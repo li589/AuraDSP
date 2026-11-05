@@ -7,6 +7,7 @@
 #include "plugin_thread.h"
 
 #include <windows.h>
+#include <ole2.h>
 
 #include <atomic>
 #include <chrono>
@@ -78,6 +79,18 @@ public:
 
     // 提交任务到 plugin main 线程并等待完成（有界超时）。
     // 返回 false = 线程停摆/毒化或超时（调用方走废弃隔离路径）。
+    bool postTask(Task fn) {
+        if (m_stopRequested.load(std::memory_order_acquire) ||
+            m_abandoned.load(std::memory_order_acquire)) {
+            return false;
+        }
+        {
+            std::lock_guard<std::mutex> lock(m_taskMutex);
+            m_tasks.emplace_back(std::move(fn));
+        }
+        return PostThreadMessageW(m_threadId, WM_APP_PUMP_TASK, 0, 0) != FALSE;
+    }
+
     bool postTaskAndWait(Task fn, DWORD timeoutMs) {
         if (m_stopRequested.load(std::memory_order_acquire) ||
             m_abandoned.load(std::memory_order_acquire)) {
@@ -162,6 +175,7 @@ private:
     }
 
     void mainLoop() {
+        OleInitialize(NULL);
         // CLAP host thread-check 回调据此识别 main thread（thread_local 默认
         // 即 Main；此处显式置位，语义不依赖默认值）。
         t_pluginThreadRole = PluginThreadRole::Main;
@@ -190,6 +204,7 @@ private:
             DispatchMessageW(&msg);
         }
         destroyRegisteredEditors();
+        OleUninitialize();
     }
 
     void drainTasks() {

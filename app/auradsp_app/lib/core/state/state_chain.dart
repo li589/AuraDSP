@@ -7,18 +7,7 @@ part of '../state.dart';
 /// _notifyUi()；setGraphOrder 内对留类 static filterVendorOrder 的调用加
 /// AppModel. 限定——extension 作用域不含被扩展类型的 static 成员）。
 
-/// 链组成员（Phase 2；与 chain_page.dart kChainGroups 同构，core 不得 import
-/// features，故此处镜像一份，改动时两边同步）。
-/// 原为 AppModel 类 static const，随 setChainGroup 迁入本文件顶层——
-/// extension 方法体不能非限定引用类 static；无外部调用者。
-const _chainGroupMembers = {
-  'chInput': ['gate', 'filter'],
-  'chTone': ['dyneq', 'bassmono', 'tube', 'comp', 'bass'],
-  'chEq': ['eq', 'arbmag', 'convolver', 'ddc', 'liveprog'],
-  'chSound': ['crossfeed', 'stereo', 'haas'],
-  'chSpatial': ['spatial'],
-  'chOut': ['exciter', 'reverb', 'loudness', 'output'],
-};
+// 链组表已下沉 effect_registry.dart（kChainGroups，由阶段契约派生）。
 
 extension StateChain on AppModel {
 
@@ -138,34 +127,12 @@ extension StateChain on AppModel {
   /// 19: loudness stage out
   /// 20: spatial stage out（Phase 2 接入链页）
   /// 21..31: 预留/扩展插件槽
-  int stageMeterIndex(String id) => switch (id) {
-    'tube' => 0,
-    'comp' => 1,
-    'bass' => 2,
-    'eq' => 3,
-    'arbmag' => 4,
-    'convolver' => 5,
-    'ddc' => 6,
-    'liveprog' => 7,
-    'crossfeed' => 8,
-    'stereo' => 9,
-    'reverb' => 10,
-    'output' => 11,
-    'gate' => 13,
-    'dyneq' => 14,
-    'filter' => 15,
-    'bassmono' => 16,
-    'haas' => 17,
-    'exciter' => 18,
-    'loudness' => 19,
-    'spatial' => 20,
-    _ => -1,
-  };
+  int stageMeterIndex(String id) => kEffectStageById[id]?.meterIndex ?? -1;
 
   /// 整组旁路/启用：把组内成员逐个拨到目标态（复用 toggleStage，含 reverb
   /// 特殊语义）。output（限幅器）常驻，跳过——整组旁路不得静音整机。
   void setChainGroup(String group, bool on) {
-    final members = _chainGroupMembers[group];
+    final members = kChainGroups[group];
     if (members == null) return;
     for (final id in members) {
       if (id == 'output') continue;
@@ -261,16 +228,16 @@ extension StateChain on AppModel {
   void setLiveprogCode(String text) {
     lpError = null;
     final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-    lpCode = normalized;
-    lpDraftCode = normalized;
-    lpPresetCodeMismatch = false;
     lpCompileMs = -1;
-    send({'cmd': 'setParamStr', 'id': ParamId.lpCode, 'text': normalized});
+    lpPresetCodeMismatch = false;
+
     // 单一默认值源（v2 §3.2）：脚本内 sliderN: 声明优先。
     // 引擎 LoadCode 已把滑块清零，这里全量回推对齐；声明签名不变时
     // 保留用户已调值（只做回推），声明变化才采纳新默认值。
-    // 同一 isolate SendPort 保序：code → 默认值 → 调用方后续值。
     final metas = EelSliderParser.parse(normalized);
+    lpSliderMetas.clear();
+    lpSliderMetas.addAll(metas);
+
     final sig = StringBuffer();
     for (final meta in metas.values) {
       sig.write('${meta.index}:${meta.defaultVal}:${meta.minVal}:${meta.maxVal};');
@@ -288,6 +255,15 @@ extension StateChain on AppModel {
         }
       }
     }
+
+    // 将代码中的变量赋值同 lpSliderValues / metas 全量对齐
+    // 杜绝首次编译时代码中旧硬编码值与界面滑块默认值不一致（如 dPreset=18 与 界面预设 0）
+    final alignedCode = EelSliderParser.alignCodeWithSliders(normalized, lpSliderValues, metas);
+    lpCode = alignedCode;
+    lpDraftCode = alignedCode;
+
+    send({'cmd': 'setParamStr', 'id': ParamId.lpCode, 'text': alignedCode});
+
     for (final meta in metas.values) {
       final v = lpSliderValues[meta.index] ?? meta.defaultVal;
       if (meta.index >= 1 && meta.index <= 64) {

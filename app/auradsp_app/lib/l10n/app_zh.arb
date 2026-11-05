@@ -456,6 +456,25 @@
       }
     }
   },
+  "dspBypassHint": "DSP 已旁路 · 点击激活处理",
+  "dspActiveHint": "DSP 正在处理 · 点击切换全局旁路",
+  "pdcLatencyTooltip": "全链路端到端总延迟: {ms} ms\n点击触发全链路测量与时钟同步",
+  "@pdcLatencyTooltip": {
+    "placeholders": {
+      "ms": {
+        "type": "String"
+      }
+    }
+  },
+  "chainFreqRefreshTooltip": "重新测算全链路频响与端到端延迟",
+  "chainLatencyMeasuredMsg": "已完成全链路延迟测定，端到端延迟已更新为 {ms} ms",
+  "@chainLatencyMeasuredMsg": {
+    "placeholders": {
+      "ms": {
+        "type": "String"
+      }
+    }
+  },
   "bassBoost": "低音增强",
   "bassGain": "增强量",
   "reverb": "混响",
@@ -1089,7 +1108,7 @@
   "stArbmag": "任意响应 EQ",
   "stScript": "脚本",
   "chainTitle": "处理链",
-  "chainOrderTitle": "处理顺序与状态",
+  "chainOrderTitle": "处理顺序",
   "chainOrderHint": "拖拽调整信号处理先后（自上而下）；改动后点\"应用\"。支持独立旁路/启用单节点；右侧显示每节点实时双声道电平。",
   "chainApply": "应用顺序",
   "chainReset": "恢复默认",
@@ -1464,7 +1483,7 @@
   "gateStateOpen": "开启",
   "gateStateHold": "保持",
   "gateStateClosed": "关闭",
-  "chainVstTitle": "第三方 VST / CLAP 插件挂载槽与阶段处理顺序",
+  "chainVstTitle": "第三方插件挂载顺序",
   "chainVstHint": "支持多插槽并行挂载；可在下方为每个插件单独设定在全局音频链上的插入阶段与处理先后。",
   "compTitle": "动态压限器",
   "compHint": "平抑突发大音量，提亮微弱细节，让听感饱满统一。右侧仪表实时显示压限削减量 (GR)。",
@@ -1706,5 +1725,8 @@
     }
   },
   "plug32BitBadge": "32位",
-  "plug32BitHint": "32 位插件（支持加载）"
+  "plug32BitHint": "32 位插件（支持加载）",
+  "ambient": "氛围背景",
+  "ambientLabel": "频谱光晕",
+  "ambientHint": "主页背景随音乐起伏的光晕；关闭后完全停绘，可省 GPU"
 }

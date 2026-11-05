@@ -348,6 +348,9 @@ void main() {
 
       // 向导弹窗成功打开
       expect(find.byType(NewScriptWizardDialog), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.byType(NewScriptWizardDialog), findsNothing);
     });
 
     testWidgets('编译与应用状态互锁机制 (Compile & Apply Interlock)', (tester) async {

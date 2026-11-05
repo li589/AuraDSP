@@ -931,6 +931,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get latencyTip => '算法附加延迟：仅统计引入延迟的效果（如混响 +30ms）；低延迟效果计 0ms';
 
   @override
+  String get dspBypassHint => 'DSP 已旁路 · 点击激活处理';
+
+  @override
+  String get dspActiveHint => 'DSP 正在处理 · 点击切换全局旁路';
+
+  @override
+  String pdcLatencyTooltip(String ms) {
+    return '全链路端到端总延迟: $ms ms\n点击触发全链路测量与时钟同步';
+  }
+
+  @override
+  String get chainFreqRefreshTooltip => '重新测算全链路频响与端到端延迟';
+
+  @override
+  String chainLatencyMeasuredMsg(String ms) {
+    return '已完成全链路延迟测定，端到端延迟已更新为 $ms ms';
+  }
+
+  @override
   String get bassBoost => '低音增强';
 
   @override
@@ -2574,7 +2593,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainTitle => '处理链';
 
   @override
-  String get chainOrderTitle => '处理顺序与状态';
+  String get chainOrderTitle => '处理顺序';
 
   @override
   String get chainOrderHint =>
@@ -3118,7 +3137,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gateStateClosed => '关闭';
 
   @override
-  String get chainVstTitle => '第三方 VST / CLAP 插件挂载槽与阶段处理顺序';
+  String get chainVstTitle => '第三方插件挂载顺序';
 
   @override
   String get chainVstHint => '支持多插槽并行挂载；可在下方为每个插件单独设定在全局音频链上的插入阶段与处理先后。';
@@ -3640,4 +3659,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get plug32BitHint => '32 位插件（支持加载）';
+
+  @override
+  String get ambient => '氛围背景';
+
+  @override
+  String get ambientLabel => '频谱光晕';
+
+  @override
+  String get ambientHint => '主页背景随音乐起伏的光晕；关闭后完全停绘，可省 GPU';
 }

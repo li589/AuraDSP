@@ -10,6 +10,7 @@
 import 'dart:io';
 
 import 'io/document_store.dart';
+import 'io/resource_gate.dart';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'audio_modes.dart';
@@ -71,6 +72,9 @@ class AppConfig {
   String locale;
   String themeId;
   bool autoRestoreSession;
+
+  /// 主页氛围背景（频谱光晕）。关闭后不再构造氛围层，等于零绘制开销。
+  bool ambientSpectrum;
   int autoSaveDebounceMs;
 
   // 安全与资源参数
@@ -123,6 +127,7 @@ class AppConfig {
     this.locale = 'zh',
     this.themeId = 'auraDark',
     this.autoRestoreSession = true,
+    this.ambientSpectrum = true,
     this.autoSaveDebounceMs = 500,
     this.maxIrDurationSeconds = 30.0,
     this.maxFileSizeMb = 64.0,
@@ -189,6 +194,7 @@ class AppConfig {
       locale: (ui['locale'] as String?) ?? 'zh',
       themeId: (ui['themeId'] as String?) ?? 'auraDark',
       autoRestoreSession: (ui['autoRestoreSession'] as bool?) ?? true,
+      ambientSpectrum: (ui['ambientSpectrum'] as bool?) ?? true,
       autoSaveDebounceMs: (ui['autoSaveDebounceMs'] as num?)?.toInt() ?? 500,
       maxIrDurationSeconds: (safety['maxIrDurationSeconds'] as num?)?.toDouble() ?? 30.0,
       maxFileSizeMb: (safety['maxFileSizeMb'] as num?)?.toDouble() ?? 64.0,
@@ -267,6 +273,7 @@ class AppConfig {
           'locale': locale,
           'themeId': themeId,
           'autoRestoreSession': autoRestoreSession,
+          'ambientSpectrum': ambientSpectrum,
           'autoSaveDebounceMs': autoSaveDebounceMs,
         },
         'safety': {
@@ -417,6 +424,21 @@ abstract final class ConfigManager {
         save(cfg);
       }
       return cfg;
+    }
+    // APP-01（全项目审查 S7）：文件存在但解析失败（badJson/unreadable/
+    // tooLarge 等）时，先把坏档改名隔离再生成默认——旧实现直接以默认
+    // 覆盖，用户设置与损坏证据一并销毁且无从抢救。首次运行（missing）
+    // 不隔离。隔离失败不阻塞启动（swallow 后继续走默认）。
+    if (read.issue != ResourceIssue.missing) {
+      try {
+        final bad = File(configPath);
+        if (bad.existsSync()) {
+          bad.renameSync('$configPath.corrupt-'
+              '${DateTime.now().millisecondsSinceEpoch}');
+        }
+      } catch (e, st) {
+        swallow(e, st);
+      }
     }
     // 首次运行或解析失败，生成并写入默认配置
     final cfg = AppConfig();

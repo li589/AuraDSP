@@ -20,6 +20,7 @@ class _TubeCard extends StatelessWidget {
       latencyEnabled: model.isSectionEnabled('tube'),
       latencyMeasured: model.componentLatency('tube').measured,
       latencyEstimated: model.componentLatency('tube').estimated,
+      latencyMode: model.componentLatency('tube').mode,
       latencyProbing: model.isProbingLatency('tube'),
       onRefreshLatency: AppModel.isLatencyProbeSupported('tube')
           ? () => model.refreshComponentLatency('tube')

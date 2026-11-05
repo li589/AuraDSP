@@ -481,8 +481,8 @@ class _ActivePluginHero extends StatelessWidget {
     final latencySamples = manager.getSlotLatency(slot);
     final status = manager.getSlotStatus(slot);
     // 插件延迟是「样本数」，必须按设备实际采样率换算，不是固定 48k。
-    final latencyMs = (latencySamples / model.deviceRate * 1000.0)
-        .toStringAsFixed(1);
+    final latencyMs =
+        LatencyPresenter.number(samplesToMs(latencySamples, model.deviceRate));
     // Z15 诚实化：VB 模式下若当前编辑器目标路被 Z12 超预算保护旁路
     // （该路不进插件链、仅 vizStick 热组存活），「生效中」按钮如实
     // 显示「部分旁路」警示态。点击逻辑不变：点本按钮 → 全旁路；
@@ -847,14 +847,7 @@ class _ActivePluginHero extends StatelessWidget {
                         Icons.arrow_drop_down_rounded,
                         color: p.accent,
                       ),
-                      items:
-                          [
-                            PluginInsertStage.preDsp,
-                            PluginInsertStage.preVendor,
-                            PluginInsertStage.postVendor,
-                            PluginInsertStage.postReverb,
-                            PluginInsertStage.postLimiter,
-                          ].map((stg) {
+                      items: PluginInsertStage.values.map((stg) {
                             return DropdownMenuItem<int>(
                               value: stg,
                               child: Text(

@@ -32,14 +32,23 @@ class HomePage extends StatelessWidget {
       valueListenable: model.visiblePage,
       builder: (_, page, _) {
         final active = page == AppPage.home;
-        return PageScaffold(
-          eyebrow: l.pageHomeEyebrow,
-          title: l.pageHomeTitle,
-          ambient: active ? model.spectrum : _frozenSpectrum,
-          children: [
-            _SpectrumCard(model: model, active: active), // 可视化置顶：主页的第一视觉（无序号）
-            _Hero(model: model), // 引擎总览：状态 / 延迟 / 旁路
-          ],
+        // 氛围开关走独立 ValueListenable：本页被外壳 IndexedStack 保活、
+        // 实例缓存，模型 notifyListeners 不会让 build 重跑；设置页又是模态
+        // 覆盖层，visiblePage 也不会变 —— 只听 model 的话开关按了不生效。
+        return ValueListenableBuilder<bool>(
+          valueListenable: model.ambientEnabled,
+          builder: (_, ambientOn, _) => PageScaffold(
+            eyebrow: l.pageHomeEyebrow,
+            title: l.pageHomeTitle,
+            // 关掉氛围背景 → 直接不传数据源，整层不构造（零绘制/零订阅）
+            ambient: !ambientOn
+                ? null
+                : (active ? model.spectrum : _frozenSpectrum),
+            children: [
+              _SpectrumCard(model: model, active: active), // 可视化置顶
+              _Hero(model: model), // 引擎总览：状态 / 延迟 / 旁路
+            ],
+          ),
         );
       },
     );
@@ -115,10 +124,10 @@ class _Hero extends StatelessWidget {
                 waitDuration: const Duration(milliseconds: 350),
                 child: StatReadout(
                   label: l.latencyLabel,
-                  value: model.latencyMs.toStringAsFixed(1),
+                  value: LatencyPresenter.number(model.latencyMs),
                   unit: 'ms',
                   size: 30,
-                  valueColor: latencyColor(model.latencyMs, p),
+                  valueColor: LatencyPresenter.color(model.latencyMs, p),
                 ),
               ),
               const SizedBox(width: AuraSpace.xl),
@@ -279,8 +288,12 @@ class _OutputLevelRow extends StatelessWidget {
   final bool active;
   const _OutputLevelRow({required this.model, required this.active});
 
-  /// WAVEFORMATEX 声道序标签（与引擎 mx_* 同序：FL FR C LFE SL SR BL BR）。
-  static const _chLabels = ['FL', 'FR', 'C', 'LFE', 'SL', 'SR', 'BL', 'BR'];
+  /// WAVEFORMATEX 声道序标签（与引擎 speaker_layout.h 同序）：
+  /// 4ch 是 Quad 4.0（FL FR BL BR），6/8ch 才是 FL FR C LFE SL SR [BL BR]。
+  static List<String> _labelsFor(int ch) {
+    if (ch == 4) return const ['FL', 'FR', 'BL', 'BR'];
+    return const ['FL', 'FR', 'C', 'LFE', 'SL', 'SR', 'BL', 'BR'];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -310,6 +323,7 @@ class _OutputLevelRow extends StatelessWidget {
           builder: (_, levels, _) {
             final p = paletteOf(context);
             final n = cc.clamp(3, 8);
+            final labels = _labelsFor(cc);
             return Row(
               children: [
                 for (var c = 0; c < n; c++) ...[
@@ -318,7 +332,7 @@ class _OutputLevelRow extends StatelessWidget {
                     child: Row(children: [
                       SizedBox(
                         width: 22,
-                        child: Text(_chLabels[c],
+                        child: Text(labels[c],
                             style: monoOf(p, size: 9, color: p.textDim)),
                       ),
                       const SizedBox(width: 3),

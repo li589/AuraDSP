@@ -329,6 +329,25 @@
       }
     }
   },
+  "dspBypassHint": "DSP bypassed · Click to resume processing",
+  "dspActiveHint": "DSP processing · Click to toggle global bypass",
+  "pdcLatencyTooltip": "Full-chain end-to-end latency: {ms} ms\nClick to run full-chain measurement and clock sync",
+  "@pdcLatencyTooltip": {
+    "placeholders": {
+      "ms": {
+        "type": "String"
+      }
+    }
+  },
+  "chainFreqRefreshTooltip": "Re-measure full-chain frequency response and end-to-end latency",
+  "chainLatencyMeasuredMsg": "Full-chain latency measurement complete; end-to-end latency updated to {ms} ms",
+  "@chainLatencyMeasuredMsg": {
+    "placeholders": {
+      "ms": {
+        "type": "String"
+      }
+    }
+  },
   "bassBoost": "Bass Boost",
   "bassGain": "Amount",
   "reverb": "Reverb",
@@ -1576,5 +1595,8 @@
   "presetDeleteAction": "Delete",
   "presetOverwritten": "Overwrote the existing preset \"{name}\"",
   "plug32BitBadge": "32-bit",
-  "plug32BitHint": "32-bit plugin (supported)"
+  "plug32BitHint": "32-bit plugin (supported)",
+  "ambient": "Ambient background",
+  "ambientLabel": "Spectrum glow",
+  "ambientHint": "Glow behind the home page that follows the music. Turn it off to stop drawing entirely and save GPU."
 }

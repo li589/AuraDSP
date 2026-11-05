@@ -87,8 +87,17 @@ std::wstring moduleDirectory() {
 std::wstring hostExecutablePath(HostArch arch) {
     const std::wstring dir = moduleDirectory();
     if (dir.empty()) return {};
-    if (arch == HostArch::X86) return dir + L"\\plugin_host_x86.exe";
-    return dir + L"\\plugin_host_x64.exe";
+    const std::wstring exeName = (arch == HostArch::X86) ? L"plugin_host_x86.exe" : L"plugin_host_x64.exe";
+    const std::wstring candidates[] = {
+        dir + L"\\" + exeName,
+        dir + L"\\..\\" + exeName,
+        dir + L"\\bin\\" + exeName,
+        dir + L"\\lib\\" + exeName
+    };
+    for (const auto& path : candidates) {
+        if (std::filesystem::exists(std::filesystem::path(path))) return path;
+    }
+    return dir + L"\\" + exeName;
 }
 
 void enableKillOnClose(HANDLE job) {
@@ -105,19 +114,25 @@ PluginHostClient::~PluginHostClient() {
     shutdown();
 }
 
-bool PluginHostClient::start() {
+bool PluginHostClient::start(bool allowScanHost) {
     const char* mode = std::getenv("AURA_PLUGIN_HOST_MODE");
+    bool processMode = false;
     if (m_arch == HostArch::X64) {
-        if (!mode || _stricmp(mode, "process") != 0) return false;
+        processMode = (mode && _stricmp(mode, "process") == 0);
+        /* allowScanHost：非 process 模式下也允许拉起 X64 宿主，但那只用于
+         * 深扫隔离——processMode() 仍为 false，管理器的加载分支因此保持进程内。 */
+        if (!processMode && !allowScanHost) return false;
     } else {
         // x86 位桥是跨架构必需机制，只要二进制在位即自适应启用；仅当显式禁用时才关闭。
         if (mode && (_stricmp(mode, "disabled") == 0 || _stricmp(mode, "off") == 0 || _stricmp(mode, "none") == 0)) {
             return false;
         }
+        // 位桥客户端永远是"远程"（32 位插件只能跨进程），如实置位。
+        processMode = true;
     }
     const std::wstring exe = hostExecutablePath(m_arch);
     if (exe.empty() || !std::filesystem::exists(std::filesystem::path(exe))) return false;
-    m_processMode.store(true, std::memory_order_release);
+    m_processMode.store(processMode, std::memory_order_release);
     return true;
 }
 
@@ -367,6 +382,45 @@ bool PluginHostClient::load(uint32_t slot, const std::string& path,
     outInfo.name[sizeof(outInfo.name) - 1] = '\0';
     outInfo.errorMessage[sizeof(outInfo.errorMessage) - 1] = '\0';
     outError = outInfo.errorMessage;
+    return true;
+}
+
+bool PluginHostClient::queryMetadata(const std::string& path,
+                                     std::vector<ipc::RemotePluginInfo>& out,
+                                     int timeoutMs) {
+    out.clear();
+    if (path.empty()) return false;
+    ipc::Writer w;
+    w.str(path);
+
+    std::string body;
+    int32_t status = 0;
+    if (!request(ipc::Op::QueryMetadata, w.data(), &body, &status, timeoutMs) || status != 1) {
+        return false;
+    }
+    /* v5 响应：u32 count + count × RemotePluginInfo。畸形响应一律当失败，
+     * 不猜、不截断（截断会让上层把半个插件当成完整条目）。 */
+    if (body.size() < sizeof(uint32_t)) return false;
+    uint32_t count = 0;
+    std::memcpy(&count, body.data(), sizeof(count));
+    if (count == 0 || count > ipc::kMaxMetadataBatch) return false;
+    const size_t need = sizeof(uint32_t) + static_cast<size_t>(count) * sizeof(ipc::RemotePluginInfo);
+    if (body.size() < need) return false;
+
+    out.resize(count);
+    std::memcpy(out.data(), body.data() + sizeof(uint32_t),
+                static_cast<size_t>(count) * sizeof(ipc::RemotePluginInfo));
+    for (auto& info : out) {
+        info.path[sizeof(info.path) - 1] = '\0';
+        info.id[sizeof(info.id) - 1] = '\0';
+        info.name[sizeof(info.name) - 1] = '\0';
+        info.bundleName[sizeof(info.bundleName) - 1] = '\0';
+        info.vendor[sizeof(info.vendor) - 1] = '\0';
+        info.version[sizeof(info.version) - 1] = '\0';
+        info.category[sizeof(info.category) - 1] = '\0';
+        info.description[sizeof(info.description) - 1] = '\0';
+        info.errorMessage[sizeof(info.errorMessage) - 1] = '\0';
+    }
     return true;
 }
 

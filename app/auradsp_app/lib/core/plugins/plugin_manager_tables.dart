@@ -28,6 +28,7 @@ extension PluginManagerTables on PluginManager {
       _saveQuarantineLists(
         close: (defQ['close'] as List?)?.cast<String>() ?? const [],
         open: (defQ['open'] as List?)?.cast<String>() ?? const [],
+        load: (defQ['load'] as List?)?.cast<String>() ?? const [],
       );
     }
     final cfg = _readQuarantineConfig();
@@ -37,6 +38,9 @@ extension PluginManagerTables on PluginManager {
     _openQuarantine
       ..clear()
       ..addAll(cfg['open'] ?? const <String>[]);
+    _loadQuarantine
+      ..clear()
+      ..addAll(cfg['load'] ?? const <String>[]);
     _autoRegisterFromCrashJournal();
     _sendQuarantineToEngine();
     // 启动时若存在遗留的未清扫条目，才开启周期清扫；若本来就无日志，保持静默避免多余后台轮询
@@ -51,6 +55,31 @@ extension PluginManagerTables on PluginManager {
 
   /// 当前生效的编辑器打开隔离名单（应用阻止打开），小写子串。
   List<String> get openQuarantine => List.unmodifiable(_openQuarantine);
+
+  /// 当前生效的挂载崩溃隔离名单（挂载期崩溃自动记录，阻止再次挂载），小写子串。
+  List<String> get loadQuarantine => List.unmodifiable(_loadQuarantine);
+
+  /// 插件是否曾导致挂载崩溃。
+  bool isLoadCrashKnown(PluginMetadata meta) =>
+      isLoadCrashKnownPath(meta.path) || isLoadCrashKnownName(meta.name);
+
+  bool isLoadCrashKnownPath(String path) {
+    if (path.isEmpty) return false;
+    final lp = path.toLowerCase();
+    for (final p in _loadQuarantine) {
+      if (p.isNotEmpty && lp.contains(p)) return true;
+    }
+    return false;
+  }
+
+  bool isLoadCrashKnownName(String name) {
+    if (name.isEmpty) return false;
+    final ln = name.toLowerCase();
+    for (final p in _loadQuarantine) {
+      if (p.isNotEmpty && ln.contains(p)) return true;
+    }
+    return false;
+  }
 
   /// 插件是否曾导致编辑器打开崩溃（仅用于提示，不阻止操作）。
   bool isEditorCrashKnown(PluginMetadata meta) {
@@ -80,16 +109,18 @@ extension PluginManagerTables on PluginManager {
       return {
         'close': (j['close'] as List?)?.cast<String>() ?? const [],
         'open': (j['open'] as List?)?.cast<String>() ?? const [],
+        'load': (j['load'] as List?)?.cast<String>() ?? const [],
       };
     } catch (e, st) {
       swallow(e, st);
-      return {'close': const [], 'open': const []};
+      return {'close': const [], 'open': const [], 'load': const []};
     }
   }
 
   void _saveQuarantineLists({
     required List<String> close,
     required List<String> open,
+    List<String>? load,
   }) {
     try {
       ConfigManager.writeJsonFile(
@@ -97,11 +128,33 @@ extension PluginManagerTables on PluginManager {
         {
           'close': close.where((p) => p.isNotEmpty).toSet().toList(),
           'open': open.where((p) => p.isNotEmpty).toSet().toList(),
+          'load': (load ?? _loadQuarantine).where((p) => p.isNotEmpty).toSet().toList(),
         },
       );
     } catch (e) {
       dbgLog('[PluginManager] quarantine config save failed: $e');
     }
+  }
+
+  /// 记录挂载在途日志（防硬崩溃闪退死循环）
+  void _journalPluginLoading(PluginMetadata meta) {
+    try {
+      final path = PluginManager._loadJournalFile().path;
+      final entry = {
+        'path': meta.path,
+        'name': meta.name,
+        'loadedAt': DateTime.now().millisecondsSinceEpoch,
+      };
+      DocumentStore.writeJson(path, [entry]);
+    } catch (e, st) { swallow(e, st); }
+  }
+
+  /// 挂载完成（成功或返回错误码）：清除在途挂载日志
+  void _journalPluginLoaded(String path) {
+    try {
+      final jPath = PluginManager._loadJournalFile().path;
+      DocumentStore.delete(jPath);
+    } catch (e, st) { swallow(e, st); }
   }
 
   /// 厂商表填充：命中即覆盖引擎 vendor 字段（数据驱动，引擎不硬编码厂商名）。
@@ -155,6 +208,38 @@ extension PluginManagerTables on PluginManager {
   /// 启动时检查崩溃日志：上一进程在编辑器打开后未健康化前退出（打开即崩溃）
   /// → 自动把该插件登记进 open 名单并持久化。登记后清空日志。
   void _autoRegisterFromCrashJournal() {
+    // 1. 检查挂载崩溃日志（若上一进程在 load 期暴毙退出，在此登记隔离）
+    List<String> loadCrashed = [];
+    try {
+      final loadPath = PluginManager._loadJournalFile().path;
+      final j = DocumentStore.readJsonList(loadPath);
+      if (j != null) {
+        for (final e in j) {
+          if (e is! Map) continue;
+          final p = _crashPattern(e['name'] as String?, e['path'] as String?);
+          if (p != null && p.isNotEmpty) loadCrashed.add(p);
+        }
+        DocumentStore.delete(loadPath);
+      }
+    } catch (e, st) { swallow(e, st); }
+
+    if (loadCrashed.isNotEmpty) {
+      var loadChanged = false;
+      for (final c in loadCrashed) {
+        final lp = c.toLowerCase();
+        if (!_loadQuarantine.any((e) => e.toLowerCase() == lp)) {
+          _loadQuarantine.add(lp);
+          loadChanged = true;
+        }
+      }
+      if (loadChanged) {
+        _saveQuarantineLists(close: _closeQuarantine, open: _openQuarantine, load: _loadQuarantine);
+        _lastNotice = '检测到插件上次在挂载时发生崩溃，已自动加入隔离名单以防再次闪退。';
+        _notify();
+      }
+    }
+
+    // 2. 检查编辑器打开崩溃日志
     List<String> crashed = [];
     try {
       final path = PluginManager._editorJournalFile().path;

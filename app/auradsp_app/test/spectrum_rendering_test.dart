@@ -77,7 +77,10 @@ void main() {
     test('关键：stale 期间不得再吃陈旧 spectrum（否则永不归零）', () {
       final env = AmbientEnvelope();
       final staleFrame = List<double>.filled(32, 0.9);
-      env.feed(staleFrame);
+      // 包络是渐进的（attack 0.22/帧）：喂到稳态才代表「响着的时候」
+      for (var i = 0; i < 30; i++) {
+        env.feed(staleFrame);
+      }
       expect(env.maxValue, greaterThan(0.5));
 
       // 引擎不再产出新帧，但 spectrum 的值仍是旧的高值。
@@ -92,13 +95,21 @@ void main() {
 
     test('重新收到真实帧后恢复正常（stale 被解除）', () {
       final env = AmbientEnvelope();
-      env.feed(List<double>.filled(32, 0.9));
+      final loud = List<double>.filled(32, 0.9);
+      for (var i = 0; i < 30; i++) {
+        env.feed(loud);
+      }
       while (env.decay()) {}
       expect(env.maxValue, 0.0);
 
+      // 首帧必须先解除 stale（而不是等包络爬满）
       env.feed(List<double>.filled(32, 0.6));
       expect(env.stale, isFalse);
-      expect(env.maxValue, closeTo(0.6, 0.05));
+      // 之后按 attack 收敛到新目标
+      for (var i = 0; i < 30; i++) {
+        env.feed(List<double>.filled(32, 0.6));
+      }
+      expect(env.maxValue, closeTo(0.6, 0.02));
     });
 
     test('decay 收敛步数有界（不会无限拖尾）', () {
@@ -153,21 +164,44 @@ void main() {
       expect(m.toSet().length, lessThanOrEqualTo(VizBands.count - 7));
     });
 
-    test('feed 走预计算表：单频带输入只点亮映射到该带的柱', () {
+    test('feed 走预计算表：单频带输入点亮映射柱，并按 3-tap 向邻柱铺成包络', () {
       final target = AmbientEnvelope.sourceBands[30];
       final src = List<double>.filled(VizBands.count, 0.0);
       src[target] = 1.0;
 
       final env = AmbientEnvelope();
-      env.feed(src);
-
-      final lit = <int>[];
-      for (var i = 0; i < AmbientEnvelope.bars; i++) {
-        if (env.smooth[i] > 0.5) lit.add(i);
+      // 包络渐进（attack 0.22/帧）→ 喂到稳态再断言形状
+      for (var i = 0; i < 40; i++) {
+        env.feed(src);
       }
-      expect(lit, isNotEmpty, reason: '该频带必须有点亮的柱');
-      for (final i in lit) {
-        expect(AmbientEnvelope.sourceBands[i], target);
+
+      final mapped = <int>[
+        for (var i = 0; i < AmbientEnvelope.bars; i++)
+          if (AmbientEnvelope.sourceBands[i] == target) i,
+      ];
+      expect(mapped, isNotEmpty, reason: '该频带必须有映射柱');
+      // 3-tap 会把平台边缘的柱从 1.0 拉到 ~0.75（0.5×1 + 0.25×邻）；
+      // 绘制侧按 max 归一化，所以稳态绝对值下降不影响最终高度。
+      for (final i in mapped) {
+        expect(env.smooth[i], greaterThan(0.6),
+            reason: '映射到该频带的柱应到稳态（$i）');
+      }
+
+      // 2026-11-03 契约变更：横向 3-tap 让能量溢出到邻柱 —— 这是「包络」，
+      // 不再是「一根柱」；但必须只在局部，不能把整屏都点亮。
+      final spread = <int>[
+        for (var i = 0; i < AmbientEnvelope.bars; i++)
+          if (env.smooth[i] > 0.02) i,
+      ];
+      expect(spread.length, greaterThan(mapped.length),
+          reason: '能量应沿包络铺到邻柱');
+      for (final i in spread) {
+        // 参照取「最近的映射柱」而不是第一根：映射可能是连续多柱（平台），
+        // 3-tap 的契约是「只影响紧邻的那一根」。
+        final nearest = mapped.reduce(
+            (a, b) => (a - i).abs() <= (b - i).abs() ? a : b);
+        expect((i - nearest).abs(), lessThanOrEqualTo(1),
+            reason: '平滑只应影响紧邻柱（$i 距最近的映射柱 ${(i - nearest).abs()} 根）');
       }
     });
 

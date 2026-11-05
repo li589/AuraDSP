@@ -47,6 +47,7 @@ extension PluginManagerEvents on PluginManager {
     dynamic rawStatus,
     int stage,
   ) {
+    _journalPluginLoaded(path);
     if (slot >= 0 && slot < PluginManager.kMaxSlots) {
       _slotBusy[slot] = false; // C3：任务终态，忙态清除
       _slotBusyAction.remove(slot);

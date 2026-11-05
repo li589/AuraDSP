@@ -4,8 +4,11 @@
 
 本机通常没有真实 32 位插件，因此用**合成最小 PE 头**验证整条链路：
   D1  多架构 bundle 探测：x86_64-win 与 x86-win 都能被发现（旧实现只认前者）
-  D2  32 位条目"可发现但不可加载"：is64Bit=false + isCompatible=false
-      + 明确 errorMessage，且不会从扫描结果里消失
+  D2  32 位条目可发现且不会从扫描结果里消失；isCompatible/errorMessage
+      按位桥可用性判定（2026-11-04 起，见《插件扫描归属重构与崩溃隔离》D-5）：
+      plugin_host_x86 在位 → isCompatible=true、errorMessage 为空；
+      位桥缺失 → isCompatible=false + 指明缺位桥的 errorMessage
+      （旧断言「一律 false + 请安装 64 位版本」已随位桥落地作废）
   D3  加载路拒绝：auradsp_plugin_slot_load 对 32 位条目返回 0
       （不真的 LoadLibrary —— x64 进程加载 32 位 DLL 必 193）
   D4  大小写扩展名 bundle 不得静默消失（审查 P1 回归）：
@@ -34,6 +37,11 @@ import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
 from engine_artifact import engine_lib_path as _elp, REPO_ROOT as _RR  # noqa: E402
 DLL_PATH = _elp()
+
+# 位桥可用性（2026-11-04）：与引擎 DLL 同目录的 plugin_host_x86.exe 在位即视为可用，
+# 与 PluginHostManager 的判定口径一致（存在性检查；实际启用还有 disabled 环境变量门）。
+BRIDGE_AVAILABLE = os.path.exists(
+    os.path.join(os.path.dirname(os.path.abspath(DLL_PATH)), "plugin_host_x86.exe"))
 
 failures = []
 
@@ -134,14 +142,21 @@ def main():
             mine = [p for p in plugins if root.replace("\\", "/").lower() in p["path"].replace("\\", "/").lower()]
             by_name = {p["name"]: p for p in mine}
 
-            # D1/D2：32 位 VST3 bundle 被发现且标记不兼容
+            # D1/D2：32 位 VST3 bundle 被发现；兼容标记按位桥可用性判定
             legacy = by_name.get("Legacy32")
             check(legacy is not None, "Legacy32.vst3（x86-win）出现在扫描结果中（D1）")
             if legacy:
                 check(legacy["is64Bit"] is False, "Legacy32.vst3 is64Bit=false")
-                check(legacy["isCompatible"] is False, "Legacy32.vst3 isCompatible=false")
-                check("32 位" in legacy["errorMessage"],
-                      f"Legacy32.vst3 errorMessage 指明位数问题：{legacy['errorMessage']!r}")
+                if BRIDGE_AVAILABLE:
+                    check(legacy["isCompatible"] is True,
+                          "Legacy32.vst3 isCompatible=true（位桥在位）")
+                    check(legacy["errorMessage"] == "",
+                          f"Legacy32.vst3 位桥在位时无错误文案：{legacy['errorMessage']!r}")
+                else:
+                    check(legacy["isCompatible"] is False,
+                          "Legacy32.vst3 isCompatible=false（位桥缺失）")
+                    check("plugin_host_x86" in legacy["errorMessage"],
+                          f"Legacy32.vst3 errorMessage 指明缺位桥：{legacy['errorMessage']!r}")
                 check(legacy["vendor"] != "", "Legacy32.vst3 vendor 非空")
                 check(legacy["vendor"] != "x86-win",
                       "Legacy32.vst3 vendor 不退化成名架构目录名 x86-win")
@@ -160,15 +175,22 @@ def main():
                 check(both_entries[0]["is64Bit"] is True,
                       "Both.vst3 解析到 x86_64-win（本进程架构优先）")
 
-            # 32 位单文件 CLAP：queryMetadata 早分支产出不兼容条目
+            # 32 位单文件 CLAP：兼容标记同 D2（按位桥可用性判定）
             clap = by_name.get("Legacy32")
             clap_entries = [p for p in mine if p["format"] == "CLAP"]
             check(len(clap_entries) == 1, f"Legacy32.clap 恰有一条 CLAP 条目（实测 {len(clap_entries)}）")
             if clap_entries:
                 c = clap_entries[0]
                 check(c["is64Bit"] is False, "Legacy32.clap is64Bit=false")
-                check(c["isCompatible"] is False, "Legacy32.clap isCompatible=false")
-                check("32 位" in c["errorMessage"], "Legacy32.clap errorMessage 指明位数问题")
+                if BRIDGE_AVAILABLE:
+                    check(c["isCompatible"] is True,
+                          "Legacy32.clap isCompatible=true（位桥在位）")
+                    check(c["errorMessage"] == "", "Legacy32.clap 位桥在位时无错误文案")
+                else:
+                    check(c["isCompatible"] is False,
+                          "Legacy32.clap isCompatible=false（位桥缺失）")
+                    check("plugin_host_x86" in c["errorMessage"],
+                          "Legacy32.clap errorMessage 指明缺位桥")
 
             # D4：大小写扩展名 bundle 不得静默消失（审查 P1 回归）
             upper = by_name.get("Upper64")
@@ -181,7 +203,8 @@ def main():
             check(mixed_entry is not None,
                   "MixedCase.VST3（bundle 目录大写）出现在扫描结果中（D4b）")
 
-        # ---- D3：加载路拒绝（不走到 LoadLibrary） ----
+        # ---- D3：加载路拒绝（合成桩不是有效插件，rc=0 与位桥无关——
+        # 真实 32 位插件经位桥可加载，另由 VST2 冒烟的 x86 探针实证） ----
         print("\n=== 加载路拒绝 ===")
         legacy_bin = os.path.join(root, "Legacy32.vst3", "Contents", "x86-win", "Legacy32.vst3")
         rc = dll.auradsp_plugin_slot_load(

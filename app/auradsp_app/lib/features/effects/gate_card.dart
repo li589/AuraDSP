@@ -22,6 +22,7 @@ class _GateCard extends StatelessWidget {
       latencyEnabled: model.isSectionEnabled('gate'),
       latencyMeasured: model.componentLatency('gate').measured,
       latencyEstimated: model.componentLatency('gate').estimated,
+      latencyMode: model.componentLatency('gate').mode,
       latencyProbing: model.isProbingLatency('gate'),
       onRefreshLatency: AppModel.isLatencyProbeSupported('gate')
           ? () => model.refreshComponentLatency('gate')

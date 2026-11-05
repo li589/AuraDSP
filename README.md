@@ -5,7 +5,7 @@
 ![engine](https://img.shields.io/badge/engine-C%2B%2B20-00599c?style=flat-square)
 ![ui](https://img.shields.io/badge/UI-Flutter_3.47-02569b?style=flat-square)
 ![dsp](https://img.shields.io/badge/DSP-23_units-8957e5?style=flat-square)
-![plugins](https://img.shields.io/badge/plugins-VST3_%7C_CLAP-4b8bbe?style=flat-square)
+![plugins](https://img.shields.io/badge/plugins-VST3_%7C_CLAP_%7C_VST2-4b8bbe?style=flat-square)
 
 **跨平台全局音频效果系统** —— 一套 Flutter 界面 + 一族自研引擎，把系统级音频链路接管下来做实时 DSP。
 Windows 侧是进程内 WASAPI 泵 + `auradsp_engine.dll`；Android 侧经 AIDL effects HAL 注入系统音频链路。
@@ -15,8 +15,8 @@ UI 与引擎之间只有一层 **C ABI**（`engine/auradsp_engine.h`），UI 不
 |---|---|
 | 主力形态 | Windows 10 / 11 桌面，全功能；四种音频后端可切 |
 | 处理能力 | 23 个效果处理单元（能力计数）= 自研 11 个效果 TU + vendor 12 级可重排序链；另有插件 4 槽 × 5 级插入（链页按 20 个可见阶段展示） |
-| 插件宿主 | VST3 / CLAP 64 位；默认进程内，`AURA_PLUGIN_HOST_MODE=process` 切进程外硬隔离 |
-| 质量门禁 | analyze 零问题 · Dart 66 个测试文件 / 580+ 用例 · 引擎冒烟 140 项 · ABI / 补丁编号 / 静默异常三道脚本门禁 · GitHub CI 八 job（Win/Linux 双流水线） |
+| 插件宿主 | VST3 / CLAP / VST2；64 位加载走进程内，32 位自动经 `plugin_host_x86` 位桥；`AURA_PLUGIN_HOST_MODE=process` 切加载硬隔离；扫描=快扫本地、深扫按位数进对应宿主（`AURA_PLUGIN_DEEP_SCAN=inproc` 回退引擎内深扫） |
+| 质量门禁 | analyze 零问题 · Dart 67 个测试文件 / 580+ 用例 · 引擎冒烟 142 项 · ABI / 补丁编号 / 静默异常三道脚本门禁 · GitHub CI 八 job（Win/Linux 双流水线） |
 
 目录：[它是什么](#1-它是什么) · [形态矩阵](#2-形态矩阵) · [音频链路](#3-音频链路) · [近期里程碑](#4-近期里程碑) · [快速开始](#5-快速开始) · [仓库结构](#6-仓库结构) · [质量门禁](#7-质量门禁) · [文档入口](#8-文档入口) · [许可证与致谢](#9-许可证与致谢)
 
@@ -114,7 +114,7 @@ Android 侧为 `root` / `rootless`。驱动套件在 `core/desktop/windows-drive
 `tube`（Triode / Pentode / Tape）· `bass` · `eq`（卷积 EQ）· `comp`（DrDynamic FFT Compander）· `arbmag` · `convolver`（IR 卷积，FileGate 六道门卫）· `ddc`（ViPER DDC）· `liveprog`（EEL2 可编程，专业 IDE + 编译/应用互锁 + EqualizerAPO 转写）· `crossfeed`（bs2b，Chu Moy / Jan Meier）· `stereo`（分带展宽）· `reverb`（SF 预设）· `post` + `limiter`
 
 **插件宿主**（`engine/plugins/`）
-VST3 / CLAP 64 位，4 插槽 × 5 级插入拓扑（Pre-DSP / Pre-Vendor / Post-Vendor / Post-Reverb / Post-Limiter）。挂载即旁路，解旁路才进链；32 位插件由 PE 头判定后双端拦截。进程外宿主为 opt-in。
+VST3 / CLAP / VST2，4 插槽 × 5 级插入拓扑（Pre-DSP / Pre-Vendor / Post-Vendor / Post-Reverb / Post-Limiter）。挂载即旁路，解旁路才进链；64 位插件走进程内，32 位插件按 PE 头位数自动路由到 `plugin_host_x86` 位桥（含跨进程窗口嵌入）。进程外宿主为 opt-in。VST2 扫描只做 PE 快扫（不在引擎进程 `LoadLibrary` 未知插件），真实元数据由加载路补齐；32 位 VST2 深扫由位桥宿主代查。
 
 > 完整参数语义以 `engine/auradsp_engine.h` 参数表 + `graph.effects` 注册表为准 —— **以代码为准，不全信文档**。
 
@@ -126,15 +126,20 @@ Voicemeeter 桥（`bridge/vm_bridge` + `02_voicemeeter_client`）按路处理：
 
 | 日期 | 内容 | 提交 |
 |---|---|---|
+| 2026-11-05 | 效果器延迟计算全域统一与 DAW 工控级监视舱重构（消除 AI 味）：① 定义 5 态延迟模型（实测/参数推算/测定中/零延迟/未测定）与全局统一色彩规范映射；② 测定路径唯一化，统一经由异步安全管道派发并反哺全链总延迟；③ 右上角彻底废弃悬浮药丸与呼吸光晕，重构为专业 DAW 一体化深灰金属切面主状态总控舱（MasterStatusConsole），配备 5.5px 纯净固态硬件 LED 与等宽 Monospace PDC 延迟仪表 | 见 `docs/40-回顾/处理链全流程复合频响测量与科幻信号流全景重构-2026-11-05.md` |
+| 2026-11-05 | 处理链全流程复合频响测量与科幻信号流全景重构：① 顶部集成 EqualizerAPO 风格全流程复合曲线/折线频谱图（256 点纯内存解析传递函数，支持立体声/左/右声道及 Voicemeeter A1~Ax 总线动态切换，静音测量与延迟反哺）；② 全局信号流卡片全面升级为未来科技感交互面板（HUD 展开动效、PCB 电路板背景与流光粒子、Stage 0~4 插件芯片插槽实时嵌入、重绘科技能量流光箭头、支持自由平移缩放与 100% 复位） | 见 `docs/40-回顾/处理链全流程复合频响测量与科幻信号流全景重构-2026-11-05.md` |
+| 2026-11-05 | 插件界面视觉降噪与规范收敛：移除第三方效果器库副标题说明文字，彻底移除底部 M1 插件宿主引擎规范整卡 | `2e2595e` |
+| 2026-11-05 | 插件体系健壮性专项治理：① 修复高阶 Ambisonics 64 通道越界写栈崩溃与音频死循环；② 落地非有限值（NaN/Inf）全通道过滤清洗与钳位防护，根除插件异常导致引擎静音；③ VST2 支持自适应动态重设尺寸与边框自由拖动；④ 修复 Linux CLAP 定时器派发消灭黑屏；⑤ 探测无界面插件提示纯算法 Headless；⑥ 修复 Linux 32 位位桥打包路径搜索失败；⑦ 跨格式统一隔离黑名单；双平台 64/32 位门禁全绿 | 见 `docs/40-回顾/插件健壮性治理与多通道拓扑优化-2026-11-05.md` |
 | 2026-11-01 | Linux 移植第一期（`feature/linux` 分支）：引擎 Linux 目标（导出集与 `.def` 恒等）、App PulseAudio 输出闭环、CI 七 job 双流水线全绿、Linux 测试套件补强（冒烟 PASS 9 / Dart 57 PASS + 4 平台跳过） | `61bca64` `017b2eb` `b80eaeb` `d94f2ff` |
 | 2026-11-02 | Linux 移植一期收官：三模式功能对等（S5a）、桌面体验（S5b：XDG/托盘/自启/MPRIS）、治理收尾（S5c）与全增量代码审查；Ubuntu 24.04 真机轮次修复输出泵饿死、snd-aloop 回环源、Impeller 重绘损坏三项真机问题；冒烟 PASS 12 / Dart 59 PASS + 4 平台跳过、CI 七 job 全绿，`feature/linux` 合入 `dev` | `c9c0524` `4524e08` `8193b72` `d07650f` `0d79cd3` PR #21 |
 | 2026-11-02 | Linux 二期 ALSA 专家模式（D-6 二期立项交付）：libasound FFI 直连（period 256/buffer 1024）、后端设置切换、driver 直采 hw:Loopback、设备枚举与新门禁（冒烟 PASS 13） | `6f5b5f6` `dd48c1e` `0924c36` |
+| 2026-11-03 | VST2 64/32 位适配：Xaymar 净室头收编、VST2 驱动/实例/编辑器/预设、32 位 IPC 远程深扫、自建探针与 77 项断言 × 进程内/外双路径全绿 | 见 `docs/20-执行/VST2插件适配实施计划-2026-11-03.md` |
 | 2026-11-02 | Linux 二期插件宿主全量（D-7 二期立项交付）：引擎插件层默认开启、VST3/CLAP 进程内托管、POSIX 双宿主隔离（shm 环 + Unix socket IPC）与 32 位桥路由；CI 八 job 全绿且 J3 日志实证 x86 桥活体全链（跨位数环形峰值 0.4） | `e76ba16` `f6a1f4a` `b369016` `e553382` `6d99392` |
 | 2026-11-02 | Linux 打磨三期 + 安全/边界审查：ALSA 采集率一致性与协商校验、失败原因与采集中断状态送达 UI、ALSA 采集设备设置入口与枚举治理；安全审查修复 IPC 对端认证（SO_PEERCRED + socket 0600）、FFI 回调字符串防护、数值边界与 /tmp 日志链接防护共 8 项（冒烟 PASS 14 / SKIP 126 / FAIL 0） | `2b2c150` `c7f2213` `e1f541b` `fb10200` |
-| 2026-10-28 | 预设系统 v7：路由/设备端点移出预设（不再被载入预设清空）、`defaults.json` 与出厂预设键集常驻门禁、导入版本闸门与同名改名 | `8486e11` `cbf5990` |
-| 2026-10-28 | 插件扫描目录改版（平台预置、可勾选、异步深扫）+ 深扫挂死防护（进程内 2.5s / 进程外 IPC 超时杀宿主） | `60df848` |
-| 2026-10-28 | 挂载即旁路（治理「UI 显示旁路但实际不旁路」）+ 插件界面在旁路槽不再假装有音频流 | `56c145f` |
-| 2026-10-27 | VB 桥加载期卡顿根治：fan-in 预算感知截止 + 加载期旁路 + 泵线程提优先级 | `902afd4` |
+| 2026-10-28 | 预设系统 v7：路由/设备端点移出预设（不再被载入预设清空）、`defaults.json` 与出厂预设键集常驻门禁、导入版本闸门与同名改名 | `9494ecd` `edac88e` |
+| 2026-10-28 | 插件扫描目录改版（平台预置、可勾选、异步深扫）+ 深扫挂死防护（进程内 2.5s / 进程外 IPC 超时杀宿主） | `c44228c` |
+| 2026-10-28 | 挂载即旁路（治理「UI 显示旁路但实际不旁路」）+ 插件界面在旁路槽不再假装有音频流 | `fc2054c` |
+| 2026-10-27 | VB 桥加载期卡顿根治：fan-in 预算感知截止 + 加载期旁路 + 泵线程提优先级 | `ca1b7b5` |
 | 2026-10-24 | 全仓审查与硬置入排查：运行时真特判 **0 处**，5 个 P0 / 9 个 P1 全闭环 | 见 `docs/30-审查/` |
 
 ---
@@ -188,7 +193,7 @@ python ../../tools/bin/run_dart_tests.py      # T-03：按文件串行 + 失败�
 **测试与工具**
 
 ```powershell
-python test/runner.py --smoke                 # 引擎冒烟（统一入口，139 项登记，按平台自动切换）
+python test/runner.py --smoke                 # 引擎冒烟（统一入口，142 项登记，按平台自动切换）
 python test/runner.py --ui                    # UI 自动化（置顶前置，默认 7 个脚本）
 python tools/bin/abi_consistency.py           # .def / 头文件 / ffi.dart 三处符号一致
 python tools/bin/verify_dll_copies.py --sync  # DLL 多副本哈希同步（禁手拷）
@@ -246,7 +251,7 @@ AuraDSP/
 |---|---|---|
 | Dart 静态分析 | `flutter analyze` | 全量 lib + test，要求零问题 |
 | Dart 单测 | `python tools/bin/run_dart_tests.py` | 61 个测试文件；按文件串行 + 失败单文件重试两次（全量并发不可信）；Windows 范式专属 4 文件在非 Windows 主机显式 SKIP-PLATFORM |
-| 引擎冒烟 | `python test/runner.py --smoke` | 139 项：DSP 正确性、插件生命周期、桥 ABI、竞态；平台标记（PLATFORM_WINDOWS / PLATFORM_LINUX）按开发平台自动切换 |
+| 引擎冒烟 | `python test/runner.py --smoke` | 142 项：DSP 正确性、插件生命周期、桥 ABI、竞态；平台标记（PLATFORM_WINDOWS / PLATFORM_LINUX）按开发平台自动切换 |
 | ABI 一致性 | `python tools/bin/abi_consistency.py` | `.def` ↔ 头文件 ↔ `ffi.dart` ↔ `.map`（Linux version script）四处符号与签名 |
 | CI | `.github/workflows/ci.yml` | 八 job：静态门禁 / Linux 引擎构建 / Linux 冒烟 / ABI / Windows 构建 / Dart 测试 / 资源守卫 / Linux App 打包与无头启动，push 与 PR 均触发 |
 | DLL 副本同步 | `python tools/bin/verify_dll_copies.py --sync` | 三处副本哈希一致（禁手拷） |
@@ -255,7 +260,7 @@ AuraDSP/
 | 硬编码中文 | `test/l10n_cjk_guard_test.dart` | 棘轮：`lib/features` + `lib/ui` 基线只降不升 |
 
 最近一轮（2026-10-28）：analyze 零问题、Dart 580+ 用例通过、冒烟 100%。
-Linux 侧（2026-11-02，二期 + 打磨 + 安全审查后）：analyze 零问题、Linux 冒烟 PASS 14 / SKIP 126（Windows 专属）/ FAIL 0（共 140 项）、GitHub CI 八 job 全绿（基线 run 41456330844，含 J3 的 x86 桥活体实证）；一期已合入 `dev`（PR #21）并经 Ubuntu 24.04 真机全量验证，二期与打磨/审查增量待下轮合并与真机验收（清单 §3b/§3c/§3d）。
+Linux 侧（2026-11-02，二期 + 打磨 + 安全审查后）：analyze 零问题、Linux 冒烟 PASS 14 / SKIP 128（Windows 专属）/ FAIL 0（共 142 项）、GitHub CI 八 job 全绿（基线 run 41456330844，含 J3 的 x86 桥活体实证）；一期已合入 `dev`（PR #21）并经 Ubuntu 24.04 真机全量验证，二期与打磨/审查增量待下轮合并与真机验收（清单 §3b/§3c/§3d）。
 
 ---
 
@@ -271,6 +276,7 @@ Linux 侧（2026-11-02，二期 + 打磨 + 安全审查后）：analyze 零问�
 | [`docs/30-审查/预设系统与硬置入复检-2026-10-28.md`](docs/30-审查/预设系统与硬置入复检-2026-10-28.md) | 最近一轮专项复检：预设边界 / 基线门禁 / 硬置入排查结论 |
 | [`.ai/memory/MEMORY.md`](.ai/memory/MEMORY.md) | **项目长期备忘**：既定范式 / 避坑 / 测试 SOP（入库的唯一记忆真相源） |
 | [`docs/源码重组与目录规范方案-2026-10-13.md`](docs/源码重组与目录规范方案-2026-10-13.md) | 目录重组的诊断 / 目标树 / 政策 / 分期 |
+| [`docs/40-回顾/处理链全流程复合频响测量与科幻信号流全景重构-2026-11-05.md`](docs/40-回顾/处理链全流程复合频响测量与科幻信号流全景重构-2026-11-05.md) | 处理链全流程复合频响测量（EqualizerAPO风格）与科幻信号流全景重构 |
 | [`docs/40-回顾/阶段性回顾-2026-10-13.md`](docs/40-回顾/阶段性回顾-2026-10-13.md) | 重构 P0→P3b 与功能交付回顾 |
 
 架构决策记录见 `docs/adr/`：ADR-001 / 003 / 004 / 006 / 007 / 008 / 009 已接受，ADR-002 已被 ADR-006 取代（原文留档）。
@@ -280,6 +286,6 @@ Linux 侧（2026-11-02，二期 + 打磨 + 安全审查后）：analyze 零问�
 ## 9. 许可证与致谢
 
 - 引擎核心衍生自 [JamesDSP](https://github.com/james34602/JamesDSPManager)（libjamesdsp，2026-10-16 起收编于 `engine/legacy/`），遵循其上游 GPL 系许可证；所有补丁登记在 `engine/legacy/PATCHES.md`。
-- 第三方插件 API（`vendor/plugin-api/`：CLAP / Steinberg VST3）遵循各自许可证。
+- 第三方插件 API（`vendor/plugin-api/`：CLAP / Steinberg VST3 / VST2 Xaymar 净室头）遵循各自许可证；VST2 仅以 BSD-3-Clause 净室头编译，Steinberg 官方 2.4 归档不入库、不分发。
 - 第三方参照项目以只读快照置于 `source/`（不入库），提取与版本溯源见 `source/ORIGIN.md` 与 `vendor/ORIGIN.md`。
 - 运行资源（IR / VDC / Liveprog 脚本）来自上游社区，清单见 `assets/manifest.json`。

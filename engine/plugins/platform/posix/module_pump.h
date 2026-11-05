@@ -9,8 +9,9 @@
 //   - PumpDeleter：线程停得下来才 delete，停不下来故意泄漏
 //     （挂死线程栈上仍有引用，delete 即 UAF——隔离区哲学同
 //     Win32 版）。
-// 实现差异：Win32 消息循环 → 条件变量任务队列（编辑器窗口消息
-// 分发在 Linux 编辑器阶段另行接入）；编辑器登记为空操作。
+// 实现差异：Win32 消息循环 → 条件变量任务队列；编辑器窗口的
+// 事件/定时器分发经循环钩子接入（guiX11Dispatch，编辑器阶段
+// 2026-11-04；registerEditor 首登记时安装，10ms 节拍）。
 // 任务守卫：Win32 版用 SEH 捕获硬件异常，POSIX 无等价物，用
 // C++ 异常捕获兜底（探针实测通路成立；段错误级崩溃的隔离由
 // 进程外宿主阶段四承担，与架构分工一致）。
@@ -65,6 +66,19 @@ public:
 
     // 提交任务到 plugin main 线程并等待完成（有界超时）。
     // 返回 false = 线程停摆/毒化或超时（调用方走废弃隔离路径）。
+    bool postTask(Task fn) {
+        if (m_stopRequested.load(std::memory_order_acquire) ||
+            m_abandoned.load(std::memory_order_acquire)) {
+            return false;
+        }
+        {
+            std::lock_guard<std::mutex> lock(m_taskMutex);
+            m_tasks.emplace_back(std::move(fn));
+        }
+        m_cv.notify_one();
+        return true;
+    }
+
     bool postTaskAndWait(Task fn, DWORD timeoutMs) {
         if (m_stopRequested.load(std::memory_order_acquire) ||
             m_abandoned.load(std::memory_order_acquire)) {
@@ -81,10 +95,19 @@ public:
                std::future_status::ready;
     }
 
-    // 编辑器登记：POSIX 版无窗口兜底销毁需求（编辑器阶段另行
-    // 接入），空操作。
-    void registerEditor(HWND) {}
+    // 编辑器登记：首个编辑器登记时给本泵装上 X11 分发钩子
+    // （guiX11Dispatch：事件 + 定时器，语义对齐 Win32 的
+    // DispatchMessageW 循环）。钩子内部以原子标志早退，无窗口
+    // 时每 10ms 一次空转检查；unregister 不卸载（钩子无状态、
+    // 跨编辑器复用）。
+    void registerEditor(HWND) { setLoopHook(&guiX11Dispatch); }
     void unregisterEditor(HWND) {}
+
+    // 循环钩子：主循环在每轮（任务后/等待超时后）于泵线程调用。
+    void setLoopHook(std::function<void()> hook) {
+        std::lock_guard<std::mutex> lock(m_hookMutex);
+        m_loopHook = std::move(hook);
+    }
 
 private:
     ModulePumpThread() = default;
@@ -150,25 +173,47 @@ private:
         m_ready.store(true, std::memory_order_release);
         for (;;) {
             std::function<void()> task;
+            std::function<void()> hook;
+            {
+                std::lock_guard<std::mutex> hlock(m_hookMutex);
+                hook = m_loopHook;
+            }
             {
                 std::unique_lock<std::mutex> lock(m_taskMutex);
-                m_cv.wait(lock, [this]() {
+                auto pred = [this]() {
                     return !m_tasks.empty() ||
                            m_stopRequested.load(std::memory_order_acquire);
-                });
+                };
+                if (hook) {
+                    // 有编辑器分发需求：10ms 节拍等待，保证 X 事件
+                    // 与编辑器定时器（尺寸稳定化 100ms / VST2 idle
+                    // 30ms / CLAP 定时器）的时效。
+                    m_cv.wait_for(lock, std::chrono::milliseconds(10), pred);
+                } else {
+                    m_cv.wait(lock, pred);
+                }
                 if (m_tasks.empty()) {
                     if (m_stopRequested.load(std::memory_order_acquire)) break;
-                    continue;
+                } else {
+                    task = std::move(m_tasks.front());
+                    m_tasks.pop_front();
                 }
-                task = std::move(m_tasks.front());
-                m_tasks.pop_front();
             }
-            runTaskGuarded(&task);
-            if (m_abandoned.load(std::memory_order_acquire)) {
-                // 本任务崩溃：丢弃后续任务（等待方超时 → 实例隔离）。
-                std::lock_guard<std::mutex> lock(m_taskMutex);
-                m_tasks.clear();
-                break;
+            if (task) {
+                runTaskGuarded(&task);
+                if (m_abandoned.load(std::memory_order_acquire)) {
+                    // 本任务崩溃：丢弃后续任务（等待方超时 → 实例隔离）。
+                    std::lock_guard<std::mutex> lock(m_taskMutex);
+                    m_tasks.clear();
+                    break;
+                }
+            }
+            if (hook) {
+                try {
+                    hook();
+                } catch (...) {
+                    AURADSP_WARN("[DBG Pump] loop hook threw; ignored");
+                }
             }
         }
     }
@@ -190,6 +235,8 @@ private:
     std::mutex m_taskMutex;
     std::condition_variable m_cv;
     std::deque<std::function<void()>> m_tasks;
+    std::mutex m_hookMutex;
+    std::function<void()> m_loopHook;
 
     // registry：key = 规范化二进制路径（小写、canonical）。
     // weak_ptr 使最后一实例卸载后条目自然过期；static 声明为

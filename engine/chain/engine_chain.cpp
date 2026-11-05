@@ -1093,6 +1093,8 @@ void lp_refresh_sliders(auradsp_handle h) {
         if (h->lp_slider_ptr[i])
             *h->lp_slider_ptr[i] = h->p.lp_param[i].load(std::memory_order_relaxed);
     }
+    if (eel->codehandleSlider)
+        NSEEL_code_execute(eel->codehandleSlider);
 }
 
 

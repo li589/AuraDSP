@@ -1,4 +1,13 @@
 #pragma once
+
+// VST2 净室头（vendor/plugin-api/vst2/vst.h）无条件把
+// VST_FUNCTION_INTERFACE 定义为 __cdecl——MSVC 习语，POSIX 编译器
+// 无此关键字。x86-64 与 i386 的 Linux C 调用约定本就是 cdecl 语义，
+// 空定义即等价。须在任何包含 vst.h 的 TU 之前生效（VST2 的两个
+// 实现文件都先包含 win32_util.h，本头经其引入）。
+#ifndef __cdecl
+#define __cdecl
+#endif
 // win32_compat.h —— POSIX 平台的 Win32 最小兼容层（二期阶段一）。
 //
 // 定位与边界（与实施方案 §2 对齐）：
@@ -11,6 +20,10 @@
 //   - 例外：GetSystemTimeAsFileTime 是 process 上下文（VST3 过程
 //     数据的时间戳）在用的**非编辑器** API，这里给真实实现
 //     （FILETIME 纪元换算），不是惰性桩。
+//   - 编辑器阶段（2026-11-04）：窗口类 API 已由 plugin_gui_x11.cpp
+//     以 X11 真实现（运行时 dlopen libX11.so.6，无构建期依赖；
+//     无 X 环境时恒失败，与原桩行为一致地干净降级）。本头只留
+//     声明与无调用方的惰性桩（SetParent/SendMessageW 等）。
 //   - 本头只经 platform/posix 的 win32_util.h 间接引入，且仅在
 //     Linux 构建的 include 路径中出现；Windows 构建永不包含。
 #include <cstdint>
@@ -62,6 +75,12 @@ typedef struct tagMSG { HWND hwnd; UINT message; WPARAM wParam; LPARAM lParam; }
 #define WM_SIZE 0x0005
 #define WM_QUIT 0x0012
 #define WM_APP 0x8000
+#define WS_OVERLAPPED 0x00000000L
+#define WS_CAPTION 0x00C00000L
+#define WS_SYSMENU 0x00080000L
+#define WS_MINIMIZEBOX 0x00020000L
+#define WS_MAXIMIZEBOX 0x00010000L
+#define WS_THICKFRAME 0x00040000L
 #define WS_OVERLAPPEDWINDOW 0x00CF0000L
 #define HWND_TOP ((HWND)0)
 #define HWND_TOPMOST ((HWND)-1)
@@ -72,42 +91,38 @@ typedef struct tagMSG { HWND hwnd; UINT message; WPARAM wParam; LPARAM lParam; }
 #define SWP_NOZORDER 0x0004
 #define SWP_NOACTIVATE 0x0010
 #define SWP_FRAMECHANGED 0x0020
+#define SWP_SHOWWINDOW 0x0040
 
-static inline BOOL IsWindow(HWND) { return FALSE; }
-static inline HWND CreateWindowExW(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int,
-                                   int, int, HWND, HMENU, HINSTANCE, LPVOID) {
-    return nullptr;
-}
-static inline BOOL DestroyWindow(HWND) { return FALSE; }
-static inline BOOL ShowWindow(HWND, int) { return FALSE; }
-static inline BOOL SetWindowPos(HWND, HWND, int, int, int, int, UINT) {
-    return FALSE;
-}
-static inline INT_PTR SetWindowLongPtrW(HWND, int, INT_PTR) { return 0; }
-static inline INT_PTR GetWindowLongPtrW(HWND, int) { return 0; }
-static inline LONG_PTR SetWindowLongPtr(HWND, int, LONG_PTR) { return 0; }
-static inline LONG_PTR GetWindowLongPtr(HWND, int) { return 0; }
-static inline LONG GetWindowLongW(HWND, int) { return 0; }
-static inline LONG GetWindowLong(HWND, int) { return 0; }
-static inline UINT_PTR SetTimer(HWND, UINT_PTR, UINT, void*) { return 0; }
-static inline BOOL KillTimer(HWND, UINT_PTR) { return FALSE; }
-static inline BOOL GetClientRect(HWND, RECT* rc) {
-    if (rc) std::memset(rc, 0, sizeof(*rc));
-    return FALSE;
-}
-static inline BOOL UpdateWindow(HWND) { return FALSE; }
+// 窗口类 API：真实现在 plugin_gui_x11.cpp（X11，见文件头注）。
+BOOL IsWindow(HWND hwnd);
+HWND CreateWindowExW(DWORD exStyle, LPCWSTR className, LPCWSTR title,
+                     DWORD style, int x, int y, int w, int h, HWND parent,
+                     HMENU menu, HINSTANCE inst, LPVOID param);
+BOOL DestroyWindow(HWND hwnd);
+BOOL ShowWindow(HWND hwnd, int cmd);
+BOOL SetWindowPos(HWND hwnd, HWND after, int x, int y, int w, int h, UINT flags);
+INT_PTR SetWindowLongPtrW(HWND hwnd, int index, INT_PTR value);
+INT_PTR GetWindowLongPtrW(HWND hwnd, int index);
+LONG_PTR SetWindowLongPtr(HWND hwnd, int index, LONG_PTR value);
+LONG_PTR GetWindowLongPtr(HWND hwnd, int index);
+LONG GetWindowLongW(HWND hwnd, int index);
+LONG GetWindowLong(HWND hwnd, int index);
+UINT_PTR SetTimer(HWND hwnd, UINT_PTR id, UINT periodMs, void* proc);
+BOOL KillTimer(HWND hwnd, UINT_PTR id);
+BOOL GetClientRect(HWND hwnd, RECT* rc);
+BOOL UpdateWindow(HWND hwnd);
+BOOL MoveWindow(HWND hwnd, int x, int y, int w, int h, BOOL repaint);
+BOOL AdjustWindowRect(RECT* rc, DWORD style, BOOL menu);
+HWND GetWindow(HWND hwnd, UINT cmd);
+BOOL SetForegroundWindow(HWND hwnd);
 static inline void Sleep(DWORD) {}
 static inline HMODULE GetModuleHandleW(LPCWSTR) { return nullptr; }
 static inline DWORD GetCurrentThreadId() { return 0; }
 static inline DWORD GetLastError() { return 0; }
 static inline HWND SetParent(HWND, HWND) { return nullptr; }
-static inline BOOL MoveWindow(HWND, int, int, int, int, BOOL) { return FALSE; }
 static inline BOOL InvalidateRect(HWND, const RECT*, BOOL) { return FALSE; }
 static inline LRESULT SendMessageW(HWND, UINT, WPARAM, LPARAM) { return 0; }
 static inline BOOL PostMessageW(HWND, UINT, WPARAM, LPARAM) { return FALSE; }
-static inline BOOL AdjustWindowRect(RECT*, DWORD, BOOL) { return FALSE; }
-static inline HWND GetWindow(HWND, UINT) { return nullptr; }
-static inline BOOL SetForegroundWindow(HWND) { return FALSE; }
 
 // 真实实现（非编辑器路径）：系统时间 → FILETIME（1601 纪元，
 // 100ns 单位），供 VST3 process 的 systemTime 字段使用。
@@ -123,3 +138,12 @@ static inline void GetSystemTimeAsFileTime(FILETIME* ft) {
     ft->dwLowDateTime = static_cast<DWORD>(ticks & 0xFFFFFFFFULL);
     ft->dwHighDateTime = static_cast<DWORD>(ticks >> 32);
 }
+
+namespace auradsp {
+// X11 编辑器事件/定时器分发（plugin_gui_x11.cpp）。由 POSIX
+// ModulePumpThread 在登记过编辑器后周期调用（泵线程上执行，
+// 与 Win32 版 DispatchMessageW 的线程亲和语义对齐：只处理调用
+// 线程自有 X 连接上的窗口）。无窗口时近零开销早退。
+void guiX11Dispatch();
+bool guiX11HasWindows();
+} // namespace auradsp

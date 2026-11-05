@@ -393,7 +393,7 @@ tools/sync_artifacts.ps1 分发 test/ 等三处。
   `app/auradsp_app/lib/core/state/state_events.dart:16`（isolate 事件路由全量 case 分发），
   却在 10-28 记忆中挂在「Windows 引擎/桥」条目组之下（该组其余条目均为 C++ 侧）。
   **立项前先确认 E1 的原始定义**，避免拆错对象。
-- **VST2 / AU / LV2**：引擎侧只有 `engine/plugins/formats/{clap,vst3}`，无驱动；Dart 侧
+- **VST2 / AU / LV2**（**VST2 已于 2026-11-03 落地，见「VST2 支持」节**）：引擎侧只有 `engine/plugins/formats/{clap,vst3}`，无驱动；Dart 侧
   `PluginFormat` 枚举已含三种，但注释明确其定位是「引擎产出这些格式时角标/筛选即刻可用」的预留，
   **不是挂载支持**。补驱动前需先做授权与 ABI 取舍（VST2 需 `fst` 头 / AU 仅 macOS / LV2 与 CLAP 有 ABI 冲突面）。
 - **VB 总线掩码裁剪引擎（内存后续项，~180MB）**：`VmBridge.cpp:605 RebuildEngines(groups, sr)`
@@ -460,3 +460,75 @@ tools/sync_artifacts.ps1 分发 test/ 等三处。
 - **产物分发可能被运行中的 App 锁住**：`sync_artifacts.ps1` 对 `app/.../runner/Release` 的副本会报
   「being used by another process」并跳过（`test/` 与 `dist/` 正常）。本轮仅注释变更故无影响；
   有行为变更时须先关 App 再重建。
+
+### VST2 支持（2026-11-03 定稿 · ADR-013）
+
+- **编译头唯一源**：`vendor/plugin-api/vst2/vst.h`（Xaymar 净室，BSD-3-Clause）。
+  原 `vendor/plugin-api/steinberg/vst2.{h,main.h,_keytable.h}` 已删除——其注释与官方
+  `aeffect.h` 逐字相同，不是净室。Steinberg 官方 2.4 归档只留在
+  `source/vst2sdk/vstsdk2.4/`，严禁入 vendor / Release。
+- **32 位回调 ABI 坑**：Xaymar `vst_host_callback_t` 把 `p_int2` 声明成 `int64_t`；
+  32 位插件的 `VstIntPtr` 是 4 字节，宿主必须自定义 `intptr_t` 签名，否则
+  `p_str` / `p_float` 整体错位 4 字节。
+- **路由**：64 位 VST2 进程内；32 位强制 `plugin_host_x86` 位桥（`remoteClientFor` 已有逻辑）。
+- **扫描安全铁律**：绝不在引擎进程内 `LoadLibrary` 未知厂商 VST2。实测
+  `C:\Program Files\VstPlugins` 的 Blue Cat PatchWork / FabFilter 在
+  `VSTPluginMain` / `effOpen` 直接 0xC0000005。64 位进程内只做 PE 快扫
+  （`peHasVst2Entry` 导出表判定），真实元数据由加载路补齐；32 位深扫走
+  IPC `Op::QueryMetadata`（协议 v4，复用 `RemotePluginInfo`），崩溃隔离在桥宿主；
+  深扫只在进程外宿主内允许。
+- **扫描枚举通用修正**：`enumerate` 对文件候选也必须走 `driver->resolveBinary`，
+  否则 VST2 的 PE 导出表过滤只在目录分支生效，依赖 DLL 会混进列表。
+- **编辑器**：VST2 靠 30ms `WM_TIMER` → `IPluginInstance::onEditorIdle()` →
+  `effEditIdle`；容器窗固定尺寸，不做拉伸。
+- **预设**：写 `AUR2`（20B 头 + chunk/参数数组），读兼容 `.fxp`（`CcnK`，偏移 20 取 chunk）。
+- **探针**：`test/fixtures/vst2_gain/gain_vst2.cpp`（增益 0.5、chunk、editor）+
+  `bad_vst2.cpp`（坏 magic）；CMake target `test_vst2_fixture` /
+  `test_vst2_bad_fixture`，x64 → `test/vst2/x64/`，x86 → `test/vst2/x86/`，
+  坏 magic → `test/vst2/bad/`；
+  门禁 `smoke_plugin_vst2.py`（77 断言）+ `smoke_plugin_vst2_process.py`
+  （同套断言强制进程外）。
+- **进程外重载必须清共享环**（2026-11-03 实测）：同一槽第二次 load 起持续直通，
+  根因是上一会话未被消费的输出块被新代理当成流水基线（`m_outSynced` 建立后
+  seq 全不匹配）。`ProcessPluginProxy::load` 在拿到 ring 后把
+  `inputRead=inputWrite`、`outputRead=outputWrite`。这是**所有格式**的进程外
+  重载问题，不只 VST2。
+- **`extractVendorFromPath` 必须跳过 `.dll/.so/.vst`**：否则 VST2 快扫在无 PE
+  版本资源时会把 DLL 文件名当厂商名（`AuraTestVST2.dll`）。
+- **扫描归属（2026-11-04 定论，《插件扫描归属重构与崩溃隔离》）**：
+  - **快扫本地、深扫按位数进宿主**：引擎 `scan*` 全家不再整轮委托（9 处
+    `if (m_remoteMode) return client->...` 已删）；`remoteScanClientFor(binaryPath)`
+    按位数选宿主（32→x86 桥、64→x64、未知→nullptr），VST2 无宿主时退快扫，
+    VST3/CLAP 回退引擎内深扫（`AURA_PLUGIN_DEEP_SCAN=inproc` 强制全回退）。
+  - **`AURA_PLUGIN_HOST_MODE` 只管加载**：x64 客户端 `start(allowScanHost)` 支持
+    「仅扫描」懒启动，`processMode()` 仍如实返回；**`setChannelHint` 的 x64 转发
+    必须 gate 在 `m_remoteMode`**，否则仅扫描客户端会被加载期消息拉起（懒启动失效）。
+  - **协议 v5**：`Op::QueryMetadata` 响应 = `u32 count + count × RemotePluginInfo`
+    （上限 512）。宿主用 `driver->queryMetadata` 直出（VST3 一包多插件完整返回），
+    不再 createInstance；失败一律 status=0，引擎回退快扫。**混版本被 Hello 拦截**
+    ——改协议必须同时重建 `plugin_host_x86`（独立构建树 `build-x86`，
+    `build_engine.sh` 不建它！），否则 32 位全挂（深扫回快扫 + 桥加载 rc=0）。
+  - **errorMessage 只描述「不兼容」，不描述「元数据深浅」**：深扫回退的快扫条目
+    保持空文案——快扫条目本可正常挂载，塞告警会污染数据（UI 只在 isUnsupported
+    时展示，但数据层先错、守卫后到就是定时炸弹）。
+  - **32 位标记按位桥可用性**（`PluginScanner::setArchBridgeAvailable`，manager
+    构造时写入）：桥在位 → `isCompatible=true`；缺 → false + 「需要
+    plugin_host_x86」。Dart `isSupported` 逻辑不变，注释已修正（桥不要求 process 模式）。
+  - **快扫全格式零执行（11-04 二次修正）**：`supportsQuickMetadata` 接口已删，
+    CLAP 快扫不再载入模块；快扫列表显示文件名（与 VST3/VST2 口径一致）。
+  - **快扫种子不进加载路（D-8）**：`PluginMetadata::fromQuickScan` 由
+    `makeQuickMeta`/`fill32BitIncompatible` 置位；三实例 load 遇快扫种子跳过
+    `seedMetadataFromScan` 走纯描述符路径。否则快扫猜测值（vendor=Unknown）
+    经 `fillMetadataIfEmpty` 只补空语义**压死描述符真值**（实测 KV-Element）。
+    深扫种子维持 B1「种子为准」。
+  - **宿主 SEH 兜底**：`queryMetadataGuarded`（POD 局部量 + `__try/__except`）调
+    `__declspec(noinline) queryMetadataImpl`——MSVC 禁止在需对象展开的函数里用
+    `__try`（C2712）；AV 后临时对象/模块句柄按隔离区语义泄漏不 FreeLibrary。
+    POSIX 无 SEH，靠客户端超时杀宿主（`killHostOnTimeout`，10-28 已有）。
+- **宿主矩阵（2026-11-03 核实，2026-11-04 扫描归属重构后更新）**：加载口径——默认
+  （`AURA_PLUGIN_HOST_MODE` 未设）64 位进程内；`=process` 转 `plugin_host_x64`；32 位
+  两平台永远走 `plugin_host_x86` 位桥（在位即启用，`disabled/off/none` 才关）。格式：
+  Windows = VST3 / CLAP / VST2，Linux = VST3 / CLAP（VST2 驱动 `#if defined(_WIN32)` 注册）。
+  扫描口径（11-04 起）——快扫本地、深扫按位数进对应宿主，**进程内/外结果一致**；
+  `AURA_PLUGIN_DEEP_SCAN=inproc` 回退引擎内深扫（此时 VST2 仍只快扫，安全铁律）。
+  AU 未规划，LV2 暂缓。

@@ -46,7 +46,9 @@ std::string resolvePluginBundleBinary(const std::string& bundlePath,
         // 扫描枚举直接丢弃（目录型 VST3 在 Linux 完全不可见），
         // 双宿主路由也因 resolveBinary 失败落不到真实二进制。
         // 偏好顺序同 Windows 口径：本机架构优先，32 位可发现。
-        static const char* const kArchDirs[] = {"x86_64-linux", "x86-linux"};
+        static const char* const kArchDirs[] = {
+            "x86_64-linux", "i686-linux", "i386-linux", "x86-linux"
+        };
         const std::string bundleStem = fs::path(bundlePath).stem().string();
         for (const char* arch : kArchDirs) {
             fs::path subDir = fs::path(bundlePath) / "Contents" / arch;

@@ -38,8 +38,11 @@ public:
     PluginHostClient(const PluginHostClient&) = delete;
     PluginHostClient& operator=(const PluginHostClient&) = delete;
 
-    /* Reads AURA_PLUGIN_HOST_MODE. Returns true when process mode was requested. */
-    bool start();
+    /* Reads AURA_PLUGIN_HOST_MODE. Returns true when this client was launched.
+     * allowScanHost（2026-11-04）：X64 客户端在非 process 模式下也允许启动——
+     * 仅用于「深扫借宿主做」的隔离，不改变加载语义（processMode() 仍如实返回，
+     * 管理器只在它为真时才把加载转成远程）。X86 位桥不受此参数影响。 */
+    bool start(bool allowScanHost = false);
     void shutdown();
 
     bool processMode() const { return m_processMode.load(std::memory_order_acquire); }
@@ -66,6 +69,12 @@ public:
     bool load(uint32_t slot, const std::string& path, const std::string& pluginId,
               double sampleRate, uint32_t maxBlockSize,
               ipc::RemotePluginInfo& outInfo, std::string& outError);
+    /* 深扫元数据查询（v5，2026-11-04）：宿主内 driver->queryMetadata 直出，
+     * 一次可返回多条（VST3 一包多插件）。timeoutMs 与进程内深扫的 2500ms 同口径；
+     * 超时/失败返回 false 且 out 保持为空，调用方按各自策略回退。 */
+    bool queryMetadata(const std::string& path,
+                       std::vector<ipc::RemotePluginInfo>& out,
+                       int timeoutMs = 2500);
     bool unload(uint32_t slot);
     bool setBypass(uint32_t slot, bool bypass);
     bool getBypass(uint32_t slot, bool& bypass);

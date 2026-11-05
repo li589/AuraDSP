@@ -28,6 +28,7 @@ namespace fs = std::filesystem;
 namespace auradsp {
 
 constexpr UINT_PTR kSizeSettleTimerId = 0x4143;  // 与 Win32 版同值
+constexpr UINT_PTR kEditorIdleTimerId = 0x4144;  // 与 Win32 版同值
 
 // UTF-8 ↔ UTF-32（Linux wchar_t）逐码点转换。
 inline std::wstring utf8ToWide(const std::string& utf8) {
@@ -91,6 +92,9 @@ std::string extractVendorFromPath(const std::string& filePath);
 // 以 ELF class 给出三态。
 int pluginBinaryBitness(const std::wstring& binaryPath);
 bool peIs64Bit(const std::wstring& binaryPath);
+// VST2 入口判定（PE 版解析导出表；POSIX 版解析 ELF 动态符号表，
+// 同口径：只读文件、零代码执行）。查 VSTPluginMain / main。
+bool peHasVst2Entry(const std::wstring& binaryPath);
 std::string extractCompanyFromVersionInfo(const std::wstring& binaryPath);
 std::string extractProductVersionFromVersionInfo(const std::wstring& binaryPath);
 std::string extractVendorFromLegalCopyright(const std::wstring& binaryPath);
@@ -104,5 +108,6 @@ void ResizeDirectChildren(HWND hwnd);
 void FlashEditorToFront(HWND hwnd);
 void EnsureClapWindowClassRegistered();
 void EnsureVst3WindowClassRegistered();
+void EnsureVst2WindowClassRegistered();
 
 } // namespace auradsp

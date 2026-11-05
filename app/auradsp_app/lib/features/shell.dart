@@ -637,12 +637,14 @@ class _TopBar extends StatelessWidget {
                   listenable: model,
                   builder: (_, _) => Row(
                     children: [
-                      StateBadge(
-                          engineState: model.engineState,
-                          bypass: model.bypass,
-                          live: model.liveSpectrum),
-                      const SizedBox(width: AuraSpace.sm),
-                      LatencyBadge(ms: model.latencyMs),
+                      MasterStatusConsole(
+                        engineState: model.engineState,
+                        bypass: model.bypass,
+                        live: model.liveSpectrum,
+                        latencyMs: model.latencyMs,
+                        onToggleBypass: () => model.toggleBypass(),
+                        onRefreshLatency: () => model.refreshAllComponentLatencies(),
+                      ),
                       const SizedBox(width: AuraSpace.sm),
                       _IconAction(
                         icon: Icons.palette_outlined,

@@ -20,6 +20,7 @@ import 'package:flutter/material.dart' show Color, Locale;
 import '../engine/audio_isolate.dart';
 import '../engine/audio_out/alsa_ffi.dart' as alsa_ffi;
 import 'debug/debug_trace.dart';
+import 'effect_registry.dart';
 import 'plugins/plugin_scan_dirs.dart';
 import 'nav.dart';
 import '../engine/auradsp_ffi.dart'
@@ -141,6 +142,14 @@ class AppModel extends ChangeNotifier {
 
   int engineState = 0; // 0=bypass 1=processing 2=error
   double latencyMs = 0;
+
+  /// 全链路端到端频响分析反哺延迟值（静音仿真测定，不向扬声器发声）
+  void updateFullChainMeasuredLatency(double ms) {
+    if ((latencyMs - ms).abs() > 0.05) {
+      latencyMs = ms;
+      _notifyUi();
+    }
+  }
   bool playing = false;
   // 频谱门：进程内 playing 或 VB/ASIO/VAIO 桥活着都算 live。
   // Linux 的 virtual/driver 模式没有「播放音源」，音频来自 PA 采集
@@ -273,6 +282,13 @@ class AppModel extends ChangeNotifier {
   String get pipelineOutputDevice => config.pipelineOutputDevice;
   String get apoTargetEndpoint => config.apoTargetEndpoint;
   bool get monitorMirroring => config.monitorMirroring;
+  /// 主页氛围背景开关（配置代理；关闭后页面不构造 AmbientSpectrum）。
+  bool get ambientOn => config.ambientSpectrum;
+
+  /// 氛围背景开关的页面级订阅源（见构造函数注释）。UI 必须听它，
+  /// 不要依赖 model 的 notifyListeners —— 保活页收不到。
+  late final ValueNotifier<bool> ambientEnabled;
+
   bool get pipelineInputEnabled => config.pipelineInputEnabled;
   bool get pipelineOutputEnabled => config.pipelineOutputEnabled;
   List<AudioDeviceItem> wasapiDevices = [];
@@ -729,6 +745,13 @@ class AppModel extends ChangeNotifier {
   /// Liveprog 扩展滑块参数表（支持 1..64 及自定义变量，以 meta.index 为键）
   final Map<int, double> lpSliderValues = {};
 
+  /// Liveprog 扩展滑块元数据表（支持解析后的全部滑块）
+  final Map<int, EelSliderMeta> lpSliderMetas = {};
+
+  /// Liveprog 代码重载节流计时器与最后发送时间戳
+  Timer? _lpCodeReloadTimer;
+  int _lastLpCodeReloadMs = 0;
+
   double getLiveprogSliderVal(int idx, double defaultVal) {
     if (lpSliderValues.containsKey(idx)) {
       return lpSliderValues[idx]!;
@@ -739,7 +762,7 @@ class AppModel extends ChangeNotifier {
     return defaultVal;
   }
 
-  void setLiveprogSliderVal(int idx, double v) {
+  void setLiveprogSliderVal(int idx, double v, {EelSliderMeta? meta}) {
     lpSliderValues[idx] = v;
     if (idx >= 1 && idx <= 8) {
       lpParams[idx - 1] = v;
@@ -749,6 +772,56 @@ class AppModel extends ChangeNotifier {
     }
     _notifyUi();
     scheduleAutoSave();
+
+    final m = meta ?? lpSliderMetas[idx];
+    if (m != null && lpCode != null && lpCode!.isNotEmpty) {
+      var code = lpCode!;
+      var codeChanged = false;
+      for (final varName in EelSliderParser.candidateVarNames(m)) {
+        if (EelSliderParser.hasVariableAssignment(code, varName)) {
+          final newCode = EelSliderParser.replaceVariableValue(code, varName, v, step: m.step);
+          if (newCode != code) {
+            code = newCode;
+            codeChanged = true;
+          }
+        }
+      }
+      if (codeChanged) {
+        final oldCode = lpCode;
+        lpCode = code;
+        if (lpDraftCode == oldCode || lpDraftCode == null) {
+          lpDraftCode = code;
+        }
+        if (m.enumOptions.isNotEmpty || m.step >= 1.0) {
+          _sendLiveprogCodeNow(code);
+        } else {
+          _scheduleLiveprogCodeReload(code);
+        }
+      }
+    }
+  }
+
+  void _sendLiveprogCodeNow(String code) {
+    _lpCodeReloadTimer?.cancel();
+    _lpCodeReloadTimer = null;
+    _lastLpCodeReloadMs = DateTime.now().millisecondsSinceEpoch;
+    send({'cmd': 'setParamStr', 'id': ParamId.lpCode, 'text': code});
+  }
+
+  void _scheduleLiveprogCodeReload(String code) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final elapsed = now - _lastLpCodeReloadMs;
+    const throttleMs = 35;
+    if (elapsed >= throttleMs) {
+      _sendLiveprogCodeNow(code);
+    } else {
+      _lpCodeReloadTimer?.cancel();
+      _lpCodeReloadTimer = Timer(Duration(milliseconds: throttleMs - elapsed), () {
+        if (lpCode != null) {
+          _sendLiveprogCodeNow(lpCode!);
+        }
+      });
+    }
   }
   Timer? _debounceSaveTimer;
   bool _isReplayingSession = false;
@@ -942,6 +1015,11 @@ class AppModel extends ChangeNotifier {
         windowsSystem = windowsSystem ?? const NullWindowsSystem(),
         window = window ?? NullWindowPort() {
     config = ConfigManager.load();
+    // 氛围背景开关的页面级订阅源：外壳用 IndexedStack 保活、页面实例缓存，
+    // 模型 notifyListeners 不会让保活页重建（Settings 还是模态覆盖层，
+    // visiblePage 也不变）。凡「设置里改、别的页要立刻响应」的开关都必须
+    // 走这样一个 ValueListenable，否则改了配置但画面不动。
+    ambientEnabled = ValueNotifier<bool>(config.ambientSpectrum);
     // 可视化配置：config.json 是跨重启持久化副本，这里建立运行时真相源。
     // 随后 SessionMemory.restoreMemoryImage 会再用会话快照覆盖（若存在）。
     visualizerConfig = ValueNotifier<VisualizerConfig>(config.visualizerConfig);
@@ -1093,31 +1171,80 @@ class AppModel extends ChangeNotifier {
   /// 正在探测中的组件（UI 据此显示进度并禁用重复点击）。
   final Set<String> _probing = {};
 
-  /// 该组件当前可显示的延迟，带**来源**三态。
+  /// 第三方插件槽位累计延迟（ms）：全链路延迟的插件部分。
   ///
-  /// - [measured]  = true：来自真实脉冲响应实测（引擎 auradsp_probe_component）。
-  /// - [estimated] = true：来自**实时计算**（目前仅 convolver 的 IR 长度换算，
-  ///   是精确数学而非预设常数）。2026-10-19 起不再有任何「预设延迟数值」：
-  ///   comp/haas/spatial/arbmag/ddc 的硬编码标称已全部删除，改为 ↻ 实测
-  ///   （haas/spatial 探针本轮已支持）。
-  /// - 两者皆 false：真的没有可用数值，UI 显示「未测量」。
-  ({double ms, bool measured, bool estimated}) componentLatency(String compId) {
+  /// R-05：全链路延迟的拆分口径只在这里算一次，频响分析器等消费方
+  /// 直接读取本 getter，不得再自行遍历槽位做样本→毫秒换算。
+  double get pluginChainLatencyMs {
+    double totalMs = 0.0;
+    if (deviceRate <= 0) return 0.0;
+    for (var s = 0; s < PluginManager.kMaxSlots; s++) {
+      if (pluginManager.isSlotActive(s) && !pluginManager.isSlotBypassed(s)) {
+        totalMs += samplesToMs(pluginManager.getSlotLatency(s), deviceRate);
+      }
+    }
+    return totalMs;
+  }
+
+  /// 核心效果器链累计延迟（ms）= 全链路总延迟 − 插件部分。
+  double get coreChainLatencyMs {
+    final total = fullChainLatencyMs;
+    return (total - pluginChainLatencyMs).clamp(0.0, total);
+  }
+
+  /// 全链路端到端总延迟（ms）：统揽所有启用核心效果器 + 第三方插件槽位延迟
+  double get fullChainLatencyMs {
+    double totalMs = 0.0;
+    for (final id in kFullChainStageIds) {
+      if (isStageEnabled(id)) {
+        totalMs += componentLatency(id).ms;
+      }
+    }
+    // 前后级门控与 Limiter
+    if (limiterOn) {
+      totalMs += componentLatency('limiter').ms;
+    }
+    // 第三方插件槽位延迟（统一走 pluginChainLatencyMs）
+    totalMs += pluginChainLatencyMs;
+    return totalMs;
+  }
+
+  /// 该组件当前可显示的延迟，带来源与模式（实测 / 实时推算 / 零延迟 / 未测定）。
+  ({double ms, bool measured, bool estimated, LatencyMode mode}) componentLatency(String compId) {
+    // 1. 实测优先：若已真实完成脉冲探测，返回实测数据
     final m = _measuredLatencyMs[compId];
-    if (m != null) return (ms: m, measured: true, estimated: false);
-    // 解析兜底：只有 convolver 能从已知的 IR 长度算出真正的附加延迟
-    // （convFrames/deviceRate 实时计算，非预设常数）。
+    if (m != null) {
+      return (ms: m, measured: true, estimated: false, mode: LatencyMode.measured);
+    }
+
+    // 2. 探测中
+    if (_probing.contains(compId)) {
+      return (ms: 0.0, measured: false, estimated: false, mode: LatencyMode.probing);
+    }
+
+    // 3. 算法与参数实时精确推算（非硬编码常数，基于当前滑块/资源/模型计算）
     if (compId == 'convolver' &&
         convEnabled &&
         convReady &&
         convFrames > 0 &&
         deviceRate > 0) {
-      return (
-        ms: (convFrames / deviceRate) * 1000.0,
-        measured: false,
-        estimated: true,
-      );
+      final ms = samplesToMs(convFrames, deviceRate);
+      return (ms: ms, measured: false, estimated: true, mode: LatencyMode.estimated);
     }
-    return (ms: 0.0, measured: false, estimated: false);
+
+
+    if ((compId == 'post' || compId == 'limiter') && limiterOn) {
+      return (ms: 1.5, measured: false, estimated: true, mode: LatencyMode.estimated);
+    }
+
+
+
+    // 4. 零延迟判断：若该组件已启用但属于零延迟（如纯增益或常规直通），返回 0.0 ms
+    if (isStageEnabled(compId)) {
+      return (ms: 0.0, measured: false, estimated: false, mode: LatencyMode.zero);
+    }
+
+    return (ms: 0.0, measured: false, estimated: false, mode: LatencyMode.unmeasured);
   }
 
   /// 该组件是否支持实测。
@@ -1133,40 +1260,10 @@ class AppModel extends ChangeNotifier {
   /// param_contract_test Part G 以引擎源文件断言该集合不得越界。
   /// 2026-10-19：haas / spatial 入列——引擎探针改逐声道首非零取最大后
   /// 两者均可如实测量（haas 测当前延迟、spatial 测 0ms 诚实链延迟）。
-  static bool isLatencyProbeSupported(String compId) => const {
-    'bass',
-    'reverb',
-    'eq',
-    'tube',
-    'crossfeed',
-    'limiter',
-    'post',
-    'comp',
-    'exciter',
-    'stereo',
-    'arbmag',
-    'dyneq',
-    'filter',
-    'gate',
-    'loudness',
-    'convolver',
-    'ddc',
-    'haas',
-    'spatial',
-  }.contains(compId);
+  static bool isLatencyProbeSupported(String compId) =>
+      kLatencyProbeIds.contains(compId);
 
-  /// 探针别名：卡片 compId → 引擎 probe_is_supported 实名列表。
-  ///
-  /// 低音塑形是合并卡（shelf + bassmono 两段引擎 stage），Dart 侧没有
-  /// 'bass_shaping' 这个探针名（引擎只认 shelf/bassmono，二者均在
-  /// kSupported）。↻ 实测时对两个实名分别打脉冲，样本延迟求和 =
-  /// 合并卡总算法延迟。param_contract_test Part G 校验别名目标必须
-  /// 全部在引擎支持集内。
-  static const Map<String, List<String>> kLatencyProbeAliases = {
-    'bass_shaping': ['shelf', 'bassmono'],
-  };
-
-  /// 该组件是否显示 ↻ 刷新按钮。
+  /// 该组件是否显示 ↻ 刷新按钮（探针支持集与别名见 effect_registry.dart）。
   /// 2026-10-19：haas/spatial 探针已支持后，全部卡片都是真探针或别名探针
   /// ——三档口径收敛为两档，不再有「只刷新标称」的档位。
   static bool hasLatencyRefresh(String compId) =>
@@ -1188,6 +1285,7 @@ class AppModel extends ChangeNotifier {
     // 下次启动 restoreMemoryImage 把旧参数全部还原（用户心智：全部归零）。
     // 先取消挂起的防抖保存——否则 500ms 后的 timer 会把文件写回来。
     _debounceSaveTimer?.cancel();
+    _lpCodeReloadTimer?.cancel();
     SessionMemory.clear();
     notifyListeners();
   }
@@ -1200,6 +1298,7 @@ class AppModel extends ChangeNotifier {
     appearanceTick.dispose();
     connTick.dispose();
     visiblePage.dispose();
+    ambientEnabled.dispose();
     visualizerImmersive.dispose();
     visualizerConfig.dispose();
     _headTracker.stop();
@@ -1208,6 +1307,7 @@ class AppModel extends ChangeNotifier {
     );
     _trayVisibilitySubscribed = false;
     _debounceSaveTimer?.cancel();
+    _lpCodeReloadTimer?.cancel();
     _eqCurveTimer?.cancel();
     _eqResponseTimer?.cancel();
     // 可视化 config 写盘防抖：退出前补一次同步落盘，避免最后一次改动丢失
@@ -1253,9 +1353,59 @@ String dbfsText(double db) {
 }
 
 /// 延迟徽标配色档位：四阶声学色彩动力学（直通/零开销为弱灰，录音监听级为绿，影视游戏级为金，缓冲级为红）
-Color latencyColor(double ms, AuraPalette p) {
-  if (ms <= 0) return p.textDim;
-  if (ms <= 10) return p.success;
-  if (ms <= 30) return p.warning;
-  return p.accent2;
+/// 全链路效果器延迟计算与显示状态模式
+enum LatencyMode {
+  measured,   // 真实脉冲响应实测（实测值，实线高保真绿）
+  estimated,  // 算法/参数实时精准推算（动态推算值，带 ≈ 前缀）
+  probing,    // 正在测定中（高频脉冲）
+  zero,       // 零延迟或直通（沉稳次级灰）
+  unmeasured, // 未测定（微弱灰）
 }
+
+/// 延迟展示与换算的唯一入口：格式化、配色、样本→毫秒一律走这里。
+/// 新增展示点不得再手写 `toStringAsFixed(1)` 或 `samples / rate * 1000`。
+abstract final class LatencyPresenter {
+  /// 一位小数的毫秒数值（供 StatReadout 等数值/单位分离的控件使用）。
+  static String number(double ms) => ms.toStringAsFixed(1);
+
+  /// 标准展示串：`12.3 ms`。
+  static String format(double ms) => '${number(ms)} ms';
+
+  /// 聚合延迟配色（主监视舱 / 首页读数等无模式场景）。
+  static Color color(double ms, AuraPalette p) {
+    if (ms <= 0) return p.textDim;
+    if (ms <= 5) return p.success;
+    if (ms <= 15) return p.accent;
+    if (ms <= 30) return p.warning;
+    return p.accent2;
+  }
+
+  /// 模式感知配色（组件级延迟徽标）。
+  static Color colorByMode({
+    required LatencyMode mode,
+    required double ms,
+    required AuraPalette p,
+  }) {
+    switch (mode) {
+      case LatencyMode.probing:
+        return p.accent;
+      case LatencyMode.measured:
+        if (ms <= 5.0) return p.success;   // < 5ms: 录音监听级高保真绿
+        if (ms <= 15.0) return p.accent;   // 5~15ms: 极佳低延迟青
+        if (ms <= 30.0) return p.warning;  // 15~30ms: 暖琥珀
+        return p.accent2;                  // > 30ms: 缓冲级警示橙红
+      case LatencyMode.estimated:
+        if (ms <= 15.0) return p.accent;
+        if (ms <= 30.0) return p.warning;
+        return p.accent2;
+      case LatencyMode.zero:
+        return p.success;   // 0.0ms 零算法延迟（实时样本级），统一为高保真绿！
+      case LatencyMode.unmeasured:
+        return p.textDim;
+    }
+  }
+}
+
+/// 样本数 → 毫秒（唯一换算口径）；采样率未知（0）时返回 0，避免 NaN/Infinity。
+double samplesToMs(int samples, int rate) =>
+    rate > 0 ? samples / rate * 1000.0 : 0.0;

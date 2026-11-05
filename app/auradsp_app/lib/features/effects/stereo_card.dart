@@ -18,6 +18,7 @@ class _StereoCard extends StatelessWidget {
       latencyEnabled: model.isSectionEnabled('stereo'),
               latencyMeasured: model.componentLatency('stereo').measured,
               latencyEstimated: model.componentLatency('stereo').estimated,
+      latencyMode: model.componentLatency('stereo').mode,
               latencyProbing: model.isProbingLatency('stereo'),
       onRefreshLatency: AppModel.isLatencyProbeSupported('stereo')
           ? () => model.refreshComponentLatency('stereo')

@@ -28,6 +28,8 @@
 #include <thread>
 #include <condition_variable>
 
+#include "plugins/plugin_limits.h"
+
 namespace auradsp {
 
 #ifndef AURADSP_HOST_INPROC
@@ -37,7 +39,10 @@ class PluginHostClient;
 enum class PluginFormat {
     Unknown = 0,
     VST3,
-    CLAP
+    CLAP,
+    /* 2026-11-03：追加在末尾，保持既有数值稳定（IPC RemotePluginInfo
+     * 的 format 字段跨进程传输，不得重排）。 */
+    VST2
 };
 
 struct PluginMetadata {
@@ -54,6 +59,12 @@ struct PluginMetadata {
     uint32_t latency = 0;
     bool isCompatible = true;
     std::string errorMessage;
+    bool hasEditor = true;
+    /* 2026-11-04：该条目元数据是否来自快扫（纯文件头启发式：文件名/目录/PE
+     * 版本资源）。快扫值是猜测值，加载路不得让它压过格式原生真值——
+     * 实例 load 遇到快扫种子时直接跳过 seedMetadataFromScan（走纯描述符
+     * 路径）；深扫种子（driver->queryMetadata 直出）保持 B1「种子为准」。 */
+    bool fromQuickScan = false;
 
     /* 只序列化。反序列化在 Dart 侧（PluginMetadata.fromJson），C++ 侧曾有
      * 一个从未实现的 fromJson 声明，加字段后必然失真，故直接删除而非留死代码。 */
@@ -143,6 +154,13 @@ public:
      * 默认空实现。线程契约：在 plugin main 线程（泵线程）上被调用。 */
     virtual void onEditorResize() {}
 
+    /* VST2（2026-11-03）：编辑器需要宿主周期调用 `effEditIdle` 才能刷新
+     * 表针/波形（VST2 没有 CLAP 的 timer 扩展）。容器窗口用 30ms WM_TIMER
+     * 驱动本回调。默认空实现——VST3/CLAP 不依赖它。
+     * 线程契约：在 plugin main 线程（泵线程）上被调用。 */
+    virtual void onEditorIdle() {}
+    virtual void onTimer(uint32_t timerId) { (void)timerId; }
+
     int getSettleTicks() const { return m_sizeSettleTicks; }
     void incSettleTicks() { ++m_sizeSettleTicks; }
     void resetSettleTicks() { m_sizeSettleTicks = 0; }
@@ -175,11 +193,18 @@ public:
      * 只探测 x86_64-win，缺失即 return ""，32 位 bundle 被静默丢弃。 */
     static std::string resolveBundleBinary(const std::string& bundlePath, PluginFormat format,
                                            std::string* outArch = nullptr);
+
+    /* 位桥可用性（2026-11-04）：`plugin_host_x86` 是否就绪，由 PluginHostManager
+     * 构造时写入一次。快扫用它决定 32 位条目的 isCompatible 与文案——
+     * 旧实现写死「32 位无法加载，请安装 64 位版本」，在位桥就绪时是与事实相反的
+     * 假信息（见 docs/20-执行/插件扫描归属重构与崩溃隔离-2026-11-04.md D-5）。 */
+    static void setArchBridgeAvailable(bool available);
+    static bool archBridgeAvailable();
 };
 
 class PluginHostManager {
 public:
-    static constexpr size_t kMaxPluginSlots = 4;
+    static constexpr size_t kMaxPluginSlots = auradsp::limits::kMaxSlots;
 
     struct PluginSlot {
         std::unique_ptr<IPluginInstance> instance;
@@ -187,7 +212,8 @@ public:
         std::atomic<bool> bypassed{false};
         std::atomic<uint32_t> latency{0};
         std::atomic<int> insertStage{3}; // 0=Pre-DSP, 1=Pre-Vendor, 2=Post-Vendor, 3=Post-Reverb, 4=Post-Limiter
-        std::atomic<uint32_t> channelMask{0xFF};
+        std::atomic<uint32_t> channelMask{
+            (1u << auradsp::limits::kBusChannels) - 1u};
         std::atomic<int> mainInChannels{2};
         std::atomic<int> mainOutChannels{2};
         /* RT 临界区握手计数器（修复 use-after-free）。
@@ -363,6 +389,11 @@ public:
     std::shared_ptr<PluginHostClient> m_remoteClientX86;
     std::shared_ptr<PluginHostClient> remoteClientFor(
         const std::string& path);
+    /* 深扫分派（2026-11-04）：按候选二进制位数选出「能加载它的那个宿主」。
+     * 32 位 → 桥宿主；64 位 → x64 宿主（含仅扫描用途的实例）；位数未知或宿主
+     * 不可用 → nullptr，调用方按格式各自回退（VST3/CLAP 进程内、VST2 快扫）。 */
+    std::shared_ptr<PluginHostClient> remoteScanClientFor(
+        const std::string& binaryPath);
 #endif
     double m_sampleRate{48000.0};
     uint32_t m_maxBlockSize{1024};
@@ -396,6 +427,9 @@ public:
     /* 缓存条目是否是深扫产出（用于上面"深度足够"判定）。 */
     std::unordered_map<std::string, bool> m_scanCacheDeep;
 };
+
+bool editorQuarantineMatch(const std::string& name, const std::string& path);
+void pluginSetEditorQuarantineList(const char* patterns);
 
 } // namespace auradsp
 

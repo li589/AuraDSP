@@ -21,6 +21,7 @@ class _ExciterCard extends StatelessWidget {
       latencyEnabled: model.isSectionEnabled('exciter'),
       latencyMeasured: model.componentLatency('exciter').measured,
       latencyEstimated: model.componentLatency('exciter').estimated,
+      latencyMode: model.componentLatency('exciter').mode,
       latencyProbing: model.isProbingLatency('exciter'),
       onRefreshLatency: AppModel.isLatencyProbeSupported('exciter')
           ? () => model.refreshComponentLatency('exciter')

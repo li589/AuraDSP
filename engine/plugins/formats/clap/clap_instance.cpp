@@ -6,6 +6,7 @@
 #include "platform/port/module.h"
 #include "plugin_bundle.h"
 #include "plugin_metadata_util.h"
+#include "plugins/plugin_limits.h"
 #include "win32_util.h"
 
 #include <clap/clap.h>
@@ -49,7 +50,9 @@ public:
         setupPluginDllDirectories(path);
 
         m_meta = PluginMetadata{};
-        if (scanSeed) seedMetadataFromScan(m_meta, *scanSeed);
+        /* 快扫种子是文件头启发式，不进加载路（压过描述符即假数据）；
+         * 深扫种子维持 B1「种子为准」。 */
+        if (scanSeed && !scanSeed->fromQuickScan) seedMetadataFromScan(m_meta, *scanSeed);
         m_meta.path = path;
         m_meta.format = PluginFormat::CLAP;
 
@@ -178,6 +181,10 @@ public:
                 m_entry = nullptr;
                 return;
             }
+
+            auto gui = reinterpret_cast<const clap_plugin_gui_t*>(
+                m_plugin->get_extension(m_plugin, CLAP_EXT_GUI));
+            m_meta.hasEditor = (gui != nullptr);
         }, 10000);
         if (!taskRan || !initErr.empty()) {
             m_meta.isCompatible = false;
@@ -546,7 +553,9 @@ public:
     }
     void setChannelHint(int channels) override {
         if (channels < 1) channels = 1;
-        if (channels > 8) channels = 8;
+        if (channels > auradsp::limits::kBusChannelsInt) {
+            channels = auradsp::limits::kBusChannelsInt;
+        }
         m_channelHint = static_cast<uint32_t>(channels);
     }
     uint32_t getLatency() const override { return m_meta.latency; }
@@ -584,14 +593,20 @@ public:
         auto gui = reinterpret_cast<const clap_plugin_gui_t*>(
             m_plugin->get_extension(m_plugin, CLAP_EXT_GUI));
         if (!gui) return false;
-        if (!gui->is_api_supported || !gui->is_api_supported(m_plugin, CLAP_WINDOW_API_WIN32, false)) {
+        // 编辑器窗口 API 按平台选：Win32 HWND / POSIX X11（E1）。
+#if defined(_WIN32)
+        constexpr const char* kEditorApi = CLAP_WINDOW_API_WIN32;
+#else
+        constexpr const char* kEditorApi = CLAP_WINDOW_API_X11;
+#endif
+        if (!gui->is_api_supported || !gui->is_api_supported(m_plugin, kEditorApi, false)) {
             return false;
         }
 
         AURADSP_DBG("[DBG CLAP showEditor] main thread: gui->create...");
         bool createRes = false;
         try {
-            createRes = gui->create(m_plugin, CLAP_WINDOW_API_WIN32, false);
+            createRes = gui->create(m_plugin, kEditorApi, false);
         } catch (const std::exception& ex) {
             AURADSP_WARN_S("[DBG CLAP showEditor] gui->create exception: " << ex.what());
         } catch (...) {
@@ -649,8 +664,13 @@ public:
         // [2] set_parent + show 在本线程（== 容器线程 == 泵线程）：
         //     插件子窗口由本线程创建，其 WM_PAINT/输入由本线程泵分发。
         clap_window_t win = {};
+#if defined(_WIN32)
         win.api = CLAP_WINDOW_API_WIN32;
         win.win32 = hwnd;
+#else
+        win.api = CLAP_WINDOW_API_X11;
+        win.x11 = static_cast<clap_xwnd>(reinterpret_cast<uintptr_t>(hwnd));
+#endif
         AURADSP_DBG("[DBG CLAP showEditor] main thread: calling gui->set_parent...");
         bool setParentRes = false;
         try {
@@ -738,6 +758,31 @@ public:
         ResizeDirectChildren(m_editorHwnd);
     }
 
+    void onTimer(uint32_t timerId) override {
+        if (!m_plugin) return;
+        clap_id cid = 0;
+        {
+            std::lock_guard<std::mutex> lock(m_timerMutex);
+            auto it = m_timerIdMap.find(static_cast<UINT_PTR>(timerId));
+            if (it != m_timerIdMap.end()) {
+                cid = it->second;
+            } else {
+                auto directIt = m_timers.find(static_cast<clap_id>(timerId));
+                if (directIt != m_timers.end()) {
+                    cid = directIt->first;
+                }
+            }
+        }
+        if (cid == 0) return;
+        auto timerExt = reinterpret_cast<const clap_plugin_timer_support_t*>(
+            m_plugin->get_extension(m_plugin, CLAP_EXT_TIMER_SUPPORT));
+        if (timerExt && timerExt->on_timer) {
+            try {
+                timerExt->on_timer(m_plugin, cid);
+            } catch (...) {}
+        }
+    }
+
     static void safeHideAndDestroyClapGui(const clap_plugin_gui_t* gui, const clap_plugin_t* plugin) {
         if (!gui || !plugin) return;
 #if defined(_MSC_VER)
@@ -768,7 +813,10 @@ public:
         // （JUCE message thread），MessageManagerLock 无竞争（B3-② 重构，
         // 推翻 10-12「hide/destroy 必须在 caller」的结论——那个结论成立的
         // 前提是 create 在 caller 线程）。m_guiCreated 交换守卫防双执行。
-        if (m_guiCreated.exchange(false, std::memory_order_acq_rel) && gui) {
+        if (editorQuarantineMatch(m_meta.name, m_meta.path)) {
+            AURADSP_WARN("[DBG CLAP closeEditor] quarantine: 插件自身 teardown 缺陷，跳过 gui->destroy");
+            m_guiCreated.store(false, std::memory_order_release);
+        } else if (m_guiCreated.exchange(false, std::memory_order_acq_rel) && gui) {
             safeHideAndDestroyClapGui(gui, m_plugin);
         }
         if (hwnd) {

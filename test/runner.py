@@ -84,6 +84,10 @@ PLATFORM_WINDOWS = {
     "smoke_plugin_channels.py",
     "smoke_plugin_metadata.py",
     "smoke_plugin_arch_detect.py",
+    # VST2 64/32 位（2026-11-03）：自建探针，无外部插件依赖。
+    "smoke_plugin_vst2.py",
+    # 同套断言走进程外（x64 沙箱 + x86 位桥 + 重载清环）。
+    "smoke_plugin_vst2_process.py",
     "smoke_win32_plugin_host.py",
     "smoke_multislot_and_stages.py",
     "smoke_cross_mode_consistency.py",
@@ -142,6 +146,9 @@ PLATFORM_WINDOWS = {
     "smoke_asio_bridge.py",
     "smoke_asio_multichannel.py",
     "smoke_vaio_bridge.py",
+    # AuraVAIO 声道模式协商契约（2026-11-05）：countMode=auto/manual 下
+    # channels.count 的有效档位回读与非法值拒绝。
+    "smoke_vaio_channel_mode.py",
     "smoke_crossfeed.py",
     "smoke_basspsycho.py",
     "smoke_filter.py",
@@ -246,6 +253,10 @@ def run_smoke_tests():
         "smoke_plugin_channels.py",
         "smoke_plugin_metadata.py",
         "smoke_plugin_arch_detect.py",
+        # VST2 64/32 位（2026-11-03）：快扫/深扫/加载/音频/编辑器/预设/拒绝路径。
+        "smoke_plugin_vst2.py",
+        # 同套断言走进程外：x64 沙箱 + x86 位桥 + 重载清环。
+        "smoke_plugin_vst2_process.py",
     "smoke_win32_plugin_host.py",
         "smoke_multislot_and_stages.py",
         # E9 跨模式一致性（进程内 vs 进程外逐位比对）。历史：建门禁时对 HEAD
@@ -427,6 +438,9 @@ def run_smoke_tests():
     "smoke_asio_multichannel.py",
     # AuraVAIO 虚拟声卡桥（Mode 1）：探测端点与无驱动防御 / 有驱动回环断言
     "smoke_vaio_bridge.py",
+    # AuraVAIO 声道模式协商契约（2026-11-05）：auto/manual 切换下有效档位
+    # 回读、非法值拒绝与 auto 下写 count 不改变有效档位。
+    "smoke_vaio_channel_mode.py",
     "smoke_crossfeed.py",
     "smoke_basspsycho.py",
     "smoke_filter.py",

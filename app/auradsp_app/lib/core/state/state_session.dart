@@ -418,6 +418,10 @@ extension StateSession on AppModel {
       if (savedPluginSlots.isNotEmpty) {
         for (final item in savedPluginSlots) {
           if (item.path.isNotEmpty && File(item.path).existsSync()) {
+            if (pluginManager.isLoadCrashKnownPath(item.path)) {
+              dbgLog('[StateSession] 跳过曾导致挂载崩溃的插件恢复: ${item.path}');
+              continue;
+            }
             send({
               'cmd': 'pluginSlotLoad',
               'slot': item.slot,
@@ -530,6 +534,16 @@ extension StateSession on AppModel {
     appearanceTick.value++;
     _notifyUi();
     scheduleAutoSave();
+  }
+
+  /// 氛围背景开关。关闭时页面直接不构造氛围层 —— 连 spectrum 订阅、
+  /// 节流拨钟与衰减 Timer 一并消失，是真正的零开销，而不是画成全透明。
+  void setAmbientOn(bool on) {
+    if (config.ambientSpectrum == on) return;
+    config.ambientSpectrum = on;
+    ambientEnabled.value = on;
+    if (!_testing) ConfigManager.save(config);
+    _notifyUi();
   }
 
   void setAutoRestoreSession(bool enable) {

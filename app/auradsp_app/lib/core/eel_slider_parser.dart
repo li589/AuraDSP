@@ -136,4 +136,63 @@ abstract final class EelSliderParser {
 
     return result;
   }
+
+  /// 检查代码中是否包含变量显式赋值
+  static bool hasVariableAssignment(String code, String varName) {
+    return RegExp('\\b${RegExp.escape(varName)}\\s*=\\s*(-?[\\d.]+)\\s*;').hasMatch(code);
+  }
+
+  /// 检查代码中是否包含 `@slider` 段
+  static bool hasSliderSection(String code) {
+    return RegExp(r'(?:^|[\r\n])[ \t]*@slider\b').hasMatch(code);
+  }
+
+  /// 格式化数值为适合代码嵌入的文本形式
+  static String formatValueForCode(double value, {double? step}) {
+    if (step != null && step >= 1.0) {
+      return value.round().toString();
+    }
+    if (value == value.roundToDouble()) {
+      return value.round().toString();
+    }
+    return value.toStringAsFixed(4).replaceAll(RegExp(r'\.?0+$'), '');
+  }
+
+  /// 将代码中匹配的赋值语句替换为新数值
+  static String replaceVariableValue(String code, String varName, double value, {double? step}) {
+    final pattern = RegExp('\\b${RegExp.escape(varName)}\\s*=\\s*(-?[\\d.]+)\\s*;');
+    final valStr = formatValueForCode(value, step: step);
+    return code.replaceAllMapped(pattern, (m) => '$varName = $valStr;');
+  }
+
+  /// 获取元数据对应的候选变量名集合（包括 rawName 以及从 displayName 提取的有效标识符）
+  static List<String> candidateVarNames(EelSliderMeta meta) {
+    final names = <String>[meta.rawName];
+    final m = RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*').firstMatch(meta.displayName.trim());
+    if (m != null) {
+      final id = m.group(0)!;
+      if (!names.contains(id)) {
+        names.add(id);
+      }
+    }
+    return names;
+  }
+
+  /// 将代码中全部存在显式赋值的变量同 sliderValues / metas 进行全量对齐（用于首次编译与加载）
+  static String alignCodeWithSliders(
+    String code,
+    Map<int, double> sliderValues,
+    Map<int, EelSliderMeta> metas,
+  ) {
+    var result = code;
+    for (final meta in metas.values) {
+      final currentVal = sliderValues[meta.index] ?? meta.defaultVal;
+      for (final varName in candidateVarNames(meta)) {
+        if (hasVariableAssignment(result, varName)) {
+          result = replaceVariableValue(result, varName, currentVal, step: meta.step);
+        }
+      }
+    }
+    return result;
+  }
 }

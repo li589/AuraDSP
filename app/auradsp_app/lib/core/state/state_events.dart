@@ -901,6 +901,12 @@ extension StateEvents on AppModel {
         final wasV = vaioActive;
         vaioActive = (raw['running'] as bool?) ?? false;
         vaioInfo = Map<String, dynamic>.from(raw);
+        if (vaioActive && channelsCountMode == 0 && raw['channels'] != null) {
+          final c = (raw['channels'] as num).toInt();
+          if (c == 2 || c == 4 || c == 6 || c == 8) {
+            channelsCount = c;
+          }
+        }
         if (vaioActive && !wasV) {
           spectrum.value = List<double>.filled(32, 0.0);
           eqInSpectrum.value = List<double>.filled(32, 0.0);
@@ -1124,7 +1130,7 @@ extension StateEvents on AppModel {
     // 会把徽标刷成 "NaN ms"（历史事故）。此时与失败同处理——清除旧值，
     // 卡片 Badge 静默保持「未测量」与 Tooltip 说明。
     if (rc == 0 && deviceRate > 0) {
-      _measuredLatencyMs[comp] = samples / deviceRate * 1000.0;
+      _measuredLatencyMs[comp] = samplesToMs(samples, deviceRate);
     } else {
       _measuredLatencyMs.remove(comp);
     }
@@ -1146,7 +1152,7 @@ extension StateEvents on AppModel {
     // 2026-10-19：haas / spatial 探针已支持，全部组件均可真实测——「三档
     // 口径」的档位 3（结构性不可测）已不存在，全部走引擎脉冲实测。
     if (!AppModel.isLatencyProbeSupported(compId) &&
-        !AppModel.kLatencyProbeAliases.containsKey(compId)) {
+        !kLatencyProbeAliases.containsKey(compId)) {
       _latencyRefreshTicks[compId] = DateTime.now().millisecondsSinceEpoch;
       _notifyUi();
       return;
@@ -1157,7 +1163,7 @@ extension StateEvents on AppModel {
     _notifyUi();
 
     // 别名探针——合并卡映射到引擎实名，逐段实测求和。
-    final alias = AppModel.kLatencyProbeAliases[compId];
+    final alias = kLatencyProbeAliases[compId];
     final res = latencyProbeResource(compId) ?? '';
     final rate = info?.deviceRate.toDouble() ?? 48000.0;
     final enginePath = AuraDspLib.loadedPath;
@@ -1237,4 +1243,21 @@ extension StateEvents on AppModel {
 
   /// 探测进行中
   bool isProbingLatency(String compId) => _probing.contains(compId);
+
+  /// 统一延迟测量主干路径：异步测试所有已启用的效果器组件并反哺刷新全链路总延迟
+  Future<void> refreshAllComponentLatencies() async {
+    final activeTargets = <String>[];
+    for (final id in kLatencyProbeIds) {
+      if (isStageEnabled(id) || ((id == 'post' || id == 'limiter') && limiterOn)) {
+        activeTargets.add(id);
+      }
+    }
+
+    for (final id in activeTargets) {
+      await refreshComponentLatency(id);
+    }
+
+    // 重新测定反哺全链路总延迟（统一使用全系统唯一口径 fullChainLatencyMs）
+    updateFullChainMeasuredLatency(fullChainLatencyMs);
+  }
 }

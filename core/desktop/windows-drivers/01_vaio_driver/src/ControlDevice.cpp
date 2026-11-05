@@ -15,6 +15,7 @@ Abstract:
 --*/
 
 #include "ControlDevice.h"
+#include <wdmsec.h>
 
 //=============================================================================
 // Globals
@@ -62,17 +63,26 @@ AuraControlDevice_Create(
     RtlInitUnicodeString(&ntDeviceName, AURA_VAIO_DEVICE_NAME_NT);
     RtlInitUnicodeString(&dosDeviceName, AURA_VAIO_DOS_DEVICE_NAME);
 
-    ntStatus = IoCreateDevice(
+    // DRV-04: IoCreateDeviceSecure with SDDL restricting access to SYSTEM (SY),
+    // Administrators (BA), and Interactive Users (IU).
+    // WD (Everyone) is excluded to prevent unprivileged sandboxes or remote callers
+    // from accessing or hijacking the control device.
+    UNICODE_STRING sddl;
+    RtlInitUnicodeString(&sddl, L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGWGX;;;IU)");
+
+    ntStatus = IoCreateDeviceSecure(
                     DriverObject,
                     0,
                     &ntDeviceName,
                     FILE_DEVICE_UNKNOWN,
-                    0,
+                    FILE_DEVICE_SECURE_OPEN,
                     FALSE,
+                    &sddl,
+                    NULL,
                     &g_pControlDeviceObject);
     if (!NT_SUCCESS(ntStatus))
     {
-        AURA_TRACE("IoCreateDevice failed, 0x%08X\n", ntStatus);
+        AURA_TRACE("IoCreateDeviceSecure failed, 0x%08X\n", ntStatus);
         return ntStatus;
     }
 
@@ -373,7 +383,6 @@ AuraControlDevice_DispatchDeviceControl(
         }
         {
             PAURA_VAIO_MAP_RESPONSE pResp = reinterpret_cast<PAURA_VAIO_MAP_RESPONSE>(systemBuffer);
-            PAURA_VAIO_SHARED_HEADER pHeader = reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer);
             PEPROCESS currentProc = PsGetCurrentProcess();
             PVOID userVa = NULL;
 
@@ -384,20 +393,16 @@ AuraControlDevice_DispatchDeviceControl(
             {
                 userVa = g_pMappedUserAddress;
             }
+            else if (g_pMappedUserAddress != NULL)
+            {
+                // DRV-04: Ring buffer is exclusively held by another process.
+                // Reject hijack attempts with STATUS_DEVICE_BUSY instead of unmapping the owner.
+                KeReleaseSpinLock(&g_RingLock, oldIrql);
+                ntStatus = STATUS_DEVICE_BUSY;
+                break;
+            }
             else
             {
-                // Unmap previous mapping if another process had it open
-                if (g_pMappedUserAddress != NULL)
-                {
-                    __try
-                    {
-                        MmUnmapLockedPages(g_pMappedUserAddress, g_pRingMdl);
-                    }
-                    __except (EXCEPTION_EXECUTE_HANDLER) {}
-                    g_pMappedUserAddress = NULL;
-                    g_pMappedProcess = NULL;
-                }
-
                 __try
                 {
                     userVa = MmMapLockedPagesSpecifyCache(
@@ -423,18 +428,20 @@ AuraControlDevice_DispatchDeviceControl(
 
             if (userVa != NULL)
             {
+                /* DRV-03：应答一律报内核真值——共享头在上一个映射者手里
+                 * 可能已被改写，报它会把伪造几何递给新客户端。 */
                 pResp->UserAddress          = userVa;
                 pResp->TotalMappedSizeBytes = g_ulRingTotalSize;
-                pResp->HeaderSizeBytes      = pHeader->HeaderSizeBytes;
-                pResp->DataSizeBytes        = pHeader->DataSizeBytes;
-                pResp->SampleRate           = pHeader->SampleRate;
-                pResp->Channels             = pHeader->Channels;
-                pResp->BitsPerSample        = pHeader->BitsPerSample;
-                pResp->BlockAlign           = pHeader->BlockAlign;
+                pResp->HeaderSizeBytes      = sizeof(AURA_VAIO_SHARED_HEADER);
+                pResp->DataSizeBytes        = g_ulRingTotalSize - sizeof(AURA_VAIO_SHARED_HEADER);
+                pResp->SampleRate           = g_ulCurrentSampleRate;
+                pResp->Channels             = g_ulCurrentChannels;
+                pResp->BitsPerSample        = g_ulCurrentBitsPerSample;
+                pResp->BlockAlign           = g_ulCurrentChannels * (g_ulCurrentBitsPerSample / 8);
 
                 bytesReturned = sizeof(AURA_VAIO_MAP_RESPONSE);
                 ntStatus = STATUS_SUCCESS;
-                AURA_TRACE("MAP_SHARED_RING: userVa=%p, dataSize=%u\n", userVa, pHeader->DataSizeBytes);
+                AURA_TRACE("MAP_SHARED_RING: userVa=%p, dataSize=%u\n", userVa, pResp->DataSizeBytes);
             }
 
             KeReleaseSpinLock(&g_RingLock, oldIrql);
@@ -452,18 +459,34 @@ AuraControlDevice_DispatchDeviceControl(
 
             PEPROCESS currentProc = PsGetCurrentProcess();
             KeAcquireSpinLock(&g_RingLock, &oldIrql);
-            if (g_pMappedUserAddress != NULL && g_pRingMdl != NULL &&
-                (reqAddress == NULL || reqAddress == g_pMappedUserAddress) &&
-                (g_pMappedProcess == NULL || g_pMappedProcess == currentProc))
+            if (g_pMappedUserAddress != NULL)
             {
-                __try
+                if (g_pMappedProcess != NULL && g_pMappedProcess != currentProc)
                 {
-                    MmUnmapLockedPages(g_pMappedUserAddress, g_pRingMdl);
-                    AURA_TRACE("UNMAP_SHARED_RING: userVa=%p unmapped\n", g_pMappedUserAddress);
+                    // DRV-04: Non-owning process cannot unmap another process's mapping
+                    KeReleaseSpinLock(&g_RingLock, oldIrql);
+                    ntStatus = STATUS_ACCESS_DENIED;
+                    break;
                 }
-                __except (EXCEPTION_EXECUTE_HANDLER)
+
+                if (reqAddress != NULL && reqAddress != g_pMappedUserAddress)
                 {
-                    ntStatus = GetExceptionCode();
+                    KeReleaseSpinLock(&g_RingLock, oldIrql);
+                    ntStatus = STATUS_INVALID_PARAMETER;
+                    break;
+                }
+
+                if (g_pRingMdl != NULL)
+                {
+                    __try
+                    {
+                        MmUnmapLockedPages(g_pMappedUserAddress, g_pRingMdl);
+                        AURA_TRACE("UNMAP_SHARED_RING: userVa=%p unmapped\n", g_pMappedUserAddress);
+                    }
+                    __except (EXCEPTION_EXECUTE_HANDLER)
+                    {
+                        ntStatus = GetExceptionCode();
+                    }
                 }
                 g_pMappedUserAddress = NULL;
                 g_pMappedProcess = NULL;
@@ -471,7 +494,7 @@ AuraControlDevice_DispatchDeviceControl(
             }
             else
             {
-                ntStatus = (g_pMappedUserAddress == NULL) ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
+                ntStatus = STATUS_SUCCESS;
             }
             KeReleaseSpinLock(&g_RingLock, oldIrql);
         }
@@ -584,8 +607,14 @@ AuraControlDevice_WriteRenderSamples(
     if (g_pRingBuffer == NULL || Buffer == NULL || ByteCount == 0) return;
 
     pHeader = reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer);
-    pPayload = g_pRingBuffer + pHeader->DataOffsetBytes;
-    dataSize = pHeader->DataSizeBytes;
+    /* DRV-03（全项目审查 S7）：几何必须由内核自有真值派生，绝不能读
+     * 共享头——共享头对映射进程可写，DataOffsetBytes/DataSizeBytes 被
+     * 改大即可让下面的 RtlCopyMemory 写出环外（蓝屏/提权级）。共享头
+     * 里的同名字段今后只作展示副本；WriteOffset/TotalBytes 等仍经
+     * dataSize 取模/钳制，影响面被关进环内。 */
+    if (g_ulRingTotalSize <= sizeof(AURA_VAIO_SHARED_HEADER)) return;
+    pPayload = g_pRingBuffer + sizeof(AURA_VAIO_SHARED_HEADER);
+    dataSize = g_ulRingTotalSize - sizeof(AURA_VAIO_SHARED_HEADER);
 
     if (dataSize == 0) return;
 
@@ -616,9 +645,12 @@ AuraControlDevice_WriteRenderSamples(
 
     pHeader->WriteOffset = writeOffset;
     pHeader->TotalBytesWritten += ByteCount;
-    if (pHeader->BlockAlign > 0)
+    /* DRV-03：帧计数同样只用内核侧格式真值，不读共享头 BlockAlign。 */
     {
-        g_ullTotalFramesWritten += (ByteCount / pHeader->BlockAlign);
+        const ULONG blockAlign =
+            g_ulCurrentChannels * (g_ulCurrentBitsPerSample / 8);
+        if (blockAlign > 0)
+            g_ullTotalFramesWritten += (ByteCount / blockAlign);
     }
 
     KeReleaseSpinLock(&g_RingLock, oldIrql);
@@ -646,8 +678,14 @@ AuraControlDevice_ReadCaptureSamples(
     }
 
     pHeader = reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer);
-    pPayload = g_pRingBuffer + pHeader->DataOffsetBytes;
-    dataSize = pHeader->DataSizeBytes;
+    /* DRV-03：同 WriteRenderSamples——几何由内核真值派生，不读共享头。 */
+    if (g_ulRingTotalSize <= sizeof(AURA_VAIO_SHARED_HEADER))
+    {
+        RtlZeroMemory(Buffer, ByteCount);
+        return;
+    }
+    pPayload = g_pRingBuffer + sizeof(AURA_VAIO_SHARED_HEADER);
+    dataSize = g_ulRingTotalSize - sizeof(AURA_VAIO_SHARED_HEADER);
 
     if (dataSize == 0)
     {
@@ -695,9 +733,11 @@ AuraControlDevice_ReadCaptureSamples(
 
         pHeader->ReadOffset = readOffset;
         pHeader->TotalBytesRead += bytesToCopy;
-        if (pHeader->BlockAlign > 0)
         {
-            g_ullTotalFramesRead += (bytesToCopy / pHeader->BlockAlign);
+            const ULONG blockAlign =
+                g_ulCurrentChannels * (g_ulCurrentBitsPerSample / 8);
+            if (blockAlign > 0)
+                g_ullTotalFramesRead += (bytesToCopy / blockAlign);
         }
     }
 

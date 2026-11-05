@@ -12,7 +12,11 @@ inline void fillMetadataIfEmpty(std::string& dst, const std::string& src) {
 }
 
 /* 以扫描期元数据为基准初始化加载路 meta：只搬描述性字段，
- * 运行期字段（latency / isCompatible / errorMessage）一律重置。 */
+ * 运行期字段（latency / isCompatible / errorMessage）一律重置。
+ * 调用方（2026-11-04 起）必须先用 src.fromQuickScan 过滤：快扫值是
+ * 文件头启发式（文件名/目录/Unknown），压过描述符真值就是假数据
+ * （实测 KV-Element 加载路 vendor 被 seed 钉成 Unknown）；快扫种子
+ * 一律跳过本函数走纯描述符路径，深扫种子维持 B1「种子为准」。 */
 inline void seedMetadataFromScan(PluginMetadata& dst, const PluginMetadata& src) {
     dst.path = src.path;
     dst.id = src.id;

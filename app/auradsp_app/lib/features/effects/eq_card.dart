@@ -18,6 +18,7 @@ class _EqualizerCard extends StatelessWidget {
       latencyEnabled: model.isSectionEnabled('eq'),
               latencyMeasured: model.componentLatency('eq').measured,
               latencyEstimated: model.componentLatency('eq').estimated,
+      latencyMode: model.componentLatency('eq').mode,
               latencyProbing: model.isProbingLatency('eq'),
       onRefreshLatency: AppModel.isLatencyProbeSupported('eq')
           ? () => model.refreshComponentLatency('eq')

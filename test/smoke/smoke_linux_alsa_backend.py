@@ -67,6 +67,12 @@ def source_invariants():
           "driver 专家路径校验采集协商率与泵率一致（防变速变调）")
     check("alsa-capture-unavailable" in linux_iso,
           "ALSA 采集失败有专属 note")
+    # 全项目审查 DRV-02（2026-11-05）：Linux 输出流死亡必须能累计到
+    # 端点死亡判定（旧逻辑只认 WASAPI HRESULT，PA/ALSA 永远凑不齐）。
+    iso = read("lib/engine/audio_isolate.dart")
+    check("PlatformProfile.isLinux" in iso and "pa_simple" in iso
+          and "snd_pcm" in iso and "wasapiLost" in iso,
+          "[DRV-02] 泵对 Linux 输出后端 StateError 有端点死亡累计路径")
 
 
 SND_PCM_STREAM_PLAYBACK = 0

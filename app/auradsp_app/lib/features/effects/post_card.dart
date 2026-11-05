@@ -17,6 +17,7 @@ class _PostCard extends StatelessWidget {
       latencyEnabled: model.limiterOn,
       latencyMeasured: model.componentLatency('post').measured,
       latencyEstimated: model.componentLatency('post').estimated,
+      latencyMode: model.componentLatency('post').mode,
       latencyProbing: model.isProbingLatency('post'),
       onRefreshLatency: AppModel.isLatencyProbeSupported('post')
           ? () => model.refreshComponentLatency('post')

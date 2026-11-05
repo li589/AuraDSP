@@ -43,14 +43,24 @@ abstract final class DocumentStore {
   }
 
   static bool writeText(String path, String text) {
+    // APP-01（全项目审查 S7）：原子写——先写同目录临时文件并 flush，
+    // 再 rename 覆盖目标。直写目标时崩溃/断电会留下截断文件，而读侧
+    // 只能整档判废；rename 在同一文件系统内是原子替换，读者永远只
+    // 看到旧版或新版全文。失败时清理临时文件并返回 false（不抛）。
+    final tmp = File('$path.tmp');
     try {
-      final file = File(path);
-      final parent = file.parent;
+      final parent = tmp.parent;
       if (!parent.existsSync()) parent.createSync(recursive: true);
-      file.writeAsStringSync(text);
+      tmp.writeAsStringSync(text, flush: true);
+      tmp.renameSync(path);
       return true;
     } catch (e, st) {
       swallow(e, st);
+      try {
+        if (tmp.existsSync()) tmp.deleteSync();
+      } catch (e2, st2) {
+        swallow(e2, st2);
+      }
       return false;
     }
   }

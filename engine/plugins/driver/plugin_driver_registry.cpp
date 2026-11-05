@@ -17,6 +17,14 @@ PluginDriverRegistry::PluginDriverRegistry() {
     if (auto vst3 = createVst3FormatDriver()) {
         m_drivers.push_back(std::move(vst3));
     }
+#if defined(_WIN32) || defined(__linux__)
+    /* VST2：2026-11-03 首落地仅 Windows 注册；2026-11-04 Linux 跟进
+     * （POSIX peHasVst2Entry 按 ELF 动态符号表判定入口、驱动源编入
+     * Linux 目标），两平台同口径注册。 */
+    if (auto vst2 = createVst2FormatDriver()) {
+        m_drivers.push_back(std::move(vst2));
+    }
+#endif
 }
 
 IPluginFormatDriver* PluginDriverRegistry::find(PluginFormat format) const {

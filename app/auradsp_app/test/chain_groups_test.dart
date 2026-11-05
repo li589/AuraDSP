@@ -46,6 +46,13 @@ void main() {
     expect(model.stageMeterIndex('spatial'), 20);
   });
 
+  test('chain group table covers every default-order stage', () {
+    final grouped = kChainGroups.values.expand((members) => members).toSet();
+    for (final id in kDefaultCoreOrder) {
+      expect(grouped, contains(id), reason: '$id is missing from kChainGroups');
+    }
+  });
+
   test('group bypass toggles members but spares limiter', () {
     final model = AppModel(testing: true);
     // 空间组：开

@@ -16,7 +16,6 @@ import '../core/state.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
 import '../engine/auradsp_ffi.dart' show VizBands;
-import 'chrome.dart';
 
 // l10nOf 上移后 re-export：既有 `import ...widgets.dart` 的调用方零改动。
 export '../core/ui_helpers.dart' show l10nOf;
@@ -78,6 +77,7 @@ class SectionCard extends StatelessWidget {
     this.latencyMs,
     this.latencyMeasured,
     this.latencyEstimated,
+    this.latencyMode,
     this.latencyProbing,
     this.onRefreshLatency,
     this.latencyTick = 0,
@@ -85,6 +85,8 @@ class SectionCard extends StatelessWidget {
     this.titleTooltip,
     this.latencyEnabled = true,
   });
+
+  final LatencyMode? latencyMode;
 
   @override
   Widget build(BuildContext context) {
@@ -100,6 +102,7 @@ class SectionCard extends StatelessWidget {
                   latencyMs: latencyMs!,
                   measured: latencyMeasured ?? false,
                   estimated: latencyEstimated ?? false,
+                  mode: latencyMode,
                   probing: latencyProbing ?? false,
                   onRefresh: onRefreshLatency,
                   showRefresh: onRefreshLatency != null,
@@ -322,6 +325,150 @@ class SectionTitle extends StatelessWidget {
 
 /* ---- 状态徽标 ---- */
 
+/// 专业音频工作站一体化引擎状态与时延总控舱（Master Status Console）
+/// 彻底去除浮夸 AI 味（废除呼吸光圈扩散球与散乱浮动药丸），
+/// 采用一体式工业级嵌入面板、固态微型硬件 LED 状态灯与精密 Monospace 延迟时钟。
+class MasterStatusConsole extends StatelessWidget {
+  final int engineState;
+  final bool bypass;
+  final bool live;
+  final double latencyMs;
+  final VoidCallback? onToggleBypass;
+  final VoidCallback? onRefreshLatency;
+
+  const MasterStatusConsole({
+    super.key,
+    required this.engineState,
+    required this.bypass,
+    required this.live,
+    required this.latencyMs,
+    this.onToggleBypass,
+    this.onRefreshLatency,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+
+    // 引擎硬件状态与固态 LED 色彩
+    final (statusText, ledColor) = switch (engineState) {
+      2 => ('DSP FAULT', p.error),
+      _ when bypass => ('DSP BYPASS', p.warning),
+      0 => ('DSP STANDBY', p.textDim),
+      _ => live ? ('DSP ACTIVE', p.success) : ('DSP STANDBY', p.textDim),
+    };
+
+    final latColor = LatencyPresenter.color(latencyMs, p);
+
+    return Container(
+      height: 28,
+      decoration: BoxDecoration(
+        color: p.panelRaised,
+        borderRadius: BorderRadius.circular(AuraRadius.xs),
+        border: Border.all(color: p.hairline, width: 1.0),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // 左半部分：DSP 引擎固态微型 LED 与状态文字（支持点击切换全局旁路）
+          Tooltip(
+            message: bypass ? l.dspBypassHint : l.dspActiveHint,
+            waitDuration: const Duration(milliseconds: 300),
+            child: InkWell(
+              onTap: onToggleBypass,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(AuraRadius.xs),
+                bottomLeft: Radius.circular(AuraRadius.xs),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 固态声学硬件微型方形 LED（非 AI 呼吸扩散圈）
+                    Container(
+                      width: 5.5,
+                      height: 5.5,
+                      decoration: BoxDecoration(
+                        color: ledColor,
+                        borderRadius: BorderRadius.circular(1.2),
+                        boxShadow: (live && !bypass && engineState == 1)
+                            ? [
+                                BoxShadow(
+                                  color: ledColor.withValues(alpha: 0.6),
+                                  blurRadius: 4,
+                                ),
+                              ]
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      statusText,
+                      style: monoOf(
+                        p,
+                        size: 10.5,
+                        color: ledColor,
+                      ).copyWith(fontWeight: FontWeight.w700, letterSpacing: 0.4),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 中间精密标尺分割线
+          Container(
+            width: 1.0,
+            height: 14.0,
+            color: p.hairline,
+          ),
+
+          // 右半部分：音频链路延迟（支持点击触发全链路测量）
+          Tooltip(
+            message: l.pdcLatencyTooltip(LatencyPresenter.number(latencyMs)),
+            waitDuration: const Duration(milliseconds: 300),
+            child: InkWell(
+              onTap: onRefreshLatency,
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(AuraRadius.xs),
+                bottomRight: Radius.circular(AuraRadius.xs),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'PDC',
+                      style: monoOf(
+                        p,
+                        size: 9.0,
+                        color: p.textDim,
+                      ).copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      LatencyPresenter.format(latencyMs),
+                      style: monoOf(
+                        p,
+                        size: 11.0,
+                        color: latColor,
+                      ).copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class StateBadge extends StatelessWidget {
   final int engineState;
   final bool bypass;
@@ -337,37 +484,35 @@ class StateBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);
-    // 与 AppModel.engineDisplay 同口径（ primitives 版本，避免 import cycle）：
-    // 开关开→旁路；开关没开但引擎报 0→空闲；引擎 1→看有没有活数据。
     final (text, color) = switch (engineState) {
       2 => (l.stateError, p.error),
       _ when bypass => (l.stateBypass, p.textDim),
       0 => (l.stateIdle, p.textDim),
       _ => live ? (l.stateProcessing, p.success) : (l.stateIdle, p.textDim),
     };
-    final active = engineState == 1 && live && !bypass;
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AuraSpace.md,
-        vertical: AuraSpace.sm - 2,
-      ),
+      height: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(AuraRadius.sm),
-        border: Border.all(color: color.withValues(alpha: 0.5), width: 1),
+        color: p.panelRaised,
+        borderRadius: BorderRadius.circular(AuraRadius.xs),
+        border: Border.all(color: p.hairline, width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          PulseDot(color: color, active: active),
-          const SizedBox(width: AuraSpace.sm - 2),
+          Container(
+            width: 5.5,
+            height: 5.5,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(1.2),
+            ),
+          ),
+          const SizedBox(width: 5),
           Text(
             text,
-            style: TextStyle(
-              fontSize: 12,
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
+            style: monoOf(p, size: 10.5, color: color).copyWith(fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -382,28 +527,22 @@ class LatencyBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final c = latencyColor(ms, p);
+    final c = LatencyPresenter.color(ms, p);
     final l = l10nOf(context);
-    final text = ms <= 0
-        ? '${l.latencyLabel} 0.0 ms'
-        : '${l.latencyLabel} ${ms.toStringAsFixed(1)} ms';
+    final text =
+        '${l.latencyLabel} ${LatencyPresenter.format(ms <= 0 ? 0.0 : ms)}';
     return Tooltip(
       message: l.latencyTip,
       waitDuration: const Duration(milliseconds: 350),
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AuraSpace.md,
-          vertical: AuraSpace.sm - 2,
-        ),
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: c == p.textDim ? p.panel : c.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(AuraRadius.sm),
-          border: Border.all(
-            color: c == p.textDim ? p.hairline : c.withValues(alpha: 0.35),
-            width: 1,
-          ),
+          color: p.panelRaised,
+          borderRadius: BorderRadius.circular(AuraRadius.xs),
+          border: Border.all(color: p.hairline, width: 1),
         ),
-        child: Text(text, style: monoOf(p, size: 12, color: c)),
+        child: Center(child: Text(text, style: monoOf(p, size: 10.5, color: c).copyWith(fontWeight: FontWeight.w600))),
       ),
     );
   }
@@ -522,22 +661,13 @@ class OutputGainFrame extends StatelessWidget {
 
 class ComponentLatencyBadge extends StatefulWidget {
   final double latencyMs;
-
-  /// 该数值是否来自真实脉冲响应实测。false 表示解析估算或未测量。
   final bool measured;
-
-  /// 该数值是否来自标称表/解析推算（非实测）。true 时 UI 以「≈」前缀 +
-  /// 弱化配色展示，避免把估算谎报成实测。
   final bool estimated;
+  final LatencyMode? mode;
   final VoidCallback? onRefresh;
   final int refreshTick;
   final bool probing;
-
-  /// 是否显示 ↻ 刷新按钮。为 false 时（该组件不支持实测）整个按钮区不渲染，
-  /// 避免用户点一个必然失败的控件。
   final bool showRefresh;
-
-  /// C1：效果器关闭时隐藏延迟小框（enabled=false → 整徽标不渲染）。
   final bool enabled;
 
   const ComponentLatencyBadge({
@@ -545,6 +675,7 @@ class ComponentLatencyBadge extends StatefulWidget {
     required this.latencyMs,
     this.measured = false,
     this.estimated = false,
+    this.mode,
     this.onRefresh,
     this.refreshTick = 0,
     this.probing = false,
@@ -587,24 +718,41 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);
-    if (!widget.enabled) return const SizedBox.shrink(); // C1：关闭态隐藏延迟小框
-    // 2026-10-19：无预设常数后估算值只来自 convolver 的 IR 长度实时计算，
-    // 不再以「≈」前缀弱化（与实测同款渲染）；无可显示值时仍是「未测量」。
-    final String text;
-    if (widget.measured || widget.estimated) {
-      text = '${widget.latencyMs.toStringAsFixed(1)} ms';
-    } else {
-      text = l.latUnmeasured;
-    }
-    // 如实标注来源：实测 / 估算 / 未测量。
-    final tooltip = widget.measured
-        ? l.latTipMeasured(text)
-        : (widget.estimated
-              ? l.latTipEstimated(text)
-              : (widget.probing ? l.latTipProbing : l.latTipUnmeasured));
-    final Color c = (!widget.measured && !widget.estimated)
-        ? p.textDim
-        : latencyColor(widget.latencyMs, p);
+    if (!widget.enabled) return const SizedBox.shrink();
+
+    // 确定唯一标准显示模式
+    final effMode = widget.mode ??
+        (widget.probing
+            ? LatencyMode.probing
+            : (widget.measured
+                ? LatencyMode.measured
+                : (widget.estimated
+                    ? LatencyMode.estimated
+                    : (widget.latencyMs > 0
+                        ? LatencyMode.estimated
+                        : LatencyMode.zero))));
+
+    final Color c = LatencyPresenter.colorByMode(
+      mode: effMode,
+      ms: widget.latencyMs,
+      p: p,
+    );
+
+    final String text = switch (effMode) {
+      LatencyMode.probing => '↻ 测定中',
+      LatencyMode.measured => LatencyPresenter.format(widget.latencyMs),
+      LatencyMode.estimated => LatencyPresenter.format(widget.latencyMs),
+      LatencyMode.zero => LatencyPresenter.format(0.0),
+      LatencyMode.unmeasured => l.latUnmeasured,
+    };
+
+    final tooltip = switch (effMode) {
+      LatencyMode.probing => l.latTipProbing,
+      LatencyMode.measured => l.latTipMeasured(text),
+      LatencyMode.estimated => l.latTipEstimated(text),
+      LatencyMode.zero => '零算法延迟（直通 / 实时）',
+      LatencyMode.unmeasured => l.latTipUnmeasured,
+    };
 
     return AnimatedBuilder(
       animation: _pulseController,
@@ -612,7 +760,7 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
         final pulse = _pulseController.value;
         final glowAlpha = (math.sin(pulse * math.pi) * 0.45).clamp(0.0, 1.0);
         final borderColor = Color.lerp(
-          c == p.textDim ? p.hairline : c.withValues(alpha: 0.35),
+          c == p.textDim ? p.hairline : c.withValues(alpha: effMode == LatencyMode.measured ? 0.55 : 0.35),
           p.accent,
           glowAlpha,
         )!;

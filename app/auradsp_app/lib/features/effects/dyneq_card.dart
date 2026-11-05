@@ -23,6 +23,7 @@ class _DyneCard extends StatelessWidget {
       latencyEnabled: m.isSectionEnabled('dyneq'),
       latencyMeasured: m.componentLatency('dyneq').measured,
       latencyEstimated: m.componentLatency('dyneq').estimated,
+      latencyMode: m.componentLatency('dyneq').mode,
       latencyProbing: m.isProbingLatency('dyneq'),
       onRefreshLatency: AppModel.isLatencyProbeSupported('dyneq')
           ? () => m.refreshComponentLatency('dyneq')

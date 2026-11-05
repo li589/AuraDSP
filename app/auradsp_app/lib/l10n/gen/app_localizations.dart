@@ -1804,6 +1804,36 @@ abstract class AppLocalizations {
   /// **'算法附加延迟：仅统计引入延迟的效果（如混响 +30ms）；低延迟效果计 0ms'**
   String get latencyTip;
 
+  /// No description provided for @dspBypassHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'DSP 已旁路 · 点击激活处理'**
+  String get dspBypassHint;
+
+  /// No description provided for @dspActiveHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'DSP 正在处理 · 点击切换全局旁路'**
+  String get dspActiveHint;
+
+  /// No description provided for @pdcLatencyTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'全链路端到端总延迟: {ms} ms\n点击触发全链路测量与时钟同步'**
+  String pdcLatencyTooltip(String ms);
+
+  /// No description provided for @chainFreqRefreshTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新测算全链路频响与端到端延迟'**
+  String get chainFreqRefreshTooltip;
+
+  /// No description provided for @chainLatencyMeasuredMsg.
+  ///
+  /// In zh, this message translates to:
+  /// **'已完成全链路延迟测定，端到端延迟已更新为 {ms} ms'**
+  String chainLatencyMeasuredMsg(String ms);
+
   /// No description provided for @bassBoost.
   ///
   /// In zh, this message translates to:
@@ -4981,7 +5011,7 @@ abstract class AppLocalizations {
   /// No description provided for @chainOrderTitle.
   ///
   /// In zh, this message translates to:
-  /// **'处理顺序与状态'**
+  /// **'处理顺序'**
   String get chainOrderTitle;
 
   /// No description provided for @chainOrderHint.
@@ -5953,7 +5983,7 @@ abstract class AppLocalizations {
   /// No description provided for @chainVstTitle.
   ///
   /// In zh, this message translates to:
-  /// **'第三方 VST / CLAP 插件挂载槽与阶段处理顺序'**
+  /// **'第三方插件挂载顺序'**
   String get chainVstTitle;
 
   /// No description provided for @chainVstHint.
@@ -6957,6 +6987,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'32 位插件（支持加载）'**
   String get plug32BitHint;
+
+  /// No description provided for @ambient.
+  ///
+  /// In zh, this message translates to:
+  /// **'氛围背景'**
+  String get ambient;
+
+  /// No description provided for @ambientLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'频谱光晕'**
+  String get ambientLabel;
+
+  /// No description provided for @ambientHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'主页背景随音乐起伏的光晕；关闭后完全停绘，可省 GPU'**
+  String get ambientHint;
 }
 
 class _AppLocalizationsDelegate

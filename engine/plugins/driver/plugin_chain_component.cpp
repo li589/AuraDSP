@@ -1,4 +1,5 @@
 #include "plugins/driver/plugin_chain_component.h"
+#include "plugins/plugin_limits.h"
 
 #include <new>
 
@@ -68,7 +69,9 @@ void PluginChainComponent::processInterleavedN(int stage, float* interleaved,
         channels == 0) {
         return;
     }
-    if (channels > 8) channels = 8;
+    if (channels > auradsp::limits::kBusChannels) {
+        channels = auradsp::limits::kBusChannels;
+    }
     /* 链级开关：关闭时插件（含 PDC）整体不进路径，纯直通。 */
     if (!m_chainEnabled.load(std::memory_order_acquire)) return;
     if (!stageHasActiveOrPdc(stage)) return;

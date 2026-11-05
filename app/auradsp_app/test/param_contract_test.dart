@@ -20,6 +20,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:auradsp_app/core/effect_registry.dart';
 import 'package:auradsp_app/core/engine_error_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:auradsp_app/core/param_schema.dart';
@@ -314,14 +315,15 @@ const Set<String> kRangeCheckSkipSpecIds = {
 /// limiter.release、freeverb.roomsize、freeverb.width。这类超界值经 preset
 /// apply / session 回放直达引擎必被拒收 → 回读回弹（块自己变）+ guard
 /// 通知，属真实缺陷而非产品取舍。
-/// 剩余 5 条均为「UI 收窄」（spec 是引擎范围的子集，UI 选值必在引擎域内，
+/// 原剩余 5 条均为「UI 收窄」（spec 是引擎范围的子集，UI 选值必在引擎域内，
 /// 无拒收风险），收窄是产品取舍，保留登记待产品确认，不得悄悄抹平。
+/// 2026-11-05 全项目审查 FX-01 复核 legacy CompressorApplyParamTail 后确认
+/// comp.granularity（0..4 五档 avgBW 各异）/comp.tfresolution（==3 独立分支）/
+/// dyneq.release（setter 钳位本就是 10..1000）三条的引擎范围是真实功能而非
+/// 富余域，spec 已按引擎表放宽对齐，三条自本表删除；余 2 条仍为 UI 收窄登记。
 const Map<String, String> kKnownRangeDivergences = {
-  'comp.granularity': 'spec 0..2 vs 引擎 0..4（UI 收窄，产品已定案保留 2026-10-19）',
-  'comp.tfresolution': 'spec 0..2 vs 引擎 0..3（UI 收窄，产品已定案保留 2026-10-19）',
   'dyneq.attack': 'spec 1..100ms vs 引擎 0.1..100ms（UI 收窄下限）',
   'dyneq.mid.freq': 'spec 200..5000Hz vs 引擎 200..8000Hz（UI 收窄，产品已定案保留 2026-10-19）',
-  'dyneq.release': 'spec 10..500ms vs 引擎 10..1000ms（UI 收窄，产品已定案保留 2026-10-19）',
 };
 
 // ---------------------------------------------------------------------------
@@ -1033,19 +1035,10 @@ void main() {
       expect(engineSupported.length, greaterThanOrEqualTo(15),
           reason: '引擎 kSupported 解析异常: $engineSupported');
 
-      // Dart 侧集合（剥注释后定位，注释里出现的组件名不得计入）
-      final st = _stripComments(_readStateLibrary());
-      final dm = RegExp(r'isLatencyProbeSupported\(String compId\)\s*=>\s*'
-              r'const\s*\{([^}]*)\}\.contains\(compId\)')
-          .firstMatch(st);
-      expect(dm, isNotNull,
-          reason: 'state.dart 解析不到 isLatencyProbeSupported 集合');
-      final dartSet = RegExp("'([^']+)'")
-          .allMatches(dm!.group(1)!)
-          .map((e) => e.group(1)!)
-          .toSet();
+      // Dart 侧集合：直接读 registry 派生表，避免源码正则随重构失效。
+      final dartSet = kLatencyProbeIds.toSet();
       expect(dartSet.length, greaterThanOrEqualTo(15),
-          reason: 'Dart 探针集解析异常: $dartSet');
+          reason: 'Dart 探针集异常: $dartSet');
 
       // 资源型组件：引擎空探针返回 -1，但 IR/VDC 资源已加载时可测
       // （latencyProbeResource 提供路径）——显式白名单放行。
@@ -1072,19 +1065,13 @@ void main() {
 
       // 2026-10-19 补：别名探针（合并卡 → 引擎实名）目标必须全部在
       // 引擎 kSupported 内（bass_shaping → shelf + bassmono）。
-      final am = RegExp(r'kLatencyProbeAliases\s*=\s*\{([^;]*?)\};', dotAll: true)
-          .firstMatch(st);
-      expect(am, isNotNull, reason: '解析不到 kLatencyProbeAliases');
-      final aliasEntries =
-          RegExp(r"'([^']+)':\s*\[([^\]]*)\]").allMatches(am!.group(1)!).toList();
-      expect(aliasEntries, isNotEmpty, reason: 'kLatencyProbeAliases 解析为空');
-      for (final e in aliasEntries) {
-        final targets =
-            RegExp("'([^']+)'").allMatches(e.group(2)!).map((m) => m.group(1)!).toSet();
-        expect(targets, isNotEmpty, reason: '别名 ${e.group(1)} 目标为空');
-        final missing = targets.difference(engineSupported);
+      // 直接从 registry 读取别名表，避免源码正则随重构失效。
+      expect(kLatencyProbeAliases, isNotEmpty, reason: 'kLatencyProbeAliases 为空');
+      for (final e in kLatencyProbeAliases.entries) {
+        expect(e.value, isNotEmpty, reason: '别名 ${e.key} 目标为空');
+        final missing = e.value.toSet().difference(engineSupported);
         expect(missing, isEmpty,
-            reason: '别名探针 ${e.group(1)} 的目标 $missing 不在引擎 kSupported');
+            reason: '别名探针 ${e.key} 的目标 $missing 不在引擎 kSupported');
       }
 
       // 2026-10-19：haas/spatial 探针升级为「逐声道首非零取最大」，已可如实

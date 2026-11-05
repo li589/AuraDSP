@@ -23,6 +23,7 @@ class _CrossfeedCard extends StatelessWidget {
       latencyEnabled: m.isSectionEnabled('crossfeed'),
       latencyMeasured: m.componentLatency('crossfeed').measured,
       latencyEstimated: m.componentLatency('crossfeed').estimated,
+      latencyMode: m.componentLatency('crossfeed').mode,
       latencyProbing: m.isProbingLatency('crossfeed'),
       onRefreshLatency: AppModel.isLatencyProbeSupported('crossfeed')
           ? () => m.refreshComponentLatency('crossfeed')

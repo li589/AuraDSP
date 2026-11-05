@@ -39,15 +39,17 @@ final class WindowsPluginDirs implements PluginDirsPort {
     final localApp = e['LOCALAPPDATA'];
     final appData = e['APPDATA'];
 
-    // VST3 / CLAP：共享 + 用户级（插件安装器的事实标准位置）。
+    // VST3 / CLAP / VST2：共享 + 用户级（插件安装器的事实标准位置）。
     add(common, 'VST3');
     add(common, 'CLAP');
+    add(common, 'VST2');
+    add(common, 'Steinberg${sep}VST2');
     if (localApp != null) {
       candidates.add('$localApp\\Programs\\Common\\VST3');
       candidates.add('$localApp\\Programs\\Common\\CLAP');
       candidates.add('$localApp\\Programs\\Common\\VST2');
     }
-    // 旧式 VST2 目录（未来格式，先入列表便于用户统一管理）。
+    // VST2 传统目录（2026-11-03 起正式支持，不再只是占位）。
     add(programFiles, 'VstPlugins');
     add(programFiles, 'Steinberg${sep}VSTPlugins');
     add(programFilesX86, 'VstPlugins');

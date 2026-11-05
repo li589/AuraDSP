@@ -7,13 +7,21 @@
 #include <string>
 #include <vector>
 
+#include "plugins/plugin_limits.h"
+
 namespace auradsp {
 namespace ipc {
 
 constexpr uint32_t kMagic = 0x41555241u;   // "AURA"
-constexpr uint32_t kProtocolVersion = 3u;
-constexpr uint32_t kMaxSlots = 4u;
-constexpr uint32_t kChannels = 8u;
+/* v5（2026-11-04）：Op::QueryMetadata 响应改为「u32 count + count × RemotePluginInfo」，
+ * 深扫不再只服务 32 位 VST2 —— 引擎侧把深扫统一按位数分派给宿主，VST3 一包多插件
+ * 也要能一次返回多条。引擎与宿主必须同版本；旧宿主进程会被 Hello 版本检查拒掉并重启。 */
+constexpr uint32_t kProtocolVersion = 5u;
+/* 单次元数据查询允许返回的最大条目数（防御畸形/恶意响应）。 */
+constexpr uint32_t kMaxMetadataBatch = 512u;
+/* 槽位数与总线通道上限来自 plugins/plugin_limits.h（唯一定义处）。 */
+constexpr uint32_t kMaxSlots = auradsp::limits::kMaxSlots;
+constexpr uint32_t kChannels = auradsp::limits::kBusChannels;
 constexpr uint32_t kTransportFrames = 128u;
 constexpr uint32_t kRingBlocks = 16u;
 constexpr uint32_t kMaxScannedPlugins = 65536u;
@@ -22,6 +30,9 @@ constexpr size_t kMaxControlPayload = 32u * 1024u * 1024u;
 enum class Op : uint32_t {
     Hello = 1,
     Ping = 2,
+    /* Scan*（v5 起降级为诊断用途）：引擎侧扫描已改为「本地 enumerate + 快扫，
+     * 深扫按候选位数调 QueryMetadata」，不再整轮委托宿主（见
+     * docs/20-执行/插件扫描归属重构与崩溃隔离-2026-11-04.md）。宿主仍保留实现。 */
     Scan = 3,
     ScanBegin = 4,
     ScanStep = 5,
@@ -46,6 +57,10 @@ enum class Op : uint32_t {
     UpdateFormat = 24,
     Shutdown = 25,
     SetChannelHint = 26,
+    /* 深扫查询（v4 引入，v5 改多条目）：payload = path，response = u32 count +
+     * count × RemotePluginInfo。宿主用 driver->queryMetadata 直接产出，不建实例、
+     * 不占槽。count 上限 kMaxMetadataBatch。 */
+    QueryMetadata = 27,
 };
 
 enum class HostState : uint32_t {

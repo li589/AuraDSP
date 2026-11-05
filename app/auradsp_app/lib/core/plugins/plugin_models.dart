@@ -69,6 +69,7 @@ class PluginMetadata {
   final bool isCompatible;
   final bool is64Bit;
   final String errorMessage;
+  final bool hasEditor;
 
   const PluginMetadata({
     required this.id,
@@ -83,6 +84,7 @@ class PluginMetadata {
     this.isCompatible = true,
     this.is64Bit = true,
     this.errorMessage = '',
+    this.hasEditor = true,
   });
 
   factory PluginMetadata.fromJson(Map<String, dynamic> json) {
@@ -100,6 +102,7 @@ class PluginMetadata {
       is64Bit: json['is64Bit'] as bool? ??
           (json['errorMessage']?.toString().contains('32') == true ? false : true),
       errorMessage: json['errorMessage'] as String? ?? '',
+      hasEditor: json['hasEditor'] as bool? ?? true,
     );
   }
 
@@ -116,6 +119,7 @@ class PluginMetadata {
     'isCompatible': isCompatible,
     'is64Bit': is64Bit,
     'errorMessage': errorMessage,
+    'hasEditor': hasEditor,
   };
 
   @override
@@ -131,15 +135,16 @@ class PluginMetadata {
 
   /// 当前平台下是否支持加载与运行该插件。
   /// Windows 与 Linux 均已具备 32 位进程宿主桥（plugin_host_x86，
-  /// 支持 32 位 VST3/CLAP 经隔离宿主加载），故两平台下 32 位插件
+  /// 支持 32 位 VST2/VST3/CLAP 经隔离宿主加载），故两平台下 32 位插件
   /// 与 64 位同等对待（列表不灰显、显示「32 位」角标、可正常挂载）；
-  /// 其它平台当前仅支持 64 位插件。注意桥加载要求进程外模式
-  /// （AURA_PLUGIN_HOST_MODE=process，与 Windows 同口径）；进程内
-  /// 模式下引擎侧 load 仍会以 D2 文案拒绝 32 位插件（双保险）。
+  /// 其它平台当前仅支持 64 位插件。注意：位桥只要宿主二进制在位即自适应
+  /// 启用，与 AURA_PLUGIN_HOST_MODE 无关（2026-11-04 修正——旧注释误写
+  /// 「桥加载要求进程外模式」，实测进程内模式下 32 位加载同样走桥）。
   bool get isSupported =>
       isCompatible ||
       (!is64Bit &&
-          (PlatformProfile.isWindows || PlatformProfile.isLinux));
+          (PlatformProfile.isWindows || PlatformProfile.isLinux) &&
+          !errorMessage.contains('非当前系统可执行'));
 
   /// 复制并覆盖部分字段（厂商表填充 vendor 用）。
   PluginMetadata copyWith({
@@ -264,6 +269,15 @@ abstract final class PluginInsertStage {
   static const postLimiter = 4;
 
   static const defaultStage = postReverb;
+
+  /// 全部插入阶段（唯一枚举源；下拉等 UI 必须迭代本表，禁止手写列表）。
+  static const List<int> values = [
+    preDsp,
+    preVendor,
+    postVendor,
+    postReverb,
+    postLimiter,
+  ];
 
   static String labelOf(int stage) {
     switch (stage) {

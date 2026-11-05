@@ -60,6 +60,11 @@ set(AURADSP_PLUGIN_HOST_SOURCES
     "${API}/plugins/formats/vst3/vst3_driver.cpp"
     "${API}/plugins/formats/vst3/vst3_instance.cpp"
     "${API}/plugins/formats/vst3/vst3_metadata.cpp"
+    # VST2（2026-11-03）：驱动/实例/元数据。编译头是 vendor/plugin-api/vst2/vst.h
+    # （Xaymar 净室，BSD-3-Clause）；仅在 Windows 目标编入。
+    "${API}/plugins/formats/vst2/vst2_driver.cpp"
+    "${API}/plugins/formats/vst2/vst2_instance.cpp"
+    "${API}/plugins/formats/vst2/vst2_metadata.cpp"
 )
 set(AURADSP_PLUGIN_INTEGRATION_SOURCES
     "${API}/plugins/integration/plugin_host.cpp"
@@ -117,7 +122,7 @@ target_compile_definitions(auradsp_core PRIVATE
     WINVER=0x0601
     NTDDI_VERSION=0x06010000
 )
-target_compile_options(auradsp_core PRIVATE /utf-8 /W1 /EHsc)
+target_compile_options(auradsp_core PRIVATE /utf-8 /W1 /EHa)
 # engine/legacy 的 essential.h 仅 include <errno.h>，MSVC 不会像 NDK 那样间接带入
 # <stdint.h>；且 engine/legacy/jamesdsp.c 使用 GCC 扩展 __attribute__((constructor))。
 # 按铁律 §3.3 不改上游，调用侧 /FI 前置 shim 统一处理（见 auradsp_msvc_shim.h 头注释）。
@@ -190,7 +195,7 @@ option(AURADSP_DBG_LOG "Emit host [DBG diagnostics via OutputDebugString (OFF in
 if(AURADSP_DBG_LOG)
     target_compile_definitions(auradsp_engine PRIVATE AURADSP_DBG_LOG)
 endif()
-target_compile_options(auradsp_engine PRIVATE /utf-8 /W1 /EHsc)
+target_compile_options(auradsp_engine PRIVATE /utf-8 /W1 /EHa)
 # 与核心相同的强制 shim，保持历史编译行为（legacy C 已全部移入 auradsp_core）。
 target_compile_options(auradsp_engine PRIVATE /FI"${API}/auradsp_msvc_shim.h")
 set_property(TARGET auradsp_engine PROPERTY CXX_STANDARD 20)
@@ -208,6 +213,9 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
 
     add_executable(${HOST_EXE_TARGET_NAME}
         "${API}/plugins/platform/win32/host/auradsp_plugin_host_main.cpp"
+        # R-07（2026-11-05）：命令循环与 Op 分发下沉到平台无关层，
+        # Win32 主程序只保留管道/看门狗/唤醒等平台原语。
+        "${API}/plugins/platform/host/plugin_host_command.cpp"
         "${API}/plugins/platform/win32/host/plugin_shared_region.cpp"
         ${AURADSP_PLUGIN_HOST_SOURCES}
     )
@@ -215,6 +223,7 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         "${API}"
         "${API}/plugins/api"
         "${API}/plugins/driver"
+        "${API}/plugins/platform/host"
         "${API}/plugins/platform/win32/host"
         "${API}/plugins/platform/win32"
         "${PLUGIN_API}"
@@ -224,7 +233,7 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         _CRT_SECURE_NO_WARNINGS
         AURADSP_HOST_INPROC=1
     )
-    target_compile_options(${HOST_EXE_TARGET_NAME} PRIVATE /utf-8 /W1 /EHsc)
+    target_compile_options(${HOST_EXE_TARGET_NAME} PRIVATE /utf-8 /W1 /EHa)
     set_property(TARGET ${HOST_EXE_TARGET_NAME} PROPERTY CXX_STANDARD 20)
     set_property(TARGET ${HOST_EXE_TARGET_NAME} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
     # R1：plugin_scanner.cpp 用 <filesystem> → 必须带 Win7 CreateFile2 回退。
@@ -235,6 +244,57 @@ endif()  # AURADSP_PLUGIN_HOST_REMOTE
 
 # CP-02：三个插件测试 EXE 直接编译 AURADSP_PLUGIN_HOST_SOURCES，裁剪构建不产出。
 if(AURADSP_ENABLE_PLUGINS)
+# VST2 探针（2026-11-03）：最小增益插件，64 位与 32 位各产一份。
+# 产物落 test/vst2/（x64）或 test/vst2/x86/（Win32），供 smoke_plugin_vst2.py 使用。
+if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    set(VST2_FIXTURE_OUT "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/vst2/x86")
+else()
+    set(VST2_FIXTURE_OUT "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/vst2/x64")
+endif()
+add_library(test_vst2_fixture SHARED
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/fixtures/vst2_gain/gain_vst2.cpp"
+)
+target_include_directories(test_vst2_fixture PRIVATE "${PLUGIN_API}")
+set_target_properties(test_vst2_fixture PROPERTIES
+    OUTPUT_NAME "AuraTestVST2"
+    PREFIX ""
+    SUFFIX ".dll"
+    CXX_STANDARD 20
+    MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"
+    RUNTIME_OUTPUT_DIRECTORY "${VST2_FIXTURE_OUT}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${VST2_FIXTURE_OUT}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${VST2_FIXTURE_OUT}"
+    LIBRARY_OUTPUT_DIRECTORY "${VST2_FIXTURE_OUT}"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${VST2_FIXTURE_OUT}"
+    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${VST2_FIXTURE_OUT}"
+)
+target_compile_options(test_vst2_fixture PRIVATE /utf-8 /W1 /EHsc)
+
+# 坏 magic 探针：导出 VSTPluginMain 但返回非法 AEffect，验证拒绝路径不崩溃。
+if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    set(VST2_BAD_OUT "${VST2_FIXTURE_OUT}")
+else()
+    set(VST2_BAD_OUT "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/vst2/bad")
+endif()
+add_library(test_vst2_bad_fixture SHARED
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/fixtures/vst2_gain/bad_vst2.cpp"
+)
+target_include_directories(test_vst2_bad_fixture PRIVATE "${PLUGIN_API}")
+set_target_properties(test_vst2_bad_fixture PROPERTIES
+    OUTPUT_NAME "AuraTestVST2Bad"
+    PREFIX ""
+    SUFFIX ".dll"
+    CXX_STANDARD 20
+    MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"
+    RUNTIME_OUTPUT_DIRECTORY "${VST2_BAD_OUT}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${VST2_BAD_OUT}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${VST2_BAD_OUT}"
+    LIBRARY_OUTPUT_DIRECTORY "${VST2_BAD_OUT}"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${VST2_BAD_OUT}"
+    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${VST2_BAD_OUT}"
+)
+target_compile_options(test_vst2_bad_fixture PRIVATE /utf-8 /W1 /EHsc)
+
 add_executable(test_plugin_direct
     "${API}/plugins/tests/plugin_host_direct.cpp"
     ${AURADSP_PLUGIN_HOST_SOURCES}

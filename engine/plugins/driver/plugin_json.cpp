@@ -40,11 +40,17 @@ std::string PluginMetadata::toJson() const {
        << "\"version\":\"" << escapeJsonString(version) << "\","
        << "\"category\":\"" << escapeJsonString(category) << "\","
        << "\"description\":\"" << escapeJsonString(description) << "\","
-       << "\"format\":\"" << (format == PluginFormat::VST3 ? "VST3" : (format == PluginFormat::CLAP ? "CLAP" : "Unknown")) << "\","
+       << "\"format\":\"" << (format == PluginFormat::VST3
+                                 ? "VST3"
+                                 : (format == PluginFormat::CLAP
+                                        ? "CLAP"
+                                        : (format == PluginFormat::VST2 ? "VST2" : "Unknown")))
+       << "\","
        << "\"is64Bit\":" << (is64Bit ? "true" : "false") << ","
        << "\"latency\":" << latency << ","
        << "\"isCompatible\":" << (isCompatible ? "true" : "false") << ","
-       << "\"errorMessage\":\"" << escapeJsonString(errorMessage) << "\""
+       << "\"errorMessage\":\"" << escapeJsonString(errorMessage) << "\","
+       << "\"hasEditor\":" << (hasEditor ? "true" : "false")
        << "}";
     return ss.str();
 }

@@ -17,7 +17,7 @@ class _EngineInfo extends StatelessWidget {
         if (info != null) ...[
           _InfoRow('ABI', 'v${info.abi} · ${info.version}'),
         ],
-        _InfoRow('Latency', '${model.latencyMs.toStringAsFixed(1)} ms'),
+        _InfoRow('Latency', LatencyPresenter.format(model.latencyMs)),
         const SizedBox(height: AuraSpace.md),
         Container(height: 1, color: p.hairline),
         const SizedBox(height: AuraSpace.md),

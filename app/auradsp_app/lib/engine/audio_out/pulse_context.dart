@@ -90,6 +90,17 @@ typedef _ContextLoadModuleNative = Pointer<Void> Function(
     Pointer<Void>);
 typedef _LoadModuleCbNative = Void Function(
     Pointer<Void>, Uint32, Pointer<Void>);
+typedef _ContextUnloadModuleNative = Pointer<Void> Function(
+    Pointer<Void>,
+    Uint32,
+    Pointer<NativeFunction<_SuccessCbNative>>,
+    Pointer<Void>);
+typedef _SuccessCbNative = Void Function(
+    Pointer<Void>, Int32, Pointer<Void>);
+typedef _ContextGetModuleInfoListNative = Pointer<Void> Function(
+    Pointer<Void>,
+    Pointer<NativeFunction<_InfoCbNative>>,
+    Pointer<Void>);
 typedef _OperationGetStateNative = Int32 Function(Pointer<Void>);
 typedef _OperationUnrefNative = Void Function(Pointer<Void>);
 typedef _ContextDisconnectNative = Void Function(Pointer<Void>);
@@ -144,6 +155,15 @@ class _PulseMainLib {
       Pointer<Void> Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>,
           Pointer<NativeFunction<_LoadModuleCbNative>>, Pointer<Void>)>(
       'pa_context_load_module');
+  late final contextUnloadModule = _lib.lookupFunction<_ContextUnloadModuleNative,
+      Pointer<Void> Function(Pointer<Void>, int,
+          Pointer<NativeFunction<_SuccessCbNative>>, Pointer<Void>)>(
+      'pa_context_unload_module');
+  late final contextGetModuleInfoList = _lib.lookupFunction<
+      _ContextGetModuleInfoListNative,
+      Pointer<Void> Function(Pointer<Void>,
+          Pointer<NativeFunction<_InfoCbNative>>, Pointer<Void>)>(
+      'pa_context_get_module_info_list');
   late final operationGetState = _lib.lookupFunction<
       _OperationGetStateNative, int Function(Pointer<Void>)>(
       'pa_operation_get_state');
@@ -398,34 +418,164 @@ class PulseContextService {
 
   /// 确保虚拟 sink 存在：缺失则 pa_context_load_module 加载
   /// module-null-sink 并复查。返回最终是否存在。
-  bool ensureVirtualSink() {
-    if (virtualSinkPresent()) return true;
-    final session = _Session(_lib)..open();
-    final idxCell = malloc<Uint32>()..value = 0xFFFFFFFF;
+  int? _lastLoadedVirtualModuleIdx;
+
+  /// 在既有会话里收集可能属于 auradsp_virtual 的 module-null-sink 模块索引。
+  List<int> _collectResidualModuleIndices(_Session session) {
+    final indices = <int>[];
     final doneCell = malloc<Int32>()..value = 0;
-    final cb = NativeCallable<_LoadModuleCbNative>.isolateLocal(
-        (Pointer<Void> ctx, int idx, Pointer<Void> ud) {
-      idxCell.value = idx;
+    final ptrSize = sizeOf<Pointer<Void>>();
+    final nameOffset = ptrSize == 8 ? 8 : 4;
+    final argOffset = ptrSize == 8 ? 16 : 8;
+
+    final cb = NativeCallable<_InfoCbNative>.isolateLocal(
+        (Pointer<Void> ctx, Pointer<Void> info, int eol, Pointer<Void> ud) {
+      if (eol != 0) {
+        doneCell.value = 1;
+        return;
+      }
+      if (info != nullptr) {
+        try {
+          final idx = info.cast<Uint32>().value;
+          final namePtr = (info.cast<Uint8>() + nameOffset).cast<Pointer<Utf8>>().value;
+          final argPtr = (info.cast<Uint8>() + argOffset).cast<Pointer<Utf8>>().value;
+          final name = namePtr != nullptr ? namePtr.toDartString() : '';
+          final arg = argPtr != nullptr ? argPtr.toDartString() : '';
+          if (name == 'module-null-sink' &&
+              (arg.contains(virtualSinkName) || arg.contains(virtualSinkDescription))) {
+            indices.add(idx);
+          }
+        } catch (e, st) {
+          swallow(e, st);
+        }
+      }
+    });
+
+    try {
+      final op = _lib.contextGetModuleInfoList(
+          session.context, cb.nativeFunction, nullptr);
+      session.runOperation(op, () => doneCell.value == 1);
+    } finally {
+      cb.close();
+      malloc.free(doneCell);
+    }
+    return indices;
+  }
+
+  /// 在既有会话里卸载指定模块索引。
+  bool _unloadModule(_Session session, int idx) {
+    final doneCell = malloc<Int32>()..value = 0;
+    final successCell = malloc<Int32>()..value = 0;
+    final cb = NativeCallable<_SuccessCbNative>.isolateLocal(
+        (Pointer<Void> ctx, int success, Pointer<Void> ud) {
+      successCell.value = success;
       doneCell.value = 1;
     });
-    final modName = 'module-null-sink'.toNativeUtf8();
-    final modArgs =
-        'sink_name=$virtualSinkName sink_properties=device.description=$virtualSinkDescription'
-            .toNativeUtf8();
     try {
-      final op = _lib.contextLoadModule(
-          session.context, modName, modArgs, cb.nativeFunction, nullptr);
+      final op = _lib.contextUnloadModule(
+          session.context, idx, cb.nativeFunction, nullptr);
       session.runOperation(op, () => doneCell.value == 1);
-      dbgLog('PULSE module-null-sink load idx=${idxCell.value}');
+      final ok = successCell.value != 0;
+      dbgLog('PULSE unload-module idx=$idx ok=$ok');
+      return ok;
+    } catch (e, st) {
+      swallow(e, st);
+      return false;
     } finally {
-      malloc.free(modName);
-      malloc.free(modArgs);
       cb.close();
-      malloc.free(idxCell);
       malloc.free(doneCell);
+      malloc.free(successCell);
+    }
+  }
+
+  /// 卸载虚拟 sink 模块（DRV-01 自动卸载）：
+  /// 优先卸载当前已知加载的 module index，同时扫描并清理所有残留的
+  /// auradsp_virtual module-null-sink 实例。
+  void unloadVirtualSink() {
+    try {
+      final session = _Session(_lib)..open();
+      try {
+        final toUnload = <int>{};
+        if (_lastLoadedVirtualModuleIdx != null) {
+          toUnload.add(_lastLoadedVirtualModuleIdx!);
+        }
+        toUnload.addAll(_collectResidualModuleIndices(session));
+        if (toUnload.isNotEmpty) {
+          dbgLog('PULSE unloading virtual sink module(s): $toUnload');
+          for (final idx in toUnload) {
+            _unloadModule(session, idx);
+          }
+        }
+        _lastLoadedVirtualModuleIdx = null;
+      } finally {
+        session.close();
+      }
+    } catch (e, st) {
+      swallow(e, st);
+    }
+  }
+
+  /// 确保虚拟 sink 存在：
+  /// DRV-01 规则：安装前如果发现有驱动残留（已有 auradsp_virtual 模块或 sink），
+  /// 自动卸载后重装，确保虚拟声卡干净。
+  bool ensureVirtualSink() {
+    final session = _Session(_lib)..open();
+    try {
+      // 1. 安装前如果发现有驱动残留，自动卸载
+      final residuals = _collectResidualModuleIndices(session);
+      final sinkExists =
+          _collectNames(session, sinks: true).contains(virtualSinkName);
+      if (residuals.isNotEmpty || sinkExists || _lastLoadedVirtualModuleIdx != null) {
+        dbgLog('PULSE residual virtual sink/module detected '
+            '(residuals=$residuals, sinkExists=$sinkExists, lastIdx=$_lastLoadedVirtualModuleIdx); '
+            'unloading before reinstall');
+        final toUnload = <int>{...residuals};
+        if (_lastLoadedVirtualModuleIdx != null) {
+          toUnload.add(_lastLoadedVirtualModuleIdx!);
+        }
+        for (final idx in toUnload) {
+          _unloadModule(session, idx);
+        }
+        _lastLoadedVirtualModuleIdx = null;
+      }
+
+      // 2. 加载全新 module-null-sink
+      final idxCell = malloc<Uint32>()..value = 0xFFFFFFFF;
+      final doneCell = malloc<Int32>()..value = 0;
+      final cb = NativeCallable<_LoadModuleCbNative>.isolateLocal(
+          (Pointer<Void> ctx, int idx, Pointer<Void> ud) {
+        idxCell.value = idx;
+        doneCell.value = 1;
+      });
+      final modName = 'module-null-sink'.toNativeUtf8();
+      final modArgs =
+          'sink_name=$virtualSinkName sink_properties=device.description=$virtualSinkDescription'
+              .toNativeUtf8();
+      try {
+        final op = _lib.contextLoadModule(
+            session.context, modName, modArgs, cb.nativeFunction, nullptr);
+        session.runOperation(op, () => doneCell.value == 1);
+        final loadedIdx = idxCell.value;
+        dbgLog('PULSE module-null-sink load idx=$loadedIdx');
+        if (loadedIdx != 0xFFFFFFFF) {
+          _lastLoadedVirtualModuleIdx = loadedIdx;
+        }
+      } finally {
+        malloc.free(modName);
+        malloc.free(modArgs);
+        cb.close();
+        malloc.free(idxCell);
+        malloc.free(doneCell);
+      }
+
+      // 3. 复查并返回最终 sink 是否存在
+      return _collectNames(session, sinks: true).contains(virtualSinkName);
+    } catch (e, st) {
+      swallow(e, st);
+      return false;
+    } finally {
       session.close();
     }
-    return virtualSinkPresent();
   }
 
   /// snd-aloop 采集源（PA 侧名字）；不存在返回 null。

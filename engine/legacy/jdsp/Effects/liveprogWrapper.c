@@ -243,7 +243,13 @@ static int LiveProgCompileInto(LiveProg *pg, JamesDSPLib *jdsp, char *codeTextIn
 		char aura_nm[16];
 		snprintf(aura_nm, sizeof(aura_nm), "slider%d", aura_i);
 		float *aura_v = NSEEL_VM_regvar(pg->vm, aura_nm);
-		if (aura_v) *aura_v = 0.0f;
+		float init_v = 0.0f;
+		if (jdsp->eel && jdsp->eel->vm)
+		{
+			float *prev_v = NSEEL_VM_regvar(jdsp->eel->vm, aura_nm);
+			if (prev_v) init_v = *prev_v;
+		}
+		if (aura_v) *aura_v = init_v;
 	}
 	if (pg->codehandleInit)
 	{

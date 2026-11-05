@@ -153,11 +153,18 @@ if(AURADSP_ENABLE_PLUGINS)
         "${API}/plugins/formats/vst3/vst3_driver.cpp"
         "${API}/plugins/formats/vst3/vst3_instance.cpp"
         "${API}/plugins/formats/vst3/vst3_metadata.cpp"
+        # VST2（2026-11-04 Linux 跟进）：驱动/实例/元数据，编译头是
+        # vendor/plugin-api/vst2/vst.h（Xaymar 净室）；__cdecl 习语
+        # 由 platform/posix/win32_compat.h 的空定义消解。
+        "${API}/plugins/formats/vst2/vst2_driver.cpp"
+        "${API}/plugins/formats/vst2/vst2_instance.cpp"
+        "${API}/plugins/formats/vst2/vst2_metadata.cpp"
         "${API}/plugins/integration/plugin_host.cpp"
         "${API}/plugins/integration/plugin_engine_state.cpp"
         "${API}/plugins/integration/plugin_chain_adapter.cpp"
         "${API}/plugins/integration/plugin_abi.cpp"
         "${API}/plugins/platform/posix/plugin_util_posix.cpp"
+        "${API}/plugins/platform/posix/plugin_gui_x11.cpp"
         # 注：vendor 的 Steinberg SDK 为单头 amalgamation
         # （<steinberg/vst3_static.h>），无 .cpp 实现单元，与
         # Windows 工程同口径不列 SDK 源。
@@ -212,6 +219,14 @@ endif()
 target_link_options(auradsp_engine PRIVATE
     "LINKER:--version-script=${API}/auradsp_engine.map"
 )
+# VST2 净室头在头内定义两张已初始化的常量表（vst_host_supports /
+# vst_effect_supports），多 TU 包含即多重定义：MSVC 链接器自行折叠，
+# ELF ld 需显式允许。两份内容逐字节相同（同一头文件），取先者语义
+# 精确；引擎代码不引用这两张表。（仅 PLUGINS 口味实际包含 VST2 源，
+# 选项对裁剪口味无副作用。）
+target_link_options(auradsp_engine PRIVATE
+    "LINKER:--allow-multiple-definition"
+)
 set_property(TARGET auradsp_engine PROPERTY LINK_DEPENDS "${API}/auradsp_engine.map")
 target_link_libraries(auradsp_engine PRIVATE
     auradsp_core
@@ -227,6 +242,9 @@ target_link_libraries(auradsp_engine PRIVATE
 if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
     set(AURADSP_HOST_SOURCES
         "${API}/plugins/platform/posix/host/plugin_host_main_posix.cpp"
+        # R-07（2026-11-05）：命令循环与 Op 分发下沉到平台无关层，
+        # POSIX 主程序只保留 socket/看门狗/唤醒等平台原语。
+        "${API}/plugins/platform/host/plugin_host_command.cpp"
         "${API}/plugins/platform/posix/host/plugin_shared_region_posix.cpp"
         "${API}/platform/linux/fs_linux.cpp"
         "${API}/platform/linux/env_linux.cpp"
@@ -245,7 +263,14 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         "${API}/plugins/formats/vst3/vst3_driver.cpp"
         "${API}/plugins/formats/vst3/vst3_instance.cpp"
         "${API}/plugins/formats/vst3/vst3_metadata.cpp"
+        # VST2（2026-11-04 Linux 跟进）：驱动/实例/元数据，编译头是
+        # vendor/plugin-api/vst2/vst.h（Xaymar 净室）；__cdecl 习语
+        # 由 platform/posix/win32_compat.h 的空定义消解。
+        "${API}/plugins/formats/vst2/vst2_driver.cpp"
+        "${API}/plugins/formats/vst2/vst2_instance.cpp"
+        "${API}/plugins/formats/vst2/vst2_metadata.cpp"
         "${API}/plugins/platform/posix/plugin_util_posix.cpp"
+        "${API}/plugins/platform/posix/plugin_gui_x11.cpp"
     )
     add_executable(plugin_host_x64 ${AURADSP_HOST_SOURCES})
     set_property(TARGET plugin_host_x64 PROPERTY CXX_STANDARD 20)
@@ -260,11 +285,15 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         "${API}/chain"
         "${API}/plugins/api"
         "${API}/plugins/driver"
+        "${API}/plugins/platform/host"
         "${API}/plugins/platform/win32/host"
         "${API}/plugins/platform/posix"
         "${LEGACY}"
         "${LEGACY}/jdsp"
         "${PLUGIN_API}"
+    )
+    target_link_options(plugin_host_x64 PRIVATE
+        "LINKER:--allow-multiple-definition"
     )
     target_link_libraries(plugin_host_x64 PRIVATE
         Threads::Threads
@@ -288,12 +317,15 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
             -m32
             $<$<COMPILE_LANGUAGE:CXX>:-include ${API}/auradsp_gcc_shim.h>
         )
-        target_link_options(plugin_host_x86 PRIVATE -m32)
+        target_link_options(plugin_host_x86 PRIVATE -m32
+            "LINKER:--allow-multiple-definition"
+        )
         target_include_directories(plugin_host_x86 PRIVATE
             "${API}"
             "${API}/chain"
             "${API}/plugins/api"
             "${API}/plugins/driver"
+            "${API}/plugins/platform/host"
             "${API}/plugins/platform/win32/host"
             "${API}/plugins/platform/posix"
             "${LEGACY}"

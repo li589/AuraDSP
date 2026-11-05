@@ -919,7 +919,9 @@ abstract final class ParamRegistry {
   static final dyneqRelease = ParamSpec<double>(
     id: 'dyneq.release', section: 'dyneq', key: 'release',
     type: ParamType.float, defaultValue: 120.0,
-    min: 10.0, max: 500.0, step: 5.0, unit: 'ms',
+    // FX-01：与引擎表及 dyneq 卡片手写滑块对齐 [10,1000]ms；原 500
+    // 与任何实际执行路径都不一致（setter 钳 [10,1000]）。
+    min: 10.0, max: 1000.0, step: 5.0, unit: 'ms',
     getter: (m) => m.dyneqReleaseMs,
     setter: (m, v) => m.setDyneqRelease(v),
   );
@@ -1201,14 +1203,19 @@ abstract final class ParamRegistry {
   static final compGranularity = ParamSpec<int>(
     id: 'comp.granularity', section: 'comp', key: 'granularity',
     type: ParamType.int32, defaultValue: 1,
-    min: 0, max: 2,
+    // FX-01（全项目审查 S7）：与引擎表对齐 [0,4]——legacy compander 对
+    // 0..4 各有独立 avgBW 曲线（dynamic.c CompressorApplyParamTail），
+    // 原 schema 上限 2 系陈旧截断，模式 3/4 是真实功能而非越界值。
+    min: 0, max: 4,
     getter: (m) => m.compGranularity,
     setter: (m, v) => m.setCompGranularity(v),
   );
   static final compTfresolution = ParamSpec<int>(
     id: 'comp.tfresolution', section: 'comp', key: 'tfresolution',
     type: ParamType.int32, defaultValue: 1,
-    min: 0, max: 2,
+    // FX-01：与引擎表对齐 [0,3]——tfresolution==3 在 legacy 是独立
+    // 分支（全采样率 fgt_fac），非保留值。
+    min: 0, max: 3,
     getter: (m) => m.compTfresolution,
     setter: (m, v) => m.setCompTfresolution(v),
   );

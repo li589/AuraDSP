@@ -47,14 +47,27 @@ class PluginHostCapabilities {
     runtime: PluginHostRuntime.win32Process,
   );
 
-  /// Linux 进程内宿主：扫描/挂载可用；编辑器 GUI（X11 嵌入）为
-  /// 后续独立阶段，canEdit 如实为 false。
+  /// Linux 进程内宿主（无显示环境）：扫描/挂载可用；编辑器需要
+  /// X 显示，无 DISPLAY 时 canEdit 如实为 false。
   static const PluginHostCapabilities linuxInProcess =
       PluginHostCapabilities(
     supported: true,
     canScan: true,
     canMount: true,
     canEdit: false,
+    runtime: PluginHostRuntime.inProcess,
+  );
+
+  /// Linux 进程内宿主（有 X 显示）：编辑器 GUI 已落地（X11 顶层
+  /// 容器窗口，2026-11-04 编辑器阶段），canEdit 为 true。DISPLAY
+  /// 存在只说明有 X 服务器可达；个别插件编辑器打开失败时引擎
+  /// 侧仍会干净降级（showEditor 返回失败、UI 提示）。
+  static const PluginHostCapabilities linuxInProcessWithEditor =
+      PluginHostCapabilities(
+    supported: true,
+    canScan: true,
+    canMount: true,
+    canEdit: true,
     runtime: PluginHostRuntime.inProcess,
   );
 }

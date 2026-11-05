@@ -3,6 +3,7 @@
 
 #include "inflight_guard.h"
 #include "plugin_format_driver.h"
+#include "plugins/plugin_limits.h"
 
 #ifndef AURADSP_HOST_INPROC
 #include "process_plugin_proxy.h"
@@ -22,6 +23,50 @@
 #include <string>
 
 namespace auradsp {
+
+static std::vector<std::string> g_quarantinePatterns;
+static std::mutex g_quarantineMutex;
+
+void pluginSetEditorQuarantineList(const char* patterns) {
+    std::lock_guard<std::mutex> lk(g_quarantineMutex);
+    g_quarantinePatterns.clear();
+    if (!patterns || !*patterns) return;
+    std::string s = patterns;
+    size_t start = 0;
+    for (;;) {
+        const size_t comma = s.find(',', start);
+        std::string tok = s.substr(
+            start, comma == std::string::npos ? std::string::npos : comma - start);
+        auto notSpace = [](char c) { return !std::isspace((unsigned char)c); };
+        const auto b = std::find_if(tok.begin(), tok.end(), notSpace);
+        const auto e = std::find_if(tok.rbegin(), tok.rend(), notSpace).base();
+        if (b < e) {
+            std::string pat(b, e);
+            for (auto& c : pat) c = (char)std::tolower((unsigned char)c);
+            g_quarantinePatterns.push_back(pat);
+        }
+        if (comma == std::string::npos) break;
+        start = comma + 1;
+    }
+}
+
+bool editorQuarantineMatch(const std::string& name, const std::string& path) {
+    std::lock_guard<std::mutex> lk(g_quarantineMutex);
+    if (g_quarantinePatterns.empty()) return false;
+    std::string ln = name, lp = path;
+    for (auto& c : ln) c = (char)std::tolower((unsigned char)c);
+    for (auto& c : lp) c = (char)std::tolower((unsigned char)c);
+    for (const auto& p : g_quarantinePatterns) {
+        if (ln.find(p) != std::string::npos) return true;
+        if (lp.find(p) != std::string::npos) return true;
+    }
+    return false;
+}
+
+extern "C" int auradsp_plugin_set_editor_quarantine_list(const char* patterns) {
+    pluginSetEditorQuarantineList(patterns);
+    return 1;
+}
 
 /* F-8a：遥测测量抽取周期（音频块）。8 块 @ 48kHz/256 帧 ≈ 43ms → ~23Hz
  * 刷新，仍高于 UI 轮询与肉眼 meter 需求；块率更高时（低延迟小块）刷新
@@ -447,12 +492,17 @@ void PluginHostManager::getMainChannelsSlot(size_t slot, int* inChannels,
 
 void PluginHostManager::setChannelHint(int channels) {
     if (channels < 1) channels = 1;
-    if (channels > 8) channels = 8;
+    if (channels > auradsp::limits::kBusChannelsInt) {
+        channels = auradsp::limits::kBusChannelsInt;
+    }
     const int previous = m_channelHint.exchange(channels, std::memory_order_acq_rel);
     if (previous == channels) return;
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
 #ifndef AURADSP_HOST_INPROC
-    if (m_remoteClient) {
+    /* 2026-11-04：x64 客户端只在 process（加载）模式下转发——「仅扫描」
+     * 客户端不得因加载期的格式消息被拉起，懒启动语义属于深扫。桥客户端
+     * 不受限：32 位插件可能随时经它挂载。 */
+    if (m_remoteMode && m_remoteClient) {
         m_remoteClient->setChannelHint(static_cast<uint32_t>(channels));
     }
     if (m_remoteClientX86) {
@@ -493,9 +543,10 @@ void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float
     s.inFlight.fetch_add(1, std::memory_order_acq_rel);
     InFlightGuard guard(s.inFlight, s.destroyPending);
 
+    const int chHint = (std::max)(1, (std::min)(64, m_channelHint.load(std::memory_order_relaxed)));
     if (!s.hasActive.load(std::memory_order_acquire) || s.bypassed.load(std::memory_order_acquire)) {
         if (inChannels != outChannels && inChannels && outChannels) {
-            for (int ch = 0; ch < 2; ++ch) {
+            for (int ch = 0; ch < chHint; ++ch) {
                 if (inChannels[ch] && outChannels[ch]) {
                     std::memcpy(outChannels[ch], inChannels[ch], numFrames * sizeof(float));
                 }
@@ -513,6 +564,32 @@ void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float
         // 前的陈旧/脏值。与 setBypassSlot/unloadPluginSlotLocked/
         // setInsertStageSlot/commitInstanceLocked 的重置行为统一。
         resetTelemetryGateSlot(slot);
+        if (inChannels != outChannels && inChannels && outChannels) {
+            for (int ch = 0; ch < chHint; ++ch) {
+                if (inChannels[ch] && outChannels[ch]) {
+                    std::memcpy(outChannels[ch], inChannels[ch], numFrames * sizeof(float));
+                }
+            }
+        }
+        return;
+    }
+
+    // 清洗 NaN / Inf 并钳位极限值，彻底阻止毒化传播到下游 JamesDSP 滤波器
+    if (outChannels) {
+        for (int ch = 0; ch < chHint; ++ch) {
+            if (!outChannels[ch]) continue;
+            float* dst = outChannels[ch];
+            for (uint32_t i = 0; i < numFrames; ++i) {
+                const float v = dst[i];
+                if (!std::isfinite(v)) {
+                    dst[i] = 0.0f;
+                } else if (v > 10.0f) {
+                    dst[i] = 10.0f;
+                } else if (v < -10.0f) {
+                    dst[i] = -10.0f;
+                }
+            }
+        }
     }
 }
 
@@ -520,7 +597,9 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
                                                 uint32_t numFrames, uint32_t channels,
                                                 uint32_t mask) {
     if (slot >= kMaxPluginSlots || !interleaved || numFrames == 0 || channels == 0) return;
-    if (channels > 8) channels = 8;
+    if (channels > auradsp::limits::kBusChannels) {
+        channels = auradsp::limits::kBusChannels;
+    }
     mask &= (1u << channels) - 1u;
     if (mask == 0) return;
     if (numFrames > m_channelScratchBlock || !m_channelIn[0] ||
@@ -600,8 +679,12 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
         getMainChannelsSlot(slot, &inChannels, &outChannels);
         if (inChannels <= 0) inChannels = 2;
         if (outChannels <= 0) outChannels = inChannels;
-        if (inChannels > 8) inChannels = 8;
-        if (outChannels > 8) outChannels = 8;
+        if (inChannels > auradsp::limits::kBusChannelsInt) {
+            inChannels = auradsp::limits::kBusChannelsInt;
+        }
+        if (outChannels > auradsp::limits::kBusChannelsInt) {
+            outChannels = auradsp::limits::kBusChannelsInt;
+        }
 
         auto fillOutput = [&](int count, const float* first) {
             for (int ch = 0; ch < count; ++ch) {

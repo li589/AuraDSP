@@ -8,12 +8,14 @@
 // 与 plugin_abi.cpp 的 null-host 分支默认值逐项对齐（见该文件各 return 默认值），
 // 避免 UI 在裁剪构建下读到不同语义。全部函数不分配、不加锁，可被控制线程调用。
 #include "auradsp_engine.h"
+#include "plugins/plugin_limits.h"
 
 namespace {
-// 与 plugin_host.h 的 PluginHostManager::kMaxPluginSlots 保持一致（不引插件头）。
-constexpr int kStubPluginSlots = 4;
+// 槽位数/声道掩码与插件宿主同源（plugins/plugin_limits.h），不另抄字面量。
+constexpr int kStubPluginSlots = static_cast<int>(auradsp::limits::kMaxSlots);
 constexpr int kStubDefaultInsertStage = 3;   // Post-Reverb
-constexpr int kStubDefaultChannelMask = 0xFF; // 8 声道全开
+constexpr int kStubDefaultChannelMask =
+    (1 << auradsp::limits::kBusChannels) - 1; // 全部总线声道
 } // namespace
 
 extern "C" {

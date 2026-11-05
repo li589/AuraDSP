@@ -82,6 +82,92 @@ void main() {
       expect(restored.maxFileSizeMb, 128.0);
     });
 
+    // P1/F-08 契约测试：toJson/fromJson 是手写镜像，字段一旦漏读或漏写，
+    // 用户改过的配置会在重启后静默丢回默认值。这里用"全键 sentinel JSON"
+    // 做双向精确对账：
+    //   - fromJson 漏读某键 → 该字段回落默认值，toJson 输出 ≠ sentinel；
+    //   - toJson 漏写某键 → 输出缺键（或值不符），≠ sentinel。
+    // 所有 sentinel 值都刻意不同于字段默认值，保证漏读能被观察到。
+    // 新增持久化字段时必须同步补进本 sentinel，否则本测试失败。
+    test('AppConfig toJson/fromJson covers every persisted key (contract)',
+        () {
+      final sentinel = <String, dynamic>{
+        'version': 3,
+        'audio': <String, dynamic>{
+          'sampleRate': 44100,
+          'maxBlockFrames': 512,
+          'audioMode': 'asio',
+          'linuxAudioBackend': 'alsa',
+          'alsaOutputDevice': 'hw:1,0',
+          'alsaCaptureDevice': 'hw:2,0',
+          'channelsCountMode': 1,
+          'channelsCount': 8,
+          // audioMode=asio 的构造默认是 pipeline；这里取另一个合法值。
+          'modeCategory': 'attachment',
+          'attachmentMode': 'voicemeeter_api',
+          'pipelineInput': 'vaio',
+          'pipelineOutput': 'asio_client',
+          'pipelineInputDevice': 'sentinel-in-device',
+          'pipelineOutputDevice': 'sentinel-out-device',
+          'pipelineInputEnabled': false,
+          'pipelineOutputEnabled': false,
+          'apoTargetEndpoint': 'sentinel-apo',
+          'monitorMirroring': true,
+          'asioDriver': 'Sentinel ASIO',
+          'asioBufSize': 256,
+          'asioOutPair': 3,
+          'vbBusMask': 0x0F,
+          'vbPluginGroupMask': 0x03,
+          'vbAutoProtect': false,
+          'vaioOutputEndpoint': 'sentinel-vaio',
+          'vizFps': 60,
+          'vizFftSize': 8192,
+          'stereoWidenMax': 0.9,
+        },
+        'ui': <String, dynamic>{
+          'locale': 'en',
+          'themeId': 'aurora',
+          'autoRestoreSession': false,
+          'ambientSpectrum': false,
+          'autoSaveDebounceMs': 250,
+        },
+        'safety': <String, dynamic>{
+          'maxIrDurationSeconds': 12.5,
+          'maxFileSizeMb': 100.0,
+        },
+        'paths': <String, dynamic>{
+          'pluginScanDirs': [
+            {'path': 'sentinel-plugins-a', 'enabled': false, 'builtin': true},
+            {'path': 'sentinel-plugins-b', 'enabled': true, 'builtin': false},
+          ],
+          'pluginScanDirsSeeded': true,
+          'customScriptDirs': ['sentinel-scripts'],
+        },
+        'visualizer': <String, dynamic>{
+          'style': 'tornado',
+          'colorTheme': 'aurora',
+          'sensitivity': 2.5,
+          'decayRate': 0.3,
+          'gravity': 3.0,
+          'barCount': 64,
+          'lineWidth': 2.5,
+          'bloom': 0.8,
+          'showGrid': false,
+          'showPeaks': false,
+          'showDbScale': false,
+          'showLyrics': true,
+          'showTranslation': false,
+          'lyricsSource': 'kugou',
+        },
+      };
+
+      final restored = AppConfig.fromJson(
+        Map<String, dynamic>.from(sentinel),
+      );
+      // 精确相等：既查漏读（值回落默认）也查漏写（键缺失/值不符）。
+      expect(restored.toJson(), sentinel);
+    });
+
     test('ConfigManager file persistence works', () {
       final cfg = ConfigManager.load();
       expect(cfg, isNotNull);
