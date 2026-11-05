@@ -741,7 +741,7 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
     final String text = switch (effMode) {
       LatencyMode.probing => '↻ 测定中',
       LatencyMode.measured => widget.latencyMs.toStringAsFixed(1) + ' ms',
-      LatencyMode.estimated => '≈ ' + widget.latencyMs.toStringAsFixed(1) + ' ms',
+      LatencyMode.estimated => widget.latencyMs.toStringAsFixed(1) + ' ms',
       LatencyMode.zero => '0.0 ms',
       LatencyMode.unmeasured => l.latUnmeasured,
     };

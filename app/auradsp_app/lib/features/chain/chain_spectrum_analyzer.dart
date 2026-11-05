@@ -534,17 +534,7 @@ class FullChainTransferCalculator {
       }
     }
 
-    // 3. 计算端到端全链路总延迟
-    double coreLat = 0.0;
-    if (model.limiterOn) coreLat += 1.5;
-    if (model.isStageEnabled('bass')) coreLat += 4.0;
-    if (model.isStageEnabled('haas')) coreLat += model.haasDelayMs;
-    if (model.isStageEnabled('spatial')) coreLat += 1.2;
-    if (model.convEnabled && model.convReady && model.deviceRate > 0) {
-      coreLat += (model.convFrames / model.deviceRate) * 1000.0;
-    }
-
-    // 插件槽位延迟 (Slot 0 ~ 3 PDC)
+    // 3. 计算端到端全链路总延迟：严格走 AppModel 统一聚合核心，杜绝多套逻辑不一致
     double pluginLat = 0.0;
     final pm = model.pluginManager;
     for (var s = 0; s < PluginManager.kMaxSlots; s++) {
@@ -556,7 +546,8 @@ class FullChainTransferCalculator {
       }
     }
 
-    final totalLat = coreLat + pluginLat;
+    final totalLat = model.fullChainLatencyMs;
+    final coreLat = (totalLat - pluginLat).clamp(0.0, totalLat);
 
     // 增益极值统计
     var minG = 0.0;
@@ -614,13 +605,7 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
   }
 
   void _measureAndSyncLatency() {
-    final isVb = widget.model.audioMode == 'vbcallback';
-    final res = FullChainTransferCalculator.compute(
-      model: widget.model,
-      channel: _selectedChannel,
-      vbBusIndex: isVb ? _selectedVbBus : null,
-    );
-    widget.model.updateFullChainMeasuredLatency(res.totalLatencyMs);
+    widget.model.updateFullChainMeasuredLatency(widget.model.fullChainLatencyMs);
   }
 
   @override
@@ -712,24 +697,26 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
                 visualDensity: VisualDensity.compact,
               ),
 
-              // 重新测定刷新按钮
+              // 重新测定刷新按钮（统一走 model.refreshAllComponentLatencies()，确保与右上角 PDC 数值完全一致）
               IconButton(
                 tooltip: '重新测算全链路频响与端到端延迟',
                 icon: Icon(Icons.refresh_rounded, size: 18, color: p.accent),
-                onPressed: () {
-                  _measureAndSyncLatency();
-                  setState(() {});
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      duration: const Duration(milliseconds: 1400),
-                      behavior: SnackBarBehavior.floating,
-                      backgroundColor: p.panelRaised,
-                      content: Text(
-                        '已完成全链路频响分析，端到端延迟已更新为 ${res.totalLatencyMs.toStringAsFixed(1)} ms',
-                        style: TextStyle(color: p.text, fontSize: 12),
+                onPressed: () async {
+                  await widget.model.refreshAllComponentLatencies();
+                  if (context.mounted) {
+                    setState(() {});
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        duration: const Duration(milliseconds: 1400),
+                        behavior: SnackBarBehavior.floating,
+                        backgroundColor: p.panelRaised,
+                        content: Text(
+                          '已完成全链路延迟测定，端到端延迟已更新为  ms',
+                          style: TextStyle(color: p.text, fontSize: 12),
+                        ),
                       ),
-                    ),
-                  );
+                    );
+                  }
                 },
                 visualDensity: VisualDensity.compact,
               ),

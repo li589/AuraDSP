@@ -1,6 +1,8 @@
 // chain_spectrum_analyzer_test.dart — 全流程复合频响测量与延迟反哺测试
 import 'package:auradsp_app/core/audio_modes.dart';
 import 'package:auradsp_app/core/design.dart';
+import 'package:auradsp_app/core/plugins/plugin_manager.dart';
+import 'package:auradsp_app/core/plugins/plugin_models.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
 import 'package:auradsp_app/features/chain/chain_spectrum_analyzer.dart';
@@ -102,22 +104,27 @@ void main() {
       }
     });
 
-    test('全链路端到端总延迟反哺 model.latencyMs', () {
+    test('全链路端到端总延迟与 PDC 槽位延迟严格对齐并反哺 model.latencyMs', () {
       final model = AppModel(testing: true);
-      model.limiterOn = true; // 1.5ms
-      model.bassOn = true; // 4.0ms
-      model.haasOn = true;
-      model.haasDelayMs = 15.0; // 15.0ms
+      model.limiterOn = true; // 核心 1.5ms lookahead
+      // 模拟第三方插件槽位 0 有 96 samples @ 48kHz (2.0ms)
+      model.pluginManager.onPluginSlotStatus(0, {
+        'hasActive': true,
+        'status': 2,
+        'latency': 96,
+        'plugin': {'name': 'TestEQ', 'vendor': 'Test', 'format': 'vst3', 'category': 'EQ', 'path': '/vst/test.vst3'},
+      }, PluginInsertStage.preDsp);
 
       final res = FullChainTransferCalculator.compute(
         model: model,
         channel: 'stereo',
       );
-      expect(res.coreLatencyMs, closeTo(20.5, 0.1));
-      expect(res.totalLatencyMs, closeTo(20.5, 0.1));
+      expect(res.coreLatencyMs, closeTo(1.5, 0.05));
+      expect(res.pluginLatencyMs, closeTo(2.0, 0.05));
+      expect(res.totalLatencyMs, closeTo(3.5, 0.05));
 
       model.updateFullChainMeasuredLatency(res.totalLatencyMs);
-      expect(model.latencyMs, closeTo(20.5, 0.1));
+      expect(model.latencyMs, closeTo(3.5, 0.05));
     });
   });
 

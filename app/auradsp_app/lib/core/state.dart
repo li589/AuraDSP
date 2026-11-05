@@ -1179,6 +1179,32 @@ class AppModel extends ChangeNotifier {
   ///   （haas/spatial 探针本轮已支持）。
   /// - 两者皆 false：真的没有可用数值，UI 显示「未测量」。
   /// 该组件当前可显示的延迟，带来源与模式（实测 / 实时推算 / 零延迟 / 未测定）。
+  /// 全链路端到端总延迟（ms）：统揽所有启用核心效果器 + 第三方插件槽位延迟
+  double get fullChainLatencyMs {
+    double totalMs = 0.0;
+    const stageIds = [
+      'gate', 'dyneq', 'filter', 'bassmono', 'bass', 'comp',
+      'stereo', 'spatial', 'exciter', 'tube', 'haas', 'crossfeed',
+      'eq', 'reverb', 'arbmag', 'loudness', 'ddc', 'convolver',
+    ];
+    for (final id in stageIds) {
+      if (isStageEnabled(id)) {
+        totalMs += componentLatency(id).ms;
+      }
+    }
+    // 前后级门控与 Limiter
+    if (limiterOn) {
+      totalMs += componentLatency('limiter').ms;
+    }
+    // 第三方插件槽位延迟
+    for (var s = 0; s < PluginManager.kMaxSlots; s++) {
+      if (pluginManager.isSlotActive(s) && !pluginManager.isSlotBypassed(s) && deviceRate > 0) {
+        totalMs += (pluginManager.getSlotLatency(s) / deviceRate) * 1000.0;
+      }
+    }
+    return totalMs;
+  }
+
   ({double ms, bool measured, bool estimated, LatencyMode mode}) componentLatency(String compId) {
     // 1. 实测优先：若已真实完成脉冲探测，返回实测数据
     final m = _measuredLatencyMs[compId];
@@ -1206,13 +1232,7 @@ class AppModel extends ChangeNotifier {
       return (ms: 1.5, measured: false, estimated: true, mode: LatencyMode.estimated);
     }
 
-    if (compId == 'spatial' && spatialOn) {
-      return (ms: 1.2, measured: false, estimated: true, mode: LatencyMode.estimated);
-    }
 
-    if (compId == 'bass' && bassOn) {
-      return (ms: 4.0, measured: false, estimated: true, mode: LatencyMode.estimated);
-    }
 
     // 4. 零延迟判断：若该组件已启用但属于零延迟（如纯增益或常规直通），返回 0.0 ms
     if (isStageEnabled(compId)) {
@@ -1386,6 +1406,7 @@ Color latencyColorByMode({
       if (ms <= 30.0) return p.warning;
       return p.accent2;
     case LatencyMode.zero:
+      return p.success;   // 0.0ms 零算法延迟（实时样本级），统一为高保真绿！
     case LatencyMode.unmeasured:
       return p.textDim;
   }

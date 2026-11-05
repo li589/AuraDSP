@@ -96,13 +96,21 @@ void main() {
       );
       expect(cEst, p.accent);
 
-      // 4. 零延迟直通 zero (工业次级灰)
+      // 4. 零延迟直通 zero 统一为录音监听级高保真绿 (与 0.0ms 其它效果器一致)
       final cZero = latencyColorByMode(
         mode: LatencyMode.zero,
         ms: 0.0,
         p: p,
       );
-      expect(cZero, p.textDim);
+      expect(cZero, p.success);
+
+      // 5. 未测定 unmeasured (次级灰)
+      final cUnmeasured = latencyColorByMode(
+        mode: LatencyMode.unmeasured,
+        ms: 0.0,
+        p: p,
+      );
+      expect(cUnmeasured, p.textDim);
     });
 
     test('组件延迟自动提供实时参数推算值（Convolver / Limiter / Spatial / Bass）', () {
@@ -124,12 +132,11 @@ void main() {
       expect(limitLat.estimated, isTrue);
       expect(limitLat.mode, LatencyMode.estimated);
 
-      // Spatial 开启时，实时推算 1.2ms
+      // Spatial 开启时，诚实零算法延迟（近耳直达实时输出）
       model.spatialOn = true;
       final spatLat = model.componentLatency('spatial');
-      expect(spatLat.ms, 1.2);
-      expect(spatLat.estimated, isTrue);
-      expect(spatLat.mode, LatencyMode.estimated);
+      expect(spatLat.ms, 0.0);
+      expect(spatLat.mode, LatencyMode.zero);
     });
   });
 }

@@ -4981,7 +4981,7 @@ abstract class AppLocalizations {
   /// No description provided for @chainOrderTitle.
   ///
   /// In zh, this message translates to:
-  /// **'处理顺序与状态'**
+  /// **'处理顺序'**
   String get chainOrderTitle;
 
   /// No description provided for @chainOrderHint.
@@ -5953,7 +5953,7 @@ abstract class AppLocalizations {
   /// No description provided for @chainVstTitle.
   ///
   /// In zh, this message translates to:
-  /// **'第三方 VST / CLAP 插件挂载槽与阶段处理顺序'**
+  /// **'第三方插件挂载顺序'**
   String get chainVstTitle;
 
   /// No description provided for @chainVstHint.

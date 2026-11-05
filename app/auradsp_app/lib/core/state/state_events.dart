@@ -1273,16 +1273,7 @@ extension StateEvents on AppModel {
       await refreshComponentLatency(id);
     }
 
-    // 重新测定反哺全链路总延迟
-    double totalMs = 0.0;
-    for (final id in activeTargets) {
-      totalMs += componentLatency(id).ms;
-    }
-    for (var s = 0; s < PluginManager.kMaxSlots; s++) {
-      if (pluginManager.isSlotActive(s) && !pluginManager.isSlotBypassed(s) && deviceRate > 0) {
-        totalMs += (pluginManager.getSlotLatency(s) / deviceRate) * 1000.0;
-      }
-    }
-    updateFullChainMeasuredLatency(totalMs);
+    // 重新测定反哺全链路总延迟（统一使用全系统唯一口径 fullChainLatencyMs）
+    updateFullChainMeasuredLatency(fullChainLatencyMs);
   }
 }
