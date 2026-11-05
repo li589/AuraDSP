@@ -1,0 +1,48 @@
+# AuraDSP Flatpak 清单（预留：GitHub Release 直分发形态）。
+#
+# 形态说明：本清单消费「预构建的 Flutter Linux bundle」，适用于随
+# Release 直接分发 .flatpak 单文件；上架 Flathub 需要 from-source
+# 构建变体（见 installer/docs/05 §6），不在此清单范围。
+#
+# 构建（需 flatpak-builder 与 org.freedesktop.Platform/Sdk 25.08）：
+#   1. 把 Flutter bundle 目录复制为本目录下的 bundle/
+#      （cp -a <bundle> installer/linux/flatpak/bundle）
+#   2. flatpak-builder --user --install build-dir org.auradsp.AuraDSP.yml
+#   或产出单文件：flatpak-builder build-dir ... 后
+#      flatpak build-bundle <repo> org.auradsp.AuraDSP.flatpak org.auradsp.AuraDSP
+#
+# 运行时基线 25.08（当前稳定线；旧规格的 23.08 已过时）。
+
+app-id: org.auradsp.AuraDSP
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+command: auradsp
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=dri
+  - --filesystem=home:ro
+  - --filesystem=xdg-run/pipewire-0
+  - --own-name=org.mpris.MediaPlayer2.auradsp
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.kde.StatusNotifierWatcher
+modules:
+  - name: auradsp
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/lib /app/bin /app/share/applications /app/share/icons/hicolor/256x256/apps
+      - cp -a bundle /app/lib/auradsp
+      - printf '#!/bin/sh\nexec /app/lib/auradsp/auradsp_app "$@"\n' > /app/bin/auradsp
+      - chmod +x /app/bin/auradsp
+      - install -m 644 desktop/auradsp.desktop /app/share/applications/org.auradsp.AuraDSP.desktop
+      - install -m 644 desktop/auradsp.png /app/share/icons/hicolor/256x256/apps/org.auradsp.AuraDSP.png
+    sources:
+      # 预构建 bundle（构建前按上方说明就位，不入 git）
+      - type: dir
+        path: bundle
+      # 桌面入口与图标（构建前从 ../shared 与设计资产复制到 desktop/）
+      - type: dir
+        path: desktop

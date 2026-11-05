@@ -29,6 +29,12 @@ AuraDSP 是核心音频效果器应用，与 Linux 底层音频架构（PulseAud
 `.deb` 包用于适配所有 Debian 系生态系统（Debian, Ubuntu, Linux Mint, Pop!_OS, Deepin, Kylin 等）。
 
 ### 2.1 文件系统层级规范 (FHS Layout)
+
+> **实现注（2026-11-06）**：Flutter runner 要求主程序与 `lib/`、`data/`
+> 保持 bundle 原生相对结构，下方示意树中的引擎/宿主实际随 bundle 的
+> `lib/` 子目录装入 `/usr/lib/auradsp/lib/`，不拆平到 `/usr/lib/auradsp/`
+> 根下；其余（bin 链接、share 布局）与示意一致。实现见
+> `installer/linux/deb/build_deb.sh`。
 ```text
 auradsp_0.1.0-1_amd64/
 ├── DEBIAN/
@@ -126,7 +132,7 @@ exec "${HERE}/usr/bin/auradsp_app" "$@"
 
 ### 4.1 Flatpak 规格 (`installer/linux/flatpak/`)
 - **应用 ID**：`org.auradsp.AuraDSP`
-- **运行时环境**：`org.freedesktop.Platform // 23.08`
+- **运行时环境**：`org.freedesktop.Platform // 25.08`（2026-11-06 更新，见 05 号规划 §2.2）
 - **沙盒权限配置 (`finish-args`)**：
   ```yaml
   finish-args:
@@ -140,7 +146,7 @@ exec "${HERE}/usr/bin/auradsp_app" "$@"
 
 ### 4.2 Snap 规格 (`installer/linux/snap/`)
 - **应用名称**：`auradsp`
-- **基础镜像**：`core22`
+- **基础镜像**：`core24`（2026-11-06 更新，见 05 号规划 §2.2）
 - **权限插槽 (Plugs)**：
   ```yaml
   plugs:

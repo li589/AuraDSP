@@ -1,0 +1,10 @@
+#!/bin/bash
+# AuraDSP AppImage 入口（规格：installer/docs/03 §3.2）。
+# bundle 保持原生布局整包位于 usr/lib/auradsp/；主程序经 $ORIGIN/lib
+# rpath 找自带库，这里仅补 PATH/LD_LIBRARY_PATH 兜底后直启。
+HERE="$(dirname "$(readlink -f "${0}")")"
+export PATH="${HERE}/usr/bin:${PATH}"
+if [ -d "${HERE}/usr/lib/auradsp/lib" ]; then
+    export LD_LIBRARY_PATH="${HERE}/usr/lib/auradsp/lib:${LD_LIBRARY_PATH:-}"
+fi
+exec "${HERE}/usr/lib/auradsp/auradsp_app" "$@"

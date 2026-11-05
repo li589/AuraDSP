@@ -1,0 +1,51 @@
+# AuraDSP Snap 清单（预留，不进首发构成；见 installer/docs/05 §2.2）。
+#
+# 基础镜像 core24（旧规格的 core22 已过时）。先 strict confinement +
+# 下列 plugs；音频系统级能力（虚拟 sink 等）在 snap 沙盒内的实际
+# 可行性待真机评估，必要时再议 classic。
+#
+# 构建：把 Flutter bundle 复制为本目录下的 bundle/ 后执行 snapcraft。
+# version 字段须与 pubspec 一致（由 version_resolver 在 CI 中校验/注入）。
+
+name: auradsp
+base: core24
+version: '0.1.0'
+summary: Cross-platform global audio effects system
+description: |
+  AuraDSP takes over the system audio path and applies a real-time DSP
+  chain with VST3 / CLAP / VST2 plugin hosting. On Linux it runs on
+  PulseAudio (system / virtual sink / snd-aloop driver modes) with an
+  ALSA expert mode.
+grade: devel
+confinement: strict
+
+apps:
+  auradsp:
+    command: bin/auradsp
+    desktop: share/applications/auradsp.desktop
+    plugs:
+      - audio-playback
+      - audio-record
+      - pulseaudio
+      - desktop
+      - wayland
+      - x11
+      - home
+
+parts:
+  auradsp:
+    plugin: dump
+    source: bundle
+    organize:
+      auradsp_app: lib/auradsp/auradsp_app
+      lib: lib/auradsp/lib
+      data: lib/auradsp/data
+      resources: lib/auradsp/resources
+    stage:
+      - lib/auradsp
+  launcher:
+    plugin: dump
+    source: snap-local
+    organize:
+      auradsp: bin/auradsp
+      auradsp.desktop: share/applications/auradsp.desktop

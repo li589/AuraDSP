@@ -7,7 +7,7 @@
 ## 1. 基础配置规格
 
 - **应用名称**：`auradsp`
-- **基础镜像**：`base: core22`
+- **基础镜像**：`base: core24`
 - **等级模式**：`confinement: strict`
 - **清单文件**：`snapcraft.yaml`
 
