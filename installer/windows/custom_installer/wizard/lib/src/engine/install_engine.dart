@@ -16,6 +16,17 @@ String defaultInstallDir(bool allUsers) => allUsers
     ? r'C:\Program Files\AuraDSP'
     : p.join(env('LOCALAPPDATA'), 'Programs', 'AuraDSP');
 
+/// ASIO 驱动 DLL 在安装目录中的路径。规范名 auraasio_driver.dll
+/// （ADR-008：CMake 目标名即文件名，pack.py 按此名投放）；
+/// AuraAsioDriver.dll 为早期打包口径的别名，兼容识别。
+String asioDllPath(String dir) {
+  final canonical = p.join(dir, 'auraasio_driver.dll');
+  if (File(canonical).existsSync()) return canonical;
+  final alias = p.join(dir, 'AuraAsioDriver.dll');
+  if (File(alias).existsSync()) return alias;
+  return canonical;
+}
+
 class InstallEngine {
   InstallEngine({required this.args, required this.wizard});
   final SetupArgs args;
@@ -79,9 +90,9 @@ class InstallEngine {
       // 3) ASIO 注册（降级警告）
       if (o.asio) {
         sink(const ProgressEvent('asio', 'register'));
-        final dll = p.join(o.installDir, 'AuraAsioDriver.dll');
+        final dll = asioDllPath(o.installDir);
         if (!File(dll).existsSync()) {
-          warnings.add('未找到 AuraAsioDriver.dll，ASIO 注册跳过');
+          warnings.add('未找到 auraasio_driver.dll，ASIO 注册跳过');
         } else {
           try {
             final hr = callDllRegisterServer(dll, register: true);
@@ -236,7 +247,7 @@ $s.Save()
 
       if (manifest.components.contains('asio')) {
         sink(const ProgressEvent('asio', 'unregister'));
-        final dll = p.join(manifest.installDir, 'AuraAsioDriver.dll');
+        final dll = asioDllPath(manifest.installDir);
         if (File(dll).existsSync()) {
           try {
             callDllRegisterServer(dll, register: false);

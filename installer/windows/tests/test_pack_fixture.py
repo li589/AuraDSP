@@ -62,7 +62,7 @@ def main() -> int:
         drv.mkdir()
         for ext in ("sys", "inf", "cat"):
             (drv / f"AuraVaio.{ext}").write_bytes(b"drv")
-        asio = base / "AuraAsioDriver.dll"
+        asio = base / "auraasio_driver.dll"
         asio.write_bytes(b"MZ-asio")
 
         inst = base / "installer"
@@ -83,7 +83,7 @@ def main() -> int:
         dz = out / "AuraDSP-Driver-x64-v0.1.0.zip"
         names = zipfile.ZipFile(dz).namelist() if dz.exists() else []
         for want in ("AuraVaio.sys", "AuraVaio.inf", "AuraVaio.cat",
-                     "install_driver.ps1", "AuraAsioDriver.dll",
+                     "install_driver.ps1", "auraasio_driver.dll",
                      "register_asio.ps1"):
             check(f"含 {want}", want in names)
 
@@ -130,6 +130,20 @@ def main() -> int:
         check("ZIP-W 全条目 STORED（引导壳零依赖解包）",
               all(i.compress_type == zipfile.ZIP_STORED
                   for i in wz.infolist()))
+        pz2 = zipfile.ZipFile(_io.BytesIO(blob[op:op + lp]))
+        check("ZIP-P 含 payload/auraasio_driver.dll（规范名）",
+              "payload/auraasio_driver.dll" in pz2.namelist())
+
+        print("== ASIO 别名归一化 ==")
+        alias = base / "AuraAsioDriver.dll"
+        alias.write_bytes(b"MZ-asio-alias")
+        r = run_pack("--mode", "driver", *common,
+                     "--asio-driver", str(alias))  # 后置覆盖
+        check("别名输入 exit 0", r.returncode == 0, r.stderr.strip()[-200:])
+        names = zipfile.ZipFile(dz).namelist()
+        check("驱动包内归一化为规范名",
+              "auraasio_driver.dll" in names
+              and "AuraAsioDriver.dll" not in names)
 
         print("== 错误路径 ==")
         r = run_pack("--mode", "setup", *common,

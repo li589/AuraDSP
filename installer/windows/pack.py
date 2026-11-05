@@ -5,7 +5,7 @@
 一个脚本产出 Windows 完整发行的三件（可任意组合）：
 
   driver   AuraDSP-Driver-x64-v<ver>.zip
-           VAIO 驱动全套 + install_driver.ps1 + AuraAsioDriver.dll
+           VAIO 驱动全套 + install_driver.ps1 + auraasio_driver.dll
            + register_asio.ps1（生成的注册/反注册脚本）
   portable AuraDSP-Windows-x64-v<ver>.zip
            staging 整目录（按 --resources 策略加工）+ build-info 刷新
@@ -107,15 +107,24 @@ def find_driver_dir(explicit: str | None) -> Path | None:
     return max(candidates, key=score)
 
 
+# ASIO 驱动 DLL 的规范文件名（ADR-008：CMake 目标 auraasio_driver 的
+# 产物名即文件名，驱动侧 register_driver.ps1 与冒烟门均以此为准）。
+# AuraAsioDriver.dll 是早期安装器口径的别名，仅作兼容发现/输入，
+# 进入产物时一律归一化为规范名。
+ASIO_DLL_NAME = "auraasio_driver.dll"
+ASIO_DLL_ALIASES = (ASIO_DLL_NAME, "AuraAsioDriver.dll")
+
+
 def find_asio_driver(explicit: str | None) -> Path | None:
     if explicit:
         p = Path(explicit)
         return p if p.is_file() else None
     base = ROOT / "core" / "desktop" / "windows-drivers"
-    hits = [p for p in base.rglob("AuraAsioDriver.dll")]
-    if not hits:
-        return None
-    return max(hits, key=lambda p: p.stat().st_mtime)
+    for name in ASIO_DLL_ALIASES:
+        hits = [p for p in base.rglob(name)]
+        if hits:
+            return max(hits, key=lambda p: p.stat().st_mtime)
+    return None
 
 
 def check_staging(staging: Path) -> None:
@@ -230,12 +239,12 @@ def refresh_build_info(staging_copy: Path, extra: dict[str, str]) -> None:
 REGISTER_ASIO_PS1 = """\
 # AuraDSP ASIO 驱动注册/反注册（pack.py 生成，随驱动包分发）
 # 用法（管理员 PowerShell）：
-#   .\\register_asio.ps1            注册 AuraAsioDriver.dll
+#   .\\register_asio.ps1            注册 auraasio_driver.dll
 #   .\\register_asio.ps1 -Unregister 反注册
 param([switch]$Unregister)
 $ErrorActionPreference = "Stop"
-$dll = Join-Path $PSScriptRoot "AuraAsioDriver.dll"
-if (-not (Test-Path $dll)) { throw "AuraAsioDriver.dll 不在脚本同目录" }
+$dll = Join-Path $PSScriptRoot "auraasio_driver.dll"
+if (-not (Test-Path $dll)) { throw "auraasio_driver.dll 不在脚本同目录" }
 $regsvr = "$env:SystemRoot\\System32\\regsvr32.exe"
 $args = if ($Unregister) { @("/s", "/u", $dll) } else { @("/s", $dll) }
 $p = Start-Process $regsvr -ArgumentList $args -Wait -PassThru
@@ -255,7 +264,8 @@ def mode_driver(args, ver: dict[str, str], out: Path) -> Path:
         raise die("找不到 VAIO 驱动产物目录（含 .sys 的目录）；"
                   "先在 Windows 构建驱动，或用 --driver-dir 指定")
     if asio is None:
-        raise die("找不到 AuraAsioDriver.dll；先构建 04_asio_driver，或用 --asio-driver 指定")
+        raise die("找不到 auraasio_driver.dll；先跑 build_windows.ps1 全量构建"
+                  "（含 auraasio_driver 目标），或用 --asio-driver 指定")
     install_ps1 = (ROOT / "core" / "desktop" / "windows-drivers" /
                    "01_vaio_driver" / "install_driver.ps1")
     if not install_ps1.is_file():
@@ -275,7 +285,7 @@ def mode_driver(args, ver: dict[str, str], out: Path) -> Path:
         if copied == 0:
             raise die(f"驱动目录没有任何 .sys/.inf/.cat/.cer: {driver_dir}")
         shutil.copy2(install_ps1, stage / install_ps1.name)
-        shutil.copy2(asio, stage / asio.name)
+        shutil.copy2(asio, stage / ASIO_DLL_NAME)
         (stage / "register_asio.ps1").write_text(REGISTER_ASIO_PS1, encoding="utf-8")
         n = zip_dir(stage, dest, args.zip_level)
     log(f"driver: {dest.name}（{n} 条目，{dest.stat().st_size / 1e6:.1f} MB）")
@@ -362,8 +372,8 @@ def mode_setup(args, ver: dict[str, str], out: Path) -> Path:
     dest = out / f"AuraDSP-Setup-x64-{ver['AURADSP_TAG']}.exe"
     asio = find_asio_driver(args.asio_driver)
     if asio is None:
-        raise die("setup 模式必须有 AuraAsioDriver.dll（staging 当前不含，"
-                  "属已知缺口）；先构建 04_asio_driver 或用 --asio-driver 指定")
+        raise die("setup 模式必须有 auraasio_driver.dll；先跑 build_windows.ps1 "
+                  "全量构建（含 auraasio_driver 目标），或用 --asio-driver 指定")
     driver_dir = find_driver_dir(args.driver_dir)
     if driver_dir is None:
         raise die("setup 模式必须有 VAIO 驱动产物（payload 的 driver/ 子目录）；"
@@ -377,7 +387,7 @@ def mode_setup(args, ver: dict[str, str], out: Path) -> Path:
     td, work = prepare_staging_copy(args)
     with td:
         # 载荷增补：ASIO 驱动本体 + driver/ 子目录
-        shutil.copy2(asio, work / asio.name)
+        shutil.copy2(asio, work / ASIO_DLL_NAME)
         drv = work / "driver"
         drv.mkdir(exist_ok=True)
         for f in sorted(driver_dir.iterdir()):

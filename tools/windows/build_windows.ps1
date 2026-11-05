@@ -145,6 +145,15 @@ if (-not $SkipDrivers) {
     Write-Host "  编译桥接动态库 (auradsp_bridges: vm / vaio / asio)..."
     cmake --build --preset $BuildPreset --target auradsp_bridges
 
+    Write-Host "  编译 ASIO 虚拟驱动 (auraasio_driver，发行包必需)..."
+    cmake --build --preset $BuildPreset --target auraasio_driver
+    $AsioDrvPath = Join-Path $DriversOutDir "$BuildType\auraasio_driver.dll"
+    if (Test-Path $AsioDrvPath) {
+        Write-Host "  -> ASIO 驱动就绪: auraasio_driver.dll" -ForegroundColor Green
+    } else {
+        Write-Host "  -> 警告: auraasio_driver.dll 未生成 (pack.py 的 driver/setup 模式将报错)" -ForegroundColor DarkYellow
+    }
+
     foreach ($Bridge in @("auravm_bridge.dll", "auravaio_bridge.dll", "auraasio_bridge.dll")) {
         $DllPath = Join-Path $DriversOutDir "$BuildType\$Bridge"
         if (Test-Path $DllPath) {
