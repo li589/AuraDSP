@@ -16,7 +16,6 @@ import '../core/state.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
 import '../engine/auradsp_ffi.dart' show VizBands;
-import 'chrome.dart';
 
 // l10nOf 上移后 re-export：既有 `import ...widgets.dart` 的调用方零改动。
 export '../core/ui_helpers.dart' show l10nOf;

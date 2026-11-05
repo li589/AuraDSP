@@ -2574,7 +2574,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainTitle => '处理链';
 
   @override
-  String get chainOrderTitle => '处理顺序与状态';
+  String get chainOrderTitle => '处理顺序';
 
   @override
   String get chainOrderHint =>
@@ -3118,7 +3118,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get gateStateClosed => '关闭';
 
   @override
-  String get chainVstTitle => '第三方 VST / CLAP 插件挂载槽与阶段处理顺序';
+  String get chainVstTitle => '第三方插件挂载顺序';
 
   @override
   String get chainVstHint => '支持多插槽并行挂载；可在下方为每个插件单独设定在全局音频链上的插入阶段与处理先后。';

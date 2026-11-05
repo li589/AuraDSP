@@ -1,7 +1,6 @@
 // chain_scifi_flow_panel_test.dart — 科幻信号流面板与实时插件物理拓扑测试
 import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/plugins/plugin_manager.dart';
-import 'package:auradsp_app/core/plugins/plugin_models.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
 import 'package:auradsp_app/features/chain/chain_scifi_flow_panel.dart';
@@ -34,7 +33,7 @@ void main() {
 
     // 1. 验证大号标题与副标题渲染
     expect(find.text('全局信号流顺序'), findsOneWidget);
-    expect(find.text('全链路 24 节点拓扑 · 实时 Stage 0~4 插件注入映射 · 支持平移缩放'), findsOneWidget);
+    expect(find.text('全链路 24 节点拓扑 · 实时 Stage 0~4 插件注入 · 支持平移缩放'), findsOneWidget);
     expect(find.text('显示全景'), findsOneWidget);
 
     // 2. 点击“显示全景”按钮展开面板
@@ -44,7 +43,6 @@ void main() {
 
     // 展开后按钮文字变为“收起面板”
     expect(find.text('收起面板'), findsOneWidget);
-    expect(find.text('SIGNAL ROUTING TOPOLOGY (PHYSICAL ORDER)'), findsOneWidget);
     expect(find.text('100% 复位'), findsOneWidget);
 
     // 3. 点击“100% 复位”
@@ -89,10 +87,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     // 验证插件节点渲染
-    expect(find.text('SLOT 1'), findsOneWidget);
+    expect(find.textContaining('SLOT 1'), findsOneWidget);
     expect(find.text('FabFilter Pro-Q 3'), findsOneWidget);
-    expect(find.text('Pre-DSP'), findsOneWidget);
-    expect(find.text('64 spl'), findsOneWidget);
+    expect(find.text('64spl 延迟'), findsOneWidget);
 
     // 收起动画
     await tester.tap(find.text('收起面板'));

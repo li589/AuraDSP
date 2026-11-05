@@ -132,21 +132,57 @@ void main() {
       await tester.pumpWidget(_wrap(ChainSpectrumAnalyzer(model: model)));
       await tester.pumpAndSettle();
 
-      expect(find.text('全流程复合频响测量'), findsOneWidget);
-      expect(find.text('(EqualizerAPO 响应风格)'), findsOneWidget);
-      expect(find.text('纯内存静音测算 · 扬声器不发声'), findsOneWidget);
-      expect(find.text('立体声 (L/R)'), findsOneWidget);
-      expect(find.text('左声道 (L)'), findsOneWidget);
-      expect(find.text('右声道 (R)'), findsOneWidget);
+      expect(find.text('处理链频响测量'), findsOneWidget);
+      expect(find.text('全部'), findsOneWidget);
+      expect(find.text('FL'), findsOneWidget);
+      expect(find.text('FR'), findsOneWidget);
 
-      // 点击切换至左声道
-      await tester.tap(find.text('左声道 (L)'));
+      // 点击切换至 FL 声道
+      await tester.tap(find.text('FL'));
       await tester.pumpAndSettle();
 
-      // 点击切换至折线模式
+      // 点击切换至几何折线模式
       await tester.tap(find.byIcon(Icons.show_chart_rounded));
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.timeline_rounded), findsOneWidget);
+    });
+
+    test('多声道根据 effectiveChannelCount 动态展示 FL/FR/C/LFE/SL/SR 等', () {
+      final model = AppModel(testing: true);
+      model.channelsCountMode = 1;
+      model.channelsCount = 8;
+      expect(model.effectiveChannelCount, 8);
+
+      final resLfe = FullChainTransferCalculator.compute(
+        model: model,
+        channel: 'LFE',
+      );
+      expect(resLfe.frequencies.length, 256);
+      expect(resLfe.gainsDb.length, 256);
+    });
+
+    test('空间音效、卷积、DDC校准与Liveprog真实联动频响增益', () {
+      final model = AppModel(testing: true);
+
+      // 1. Spatial 开启产生真实声学空间增益变动
+      final res0 = FullChainTransferCalculator.compute(model: model, channel: 'FL');
+      model.spatialOn = true;
+      model.spatialOutGain = 3.0;
+      model.spatialMix = 1.0;
+      final resSpatial = FullChainTransferCalculator.compute(model: model, channel: 'FL');
+      expect(resSpatial.maxGain, greaterThan(res0.maxGain));
+
+      // 2. Convolver 开启产生滤波增益变动
+      model.convEnabled = true;
+      model.convReady = true;
+      model.convMix = 1.0;
+      final resConv = FullChainTransferCalculator.compute(model: model, channel: 'FL');
+      expect(resConv.gainsDb != resSpatial.gainsDb, isTrue);
+
+      // 3. Liveprog 开启产生特征增益
+      model.lpEnabled = true;
+      final resLp = FullChainTransferCalculator.compute(model: model, channel: 'FL');
+      expect(resLp.gainsDb != resConv.gainsDb, isTrue);
     });
   });
 }

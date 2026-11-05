@@ -105,16 +105,17 @@ void main() {
       expect(cZero, p.textDim);
     });
 
-    test('组件延迟自动提供实时参数推算值（Haas / Limiter / Spatial / Bass）', () {
+    test('组件延迟自动提供实时参数推算值（Convolver / Limiter / Spatial / Bass）', () {
       final model = AppModel(testing: true);
 
-      // Haas 开启时，实时推算滑块延迟
-      model.haasOn = true;
-      model.haasDelayMs = 18.5;
-      final haasLat = model.componentLatency('haas');
-      expect(haasLat.ms, 18.5);
-      expect(haasLat.estimated, isTrue);
-      expect(haasLat.mode, LatencyMode.estimated);
+      // Convolver 开启时，根据帧数与采样率推算
+      model.convEnabled = true;
+      model.convReady = true;
+      model.convFrames = 480;
+      final convLat = model.componentLatency('convolver');
+      expect(convLat.ms, closeTo(10.0, 0.01));
+      expect(convLat.estimated, isTrue);
+      expect(convLat.mode, LatencyMode.estimated);
 
       // Limiter 开启时，实时推算 1.5ms 前瞻
       model.limiterOn = true;
@@ -132,3 +133,4 @@ void main() {
     });
   });
 }
+

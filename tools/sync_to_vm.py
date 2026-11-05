@@ -24,6 +24,8 @@ FILES_TO_SYNC = [
     "app/auradsp_app/lib/core/state.dart",
     "app/auradsp_app/lib/features/chain_page.dart",
     "app/auradsp_app/lib/features/chain/chain_spectrum_analyzer.dart",
+    "app/auradsp_app/lib/features/chain/chain_order_card.dart",
+    "app/auradsp_app/lib/features/chain/chain_plugin_slots_card.dart",
     "app/auradsp_app/lib/features/chain/chain_scifi_flow_panel.dart",
     "app/auradsp_app/test/chain_spectrum_analyzer_test.dart",
     "app/auradsp_app/test/chain_scifi_flow_panel_test.dart",

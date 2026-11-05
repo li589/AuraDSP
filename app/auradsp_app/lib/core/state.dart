@@ -1201,9 +1201,6 @@ class AppModel extends ChangeNotifier {
       return (ms: ms, measured: false, estimated: true, mode: LatencyMode.estimated);
     }
 
-    if (compId == 'haas' && haasOn) {
-      return (ms: haasDelayMs, measured: false, estimated: true, mode: LatencyMode.estimated);
-    }
 
     if ((compId == 'post' || compId == 'limiter') && limiterOn) {
       return (ms: 1.5, measured: false, estimated: true, mode: LatencyMode.estimated);

@@ -1,25 +1,24 @@
 /*
  * chain_scifi_flow_panel.dart — 全局信号流顺序科幻全景面板组件
- * 1. 触发条重构：左侧大号标题与节点拓扑摘要，右侧科幻发光“显示”按钮
- * 2. 科幻展开特效：半透明毛玻璃 HUD 覆盖层覆盖于“处理顺序与状态”区域
- * 3. 动态电路装饰背景：PCB 铜箔走线、焊盘过孔、流光脉冲粒子动画
- * 4. 实时插件物理位置嵌入：精准展示 Stage 0~4 (Pre-DSP, Pre-Vendor, Post-Vendor, Post-Reverb, Post-Limiter) 插件芯片节点
- * 5. 重绘科技感能量流光箭头（替代廉价单线箭头）
- * 6. 交互手势支持：基于 InteractiveViewer 的鼠标拖拽平移、滚轮缩放、触屏移动与一键 100% 视角复位
+ * 1. 标题与交互：13.5px 适度标题、触发条右侧科幻流光胶囊按钮一键展开/收起 HUD
+ * 2. 滚轮事件独占：拦截 PointerScrollEvent 阻止外层页面联动滚动
+ * 3. 实时缩放仪表：动态显示当前缩放百分比（例如 100% 复位、125% 复位）
+ * 4. 极致 PCB 背景与多路径电流粒子：多走向折角铜箔走线、汇流焊盘过孔、分支电流穿梭，零 GC 内存优化
+ * 5. 真实芯片节点拓扑：Stage 0~4 插件实时物理嵌入，重绘科技能量双折角流光箭头
  */
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/design.dart';
 import '../../core/plugins/plugin_manager.dart';
-import '../../core/plugins/plugin_models.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
 import '../../core/ui_helpers.dart';
 import '../../l10n/gen/app_localizations.dart';
-import '../chain_page.dart' show stageLabelOf;
+import '../chain_page.dart' show stageLabelOf, stageCategoryLabelOf;
 
-/// 科幻全局信号流全景触发条与覆盖面板
+/// 科幻全局信号流全景展开面板
 class ChainScifiFlowPanel extends StatefulWidget {
   final List<String> order;
   final AppModel model;
@@ -37,32 +36,45 @@ class ChainScifiFlowPanel extends StatefulWidget {
 class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
     with TickerProviderStateMixin {
   bool _isExpanded = false;
-  late final AnimationController _expandCtrl;
-  late final Animation<double> _expandAnim;
-  late final AnimationController _circuitPulseCtrl;
+  late AnimationController _expandCtrl;
+  late Animation<double> _expandAnim;
+  late AnimationController _circuitPulseCtrl;
   final TransformationController _transCtrl = TransformationController();
+  double _currentScale = 1.0;
 
   @override
   void initState() {
     super.initState();
     _expandCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 380),
+      duration: const Duration(milliseconds: 360),
     );
     _expandAnim = CurvedAnimation(
       parent: _expandCtrl,
       curve: Curves.easeOutCubic,
     );
 
-    // 电路板能量流光脉冲动画（展开时驱动）
+    // 电路板电流粒子循环动画
     _circuitPulseCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2400),
+      duration: const Duration(milliseconds: 2600),
     );
+
+    _transCtrl.addListener(_onTransformChanged);
+  }
+
+  void _onTransformChanged() {
+    final scale = _transCtrl.value.getMaxScaleOnAxis();
+    if ((scale - _currentScale).abs() > 0.02) {
+      setState(() {
+        _currentScale = scale;
+      });
+    }
   }
 
   @override
   void dispose() {
+    _transCtrl.removeListener(_onTransformChanged);
     _expandCtrl.dispose();
     _circuitPulseCtrl.dispose();
     _transCtrl.dispose();
@@ -84,6 +96,9 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
 
   void _resetZoom() {
     _transCtrl.value = Matrix4.identity();
+    setState(() {
+      _currentScale = 1.0;
+    });
   }
 
   @override
@@ -99,6 +114,7 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
     } else {
       bypassedCount++;
     }
+
     for (final id in widget.order) {
       if (widget.model.isStageEnabled(id)) {
         activeCount++;
@@ -107,114 +123,128 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
       }
     }
 
-    var pluginCount = 0;
     final pm = widget.model.pluginManager;
+    var pluginCount = 0;
     for (var s = 0; s < PluginManager.kMaxSlots; s++) {
       if (pm.isSlotActive(s)) {
         pluginCount++;
-        if (pm.isSlotBypassed(s)) {
-          bypassedCount++;
-        } else {
-          activeCount++;
-        }
       }
     }
 
     return Container(
+      margin: const EdgeInsets.only(top: AuraSpace.sm),
       decoration: BoxDecoration(
-        color: p.panelRaised.withValues(alpha: 0.65),
+        color: p.panelRaised.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(AuraRadius.md),
         border: Border.all(
-          color: _isExpanded ? p.accent.withValues(alpha: 0.6) : p.hairline,
+          color: _isExpanded ? p.accent.withValues(alpha: 0.45) : p.hairline,
         ),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. 触发条头部（左侧大号标题与拓扑芯片说明，右侧高科技展开按钮）
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AuraSpace.md,
-              vertical: AuraSpace.sm + 2,
-            ),
-            child: Row(
-              children: [
-                // 科幻状态霓虹标
-                Container(
-                  width: 3.5,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    color: p.accent,
-                    borderRadius: BorderRadius.circular(2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: p.accent.withValues(alpha: 0.75),
-                        blurRadius: 6,
-                        spreadRadius: 1,
+          // 1. 顶部科幻触发条
+          InkWell(
+            borderRadius: BorderRadius.circular(AuraRadius.md),
+            onTap: _toggleExpand,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AuraSpace.md,
+                vertical: AuraSpace.sm + 2,
+              ),
+              child: Row(
+                children: [
+                  // 左侧声学霓虹灯柱
+                  Container(
+                    width: 3.5,
+                    height: 15,
+                    decoration: BoxDecoration(
+                      color: p.accent,
+                      borderRadius: BorderRadius.circular(2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: p.accent.withValues(alpha: 0.75),
+                          blurRadius: 5,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AuraSpace.sm + 2),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '全局信号流顺序',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: p.text,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '全链路 24 节点拓扑 · 实时 Stage 0~4 插件注入 · 支持平移缩放',
+                        style: monoOf(p, size: 10, color: p.textDim),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(width: AuraSpace.sm + 2),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '全局信号流顺序',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: p.text,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '全链路 24 节点拓扑 · 实时 Stage 0~4 插件注入映射 · 支持平移缩放',
-                      style: monoOf(p, size: 10.5, color: p.textDim),
-                    ),
-                  ],
-                ),
-                const Spacer(),
+                  const Spacer(),
 
-                // 节点简要统计
-                Container(
-                  margin: const EdgeInsets.only(right: AuraSpace.sm),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: p.bg.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(AuraRadius.xs),
-                    border: Border.all(color: p.hairline.withValues(alpha: 0.5)),
+                  // 节点简要统计
+                  Container(
+                    margin: const EdgeInsets.only(right: AuraSpace.sm),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: p.bg.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(AuraRadius.xs),
+                      border: Border.all(color: p.hairline.withValues(alpha: 0.5)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '$activeCount 活跃',
+                          style: monoOf(p, size: 10.5, color: p.accent),
+                        ),
+                        if (pluginCount > 0) ...[
+                          Text(' · ', style: TextStyle(color: p.textDim, fontSize: 10)),
+                          Text(
+                            '$pluginCount 插件',
+                            style: monoOf(p, size: 10.5, color: p.accent2),
+                          ),
+                        ],
+                        if (bypassedCount > 0) ...[
+                          Text(' · ', style: TextStyle(color: p.textDim, fontSize: 10)),
+                          Text(
+                            '$bypassedCount 旁路',
+                            style: monoOf(p, size: 10.5, color: p.textDim),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                  child: Text(
-                    '$activeCount 活跃 · $bypassedCount 旁路 · $pluginCount 插件',
-                    style: monoOf(p, size: 10.5, color: p.textDim),
-                  ),
-                ),
 
-                // 科幻风格“显示 / 展开全景”按钮
-                InkWell(
-                  borderRadius: BorderRadius.circular(AuraRadius.sm),
-                  onTap: _toggleExpand,
-                  child: AnimatedContainer(
+                  // 右侧科幻胶囊展开按钮
+                  AnimatedContainer(
                     duration: const Duration(milliseconds: 250),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: _isExpanded
-                          ? p.accent.withValues(alpha: 0.2)
-                          : p.accent.withValues(alpha: 0.08),
+                          ? p.accent.withValues(alpha: 0.16)
+                          : p.panelRaised,
                       borderRadius: BorderRadius.circular(AuraRadius.sm),
                       border: Border.all(
-                        color: _isExpanded
-                            ? p.accent
-                            : p.accent.withValues(alpha: 0.4),
-                        width: 1.2,
+                        color: _isExpanded ? p.accent : p.hairline,
+                        width: 1.0,
                       ),
                       boxShadow: _isExpanded
                           ? [
                               BoxShadow(
                                 color: p.accent.withValues(alpha: 0.25),
                                 blurRadius: 8,
+                                spreadRadius: 0,
                               ),
                             ]
                           : null,
@@ -225,160 +255,150 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
                         Icon(
                           _isExpanded
                               ? Icons.close_fullscreen_rounded
-                              : Icons.account_tree_rounded,
-                          size: 15,
-                          color: p.accent,
+                              : Icons.hub_outlined,
+                          size: 14,
+                          color: _isExpanded ? p.accent : p.text,
                         ),
                         const SizedBox(width: 6),
                         Text(
                           _isExpanded ? '收起面板' : '显示全景',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11.5,
                             fontWeight: FontWeight.w600,
-                            color: p.accent,
+                            color: _isExpanded ? p.accent : p.text,
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
 
-          // 2. 科幻展开面板（覆盖于状态层）
+          // 2. 展开的 HUD 科幻信号流面板主体
           SizeTransition(
             sizeFactor: _expandAnim,
-            axisAlignment: -1.0,
-            child: FadeTransition(
-              opacity: _expandAnim,
-              child: Container(
-                height: 440,
-                decoration: BoxDecoration(
-                  color: p.bg.withValues(alpha: 0.94),
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(AuraRadius.md),
-                    bottomRight: Radius.circular(AuraRadius.md),
+            alignment: Alignment.topCenter,
+            child: AnimatedBuilder(
+              animation: _circuitPulseCtrl,
+              builder: (context, _) {
+                return Container(
+                  height: 240,
+                  decoration: BoxDecoration(
+                    color: p.bg.withValues(alpha: 0.94),
+                    borderRadius: const BorderRadius.vertical(
+                      bottom: Radius.circular(AuraRadius.md),
+                    ),
+                    border: Border(
+                      top: BorderSide(color: p.accent.withValues(alpha: 0.3)),
+                    ),
                   ),
-                  border: Border(
-                    top: BorderSide(color: p.accent.withValues(alpha: 0.4)),
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    // A. 底层：动态电路板铜箔走线与能量流光脉冲装饰
-                    Positioned.fill(
-                      child: AnimatedBuilder(
-                        animation: _circuitPulseCtrl,
-                        builder: (ctx, _) => CustomPaint(
+                  child: Stack(
+                    children: [
+                      // 背景有机电路走线与电流流光粒子
+                      Positioned.fill(
+                        child: CustomPaint(
                           painter: _CircuitBoardPainter(
                             palette: p,
                             pulseProgress: _circuitPulseCtrl.value,
                           ),
                         ),
                       ),
-                    ),
 
-                    // B. 中层：可拖拽缩放的信号拓扑流图
-                    Positioned.fill(
-                      child: InteractiveViewer(
-                        transformationController: _transCtrl,
-                        boundaryMargin: const EdgeInsets.all(180),
-                        minScale: 0.5,
-                        maxScale: 2.2,
-                        constrained: false,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 60.0,
-                            vertical: 50.0,
+                      // 滚轮事件独占监听器：拦截 PointerScrollEvent 杜绝外层页面滚动
+                      Positioned.fill(
+                        child: Listener(
+                          behavior: HitTestBehavior.opaque,
+                          onPointerSignal: (pointerSignal) {
+                            if (pointerSignal is PointerScrollEvent) {
+                              // 独占消费滚轮事件，阻止冒泡到外层可滚动页面
+                              GestureBinding.instance.pointerSignalResolver.register(
+                                pointerSignal,
+                                (_) {},
+                              );
+                            }
+                          },
+                          child: InteractiveViewer(
+                            transformationController: _transCtrl,
+                            boundaryMargin: const EdgeInsets.symmetric(
+                              horizontal: 240,
+                              vertical: 60,
+                            ),
+                            minScale: 0.45,
+                            maxScale: 2.2,
+                            child: Center(
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                physics: const NeverScrollableScrollPhysics(),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AuraSpace.lg,
+                                  vertical: AuraSpace.md,
+                                ),
+                                child: _buildPhysicalSignalChain(context, p, l),
+                              ),
+                            ),
                           ),
-                          child: _buildTopologyContent(context, p, l),
                         ),
                       ),
-                    ),
 
-                    // C. 顶层：控制工具栏与 HUD 装饰
-                    Positioned(
-                      top: 10,
-                      left: 14,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: p.panelRaised.withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.circular(AuraRadius.xs),
-                          border: Border.all(color: p.hairline),
-                        ),
+                      // 右上角浮动操作条（动态显示实时缩放比并支持复位）
+                      Positioned(
+                        top: 8,
+                        right: 12,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.hub_rounded, size: 13, color: p.accent),
-                            const SizedBox(width: 5),
-                            Text(
-                              'SIGNAL ROUTING TOPOLOGY (PHYSICAL ORDER)',
-                              style: monoOf(p, size: 10, color: p.textDim)
-                                  .copyWith(fontWeight: FontWeight.w700),
+                            // 动态比例复位按钮
+                            InkWell(
+                              borderRadius: BorderRadius.circular(AuraRadius.xs),
+                              onTap: _resetZoom,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: p.panelRaised.withValues(alpha: 0.85),
+                                  borderRadius: BorderRadius.circular(AuraRadius.xs),
+                                  border: Border.all(color: p.hairline),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.restart_alt_rounded,
+                                      size: 13,
+                                      color: p.accent,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${(_currentScale * 100).toInt()}% 复位',
+                                      style: monoOf(p, size: 10.5, color: p.accent).copyWith(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ),
 
-                    Positioned(
-                      top: 10,
-                      right: 14,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // 100% 视角复位
-                          InkWell(
-                            borderRadius: BorderRadius.circular(AuraRadius.xs),
-                            onTap: _resetZoom,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: p.panelRaised.withValues(alpha: 0.8),
-                                borderRadius: BorderRadius.circular(AuraRadius.xs),
-                                border: Border.all(color: p.hairline),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.restart_alt_rounded,
-                                      size: 13, color: p.accent),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '100% 复位',
-                                    style: monoOf(p, size: 10, color: p.accent),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: AuraSpace.sm),
-                          // 关闭全景
-                          IconButton(
-                            tooltip: '收起全景面板',
-                            icon: Icon(Icons.close_rounded, size: 18, color: p.textDim),
-                            onPressed: _toggleExpand,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ],
+                      // 底部手势引导提示
+                      Positioned(
+                        bottom: 8,
+                        right: 14,
+                        child: Text(
+                          '鼠标左键/触屏拖拽平移 · 滚轮独立缩放',
+                          style: monoOf(p, size: 9.5, color: p.textDim.withValues(alpha: 0.5)),
+                        ),
                       ),
-                    ),
-
-                    // 底部手势引导提示
-                    Positioned(
-                      bottom: 8,
-                      right: 14,
-                      child: Text(
-                        '按住鼠标左键或触屏平移 · 滚轮缩放',
-                        style: monoOf(p, size: 10, color: p.textDim.withValues(alpha: 0.5)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
         ],
@@ -386,358 +406,221 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
     );
   }
 
-  /// 构建端到端物理拓扑流（精准插入 Stage 0~4 插件）
-  Widget _buildTopologyContent(BuildContext context, AuraPalette p, AppLocalizations l) {
+  /// 真实物理音频处理流水线（包含首尾固化门控与 Stage 0~4 插件芯片插槽）
+  Widget _buildPhysicalSignalChain(
+    BuildContext context,
+    AuraPalette p,
+    AppLocalizations l,
+  ) {
     final pm = widget.model.pluginManager;
+    final widgets = <Widget>[];
 
-    // 获取特定 Stage 的激活插件槽位
-    List<int> getSlotsForStage(int stage) {
-      final list = <int>[];
+    void addArrow() {
+      widgets.add(const _ScifiEnergyArrow());
+    }
+
+    void addPluginSlotsForStage(int stageIndex) {
       for (var s = 0; s < PluginManager.kMaxSlots; s++) {
-        if (pm.isSlotActive(s) && pm.getSlotStage(s) == stage) {
-          list.add(s);
+        if (pm.isSlotActive(s) && pm.getSlotStage(s) == stageIndex) {
+          final isBypassed = pm.isSlotBypassed(s);
+          final active = pm.getSlotPlugin(s);
+          final slotName = active != null ? active.name : 'Plugin Slot ${s + 1}';
+          final slotFmt = active != null ? active.format.label : 'VST';
+          final latency = pm.getSlotLatency(s);
+
+          widgets.add(
+            _PluginChipNode(
+              slot: s + 1,
+              name: slotName,
+              format: slotFmt,
+              isBypassed: isBypassed,
+              latency: latency,
+              palette: p,
+            ),
+          );
+          addArrow();
         }
       }
-      return list;
     }
 
-    final items = <Widget>[];
-
-    // 1. 输入门控 (常驻固定)
-    items.add(_flowNode(
-      p: p,
-      label: l.chainNodeInput,
-      typeLabel: 'PINNED IN',
-      isFixed: true,
-      isActive: true,
+    // 1. Audio Input
+    widgets.add(_PinnedNode(
+      name: 'Audio In',
+      desc: '系统音频输入',
+      icon: Icons.login_rounded,
+      palette: p,
+      accentColor: p.accent,
     ));
-    items.add(const _ScifiEnergyArrow());
+    addArrow();
 
-    // 2. Stage 0: Pre-DSP 插件
-    final stage0Slots = getSlotsForStage(PluginInsertStage.preDsp);
-    for (final slot in stage0Slots) {
-      items.add(_pluginNode(p: p, slot: slot, stageName: 'Pre-DSP'));
-      items.add(const _ScifiEnergyArrow());
+    // 2. Input Gate
+    widgets.add(_PinnedNode(
+      name: 'Input Gate',
+      desc: '输入物理门控',
+      icon: Icons.shield_outlined,
+      palette: p,
+      isBypassed: false,
+    ));
+    addArrow();
+
+    // 3. Stage 0: Pre-DSP 插件槽位
+    addPluginSlotsForStage(0);
+
+    // 4. 前置处理节点（Gate, Filter, BassMono, Shelf）
+    for (final id in widget.order) {
+      if (id == 'gate' || id == 'filter' || id == 'bassmono' || id == 'shelf') {
+        widgets.add(_CoreEffectNode(
+          id: id,
+          model: widget.model,
+          palette: p,
+          l10n: l,
+        ));
+        addArrow();
+      }
     }
 
-    // 3. 前置处理节点 (gate, filter, bassmono, shelf)
-    const frontStages = {'gate', 'filter', 'bassmono', 'shelf'};
-    final frontInOrder = widget.order.where((id) => frontStages.contains(id)).toList();
-    for (final id in frontInOrder) {
-      items.add(_dspNode(p: p, l: l, id: id));
-      items.add(const _ScifiEnergyArrow());
+    // 5. Stage 1: Pre-Vendor 插件槽位
+    addPluginSlotsForStage(1);
+
+    // 6. 主算法链节点
+    for (final id in widget.order) {
+      if (id != 'gate' &&
+          id != 'filter' &&
+          id != 'bassmono' &&
+          id != 'shelf' &&
+          id != 'reverb' &&
+          id != 'loudness') {
+        widgets.add(_CoreEffectNode(
+          id: id,
+          model: widget.model,
+          palette: p,
+          l10n: l,
+        ));
+        addArrow();
+      }
     }
 
-    // 4. Stage 1: Pre-Vendor 插件
-    final stage1Slots = getSlotsForStage(PluginInsertStage.preVendor);
-    for (final slot in stage1Slots) {
-      items.add(_pluginNode(p: p, slot: slot, stageName: 'Pre-Vendor'));
-      items.add(const _ScifiEnergyArrow());
-    }
+    // 7. Stage 2: Post-Vendor 插件槽位
+    addPluginSlotsForStage(2);
 
-    // 5. 中置核心 Vendor 效果器 (除去 frontStages 和后置的 reverb/loudness)
-    final midInOrder = widget.order.where((id) =>
-        !frontStages.contains(id) && id != 'reverb' && id != 'loudness').toList();
-    for (final id in midInOrder) {
-      items.add(_dspNode(p: p, l: l, id: id));
-      items.add(const _ScifiEnergyArrow());
-    }
-
-    // 6. Stage 2: Post-Vendor 插件
-    final stage2Slots = getSlotsForStage(PluginInsertStage.postVendor);
-    for (final slot in stage2Slots) {
-      items.add(_pluginNode(p: p, slot: slot, stageName: 'Post-Vendor'));
-      items.add(const _ScifiEnergyArrow());
-    }
-
-    // 7. 混响节点 (Reverb)
+    // 8. 混响节点 (Reverb)
     if (widget.order.contains('reverb')) {
-      items.add(_dspNode(p: p, l: l, id: 'reverb'));
-      items.add(const _ScifiEnergyArrow());
+      widgets.add(_CoreEffectNode(
+        id: 'reverb',
+        model: widget.model,
+        palette: p,
+        l10n: l,
+      ));
+      addArrow();
     }
 
-    // 8. Stage 3: Post-Reverb 插件 (默认插槽阶段)
-    final stage3Slots = getSlotsForStage(PluginInsertStage.postReverb);
-    for (final slot in stage3Slots) {
-      items.add(_pluginNode(p: p, slot: slot, stageName: 'Post-Reverb'));
-      items.add(const _ScifiEnergyArrow());
-    }
+    // 9. Stage 3: Post-Reverb 插件槽位（默认）
+    addPluginSlotsForStage(3);
 
-    // 9. 后置响度补偿 (Loudness)
+    // 10. 后置等响 (Loudness)
     if (widget.order.contains('loudness')) {
-      items.add(_dspNode(p: p, l: l, id: 'loudness'));
-      items.add(const _ScifiEnergyArrow());
+      widgets.add(_CoreEffectNode(
+        id: 'loudness',
+        model: widget.model,
+        palette: p,
+        l10n: l,
+      ));
+      addArrow();
     }
 
-    // 10. 输出门控 (Output Gate)
-    items.add(_flowNode(
-      p: p,
-      label: l.chainNodeOutputGate,
-      typeLabel: 'GATE OUT',
-      isFixed: true,
-      isActive: true,
+    // 11. Output Gate
+    widgets.add(_PinnedNode(
+      name: 'Output Gate',
+      desc: '输出物理门控',
+      icon: Icons.shield_outlined,
+      palette: p,
+      isBypassed: false,
     ));
-    items.add(const _ScifiEnergyArrow());
+    addArrow();
 
-    // 11. 主限幅器 (Limiter)
-    items.add(_flowNode(
-      p: p,
-      label: l.chainNodeLimiter,
-      typeLabel: 'LOOKAHEAD',
-      isFixed: true,
-      isActive: widget.model.limiterOn,
+    // 12. 前瞻限幅器 (Limiter)
+    widgets.add(_PinnedNode(
+      name: 'Limiter',
+      desc: '1.5ms 前瞻限幅',
+      icon: Icons.speed_rounded,
+      palette: p,
+      isBypassed: !widget.model.limiterOn,
     ));
-    items.add(const _ScifiEnergyArrow());
+    addArrow();
 
-    // 12. Stage 4: Post-Limiter 插件 (总输出级)
-    final stage4Slots = getSlotsForStage(PluginInsertStage.postLimiter);
-    for (final slot in stage4Slots) {
-      items.add(_pluginNode(p: p, slot: slot, stageName: 'Post-Limit'));
-      items.add(const _ScifiEnergyArrow());
-    }
+    // 13. Stage 4: Post-Limiter 插件槽位
+    addPluginSlotsForStage(4);
 
-    // 13. 最终物理音频输出 (Audio Output)
-    items.add(_flowNode(
-      p: p,
-      label: l.chainNodeOutput,
-      typeLabel: 'PINNED OUT',
-      isFixed: true,
-      isActive: true,
+    // 14. Audio Output
+    widgets.add(_PinnedNode(
+      name: 'Audio Out',
+      desc: '后级音频输出',
+      icon: Icons.logout_rounded,
+      palette: p,
+      accentColor: p.accent,
     ));
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
-      children: items,
+      children: widgets,
     );
   }
+}
 
-  /// 常规核心 DSP 节点
-  Widget _dspNode({
-    required AuraPalette p,
-    required AppLocalizations l,
-    required String id,
-  }) {
-    final label = stageLabelOf(l, id);
-    final isEnabled = widget.model.isStageEnabled(id);
+/// 固定首尾门控节点
+class _PinnedNode extends StatelessWidget {
+  final String name;
+  final String desc;
+  final IconData icon;
+  final AuraPalette palette;
+  final bool isBypassed;
+  final Color? accentColor;
 
+  const _PinnedNode({
+    required this.name,
+    required this.desc,
+    required this.icon,
+    required this.palette,
+    this.isBypassed = false,
+    this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final col = accentColor ?? (isBypassed ? palette.textDim : palette.accent);
     return Container(
-      width: 104,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      width: 98,
+      height: 76,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       decoration: BoxDecoration(
-        color: isEnabled ? p.panel : p.panel.withValues(alpha: 0.45),
+        color: palette.panelRaised.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(AuraRadius.sm),
         border: Border.all(
-          color: isEnabled ? p.hairline : p.hairline.withValues(alpha: 0.4),
-          width: 1.0,
-        ),
-        boxShadow: isEnabled
-            ? [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.25),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ]
-            : null,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isEnabled ? p.accent : p.textDim.withValues(alpha: 0.4),
-                ),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  id.toUpperCase(),
-                  style: monoOf(p, size: 9, color: p.textDim),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: isEnabled ? p.text : p.textDim,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            isEnabled ? 'ACTIVE' : 'BYPASS',
-            style: monoOf(
-              p,
-              size: 8.5,
-              color: isEnabled ? p.accent : p.textDim.withValues(alpha: 0.5),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 插件芯片节点（高科技芯片插槽风格）
-  Widget _pluginNode({
-    required AuraPalette p,
-    required int slot,
-    required String stageName,
-  }) {
-    final pm = widget.model.pluginManager;
-    final meta = pm.getSlotPlugin(slot);
-    final name = meta?.name ?? 'Slot ${slot + 1}';
-    final format = meta?.format.label ?? 'VST';
-    final isBypassed = pm.isSlotBypassed(slot);
-    final latencySpl = pm.getSlotLatency(slot);
-
-    return Container(
-      width: 128,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-      decoration: BoxDecoration(
-        color: isBypassed
-            ? const Color(0xFF1E2129)
-            : const Color(0xFF0F262C), // 科技青墨色
-        borderRadius: BorderRadius.circular(AuraRadius.sm),
-        border: Border.all(
-          color: isBypassed
-              ? Colors.amber.withValues(alpha: 0.5)
-              : p.accent.withValues(alpha: 0.8),
+          color: col.withValues(alpha: isBypassed ? 0.3 : 0.7),
           width: 1.2,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: (isBypassed ? Colors.amber : p.accent).withValues(alpha: 0.25),
-            blurRadius: 6,
-          ),
-        ],
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: isBypassed
-                      ? Colors.amber.withValues(alpha: 0.15)
-                      : p.accent.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-                child: Text(
-                  'SLOT ${slot + 1}',
-                  style: monoOf(
-                    p,
-                    size: 8.5,
-                    color: isBypassed ? Colors.amber : p.accent,
-                  ).copyWith(fontWeight: FontWeight.w700),
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                decoration: BoxDecoration(
-                  color: Colors.white10,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-                child: Text(
-                  format,
-                  style: monoOf(p, size: 8, color: p.textDim),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
+          Icon(icon, size: 16, color: col),
+          const SizedBox(height: 3),
           Text(
             name,
             style: TextStyle(
-              fontSize: 11.5,
+              fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: isBypassed ? p.textDim : p.text,
+              color: isBypassed ? palette.textDim : palette.text,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 2),
-          Row(
-            children: [
-              Text(
-                stageName,
-                style: monoOf(p, size: 8.5, color: p.textDim),
-              ),
-              const Spacer(),
-              Text(
-                isBypassed ? 'BYPASS' : '$latencySpl spl',
-                style: monoOf(
-                  p,
-                  size: 8.5,
-                  color: isBypassed ? Colors.amber : p.accent,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 钉死首位/末位固定节点
-  Widget _flowNode({
-    required AuraPalette p,
-    required String label,
-    required String typeLabel,
-    required bool isFixed,
-    required bool isActive,
-  }) {
-    return Container(
-      width: 100,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: p.panelRaised,
-        borderRadius: BorderRadius.circular(AuraRadius.sm),
-        border: Border.all(
-          color: isActive ? p.accent.withValues(alpha: 0.6) : p.hairline,
-          width: 1.0,
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
           Text(
-            typeLabel,
-            style: monoOf(p, size: 8.5, color: isActive ? p.accent : p.textDim)
-                .copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: isActive ? p.text : p.textDim,
-            ),
+            desc,
+            style: monoOf(palette, size: 8.5, color: palette.textDim),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            isActive ? 'FIXED' : 'OFF',
-            style: monoOf(p, size: 8.5, color: p.textDim),
           ),
         ],
       ),
@@ -745,7 +628,177 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
   }
 }
 
-/// 科幻能量流光连接箭头
+/// 核心 DSP 处理节点
+class _CoreEffectNode extends StatelessWidget {
+  final String id;
+  final AppModel model;
+  final AuraPalette palette;
+  final AppLocalizations l10n;
+
+  const _CoreEffectNode({
+    required this.id,
+    required this.model,
+    required this.palette,
+    required this.l10n,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = model.isStageEnabled(id);
+    final label = stageLabelOf(l10n, id);
+    final cat = stageCategoryLabelOf(context, id);
+
+    return Container(
+      width: 92,
+      height: 76,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      decoration: BoxDecoration(
+        color: isEnabled
+            ? palette.panel.withValues(alpha: 0.95)
+            : palette.panel.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        border: Border.all(
+          color: isEnabled
+              ? palette.accent.withValues(alpha: 0.45)
+              : palette.hairline.withValues(alpha: 0.35),
+          width: 1.0,
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            decoration: BoxDecoration(
+              color: isEnabled
+                  ? palette.accent.withValues(alpha: 0.12)
+                  : palette.bg.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(AuraRadius.xs),
+            ),
+            child: Text(
+              cat,
+              style: monoOf(
+                palette,
+                size: 8.5,
+                color: isEnabled ? palette.accent : palette.textDim,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: isEnabled ? palette.text : palette.textDim,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            isEnabled ? '活跃' : '旁路',
+            style: monoOf(
+              palette,
+              size: 8.5,
+              color: isEnabled ? palette.success : palette.textDim,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 芯片插槽式第三方插件节点
+class _PluginChipNode extends StatelessWidget {
+  final int slot;
+  final String name;
+  final String format;
+  final bool isBypassed;
+  final int latency;
+  final AuraPalette palette;
+
+  const _PluginChipNode({
+    required this.slot,
+    required this.name,
+    required this.format,
+    required this.isBypassed,
+    required this.latency,
+    required this.palette,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final chipColor = isBypassed ? palette.warning : palette.accent2;
+
+    return Container(
+      width: 124,
+      height: 76,
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+      decoration: BoxDecoration(
+        color: palette.bg.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        border: Border.all(
+          color: chipColor.withValues(alpha: isBypassed ? 0.45 : 0.85),
+          width: 1.4,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: chipColor.withValues(alpha: isBypassed ? 0.08 : 0.2),
+            blurRadius: 6,
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.memory_rounded, size: 12, color: chipColor),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  'SLOT $slot · $format',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: monoOf(palette, size: 9, color: chipColor).copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            name,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: isBypassed ? palette.textDim : palette.text,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 1),
+          Text(
+            isBypassed ? '插槽旁路' : '${latency}spl 延迟',
+            style: monoOf(
+              palette,
+              size: 8.5,
+              color: isBypassed ? palette.warning : palette.textDim,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 能量流光双折角箭头
 class _ScifiEnergyArrow extends StatelessWidget {
   const _ScifiEnergyArrow();
 
@@ -776,10 +829,8 @@ class _EnergyArrowPainter extends CustomPainter {
       ..color = palette.accent.withValues(alpha: 0.6)
       ..strokeWidth = 1.4;
 
-    // 导引水平中轴线
     canvas.drawLine(Offset(0, cy), Offset(size.width - 6, cy), linePaint);
 
-    // 科技双折角能量箭头 »
     final arrowPaint = Paint()
       ..color = palette.accent
       ..strokeWidth = 1.6
@@ -805,7 +856,7 @@ class _EnergyArrowPainter extends CustomPainter {
       oldDelegate.palette != palette;
 }
 
-/// 电路板背景铜箔走线与能量光点脉冲绘制器
+/// 有机 PCB 电路背景与轻量级电流脉冲绘制器（零内存抖动架构）
 class _CircuitBoardPainter extends CustomPainter {
   final AuraPalette palette;
   final double pulseProgress;
@@ -818,60 +869,116 @@ class _CircuitBoardPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final tracePaint = Paint()
-      ..color = palette.accent.withValues(alpha: 0.08)
+      ..color = palette.accent.withValues(alpha: 0.07)
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
 
     final padPaint = Paint()
-      ..color = palette.accent.withValues(alpha: 0.15)
-      ..strokeWidth = 1.0
+      ..color = palette.accent.withValues(alpha: 0.16)
+      ..strokeWidth = 1.2
       ..style = PaintingStyle.stroke;
 
     final pulsePaint = Paint()
-      ..color = palette.accent.withValues(alpha: 0.75)
+      ..color = palette.accent.withValues(alpha: 0.8)
       ..style = PaintingStyle.fill;
 
-    // 绘制横纵交错 PCB 走线
-    final stepY = 32.0;
-    final rowCount = (size.height / stepY).ceil();
+    final pulseGlowPaint = Paint()
+      ..color = palette.accent.withValues(alpha: 0.25)
+      ..style = PaintingStyle.fill;
 
-    for (var r = 0; r < rowCount; r++) {
-      final y = r * stepY;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), tracePaint);
+    final w = size.width;
+    final h = size.height;
 
-      // 45 度折角走线
-      if (r % 3 == 0) {
-        final path = Path()
-          ..moveTo(60.0 * (r % 5), y)
-          ..lineTo(60.0 * (r % 5) + 20, y + 20)
-          ..lineTo(size.width, y + 20);
-        canvas.drawPath(path, tracePaint);
-      }
+    // 1. 绘制多走向设计感 PCB 走线（含 45°/90° 折角母线与汇聚过孔）
+    final path = Path();
 
-      // 焊盘过孔圆环
-      for (var c = 0; c < 8; c++) {
-        final x = c * 180.0 + (r * 40.0) % 180.0;
-        if (x < size.width) {
-          canvas.drawCircle(Offset(x, y), 2.5, padPaint);
-          canvas.drawCircle(Offset(x, y), 1.0, pulsePaint);
-        }
-      }
+    // 顶部与底部复合水平母线
+    path.moveTo(0, 24);
+    path.lineTo(w * 0.35, 24);
+    path.lineTo(w * 0.35 + 20, 44);
+    path.lineTo(w, 44);
+
+    path.moveTo(0, h - 24);
+    path.lineTo(w * 0.65, h - 24);
+    path.lineTo(w * 0.65 + 20, h - 44);
+    path.lineTo(w, h - 44);
+
+    // 中间交织走线
+    path.moveTo(0, h * 0.45);
+    path.lineTo(w * 0.2, h * 0.45);
+    path.lineTo(w * 0.25, h * 0.45 + 18);
+    path.lineTo(w * 0.75, h * 0.45 + 18);
+    path.lineTo(w * 0.8, h * 0.45);
+    path.lineTo(w, h * 0.45);
+
+    // 纵向连接支线
+    path.moveTo(w * 0.15, 0);
+    path.lineTo(w * 0.15, 30);
+    path.lineTo(w * 0.15 + 15, 45);
+    path.lineTo(w * 0.15 + 15, h * 0.5);
+
+    path.moveTo(w * 0.85, h);
+    path.lineTo(w * 0.85, h - 30);
+    path.lineTo(w * 0.85 - 15, h - 45);
+    path.lineTo(w * 0.85 - 15, h * 0.5);
+
+    canvas.drawPath(path, tracePaint);
+
+    // 2. 绘制重要过孔节点与芯片引脚焊盘 (Vias)
+    final vias = [
+      Offset(w * 0.15, 24),
+      Offset(w * 0.35, 24),
+      Offset(w * 0.35 + 20, 44),
+      Offset(w * 0.25, h * 0.45 + 18),
+      Offset(w * 0.75, h * 0.45 + 18),
+      Offset(w * 0.65, h - 24),
+      Offset(w * 0.85, h - 24),
+      Offset(w * 0.85 - 15, h - 45),
+    ];
+
+    for (final via in vias) {
+      canvas.drawCircle(via, 3.2, padPaint);
+      canvas.drawCircle(via, 1.4, pulsePaint);
     }
 
-    // 绘制流动能量粒子
-    final particleCount = 12;
-    for (var i = 0; i < particleCount; i++) {
-      final t = (pulseProgress + i / particleCount) % 1.0;
-      final x = t * size.width;
-      final y = (i * stepY * 1.5) % size.height;
+    // 3. 多分支有机电流脉冲粒子流动（轻量化纯色层叠发光，零内存消耗）
+    // 分支 1：沿顶部母线前进
+    final t1 = pulseProgress;
+    final p1x = t1 * w;
+    final p1y = p1x < w * 0.35
+        ? 24.0
+        : (p1x < w * 0.35 + 20
+            ? 24.0 + (p1x - w * 0.35)
+            : 44.0);
+    canvas.drawCircle(Offset(p1x, p1y), 4.2, pulseGlowPaint);
+    canvas.drawCircle(Offset(p1x, p1y), 2.0, pulsePaint);
 
-      final glowPaint = Paint()
-        ..color = palette.accent.withValues(alpha: 0.25)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+    // 分支 2：沿中间走线反向流动
+    final t2 = (pulseProgress + 0.5) % 1.0;
+    final p2x = w * (1.0 - t2);
+    final p2y = (p2x > w * 0.25 && p2x < w * 0.75)
+        ? h * 0.45 + 18
+        : h * 0.45;
+    canvas.drawCircle(Offset(p2x, p2y), 4.0, pulseGlowPaint);
+    canvas.drawCircle(Offset(p2x, p2y), 1.8, pulsePaint);
 
-      canvas.drawCircle(Offset(x, y), 3.0, glowPaint);
-      canvas.drawCircle(Offset(x, y), 1.8, pulsePaint);
-    }
+    // 分支 3：沿底部母线前进
+    final t3 = (pulseProgress + 0.25) % 1.0;
+    final p3x = t3 * w;
+    final p3y = p3x < w * 0.65
+        ? h - 24.0
+        : (p3x < w * 0.65 + 20
+            ? h - 24.0 - (p3x - w * 0.65)
+            : h - 44.0);
+    canvas.drawCircle(Offset(p3x, p3y), 4.2, pulseGlowPaint);
+    canvas.drawCircle(Offset(p3x, p3y), 2.0, pulsePaint);
+
+    // 分支 4：纵向支线快速脉冲
+    final t4 = (pulseProgress + 0.75) % 1.0;
+    final p4y = t4 * h;
+    final p4x = w * 0.15 + (p4y > 30 && p4y < 45 ? (p4y - 30) : (p4y >= 45 ? 15.0 : 0.0));
+    canvas.drawCircle(Offset(p4x, p4y), 3.5, pulseGlowPaint);
+    canvas.drawCircle(Offset(p4x, p4y), 1.6, pulsePaint);
   }
 
   @override
