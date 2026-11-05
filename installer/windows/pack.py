@@ -1,0 +1,604 @@
+#!/usr/bin/env python3
+"""AuraDSP Windows 发行打包入口（实施设计：docs/20-执行/Windows安装程序
+与打包脚本实施设计-2026-11-06.md §6）。
+
+一个脚本产出 Windows 完整发行的三件（可任意组合）：
+
+  driver   AuraDSP-Driver-x64-v<ver>.zip
+           VAIO 驱动全套 + install_driver.ps1 + AuraAsioDriver.dll
+           + register_asio.ps1（生成的注册/反注册脚本）
+  portable AuraDSP-Windows-x64-v<ver>.zip
+           staging 整目录（按 --resources 策略加工）+ build-info 刷新
+  setup    AuraDSP-Setup-x64-v<ver>.exe
+           引导壳 PE + ZIP-W（向导运行时）+ ZIP-P（产品载荷）
+           + 80B 尾块（magic/偏移/SHA256@载荷），--verify 可自检
+
+资源策略（--resources）：
+  core   staging 自带资源原样
+  full   合并 dist/resources/auradsp-resource-full.zip 覆盖 resources/
+  addons 依次合并 resource-core → resource-full → 全部 addon 包
+  none   剔除 resources（保留 manifest.json 与占位说明）
+合并在 staging 的临时副本上进行，不污染原 staging；资源包根即
+resources 内容布局（build_packages.py 口径，覆盖幂等）。
+
+版本：installer/shared/version_resolver.py（pubspec 真相源 + 格式
+校验）；--version 可覆盖（仍校验）。逻辑层与平台无关，可在任意
+系统以 fixture staging 自测（installer/windows/tests/）。
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import importlib.util
+import io
+import json
+import os
+import shutil
+import struct
+import subprocess
+import sys
+import tempfile
+import zipfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+FOOTER_MAGIC = b"AURASTP1"
+FOOTER_FMT = "<8sIIQQQQ32s"  # magic, fmtVer, flags, offW, lenW, offP, lenP, sha256P
+FOOTER_SIZE = struct.calcsize(FOOTER_FMT)
+assert FOOTER_SIZE == 80, FOOTER_SIZE
+
+
+def log(msg: str) -> None:
+    print(f"[pack] {msg}")
+
+
+def die(msg: str) -> "SystemExit":
+    return SystemExit(f"[pack] error: {msg}")
+
+
+# ---------------------------------------------------------------------------
+# 版本
+# ---------------------------------------------------------------------------
+
+def load_resolver():
+    path = ROOT / "installer" / "shared" / "version_resolver.py"
+    spec = importlib.util.spec_from_file_location("version_resolver", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod
+
+
+def resolve_version(override: str | None) -> dict[str, str]:
+    values = load_resolver().resolve()
+    if override:
+        import re
+
+        if not re.match(r"^(\d{1,2})\.(\d{1,2})\.(\d+)$", override):
+            raise die(f"--version {override!r} 不符合 vXX.XX.X 格式")
+        values["AURADSP_VERSION"] = override
+        values["AURADSP_TAG"] = f"v{override}"
+        values["AURADSP_FULL_VERSION"] = f"{override}.{values['AURADSP_BUILD']}"
+    return values
+
+
+# ---------------------------------------------------------------------------
+# 输入探测
+# ---------------------------------------------------------------------------
+
+def find_driver_dir(explicit: str | None) -> Path | None:
+    """定位 VAIO 驱动构建产物目录（含 .sys/.inf/.cat 的目录）。"""
+    if explicit:
+        p = Path(explicit)
+        return p if p.is_dir() else None
+    base = ROOT / "core" / "desktop" / "windows-drivers" / "01_vaio_driver"
+    candidates: list[Path] = []
+    for sysfile in base.rglob("*.sys"):
+        if "legacy" not in sysfile.parts:  # legacy 驱动不进发行包
+            candidates.append(sysfile.parent)
+    if not candidates:
+        return None
+    # 取文件最全（sys+inf+cat 齐备）且最新的目录
+    def score(d: Path) -> tuple[int, float]:
+        kinds = {e.suffix.lower() for e in d.iterdir() if e.is_file()}
+        return (len(kinds & {".sys", ".inf", ".cat"}), max(
+            (e.stat().st_mtime for e in d.iterdir() if e.is_file()), default=0))
+
+    return max(candidates, key=score)
+
+
+def find_asio_driver(explicit: str | None) -> Path | None:
+    if explicit:
+        p = Path(explicit)
+        return p if p.is_file() else None
+    base = ROOT / "core" / "desktop" / "windows-drivers"
+    hits = [p for p in base.rglob("AuraAsioDriver.dll")]
+    if not hits:
+        return None
+    return max(hits, key=lambda p: p.stat().st_mtime)
+
+
+def check_staging(staging: Path) -> None:
+    if not staging.is_dir():
+        raise die(f"staging 目录不存在: {staging}（先跑 build_windows.ps1 或 --build-staging）")
+    if not (staging / "auradsp_app.exe").is_file():
+        raise die(f"staging 缺 auradsp_app.exe: {staging}")
+
+
+# ---------------------------------------------------------------------------
+# 资源策略
+# ---------------------------------------------------------------------------
+
+def resource_pack_paths(kind: str, packs_dir: Path) -> list[Path]:
+    if kind in ("core", "none"):
+        return []
+    full = packs_dir / "auradsp-resource-full.zip"
+    if kind == "full":
+        return [full] if full.is_file() else []
+    # addons：core → full → addons（文件名序）
+    ordered: list[Path] = []
+    for name in ("auradsp-resource-core.zip", "auradsp-resource-full.zip"):
+        p = packs_dir / name
+        if p.is_file():
+            ordered.append(p)
+    ordered += sorted(packs_dir.glob("auradsp-addon-*.zip"))
+    return ordered
+
+
+def apply_resources(work_staging: Path, kind: str, packs_dir: Path,
+                    what_if: bool) -> list[dict[str, str]]:
+    """在 staging 副本上应用资源策略，返回合并记录（写入 build-info）。"""
+    records: list[dict[str, str]] = []
+    res_dir = work_staging / "resources"
+    if kind == "none":
+        if res_dir.exists():
+            manifest = res_dir / "manifest.json"
+            keep = manifest.read_bytes() if manifest.is_file() else None
+            shutil.rmtree(res_dir)
+            res_dir.mkdir(parents=True)
+            if keep is not None:
+                (res_dir / "manifest.json").write_bytes(keep)
+            (res_dir / "README.txt").write_text(
+                "Resources were excluded from this package (--resources none).\n"
+                "Download the resource packs from the GitHub Release and\n"
+                "extract them into this directory.\n", encoding="utf-8")
+        log("resources: none（已剔除，保留 manifest.json）")
+        return records
+    packs = resource_pack_paths(kind, packs_dir)
+    if kind in ("full", "addons") and not packs:
+        raise die(f"--resources {kind} 需要资源包，但 {packs_dir} 下没有找到"
+                  "（先跑 build_packages.py 或加 --rebuild-resource-packs）")
+    for pack in packs:
+        sha = hashlib.sha256(pack.read_bytes()).hexdigest()
+        count = 0
+        if not what_if:
+            with zipfile.ZipFile(pack) as zf:
+                for info in zf.infolist():
+                    name = info.filename
+                    if name.endswith("/") or name.startswith("user_data/"):
+                        continue  # 用户私有数据隔离（管线既定口径）
+                    target = res_dir / name
+                    if not target.resolve().is_relative_to(res_dir.resolve()):
+                        raise die(f"资源包 {pack.name} 含越界路径: {name}")
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(zf.read(info))
+                    count += 1
+        records.append({"pack": pack.name, "sha256": sha, "files": str(count)})
+        log(f"resources: 合并 {pack.name}（{count} 文件，sha256 {sha[:12]}…）")
+    if kind == "core":
+        log("resources: core（staging 自带）")
+    return records
+
+
+# ---------------------------------------------------------------------------
+# 通用小工具
+# ---------------------------------------------------------------------------
+
+def zip_dir(src: Path, dest_zip: Path, level: int, arc_prefix: str = "",
+            what_if: bool = False) -> int:
+    """把目录内容压成 zip（条目排序、路径统一正斜杠），返回条目数。"""
+    files = sorted(p for p in src.rglob("*") if p.is_file())
+    if what_if:
+        log(f"what-if: 将打包 {src} → {dest_zip}（{len(files)} 文件）")
+        return len(files)
+    comp = zipfile.ZIP_DEFLATED if level > 0 else zipfile.ZIP_STORED
+    with zipfile.ZipFile(dest_zip, "w", comp, compresslevel=level or None) as zf:
+        for f in files:
+            arc = (arc_prefix + f.relative_to(src).as_posix())
+            zf.write(f, arc)
+    return len(files)
+
+
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def refresh_build_info(staging_copy: Path, extra: dict[str, str]) -> None:
+    """在产物副本上刷新 build-info.txt（复用 dist_manifest 的口径追加段）。"""
+    info = staging_copy / "build-info.txt"
+    lines = []
+    if info.is_file():
+        lines = info.read_text(encoding="utf-8", errors="replace").splitlines()
+    lines += ["", "# pack.py 附加记录"] + [f"{k}: {v}" for k, v in extra.items()]
+    info.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+REGISTER_ASIO_PS1 = """\
+# AuraDSP ASIO 驱动注册/反注册（pack.py 生成，随驱动包分发）
+# 用法（管理员 PowerShell）：
+#   .\\register_asio.ps1            注册 AuraAsioDriver.dll
+#   .\\register_asio.ps1 -Unregister 反注册
+param([switch]$Unregister)
+$ErrorActionPreference = "Stop"
+$dll = Join-Path $PSScriptRoot "AuraAsioDriver.dll"
+if (-not (Test-Path $dll)) { throw "AuraAsioDriver.dll 不在脚本同目录" }
+$regsvr = "$env:SystemRoot\\System32\\regsvr32.exe"
+$args = if ($Unregister) { @("/s", "/u", $dll) } else { @("/s", $dll) }
+$p = Start-Process $regsvr -ArgumentList $args -Wait -PassThru
+if ($p.ExitCode -ne 0) { throw "regsvr32 退出码 $($p.ExitCode)" }
+Write-Host "AuraASIO $(if ($Unregister) { '反注册' } else { '注册' })完成: $dll"
+"""
+
+
+# ---------------------------------------------------------------------------
+# 模式：driver
+# ---------------------------------------------------------------------------
+
+def mode_driver(args, ver: dict[str, str], out: Path) -> Path:
+    driver_dir = find_driver_dir(args.driver_dir)
+    asio = find_asio_driver(args.asio_driver)
+    if driver_dir is None:
+        raise die("找不到 VAIO 驱动产物目录（含 .sys 的目录）；"
+                  "先在 Windows 构建驱动，或用 --driver-dir 指定")
+    if asio is None:
+        raise die("找不到 AuraAsioDriver.dll；先构建 04_asio_driver，或用 --asio-driver 指定")
+    install_ps1 = (ROOT / "core" / "desktop" / "windows-drivers" /
+                   "01_vaio_driver" / "install_driver.ps1")
+    if not install_ps1.is_file():
+        raise die(f"缺 install_driver.ps1: {install_ps1}")
+    dest = out / f"AuraDSP-Driver-x64-{ver['AURADSP_TAG']}.zip"
+    if args.what_if:
+        log(f"what-if: driver 包 ← {driver_dir} + {install_ps1.name} + {asio}")
+        return dest
+    with tempfile.TemporaryDirectory(prefix="auradsp-driver-") as td:
+        stage = Path(td) / "driver"
+        stage.mkdir()
+        copied = 0
+        for f in sorted(driver_dir.iterdir()):
+            if f.is_file() and f.suffix.lower() in (".sys", ".inf", ".cat", ".cer"):
+                shutil.copy2(f, stage / f.name)
+                copied += 1
+        if copied == 0:
+            raise die(f"驱动目录没有任何 .sys/.inf/.cat/.cer: {driver_dir}")
+        shutil.copy2(install_ps1, stage / install_ps1.name)
+        shutil.copy2(asio, stage / asio.name)
+        (stage / "register_asio.ps1").write_text(REGISTER_ASIO_PS1, encoding="utf-8")
+        n = zip_dir(stage, dest, args.zip_level)
+    log(f"driver: {dest.name}（{n} 条目，{dest.stat().st_size / 1e6:.1f} MB）")
+    return dest
+
+
+# ---------------------------------------------------------------------------
+# 模式：portable
+# ---------------------------------------------------------------------------
+
+def prepare_staging_copy(args) -> tuple[tempfile.TemporaryDirectory, Path]:
+    """把 staging 复制到临时目录并应用资源策略（原 staging 不动）。"""
+    td = tempfile.TemporaryDirectory(prefix="auradsp-staging-")
+    work = Path(td.name) / "staging"
+    shutil.copytree(args.staging, work)
+    records = apply_resources(work, args.resources, args.packs_dir, args.what_if)
+    refresh_build_info(work, {
+        "pack.resources": args.resources,
+        **{f"pack.resource.{r['pack']}": r["sha256"] for r in records},
+    })
+    return td, work
+
+
+def mode_portable(args, ver: dict[str, str], out: Path) -> Path:
+    dest = out / f"AuraDSP-Windows-x64-{ver['AURADSP_TAG']}.zip"
+    if args.what_if:
+        log(f"what-if: portable 包 ← {args.staging}（resources={args.resources}）")
+        return dest
+    td, work = prepare_staging_copy(args)
+    with td:
+        n = zip_dir(work, dest, args.zip_level)
+    log(f"portable: {dest.name}（{n} 条目，{dest.stat().st_size / 1e6:.1f} MB）")
+    return dest
+
+
+# ---------------------------------------------------------------------------
+# 模式：setup（单体 EXE 拼装）
+# ---------------------------------------------------------------------------
+
+def build_installer_artifacts(args) -> Path:
+    """--build-installer：构建引导壳与向导，汇集到 build/installer/dist。"""
+    if os.name != "nt":
+        raise die("--build-installer 只能在 Windows 上执行"
+                  "（引导壳需 MSVC、向导需 flutter build windows）")
+    dist = ROOT / "build" / "installer" / "dist"
+    boot_src = ROOT / "installer" / "windows" / "custom_installer" / "bootstrapper"
+    boot_build = ROOT / "build" / "installer" / "bootstrapper"
+    log("构建引导壳（cmake）…")
+    subprocess.run(["cmake", "-S", str(boot_src), "-B", str(boot_build),
+                    "-A", "x64"], check=True)
+    subprocess.run(["cmake", "--build", str(boot_build), "--config", "Release"],
+                   check=True)
+    shell = boot_build / "Release" / "bootstrapper.exe"
+    if not shell.is_file():
+        raise die(f"引导壳构建完成但产物缺失: {shell}")
+    wizard_dir = ROOT / "installer" / "windows" / "custom_installer" / "wizard"
+    log("构建向导（flutter build windows）…")
+    subprocess.run(["flutter", "build", "windows", "--release",
+                    "--no-tree-shake-icons"], cwd=wizard_dir, check=True)
+    runner = wizard_dir / "build" / "windows" / "x64" / "runner" / "Release"
+    if not (runner / "auradsp_setup.exe").is_file():
+        raise die(f"向导构建完成但产物缺失: {runner}")
+    if dist.exists():
+        shutil.rmtree(dist)
+    (dist / "wizard").mkdir(parents=True)
+    shutil.copy2(shell, dist / "bootstrapper.exe")
+    shutil.copytree(runner, dist / "wizard", dirs_exist_ok=True)
+    log(f"installer 构建汇集完成: {dist}")
+    return dist
+
+
+def resolve_installer_dir(args) -> Path:
+    if args.build_installer:
+        return build_installer_artifacts(args)
+    p = Path(args.installer_build_dir) if args.installer_build_dir else \
+        ROOT / "build" / "installer" / "dist"
+    if not (p / "bootstrapper.exe").is_file() or not (p / "wizard").is_dir():
+        raise die(f"installer 构建目录不完整（需 bootstrapper.exe + wizard/）: {p}"
+                  "；先 --build-installer 或用 --installer-build-dir 指定")
+    return p
+
+
+def mode_setup(args, ver: dict[str, str], out: Path) -> Path:
+    dest = out / f"AuraDSP-Setup-x64-{ver['AURADSP_TAG']}.exe"
+    asio = find_asio_driver(args.asio_driver)
+    if asio is None:
+        raise die("setup 模式必须有 AuraAsioDriver.dll（staging 当前不含，"
+                  "属已知缺口）；先构建 04_asio_driver 或用 --asio-driver 指定")
+    driver_dir = find_driver_dir(args.driver_dir)
+    if driver_dir is None:
+        raise die("setup 模式必须有 VAIO 驱动产物（payload 的 driver/ 子目录）；"
+                  "用 --driver-dir 指定")
+    inst_dir = resolve_installer_dir(args)
+    if args.what_if:
+        log(f"what-if: setup ← shell {inst_dir} + staging {args.staging} "
+            f"+ asio {asio} + driver {driver_dir}")
+        return dest
+
+    td, work = prepare_staging_copy(args)
+    with td:
+        # 载荷增补：ASIO 驱动本体 + driver/ 子目录
+        shutil.copy2(asio, work / asio.name)
+        drv = work / "driver"
+        drv.mkdir(exist_ok=True)
+        for f in sorted(driver_dir.iterdir()):
+            if f.is_file() and f.suffix.lower() in (".sys", ".inf", ".cat", ".cer"):
+                shutil.copy2(f, drv / f.name)
+        install_ps1 = (ROOT / "core" / "desktop" / "windows-drivers" /
+                       "01_vaio_driver" / "install_driver.ps1")
+        shutil.copy2(install_ps1, drv / install_ps1.name)
+
+        payload_zip = Path(td.name) / "payload.zip"
+        zip_dir(work, payload_zip, args.zip_level, arc_prefix="payload/")
+        payload_bytes = payload_zip.read_bytes()
+        payload_sha = hashlib.sha256(payload_bytes).hexdigest()
+
+        # 向导 zip：内容 + wizard_manifest.json（二级完整性校验）
+        wizard_src = inst_dir / "wizard"
+        manifest = {"product": "AuraDSP",
+                    "version": ver["AURADSP_VERSION"],
+                    "fullVersion": ver["AURADSP_FULL_VERSION"],
+                    "payloadSha256": payload_sha,
+                    "files": {}}
+        for f in sorted(p for p in wizard_src.rglob("*") if p.is_file()):
+            manifest["files"][f.relative_to(wizard_src).as_posix()] = sha256_file(f)
+        manifest_path = Path(td.name) / "wizard_manifest.json"
+        manifest_path.write_text(json.dumps(manifest, indent=1), encoding="utf-8")
+        wizard_zip = Path(td.name) / "wizard.zip"
+        # ZIP-W 必须 STORED 不压缩：引导壳零第三方依赖、只解 stored 条目
+        # （实施设计 §3）；ZIP-P 保持 deflate（向导用 archive 包解压）。
+        with zipfile.ZipFile(wizard_zip, "w", zipfile.ZIP_STORED) as zf:
+            for f in sorted(p for p in wizard_src.rglob("*") if p.is_file()):
+                zf.write(f, f.relative_to(wizard_src).as_posix())
+            zf.write(manifest_path, "wizard_manifest.json")
+        wizard_bytes = wizard_zip.read_bytes()
+
+        shell_bytes = (inst_dir / "bootstrapper.exe").read_bytes()
+        off_w = len(shell_bytes)
+        off_p = off_w + len(wizard_bytes)
+        footer = struct.pack(FOOTER_FMT, FOOTER_MAGIC, 1, 0,
+                             off_w, len(wizard_bytes), off_p,
+                             len(payload_bytes),
+                             bytes.fromhex(payload_sha))
+        with dest.open("wb") as fh:
+            fh.write(shell_bytes)
+            fh.write(wizard_bytes)
+            fh.write(payload_bytes)
+            fh.write(footer)
+    log(f"setup: {dest.name}（{dest.stat().st_size / 1e6:.1f} MB，"
+        f"payload sha256 {payload_sha[:12]}…）")
+    return dest
+
+
+# ---------------------------------------------------------------------------
+# --verify：Setup EXE 自检
+# ---------------------------------------------------------------------------
+
+def verify_setup(path: Path) -> bool:
+    data_len = path.stat().st_size
+    with path.open("rb") as fh:
+        fh.seek(max(0, data_len - FOOTER_SIZE))
+        footer = fh.read(FOOTER_SIZE)
+    if len(footer) != FOOTER_SIZE:
+        log("verify: 文件小于尾块尺寸")
+        return False
+    magic, fmt, _flags, off_w, len_w, off_p, len_p, sha = struct.unpack(
+        FOOTER_FMT, footer)
+    ok = True
+    def check(name: str, cond: bool, extra: str = "") -> None:
+        nonlocal ok
+        ok = ok and cond
+        log(f"verify: {name} {'OK' if cond else 'FAIL'} {extra}")
+    check("magic", magic == FOOTER_MAGIC)
+    check("fmtVer", fmt == 1, f"(={fmt})")
+    check("offsets", 0 < off_w < off_p and off_p + len_p + FOOTER_SIZE == data_len,
+          f"(W@{off_w}+{len_w}, P@{off_p}+{len_p}, file={data_len})")
+    with path.open("rb") as fh:
+        fh.seek(off_p)
+        payload = fh.read(len_p)
+    digest = hashlib.sha256(payload).hexdigest()
+    check("payload sha256", digest.encode() == sha.hex().encode(),
+          f"({digest[:12]}…)")
+    for label, off, ln in (("wizard", off_w, len_w), ("payload", off_p, len_p)):
+        with path.open("rb") as fh:
+            fh.seek(off)
+            blob = fh.read(ln)
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(blob))
+            bad = zf.testzip()
+            check(f"{label} zip", bad is None, f"({len(zf.namelist())} 条目)")
+            if label == "wizard":
+                man = json.loads(zf.read("wizard_manifest.json"))
+                check("manifest payloadSha256",
+                      man.get("payloadSha256") == digest)
+        except Exception as exc:  # noqa: BLE001
+            check(f"{label} zip", False, f"({exc})")
+    return ok
+
+
+# ---------------------------------------------------------------------------
+# 构建联动与签名钩子
+# ---------------------------------------------------------------------------
+
+def build_staging(args) -> None:
+    if os.name != "nt":
+        raise die("--build-staging 只能在 Windows 上执行（build_windows.ps1）")
+    cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File",
+           str(ROOT / "tools" / "windows" / "build_windows.ps1"),
+           "-BuildType", args.build_type]
+    if args.skip_drivers:
+        cmd.append("-SkipDrivers")
+    log(f"构建 staging: {' '.join(cmd)}")
+    subprocess.run(cmd, check=True, cwd=ROOT)
+
+
+def sign_file(args, path: Path) -> None:
+    if not args.sign:
+        return
+    if os.name != "nt":
+        log(f"sign: 非 Windows 平台跳过 {path.name}（钩子仅在 Windows 生效）")
+        return
+    thumb = args.cert_thumbprint or os.environ.get("AURADSP_CERT_THUMBPRINT", "")
+    pfx = os.environ.get("AURADSP_SIGN_PFX", "")
+    if not thumb and not pfx:
+        log(f"sign: 未配置证书（--cert-thumbprint 或 AURADSP_SIGN_PFX），跳过 {path.name}")
+        return
+    cmd = [args.signtool, "sign", "/fd", "SHA256", "/tr",
+           "http://timestamp.digicert.com", "/td", "SHA256"]
+    if thumb:
+        cmd += ["/sha1", thumb]
+    else:
+        cmd += ["/f", pfx, "/p", os.environ.get("AURADSP_SIGN_PASS", "")]
+    cmd.append(str(path))
+    log(f"sign: {path.name}")
+    subprocess.run(cmd, check=True)
+
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    ap = argparse.ArgumentParser(
+        description="AuraDSP Windows 发行打包（driver/portable/setup）")
+    ap.add_argument("--mode", default="all",
+                    help="driver,portable,setup 或 all（逗号分隔）")
+    ap.add_argument("--resources", default="core",
+                    choices=("core", "full", "addons", "none"))
+    ap.add_argument("--rebuild-resource-packs", action="store_true")
+    ap.add_argument("--packs-dir", type=Path, default=ROOT / "dist" / "resources")
+    ap.add_argument("--staging", type=Path,
+                    default=ROOT / "dist" / "AuraDSP-Windows-x64")
+    ap.add_argument("--build-staging", action="store_true")
+    ap.add_argument("--build-type", default="Release", choices=("Release", "Debug"))
+    ap.add_argument("--skip-drivers", action="store_true",
+                    help="透传 build_windows.ps1 -SkipDrivers")
+    ap.add_argument("--driver-dir")
+    ap.add_argument("--asio-driver")
+    ap.add_argument("--installer-build-dir")
+    ap.add_argument("--build-installer", action="store_true")
+    ap.add_argument("--version")
+    ap.add_argument("--out", type=Path, default=ROOT / "dist")
+    ap.add_argument("--zip-level", type=int, default=6)
+    ap.add_argument("--sign", action="store_true")
+    ap.add_argument("--signtool", default="signtool.exe")
+    ap.add_argument("--cert-thumbprint")
+    ap.add_argument("--sha256sums", action="store_true")
+    ap.add_argument("--clean", action="store_true")
+    ap.add_argument("--what-if", action="store_true")
+    ap.add_argument("--verify", type=Path,
+                    help="校验已生成的 Setup exe 后退出")
+    return ap.parse_args(argv)
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    if args.verify:
+        return 0 if verify_setup(args.verify) else 1
+
+    ver = resolve_version(args.version)
+    modes = (["driver", "portable", "setup"] if args.mode == "all"
+             else [m.strip() for m in args.mode.split(",") if m.strip()])
+    log(f"版本 {ver['AURADSP_VERSION']}（{ver['AURADSP_TAG']}），模式 {modes}，"
+        f"资源 {args.resources}")
+
+    if args.build_staging and not args.what_if:
+        build_staging(args)
+    if args.rebuild_resource_packs and not args.what_if:
+        log("重建资源包（build_packages.py）…")
+        subprocess.run([sys.executable,
+                        str(ROOT / "tools" / "resource_pipeline" / "build_packages.py")],
+                       check=True, cwd=ROOT)
+    if modes != ["driver"]:  # driver 模式不需要 staging
+        check_staging(args.staging)
+
+    out: Path = args.out
+    if not args.what_if:
+        out.mkdir(parents=True, exist_ok=True)
+    produced: list[Path] = []
+    for mode in modes:
+        dest_name = {"driver": f"AuraDSP-Driver-x64-{ver['AURADSP_TAG']}.zip",
+                     "portable": f"AuraDSP-Windows-x64-{ver['AURADSP_TAG']}.zip",
+                     "setup": f"AuraDSP-Setup-x64-{ver['AURADSP_TAG']}.exe"}[mode]
+        if args.clean and (out / dest_name).exists() and not args.what_if:
+            (out / dest_name).unlink()
+        fn = {"driver": mode_driver, "portable": mode_portable,
+              "setup": mode_setup}[mode]
+        produced.append(fn(args, ver, out))
+        if not args.what_if:
+            sign_file(args, produced[-1])
+
+    if args.sha256sums and not args.what_if and produced:
+        sums = out / "SHA256SUMS.txt"
+        lines = {ln.split()[-1]: ln for ln in
+                 (sums.read_text(encoding="utf-8").splitlines() if sums.exists() else [])}
+        for p in produced:
+            lines[p.name] = f"{sha256_file(p)}  {p.name}"
+        sums.write_text("\n".join(lines[k] for k in sorted(lines)) + "\n",
+                        encoding="utf-8")
+        log(f"SHA256SUMS.txt 已更新（{len(lines)} 条）")
+    log("完成")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
