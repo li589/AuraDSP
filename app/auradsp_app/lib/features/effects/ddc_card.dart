@@ -19,6 +19,7 @@ class _DdcCard extends StatelessWidget {
       latencyEnabled: model.isSectionEnabled('ddc'),
               latencyMeasured: model.componentLatency('ddc').measured,
               latencyEstimated: model.componentLatency('ddc').estimated,
+      latencyMode: model.componentLatency('ddc').mode,
               latencyProbing: model.isProbingLatency('ddc'),
       onRefreshLatency: AppModel.isLatencyProbeSupported('ddc')
           ? () => model.refreshComponentLatency('ddc')

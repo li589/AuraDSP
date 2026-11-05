@@ -19,6 +19,7 @@ class _BassCard extends StatelessWidget {
       latencyEnabled: model.isSectionEnabled('bass'),
               latencyMeasured: model.componentLatency('bass').measured,
               latencyEstimated: model.componentLatency('bass').estimated,
+      latencyMode: model.componentLatency('bass').mode,
               latencyProbing: model.isProbingLatency('bass'),
       onRefreshLatency: AppModel.isLatencyProbeSupported('bass')
           ? () => model.refreshComponentLatency('bass')

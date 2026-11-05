@@ -20,6 +20,7 @@ class _LoudnessCard extends StatelessWidget {
       latencyEnabled: model.isSectionEnabled('loudness'),
       latencyMeasured: model.componentLatency('loudness').measured,
       latencyEstimated: model.componentLatency('loudness').estimated,
+      latencyMode: model.componentLatency('loudness').mode,
       latencyProbing: model.isProbingLatency('loudness'),
       onRefreshLatency: AppModel.isLatencyProbeSupported('loudness')
           ? () => model.refreshComponentLatency('loudness')

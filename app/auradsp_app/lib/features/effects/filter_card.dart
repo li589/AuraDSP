@@ -20,6 +20,7 @@ class _FilterCard extends StatelessWidget {
       latencyEnabled: model.isSectionEnabled('filter'),
       latencyMeasured: model.componentLatency('filter').measured,
       latencyEstimated: model.componentLatency('filter').estimated,
+      latencyMode: model.componentLatency('filter').mode,
       latencyProbing: model.isProbingLatency('filter'),
       onRefreshLatency: AppModel.isLatencyProbeSupported('filter')
           ? () => model.refreshComponentLatency('filter')

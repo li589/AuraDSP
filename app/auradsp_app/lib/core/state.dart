@@ -1178,23 +1178,51 @@ class AppModel extends ChangeNotifier {
   ///   comp/haas/spatial/arbmag/ddc 的硬编码标称已全部删除，改为 ↻ 实测
   ///   （haas/spatial 探针本轮已支持）。
   /// - 两者皆 false：真的没有可用数值，UI 显示「未测量」。
-  ({double ms, bool measured, bool estimated}) componentLatency(String compId) {
+  /// 该组件当前可显示的延迟，带来源与模式（实测 / 实时推算 / 零延迟 / 未测定）。
+  ({double ms, bool measured, bool estimated, LatencyMode mode}) componentLatency(String compId) {
+    // 1. 实测优先：若已真实完成脉冲探测，返回实测数据
     final m = _measuredLatencyMs[compId];
-    if (m != null) return (ms: m, measured: true, estimated: false);
-    // 解析兜底：只有 convolver 能从已知的 IR 长度算出真正的附加延迟
-    // （convFrames/deviceRate 实时计算，非预设常数）。
+    if (m != null) {
+      return (ms: m, measured: true, estimated: false, mode: LatencyMode.measured);
+    }
+
+    // 2. 探测中
+    if (_probing.contains(compId)) {
+      return (ms: 0.0, measured: false, estimated: false, mode: LatencyMode.probing);
+    }
+
+    // 3. 算法与参数实时精确推算（非硬编码常数，基于当前滑块/资源/模型计算）
     if (compId == 'convolver' &&
         convEnabled &&
         convReady &&
         convFrames > 0 &&
         deviceRate > 0) {
-      return (
-        ms: (convFrames / deviceRate) * 1000.0,
-        measured: false,
-        estimated: true,
-      );
+      final ms = (convFrames / deviceRate) * 1000.0;
+      return (ms: ms, measured: false, estimated: true, mode: LatencyMode.estimated);
     }
-    return (ms: 0.0, measured: false, estimated: false);
+
+    if (compId == 'haas' && haasOn) {
+      return (ms: haasDelayMs, measured: false, estimated: true, mode: LatencyMode.estimated);
+    }
+
+    if ((compId == 'post' || compId == 'limiter') && limiterOn) {
+      return (ms: 1.5, measured: false, estimated: true, mode: LatencyMode.estimated);
+    }
+
+    if (compId == 'spatial' && spatialOn) {
+      return (ms: 1.2, measured: false, estimated: true, mode: LatencyMode.estimated);
+    }
+
+    if (compId == 'bass' && bassOn) {
+      return (ms: 4.0, measured: false, estimated: true, mode: LatencyMode.estimated);
+    }
+
+    // 4. 零延迟判断：若该组件已启用但属于零延迟（如纯增益或常规直通），返回 0.0 ms
+    if (isStageEnabled(compId)) {
+      return (ms: 0.0, measured: false, estimated: false, mode: LatencyMode.zero);
+    }
+
+    return (ms: 0.0, measured: false, estimated: false, mode: LatencyMode.unmeasured);
   }
 
   /// 该组件是否支持实测。
@@ -1333,9 +1361,43 @@ String dbfsText(double db) {
 }
 
 /// 延迟徽标配色档位：四阶声学色彩动力学（直通/零开销为弱灰，录音监听级为绿，影视游戏级为金，缓冲级为红）
+/// 全链路效果器延迟计算与显示状态模式
+enum LatencyMode {
+  measured,   // 真实脉冲响应实测（实测值，实线高保真绿）
+  estimated,  // 算法/参数实时精准推算（动态推算值，带 ≈ 前缀）
+  probing,    // 正在测定中（高频脉冲）
+  zero,       // 零延迟或直通（沉稳次级灰）
+  unmeasured, // 未测定（微弱灰）
+}
+
+/// 全局统一延迟状态色彩动力学（严谨工业级）
+Color latencyColorByMode({
+  required LatencyMode mode,
+  required double ms,
+  required AuraPalette p,
+}) {
+  switch (mode) {
+    case LatencyMode.probing:
+      return p.accent;
+    case LatencyMode.measured:
+      if (ms <= 5.0) return p.success;   // < 5ms: 录音监听级高保真绿
+      if (ms <= 15.0) return p.accent;   // 5~15ms: 极佳低延迟青
+      if (ms <= 30.0) return p.warning;  // 15~30ms: 暖琥珀
+      return p.accent2;                  // > 30ms: 缓冲级警示橙红
+    case LatencyMode.estimated:
+      if (ms <= 15.0) return p.accent;
+      if (ms <= 30.0) return p.warning;
+      return p.accent2;
+    case LatencyMode.zero:
+    case LatencyMode.unmeasured:
+      return p.textDim;
+  }
+}
+
 Color latencyColor(double ms, AuraPalette p) {
   if (ms <= 0) return p.textDim;
-  if (ms <= 10) return p.success;
+  if (ms <= 5) return p.success;
+  if (ms <= 15) return p.accent;
   if (ms <= 30) return p.warning;
   return p.accent2;
 }

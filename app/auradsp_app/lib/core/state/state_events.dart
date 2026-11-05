@@ -1237,4 +1237,52 @@ extension StateEvents on AppModel {
 
   /// 探测进行中
   bool isProbingLatency(String compId) => _probing.contains(compId);
+
+  /// 统一延迟测量主干路径：异步测试所有已启用的效果器组件并反哺刷新全链路总延迟
+  Future<void> refreshAllComponentLatencies() async {
+    const allProbeIds = [
+      'bass',
+      'reverb',
+      'eq',
+      'tube',
+      'crossfeed',
+      'limiter',
+      'post',
+      'comp',
+      'exciter',
+      'stereo',
+      'arbmag',
+      'dyneq',
+      'filter',
+      'gate',
+      'loudness',
+      'convolver',
+      'ddc',
+      'haas',
+      'spatial',
+    ];
+
+    final activeTargets = <String>[];
+    for (final id in allProbeIds) {
+      if (isStageEnabled(id) || ((id == 'post' || id == 'limiter') && limiterOn)) {
+        activeTargets.add(id);
+      }
+    }
+
+    for (final id in activeTargets) {
+      await refreshComponentLatency(id);
+    }
+
+    // 重新测定反哺全链路总延迟
+    double totalMs = 0.0;
+    for (final id in activeTargets) {
+      totalMs += componentLatency(id).ms;
+    }
+    for (var s = 0; s < PluginManager.kMaxSlots; s++) {
+      if (pluginManager.isSlotActive(s) && !pluginManager.isSlotBypassed(s) && deviceRate > 0) {
+        totalMs += (pluginManager.getSlotLatency(s) / deviceRate) * 1000.0;
+      }
+    }
+    updateFullChainMeasuredLatency(totalMs);
+  }
 }

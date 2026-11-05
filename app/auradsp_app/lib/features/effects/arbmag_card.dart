@@ -143,6 +143,7 @@ class _ArbmagCardState extends State<_ArbmagCard> {
       latencyEnabled: m.isSectionEnabled('arbmag'),
       latencyMeasured: m.componentLatency('arbmag').measured,
       latencyEstimated: m.componentLatency('arbmag').estimated,
+      latencyMode: m.componentLatency('arbmag').mode,
       latencyProbing: m.isProbingLatency('arbmag'),
       onRefreshLatency: AppModel.isLatencyProbeSupported('arbmag')
           ? () => m.refreshComponentLatency('arbmag')

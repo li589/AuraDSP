@@ -21,6 +21,7 @@ class _CompressorCard extends StatelessWidget {
       latencyEnabled: model.isSectionEnabled('comp'),
       latencyMeasured: model.componentLatency('comp').measured,
       latencyEstimated: model.componentLatency('comp').estimated,
+      latencyMode: model.componentLatency('comp').mode,
       latencyProbing: model.isProbingLatency('comp'),
       onRefreshLatency: AppModel.isLatencyProbeSupported('comp')
           ? () => model.refreshComponentLatency('comp')

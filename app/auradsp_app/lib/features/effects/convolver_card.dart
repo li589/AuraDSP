@@ -39,6 +39,7 @@ class _ConvolverCard extends StatelessWidget {
       latencyEnabled: model.isSectionEnabled('convolver'),
               latencyMeasured: model.componentLatency('convolver').measured,
               latencyEstimated: model.componentLatency('convolver').estimated,
+      latencyMode: model.componentLatency('convolver').mode,
               latencyProbing: model.isProbingLatency('convolver'),
       onRefreshLatency: AppModel.isLatencyProbeSupported('convolver')
           ? () => model.refreshComponentLatency('convolver')
