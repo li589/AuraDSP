@@ -506,6 +506,28 @@ AuraControlDevice_DispatchDeviceControl(
             ntStatus = STATUS_BUFFER_TOO_SMALL;
             break;
         }
+        // DRV-04 follow-up: reading the debug log drains it (copy + clear),
+        // so while the ring is mapped, only the holding process may read it.
+        // A non-holder must not be able to wipe the owner's diagnostics.
+        // The holder snapshot is taken under g_RingLock and released before
+        // g_DebugLock is acquired (no nested locking anywhere in this file).
+        {
+            PEPROCESS currentProc = PsGetCurrentProcess();
+            BOOLEAN denied = FALSE;
+            KeAcquireSpinLock(&g_RingLock, &oldIrql);
+            if (g_pMappedUserAddress != NULL &&
+                g_pMappedProcess != NULL &&
+                g_pMappedProcess != currentProc)
+            {
+                denied = TRUE;
+            }
+            KeReleaseSpinLock(&g_RingLock, oldIrql);
+            if (denied)
+            {
+                ntStatus = STATUS_ACCESS_DENIED;
+                break;
+            }
+        }
         {
             PAURA_DEBUG_LOG pLog = reinterpret_cast<PAURA_DEBUG_LOG>(systemBuffer);
             KeAcquireSpinLock(&g_DebugLock, &oldIrql);
