@@ -12,7 +12,11 @@
 #       引擎 .so 与 plugin_host_x64/x86 须已由 sync 流程随 bundle 就位）。
 # 版本：installer/shared/version_resolver.py 解析 pubspec（发布格式校验）。
 #
-# 用法：pack.sh [--bundle DIR] [--out DIR] [--only deb,driver,appimage,portable]
+# 用法：pack.sh [--build] [--bundle DIR] [--out DIR] [--only deb,driver,appimage,portable]
+#   --build  先一键构建再打包：引擎（cmake 预设 linux-x64）→ Flutter
+#            bundle → sync_artifacts 同步引擎/宿主进 bundle/lib，然后打包。
+#            从干净拉取到产出三件只需这一条命令（需 cmake/ninja/flutter
+#            与 multilib 等构建依赖在位，同 CI J2/J8 口径）。
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,9 +24,11 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 BUNDLE="$ROOT/app/auradsp_app/build/linux/x64/release/bundle"
 OUT="$ROOT/dist"
 ONLY=""
+BUILD=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        --build) BUILD=1; shift ;;
         --bundle) BUNDLE="$2"; shift 2 ;;
         --out) OUT="$2"; shift 2 ;;
         --only) ONLY="$2"; shift 2 ;;
@@ -32,6 +38,17 @@ done
 
 eval "$(python3 "$ROOT/installer/shared/version_resolver.py")"
 echo "AuraDSP Linux packaging — version $AURADSP_VERSION (tag $AURADSP_TAG)"
+
+if [ "$BUILD" = "1" ]; then
+    echo "== --build: engine -> app bundle -> sync =="
+    command -v flutter >/dev/null 2>&1 || { echo "error: 找不到 flutter（先安装 Flutter 并加入 PATH）" >&2; exit 1; }
+    (cd "$ROOT" && cmake --preset linux-x64 -DAURADSP_BUILD_HOST_X86=ON)
+    (cd "$ROOT" && cmake --build --preset linux-x64-release)
+    (cd "$ROOT/app/auradsp_app" && flutter build linux --release --no-tree-shake-icons)
+    # sync 退出码 2 表示有可选目标被跳过（如 dist 分发目录不存在），
+    # 不算失败；bundle 是否完整以下面的完整性检查为准。
+    python3 "$ROOT/tools/sync_artifacts.py" || echo "warning: sync_artifacts 有跳过项，以 bundle 完整性检查为准"
+fi
 echo "bundle: $BUNDLE"
 echo "out:    $OUT"
 
