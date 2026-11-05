@@ -34,6 +34,7 @@ import 'local_channel_policy.dart';
 
 
 import '../core/error_sink.dart';
+import '../platform/platform_profile.dart';
 part 'audio_wav.dart';
 part 'audio_sources.dart';
 part 'audio_slots.dart';
@@ -2309,7 +2310,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         // 见下。其余错误走上面的常规上报，不触发重启）。
         if (msg.contains('0x8889000a')) {
           audioOutErrRounds++;
-        } else if (Platform.isLinux &&
+        } else if (PlatformProfile.isLinux &&
             audioOut != null &&
             e is StateError &&
             (msg.contains('pa_simple') ||
