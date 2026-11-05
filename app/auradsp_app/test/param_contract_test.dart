@@ -315,14 +315,15 @@ const Set<String> kRangeCheckSkipSpecIds = {
 /// limiter.release、freeverb.roomsize、freeverb.width。这类超界值经 preset
 /// apply / session 回放直达引擎必被拒收 → 回读回弹（块自己变）+ guard
 /// 通知，属真实缺陷而非产品取舍。
-/// 剩余 5 条均为「UI 收窄」（spec 是引擎范围的子集，UI 选值必在引擎域内，
+/// 原剩余 5 条均为「UI 收窄」（spec 是引擎范围的子集，UI 选值必在引擎域内，
 /// 无拒收风险），收窄是产品取舍，保留登记待产品确认，不得悄悄抹平。
+/// 2026-11-05 全项目审查 FX-01 复核 legacy CompressorApplyParamTail 后确认
+/// comp.granularity（0..4 五档 avgBW 各异）/comp.tfresolution（==3 独立分支）/
+/// dyneq.release（setter 钳位本就是 10..1000）三条的引擎范围是真实功能而非
+/// 富余域，spec 已按引擎表放宽对齐，三条自本表删除；余 2 条仍为 UI 收窄登记。
 const Map<String, String> kKnownRangeDivergences = {
-  'comp.granularity': 'spec 0..2 vs 引擎 0..4（UI 收窄，产品已定案保留 2026-10-19）',
-  'comp.tfresolution': 'spec 0..2 vs 引擎 0..3（UI 收窄，产品已定案保留 2026-10-19）',
   'dyneq.attack': 'spec 1..100ms vs 引擎 0.1..100ms（UI 收窄下限）',
   'dyneq.mid.freq': 'spec 200..5000Hz vs 引擎 200..8000Hz（UI 收窄，产品已定案保留 2026-10-19）',
-  'dyneq.release': 'spec 10..500ms vs 引擎 10..1000ms（UI 收窄，产品已定案保留 2026-10-19）',
 };
 
 // ---------------------------------------------------------------------------
