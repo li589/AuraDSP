@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/audio_modes.dart';
 import '../../core/design.dart';
+import '../../core/error_sink.dart';
 import '../../core/io/resource_gate.dart';
 import '../../core/channel_layout.dart';
 import '../../core/state.dart';
@@ -254,7 +255,9 @@ class FullChainTransferCalculator {
       }
       _cachedVdcPath = path;
       _cachedVdcBiquads = list;
-    } catch (_) {}
+    } catch (e, st) {
+      swallow(e, st);
+    }
     return list;
   }
 

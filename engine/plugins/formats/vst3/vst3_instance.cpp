@@ -932,26 +932,13 @@ public:
 
         m_isLoaded = true;
         m_meta.isCompatible = true;
-        if (m_controller) {
-            Steinberg::IPlugView* view = m_controller->createView(Steinberg::Vst::ViewType::kEditor);
-            if (view) {
-                m_meta.hasEditor = true;
-                view->release();
-            } else {
-                Steinberg::IPlugView* pv = nullptr;
-                if (m_controller->queryInterface(Steinberg::IPlugView::iid.toTUID(), reinterpret_cast<void**>(&pv)) == Steinberg::kResultOk && pv) {
-                    m_meta.hasEditor = true;
-                    pv->release();
-                } else if (m_component && m_component->queryInterface(Steinberg::IPlugView::iid.toTUID(), reinterpret_cast<void**>(&pv)) == Steinberg::kResultOk && pv) {
-                    m_meta.hasEditor = true;
-                    pv->release();
-                } else {
-                    m_meta.hasEditor = false;
-                }
-            }
-        } else {
-            m_meta.hasEditor = false;
-        }
+        // hasEditor 探测（6beafb7）在此处调用 createView 有副作用：ConvologyXT
+        // 会因此创建隐藏消息窗口线程，之后每次 load/unload 都叠加一条线程，
+        // 第 ~14 轮重载时该线程访问已销毁的临界区 → 0xC0000005
+        // （2026-11-05 test_cross_system_verify 50 轮用例实测）。VST3 没有
+        // 非侵入的编辑器能力查询手段，先保持默认 true（旧行为）；准确探测
+        // 应放到隔离扫描宿主进程里做，崩溃也不会污染引擎。
+        m_meta.hasEditor = true;
         return true;
     }
 

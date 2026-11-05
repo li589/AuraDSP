@@ -9,7 +9,8 @@
     3. C++ 驱动常驻桥：编译 auravm_bridge.dll、auravaio_bridge.dll、auraasio_bridge.dll；
     4. Flutter 桌面端：编译 auradsp_app.exe 及其 Windows Runner 运行环境；
     5. 声学资源包匹配：自动将 DDC 耳机校准库、Liveprog 脚本与核心脉冲挂载到 resources/；
-    6. 分发产物整理 (Dist)：统一汇流至 dist/AuraDSP-Windows-x64 绿色便携目录，支持一键 zip 归档。
+    6. 分发产物整理 (Dist)：统一汇流至 dist/AuraDSP-Windows-x64 绿色便携目录，
+       写入 build-info.txt（版本 / 提交 / SHA256 清单），支持一键 zip 归档。
 
 .EXAMPLE
     .\tools\build_windows.ps1
@@ -213,6 +214,16 @@ $LiveprogCount = (Get-ChildItem -Path "$DistResources\liveprog" -Recurse -File -
 $ConvCount = (Get-ChildItem -Path "$DistResources\convolver" -Recurse -File -ErrorAction SilentlyContinue).Count
 
 Write-Host "  -> 随包内置资源验证: DDC 耳机校准 ($DdcCount 文件), Liveprog 脚本 ($LiveprogCount 文件), 核心卷积 ($ConvCount 文件)" -ForegroundColor Green
+
+# 产物的规范化（2026-11-05）：写 build-info.txt（版本 / 提交 / 分支 /
+# 工作区状态 / 顶层二进制 SHA256），使绿色包可追溯。
+Write-Host "  写入发行产物清单 (build-info.txt)..."
+$ManifestPy = Join-Path $ProjectRoot "tools\bin\dist_manifest.py"
+if (Get-Command python -ErrorAction SilentlyContinue) {
+    python $ManifestPy --dist-dir $DistPortable
+} else {
+    Write-Host "  -> 警告: 未找到 python，跳过 build-info.txt（产物本身已就绪）" -ForegroundColor DarkYellow
+}
 
 # -------------------------------------------------------------------------
 # Step 6: 资源全量扩展包构建与最终打包归档

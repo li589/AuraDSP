@@ -13,7 +13,8 @@
   5. 限幅器压力：0 dBFS 正弦、宽带噪声、lookahead 开/关；
   6. 现有 bench 未覆盖的预设级数据（预设即链路）。
 
-不修改仓库、不写持久化状态；中间 JSON 写到 build/ 下。
+不修改仓库、不写持久化状态；报告 JSON 统一写到 build/reports/ 下
+（构建产物目录的另一半：build/ 只放构建树与报告，临时脚本不再落在根层）。
 
 运行：
   python tools/probe/audio_quality_eval.py
@@ -31,7 +32,7 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DLL = os.path.join(ROOT, 'core', 'desktop', 'windows', 'out', 'Release', 'auradsp_engine.dll')
 PRESET_DIR = os.path.join(ROOT, 'app', 'auradsp_app', 'assets', 'presets', 'factory')
-OUT_JSON = os.path.join(ROOT, 'build', 'audio_quality_eval.json')
+OUT_JSON = os.path.join(ROOT, 'build', 'reports', 'audio_quality_eval.json')
 
 SR = 48000
 BLOCK = 480

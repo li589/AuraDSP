@@ -140,6 +140,8 @@
 - [Linux适配方案-2026-11-01.md](10-架构/Linux适配方案-2026-11-01.md) — **Linux 适配方案（已裁定）**：三轴全面取证（引擎 C++ / APP / 构建测试门禁）后定稿。关键实测：引擎核心零 Win32 泄漏、裁剪 stub 与真实实现 C ABI 56 符号全等（导出集契约不破）、`linux/` 仍是原始 flutter create 脚手架、**Linux 上 `runner.py --smoke` 是 125 SKIP + 2 PASS 的假绿**（`PLATFORM_ANY` 默认拒绝式）、全仓无 CI。分期 S0~S5c（S0 NDK clang 预验证 16 个未在 GCC 编译过的 legacy 补丁 → S1 门禁口径 → S2 引擎 Linux 目标 → S3 App 最小闭环 → S4 同步治理与 CI → S5a Linux 虚拟设备/内核虚拟声卡 → S5b 桌面体验 → S5c 治理收尾）；**三项产品语义已于 2026-11-01 裁定**（[ADR-012](adr/ADR-012-linux-platform-rulings-and-branch-policy.md)）；**分支策略** `feature/linux → dev → main`（单向，`main` 合并由 `dev` 决定）
 - [调试体系与控件实测-2026-11-01.md](20-执行/调试体系与控件实测-2026-11-01.md) — 统一 `DebugTrace` 事件总线：`ui.control → param.send → engine.ack` 三段式；`--debug/--debug-log` + `tools/debug/run_debug.ps1` 命令行启动；HUD 覆盖率与打印规范门禁（禁止业务直接 print/debugPrint）
 
+- [构建与产物规范化-2026-11-05.md](20-执行/构建与产物规范化-2026-11-05.md) — 构建入口统一（build_engine.sh 改走根 preset）、报告统一 `build/reports/`、发行包 `build-info.txt` 清单（版本/提交/SHA256）、约 750MB 陈旧构建物清理与产物布局表
+
 ### 3.10 2026-10-17/18 引擎尖端、多声道与空间音效
 - [空间音效升级方案-2026-10-18.md](10-架构/空间音效升级方案-2026-10-18.md) — L1 现状基线、Tier A~D 升级路线（头跟踪/方向 pinna/5.1 虚拟环绕/HRIR/FDN）、目标渲染器架构、验收与风险；**Phase A + B1 + B2a + B3a/B3b/B3c 已落地**，含 UI 去 Dolby/DTS 品牌化记录
 - [引擎尖端升级与UI全景适配实施方案-2026-10-18.md](10-架构/引擎尖端升级与UI全景适配实施方案-2026-10-18.md) — Phase 1~3（2ms 平滑、Haas 分数延迟、2x 过采样、Lookahead/ISP Limiter、GR 计量、Dyneq 分段时间常数、Gate 迟滞/Range/Hold）已落地；Phase 4 FDN 仍为远期储备

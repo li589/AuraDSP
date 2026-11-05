@@ -115,12 +115,16 @@ cd app/auradsp_app; flutter analyze
 cd app/auradsp_app; flutter build windows --release --no-tree-shake-icons
 
 # 4b. 构建 C++ 引擎并自动同步产物到 test/app-runner/dist
-#     （build_engine.sh 构建成功后自动调用 tools/sync_artifacts.ps1 分发三处消费端）
+#     入口 = 根 preset（windows-x64 → windows-x64-release，构建树 build/windows/x64，
+#     产物 core/desktop/windows/out/Release）；成功后自动分发三处消费端
 bash core/desktop/windows/build_engine.sh
 
 # 4c. 仅同步已构建产物（不重新编译）：把真相源覆盖分发到 test/app-runner/dist
 #     任意端点缺失或单文件失败仅告警跳过；-WhatIf 预演，-PackZip 重打包发行 zip
 powershell -ExecutionPolicy Bypass -File tools/sync_artifacts.ps1
+
+# 4d. 发行包清单：dist/<产品>-<平台>/build-info.txt（版本/提交/DLL SHA256）
+python tools/bin/dist_manifest.py --check
 
 # 4d. 设计令牌：改 app/auradsp_app/design/tokens/aura.tokens.json 后重生成（tokens.g.dart 勿手改）
 python tools/gen_theme.py            # --check 只校验不写盘

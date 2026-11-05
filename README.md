@@ -179,13 +179,14 @@ Voicemeeter 桥（`bridge/vm_bridge` + `02_voicemeeter_client`）按路处理：
 ```powershell
 # 统一入口（M3）：同一棵构建树 build/windows/x64，产物仍写回各子工程 out/<Config>/
 cmake --preset windows-x64
-cmake --build --preset windows-x64-release --target auradsp_engine auradsp_plugin_host
+cmake --build --preset windows-x64-release --target auradsp_engine plugin_host_x64
 # 未装 Steinberg ASIO SDK 时：cmake --preset windows-x64 -DAURADSP_BUILD_BRIDGES=OFF
 ```
 
 ```bash
 cd core/desktop/windows && bash build_engine.sh
-# 等价（子工程单独配置）：cmake -S . -B out && cmake --build out --config Release
+# 等价（根 preset，构建树 build/windows/x64）：cmake --preset windows-x64
+#   && cmake --build --preset windows-x64-release --target auradsp_engine plugin_host_x64
 ```
 
 **Linux 桌面**（一期已合入 `dev`；环境与 CI 同口径，见 `.github/workflows/ci.yml`）
@@ -219,7 +220,7 @@ python tools/bin/patch_id_scan.py             # P-NNN 唯一且已登记
 python tools/bin/dart_swallow_scan.py         # 空 catch 必须留痕
 ```
 
-发布产物：`app/auradsp_app/build/windows/x64/runner/Release/` 增量覆盖到 `dist/AuraDSP-Windows-x64/`（`dist/` 不进 git）。引擎与桥的 DLL 若被运行中的 App 占用会同步失败，先退出应用。
+发布产物：`app/auradsp_app/build/windows/x64/runner/Release/` 增量覆盖到 `dist/AuraDSP-Windows-x64/`（`dist/` 不进 git）。引擎与桥的 DLL 若被运行中的 App 占用会同步失败，先退出应用。发行目录内的 `build-info.txt` 记录版本 / 提交 / 顶层二进制 SHA256（`python tools/bin/dist_manifest.py --check` 可校验）；探针与基准报告统一写 `build/reports/`。
 
 ---
 

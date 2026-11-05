@@ -25,6 +25,8 @@ wrapper 转发到本脚本）。语义与 PS1 版严格一致：
     - 任一目标目录缺失或单文件拷贝失败 => 警告并跳过，不中断其余
     - 源文件缺失 => 跳过该文件，不中断
     - 本脚本不编译；编译归各平台 build 脚本
+    - 分发目录存在时刷新 build-info.txt（版本 / 提交 / 哈希清单，
+      tools/bin/dist_manifest.py）；--what-if 不写任何文件
     - --pack-zip 在同步后重打包 dist 绿色包 zip（默认关；正式 zip
       归 build_windows.ps1 Step6 / 各平台打包流程所有）
 
@@ -36,6 +38,7 @@ wrapper 转发到本脚本）。语义与 PS1 版严格一致：
 
 import argparse
 import shutil
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -83,6 +86,19 @@ def platform_layout():
 
 def warn(msg):
     print(f"WARNING: {msg}")
+
+
+def refresh_dist_manifest(dist_dir: Path) -> None:
+    """分发目录存在时刷新 build-info.txt（产物的规范化，2026-11-05）。"""
+    script = ROOT / "tools" / "bin" / "dist_manifest.py"
+    if not dist_dir.is_dir() or not script.is_file():
+        return
+    print(f"\nRefreshing dist manifest: {dist_dir / 'build-info.txt'}")
+    rc = subprocess.call([sys.executable, str(script),
+                          "--dist-dir", str(dist_dir)])
+    if rc != 0:
+        warn(f"dist manifest generation failed (rc={rc}); "
+             "binaries were synced, manifest is stale")
 
 
 def main() -> int:
@@ -146,6 +162,9 @@ def main() -> int:
             else:
                 copy_one(src, dst, "auradsp_engine.dll -> "
                                    "windows-drivers/out/Release")
+
+    if not args.what_if:
+        refresh_dist_manifest(ROOT / "dist" / dist_name)
 
     print("\n=== Sync result ===")
     print(f"Planned {planned} files | OK {ok} | Skipped {skipped}")
