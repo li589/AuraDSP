@@ -19,6 +19,8 @@ import '../l10n/gen/app_localizations.dart';
 import 'chrome.dart';
 import 'effects_page.dart' show kEffectCategories;
 import 'widgets.dart';
+import 'chain/chain_scifi_flow_panel.dart';
+import 'chain/chain_spectrum_analyzer.dart';
 
 /// vendor 链序 stage 元数据（与引擎 kAuraStages 对齐）
 /// id 与是否对外暴露是常量；展示名走 l10n（st*），随语言切换。
@@ -220,6 +222,9 @@ class _ChainPageState extends State<ChainPage> {
       builder: (context, _) => PageScaffold(
         title: l10nOf(context).chainTitle,
         children: [
+          // [EqualizerAPO 风格] 全流程复合频响测量与端到端延迟测定（纯内存静音仿真）
+          ChainSpectrumAnalyzer(model: widget.model),
+
           SectionCard(
             title: l10nOf(context).chainOrderTitle,
             hint: l10nOf(context).chainOrderHint,
@@ -381,8 +386,8 @@ class _ChainPageState extends State<ChainPage> {
                   ),
                 ),
                 const SizedBox(height: AuraSpace.md),
-                // 完整实际处理链路顺序流图（顺序钉死的输入门控 -> 动态核心节点 -> 顺序钉死的输出门控）
-                _FullChainOrderFlowView(order: _order, model: widget.model),
+                // 科幻全局信号流全景面板（带电路动画与 Stage 0~4 插件实时物理拓扑）
+                ChainScifiFlowPanel(order: _order, model: widget.model),
               ],
             ),
           ),

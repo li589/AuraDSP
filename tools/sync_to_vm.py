@@ -21,6 +21,12 @@ FILES_TO_SYNC = [
     "engine/plugins/platform/win32/host/plugin_host_client.cpp",
     "engine/plugins/platform/win32/plugin_gui_win32.cpp",
     "test/smoke/test_iem_and_fabfilter.py",
+    "app/auradsp_app/lib/core/state.dart",
+    "app/auradsp_app/lib/features/chain_page.dart",
+    "app/auradsp_app/lib/features/chain/chain_spectrum_analyzer.dart",
+    "app/auradsp_app/lib/features/chain/chain_scifi_flow_panel.dart",
+    "app/auradsp_app/test/chain_spectrum_analyzer_test.dart",
+    "app/auradsp_app/test/chain_scifi_flow_panel_test.dart",
 ]
 
 def main():

@@ -141,6 +141,14 @@ class AppModel extends ChangeNotifier {
 
   int engineState = 0; // 0=bypass 1=processing 2=error
   double latencyMs = 0;
+
+  /// 全链路端到端频响分析反哺延迟值（静音仿真测定，不向扬声器发声）
+  void updateFullChainMeasuredLatency(double ms) {
+    if ((latencyMs - ms).abs() > 0.05) {
+      latencyMs = ms;
+      _notifyUi();
+    }
+  }
   bool playing = false;
   // 频谱门：进程内 playing 或 VB/ASIO/VAIO 桥活着都算 live。
   // Linux 的 virtual/driver 模式没有「播放音源」，音频来自 PA 采集
