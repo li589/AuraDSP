@@ -321,22 +321,20 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
                           },
                           child: InteractiveViewer(
                             transformationController: _transCtrl,
+                            constrained: false,
                             boundaryMargin: const EdgeInsets.symmetric(
-                              horizontal: 240,
-                              vertical: 60,
+                              horizontal: 2400,
+                              vertical: 150,
                             ),
-                            minScale: 0.45,
-                            maxScale: 2.2,
-                            child: Center(
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                physics: const NeverScrollableScrollPhysics(),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: AuraSpace.lg,
-                                  vertical: AuraSpace.md,
-                                ),
-                                child: _buildPhysicalSignalChain(context, p, l),
+                            minScale: 0.3,
+                            maxScale: 2.5,
+                            clipBehavior: Clip.hardEdge,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AuraSpace.xl,
+                                vertical: 60,
                               ),
+                              child: _buildPhysicalSignalChain(context, p, l),
                             ),
                           ),
                         ),
