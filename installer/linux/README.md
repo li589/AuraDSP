@@ -21,5 +21,7 @@ AuraDSP 在 Linux 平台采取“**原生 APT + 通用免安装 + 应用商店�
 - **动态链接宿主音频后端**：无论使用何种格式，**严禁将 `libpulse.so` 或 `libasound.so` 打包在沙盒内部**。
 - 所有音频输出必须通过宿主机现存的 PulseAudio 套接字或 PipeWire `pipewire-pulse` 套接字进行通信，以确保音量控制、虚拟声卡重定向和声效处理能够实时生效。
 
-详细技术规约参见 [03_linux_packaging_spec.md](file:///d:/temp_desktop/Proj/JamesDSP/installer/docs/03_linux_packaging_spec.md)。
+详细技术规约参见 [03_linux_packaging_spec.md](../docs/03_linux_packaging_spec.md)。
+
+> 状态（2026-11-05）：与 `installer/` 总纲一致，本目录为打包规格与模板阶段；Linux 版本体（引擎 + App）已功能对等交付，打包实现待立项。
 

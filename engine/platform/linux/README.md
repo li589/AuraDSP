@@ -1,7 +1,8 @@
 # engine/platform/linux — Linux 端口适配
 
-> 状态：**S2 已落地**（2026-11-01，`feature/linux`）：4 个端口实现 + Linux 构建
-> 目标已就绪并实测通过（见 §4）。方案：
+> 状态：**已全量交付**：端口实现（S2，2026-11-01）之后，二期插件宿主（PLUGINS=ON、
+> POSIX 双宿主 + 32 位桥，2026-11-02）与 X11 插件编辑器 GUI（2026-11-04）均已落地，
+> Linux 与 Windows 功能对等（见 §3/§4 的现状更正）。方案：
 > [Linux 适配方案](../../../docs/10-架构/Linux适配方案-2026-11-01.md)；
 > 产品语义裁定：[ADR-012](../../../docs/adr/ADR-012-linux-platform-rulings-and-branch-policy.md)。
 
@@ -40,7 +41,8 @@
   线程局部缓冲）。**诊断以文本为准，数值仅作参考。**
 - 已知语义差：`dlopen` 给定绝对路径时依赖走 DT_NEEDED + rpath/系统路径，
   **不含模块所在目录**；Windows 的 `LOAD_WITH_ALTERED_SEARCH_PATH` 会从插件
-  所在目录解析依赖。Linux 插件宿主立项时须重新裁定此点（D-7：首期不做宿主）。
+  所在目录解析依赖。（此点已在二期插件宿主落地时按 POSIX 宿主口径处理，
+  不再悬置；见 `docs/10-架构/Linux插件宿主实施方案-2026-11-02.md`。）
 
 构建侧的 GCC 适配（不在本目录，登记备查）：
 
@@ -57,8 +59,8 @@
 |---|---|
 | 设备输出（PipeWire / PulseAudio / ALSA） | App 侧 `AudioOut`：`audio_out_linux.dart`（D-6：PulseAudio simple API）落地后由 `createAudioOut()` 工厂接入，调用方不变（S3） |
 | 桥（VM / VAIO / ASIO） | `bridge/` 只实现 `ab_*` 契约（`core/desktop/windows-drivers/bridge/common/aurabridge.h`）+ Dart `BridgeDesc`；Windows 三桥不跨平台 |
-| 插件宿主 | 远程宿主（`engine/plugins/platform/win32/host/`，共享内存 + `CreateProcess`）为 Windows-only；Linux 用 `AURADSP_ENABLE_PLUGINS=OFF`（D-7）整体裁掉 VST3/CLAP 宿主，引擎编入 `plugins/integration/{plugin_chain_adapter_stub,plugin_abi_stub}.cpp`，插件阶段直通且 C ABI 导出集不变。`AURADSP_PLUGIN_HOST_REMOTE=OFF` 只裁远程宿主，**不等于**可移植（仍编 Win32 插件驱动/格式实现） |
-| 插件编辑器 GUI | 方案 §8 的 `port/gui.h` 属 N4「插件生态跨平台」独立立项，尚未建立 |
+| 插件宿主 | **二期已对等**（2026-11-02）：引擎 PLUGINS 默认 ON，POSIX 插件层 + 进程内托管（VST3/CLAP/VST2）+ 双宿主隔离（`plugin_host_x64` / `plugin_host_x86` -m32 位桥，shm/mmap + Unix socket）；C ABI 导出集不变（56 符号）。D-7 首期的 OFF 裁剪形态仅保留为构建选项 |
+| 插件编辑器 GUI | **已落地**（2026-11-04）：`plugin_gui_x11.cpp` 以运行时 dlopen libX11 实现窗口面（顶层容器 + 最小 XEmbed 宿主），三格式编辑器在 DISPLAY 在位时开放（canEdit=true）；审查见 `docs/30-审查/Linux编辑器代码审查-2026-11-04.md` |
 
 ## 4. 构建与验证（S2 实测）
 
@@ -80,3 +82,6 @@ bash core/desktop/linux/build_engine.sh
   85 文件与 C++ 核心 19 TU 全量编译通过；`.so` 动态导出集恰为 `.def` 的
   56 符号；ctypes 加载后 `auradsp_version` = 1.1.0、`auradsp_abi` = 2，
   create(48k,512) → process → destroy 冒烟通过。
+- 二期后（2026-11-02 起）：插件门禁含深扫双路、VST3/VST2 活体探针、x86 桥
+  活体链（CI 实证峰值 0.4000）；全量冒烟 PASS 14 / SKIP 129 / FAIL 0 与
+  CI 八 job 全绿为常态基线（2026-11-05 全项目深度审查结案轮复证）。

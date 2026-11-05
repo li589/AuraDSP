@@ -223,6 +223,23 @@ EWDK 19041 的头文件有个不对称：`POOL_FLAG_*` **常量**在更早的
 > 因此 `ExAllocatePoolWithTag(type, size, tag)` 在 Win7 目标下仍是真三参内核 API，
 > 不会被降成两参宏。
 
+### 控制设备安全收紧（DRV-03 / DRV-04，2026-11-05 全项目深度审查）
+
+- **DRV-03（P0）**：环形缓冲拷贝几何一律由内核真值派生
+  （`g_ulRingTotalSize - sizeof(共享头)`），不再信任用户可写的共享头
+  `DataOffsetBytes/DataSizeBytes`；MAP 应答同样回内核值。
+- **DRV-04（P1）**：控制设备改 `IoCreateDeviceSecure` + SDDL
+  `D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGWGX;;;IU)`（剥离 Everyone；
+  `wdmsec.lib` 两轨工程均已链接）；MAP 独占持有（他人持有返回
+  `STATUS_DEVICE_BUSY` → Win32 170），UNMAP 与 GET_DEBUG_LOG 均加
+  持有者校验（非持有者 `STATUS_ACCESS_DENIED` → Win32 5）；持有
+  进程退出由 MJ_CLEANUP 按进程解映射回收，不会永久锁死。
+- 验证：`01_vaio_driver/tools/test_drv04_exclusive.py`（双进程反
+  劫持断言，真机运行；需先退出主程序/桥）。2026-11-05 已在
+  vm-win10 实测 170/5 双拒 + 持有者释放顺畅；DRV-03 经 VS2026 +
+  WDK 28000 Release 构建（0 警告 0 错误）与 vm-win10/vm-win7 双机
+  探针验证。详见 `docs/30-审查/全项目深度审查方案与报告-2026-11-05.md`。
+
 ## 装载与卸载（Phase 4 验收 ①：设备管理器识别 AuraVAIO）
 
 AuraVAIO 是 **root 枚举**的软件设备（无硬件），装载链路为：

@@ -35,7 +35,7 @@
 | [ADR-010](adr/ADR-010-limiter-as-final-gate.md) | **限幅器是内置信号链的最后一道门**：post gain / 逐声道 trim / 响度补偿全部排在限幅器之前；例外登记（插件 stage 4、`limiter.channels` 掩码等） | 已接受 |
 | [ADR-011](adr/ADR-011-no-shared-mutable-dsp-state.md) | **控制线程与 RT 线程不得共享可变 DSP 状态**：三选一 —— 影子槽 + 原子发布 / 请求位 + RT 消费 / 同持 `jdsp_lock`；落地 L-01/L-02/L-03（逐声道池双槽化 + 拓扑重置请求位 + arbmag 主卷积加锁） | 已接受 |
 | [ADR-012](adr/ADR-012-linux-platform-rulings-and-branch-policy.md) | **Linux 平台三项产品语义裁定 + 分支策略**：D-5 Linux 音频后端**追求功能对等**（`system`/`virtual`/`driver` 三模式齐备，全部落在 PulseAudio 栈上，不需自研内核模块）、D-6 音频栈**PulseAudio simple API 优先**（ALSA 留二期）、D-7 首期**只做插件消费者 + 隐藏 Linux 插件目录 UI**；分支策略 `feature/linux → dev → main`（单向，`main` 合并由 `dev` 决定） | 已接受 |
-| [ADR-013](adr/ADR-013-vst2-support-and-clean-room-header.md) | **VST2 支持与净室头文件合规**：以 Xaymar BSD-3-Clause 净室 `vst.h` 为唯一编译源、退役仓库内非净室 LSP 头；64 位进程内 / 32 位 `plugin_host_x86`；32 位回调必须用 `intptr_t` 自定义签名；本期仅 Windows | 已接受 |
+| [ADR-013](adr/ADR-013-vst2-support-and-clean-room-header.md) | **VST2 支持与净室头文件合规**：以 Xaymar BSD-3-Clause 净室 `vst.h` 为唯一编译源、退役仓库内非净室 LSP 头；64 位进程内 / 32 位 `plugin_host_x86`；32 位回调必须用 `intptr_t` 自定义签名；本期仅 Windows（Linux 侧 VST2 已于 2026-11-04 跟进落地） | 已接受 |
 
 > ADR-005 为预留号，留给「插件桥进程化」（见 ADR-004 §回退条件）。
 
@@ -56,6 +56,7 @@
 - [UI与音频效果深度重构与体验优化方案.md](10-架构/UI与音频效果深度重构与体验优化方案.md) — 空间混响统一、交互式 EQ、组件级微型延迟、低音重构、电子管卡片
 - [外置参数持久化记忆与预设系统v2方案.md](10-架构/外置参数持久化记忆与预设系统v2方案.md) — `config.json` + 会话记忆 + 预设 schema v2（`*.aurapreset.json`）
 - [插件双宿主架构与跨格式扩展方案-2026-11-02.md](10-架构/插件双宿主架构与跨格式扩展方案-2026-11-02.md)
+- [Linux编辑器GUI评估-2026-11-04.md](10-架构/Linux编辑器GUI评估-2026-11-04.md) — Linux 插件编辑器 GUI（X11 顶层容器 + 最小 XEmbed 宿主）评估与落地结论：三格式编辑器已对等开放（DISPLAY 在位时 canEdit=true）
 - [32位VST3与CLAP插件支持实施计划-2026-11-02.md](20-执行/32位VST3与CLAP插件支持实施计划-2026-11-02.md) — 32 位 VST3 与 CLAP 位桥支持开工计划：Windows plugin_host_x86.exe 构建流水线、跨位数 IPC 契约审查、驱动适配与真实测试插件获取指引
 - [VST2插件适配实施计划-2026-11-03.md](20-执行/VST2插件适配实施计划-2026-11-03.md) — Windows VST2 64/32 位适配：Xaymar 净室头收编、PE 导出表扫描判定、64 位进程内 + 32 位位桥、IPC 远程深扫、AUR2/.fxp 预设、自建探针与 9 条冒烟
  — 双宿主体系（plugin_host_x64 沙箱与 plugin_host_x86 位桥）、跨平台可执行文件命名规范、Win 格式策略（支持 VST3/CLAP/VST2，排除 AU，暂缓 LV2）、UI 搜索条自动展长与贴右布局、L-01~03 闭环对账与 L-04 方案
@@ -73,6 +74,8 @@
 - [Linux移植阶段性回顾-2026-11-01.md](40-回顾/Linux移植阶段性回顾-2026-11-01.md) — Linux 移植第一期（S1–S4 + 测试补强）：引擎/App 闭环、CI 七 job 全绿、门禁抓获的真实问题清单
 - [Linux移植收官回顾-2026-11-02.md](40-回顾/Linux移植收官回顾-2026-11-02.md) — Linux 移植一期收官（S5a–S5c + 代码审查 + Ubuntu 真机轮次）：三模式对等、桌面体验、治理收尾，真机抓获的泵饿死/回环源/Impeller 三个真问题，PR #21 合入 dev
 - [Linux32位对等代码审查-2026-11-03.md](30-审查/Linux32位对等代码审查-2026-11-03.md) — 32 位 VST3/CLAP Linux 对等轮的配套审查：确认并修复 socket 目录死路径致远程模式静默归零（R1），复核 bundle 解析/isSupported/单实例/自启组合，登记 vendor 启发式等 3 个观察项
+- [Linux编辑器代码审查-2026-11-04.md](30-审查/Linux编辑器代码审查-2026-11-04.md) — X11 编辑器层审查：F1（无 X 错误处理器会被协议错误带崩进程）等 5 项修复，CI 全绿
+- [插件健壮性治理与多通道拓扑优化-2026-11-05.md](40-回顾/插件健壮性治理与多通道拓扑优化-2026-11-05.md) — 64 通道越界、非有限值清洗、CLAP 定时器派发、跨格式隔离黑名单等专项治理回顾
 - [Linux打磨与安全审查-2026-11-02.md](40-回顾/Linux打磨与安全审查-2026-11-02.md) — 一期/二期交付后的收尾两轮：细致打磨三期（驱动健壮性/状态可见性/设置完整性）与代码安全+边界审查 8 项修复（IPC 对端认证、FFI 回调与数值边界、/tmp 日志链接防护等），含 Win32 宿主同形态观察项
 - [Linux真机验证清单.md](40-回顾/Linux真机验证清单.md) — 活文档：真实桌面机器上的验证步骤与期望值（三模式/托盘/自启/XDG/MPRIS + 真机专属回归项），合入 dev 前照单跑
 - [插件宿主重构与状态总览-2026-10-11.md](10-架构/插件宿主重构与状态总览-2026-10-11.md) — CLAP 6 大扩展 / VST3 COM 独立控制器 / **JUCE `set_parent` 死锁四轮试错与方案 D** / 待办交接
@@ -124,13 +127,15 @@
 - [高性能专业音频系统评估-2026-11-01.md](30-审查/高性能专业音频系统评估-2026-11-01.md) — 引擎透明链路、六套出厂预设、采样率/多声道/限幅/CPU 的数据化评估：透明基线达标；预设层登记 **P0×3 / P1×5 / P2×4**（立体声双限幅器、混响自定义参数在 preset>=0 失效并产生 400/630 Hz -10 dB 梳状坑、低频限幅前 +12~+23 dBFS、延迟漏计 bass 4 ms、立体声/离散电子管分叉、跨采样率漂移、电平差 8.7 dB），附调音目标曲线与验收指标；`tools/probe/audio_quality_eval.py` 可复现
 - [APP跨平台治理复核与A5-A6审查-2026-11-01.md](30-审查/APP跨平台治理复核与A5-A6审查-2026-11-01.md) — A1~A4 治理复核（命名/接口/接线/残留/复用）+ A5 Android 与 A6 插件跨平台细致审查（只读不改代码）：A5 三大阻断（存储根、内容 URI、引擎桥）与 A6 宿主运行时缺口（Win32 进程/共享内存/HWND 编辑器），附分期与验收门槛
 - [Windows插件体系与RT高优遗留项深度调研报告.md](30-审查/Windows插件体系与RT高优遗留项深度调研报告.md) — 2026-11-02 深度取证与调研：L-01~03 闭环对账、L-04 平滑方案、Windows 插件生态（VST3/CLAP/VST2/AU/LV2）与 32 位位桥架构
+- [全项目深度审查方案与报告-2026-11-05.md](30-审查/全项目深度审查方案与报告-2026-11-05.md) — 驱动/引擎/插件/App/跨组件全量深度审查（S0–S8 已结案）：7 条发现（DRV-01~04、FX-01、PLG-01、APP-01）全部修复闭环，含内核 VAIO 几何信任（P0）与控制设备 ACL/独占映射收紧，均经真机/CI 实证
+- [代码复用与重复集合审计-2026-11-05.md](30-审查/代码复用与重复集合审计-2026-11-05.md) — 全仓复用与重复集合审计（F/R 登记，P0–P2 已回填）
 - [未决任务复核-2026-10-31.md](30-审查/未决任务复核-2026-10-31.md) — 在册遗留逐项回代码/产物/分支取证（不采信历史文档口径）：**销账 5 项**（32 位插件挂载、dist zip 重打包、P-045/P-046 内存专项、L-04 淡出机制实为已具备仅缺接线、L-05 前提不成立改判误报并落 ADR-010）、**仍在册 8 项**（L-01/L-02/L-03 高危并发、L-04 参数切换未接淡出、VST2/AU/LV2 引擎侧无驱动、VB 掩码裁剪引擎、E1 `_onMessage` 拆分、dev→main 未合并）、**待裁定 3 项**；并修正 `assets` 跟踪实况口径漂移（2214 个 / 73MB → 实测 2443 个 / 241.6MB）。**后续**：D-1（限幅器链尾语义）当日裁定并落 [ADR-010](adr/ADR-010-limiter-as-final-gate.md)，新增门禁 `test/smoke/smoke_limiter_final_gate.py`（四路径 × 限幅开/关反向对照，已做反向验证转红）；**2026-10-31 晚**：L-01/L-02/L-03 三项高危并发合并为 P0 专项闭环（[ADR-011](adr/ADR-011-no-shared-mutable-dsp-state.md) + `test/smoke/smoke_pool_race.py` 四阶段反向验证全红 + PATCHES.md P-047/P-048），台账现为**销账 8 项、仍在册 5 项、待裁定 3 项**
 
 ### 3.9 工程治理与重组
 - [源码重组与目录规范方案-2026-10-13.md](源码重组与目录规范方案-2026-10-13.md) — scc 实测诊断（巨文件/DLL 散落/生成文件入仓/依赖倒挂）→ 目标目录树 → 命名/分层/DLL/文档/跨平台政策 → P0~P3 迁移分期（只动结构不改行为）
 - [跨平台基础框架与平台依赖剥离方案-2026-10-29.md](10-架构/跨平台基础框架与平台依赖剥离方案-2026-10-29.md) — Linux/Android 基础框架：端口-适配器边界（`engine/platform/port` + `<os>`）、平台强依赖组件归类、`AudioOut` 归 App 侧（修正 10-13 §8）、根 CMake 单一入口、Dart `PlatformProfile` 单点；M0~M6 分期与 fitness functions / 风险登记（M0–M6 已落地，不实现新平台）
 - [APP-目录重组与平台适配层方案-2026-11-01.md](10-架构/APP-目录重组与平台适配层方案-2026-11-01.md) — APP 侧平台耦合收口：`platform/port` 七端口 + 按领域适配实现、`core/io` 统一加载治理（ResourceGate/DocumentStore/ResourceLocator）、`ResourcePicker` 统一选择、注册表/进程单点、插件目录平台化；A1~A4 已落地，A5/A6 后续
-- [Linux插件宿主实施方案-2026-11-02.md](10-架构/Linux插件宿主实施方案-2026-11-02.md) — **已立项执行中**：进程内先行（引擎 PLUGINS=ON 正式化 + platform/posix 对应物）→ App 接线 → formats 收尾与门禁 → 按双宿主架构落地 plugin_host_x64/x86 隔离主机；VST3+CLAP 与 Windows 同进度
+- [Linux插件宿主实施方案-2026-11-02.md](10-架构/Linux插件宿主实施方案-2026-11-02.md) — **已完成（2026-11-02）**：进程内先行（引擎 PLUGINS=ON 正式化 + platform/posix 对应物）→ App 接线 → formats 收尾与门禁 → 按双宿主架构落地 plugin_host_x64/x86 隔离主机；VST3+CLAP 与 Windows 同进度
 - [Linux二期大项评估-2026-11-02.md](10-架构/Linux二期大项评估-2026-11-02.md) — **二期评估（已立项并执行完毕/转实施方案）**：D-6 ALSA 低延迟专家模式（A0–A3 已完成）与 D-7 Linux 插件宿主（P0 探针完成、全量立项，实施见《Linux插件宿主实施方案-2026-11-02》）的代码级取证评估
 - [Linux适配方案-2026-11-01.md](10-架构/Linux适配方案-2026-11-01.md) — **Linux 适配方案（已裁定）**：三轴全面取证（引擎 C++ / APP / 构建测试门禁）后定稿。关键实测：引擎核心零 Win32 泄漏、裁剪 stub 与真实实现 C ABI 56 符号全等（导出集契约不破）、`linux/` 仍是原始 flutter create 脚手架、**Linux 上 `runner.py --smoke` 是 125 SKIP + 2 PASS 的假绿**（`PLATFORM_ANY` 默认拒绝式）、全仓无 CI。分期 S0~S5c（S0 NDK clang 预验证 16 个未在 GCC 编译过的 legacy 补丁 → S1 门禁口径 → S2 引擎 Linux 目标 → S3 App 最小闭环 → S4 同步治理与 CI → S5a Linux 虚拟设备/内核虚拟声卡 → S5b 桌面体验 → S5c 治理收尾）；**三项产品语义已于 2026-11-01 裁定**（[ADR-012](adr/ADR-012-linux-platform-rulings-and-branch-policy.md)）；**分支策略** `feature/linux → dev → main`（单向，`main` 合并由 `dev` 决定）
 - [调试体系与控件实测-2026-11-01.md](20-执行/调试体系与控件实测-2026-11-01.md) — 统一 `DebugTrace` 事件总线：`ui.control → param.send → engine.ack` 三段式；`--debug/--debug-log` + `tools/debug/run_debug.ps1` 命令行启动；HUD 覆盖率与打印规范门禁（禁止业务直接 print/debugPrint）

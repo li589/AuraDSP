@@ -4,6 +4,8 @@
 
 本项目目录汇总了 AuraDSP 面向所有支持平台的安装包制作、打包脚本、元数据管理，以及**自主研发的 Windows 安装向导子项目**。所有发行产物均遵循统一的工程标准，最终成果集中输出至根目录下的 `dist/` 目录。
 
+> **当前状态（2026-11-05）**：本目录为**规范与设计阶段**，安装程序实现尚未落地（全项目深度审查 S1 已确认）；现行有效的安装侧规约以设计文档为准，其中 Windows 侧新增「驱动残留检测与自动重装铁律（DRV 规约）」见 `docs/02_windows_installer_design.md` §4.2，驱动侧 `01_vaio_driver/install_driver.ps1` 已按此规约实现安装前残留清理。
+
 ---
 
 ## 1. 目录结构全景
@@ -84,8 +86,8 @@ installer/
 ## 4. 详细技术方案导航
 
 深入了解各个技术环节的架构设计与实现细则，请参阅 `docs/` 目录：
-- [01. 全平台发行架构与产物规范](file:///d:/temp_desktop/Proj/JamesDSP/installer/docs/01_distribution_architecture.md)
-- [02. 自研 Windows 安装程序设计方案](file:///d:/temp_desktop/Proj/JamesDSP/installer/docs/02_windows_installer_design.md)
-- [03. Linux (DEB / AppImage / Flatpak / Snap) 规格方案](file:///d:/temp_desktop/Proj/JamesDSP/installer/docs/03_linux_packaging_spec.md)
-- [04. Android 与 macOS 发行与签名规格方案](file:///d:/temp_desktop/Proj/JamesDSP/installer/docs/04_mobile_macos_spec.md)
+- [01. 全平台发行架构与产物规范](docs/01_distribution_architecture.md)
+- [02. 自研 Windows 安装程序设计方案](docs/02_windows_installer_design.md)
+- [03. Linux (DEB / AppImage / Flatpak / Snap) 规格方案](docs/03_linux_packaging_spec.md)
+- [04. Android 与 macOS 发行与签名规格方案](docs/04_mobile_macos_spec.md)
 
