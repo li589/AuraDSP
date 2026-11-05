@@ -193,8 +193,15 @@ struct VaioBridgeCtl {
 
     // 预分配 RT 临时缓冲 (最大 4096 帧 * 8 声道 float32)
     static constexpr int kMaxFrames = 4096;
-    float* scratchIn = nullptr;
-    float* scratchOut = nullptr;
+    float* scratchIn = nullptr;       // 驱动环直接读入 (frames * ringChannels)
+    float* scratchOut = nullptr;      // 写入 WASAPI (frames * wasapiChannels)
+    float* scratchProcIn = nullptr;   // 喂入 auradsp_process (frames * engineChannels)
+    float* scratchProcOut = nullptr;  // 从 auradsp_process 产出 (frames * engineChannels)
+
+    // 声道协商与多声道重映射状态
+    int32_t engineChannels = 2;   // 引擎当前实际运行声道数 (2, 4, 6, 8)
+    int32_t countMode = 0;        // 0 = 自动跟随驱动环 (ringChannels), 1 = 手动锁定 (manualChannels)
+    int32_t manualChannels = 2;   // 手动模式下用户指定的声道数 (2, 4, 6, 8)
 
     // 运行态与 RT 统计
     HANDLE hPumpThread = nullptr;
@@ -330,6 +337,154 @@ void FreeScratchBuffers() {
         free(g_vaio.scratchOut);
         g_vaio.scratchOut = nullptr;
     }
+    if (g_vaio.scratchProcIn) {
+        free(g_vaio.scratchProcIn);
+        g_vaio.scratchProcIn = nullptr;
+    }
+    if (g_vaio.scratchProcOut) {
+        free(g_vaio.scratchProcOut);
+        g_vaio.scratchProcOut = nullptr;
+    }
+}
+
+void SetEngineChannels(int32_t count) {
+    if (count != 2 && count != 4 && count != 6 && count != 8) return;
+    if (g_vaio.pEngine && g_vaio.fnSetParam) {
+        g_vaio.fnSetParam(g_vaio.pEngine, "channels.count", &count, sizeof(count));
+    }
+    InterlockedExchange((volatile LONG*)&g_vaio.engineChannels, (LONG)count);
+}
+
+// 零分配交织音频重映射：安全适配驱动共享环、DSP处理链与WASAPI输出三者之间的声道拓扑差异
+void RemapInterleavedAudio(const float* src, int srcCh, float* dst, int dstCh, int frames) {
+    if (srcCh == dstCh) {
+        memcpy(dst, src, (size_t)frames * dstCh * sizeof(float));
+        return;
+    }
+    // 4ch (Quad: FL,FR,BL,BR) -> 2ch：后置按 -3dB 折入 L/R
+    if (srcCh == 4 && dstCh == 2) {
+        for (int f = 0; f < frames; ++f) {
+            dst[f * 2 + 0] = src[f * 4 + 0] + src[f * 4 + 2] * 0.70710678f;
+            dst[f * 2 + 1] = src[f * 4 + 1] + src[f * 4 + 3] * 0.70710678f;
+        }
+        return;
+    }
+    // 4ch (Quad) -> 6ch (5.1)：Quad 的后置即 5.1 的 SL/SR，C/LFE 无源
+    if (srcCh == 4 && dstCh == 6) {
+        for (int f = 0; f < frames; ++f) {
+            dst[f * 6 + 0] = src[f * 4 + 0];
+            dst[f * 6 + 1] = src[f * 4 + 1];
+            dst[f * 6 + 2] = 0.0f;
+            dst[f * 6 + 3] = 0.0f;
+            dst[f * 6 + 4] = src[f * 4 + 2];
+            dst[f * 6 + 5] = src[f * 4 + 3];
+        }
+        return;
+    }
+    // 4ch (Quad) -> 8ch (7.1)：Quad 的后置对到 BL/BR，C/LFE/SL/SR 无源
+    if (srcCh == 4 && dstCh == 8) {
+        for (int f = 0; f < frames; ++f) {
+            dst[f * 8 + 0] = src[f * 4 + 0];
+            dst[f * 8 + 1] = src[f * 4 + 1];
+            dst[f * 8 + 2] = 0.0f;
+            dst[f * 8 + 3] = 0.0f;
+            dst[f * 8 + 4] = 0.0f;
+            dst[f * 8 + 5] = 0.0f;
+            dst[f * 8 + 6] = src[f * 4 + 2];
+            dst[f * 8 + 7] = src[f * 4 + 3];
+        }
+        return;
+    }
+    // 6ch (5.1) -> 2ch：C/SL/SR 按 -3dB 折入 L/R，LFE 丢弃
+    if (srcCh == 6 && dstCh == 2) {
+        for (int f = 0; f < frames; ++f) {
+            const float c = src[f * 6 + 2] * 0.70710678f;
+            dst[f * 2 + 0] =
+                src[f * 6 + 0] + c + src[f * 6 + 4] * 0.70710678f;
+            dst[f * 2 + 1] =
+                src[f * 6 + 1] + c + src[f * 6 + 5] * 0.70710678f;
+        }
+        return;
+    }
+    // 6ch (5.1) -> 4ch (Quad)：C 折入 L/R，SL/SR 落到 BL/BR，LFE 丢弃
+    if (srcCh == 6 && dstCh == 4) {
+        for (int f = 0; f < frames; ++f) {
+            const float c = src[f * 6 + 2] * 0.70710678f;
+            dst[f * 4 + 0] = src[f * 6 + 0] + c;
+            dst[f * 4 + 1] = src[f * 6 + 1] + c;
+            dst[f * 4 + 2] = src[f * 6 + 4];
+            dst[f * 4 + 3] = src[f * 6 + 5];
+        }
+        return;
+    }
+    // 8ch (7.1) -> 2ch (Stereo)
+    if (srcCh == 8 && dstCh == 2) {
+        for (int f = 0; f < frames; ++f) {
+            float l = src[f * 8 + 0];
+            float r = src[f * 8 + 1];
+            const float c  = src[f * 8 + 2];
+            const float sl = src[f * 8 + 4];
+            const float sr = src[f * 8 + 5];
+            const float bl = src[f * 8 + 6];
+            const float br = src[f * 8 + 7];
+            if (c != 0.0f) {
+                const float ch = c * 0.70710678f;
+                l += ch;
+                r += ch;
+            }
+            if (sl != 0.0f) l += sl * 0.70710678f;
+            if (sr != 0.0f) r += sr * 0.70710678f;
+            if (bl != 0.0f) l += bl * 0.70710678f;
+            if (br != 0.0f) r += br * 0.70710678f;
+            dst[f * 2 + 0] = l;
+            dst[f * 2 + 1] = r;
+        }
+        return;
+    }
+    // 8ch (7.1) -> 6ch (5.1)
+    if (srcCh == 8 && dstCh == 6) {
+        for (int f = 0; f < frames; ++f) {
+            dst[f * 6 + 0] = src[f * 8 + 0];
+            dst[f * 6 + 1] = src[f * 8 + 1];
+            dst[f * 6 + 2] = src[f * 8 + 2];
+            dst[f * 6 + 3] = src[f * 8 + 3];
+            dst[f * 6 + 4] = src[f * 8 + 4] + src[f * 8 + 6] * 0.70710678f;
+            dst[f * 6 + 5] = src[f * 8 + 5] + src[f * 8 + 7] * 0.70710678f;
+        }
+        return;
+    }
+    // 8ch (7.1) -> 4ch (Quad)：C 折入 L/R，SL/BL、SR/BR 合到 BL/BR
+    if (srcCh == 8 && dstCh == 4) {
+        for (int f = 0; f < frames; ++f) {
+            const float c = src[f * 8 + 2] * 0.70710678f;
+            dst[f * 4 + 0] = src[f * 8 + 0] + c;
+            dst[f * 4 + 1] = src[f * 8 + 1] + c;
+            dst[f * 4 + 2] = src[f * 8 + 4] + src[f * 8 + 6] * 0.70710678f;
+            dst[f * 4 + 3] = src[f * 8 + 5] + src[f * 8 + 7] * 0.70710678f;
+        }
+        return;
+    }
+    // 2ch (Stereo) -> 多声道扩展 (前两声道直通，其余静音)
+    if (srcCh == 2 && dstCh > 2) {
+        for (int f = 0; f < frames; ++f) {
+            dst[f * dstCh + 0] = src[f * 2 + 0];
+            dst[f * dstCh + 1] = src[f * 2 + 1];
+            for (int c = 2; c < dstCh; ++c) {
+                dst[f * dstCh + c] = 0.0f;
+            }
+        }
+        return;
+    }
+    // 通用回退：按公共通道数复制，目标多余通道补零
+    const int copyCh = (srcCh < dstCh) ? srcCh : dstCh;
+    for (int f = 0; f < frames; ++f) {
+        for (int c = 0; c < copyCh; ++c) {
+            dst[f * dstCh + c] = src[f * srcCh + c];
+        }
+        for (int c = copyCh; c < dstCh; ++c) {
+            dst[f * dstCh + c] = 0.0f;
+        }
+    }
 }
 
 void ReplayMirroredParams() {
@@ -338,6 +493,16 @@ void ReplayMirroredParams() {
     EnterCriticalSection(&g_mirrorCs);
     for (int i = 0; i < g_mirrorN; ++i) {
         const MirrorEnt& e = g_mirror[i];
+        if (strcmp(e.id, "channels.countMode") == 0) {
+            const int32_t m = e.isFloat ? (int32_t)e.f : e.i;
+            g_vaio.countMode = (m != 0) ? 1 : 0;
+            continue;
+        }
+        if (strcmp(e.id, "channels.count") == 0) {
+            const int32_t c = e.isFloat ? (int32_t)e.f : e.i;
+            if (c == 2 || c == 4 || c == 6 || c == 8) g_vaio.manualChannels = c;
+            continue;
+        }
         const void* v = e.isFloat ? (const void*)&e.f : (const void*)&e.i;
         g_vaio.fnSetParam(g_vaio.pEngine, e.id, v, 4);
     }
@@ -363,18 +528,31 @@ void ApplyParamsString(const char* s) {
         if (strchr(vs, '.') || strchr(vs, 'e') || strchr(vs, 'E')) {
             const float f = (float)atof(vs);
             MirrorSet(id, true, &f);
-            if (g_vaio.fnSetParam(g_vaio.pEngine, id, &f, 4) != 0) {
-                ++g_vaio.paramsFailed;
+            if (strcmp(id, "channels.countMode") == 0) {
+                g_vaio.countMode = ((int)f != 0) ? 1 : 0;
+            } else if (strcmp(id, "channels.count") == 0) {
+                const int32_t cnt = (int32_t)f;
+                if (cnt == 2 || cnt == 4 || cnt == 6 || cnt == 8) g_vaio.manualChannels = cnt;
             } else {
-                ++g_vaio.paramsApplied;
+                if (g_vaio.fnSetParam(g_vaio.pEngine, id, &f, 4) != 0) {
+                    ++g_vaio.paramsFailed;
+                } else {
+                    ++g_vaio.paramsApplied;
+                }
             }
         } else {
             const int32_t iv = (int32_t)atoi(vs);
             MirrorSet(id, false, &iv);
-            if (g_vaio.fnSetParam(g_vaio.pEngine, id, &iv, 4) != 0) {
-                ++g_vaio.paramsFailed;
+            if (strcmp(id, "channels.countMode") == 0) {
+                g_vaio.countMode = (iv != 0) ? 1 : 0;
+            } else if (strcmp(id, "channels.count") == 0) {
+                if (iv == 2 || iv == 4 || iv == 6 || iv == 8) g_vaio.manualChannels = iv;
             } else {
-                ++g_vaio.paramsApplied;
+                if (g_vaio.fnSetParam(g_vaio.pEngine, id, &iv, 4) != 0) {
+                    ++g_vaio.paramsFailed;
+                } else {
+                    ++g_vaio.paramsApplied;
+                }
             }
         }
     }
@@ -413,9 +591,8 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             g_vaio.ringChannels = ringChannels;
             blockAlign = pHeader->BlockAlign > 0 ? pHeader->BlockAlign : (ringChannels * sizeof(float));
             g_vaio.ringBlockAlign = blockAlign;
-            if (g_vaio.pEngine && g_vaio.fnSetParam) {
-                const int32_t newCh = (int32_t)ringChannels;
-                g_vaio.fnSetParam(g_vaio.pEngine, "channels.count", &newCh, sizeof(newCh));
+            if (g_vaio.countMode == 0) {
+                SetEngineChannels((int32_t)ringChannels);
             }
         }
 
@@ -468,7 +645,7 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
 
         // 测试信号注入面（优先覆盖真实输入）
         if (g_vaio.tc.testKind != 0) {
-            vmcore::FillTestSignal(&g_vaio.tc, g_vaio.scratchIn, (int)framesToProcess);
+            vmcore::FillTestSignalN(&g_vaio.tc, g_vaio.scratchIn, (long)framesToProcess, (int)ringChannels);
             // 测试注入时，虚拟声卡输入的音频同步步进丢弃，保持时序不滞后
             if (availBytes >= bytesToRead) {
                 userBytesRead += bytesToRead;
@@ -503,33 +680,60 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         }
         g_vaio.peakIn = (double)curPeakIn;
 
+        const int engineCh = (int)InterlockedCompareExchange((volatile LONG*)&g_vaio.engineChannels, 0, 0);
+        const int safeEngineCh = (engineCh == 4 || engineCh == 6 || engineCh == 8) ? engineCh : 2;
+
+        bool enginePathRan = false;
         if (g_vaio.userBypass) {
             // 用户旁路：直通，不跑 DSP
-            memcpy(g_vaio.scratchOut, g_vaio.scratchIn, bytesToRead);
+            RemapInterleavedAudio(g_vaio.scratchIn, (int)ringChannels, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
         } else if (g_vaio.pEngine && g_vaio.fnProcess) {
+            enginePathRan = true;
             // P3 静音门控（单组）：GATED 时整块写零、跳过 DSP；测试注入是
             // 信号、用户旁路已提前返回，两者都不门控。
             const bool gateOn = g_vaio.gate.enabled && g_vaio.tc.testKind == 0;
             if (gateOn && g_vaio.gate.Tick((float)curPeakIn, (long long)framesToProcess)) {
-                memset(g_vaio.scratchOut, 0, bytesToRead);
+                memset(g_vaio.scratchOut, 0, (size_t)framesToProcess * wasapiChannels * sizeof(float));
+                memset(g_vaio.scratchProcOut, 0, (size_t)framesToProcess * safeEngineCh * sizeof(float));
+                if (g_vaio.gate.enabled) g_vaio.gate.NoteOutput(0.0f);
+                g_vaio.peakOut = 0.0;
             } else {
-                // 21 项音效链处理（交织 float32）
-                g_vaio.fnProcess(g_vaio.pEngine, g_vaio.scratchIn, g_vaio.scratchOut, (int)framesToProcess);
+                // 1. 将驱动环输入重映射至引擎工作声道数（消除声道步进错位）
+                RemapInterleavedAudio(g_vaio.scratchIn, (int)ringChannels, g_vaio.scratchProcIn, safeEngineCh, (int)framesToProcess);
+
+                // 2. 21 项音效链处理（交织 float32，严格按 safeEngineCh 步进）
+                g_vaio.fnProcess(g_vaio.pEngine, g_vaio.scratchProcIn, g_vaio.scratchProcOut, (int)framesToProcess);
+
+                // 3. 计算引擎真实输出峰值
+                float curPeakOut = 0.0f;
+                const int outSampleCount = (int)(framesToProcess * safeEngineCh);
+                for (int s = 0; s < outSampleCount; ++s) {
+                    float val = fabsf(g_vaio.scratchProcOut[s]);
+                    if (val > curPeakOut) curPeakOut = val;
+                }
+                g_vaio.peakOut = (double)curPeakOut;
+                // P3：记录引擎实际输出峰值，供下一块「尾音已衰完」判据（gated 时 0）。
+                if (g_vaio.gate.enabled) g_vaio.gate.NoteOutput(curPeakOut);
+
+                // 4. 将引擎输出重映射至 WASAPI 物理设备声道数
+                RemapInterleavedAudio(g_vaio.scratchProcOut, safeEngineCh, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
             }
         } else {
-            memcpy(g_vaio.scratchOut, g_vaio.scratchIn, bytesToRead);
+            RemapInterleavedAudio(g_vaio.scratchIn, (int)ringChannels, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
         }
 
-        // 计算输出峰值
-        float curPeakOut = 0.0f;
-        const int outSampleCount = (int)(framesToProcess * ringChannels);
-        for (int s = 0; s < outSampleCount; ++s) {
-            float val = fabsf(g_vaio.scratchOut[s]);
-            if (val > curPeakOut) curPeakOut = val;
+        // 旁路/无引擎路径只做了重映射：峰值与门控尾音仍须按最终输出更新，
+        // 否则电平表会停在上一块的值、门控「尾音已衰完」判据也会失真。
+        if (!enginePathRan) {
+            float curPeakOut = 0.0f;
+            const int outSampleCount = (int)(framesToProcess * wasapiChannels);
+            for (int s = 0; s < outSampleCount; ++s) {
+                const float val = fabsf(g_vaio.scratchOut[s]);
+                if (val > curPeakOut) curPeakOut = val;
+            }
+            g_vaio.peakOut = (double)curPeakOut;
+            if (g_vaio.gate.enabled) g_vaio.gate.NoteOutput(curPeakOut);
         }
-        g_vaio.peakOut = (double)curPeakOut;
-        // P3：记录引擎实际输出峰值，供下一块「尾音已衰完」判据（gated 时 0）。
-        if (g_vaio.gate.enabled) g_vaio.gate.NoteOutput(curPeakOut);
 
         QueryPerformanceCounter(&t1);
         double pumpUs = (double)(t1.QuadPart - t0.QuadPart) * qpcToUs;
@@ -539,37 +743,7 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         BYTE* pDst = nullptr;
         hr = g_vaio.pRenderClient->GetBuffer(framesToProcess, &pDst);
         if (SUCCEEDED(hr) && pDst) {
-            if (wasapiChannels == ringChannels) {
-                memcpy(pDst, g_vaio.scratchOut, bytesToRead);
-            } else if (ringChannels == 2 && wasapiChannels > 2) {
-                // 立体声映射到多声道（前左/前右，其余静音）
-                float* pDstF = (float*)pDst;
-                for (UINT32 f = 0; f < framesToProcess; ++f) {
-                    pDstF[f * wasapiChannels + 0] = g_vaio.scratchOut[f * 2 + 0];
-                    pDstF[f * wasapiChannels + 1] = g_vaio.scratchOut[f * 2 + 1];
-                    for (UINT32 ch = 2; ch < wasapiChannels; ++ch) {
-                        pDstF[f * wasapiChannels + ch] = 0.0f;
-                    }
-                }
-            } else if (ringChannels > 2 && wasapiChannels == 2) {
-                // 虚拟声卡多声道，物理声卡立体声（提取前左/前右）
-                float* pDstF = (float*)pDst;
-                for (UINT32 f = 0; f < framesToProcess; ++f) {
-                    pDstF[f * 2 + 0] = g_vaio.scratchOut[f * ringChannels + 0];
-                    pDstF[f * 2 + 1] = g_vaio.scratchOut[f * ringChannels + 1];
-                }
-            } else {
-                float* pDstF = (float*)pDst;
-                const UINT32 copyCh = (wasapiChannels < ringChannels) ? wasapiChannels : ringChannels;
-                for (UINT32 f = 0; f < framesToProcess; ++f) {
-                    for (UINT32 ch = 0; ch < copyCh; ++ch) {
-                        pDstF[f * wasapiChannels + ch] = g_vaio.scratchOut[f * ringChannels + ch];
-                    }
-                    for (UINT32 ch = copyCh; ch < wasapiChannels; ++ch) {
-                        pDstF[f * wasapiChannels + ch] = 0.0f;
-                    }
-                }
-            }
+            memcpy(pDst, g_vaio.scratchOut, (size_t)framesToProcess * wasapiChannels * sizeof(float));
             g_vaio.pRenderClient->ReleaseBuffer(framesToProcess, 0);
         }
 
@@ -710,6 +884,9 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.note[0] = '\0';
     g_vaio.paramsApplied = 0;
     g_vaio.paramsFailed = 0;
+    g_vaio.countMode = 0;
+    g_vaio.manualChannels = 2;
+    g_vaio.engineChannels = 2;
     g_pluginMirror.Reset();  // 新会话：等 App 侧 start 后按当前会话重放
 
     // 1. 打开内核驱动控制设备
@@ -1005,16 +1182,16 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
         return -10;
     }
 
-    if (g_vaio.fnSetParam) {
-        const int32_t initCh = (int32_t)(g_vaio.ringChannels > 0 ? g_vaio.ringChannels : 2);
-        g_vaio.fnSetParam(g_vaio.pEngine, "channels.count", &initCh, sizeof(initCh));
-    }
+    const int32_t initCh = (int32_t)(g_vaio.ringChannels > 0 ? g_vaio.ringChannels : 2);
+    SetEngineChannels(initCh);
 
     // 6. 预分配 RT 临时缓冲 (4096 帧 * 8 声道 float32)
     const size_t scratchBytes = (size_t)VaioBridgeCtl::kMaxFrames * 8 * sizeof(float);
     g_vaio.scratchIn = (float*)malloc(scratchBytes);
     g_vaio.scratchOut = (float*)malloc(scratchBytes);
-    if (!g_vaio.scratchIn || !g_vaio.scratchOut) {
+    g_vaio.scratchProcIn = (float*)malloc(scratchBytes);
+    g_vaio.scratchProcOut = (float*)malloc(scratchBytes);
+    if (!g_vaio.scratchIn || !g_vaio.scratchOut || !g_vaio.scratchProcIn || !g_vaio.scratchProcOut) {
         snprintf(g_vaio.note, sizeof(g_vaio.note), "malloc-scratch-failed");
         FreeScratchBuffers();
         UnmapAndCloseRing();
@@ -1025,10 +1202,22 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     }
     memset(g_vaio.scratchIn, 0, scratchBytes);
     memset(g_vaio.scratchOut, 0, scratchBytes);
+    memset(g_vaio.scratchProcIn, 0, scratchBytes);
+    memset(g_vaio.scratchProcOut, 0, scratchBytes);
 
     // 7. 应用初始参数并回放镜像
     ApplyParamsString(params_json);
     ReplayMirroredParams();
+
+    // 7.1 声道模式决议与同步：根据 countMode 决定实际生效的工作声道数
+    if (g_vaio.countMode == 1) {
+        const int32_t manCh = (g_vaio.manualChannels == 4 || g_vaio.manualChannels == 6 || g_vaio.manualChannels == 8)
+                                  ? g_vaio.manualChannels : 2;
+        SetEngineChannels(manCh);
+    } else {
+        const int32_t ringCh = (g_vaio.ringChannels > 0 ? (int32_t)g_vaio.ringChannels : 2);
+        SetEngineChannels(ringCh);
+    }
 
     // 8. 启动 RT 音频泵线程
     // P3：采样率已定稿，配置静音门控（AURADSP_GATE=0 时禁用）。
@@ -1081,6 +1270,8 @@ int vaio_status(char* out, int cap) {
     PathForJsonA(g_vaio.outEndpointName, outEpEsc, sizeof(outEpEsc));
 
     const bool isRunning = (InterlockedCompareExchange(&g_vaio.running, 0, 0) == 1);
+    const LONG effEngCh = InterlockedCompareExchange((volatile LONG*)&g_vaio.engineChannels, 0, 0);
+    const ULONG reportedCh = (effEngCh > 0 ? (ULONG)effEngCh : g_vaio.ringChannels);
 
     const int n = _snprintf_s(
         out, (size_t)cap, _TRUNCATE,
@@ -1092,7 +1283,7 @@ int vaio_status(char* out, int cap) {
         isRunning ? "true" : "false",
         (unsigned long long)g_vaio.totalPumpedFrames,
         g_vaio.wasapiSampleRate ? g_vaio.wasapiSampleRate : g_vaio.ringSampleRate,
-        g_vaio.ringChannels,
+        reportedCh,
         g_vaio.ringBits,
         g_vaio.peakIn,
         g_vaio.peakOut,
@@ -1117,6 +1308,33 @@ int vaio_status(char* out, int cap) {
 int vaio_set_param(const char* id, int isFloat, const void* v4) {
     if (!id || !v4) return -1;
     MirrorSet(id, isFloat != 0, v4);
+
+    if (strcmp(id, "channels.countMode") == 0) {
+        const int32_t mode = (isFloat ? (int)*(const float*)v4 : *(const int32_t*)v4) ? 1 : 0;
+        g_vaio.countMode = mode;
+        if (mode == 0) {
+            const int32_t ringCh = (g_vaio.ringChannels > 0 ? (int32_t)g_vaio.ringChannels : 2);
+            SetEngineChannels(ringCh);
+        } else {
+            const int32_t manCh = (g_vaio.manualChannels == 4 || g_vaio.manualChannels == 6 || g_vaio.manualChannels == 8)
+                                      ? g_vaio.manualChannels : 2;
+            SetEngineChannels(manCh);
+        }
+        return 0;
+    }
+
+    if (strcmp(id, "channels.count") == 0) {
+        const int32_t cnt = isFloat ? (int32_t)*(const float*)v4 : *(const int32_t*)v4;
+        if (cnt == 2 || cnt == 4 || cnt == 6 || cnt == 8) {
+            g_vaio.manualChannels = cnt;
+            if (g_vaio.countMode == 1) {
+                SetEngineChannels(cnt);
+            }
+            return 0;
+        }
+        return -1;
+    }
+
     if (!InterlockedCompareExchange(&g_vaio.running, 0, 0) || !g_vaio.pEngine || !g_vaio.fnSetParam) {
         return 0; // 记录镜像成功，待启动时回放
     }
@@ -1133,7 +1351,19 @@ int vaio_set_param_str(const char* id, const char* utf8, int bytes) {
 }
 
 int vaio_get_param(const char* id, int isFloat, void* out4) {
-    if (!id || !out4 || !g_vaio.pEngine || !g_vaio.fnGetParam) return -1;
+    if (!id || !out4) return -1;
+    if (strcmp(id, "channels.countMode") == 0) {
+        if (isFloat) *(float*)out4 = (float)g_vaio.countMode;
+        else *(int32_t*)out4 = g_vaio.countMode;
+        return 0;
+    }
+    if (strcmp(id, "channels.count") == 0) {
+        const int32_t c = (int32_t)InterlockedCompareExchange((volatile LONG*)&g_vaio.engineChannels, 0, 0);
+        if (isFloat) *(float*)out4 = (float)c;
+        else *(int32_t*)out4 = c;
+        return 0;
+    }
+    if (!g_vaio.pEngine || !g_vaio.fnGetParam) return -1;
     return (g_vaio.fnGetParam(g_vaio.pEngine, id, out4, 4) == 0) ? 0 : -2;
 }
 
@@ -1151,7 +1381,8 @@ int vaio_viz_read(void* out1600, int count) {
     if (!g_vaio.gate.enabled || !g_vaio.gate.gated) return 0;
     if (InterlockedCompareExchange(&g_vaio.userBypass, 0, 0)) return 0;
     if (InterlockedCompareExchange(&g_vaio.tc.testKind, 0, 0) != 0) return 0;
-    return g_silentViz.Emit(out1600, 0, (int)g_vaio.ringChannels);
+    const int effCh = (int)InterlockedCompareExchange((volatile LONG*)&g_vaio.engineChannels, 0, 0);
+    return g_silentViz.Emit(out1600, 0, effCh > 0 ? effCh : (int)g_vaio.ringChannels);
 }
 
 // §7-2（P-028）桥 ABI 协商：返回桥编译所依据的引擎 ABI 版本（viz 帧布局代际）。

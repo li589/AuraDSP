@@ -901,6 +901,12 @@ extension StateEvents on AppModel {
         final wasV = vaioActive;
         vaioActive = (raw['running'] as bool?) ?? false;
         vaioInfo = Map<String, dynamic>.from(raw);
+        if (vaioActive && channelsCountMode == 0 && raw['channels'] != null) {
+          final c = (raw['channels'] as num).toInt();
+          if (c == 2 || c == 4 || c == 6 || c == 8) {
+            channelsCount = c;
+          }
+        }
         if (vaioActive && !wasV) {
           spectrum.value = List<double>.filled(32, 0.0);
           eqInSpectrum.value = List<double>.filled(32, 0.0);

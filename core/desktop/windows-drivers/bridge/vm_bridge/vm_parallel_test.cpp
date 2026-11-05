@@ -56,6 +56,9 @@ struct FakeEng {
     HANDLE hangGate = nullptr;          // 非空 = 进入引擎先等事件（模拟插件卡死）
     std::atomic<long>* inEngine = nullptr;
     std::atomic<long>* reentered = nullptr;
+    // 引擎工作声道数：真实引擎按 channels.count 解释交织缓冲，假插件同样
+    // 按 frames*procCh 读写，才能抓到"泵步进与引擎档位不一致"的回归。
+    int procCh = 2;
 };
 
 // 假插件 process：确定性变换（与线程/时序无关）+ QPC 校准人工成本。
@@ -64,7 +67,7 @@ struct FakeEng {
 void FakeProcess(void* eng, const float* in, float* out, int frames) {
     auto* fe = static_cast<FakeEng*>(eng);
     const float k = fe->gain;
-    const int n2 = frames * 2;
+    const int n2 = frames * fe->procCh;
     if (fe->hangGate) {
         // 重入检测：进入即计数；已有他者在引擎内 = 重入被占引擎（B2 须杜绝）
         if (fe->inEngine->fetch_add(1) != 0) fe->reentered->store(1);
@@ -470,6 +473,91 @@ StragglerResult RunStragglerScenario() {
     return r;
 }
 
+// 声道档位回归：泵送引擎的块步进必须等于引擎 channels.count。
+// 旧结构固定 2/8，选 2.0/4.0/5.1 时引擎按 2/4/6 解释 8ch 缓冲，输入被
+// 压缩成 4×/2×/1.33× 速的持续断续；4ch 还必须对到 Quad 的 BL/BR。
+bool RunChannelScenario(int procCh, std::string& why) {
+    Rig ser, par;
+    ser.Init();
+    par.Init();
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        ser.eng[g]->procCh = procCh;
+        par.eng[g]->procCh = procCh;
+    }
+    InterlockedExchange(&ser.ctx.workCh, procCh);
+    InterlockedExchange(&par.ctx.workCh, procCh);
+    VmParallelInit(&par.ctx);
+    VmParallelInit(&ser.ctx);
+    InterlockedExchange(&ser.ctx.parallelOn, 0);
+    InterlockedExchange(&par.ctx.parallelOn, 1);
+
+    std::vector<float> snap(static_cast<size_t>(kCh) * 128);
+    bool ok = true;
+    for (int b = 0; b < 4 && ok; ++b) {
+        ser.FillInputs(b, 8, -1);
+        par.FillInputs(b, 8, -1);
+        OnVbCallback(&ser.ctx, kCbBufferOut, &ser.ab, 0);
+        memcpy(snap.data(), ser.wStore.data(), snap.size() * sizeof(float));
+        OnVbCallback(&par.ctx, kCbBufferOut, &par.ab, 0);
+        if (memcmp(snap.data(), par.wStore.data(),
+                   snap.size() * sizeof(float)) != 0) {
+            why = "serial/parallel mismatch";
+            ok = false;
+        }
+    }
+
+    // 引擎 4ch 是 Quad（FL,FR,BL,BR）：槽 2/3 对总线 6/7。
+    int busOf[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    if (procCh == 4) {
+        busOf[2] = 6;
+        busOf[3] = 7;
+    }
+    const float* w = ser.wStore.data();
+    const float* rin = ser.rStore.data();
+    auto W = [&](int ch, int i) { return w[static_cast<size_t>(ch) * 128 + i]; };
+    auto R = [&](int ch, int i) { return rin[static_cast<size_t>(ch) * 128 + i]; };
+    bool inSlot[8] = {};
+    for (int c = 0; c < procCh; ++c) inSlot[busOf[c]] = true;
+    for (int g = 0; g < 8 && ok; ++g) {
+        const int base = g * 8;
+        const float gain = 1.0f + 0.01f * static_cast<float>(g);
+        for (int c = 0; c < procCh && ok; ++c) {
+            const int ch = base + busOf[c];
+            for (int i = 0; i < 128; ++i) {
+                const float exp = R(ch, i) * gain + 1e-4f;
+                if (W(ch, i) != exp) {
+                    char buf[160];
+                    snprintf(buf, sizeof(buf),
+                             "pc%d g%d bus%d i%d got %.9g exp %.9g", procCh, g,
+                             busOf[c], i, W(ch, i), exp);
+                    why = buf;
+                    ok = false;
+                    break;
+                }
+            }
+        }
+        for (int ch = base; ch < base + 8 && ok; ++ch) {
+            if (inSlot[ch - base]) continue;
+            for (int i = 0; i < 128; ++i) {
+                if (W(ch, i) != R(ch, i)) {
+                    why = "passthrough mismatch";
+                    ok = false;
+                    break;
+                }
+            }
+        }
+    }
+    if (ok && ser.ctx.peakIn <= 0.0) {
+        why = "peakIn should be positive";
+        ok = false;
+    }
+    VmParallelShutdown(&par.ctx);
+    VmParallelShutdown(&ser.ctx);
+    ser.Destroy();
+    par.Destroy();
+    return ok;
+}
+
 }  // namespace
 
 int main() {
@@ -513,6 +601,16 @@ int main() {
                      s.name, r.ok ? 1 : 0, r.bitExact ? 1 : 0, r.teleEq ? 1 : 0,
                      r.diffCh, r.diffIdx, r.serUs, r.parUs, r.workers,
                      r.why.c_str());
+            detail += buf;
+        }
+    }
+    // 声道档位：2/4/6/8 逐档验证步进、映射与串/并行一致性
+    for (int pc : {2, 4, 6, 8}) {
+        std::string why;
+        if (!RunChannelScenario(pc, why)) {
+            allOk = false;
+            char buf[256];
+            snprintf(buf, sizeof(buf), "chan%d(%s); ", pc, why.c_str());
             detail += buf;
         }
     }

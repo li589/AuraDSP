@@ -97,9 +97,14 @@ struct PumpCtx {
     int nEng = 0;
     float* scratchIn = nullptr;   // 主线程预分配 8*kMaxNbs（双耳 8ch / 普通 2ch 共用）
     float* scratchOut = nullptr;
-    // 1=该组 8ch 送引擎做双耳虚拟环绕；0=旧的主对 2ch 路径。
-    // 由 vb_set_param("spatial.binaural") 更新；RT 只读。
-    volatile LONG binaural = 0;
+    // 引擎工作声道数（2/4/6/8）：由 vb_set_param("channels.count") 更新，
+    // 必须与各引擎 handle 的 channels.count 逐块一致——否则 auradsp_process
+    // 按错误步长解释交织缓冲（8ch 喂 2/4/6 会分别变成 4×/2×/1.33× 速的断续）。
+    volatile LONG workCh = 2;
+    // 双耳生效判定（与引擎同口径）：spatial.binaural && spatial.enable &&
+    // workCh>=4。只用于“组内其余通道静音”；工作声道数只由 workCh 决定。
+    volatile LONG spatialBinaural = 0;
+    volatile LONG spatialEnable = 0;
     uint64_t frames = 0;
     uint64_t maxCbTicks = 0;  // 单次 BUFFER_OUT 最大耗时（QPC ticks；爆音预算证据）
     volatile LONG gotFirst = 0;  // 首个 BUFFER 到达（主线程轮询，RT 只存一次）
@@ -202,7 +207,8 @@ struct PumpCtx {
     long curN = 0;
     long curMask = 0;
     long curHaveEng = 0;
-    long curBinaural = 0;      // 块快照：worker 须与 RT 预填同口径（防测试信号翻转竞争）
+    long curBinaural = 0;      // 块快照：生效双耳（worker 与 RT 预填须同口径）
+    long curWorkCh = 2;        // 块快照：引擎工作声道数（与 handle 的 count 同步）
     long curTestKind = 0;      // 块快照：testKind 翻转只影响下一块
     volatile LONG testReady = 0;      // bitmap：bit g = scratchInG[g] 已由 RT 预填测试信号
     // 共享量 per-group 中间槽：worker 写、RT fan-in 后归约。max/OR 与顺序
@@ -349,22 +355,35 @@ inline void FillTestSignal(PumpCtx* c, float* dst, long n) {
     FillTestSignalN(c, dst, n, 2);
 }
 
+// 引擎工作声道数归一：只有 4/6/8 是合法多声道；其余（自动/异常值）按 2。
+inline int NormalizeWorkCh(long v) {
+    return (v == 4 || v == 6 || v == 8) ? (int)v : 2;
+}
+
+// VM 总线通道序固定 7.1（FL,FR,C,LFE,SL,SR,BL,BR）；引擎 4ch 是 Quad
+// （FL,FR,BL,BR，见 speaker_layout.h），所以 4ch 档位必须把 BL/BR 对到
+// 总线 6/7，不能按前四路直接取，否则上混的环绕会落到 C/LFE 总线上。
+inline int BusChForSlot(int procCh, int slot) {
+    return (procCh == 4 && slot >= 2) ? slot + 4 : slot;
+}
+
 // Z17：单组处理主体——串行/并行共用的唯一实现（两条路径必须逐位同义）。
 // 由原 OnVbCallback 内联 for 循环体原样提取；差异仅：
 //  1) scratch 改取每组独占对 scratchInG/OutG（并行时 worker 间零共享写；
 //     串行旧径的共享 scratchIn/Out 保留未用，02 对账与回退参考）；
 //  2) 三个共享量（peakIn/maxDiff/bypassEntered）改写 per-group 中间槽，
 //     由调用方 fan-in 后归约（max/OR 与组间顺序无关）；
-//  3) binaural/testKind 由调用方按块快照透传（原 per-group 活读，翻转时
-//     组间可撕裂；并行预填更必须同口径，否则测试信号数据竞争）。
+//  3) procCh/binaural/testKind 由调用方按块快照透传（原 per-group 活读，翻转
+//     时组间可撕裂；并行预填更必须同口径，否则测试信号数据竞争）。
 // testReady=true：scratchInG[g] 已由调用方（并行路径的 RT）按串行同序预填
 // 测试信号——FillTestSignal 写共享 testPhase/testRng/testPink/testPos，
 // 多线程并发即数据竞争，且各组按 g 顺序消费同一信号流才逐位一致。
 inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
-                           long mask, bool haveEng, bool binaural,
+                           long mask, bool haveEng, int procCh, bool binaural,
                            long testKind, bool testReady) {
     const long base = (long)g * 8;
-    // v2：每组主对（base+0/1）进该组引擎；组内其余 6 通道 + 组外全部透传。
+    // v2：每组主对（base+0/1）恒进该组引擎；procCh>2 时组内前 procCh 路
+    // 一并进引擎（逐声道处理/矩阵上混后回写），其余通道 + 组外全部透传。
     const float* inL = ab->r[base];
     const float* inR = ab->r[base + 1];
     float* outL = ab->w[base];
@@ -437,30 +456,23 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
     }
     // 静音空转（组独立，EAPO 同式）。
     if (!c->idle[g]) {
-        const int procCh = binaural ? 8 : 2;
         // per-group scratch 优先；分配不全的极端场景回退共享对（仅串行安全，
         // 并行判定已要求本块所有组 per-group 齐备，不会两条路混用）。
         float* sIn = c->scratchInG[g] ? c->scratchInG[g] : c->scratchIn;
         float* sOut = c->scratchOutG[g] ? c->scratchOutG[g] : c->scratchOut;
-        if (binaural) {
-            // 8ch：FL/FR/C/LFE/SL/SR/BL/BR 全量进引擎。
+        if (procCh > 2) {
+            // N>2：FL/FR/C/LFE/SL/SR/BL/BR 前 procCh 路按通道并行进引擎。
             if (!testReady) {
                 for (long i = 0; i < n; ++i) {
-                    for (int ch = 0; ch < 8; ++ch) {
-                        const float* src = ab->r[base + ch];
-                        sIn[i * 8 + ch] = src ? src[i] : 0.0f;
+                    for (int ch = 0; ch < procCh; ++ch) {
+                        const float* src = ab->r[base + BusChForSlot(procCh, ch)];
+                        sIn[i * procCh + ch] = src ? src[i] : 0.0f;
                     }
                 }
             }
             if (testKind != 0 && !testReady) {
-                // 测试信号仍按 stereo 生成，再展开到 FL/FR；其余置零。
-                FillTestSignal(c, sIn, n);
-                for (long i = n - 1; i >= 0; --i) {
-                    sIn[i * 8] = sIn[i * 2];
-                    sIn[i * 8 + 1] = sIn[i * 2 + 1];
-                    for (int ch = 2; ch < 8; ++ch)
-                        sIn[i * 8 + ch] = 0.0f;
-                }
+                // 测试信号仍按 stereo 生成到 FL/FR；其余置零。
+                FillTestSignalN(c, sIn, n, procCh);
             }
         } else if (testKind != 0) {
             // 测试注入：静音主通道 VB 输入，测试信号进同一条 DSP 链。
@@ -524,6 +536,14 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
                 c->gate[g].NoteOutput(outPeak);
             }
             c->maxDiffGrp[g] = grpDiff;  // Z17：maxDiff 归约中间槽
+            // N>2：把引擎逐声道输出回写总线（viz 的 channel_levels 与实测
+            // 输出同源，表头不再"引擎上混有电平、总线却没写入"）；未进引擎
+            // 的通道保持上方原样透传。
+            for (int ch = 2; ch < procCh; ++ch) {
+                float* dst = ab->w[base + BusChForSlot(procCh, ch)];
+                if (!dst) continue;
+                for (long i = 0; i < n; ++i) dst[i] = sOut[i * procCh + ch];
+            }
             if (binaural) {
                 // 双耳输出只保留 FL/FR；其余置零，避免 VM 下混把原环绕混回来。
                 for (long ch = base + 2; ch < base + 8; ++ch) {
@@ -636,11 +656,18 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
     if (ng > PumpCtx::kMaxGroups) ng = PumpCtx::kMaxGroups;
     c->groups = ng;
     const bool haveEng = c->process != nullptr;
-    // 本组快照（整块统一口径，避免组间撕裂）。Z17：binaural/testKind 也
-    // 按块快照（原 per-group 活读，翻转时组间可撕裂；并行预填更必须同口径，
+    // 本组快照（整块统一口径，避免组间撕裂）。Z17：procCh/binaural/testKind
+    // 也按块快照（原 per-group 活读，翻转时组间可撕裂；并行预填更必须同口径，
     // 否则 FillTestSignal 的共享相位/RNG 状态会数据竞争）。
     const long mask = InterlockedCompareExchange(&c->busMask, 0, 0);
-    const bool binaural = InterlockedCompareExchange(&c->binaural, 0, 0) != 0;
+    // procCh 必须与引擎 channels.count 一致；binaural 只在真正生效时静音
+    // 组内其余通道（与 auradsp_engine.cpp 的 binaural 分支同口径）。
+    const int procCh = NormalizeWorkCh(
+        InterlockedCompareExchange(&c->workCh, 0, 0));
+    const bool binaural =
+        procCh >= 4 &&
+        InterlockedCompareExchange(&c->spatialBinaural, 0, 0) != 0 &&
+        InterlockedCompareExchange(&c->spatialEnable, 0, 0) != 0;
     const long testKind = InterlockedCompareExchange(&c->testKind, 0, 0);
     // 共享量归约槽清零（per-block；归约见尾部）。
     for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
@@ -690,15 +717,7 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
                     continue;
                 if (!c->eng[g] || (mask & (1L << g)) == 0 || c->idle[g]) continue;
                 float* sIn = c->scratchInG[g];
-                FillTestSignal(c, sIn, n);
-                if (binaural) {
-                    for (long i = n - 1; i >= 0; --i) {
-                        sIn[i * 8] = sIn[i * 2];
-                        sIn[i * 8 + 1] = sIn[i * 2 + 1];
-                        for (int ch = 2; ch < 8; ++ch)
-                            sIn[i * 8 + ch] = 0.0f;
-                    }
-                }
+                FillTestSignalN(c, sIn, n, procCh);
                 testRdy |= (1L << g);
             }
         }
@@ -711,6 +730,7 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
         c->curMask = mask;
         c->curHaveEng = haveEng ? 1 : 0;
         c->curBinaural = binaural ? 1 : 0;
+        c->curWorkCh = procCh;
         c->curTestKind = testKind;
         InterlockedExchange(&c->testReady, testRdy);
         LONG expect = 0;
@@ -739,8 +759,8 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
                 continue;
             int g = 0;
             for (LONG b = bit; !(b & 1); b >>= 1) ++g;
-            ProcessGroupVm(c, ab, g, n, mask, haveEng, binaural, testKind,
-                           (testRdy & bit) != 0);
+            ProcessGroupVm(c, ab, g, n, mask, haveEng, procCh, binaural,
+                           testKind, (testRdy & bit) != 0);
             VmWorkComplete(c, newGen, bit);
         }
         // fan-in：音频线程禁阻塞 API，纯自旋（YieldProcessor 降耗降温）。
@@ -815,8 +835,8 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
         const LONG stuck = InterlockedCompareExchange(&c->workStuck, 0, 0);
         for (int g = 0; g < ng; ++g) {
             if (stuck & (1L << g)) continue;
-            ProcessGroupVm(c, ab, g, n, mask, haveEng, binaural, testKind,
-                           false);
+            ProcessGroupVm(c, ab, g, n, mask, haveEng, procCh, binaural,
+                           testKind, false);
         }
         c->curTodo = 0;  // 本块无并行发布：清账，防下一块误判 straggler
     }
@@ -880,6 +900,7 @@ static DWORD WINAPI VmWorkerMain(LPVOID param) {
         const long n = c->curN;
         const long mask = c->curMask;
         const bool haveEng = c->curHaveEng != 0;
+        const int procCh = NormalizeWorkCh(c->curWorkCh);
         const bool binaural = c->curBinaural != 0;
         const long testKind = c->curTestKind;
         const LONG testRdy = InterlockedCompareExchange(&c->testReady, 0, 0);
@@ -897,8 +918,8 @@ static DWORD WINAPI VmWorkerMain(LPVOID param) {
                 continue;
             int g = 0;
             for (LONG b = bit; !(b & 1); b >>= 1) ++g;
-            ProcessGroupVm(c, ab, g, n, mask, haveEng, binaural, testKind,
-                           (testRdy & bit) != 0);
+            ProcessGroupVm(c, ab, g, n, mask, haveEng, procCh, binaural,
+                           testKind, (testRdy & bit) != 0);
             VmWorkComplete(c, gen, bit);
         }
     }

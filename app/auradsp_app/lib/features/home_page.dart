@@ -288,8 +288,12 @@ class _OutputLevelRow extends StatelessWidget {
   final bool active;
   const _OutputLevelRow({required this.model, required this.active});
 
-  /// WAVEFORMATEX 声道序标签（与引擎 mx_* 同序：FL FR C LFE SL SR BL BR）。
-  static const _chLabels = ['FL', 'FR', 'C', 'LFE', 'SL', 'SR', 'BL', 'BR'];
+  /// WAVEFORMATEX 声道序标签（与引擎 speaker_layout.h 同序）：
+  /// 4ch 是 Quad 4.0（FL FR BL BR），6/8ch 才是 FL FR C LFE SL SR [BL BR]。
+  static List<String> _labelsFor(int ch) {
+    if (ch == 4) return const ['FL', 'FR', 'BL', 'BR'];
+    return const ['FL', 'FR', 'C', 'LFE', 'SL', 'SR', 'BL', 'BR'];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -319,6 +323,7 @@ class _OutputLevelRow extends StatelessWidget {
           builder: (_, levels, _) {
             final p = paletteOf(context);
             final n = cc.clamp(3, 8);
+            final labels = _labelsFor(cc);
             return Row(
               children: [
                 for (var c = 0; c < n; c++) ...[
@@ -327,7 +332,7 @@ class _OutputLevelRow extends StatelessWidget {
                     child: Row(children: [
                       SizedBox(
                         width: 22,
-                        child: Text(_chLabels[c],
+                        child: Text(labels[c],
                             style: monoOf(p, size: 9, color: p.textDim)),
                       ),
                       const SizedBox(width: 3),

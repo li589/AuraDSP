@@ -449,17 +449,36 @@ void MirrorSet(const char* id, bool isFloat, const void* v4) {
     ++g_mirrorN;
 }
 
-// 重建后回放全部镜像参数（主线程；引擎进程内串行，无 RT 约束）。
-// 双耳模式：把 channels.count 同步到全部 live handle。
-// vb_set_param("spatial.binaural") 与 CHANGE 重建回放后都会调用。
-void ApplyBinauralChannels(FnEngSetParam setParam) {
-    if (!setParam) return;
-    const int32_t ch =
-        InterlockedCompareExchange(&g_b.ctx.binaural, 0, 0) ? 8 : 2;
+// 引擎工作声道数 = 泵的块步进数，channels.count 是唯一真相。二者一旦错位，
+// auradsp_process 会按错误步长解释交织缓冲（8ch 缓冲喂给 2/4/6 档位 =
+// 4×/2×/1.33× 速的持续断续）。只有全部 live handle 接受后才发布影子，
+// 避免“部分引擎已换档、泵仍按旧档步进”的中间态。
+int ApplyWorkChannels(FnEngSetParam setParam, int32_t requested) {
+    if (!setParam) return 0;
+    const int32_t ch = (requested == 4 || requested == 6 || requested == 8)
+                           ? requested : 2;
+    int ok = 0;
     for (int g = 0; g < g_b.ctx.nEng; ++g) {
-        if (g_b.ctx.eng[g])
-            setParam(g_b.ctx.eng[g], "channels.count", &ch, sizeof(ch));
+        if (g_b.ctx.eng[g] && setParam(g_b.ctx.eng[g], "channels.count", &ch,
+                                       sizeof(ch)) == 0)
+            ++ok;
     }
+    if (g_b.ctx.nEng > 0 && ok == g_b.ctx.nEng)
+        InterlockedExchange(&g_b.ctx.workCh, ch);
+    return ok;
+}
+
+// 重建回放后把泵影子同步到镜像里的 channels.count（缺失/非法按 2）。
+void SyncWorkChFromMirror(FnEngSetParam setParam) {
+    int32_t ch = 2;
+    for (int i = 0; i < g_mirrorN; ++i) {
+        if (!g_mirror[i].isFloat &&
+            strcmp(g_mirror[i].id, "channels.count") == 0) {
+            ch = g_mirror[i].i;
+            break;
+        }
+    }
+    ApplyWorkChannels(setParam, ch);
 }
 
 void MirrorReplay(FnEngSetParam setParam) {
@@ -701,6 +720,16 @@ void ApplyParamsString(const char* s) {
                     break;
                 }
             }
+            if (okAll) {
+                // 泵步进影子必须与引擎同值（channels.count 是唯一真相）。
+                if (strcmp(id, "channels.count") == 0)
+                    InterlockedExchange(&g_b.ctx.workCh,
+                                        vmcore::NormalizeWorkCh(iv));
+                else if (strcmp(id, "spatial.binaural") == 0)
+                    InterlockedExchange(&g_b.ctx.spatialBinaural, iv ? 1 : 0);
+                else if (strcmp(id, "spatial.enable") == 0)
+                    InterlockedExchange(&g_b.ctx.spatialEnable, iv ? 1 : 0);
+            }
         }
         if (okAll)
             ++g_b.paramsApplied;
@@ -775,7 +804,7 @@ DWORD WINAPI MonitorProc(LPVOID) {
             if (g_b.ctx.process) {
                 auto setP = (FnEngSetParam)GetProcAddress(g_b.eng, "auradsp_set_param");
                 MirrorReplay(setP);
-                ApplyBinauralChannels(setP);
+                SyncWorkChFromMirror(setP);
                 const int sok = StrMirrorReplay(
                     (FnEngSetParam)GetProcAddress(g_b.eng, "auradsp_set_param"));
                 if (g_strMirrorN > 0) {
@@ -1194,15 +1223,23 @@ int vb_set_param(const char* id, int isFloat, const void* v4) {
                             (on && g_b.ctx.nWorkers > 0) ? 1 : 0);
         return g_b.ctx.parallelOn ? g_b.ctx.nEng : 0;
     }
+    // channels.count 走专用通道：归一化 → 全部 handle 生效 → 才更新泵影子。
+    // 否则“引擎 4ch / 泵按 8ch 步进”会让输入帧率瞬间变成 2×，表现为持续哒哒。
+    if (!isFloat && strcmp(id, "channels.count") == 0) {
+        const int32_t ch = *(const int32_t*)v4;
+        MirrorSet(id, false, &ch);
+        return ApplyWorkChannels(setParam, ch);
+    }
     MirrorSet(id, isFloat != 0, v4);  // 重建后要靠它回放
     int ok = 0;
     for (int g = 0; g < g_b.ctx.nEng; ++g) {
         if (g_b.ctx.eng[g] && setParam(g_b.ctx.eng[g], id, v4, 4) == 0) ++ok;
     }
-    if (!isFloat && strcmp(id, "spatial.binaural") == 0) {
-        InterlockedExchange(&g_b.ctx.binaural, *(const int32_t*)v4 ? 1 : 0);
-        ApplyBinauralChannels(setParam);
-    }
+    // 双耳是否真正生效由泵按“两个开关 && 工作声道数>=4”判定（与引擎同口径）。
+    if (!isFloat && strcmp(id, "spatial.binaural") == 0)
+        InterlockedExchange(&g_b.ctx.spatialBinaural, *(const int32_t*)v4 ? 1 : 0);
+    else if (!isFloat && strcmp(id, "spatial.enable") == 0)
+        InterlockedExchange(&g_b.ctx.spatialEnable, *(const int32_t*)v4 ? 1 : 0);
     return ok;
 }
 
@@ -1260,7 +1297,9 @@ int vb_viz_read(void* out1600, int count) {
     if (InterlockedCompareExchange(&g_b.ctx.userBypass, 0, 0)) return 0;
     if (InterlockedCompareExchange(&g_b.ctx.testKind, 0, 0) != 0) return 0;
     if (!AllGroupsGated()) return 0;
-    return g_silentViz.Emit(out1600, 0, g_b.ctx.binaural ? 8 : 2);
+    // 静音帧的通道数必须与引擎工作声道数一致（否则 UI 表头在静音时跳变）。
+    return g_silentViz.Emit(
+        out1600, 0, vmcore::NormalizeWorkCh(g_b.ctx.workCh));
 }
 
 // §7-2（P-028）桥 ABI 协商：返回桥编译所依据的引擎 ABI 版本（viz 帧布局代际）。
