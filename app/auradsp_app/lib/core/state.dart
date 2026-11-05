@@ -1171,15 +1171,27 @@ class AppModel extends ChangeNotifier {
   /// 正在探测中的组件（UI 据此显示进度并禁用重复点击）。
   final Set<String> _probing = {};
 
-  /// 该组件当前可显示的延迟，带**来源**三态。
+  /// 第三方插件槽位累计延迟（ms）：全链路延迟的插件部分。
   ///
-  /// - [measured]  = true：来自真实脉冲响应实测（引擎 auradsp_probe_component）。
-  /// - [estimated] = true：来自**实时计算**（目前仅 convolver 的 IR 长度换算，
-  ///   是精确数学而非预设常数）。2026-10-19 起不再有任何「预设延迟数值」：
-  ///   comp/haas/spatial/arbmag/ddc 的硬编码标称已全部删除，改为 ↻ 实测
-  ///   （haas/spatial 探针本轮已支持）。
-  /// - 两者皆 false：真的没有可用数值，UI 显示「未测量」。
-  /// 该组件当前可显示的延迟，带来源与模式（实测 / 实时推算 / 零延迟 / 未测定）。
+  /// R-05：全链路延迟的拆分口径只在这里算一次，频响分析器等消费方
+  /// 直接读取本 getter，不得再自行遍历槽位做样本→毫秒换算。
+  double get pluginChainLatencyMs {
+    double totalMs = 0.0;
+    if (deviceRate <= 0) return 0.0;
+    for (var s = 0; s < PluginManager.kMaxSlots; s++) {
+      if (pluginManager.isSlotActive(s) && !pluginManager.isSlotBypassed(s)) {
+        totalMs += samplesToMs(pluginManager.getSlotLatency(s), deviceRate);
+      }
+    }
+    return totalMs;
+  }
+
+  /// 核心效果器链累计延迟（ms）= 全链路总延迟 − 插件部分。
+  double get coreChainLatencyMs {
+    final total = fullChainLatencyMs;
+    return (total - pluginChainLatencyMs).clamp(0.0, total);
+  }
+
   /// 全链路端到端总延迟（ms）：统揽所有启用核心效果器 + 第三方插件槽位延迟
   double get fullChainLatencyMs {
     double totalMs = 0.0;
@@ -1192,15 +1204,12 @@ class AppModel extends ChangeNotifier {
     if (limiterOn) {
       totalMs += componentLatency('limiter').ms;
     }
-    // 第三方插件槽位延迟
-    for (var s = 0; s < PluginManager.kMaxSlots; s++) {
-      if (pluginManager.isSlotActive(s) && !pluginManager.isSlotBypassed(s) && deviceRate > 0) {
-        totalMs += samplesToMs(pluginManager.getSlotLatency(s), deviceRate);
-      }
-    }
+    // 第三方插件槽位延迟（统一走 pluginChainLatencyMs）
+    totalMs += pluginChainLatencyMs;
     return totalMs;
   }
 
+  /// 该组件当前可显示的延迟，带来源与模式（实测 / 实时推算 / 零延迟 / 未测定）。
   ({double ms, bool measured, bool estimated, LatencyMode mode}) componentLatency(String compId) {
     // 1. 实测优先：若已真实完成脉冲探测，返回实测数据
     final m = _measuredLatencyMs[compId];

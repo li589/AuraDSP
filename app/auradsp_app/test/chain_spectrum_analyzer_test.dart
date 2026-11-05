@@ -2,7 +2,6 @@
 import 'package:auradsp_app/core/audio_modes.dart';
 import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/plugins/plugin_manager.dart';
-import 'package:auradsp_app/core/plugins/plugin_models.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
 import 'package:auradsp_app/features/chain/chain_spectrum_analyzer.dart';
@@ -122,6 +121,11 @@ void main() {
       expect(res.coreLatencyMs, closeTo(1.5, 0.05));
       expect(res.pluginLatencyMs, closeTo(2.0, 0.05));
       expect(res.totalLatencyMs, closeTo(3.5, 0.05));
+
+      // R-05：拆分值必须与 AppModel 单一出口一致，分析器不再有第二套算式
+      expect(model.coreChainLatencyMs, closeTo(res.coreLatencyMs, 0.001));
+      expect(model.pluginChainLatencyMs, closeTo(res.pluginLatencyMs, 0.001));
+      expect(model.fullChainLatencyMs, closeTo(res.totalLatencyMs, 0.001));
 
       model.updateFullChainMeasuredLatency(res.totalLatencyMs);
       expect(model.latencyMs, closeTo(3.5, 0.05));

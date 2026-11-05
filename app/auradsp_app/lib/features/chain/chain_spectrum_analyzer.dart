@@ -15,7 +15,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/audio_modes.dart';
 import '../../core/design.dart';
-import '../../core/plugins/plugin_manager.dart';
 import '../../core/io/resource_gate.dart';
 import '../../core/channel_layout.dart';
 import '../../core/state.dart';
@@ -536,20 +535,11 @@ class FullChainTransferCalculator {
       }
     }
 
-    // 3. 计算端到端全链路总延迟：严格走 AppModel 统一聚合核心，杜绝多套逻辑不一致
-    double pluginLat = 0.0;
-    final pm = model.pluginManager;
-    for (var s = 0; s < PluginManager.kMaxSlots; s++) {
-      if (pm.isSlotActive(s) && !pm.isSlotBypassed(s)) {
-        final spl = pm.getSlotLatency(s);
-        if (spl > 0) {
-          pluginLat += samplesToMs(spl, model.deviceRate);
-        }
-      }
-    }
-
+    // 3. 延迟拆分统一走 AppModel 口径（R-05）：总延迟与插件部分都由
+    //    state 单点计算，分析器不再自行遍历槽位换算，避免两套数值。
     final totalLat = model.fullChainLatencyMs;
-    final coreLat = (totalLat - pluginLat).clamp(0.0, totalLat);
+    final pluginLat = model.pluginChainLatencyMs;
+    final coreLat = model.coreChainLatencyMs;
 
     // 增益极值统计
     var minG = 0.0;
