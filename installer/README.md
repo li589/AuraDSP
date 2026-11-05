@@ -17,7 +17,8 @@ installer/
 │   ├── 01_distribution_architecture.md   # 发行架构总纲与跨平台分发规范
 │   ├── 02_windows_installer_design.md     # 自研 Windows 安装程序设计方案
 │   ├── 03_linux_packaging_spec.md        # Linux (DEB/AppImage/Flatpak/Snap) 打包规格
-│   └── 04_mobile_macos_spec.md           # Android & macOS 打包与签名规范
+│   ├── 04_mobile_macos_spec.md           # Android & macOS 打包与签名规范
+│   └── 05_installer设计与实施规划-2026-11-06.md  # 子项目总体设计、选型调研与阶段计划
 ├── shared/                        # 跨平台共享资源与元数据
 │   ├── README.md                  # 共享资源说明
 │   ├── assets/                    # 图标、横幅、徽标 (.ico, .png, .svg)
@@ -90,4 +91,5 @@ installer/
 - [02. 自研 Windows 安装程序设计方案](docs/02_windows_installer_design.md)
 - [03. Linux (DEB / AppImage / Flatpak / Snap) 规格方案](docs/03_linux_packaging_spec.md)
 - [04. Android 与 macOS 发行与签名规格方案](docs/04_mobile_macos_spec.md)
+- [05. installer 子项目设计与实施规划](docs/05_installer设计与实施规划-2026-11-06.md)
 
