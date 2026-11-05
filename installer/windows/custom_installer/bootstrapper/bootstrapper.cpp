@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <cwchar>
 #include <iterator>
@@ -342,10 +343,9 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
             FindClose(h);
         }
     }
-    wchar_t pidBuf[32];
-    wsprintfW(pidBuf, L"%lu", GetCurrentProcessId());
     std::wstring session =
-        base + L"\\" + std::wstring(shaTag, shaTag + 8) + L"-" + pidBuf;
+        base + L"\\" + std::wstring(shaTag, shaTag + 8) + L"-" +
+        std::to_wstring(GetCurrentProcessId());
     std::wstring wizardDir = session + L"\\wizard";
     if (!EnsureDir(session) || !EnsureDir(wizardDir))
         return Fail(L"Cannot create the temp extraction directory.");
@@ -367,13 +367,10 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
                      tail.find(L"--uninstall") != std::wstring::npos;
     if (uninstall && tail.find(L"--mode") == std::wstring::npos)
         cmd += L" --mode uninstall";
-    wchar_t numBuf[32];
     cmd += L" --setup-exe \"" + self + L"\" --payload-off ";
-    _ui64tow_s(offP, numBuf, std::size(numBuf), 10);
-    cmd += numBuf;
+    cmd += std::to_wstring(offP);
     cmd += L" --payload-len ";
-    _ui64tow_s(lenP, numBuf, std::size(numBuf), 10);
-    cmd += numBuf;
+    cmd += std::to_wstring(lenP);
     cmd += L" --session-dir \"" + session + L"\"";
 
     std::vector<wchar_t> cmdBuf(cmd.begin(), cmd.end());
