@@ -10,6 +10,7 @@
 import 'dart:io';
 
 import 'io/document_store.dart';
+import 'io/resource_gate.dart';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'audio_modes.dart';
@@ -423,6 +424,21 @@ abstract final class ConfigManager {
         save(cfg);
       }
       return cfg;
+    }
+    // APP-01（全项目审查 S7）：文件存在但解析失败（badJson/unreadable/
+    // tooLarge 等）时，先把坏档改名隔离再生成默认——旧实现直接以默认
+    // 覆盖，用户设置与损坏证据一并销毁且无从抢救。首次运行（missing）
+    // 不隔离。隔离失败不阻塞启动（swallow 后继续走默认）。
+    if (read.issue != ResourceIssue.missing) {
+      try {
+        final bad = File(configPath);
+        if (bad.existsSync()) {
+          bad.renameSync('$configPath.corrupt-'
+              '${DateTime.now().millisecondsSinceEpoch}');
+        }
+      } catch (e, st) {
+        swallow(e, st);
+      }
     }
     // 首次运行或解析失败，生成并写入默认配置
     final cfg = AppConfig();
