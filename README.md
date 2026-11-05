@@ -11,12 +11,28 @@
 Windows 侧是进程内 WASAPI 泵 + `auradsp_engine.dll`；Android 侧经 AIDL effects HAL 注入系统音频链路。
 UI 与引擎之间只有一层 **C ABI**（`engine/auradsp_engine.h`），UI 不感知引擎形态、也不感知引擎在哪个进程。
 
+> **项目状态**：Windows 成品级（主力形态）· Linux 功能对等已交付 · Android Root 端到端打通 ·
+> 2026-11-05 完成全项目深度审查（驱动 / 引擎 / 插件 / App / 跨组件五面），7 条发现全部修复闭环。
+
+**核心亮点**
+
+- **一套界面，三种形态**：Windows 桌面（WASAPI / AuraVAIO 虚拟声卡 / Voicemeeter / ASIO 四后端）、
+  Linux 桌面（PulseAudio 三模式 + ALSA 专家模式）、Android Root（AIDL effects HAL 系统级注入）。
+- **自研 DSP 链**：11 个自研效果 TU + 12 级经典算法链（可重排序）+ 卷积 / DDC / EEL2 可编程脚本，
+  参数与预设全数据驱动，引擎参数表单一真源、双端对账门禁看守。
+- **真插件宿主**：VST3 / CLAP / VST2 三格式，64 位进程内、32 位自动位桥隔离，
+  插件原生编辑器窗口在 Windows 与 Linux（X11）双平台对等开放。
+- **系统级集成**：自研 AuraVAIO 内核虚拟声卡（多声道 WaveRT）、虚拟 ASIO、系统 APO、
+  Voicemeeter 回调桥——2026-11-05 经深度审查硬化（内核环几何真值化、控制设备
+  SDDL 收紧 + 独占映射防劫持，真机实证）。
+- **工程纪律**：RT 线程零分配零锁、CI 八 job 双流水线、140+ 冒烟门禁与多道脚本门禁常绿。
+
 | 关键面 | 现状 |
 |---|---|
 | 主力形态 | Windows 10 / 11 桌面，全功能；四种音频后端可切 |
 | 处理能力 | 23 个效果处理单元（能力计数）= 自研 11 个效果 TU + vendor 12 级可重排序链；另有插件 4 槽 × 5 级插入（链页按 20 个可见阶段展示） |
 | 插件宿主 | VST3 / CLAP / VST2；64 位加载走进程内，32 位自动经 `plugin_host_x86` 位桥；`AURA_PLUGIN_HOST_MODE=process` 切加载硬隔离；扫描=快扫本地、深扫按位数进对应宿主（`AURA_PLUGIN_DEEP_SCAN=inproc` 回退引擎内深扫） |
-| 质量门禁 | analyze 零问题 · Dart 67 个测试文件 / 580+ 用例 · 引擎冒烟 142 项 · ABI / 补丁编号 / 静默异常三道脚本门禁 · GitHub CI 八 job（Win/Linux 双流水线） |
+| 质量门禁 | analyze 零问题 · Dart 单测 70 文件通过 / 4 平台跳过（CI 口径） · 引擎冒烟 143 项 · ABI / 补丁编号 / 静默异常三道脚本门禁 · GitHub CI 八 job（Win/Linux 双流水线） · 全项目深度审查 S0–S8 已结案（2026-11-05） |
 
 目录：[它是什么](#1-它是什么) · [形态矩阵](#2-形态矩阵) · [音频链路](#3-音频链路) · [近期里程碑](#4-近期里程碑) · [快速开始](#5-快速开始) · [仓库结构](#6-仓库结构) · [质量门禁](#7-质量门禁) · [文档入口](#8-文档入口) · [许可证与致谢](#9-许可证与致谢)
 
@@ -58,14 +74,14 @@ UI 与引擎之间只有一层 **C ABI**（`engine/auradsp_engine.h`），UI 不
 | **Desktop** | Windows 10 / 11 | 进程内 WASAPI 泵 + `auradsp_engine.dll`（DLL 进程内 FFI） | ● 主力，全功能 |
 | **Root** | Android（KSU / Magisk） | AIDL effects HAL 注入，系统级全局 | ● 端到端打通 + 重启持久化 |
 | **Rootless** | Android APK | 会话级 AudioEffect 前台服务 | ○ 蓝本 `source/RootlessJamesDSP` |
-| **Linux** | Ubuntu（PulseAudio） | 引擎 `libauradsp_engine.so`（与 Windows 同一 C ABI / 同 56 符号）+ PulseAudio simple API 输出 | ✅ 一期已交付（`feature/linux` 已合入 `dev`，PR #21）：引擎与 App 闭环、CI 全绿，Ubuntu 24.04 真机验证通过；三模式功能对等（S5a：系统 / 虚拟 sink / snd-aloop 驱动，真机回环采集走 `.monitor` 源）；桌面体验齐备（S5b：XDG 目录拆分、托盘 PNG、XDG 自启、MPRIS 媒体会话）；治理收尾完成（S5c：插件目录 UI 按 D-7 隐藏、死依赖清理、库加载单点化）；真机轮次另修复输出泵饿死、Impeller 软件 GL 重绘损坏与频谱门三项（详见 `docs/40-回顾/Linux移植收官回顾-2026-11-02.md`，验证步骤见同目录《Linux真机验证清单》）；二期续加 **ALSA 直连专家模式**（D-6 二期：period 256 帧直连输出/采集、driver 模式直采 `hw:Loopback`，设置页可切换，默认仍 PulseAudio） 与 **插件宿主全量**（D-7 二期：VST3/CLAP 进程内托管 + 双宿主隔离 `plugin_host_x64`/`plugin_host_x86` 与 32 位桥，CI 活体实证）；其后完成细致打磨三期（驱动健壮性/状态可见性/设置完整性）与代码安全+边界审查（IPC 对端认证等 8 项修复，详见 `docs/40-回顾/Linux打磨与安全审查-2026-11-02.md`） |
+| **Linux** | Ubuntu（PulseAudio） | 引擎 `libauradsp_engine.so`（与 Windows 同一 C ABI / 同 56 符号）+ PulseAudio simple API 输出 | ✅ 一期已交付（`feature/linux` 已合入 `dev`，PR #21）：引擎与 App 闭环、CI 全绿，Ubuntu 24.04 真机验证通过；三模式功能对等（S5a：系统 / 虚拟 sink / snd-aloop 驱动，真机回环采集走 `.monitor` 源）；桌面体验齐备（S5b：XDG 目录拆分、托盘 PNG、XDG 自启、MPRIS 媒体会话）；治理收尾完成（S5c：插件目录 UI 按 D-7 隐藏、死依赖清理、库加载单点化）；真机轮次另修复输出泵饿死、Impeller 软件 GL 重绘损坏与频谱门三项（详见 `docs/40-回顾/Linux移植收官回顾-2026-11-02.md`，验证步骤见同目录《Linux真机验证清单》）；二期续加 **ALSA 直连专家模式**（D-6 二期：period 256 帧直连输出/采集、driver 模式直采 `hw:Loopback`，设置页可切换，默认仍 PulseAudio） 与 **插件宿主全量**（D-7 二期：VST3/CLAP 进程内托管 + 双宿主隔离 `plugin_host_x64`/`plugin_host_x86` 与 32 位桥，CI 活体实证）；其后完成细致打磨三期（驱动健壮性/状态可见性/设置完整性）与代码安全+边界审查（IPC 对端认证等 8 项修复，详见 `docs/40-回顾/Linux打磨与安全审查-2026-11-02.md`）；其后 **X11 插件编辑器 GUI**（2026-11-04：顶层容器 + 最小 XEmbed 宿主，CLAP/VST3/VST2 三格式编辑器对等开放）与 **VST2 Linux 跟进**（ELF 入口判定扫描 + 位桥深扫/加载）落地；2026-11-05 全项目深度审查收尾 Linux 侧：虚拟 sink 生命周期治理（退出/切离自动卸载、残留先卸后装）与 PA/PipeWire 重启后输出死亡自动恢复 |
 
 **Windows 四种音频后端**（`app/auradsp_app/lib/core/audio_modes.dart`）：
 
 | 模式 | 含义 | 备注 |
 |---|---|---|
 | `sysapo` | System APO | 默认；回归纯配置面 |
-| `vaio` | AuraVAIO 虚拟声卡 | 驱动已点亮，选择持久化 |
+| `vaio` | AuraVAIO 虚拟声卡 | 驱动已点亮，选择持久化；内核侧经深度审查硬化（环几何真值派生 + 控制设备 SDDL/独占映射，见 §4 里程碑 2026-11-05） |
 | `vbcallback` | Voicemeeter 回调 | 支持活切；按总线（路）独立引擎 |
 | `asio` | 专业 ASIO | 支持活切；2/4/6/8 声道多线 |
 
@@ -126,6 +142,8 @@ Voicemeeter 桥（`bridge/vm_bridge` + `02_voicemeeter_client`）按路处理：
 
 | 日期 | 内容 | 提交 |
 |---|---|---|
+| 2026-11-05 | **全项目深度审查结案（S0–S8）**：驱动 / 引擎 / 插件 / App / 跨组件五面全审，7 条发现全闭环——VAIO 内核环拷贝改内核真值几何（P0）、控制设备 SDDL 收紧 + 独占映射防劫持（真机反劫持 170/5 双拒实证）、Linux 输出端点死亡自动恢复、虚拟 sink 生命周期治理、参数 SSOT 三处对齐、VST3 预置读入上限、文档原子写 + 坏档隔离；CI 八 job 全绿 | 见 `docs/30-审查/全项目深度审查方案与报告-2026-11-05.md` |
+| 2026-11-04 | Linux 插件编辑器 GUI（X11）：运行时 dlopen libX11 窗口层 + 最小 XEmbed 宿主，CLAP/VST3/VST2 三格式编辑器对等开放；配套代码审查修复 X 错误处理器缺失（F1）等 5 项，CI 全绿 | 见 `docs/10-架构/Linux编辑器GUI评估-2026-11-04.md` |
 | 2026-11-05 | 效果器延迟计算全域统一与 DAW 工控级监视舱重构（消除 AI 味）：① 定义 5 态延迟模型（实测/参数推算/测定中/零延迟/未测定）与全局统一色彩规范映射；② 测定路径唯一化，统一经由异步安全管道派发并反哺全链总延迟；③ 右上角彻底废弃悬浮药丸与呼吸光晕，重构为专业 DAW 一体化深灰金属切面主状态总控舱（MasterStatusConsole），配备 5.5px 纯净固态硬件 LED 与等宽 Monospace PDC 延迟仪表 | 见 `docs/40-回顾/处理链全流程复合频响测量与科幻信号流全景重构-2026-11-05.md` |
 | 2026-11-05 | 处理链全流程复合频响测量与科幻信号流全景重构：① 顶部集成 EqualizerAPO 风格全流程复合曲线/折线频谱图（256 点纯内存解析传递函数，支持立体声/左/右声道及 Voicemeeter A1~Ax 总线动态切换，静音测量与延迟反哺）；② 全局信号流卡片全面升级为未来科技感交互面板（HUD 展开动效、PCB 电路板背景与流光粒子、Stage 0~4 插件芯片插槽实时嵌入、重绘科技能量流光箭头、支持自由平移缩放与 100% 复位） | 见 `docs/40-回顾/处理链全流程复合频响测量与科幻信号流全景重构-2026-11-05.md` |
 | 2026-11-05 | 插件界面视觉降噪与规范收敛：移除第三方效果器库副标题说明文字，彻底移除底部 M1 插件宿主引擎规范整卡 | `2e2595e` |
@@ -153,7 +171,7 @@ Voicemeeter 桥（`bridge/vm_bridge` + `02_voicemeeter_client`）按路处理：
 | Windows | 10 / 11（驱动套件仅 Windows） |
 | Visual Studio | 2026 + MSVC x64，C++20（`build_engine.sh` 用 `-G "Visual Studio 18 2026"`） |
 | CMake | 随 VS 附带即可 |
-| Flutter | 3.47.7+，需启用 Windows desktop；`flutter doctor` 全绿 |
+| Flutter | 3.47.9（当前基线），需启用 Windows desktop；`flutter doctor` 全绿 |
 | Python | 3.10+（冒烟测试与 `tools/bin` 门禁脚本） |
 
 **桌面引擎**（产物 `core/desktop/windows/out/Release/auradsp_engine.dll`，脚本会自动同步多副本）
@@ -193,7 +211,7 @@ python ../../tools/bin/run_dart_tests.py      # T-03：按文件串行 + 失败�
 **测试与工具**
 
 ```powershell
-python test/runner.py --smoke                 # 引擎冒烟（统一入口，142 项登记，按平台自动切换）
+python test/runner.py --smoke                 # 引擎冒烟（统一入口，143 项登记，按平台自动切换）
 python test/runner.py --ui                    # UI 自动化（置顶前置，默认 7 个脚本）
 python tools/bin/abi_consistency.py           # .def / 头文件 / ffi.dart 三处符号一致
 python tools/bin/verify_dll_copies.py --sync  # DLL 多副本哈希同步（禁手拷）
@@ -229,9 +247,9 @@ AuraDSP/
 │   ├── desktop/windows/             CMakeLists + build_engine.sh → out/Release/*.dll
 │   ├── desktop/windows-drivers/     独立 CMake：01 VAIO / 02 VM 泵 / 03 自研 APO / 04 ASIO 双线 / bridge 三桥
 │   └── android/                     registrar / spike-global-effect / stubs / aidl-gen / vendor-src
-├── app/auradsp_app/         Flutter 3.47.7 · 121 个 dart（不含 l10n 生成）· 21 张效果卡
+├── app/auradsp_app/         Flutter 3.47.9 · 203 个 dart（不含 l10n 生成）· 21 张效果卡
 ├── test/
-│   ├── smoke/                       123 个脚本（117 个 smoke_*.py + 6 个插件/桥专用）；runner 全部登记
+│   ├── smoke/                       146 个脚本（137 个 smoke_*.py + 9 个探针/专用）；runner 登记 143 项
 │   └── ui/                          14 个 UI 脚本；runner 默认跑 7 个
 ├── tools/                   bin 14 · probe 22 · resource_pipeline 2 · calibration 1（archive/ 不入库）
 ├── source/                  第三方参考仓库只读快照（17 项）
@@ -250,8 +268,8 @@ AuraDSP/
 | 门禁 | 命令 | 覆盖范围 |
 |---|---|---|
 | Dart 静态分析 | `flutter analyze` | 全量 lib + test，要求零问题 |
-| Dart 单测 | `python tools/bin/run_dart_tests.py` | 61 个测试文件；按文件串行 + 失败单文件重试两次（全量并发不可信）；Windows 范式专属 4 文件在非 Windows 主机显式 SKIP-PLATFORM |
-| 引擎冒烟 | `python test/runner.py --smoke` | 142 项：DSP 正确性、插件生命周期、桥 ABI、竞态；平台标记（PLATFORM_WINDOWS / PLATFORM_LINUX）按开发平台自动切换 |
+| Dart 单测 | `python tools/bin/run_dart_tests.py` | 74 个测试文件（CI 口径 70 通过 + 4 平台跳过）；按文件串行 + 失败单文件重试两次（全量并发不可信）；Windows 范式专属 4 文件在非 Windows 主机显式 SKIP-PLATFORM |
+| 引擎冒烟 | `python test/runner.py --smoke` | 143 项：DSP 正确性、插件生命周期、桥 ABI、竞态；平台标记（PLATFORM_WINDOWS / PLATFORM_LINUX）按开发平台自动切换 |
 | ABI 一致性 | `python tools/bin/abi_consistency.py` | `.def` ↔ 头文件 ↔ `ffi.dart` ↔ `.map`（Linux version script）四处符号与签名 |
 | CI | `.github/workflows/ci.yml` | 八 job：静态门禁 / Linux 引擎构建 / Linux 冒烟 / ABI / Windows 构建 / Dart 测试 / 资源守卫 / Linux App 打包与无头启动，push 与 PR 均触发 |
 | DLL 副本同步 | `python tools/bin/verify_dll_copies.py --sync` | 三处副本哈希一致（禁手拷） |
@@ -259,8 +277,11 @@ AuraDSP/
 | 静默异常 | `python tools/bin/dart_swallow_scan.py` | 空 `catch` 必须留痕或标注理由 |
 | 硬编码中文 | `test/l10n_cjk_guard_test.dart` | 棘轮：`lib/features` + `lib/ui` 基线只降不升 |
 
-最近一轮（2026-10-28）：analyze 零问题、Dart 580+ 用例通过、冒烟 100%。
-Linux 侧（2026-11-02，二期 + 打磨 + 安全审查后）：analyze 零问题、Linux 冒烟 PASS 14 / SKIP 128（Windows 专属）/ FAIL 0（共 142 项）、GitHub CI 八 job 全绿（基线 run 41456330844，含 J3 的 x86 桥活体实证）；一期已合入 `dev`（PR #21）并经 Ubuntu 24.04 真机全量验证，二期与打磨/审查增量待下轮合并与真机验收（清单 §3b/§3c/§3d）。
+最近基线（2026-11-05，全项目深度审查结案轮）：analyze 零问题、Dart 单测 70 文件 PASS / FAIL 0、
+引擎冒烟 Linux 口径 PASS 14 / SKIP 129（Windows 专属）/ FAIL 0、GitHub CI 八 job 全绿
+（run 42025227808，含 J3 的 x86 桥活体实证与 J6 全量 Dart 测试）。深度审查 7 条发现已全部
+闭环（内核 P0 含真机 WDK 构建与双 VM 实测、控制设备防劫持含真机反劫持脚本实证）；
+`feature/linux` 待 owner 合入 `dev`。
 
 ---
 
@@ -273,7 +294,7 @@ Linux 侧（2026-11-02，二期 + 打磨 + 安全审查后）：analyze 零问�
 | [`docs/README.md`](docs/README.md) | **`docs/` 导航入口**（完整索引） |
 | [`docs/00-总览/项目架构与开发规范.md`](docs/00-总览/项目架构与开发规范.md) | **工程唯一真相源**：目录约定 / 分层 / 构建规范 / 已验证决策表 |
 | [`docs/00-总览/产品架构总览.md`](docs/00-总览/产品架构总览.md) | **产品与品牌真相源**：命名体系 / 形态矩阵 |
-| [`docs/30-审查/预设系统与硬置入复检-2026-10-28.md`](docs/30-审查/预设系统与硬置入复检-2026-10-28.md) | 最近一轮专项复检：预设边界 / 基线门禁 / 硬置入排查结论 |
+| [`docs/30-审查/全项目深度审查方案与报告-2026-11-05.md`](docs/30-审查/全项目深度审查方案与报告-2026-11-05.md) | **最近一轮全量审查（已结案）**：驱动 / 引擎 / 插件 / App / 跨组件五面 + 7 条发现修复与复审台账 |
 | [`.ai/memory/MEMORY.md`](.ai/memory/MEMORY.md) | **项目长期备忘**：既定范式 / 避坑 / 测试 SOP（入库的唯一记忆真相源） |
 | [`docs/源码重组与目录规范方案-2026-10-13.md`](docs/源码重组与目录规范方案-2026-10-13.md) | 目录重组的诊断 / 目标树 / 政策 / 分期 |
 | [`docs/40-回顾/处理链全流程复合频响测量与科幻信号流全景重构-2026-11-05.md`](docs/40-回顾/处理链全流程复合频响测量与科幻信号流全景重构-2026-11-05.md) | 处理链全流程复合频响测量（EqualizerAPO风格）与科幻信号流全景重构 |
