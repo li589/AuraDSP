@@ -138,6 +138,7 @@ class _ChainOrderCardState extends State<ChainOrderCard> {
                 physics: const AuraListScrollPhysics(),
                 buildDefaultDragHandles: false,
                 itemCount: _order.length,
+                // ignore: deprecated_member_use
                 onReorder: (oldI, newI) {
                   setState(() {
                     if (newI > oldI) newI -= 1;

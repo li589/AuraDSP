@@ -291,6 +291,7 @@ class LinuxModeController {
         case 'virtual':
           final ensured = _service.ensureVirtualSink();
           if (!ensured) {
+            _service.unloadVirtualSink();
             _detachCapture(restoreSaved: true);
             _send(_statusEvent(note: 'virtual-sink-unavailable', active: false));
             return;
@@ -304,6 +305,7 @@ class LinuxModeController {
           _send(_statusEvent(active: true));
           break;
         case 'driver':
+          _service.unloadVirtualSink();
           if (!_service.asoundLoopbackLoaded()) {
             _detachCapture(restoreSaved: true);
             _send(_statusEvent(note: 'snd-aloop-not-loaded', active: false));
@@ -337,6 +339,7 @@ class LinuxModeController {
           break;
         case 'system':
         default:
+          _service.unloadVirtualSink();
           _mode = 'system';
           _detachCapture(restoreSaved: true);
           _send(_statusEvent(active: false));
@@ -344,6 +347,9 @@ class LinuxModeController {
       }
     } catch (e) {
       dbgLog('LINUXMODE apply($mode) failed: $e');
+      if (mode == 'virtual') {
+        _service.unloadVirtualSink();
+      }
       _detachCapture(restoreSaved: true);
       _send(_statusEvent(note: 'pulse-unavailable', active: false));
     }
@@ -351,5 +357,6 @@ class LinuxModeController {
 
   void dispose() {
     _detachCapture(restoreSaved: false);
+    _service.unloadVirtualSink();
   }
 }

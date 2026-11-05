@@ -107,6 +107,10 @@ AuraDSP 的虚拟声卡与 ASIO 能力依赖系统级集成：
    - 核心文件：`auravaio_bridge.dll`。
    - 创建用于跨进程音频泵送的共享内存与命名事件，确保开机自启或主程序唤醒时具备合规句柄权限。
 
+3. **驱动残留检测与自动重装铁律（DRV 规约）**：
+   - 在安装/注册任何驱动（AuraVAIO 设备节点、AuraASIO COM 注册项）前，若检测到旧版驱动、幽灵设备节点或残留服务，**必须先自动执行彻底反注册/卸载清理，再进行全新安装**。
+   - 杜绝覆盖安装产生幽灵设备冲突、驱动文件占用或 COM 指向陈旧路径。
+
 ### 4.3 写入系统“添加/删除程序” (Registry Uninstall Registration)
 为了让用户在 Windows 系统“设置 -> 应用 -> 已安装的应用”中找到并管理 AuraDSP，安装程序必须在以下位置写入规范的标准键值：
 - 路径（Per-User）：`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\AuraDSP`

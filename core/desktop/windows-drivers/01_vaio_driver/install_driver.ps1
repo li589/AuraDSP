@@ -269,6 +269,17 @@ function Invoke-Install {
         if (-not $ok) { throw '测试签名前置条件未满足（testsigning 未开），已停止。' }
     }
 
+    # 安装前如果发现有驱动残留，自动卸载后重装 (DRV 规约)
+    if ($devcon) {
+        $existing = & $devcon find $HwId 2>&1
+        if ($LASTEXITCODE -eq 0 -and ($existing -match 'matching device' -and -not ($existing -match 'No matching devices'))) {
+            Write-Host '检测到已有驱动/设备节点残留，按规约在安装前自动卸载清理...' -ForegroundColor Yellow
+            foreach ($id in @($HwId, $HwIdAlt)) {
+                & $devcon remove $id 2>&1 | ForEach-Object { Write-Host "    $_" }
+            }
+        }
+    }
+
     Write-Host '[1/3] 把驱动包装入 DriverStore'
     & "$env:SystemRoot\System32\pnputil.exe" /add-driver $InfPath /install
     if ($LASTEXITCODE -ne 0) { throw "pnputil 失败 (exit $LASTEXITCODE)" }

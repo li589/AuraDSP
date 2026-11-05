@@ -15,6 +15,7 @@ Abstract:
 --*/
 
 #include "ControlDevice.h"
+#include <wdmsec.h>
 
 //=============================================================================
 // Globals
@@ -62,17 +63,26 @@ AuraControlDevice_Create(
     RtlInitUnicodeString(&ntDeviceName, AURA_VAIO_DEVICE_NAME_NT);
     RtlInitUnicodeString(&dosDeviceName, AURA_VAIO_DOS_DEVICE_NAME);
 
-    ntStatus = IoCreateDevice(
+    // DRV-04: IoCreateDeviceSecure with SDDL restricting access to SYSTEM (SY),
+    // Administrators (BA), and Interactive Users (IU).
+    // WD (Everyone) is excluded to prevent unprivileged sandboxes or remote callers
+    // from accessing or hijacking the control device.
+    UNICODE_STRING sddl;
+    RtlInitUnicodeString(&sddl, L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGWGX;;;IU)");
+
+    ntStatus = IoCreateDeviceSecure(
                     DriverObject,
                     0,
                     &ntDeviceName,
                     FILE_DEVICE_UNKNOWN,
-                    0,
+                    FILE_DEVICE_SECURE_OPEN,
                     FALSE,
+                    &sddl,
+                    NULL,
                     &g_pControlDeviceObject);
     if (!NT_SUCCESS(ntStatus))
     {
-        AURA_TRACE("IoCreateDevice failed, 0x%08X\n", ntStatus);
+        AURA_TRACE("IoCreateDeviceSecure failed, 0x%08X\n", ntStatus);
         return ntStatus;
     }
 
@@ -373,7 +383,6 @@ AuraControlDevice_DispatchDeviceControl(
         }
         {
             PAURA_VAIO_MAP_RESPONSE pResp = reinterpret_cast<PAURA_VAIO_MAP_RESPONSE>(systemBuffer);
-            PAURA_VAIO_SHARED_HEADER pHeader = reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer);
             PEPROCESS currentProc = PsGetCurrentProcess();
             PVOID userVa = NULL;
 
@@ -384,20 +393,16 @@ AuraControlDevice_DispatchDeviceControl(
             {
                 userVa = g_pMappedUserAddress;
             }
+            else if (g_pMappedUserAddress != NULL)
+            {
+                // DRV-04: Ring buffer is exclusively held by another process.
+                // Reject hijack attempts with STATUS_DEVICE_BUSY instead of unmapping the owner.
+                KeReleaseSpinLock(&g_RingLock, oldIrql);
+                ntStatus = STATUS_DEVICE_BUSY;
+                break;
+            }
             else
             {
-                // Unmap previous mapping if another process had it open
-                if (g_pMappedUserAddress != NULL)
-                {
-                    __try
-                    {
-                        MmUnmapLockedPages(g_pMappedUserAddress, g_pRingMdl);
-                    }
-                    __except (EXCEPTION_EXECUTE_HANDLER) {}
-                    g_pMappedUserAddress = NULL;
-                    g_pMappedProcess = NULL;
-                }
-
                 __try
                 {
                     userVa = MmMapLockedPagesSpecifyCache(
@@ -454,18 +459,34 @@ AuraControlDevice_DispatchDeviceControl(
 
             PEPROCESS currentProc = PsGetCurrentProcess();
             KeAcquireSpinLock(&g_RingLock, &oldIrql);
-            if (g_pMappedUserAddress != NULL && g_pRingMdl != NULL &&
-                (reqAddress == NULL || reqAddress == g_pMappedUserAddress) &&
-                (g_pMappedProcess == NULL || g_pMappedProcess == currentProc))
+            if (g_pMappedUserAddress != NULL)
             {
-                __try
+                if (g_pMappedProcess != NULL && g_pMappedProcess != currentProc)
                 {
-                    MmUnmapLockedPages(g_pMappedUserAddress, g_pRingMdl);
-                    AURA_TRACE("UNMAP_SHARED_RING: userVa=%p unmapped\n", g_pMappedUserAddress);
+                    // DRV-04: Non-owning process cannot unmap another process's mapping
+                    KeReleaseSpinLock(&g_RingLock, oldIrql);
+                    ntStatus = STATUS_ACCESS_DENIED;
+                    break;
                 }
-                __except (EXCEPTION_EXECUTE_HANDLER)
+
+                if (reqAddress != NULL && reqAddress != g_pMappedUserAddress)
                 {
-                    ntStatus = GetExceptionCode();
+                    KeReleaseSpinLock(&g_RingLock, oldIrql);
+                    ntStatus = STATUS_INVALID_PARAMETER;
+                    break;
+                }
+
+                if (g_pRingMdl != NULL)
+                {
+                    __try
+                    {
+                        MmUnmapLockedPages(g_pMappedUserAddress, g_pRingMdl);
+                        AURA_TRACE("UNMAP_SHARED_RING: userVa=%p unmapped\n", g_pMappedUserAddress);
+                    }
+                    __except (EXCEPTION_EXECUTE_HANDLER)
+                    {
+                        ntStatus = GetExceptionCode();
+                    }
                 }
                 g_pMappedUserAddress = NULL;
                 g_pMappedProcess = NULL;
@@ -473,7 +494,7 @@ AuraControlDevice_DispatchDeviceControl(
             }
             else
             {
-                ntStatus = (g_pMappedUserAddress == NULL) ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
+                ntStatus = STATUS_SUCCESS;
             }
             KeReleaseSpinLock(&g_RingLock, oldIrql);
         }
