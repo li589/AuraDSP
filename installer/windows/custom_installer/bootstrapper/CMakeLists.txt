@@ -20,6 +20,10 @@ target_link_libraries(bootstrapper PRIVATE bcrypt shell32 shlwapi)
 
 if(MSVC)
   target_compile_options(bootstrapper PRIVATE /utf-8 /W4)
+  # bootstrapper.rc already embeds our manifest (1 RT_MANIFEST);
+  # without this the linker generates a second default manifest and
+  # the link dies with CVT1100 duplicate resource + LNK1123.
+  target_link_options(bootstrapper PRIVATE /MANIFEST:NO)
 endif()
 
 set_target_properties(bootstrapper PROPERTIES
