@@ -1,0 +1,79 @@
+# Windows 安装程序验证（独立于 ci.yml，设计文档
+# docs/20-执行/Windows安装程序与打包脚本实施设计-2026-11-06.md §7）：
+# 在 windows-latest 上编译引导壳（MSVC）+ 向导（Flutter），并以
+# fixture staging 跑 pack.py 全模式逻辑冒烟 + Setup 单体校验。
+name: windows-installer
+
+on:
+  push:
+    branches: [feature/linux]
+    paths:
+      - 'installer/windows/**'
+      - 'installer/shared/**'
+      - '.github/workflows/windows-installer.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-pack:
+    name: installer-windows
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Flutter（与主 CI 同钉版 3.47.9）
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          channel: 'stable'
+          cache: true
+
+      - name: 向导静态分析与单测
+        working-directory: installer/windows/custom_installer/wizard
+        shell: pwsh
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+
+      - name: 构建向导（Windows Release）
+        working-directory: installer/windows/custom_installer/wizard
+        shell: pwsh
+        run: flutter build windows --release --no-tree-shake-icons
+
+      - name: 构建引导壳（CMake/MSVC）
+        shell: pwsh
+        run: |
+          cmake -S installer/windows/custom_installer/bootstrapper -B build/installer/bootstrapper -A x64
+          if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
+          cmake --build build/installer/bootstrapper --config Release
+          if ($LASTEXITCODE -ne 0) { throw "bootstrapper build failed" }
+          if (-not (Test-Path build/installer/bootstrapper/Release/bootstrapper.exe)) {
+            throw "bootstrapper.exe missing"
+          }
+
+      - name: 汇集 installer 构建目录（pack.py 输入布局）
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build/installer/dist/wizard | Out-Null
+          Copy-Item build/installer/bootstrapper/Release/bootstrapper.exe build/installer/dist/
+          Copy-Item -Recurse -Force installer/windows/custom_installer/wizard/build/windows/x64/runner/Release/* build/installer/dist/wizard/
+
+      - name: pack.py fixture 全模式冒烟（含 Setup 拼装与 --verify）
+        shell: pwsh
+        run: |
+          python installer/windows/tests/test_pack_fixture.py
+          if ($LASTEXITCODE -ne 0) { throw "pack fixture test failed" }
+
+      - name: 上传 Setup 拼装验证产物（fixture 级）
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-fixture
+          path: build/installer/dist/bootstrapper.exe
+          retention-days: 7
+          if-no-files-found: error
