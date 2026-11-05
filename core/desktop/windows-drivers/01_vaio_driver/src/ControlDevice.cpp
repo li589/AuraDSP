@@ -423,18 +423,20 @@ AuraControlDevice_DispatchDeviceControl(
 
             if (userVa != NULL)
             {
+                /* DRV-03：应答一律报内核真值——共享头在上一个映射者手里
+                 * 可能已被改写，报它会把伪造几何递给新客户端。 */
                 pResp->UserAddress          = userVa;
                 pResp->TotalMappedSizeBytes = g_ulRingTotalSize;
-                pResp->HeaderSizeBytes      = pHeader->HeaderSizeBytes;
-                pResp->DataSizeBytes        = pHeader->DataSizeBytes;
-                pResp->SampleRate           = pHeader->SampleRate;
-                pResp->Channels             = pHeader->Channels;
-                pResp->BitsPerSample        = pHeader->BitsPerSample;
-                pResp->BlockAlign           = pHeader->BlockAlign;
+                pResp->HeaderSizeBytes      = sizeof(AURA_VAIO_SHARED_HEADER);
+                pResp->DataSizeBytes        = g_ulRingTotalSize - sizeof(AURA_VAIO_SHARED_HEADER);
+                pResp->SampleRate           = g_ulCurrentSampleRate;
+                pResp->Channels             = g_ulCurrentChannels;
+                pResp->BitsPerSample        = g_ulCurrentBitsPerSample;
+                pResp->BlockAlign           = g_ulCurrentChannels * (g_ulCurrentBitsPerSample / 8);
 
                 bytesReturned = sizeof(AURA_VAIO_MAP_RESPONSE);
                 ntStatus = STATUS_SUCCESS;
-                AURA_TRACE("MAP_SHARED_RING: userVa=%p, dataSize=%u\n", userVa, pHeader->DataSizeBytes);
+                AURA_TRACE("MAP_SHARED_RING: userVa=%p, dataSize=%u\n", userVa, pResp->DataSizeBytes);
             }
 
             KeReleaseSpinLock(&g_RingLock, oldIrql);
@@ -584,8 +586,14 @@ AuraControlDevice_WriteRenderSamples(
     if (g_pRingBuffer == NULL || Buffer == NULL || ByteCount == 0) return;
 
     pHeader = reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer);
-    pPayload = g_pRingBuffer + pHeader->DataOffsetBytes;
-    dataSize = pHeader->DataSizeBytes;
+    /* DRV-03（全项目审查 S7）：几何必须由内核自有真值派生，绝不能读
+     * 共享头——共享头对映射进程可写，DataOffsetBytes/DataSizeBytes 被
+     * 改大即可让下面的 RtlCopyMemory 写出环外（蓝屏/提权级）。共享头
+     * 里的同名字段今后只作展示副本；WriteOffset/TotalBytes 等仍经
+     * dataSize 取模/钳制，影响面被关进环内。 */
+    if (g_ulRingTotalSize <= sizeof(AURA_VAIO_SHARED_HEADER)) return;
+    pPayload = g_pRingBuffer + sizeof(AURA_VAIO_SHARED_HEADER);
+    dataSize = g_ulRingTotalSize - sizeof(AURA_VAIO_SHARED_HEADER);
 
     if (dataSize == 0) return;
 
@@ -616,9 +624,12 @@ AuraControlDevice_WriteRenderSamples(
 
     pHeader->WriteOffset = writeOffset;
     pHeader->TotalBytesWritten += ByteCount;
-    if (pHeader->BlockAlign > 0)
+    /* DRV-03：帧计数同样只用内核侧格式真值，不读共享头 BlockAlign。 */
     {
-        g_ullTotalFramesWritten += (ByteCount / pHeader->BlockAlign);
+        const ULONG blockAlign =
+            g_ulCurrentChannels * (g_ulCurrentBitsPerSample / 8);
+        if (blockAlign > 0)
+            g_ullTotalFramesWritten += (ByteCount / blockAlign);
     }
 
     KeReleaseSpinLock(&g_RingLock, oldIrql);
@@ -646,8 +657,14 @@ AuraControlDevice_ReadCaptureSamples(
     }
 
     pHeader = reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer);
-    pPayload = g_pRingBuffer + pHeader->DataOffsetBytes;
-    dataSize = pHeader->DataSizeBytes;
+    /* DRV-03：同 WriteRenderSamples——几何由内核真值派生，不读共享头。 */
+    if (g_ulRingTotalSize <= sizeof(AURA_VAIO_SHARED_HEADER))
+    {
+        RtlZeroMemory(Buffer, ByteCount);
+        return;
+    }
+    pPayload = g_pRingBuffer + sizeof(AURA_VAIO_SHARED_HEADER);
+    dataSize = g_ulRingTotalSize - sizeof(AURA_VAIO_SHARED_HEADER);
 
     if (dataSize == 0)
     {
@@ -695,9 +712,11 @@ AuraControlDevice_ReadCaptureSamples(
 
         pHeader->ReadOffset = readOffset;
         pHeader->TotalBytesRead += bytesToCopy;
-        if (pHeader->BlockAlign > 0)
         {
-            g_ullTotalFramesRead += (bytesToCopy / pHeader->BlockAlign);
+            const ULONG blockAlign =
+                g_ulCurrentChannels * (g_ulCurrentBitsPerSample / 8);
+            if (blockAlign > 0)
+                g_ullTotalFramesRead += (bytesToCopy / blockAlign);
         }
     }
 
