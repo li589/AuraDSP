@@ -22,13 +22,17 @@
 ## 2. 用法
 
 ```bash
-# 前置：Flutter Linux bundle 已构建且引擎/宿主已同步
+# 一键全量（推荐）：从干净拉取直接产出三件+便携补充形态
+# （内部串联：cmake 预设构建引擎/双宿主 → Flutter bundle → sync_artifacts → 打包）
+bash installer/linux/pack.sh --build
+# 需 cmake/ninja/flutter 与 multilib、libgtk-3-dev 等构建依赖在位（同 CI J2/J8 口径）
+
+# 或分步：bundle 已构建好时直接打包
 flutter build linux --release --no-tree-shake-icons   # 在 app/auradsp_app/
 python tools/sync_artifacts.py                        # 仓库根
-
-# 一键全量打包（版本自动取自 pubspec，经 shared/version_resolver.py 校验格式）
 bash installer/linux/pack.sh
 # 可选：--bundle DIR / --out DIR / --only deb,driver,appimage,portable
+# 版本自动取自 pubspec，经 shared/version_resolver.py 校验格式
 ```
 
 AppImage 工具链（appimagetool + type2 runtime）在首次构建时按

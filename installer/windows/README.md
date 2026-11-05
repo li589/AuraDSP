@@ -19,7 +19,22 @@ Windows 平台支持两种平行的分发模式：
 
 ## 2. 目录结构
 
-- `portable/`：便携版归档脚本、排除规则（如排除开发临时符号、调试 pdb）、目录规整逻辑。
-- `custom_installer/`：自研安装程序独立子项目源码与打包配置。
-- `build_windows_dist.ps1`（规划中）：一键触发“便携版压缩 + 自研安装程序编译 + 产物移至 dist/”的总入口脚本。
+- `pack.py`：**打包总入口**（全量可传参：`--mode driver,portable,setup`、`--resources core|full|addons|none`、`--build-staging`、`--build-installer`、`--sign` 钩子、`--verify` 自检）；逻辑自测在 `tests/test_pack_fixture.py`。
+- `portable/`：便携版说明（归档逻辑在 pack.py 的 portable 模式内）。
+- `custom_installer/`：自研安装程序子项目——`bootstrapper/`（C++ 引导壳）+ `wizard/`（Flutter 向导 auradsp_setup）。
+
+## 3. 一键构建三件（Windows 本机）
+
+前置（一次性）：Visual Studio（MSVC）+ Flutter 3.47.9 + Python 3；Steinberg ASIO SDK 解压到 `windows-drivers/CMakeLists.txt` 中 `ASIO_SDK_ROOT` 指向的路径（换机改该 cache 变量）；VAIO 内核驱动先在 VS + WDK 里构建 `01_vaio_driver/modern/AuraVaioDriver.vcxproj`（.sys/.inf/.cat 产物由 pack.py 自动发现）。
+
+```powershell
+# 1) 全量构建 staging（引擎/三桥/ASIO 驱动 auraasio_driver/App 本体）
+powershell -File tools/build_windows.ps1
+# 2) 资源包（如需 full/addons 策略；core 策略不需要）
+python tools/resource_pipeline/build_packages.py
+# 3) 打包三件到 dist/（driver zip + portable zip + Setup exe）
+python installer/windows/pack.py --build-installer --mode all --resources core
+```
+
+要点：ASIO 驱动的规范文件名是 `auraasio_driver.dll`（ADR-008；pack.py 按此名收集、入包归一化，`AuraAsioDriver.dll` 别名仅兼容识别）；setup 模式缺该 DLL 或 VAIO 产物会直接报错并指明构建路径。驱动正式签名（Attestation/EV）未完成前，产物为测试签名口径，见 05 号规划风险项。编译与打包逻辑的持续验证见 `.github/workflows/windows-installer.yml`。
 

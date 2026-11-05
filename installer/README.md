@@ -4,7 +4,7 @@
 
 本项目目录汇总了 AuraDSP 面向所有支持平台的安装包制作、打包脚本、元数据管理，以及**自主研发的 Windows 安装向导子项目**。所有发行产物均遵循统一的工程标准，最终成果集中输出至根目录下的 `dist/` 目录。
 
-> **当前状态（2026-11-06）**：**发布规范已裁定**（版本号 `vXX.XX.X`、首版 v0.1.0、仅 Win+Linux、只从 `main` 构建、门禁全绿、每平台驱动包+便携包+正式安装包三件齐备，见 `docs/01_distribution_architecture.md` 发布总则）。**Linux 部分已落地**：打包入口 `linux/pack.sh`（deb / 驱动配置包 / AppImage / tar.gz 便携包 + Flatpak/Snap 清单），总体设计与实施规划见 `docs/05_installer设计与实施规划-2026-11-06.md`。Windows 正式安装包（自研向导）仍按 `docs/02_windows_installer_design.md` 推进、尚未落地；其「驱动残留检测与自动重装铁律（DRV 规约）」见该设计 §4.2，驱动侧 `01_vaio_driver/install_driver.ps1` 已按此实现。
+> **当前状态（2026-11-07）**：**发布规范已裁定**（版本号 `vXX.XX.X`、首版 v0.1.0、仅 Win+Linux、只从 `main` 构建、门禁全绿、每平台驱动包+便携包+正式安装包三件齐备，见 `docs/01_distribution_architecture.md` 发布总则）。**双侧均已落地到「拉取即可构建发行包」**：Linux 入口 `linux/pack.sh --build`（一键：引擎→bundle→同步→deb / 驱动配置包 / AppImage / tar.gz）；Windows 入口 `windows/pack.py`（全量可传参，driver/portable/setup 三模式 + 资源自动合并），配自研两段式安装程序（C++ 引导壳 + Flutter 极光向导，见 `docs/02_windows_installer_design.md` 与 `docs/20-执行/Windows安装程序与打包脚本实施设计-2026-11-06.md`），由 `.github/workflows/windows-installer.yml` 在 windows-latest 持续验证编译与打包逻辑。资源包独立版本线（`resources-v*`，从 0.0.1 起）见 01 §2.4。未决外部项：Windows 驱动正式签名（Attestation/EV，现为测试签名，见 05 号规划风险项）。
 
 ---
 
@@ -26,12 +26,15 @@ installer/
 │   └── metadata/                  # 应用元数据 (app_info.json, 多语言描述)
 ├── windows/                       # Windows 发行与打包体系
 │   ├── README.md                  # Windows 打包体系说明
-│   ├── portable/                  # 便携版 (Portable Zip) 打包工具与配置
+│   ├── pack.py                    # Windows 全量可传参打包入口（三模式，见 windows/README.md）
+│   ├── tests/                     # pack.py fixture 自测（CI 同跑）
+│   ├── portable/                  # 便携版 (Portable Zip) 说明
 │   │   └── README.md
 │   └── custom_installer/          # 自研安装程序子项目 (AuraDSP Setup Wizard)
-│       ├── README.md              # 自研安装程序说明与工程规划
+│       ├── README.md              # 自研安装程序说明
 │       ├── architecture.md        # 安装程序内核、Payload、驱动注册架构详解
-│       └── project_template/      # 预留源码骨架与工程配置
+│       ├── bootstrapper/          # C++ 引导壳（零第三方依赖，stored-zip 解包 + SHA256 校验）
+│       └── wizard/                # Flutter 安装向导 auradsp_setup（极光 UI + 安装引擎）
 ├── linux/                         # Linux 发行与打包体系
 │   ├── README.md                  # Linux 打包说明与运行时矩阵
 │   ├── deb/                       # Debian / Ubuntu (.deb) 打包工具与模板
