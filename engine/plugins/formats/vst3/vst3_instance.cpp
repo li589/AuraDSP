@@ -1795,7 +1795,15 @@ public:
         std::ifstream ifs(filePath, std::ios::binary);
         if (!ifs) return false;
         ifs.seekg(0, std::ios::end);
-        size_t sz = static_cast<size_t>(ifs.tellg());
+        const std::streamoff endPos = ifs.tellg();
+        /* PLG-01（全项目审查 S7）：整读必须设上限。同层对照——CLAP 流式
+         * 读取、VST2 有容器尺寸校验、引擎其余加载器均有硬顶；此处旧实现
+         * 无上限，且 tellg 失败返回 -1 时强转 size_t 会变成天文数字直接
+         * 抛 bad_alloc。256MiB 远超任何合法 VST3 状态块，只挡损坏/被替
+         * 换的超大文件造成的无界分配。 */
+        constexpr std::streamoff kMaxPresetBytes = 256ll * 1024 * 1024;
+        if (endPos < 0 || endPos > kMaxPresetBytes) return false;
+        const size_t sz = static_cast<size_t>(endPos);
         ifs.seekg(0, std::ios::beg);
         std::vector<uint8_t> buf(sz);
         ifs.read(reinterpret_cast<char*>(buf.data()), static_cast<std::streamsize>(sz));

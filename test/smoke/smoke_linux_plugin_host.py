@@ -127,6 +127,12 @@ def source_invariants():
           "[editor][sec] 非致命 X 错误处理器在位（防 BadWindow 杀进程）")
     check("budget" in gui_x11 and "XPendingFn" in gui_x11,
           "[editor] 分发事件循环有单轮上限（防洪流饿死泵任务）")
+    # 全项目审查 PLG-01（2026-11-05）：VST3 预置整读必须有尺寸上限，
+    # 且 tellg 失败（负值）必须被拒（旧实现强转 size_t 成天文数字）。
+    vst3 = read(os.path.join(ENGINE, "plugins", "formats", "vst3",
+                             "vst3_instance.cpp"))
+    check("kMaxPresetBytes" in vst3 and "endPos < 0" in vst3,
+          "[preset] VST3 loadPreset 有尺寸上限且拒绝负 tellg")
     page = read(os.path.join(APP, "lib", "features", "plugins_page.dart"))
     check("if (!PlatformProfile.isLinux)" not in page,
           "插件页扫描目录区不再对 Linux 隐藏")
