@@ -64,6 +64,12 @@ jobs:
             core/desktop/linux/out/Release/plugin_host_x64
             core/desktop/linux/out/Release/plugin_host_x86
           if-no-files-found: error
+          # 该产物只作同一 run 内 J3/J6/J8 的跨 job 传递，保留期取
+          # 7 天：足够失败排障与复跑取证，又避免默认 90 天囤积把
+          # 账户 artifact 存储配额占满（曾囤 128 个占满，见
+          # installer/docs/01 §5 存储注记）。Release 资产是另一套
+          # 存储，不受此配额影响。
+          retention-days: 7
 
   # J3 Linux smoke ----------------------------------------------------
   smoke-linux:
