@@ -20,7 +20,7 @@
 #endif
 
 #include "plugin_host.h"
-#include "plugin_format_driver.h"
+#include "plugin_host_command.h"
 #include "plugin_ipc_protocol.h"
 #include "plugin_shared_region.h"
 #include "engine_internal.h"
@@ -100,324 +100,15 @@ bool readAll(int fd, void* data, size_t size) {
     return true;
 }
 
-void fillRemoteInfo(const auradsp::PluginMetadata& meta,
-                    const auradsp::PluginBusInfo& bus,
-                    auradsp::ipc::RemotePluginInfo& info) {
-    auradsp::ipc::copyFixed(info.path, sizeof(info.path), meta.path);
-    auradsp::ipc::copyFixed(info.id, sizeof(info.id), meta.id);
-    auradsp::ipc::copyFixed(info.name, sizeof(info.name), meta.name);
-    auradsp::ipc::copyFixed(info.bundleName, sizeof(info.bundleName), meta.bundleName);
-    auradsp::ipc::copyFixed(info.vendor, sizeof(info.vendor), meta.vendor);
-    auradsp::ipc::copyFixed(info.version, sizeof(info.version), meta.version);
-    auradsp::ipc::copyFixed(info.category, sizeof(info.category), meta.category);
-    auradsp::ipc::copyFixed(info.description, sizeof(info.description), meta.description);
-    auradsp::ipc::copyFixed(info.errorMessage, sizeof(info.errorMessage), meta.errorMessage);
-    info.format = static_cast<uint32_t>(meta.format);
-    info.latency = meta.latency;
-    info.is64Bit = meta.is64Bit ? 1u : 0u;
-    info.isCompatible = meta.isCompatible ? 1u : 0u;
-    info.inputBuses = bus.inputBuses > 0 ? static_cast<uint32_t>(bus.inputBuses) : 0u;
-    info.outputBuses = bus.outputBuses > 0 ? static_cast<uint32_t>(bus.outputBuses) : 0u;
-    info.auxInputBuses = bus.auxInputBuses > 0 ? static_cast<uint32_t>(bus.auxInputBuses) : 0u;
-    info.auxOutputBuses = bus.auxOutputBuses > 0 ? static_cast<uint32_t>(bus.auxOutputBuses) : 0u;
-    info.mainInChannels = bus.mainInChannels > 0 ? static_cast<uint32_t>(bus.mainInChannels) : 0u;
-    info.mainOutChannels = bus.mainOutChannels > 0 ? static_cast<uint32_t>(bus.mainOutChannels) : 0u;
+/* 传输适配：命令分发已下沉到 platform/host/plugin_host_command.*（审计 R-07）。
+ * POSIX 侧无 SEH，深扫查询直接使用共享层的 queryMetadataDirect——
+ * 插件 AV 会带走宿主，由客户端超时 + 重启兜底（方案 D-6）。 */
+bool socketWrite(void* user, const void* data, size_t size) {
+    return writeAll(static_cast<int>(reinterpret_cast<intptr_t>(user)), data, size);
 }
 
-bool handleCommand(int fd, auradsp::PluginHostManager& manager, bool& running) {
-    auradsp::ipc::MsgHeader header = {};
-    if (!readAll(fd, &header, sizeof(header))) return false;
-    if (header.magic != auradsp::ipc::kMagic ||
-        header.version != static_cast<uint16_t>(auradsp::ipc::kProtocolVersion) ||
-        header.payloadSize > auradsp::ipc::kMaxControlPayload) {
-        return false;
-    }
-
-    std::vector<uint8_t> payload(header.payloadSize);
-    if (header.payloadSize > 0 && !readAll(fd, payload.data(), payload.size())) return false;
-
-    auradsp::ipc::Reader r(payload.data(), payload.size());
-    std::vector<uint8_t> body;
-    int32_t status = 0;
-    const auto op = static_cast<auradsp::ipc::Op>(header.op);
-
-    try {
-        switch (op) {
-        case auradsp::ipc::Op::Hello:
-            body.assign({'A', 'U', 'R', 'A'});
-            status = 1;
-            break;
-
-        case auradsp::ipc::Op::Ping:
-            status = 1;
-            break;
-
-        case auradsp::ipc::Op::Scan: {
-            std::string dirs;
-            uint8_t deep = 0;
-            if (!r.str(dirs) || !r.u8(deep)) break;
-            status = manager.scanPlugins(dirs, deep != 0);
-            break;
-        }
-        case auradsp::ipc::Op::ScanBegin: {
-            std::string dirs;
-            uint8_t deep = 0;
-            if (!r.str(dirs) || !r.u8(deep)) break;
-            status = manager.scanBegin(dirs, deep != 0);
-            break;
-        }
-        case auradsp::ipc::Op::ScanStep: {
-            int32_t maxItems = 0;
-            if (!r.i32(maxItems)) break;
-            status = manager.scanStep(maxItems);
-            break;
-        }
-        case auradsp::ipc::Op::ScanEnd:
-            status = manager.scanEnd();
-            break;
-
-        case auradsp::ipc::Op::ScanProgress: {
-            const int32_t processed = manager.scanProcessed();
-            const int32_t total = manager.scanTotal();
-            body.resize(sizeof(int32_t) * 2);
-            std::memcpy(body.data(), &processed, sizeof(processed));
-            std::memcpy(body.data() + sizeof(int32_t), &total, sizeof(total));
-            status = 1;
-            break;
-        }
-        case auradsp::ipc::Op::GetScanCount:
-            status = static_cast<int32_t>(manager.getScannedCount());
-            break;
-
-        case auradsp::ipc::Op::GetScanItem: {
-            uint32_t index = 0;
-            if (!r.u32(index)) break;
-            const std::string json = manager.getScannedItemJson(index);
-            body.assign(json.begin(), json.end());
-            status = 1;
-            break;
-        }
-        case auradsp::ipc::Op::GetAllScanned: {
-            const std::string json = manager.getAllScannedJson();
-            body.assign(json.begin(), json.end());
-            status = 1;
-            break;
-        }
-
-        case auradsp::ipc::Op::QueryMetadata: {
-            /* 深扫查询（v5，2026-11-04）：payload = path，response = u32 count +
-             * count × RemotePluginInfo。与 Win32 宿主同口径：格式无关，交给驱动直出。
-             * POSIX 侧无 SEH（等价物是信号），插件 AV 会直接带走宿主——
-             * 由客户端超时+重启兜底，语义见方案 D-6。 */
-            std::string path;
-            if (!r.str(path)) break;
-            auto* driver = auradsp::PluginDriverRegistry::instance().findForPath(path);
-            if (driver) {
-                const std::string binary = driver->resolveBinary(path);
-                std::vector<auradsp::PluginMetadata> metas;
-                if (!binary.empty() && driver->queryMetadata(path, binary, metas) && !metas.empty()) {
-                    std::vector<auradsp::ipc::RemotePluginInfo> infos(metas.size());
-                    const auradsp::PluginBusInfo noBus{};
-                    for (size_t i = 0; i < metas.size(); ++i) {
-                        fillRemoteInfo(metas[i], noBus, infos[i]);
-                    }
-                    const uint32_t count = static_cast<uint32_t>(infos.size());
-                    const size_t bytes = infos.size() * sizeof(auradsp::ipc::RemotePluginInfo);
-                    body.resize(sizeof(count) + bytes);
-                    std::memcpy(body.data(), &count, sizeof(count));
-                    std::memcpy(body.data() + sizeof(count), infos.data(), bytes);
-                    status = 1;
-                }
-            }
-            break;
-        }
-
-        case auradsp::ipc::Op::Load: {
-            uint32_t slot = 0;
-            double sampleRate = 48000.0;
-            uint32_t maxBlock = 1024;
-            std::string path;
-            std::string pluginId;
-            if (!r.u32(slot) || !r.f64(sampleRate) || !r.u32(maxBlock) ||
-                !r.str(path) || !r.str(pluginId)) {
-                break;
-            }
-            auradsp::ipc::RemotePluginInfo info = {};
-            if (slot < auradsp::PluginHostManager::kMaxPluginSlots) {
-                /* R-1（同 Win32 宿主）：经 updateFormat 入口落地格式，
-                 * 它内部 ensureChannelScratch；宿主是懒启动的，create
-                 * 期转发的 UpdateFormat 被 alive() 守卫跳过，宿主侧
-                 * scratch 必须在此补齐，否则 process 静默直通。 */
-                manager.updateFormat(sampleRate, maxBlock);
-                auto instance = manager.prepareInstance(slot, path, pluginId);
-                if (instance) {
-                    std::unique_ptr<auradsp::IPluginInstance> oldInstance;
-                    {
-                        std::lock_guard<std::recursive_mutex> lock(manager.m_hostMutex);
-                        oldInstance = manager.detachInstanceLocked(slot);
-                        manager.commitInstanceLocked(slot, std::move(instance));
-                    }
-                    auradsp::PluginHostManager::destroyInstance(std::move(oldInstance));
-                    if (manager.m_slots[slot].instance) {
-                        fillRemoteInfo(manager.m_slots[slot].instance->getMetadata(),
-                                       manager.m_slots[slot].instance->busInfo(), info);
-                        status = 1;
-                    }
-                }
-            }
-            if (status != 1) {
-                auradsp::ipc::copyFixed(info.errorMessage, sizeof(info.errorMessage),
-                                        "plugin load failed in host process");
-                status = 0;
-            }
-            body.resize(sizeof(info));
-            std::memcpy(body.data(), &info, sizeof(info));
-            break;
-        }
-        case auradsp::ipc::Op::Unload: {
-            uint32_t slot = 0;
-            if (!r.u32(slot)) break;
-            if (slot < auradsp::PluginHostManager::kMaxPluginSlots) {
-                manager.unloadPluginSlot(slot);
-                status = 1;
-            }
-            break;
-        }
-        case auradsp::ipc::Op::SetBypass: {
-            uint32_t slot = 0;
-            uint8_t bypass = 0;
-            if (!r.u32(slot) || !r.u8(bypass)) break;
-            if (slot < auradsp::PluginHostManager::kMaxPluginSlots) {
-                manager.setBypassSlot(slot, bypass != 0);
-                status = 1;
-            }
-            break;
-        }
-        case auradsp::ipc::Op::GetBypass: {
-            uint32_t slot = 0;
-            if (!r.u32(slot)) break;
-            if (slot < auradsp::PluginHostManager::kMaxPluginSlots) {
-                status = manager.isBypassedSlot(slot) ? 1 : 0;
-            }
-            break;
-        }
-        case auradsp::ipc::Op::GetLatency: {
-            uint32_t slot = 0;
-            if (!r.u32(slot)) break;
-            if (slot < auradsp::PluginHostManager::kMaxPluginSlots) {
-                status = static_cast<int32_t>(manager.getLatencySlot(slot));
-            }
-            break;
-        }
-        case auradsp::ipc::Op::GetStatus: {
-            uint32_t slot = 0;
-            if (!r.u32(slot)) break;
-            if (slot < auradsp::PluginHostManager::kMaxPluginSlots) {
-                const std::string json = manager.getStatusJsonSlot(slot);
-                body.assign(json.begin(), json.end());
-                status = 1;
-            }
-            break;
-        }
-        case auradsp::ipc::Op::ShowEditor: {
-            uint32_t slot = 0;
-            std::string title;
-            if (!r.u32(slot) || !r.str(title)) break;
-            if (slot < auradsp::PluginHostManager::kMaxPluginSlots) {
-                status = manager.showEditorSlot(slot, title) ? 1 : 0;
-            }
-            break;
-        }
-        case auradsp::ipc::Op::CloseEditor: {
-            uint32_t slot = 0;
-            if (!r.u32(slot)) break;
-            if (slot < auradsp::PluginHostManager::kMaxPluginSlots) {
-                manager.closeEditorSlot(slot);
-                status = 1;
-            }
-            break;
-        }
-        case auradsp::ipc::Op::IsEditorOpen: {
-            uint32_t slot = 0;
-            if (!r.u32(slot)) break;
-            if (slot < auradsp::PluginHostManager::kMaxPluginSlots) {
-                status = manager.isEditorOpenSlot(slot) ? 1 : 0;
-            }
-            break;
-        }
-        case auradsp::ipc::Op::SavePreset: {
-            uint32_t slot = 0;
-            std::string path;
-            if (!r.u32(slot) || !r.str(path)) break;
-            if (slot < auradsp::PluginHostManager::kMaxPluginSlots) {
-                status = manager.savePresetSlot(slot, path) ? 1 : 0;
-            }
-            break;
-        }
-        case auradsp::ipc::Op::LoadPreset: {
-            uint32_t slot = 0;
-            std::string path;
-            if (!r.u32(slot) || !r.str(path)) break;
-            if (slot < auradsp::PluginHostManager::kMaxPluginSlots) {
-                status = manager.loadPresetSlot(slot, path) ? 1 : 0;
-            }
-            break;
-        }
-        case auradsp::ipc::Op::SetStage: {
-            uint32_t slot = 0;
-            int32_t stage = 0;
-            if (!r.u32(slot) || !r.i32(stage)) break;
-            if (slot < auradsp::PluginHostManager::kMaxPluginSlots) {
-                manager.setInsertStageSlot(slot, stage);
-                status = 1;
-            }
-            break;
-        }
-        case auradsp::ipc::Op::GetStage: {
-            uint32_t slot = 0;
-            if (!r.u32(slot)) break;
-            if (slot < auradsp::PluginHostManager::kMaxPluginSlots) {
-                status = manager.getInsertStageSlot(slot);
-            }
-            break;
-        }
-        case auradsp::ipc::Op::UpdateFormat: {
-            double sampleRate = 48000.0;
-            uint32_t maxBlock = 1024;
-            if (!r.f64(sampleRate) || !r.u32(maxBlock)) break;
-            manager.updateFormat(sampleRate, maxBlock);
-            status = 1;
-            break;
-        }
-        case auradsp::ipc::Op::SetChannelHint: {
-            uint32_t channels = 2;
-            if (!r.u32(channels)) break;
-            manager.setChannelHint(static_cast<int>(channels));
-            status = 1;
-            break;
-        }
-        case auradsp::ipc::Op::Shutdown:
-            status = 1;
-            running = false;
-            break;
-
-        default:
-            status = 0;
-            break;
-        }
-    } catch (...) {
-        status = 0;
-        body.clear();
-    }
-
-    auradsp::ipc::MsgResponse response = {};
-    response.magic = auradsp::ipc::kMagic;
-    response.version = static_cast<uint16_t>(auradsp::ipc::kProtocolVersion);
-    response.status = status;
-    response.payloadSize = static_cast<uint32_t>(body.size());
-    if (!writeAll(fd, &response, sizeof(response))) return false;
-    if (!body.empty() && !writeAll(fd, body.data(), body.size())) return false;
-    return true;
+bool socketRead(void* user, void* data, size_t size) {
+    return readAll(static_cast<int>(reinterpret_cast<intptr_t>(user)), data, size);
 }
 
 bool parentAlive(pid_t parentPid) {
@@ -580,6 +271,9 @@ int main(int argc, char** argv) {
         }
     });
 
+    auradsp::ipc::HostTransport transport{
+        reinterpret_cast<void*>(static_cast<intptr_t>(connFd)),
+        &socketRead, &socketWrite};
     bool running = true;
     while (running) {
         if (!parentAlive(options.parentPid)) break;
@@ -593,7 +287,11 @@ int main(int argc, char** argv) {
         }
         if (r > 0) {
             if (pfd.revents & POLLIN) {
-                if (!handleCommand(connFd, manager, running)) running = false;
+                if (!auradsp::ipc::handleHostCommand(
+                        transport, manager, &auradsp::ipc::queryMetadataDirect,
+                        running)) {
+                    running = false;
+                }
             } else if (pfd.revents & (POLLHUP | POLLERR)) {
                 running = false;
             }

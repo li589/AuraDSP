@@ -242,6 +242,9 @@ target_link_libraries(auradsp_engine PRIVATE
 if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
     set(AURADSP_HOST_SOURCES
         "${API}/plugins/platform/posix/host/plugin_host_main_posix.cpp"
+        # R-07（2026-11-05）：命令循环与 Op 分发下沉到平台无关层，
+        # POSIX 主程序只保留 socket/看门狗/唤醒等平台原语。
+        "${API}/plugins/platform/host/plugin_host_command.cpp"
         "${API}/plugins/platform/posix/host/plugin_shared_region_posix.cpp"
         "${API}/platform/linux/fs_linux.cpp"
         "${API}/platform/linux/env_linux.cpp"
@@ -282,6 +285,7 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         "${API}/chain"
         "${API}/plugins/api"
         "${API}/plugins/driver"
+        "${API}/plugins/platform/host"
         "${API}/plugins/platform/win32/host"
         "${API}/plugins/platform/posix"
         "${LEGACY}"
@@ -321,6 +325,7 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
             "${API}/chain"
             "${API}/plugins/api"
             "${API}/plugins/driver"
+            "${API}/plugins/platform/host"
             "${API}/plugins/platform/win32/host"
             "${API}/plugins/platform/posix"
             "${LEGACY}"

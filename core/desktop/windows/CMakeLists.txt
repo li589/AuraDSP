@@ -213,6 +213,9 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
 
     add_executable(${HOST_EXE_TARGET_NAME}
         "${API}/plugins/platform/win32/host/auradsp_plugin_host_main.cpp"
+        # R-07（2026-11-05）：命令循环与 Op 分发下沉到平台无关层，
+        # Win32 主程序只保留管道/看门狗/唤醒等平台原语。
+        "${API}/plugins/platform/host/plugin_host_command.cpp"
         "${API}/plugins/platform/win32/host/plugin_shared_region.cpp"
         ${AURADSP_PLUGIN_HOST_SOURCES}
     )
@@ -220,6 +223,7 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         "${API}"
         "${API}/plugins/api"
         "${API}/plugins/driver"
+        "${API}/plugins/platform/host"
         "${API}/plugins/platform/win32/host"
         "${API}/plugins/platform/win32"
         "${PLUGIN_API}"
