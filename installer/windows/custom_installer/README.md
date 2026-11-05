@@ -19,23 +19,22 @@
 
 ## 2. 目录规划
 
+实施规格（2026-11-06 定稿）：`docs/20-执行/Windows安装程序与打包脚本实施设计-2026-11-06.md`。
+架构为两段式——C++ 引导壳解出 Flutter 向导运行时，向导承载全部 UI 与安装引擎；
+打包入口为 `installer/windows/pack.py`（全量可传参）。
+
 ```text
 custom_installer/
 ├── README.md                      # 本文档
-├── architecture.md                # 架构设计与底层实现细节
-├── project_template/              # 预留工程源码骨架
-│   ├── src/                       # 安装向导核心源码
-│   │   ├── core/                  # 解压、进程检测、COM 注册、快捷方式创建
-│   │   ├── ui/                    # 向导各步骤界面 (Welcome, Options, Progress, Done)
-│   │   └── uninstaller/           # 卸载器逻辑与自删除机制
-│   └── assets/                    # 安装程序自带的小型 UI 图标与横幅
-└── build_installer.py (规划中)     # 将 Staging 目录打包成单体 Setup.exe 的构建脚本
+├── architecture.md                # 架构设计与底层实现细节（概念层）
+├── bootstrapper/                  # C++ 引导壳（单文件 + vendored miniz + CMake）
+└── wizard/                        # Flutter 安装向导工程（auradsp_setup）
 ```
 
 ---
 
 ## 3. 技术设计概要
 
-详见 [architecture.md](file:///d:/temp_desktop/Proj/JamesDSP/installer/windows/custom_installer/architecture.md)。
+详见 [architecture.md](architecture.md) 与实施设计（`docs/20-执行/Windows安装程序与打包脚本实施设计-2026-11-06.md`）。
 最终输出目标文件：`dist/AuraDSP-Setup-x64-v<VERSION>.exe`。
 
