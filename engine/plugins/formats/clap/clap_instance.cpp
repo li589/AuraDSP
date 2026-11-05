@@ -6,6 +6,7 @@
 #include "platform/port/module.h"
 #include "plugin_bundle.h"
 #include "plugin_metadata_util.h"
+#include "plugins/plugin_limits.h"
 #include "win32_util.h"
 
 #include <clap/clap.h>
@@ -552,7 +553,9 @@ public:
     }
     void setChannelHint(int channels) override {
         if (channels < 1) channels = 1;
-        if (channels > 8) channels = 8;
+        if (channels > auradsp::limits::kBusChannelsInt) {
+            channels = auradsp::limits::kBusChannelsInt;
+        }
         m_channelHint = static_cast<uint32_t>(channels);
     }
     uint32_t getLatency() const override { return m_meta.latency; }

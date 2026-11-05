@@ -28,6 +28,8 @@
 #include <thread>
 #include <condition_variable>
 
+#include "plugins/plugin_limits.h"
+
 namespace auradsp {
 
 #ifndef AURADSP_HOST_INPROC
@@ -202,7 +204,7 @@ public:
 
 class PluginHostManager {
 public:
-    static constexpr size_t kMaxPluginSlots = 4;
+    static constexpr size_t kMaxPluginSlots = auradsp::limits::kMaxSlots;
 
     struct PluginSlot {
         std::unique_ptr<IPluginInstance> instance;
@@ -210,7 +212,8 @@ public:
         std::atomic<bool> bypassed{false};
         std::atomic<uint32_t> latency{0};
         std::atomic<int> insertStage{3}; // 0=Pre-DSP, 1=Pre-Vendor, 2=Post-Vendor, 3=Post-Reverb, 4=Post-Limiter
-        std::atomic<uint32_t> channelMask{0xFF};
+        std::atomic<uint32_t> channelMask{
+            (1u << auradsp::limits::kBusChannels) - 1u};
         std::atomic<int> mainInChannels{2};
         std::atomic<int> mainOutChannels{2};
         /* RT 临界区握手计数器（修复 use-after-free）。

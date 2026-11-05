@@ -3,6 +3,7 @@
 
 #include "inflight_guard.h"
 #include "plugin_format_driver.h"
+#include "plugins/plugin_limits.h"
 
 #ifndef AURADSP_HOST_INPROC
 #include "process_plugin_proxy.h"
@@ -491,7 +492,9 @@ void PluginHostManager::getMainChannelsSlot(size_t slot, int* inChannels,
 
 void PluginHostManager::setChannelHint(int channels) {
     if (channels < 1) channels = 1;
-    if (channels > 8) channels = 8;
+    if (channels > auradsp::limits::kBusChannelsInt) {
+        channels = auradsp::limits::kBusChannelsInt;
+    }
     const int previous = m_channelHint.exchange(channels, std::memory_order_acq_rel);
     if (previous == channels) return;
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
@@ -594,7 +597,9 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
                                                 uint32_t numFrames, uint32_t channels,
                                                 uint32_t mask) {
     if (slot >= kMaxPluginSlots || !interleaved || numFrames == 0 || channels == 0) return;
-    if (channels > 8) channels = 8;
+    if (channels > auradsp::limits::kBusChannels) {
+        channels = auradsp::limits::kBusChannels;
+    }
     mask &= (1u << channels) - 1u;
     if (mask == 0) return;
     if (numFrames > m_channelScratchBlock || !m_channelIn[0] ||
@@ -674,8 +679,12 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
         getMainChannelsSlot(slot, &inChannels, &outChannels);
         if (inChannels <= 0) inChannels = 2;
         if (outChannels <= 0) outChannels = inChannels;
-        if (inChannels > 8) inChannels = 8;
-        if (outChannels > 8) outChannels = 8;
+        if (inChannels > auradsp::limits::kBusChannelsInt) {
+            inChannels = auradsp::limits::kBusChannelsInt;
+        }
+        if (outChannels > auradsp::limits::kBusChannelsInt) {
+            outChannels = auradsp::limits::kBusChannelsInt;
+        }
 
         auto fillOutput = [&](int count, const float* first) {
             for (int ch = 0; ch < count; ++ch) {

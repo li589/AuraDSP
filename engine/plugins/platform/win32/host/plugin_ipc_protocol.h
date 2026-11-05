@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "plugins/plugin_limits.h"
+
 namespace auradsp {
 namespace ipc {
 
@@ -17,8 +19,9 @@ constexpr uint32_t kMagic = 0x41555241u;   // "AURA"
 constexpr uint32_t kProtocolVersion = 5u;
 /* 单次元数据查询允许返回的最大条目数（防御畸形/恶意响应）。 */
 constexpr uint32_t kMaxMetadataBatch = 512u;
-constexpr uint32_t kMaxSlots = 4u;
-constexpr uint32_t kChannels = 8u;
+/* 槽位数与总线通道上限来自 plugins/plugin_limits.h（唯一定义处）。 */
+constexpr uint32_t kMaxSlots = auradsp::limits::kMaxSlots;
+constexpr uint32_t kChannels = auradsp::limits::kBusChannels;
 constexpr uint32_t kTransportFrames = 128u;
 constexpr uint32_t kRingBlocks = 16u;
 constexpr uint32_t kMaxScannedPlugins = 65536u;

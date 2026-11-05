@@ -5,6 +5,7 @@
 #include "platform/port/module.h"
 #include "plugin_bundle.h"
 #include "plugin_metadata_util.h"
+#include "plugins/plugin_limits.h"
 #include "vst3_metadata.h"
 #include "win32_util.h"
 
@@ -1157,7 +1158,9 @@ public:
                 m_inChannels = 2;
             }
             if (m_inChannels < 1) m_inChannels = 1;
-            if (m_inChannels > 8) m_inChannels = 8;
+            if (m_inChannels > auradsp::limits::kBusChannelsInt) {
+                m_inChannels = auradsp::limits::kBusChannelsInt;
+            }
             m_inBusChannels[0] = m_inChannels;
         } else {
             m_inChannels = 0;
@@ -1181,7 +1184,9 @@ public:
             m_outChannels = 2;
         }
         if (m_outChannels < 1) m_outChannels = 1;
-        if (m_outChannels > 8) m_outChannels = 8;
+        if (m_outChannels > auradsp::limits::kBusChannelsInt) {
+            m_outChannels = auradsp::limits::kBusChannelsInt;
+        }
         m_outBusChannels[0] = m_outChannels;
         for (int32_t i = 1; i < numOutBusses; ++i) {
             if (!m_outBusActive[i]) continue;
@@ -1455,7 +1460,9 @@ public:
     }
     void setChannelHint(int channels) override {
         if (channels < 1) channels = 1;
-        if (channels > 8) channels = 8;
+        if (channels > auradsp::limits::kBusChannelsInt) {
+            channels = auradsp::limits::kBusChannelsInt;
+        }
         m_channelHint = channels;
     }
     uint32_t getLatency() const override { return m_meta.latency; }

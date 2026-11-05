@@ -24,6 +24,7 @@
 #include "module_pump.h"
 #include "platform/port/module.h"
 #include "plugin_metadata_util.h"
+#include "plugins/plugin_limits.h"
 #include "win32_util.h"
 
 #include "vst2/vst.h"
@@ -473,7 +474,7 @@ public:
         m_active.store(false, std::memory_order_release);
     }
 
-    static constexpr int kMaxPluginChannels = 64;
+    static constexpr int kMaxPluginChannels = auradsp::limits::kVst2ArrayChannels;
 
     void process(float* const* inChannels, float* const* outChannels,
                  uint32_t numFrames) override {
@@ -577,7 +578,9 @@ public:
     PluginBusInfo busInfo() const override { return m_busInfo; }
     void setChannelHint(int channels) override {
         if (channels < 1) channels = 1;
-        if (channels > 8) channels = 8;
+        if (channels > auradsp::limits::kBusChannelsInt) {
+            channels = auradsp::limits::kBusChannelsInt;
+        }
         m_channelHint.store(channels, std::memory_order_relaxed);
     }
     bool abandoned() const override {
