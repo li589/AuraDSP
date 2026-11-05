@@ -2305,8 +2305,23 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           lastPumpErrAt = now;
           send({'evt': 'error', 'msg': msg});
         }
-        // 端点死亡（只认 0x8889000a，其它错误走上面的常规上报，不触发重启）。
+        // 端点死亡（WASAPI 认 0x8889000a；Linux 认输出后端 StateError，
+        // 见下。其余错误走上面的常规上报，不触发重启）。
         if (msg.contains('0x8889000a')) {
+          audioOutErrRounds++;
+        } else if (Platform.isLinux &&
+            audioOut != null &&
+            e is StateError &&
+            (msg.contains('pa_simple') ||
+                msg.contains('PulseAudioOut') ||
+                msg.contains('snd_pcm') ||
+                msg.contains('AlsaAudioOut'))) {
+          // DRV-02（全项目审查 S7）：PA/PipeWire 重启或 ALSA 设备拔出后，
+          // pa_simple/snd_pcm 连接不可自愈，其错误文案永不含 WASAPI 的
+          // HRESULT——旧逻辑下计数恒被清零，泵无限重试、永不恢复，用户
+          // 永久无声。按同口径累计：连续 400 轮（≈2s）即判端点死亡，
+          // 借 wasapiLost 通道让 UI 重起 isolate 重建输出流（ALSA 的
+          // XRUN 在后端内自恢复、不抛错，不会误触发本路径）。
           audioOutErrRounds++;
         } else {
           audioOutErrRounds = 0;
