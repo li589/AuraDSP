@@ -329,6 +329,25 @@
       }
     }
   },
+  "dspBypassHint": "DSP bypassed · Click to resume processing",
+  "dspActiveHint": "DSP processing · Click to toggle global bypass",
+  "pdcLatencyTooltip": "Full-chain end-to-end latency: {ms} ms\nClick to run full-chain measurement and clock sync",
+  "@pdcLatencyTooltip": {
+    "placeholders": {
+      "ms": {
+        "type": "String"
+      }
+    }
+  },
+  "chainFreqRefreshTooltip": "Re-measure full-chain frequency response and end-to-end latency",
+  "chainLatencyMeasuredMsg": "Full-chain latency measurement complete; end-to-end latency updated to {ms} ms",
+  "@chainLatencyMeasuredMsg": {
+    "placeholders": {
+      "ms": {
+        "type": "String"
+      }
+    }
+  },
   "bassBoost": "Bass Boost",
   "bassGain": "Amount",
   "reverb": "Reverb",

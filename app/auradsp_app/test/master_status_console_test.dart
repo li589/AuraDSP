@@ -73,7 +73,7 @@ void main() {
       final p = auraDark;
 
       // 1. 测定中 probing: 活力青
-      final cProbing = latencyColorByMode(
+      final cProbing = LatencyPresenter.colorByMode(
         mode: LatencyMode.probing,
         ms: 0.0,
         p: p,
@@ -81,7 +81,7 @@ void main() {
       expect(cProbing, p.accent);
 
       // 2. 实测 measured (< 5ms 录音监听级纯绿)
-      final cMeasuredLow = latencyColorByMode(
+      final cMeasuredLow = LatencyPresenter.colorByMode(
         mode: LatencyMode.measured,
         ms: 2.5,
         p: p,
@@ -89,7 +89,7 @@ void main() {
       expect(cMeasuredLow, p.success);
 
       // 3. 实时推算 estimated (统一天青/Accent)
-      final cEst = latencyColorByMode(
+      final cEst = LatencyPresenter.colorByMode(
         mode: LatencyMode.estimated,
         ms: 12.0,
         p: p,
@@ -97,7 +97,7 @@ void main() {
       expect(cEst, p.accent);
 
       // 4. 零延迟直通 zero 统一为录音监听级高保真绿 (与 0.0ms 其它效果器一致)
-      final cZero = latencyColorByMode(
+      final cZero = LatencyPresenter.colorByMode(
         mode: LatencyMode.zero,
         ms: 0.0,
         p: p,
@@ -105,7 +105,7 @@ void main() {
       expect(cZero, p.success);
 
       // 5. 未测定 unmeasured (次级灰)
-      final cUnmeasured = latencyColorByMode(
+      final cUnmeasured = LatencyPresenter.colorByMode(
         mode: LatencyMode.unmeasured,
         ms: 0.0,
         p: p,

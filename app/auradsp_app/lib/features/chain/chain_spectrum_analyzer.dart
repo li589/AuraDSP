@@ -19,6 +19,7 @@ import '../../core/plugins/plugin_manager.dart';
 import '../../core/io/resource_gate.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
+import '../../core/ui_helpers.dart';
 import '../../ui/widgets.dart' show vbBusNames;
 
 /// 频响分析计算结果结构体
@@ -540,8 +541,8 @@ class FullChainTransferCalculator {
     for (var s = 0; s < PluginManager.kMaxSlots; s++) {
       if (pm.isSlotActive(s) && !pm.isSlotBypassed(s)) {
         final spl = pm.getSlotLatency(s);
-        if (spl > 0 && model.deviceRate > 0) {
-          pluginLat += (spl / model.deviceRate) * 1000.0;
+        if (spl > 0) {
+          pluginLat += samplesToMs(spl, model.deviceRate);
         }
       }
     }
@@ -611,6 +612,7 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final l = l10nOf(context);
     final availableChannels = _getAvailableChannels();
     // 声道越界自愈
     if (_selectedChannel != 'all' && !availableChannels.contains(_selectedChannel)) {
@@ -699,7 +701,7 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
 
               // 重新测定刷新按钮（统一走 model.refreshAllComponentLatencies()，确保与右上角 PDC 数值完全一致）
               IconButton(
-                tooltip: '重新测算全链路频响与端到端延迟',
+                tooltip: l.chainFreqRefreshTooltip,
                 icon: Icon(Icons.refresh_rounded, size: 18, color: p.accent),
                 onPressed: () async {
                   await widget.model.refreshAllComponentLatencies();
@@ -711,7 +713,11 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
                         behavior: SnackBarBehavior.floating,
                         backgroundColor: p.panelRaised,
                         content: Text(
-                          '已完成全链路延迟测定，端到端延迟已更新为  ms',
+                          l.chainLatencyMeasuredMsg(
+                            LatencyPresenter.number(
+                              widget.model.fullChainLatencyMs,
+                            ),
+                          ),
                           style: TextStyle(color: p.text, fontSize: 12),
                         ),
                       ),

@@ -1019,6 +1019,26 @@ class AppLocalizationsEn extends AppLocalizations {
       'Added algorithmic latency: only latency-introducing effects count (e.g. reverb +30ms); low-latency effects add 0ms';
 
   @override
+  String get dspBypassHint => 'DSP bypassed · Click to resume processing';
+
+  @override
+  String get dspActiveHint => 'DSP processing · Click to toggle global bypass';
+
+  @override
+  String pdcLatencyTooltip(String ms) {
+    return 'Full-chain end-to-end latency: $ms ms\nClick to run full-chain measurement and clock sync';
+  }
+
+  @override
+  String get chainFreqRefreshTooltip =>
+      'Re-measure full-chain frequency response and end-to-end latency';
+
+  @override
+  String chainLatencyMeasuredMsg(String ms) {
+    return 'Full-chain latency measurement complete; end-to-end latency updated to $ms ms';
+  }
+
+  @override
   String get bassBoost => 'Bass Boost';
 
   @override

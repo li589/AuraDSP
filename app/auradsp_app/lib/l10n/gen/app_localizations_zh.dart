@@ -931,6 +931,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get latencyTip => '算法附加延迟：仅统计引入延迟的效果（如混响 +30ms）；低延迟效果计 0ms';
 
   @override
+  String get dspBypassHint => 'DSP 已旁路 · 点击激活处理';
+
+  @override
+  String get dspActiveHint => 'DSP 正在处理 · 点击切换全局旁路';
+
+  @override
+  String pdcLatencyTooltip(String ms) {
+    return '全链路端到端总延迟: $ms ms\n点击触发全链路测量与时钟同步';
+  }
+
+  @override
+  String get chainFreqRefreshTooltip => '重新测算全链路频响与端到端延迟';
+
+  @override
+  String chainLatencyMeasuredMsg(String ms) {
+    return '已完成全链路延迟测定，端到端延迟已更新为 $ms ms';
+  }
+
+  @override
   String get bassBoost => '低音增强';
 
   @override

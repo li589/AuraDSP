@@ -89,16 +89,6 @@ const List<String> kDefaultCoreOrder = [
   'loudness',
 ];
 
-/// 链组（Phase 2）：按链位置 contiguous 分组；组头可折叠 + 整组旁路。
-const Map<String, List<String>> kChainGroups = {
-  'chInput': ['gate', 'filter'],
-  'chTone': ['dyneq', 'bassmono', 'tube', 'comp', 'bass'],
-  'chEq': ['eq', 'arbmag', 'convolver', 'ddc', 'liveprog'],
-  'chSound': ['crossfeed', 'stereo', 'haas'],
-  'chSpatial': ['spatial'],
-  'chOut': ['exciter', 'reverb', 'loudness', 'output'],
-};
-
 /// 链组 id → 展示名（l10n）。
 String chainGroupLabelOf(AppLocalizations l, String g) => switch (g) {
       'chInput' => l.chainGrpInput,

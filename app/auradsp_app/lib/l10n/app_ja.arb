@@ -329,6 +329,25 @@
       }
     }
   },
+  "dspBypassHint": "DSP バイパス中 · クリックで処理を再開",
+  "dspActiveHint": "DSP 処理中 · クリックでグローバルバイパスを切り替え",
+  "pdcLatencyTooltip": "全チェーン端到端遅延: {ms} ms\nクリックで全チェーン測定とクロック同期を実行",
+  "@pdcLatencyTooltip": {
+    "placeholders": {
+      "ms": {
+        "type": "String"
+      }
+    }
+  },
+  "chainFreqRefreshTooltip": "全チェーンの周波数応答と端到端遅延を再測定",
+  "chainLatencyMeasuredMsg": "全チェーン遅延の測定が完了しました。端到端遅延を {ms} ms に更新しました",
+  "@chainLatencyMeasuredMsg": {
+    "placeholders": {
+      "ms": {
+        "type": "String"
+      }
+    }
+  },
   "bassBoost": "ベースブースト",
   "bassGain": "ブースト量",
   "reverb": "リバーブ",

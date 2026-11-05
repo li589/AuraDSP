@@ -124,10 +124,10 @@ class _Hero extends StatelessWidget {
                 waitDuration: const Duration(milliseconds: 350),
                 child: StatReadout(
                   label: l.latencyLabel,
-                  value: model.latencyMs.toStringAsFixed(1),
+                  value: LatencyPresenter.number(model.latencyMs),
                   unit: 'ms',
                   size: 30,
-                  valueColor: latencyColor(model.latencyMs, p),
+                  valueColor: LatencyPresenter.color(model.latencyMs, p),
                 ),
               ),
               const SizedBox(width: AuraSpace.xl),

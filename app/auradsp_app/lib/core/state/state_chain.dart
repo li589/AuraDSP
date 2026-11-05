@@ -7,11 +7,9 @@ part of '../state.dart';
 /// _notifyUi()；setGraphOrder 内对留类 static filterVendorOrder 的调用加
 /// AppModel. 限定——extension 作用域不含被扩展类型的 static 成员）。
 
-/// 链组成员（Phase 2；与 chain_page.dart kChainGroups 同构，core 不得 import
-/// features，故此处镜像一份，改动时两边同步）。
-/// 原为 AppModel 类 static const，随 setChainGroup 迁入本文件顶层——
-/// extension 方法体不能非限定引用类 static；无外部调用者。
-const _chainGroupMembers = {
+/// 链组（Phase 2）：按链位置 contiguous 分组；组头可折叠 + 整组旁路。
+/// 唯一定义源：UI（chain_page）与状态层均直接引用本表，禁止再建镜像。
+const Map<String, List<String>> kChainGroups = {
   'chInput': ['gate', 'filter'],
   'chTone': ['dyneq', 'bassmono', 'tube', 'comp', 'bass'],
   'chEq': ['eq', 'arbmag', 'convolver', 'ddc', 'liveprog'],
@@ -165,7 +163,7 @@ extension StateChain on AppModel {
   /// 整组旁路/启用：把组内成员逐个拨到目标态（复用 toggleStage，含 reverb
   /// 特殊语义）。output（限幅器）常驻，跳过——整组旁路不得静音整机。
   void setChainGroup(String group, bool on) {
-    final members = _chainGroupMembers[group];
+    final members = kChainGroups[group];
     if (members == null) return;
     for (final id in members) {
       if (id == 'output') continue;

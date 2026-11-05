@@ -944,6 +944,25 @@ class AppLocalizationsJa extends AppLocalizations {
   String get latencyTip => 'アルゴリズム追加レイテンシ：遅延を生む効果のみ加算（例：リバーブ +30ms）。低遅延効果は 0ms';
 
   @override
+  String get dspBypassHint => 'DSP バイパス中 · クリックで処理を再開';
+
+  @override
+  String get dspActiveHint => 'DSP 処理中 · クリックでグローバルバイパスを切り替え';
+
+  @override
+  String pdcLatencyTooltip(String ms) {
+    return '全チェーン端到端遅延: $ms ms\nクリックで全チェーン測定とクロック同期を実行';
+  }
+
+  @override
+  String get chainFreqRefreshTooltip => '全チェーンの周波数応答と端到端遅延を再測定';
+
+  @override
+  String chainLatencyMeasuredMsg(String ms) {
+    return '全チェーン遅延の測定が完了しました。端到端遅延を $ms ms に更新しました';
+  }
+
+  @override
   String get bassBoost => 'ベースブースト';
 
   @override

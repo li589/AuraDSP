@@ -162,13 +162,7 @@ class _PluginSlotChainCard extends StatelessWidget {
             AuraDropdown<int>(
               value: currentStage,
               isExpanded: false,
-              items: const [
-                PluginInsertStage.preDsp,
-                PluginInsertStage.preVendor,
-                PluginInsertStage.postVendor,
-                PluginInsertStage.postReverb,
-                PluginInsertStage.postLimiter,
-              ].map<DropdownMenuItem<int>>((stg) {
+              items: PluginInsertStage.values.map<DropdownMenuItem<int>>((stg) {
                 return DropdownMenuItem<int>(
                   value: stg,
                   child: Text(

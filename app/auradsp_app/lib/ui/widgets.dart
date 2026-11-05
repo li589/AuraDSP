@@ -349,6 +349,7 @@ class MasterStatusConsole extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final l = l10nOf(context);
 
     // 引擎硬件状态与固态 LED 色彩
     final (statusText, ledColor) = switch (engineState) {
@@ -358,7 +359,7 @@ class MasterStatusConsole extends StatelessWidget {
       _ => live ? ('DSP ACTIVE', p.success) : ('DSP STANDBY', p.textDim),
     };
 
-    final latColor = latencyColor(latencyMs, p);
+    final latColor = LatencyPresenter.color(latencyMs, p);
 
     return Container(
       height: 28,
@@ -373,7 +374,7 @@ class MasterStatusConsole extends StatelessWidget {
         children: [
           // 左半部分：DSP 引擎固态微型 LED 与状态文字（支持点击切换全局旁路）
           Tooltip(
-            message: bypass ? 'DSP 已旁路 · 点击激活处理' : 'DSP 正在处理 · 点击切换全局旁路',
+            message: bypass ? l.dspBypassHint : l.dspActiveHint,
             waitDuration: const Duration(milliseconds: 300),
             child: InkWell(
               onTap: onToggleBypass,
@@ -427,7 +428,7 @@ class MasterStatusConsole extends StatelessWidget {
 
           // 右半部分：音频链路延迟（支持点击触发全链路测量）
           Tooltip(
-            message: '全链路端到端总延迟: ' + latencyMs.toStringAsFixed(1) + ' ms\n点击触发全链路测量与时钟同步',
+            message: l.pdcLatencyTooltip(LatencyPresenter.number(latencyMs)),
             waitDuration: const Duration(milliseconds: 300),
             child: InkWell(
               onTap: onRefreshLatency,
@@ -450,7 +451,7 @@ class MasterStatusConsole extends StatelessWidget {
                     ),
                     const SizedBox(width: 5),
                     Text(
-                      latencyMs.toStringAsFixed(1) + ' ms',
+                      LatencyPresenter.format(latencyMs),
                       style: monoOf(
                         p,
                         size: 11.0,
@@ -526,11 +527,10 @@ class LatencyBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final c = latencyColor(ms, p);
+    final c = LatencyPresenter.color(ms, p);
     final l = l10nOf(context);
-    final text = ms <= 0
-        ? l.latencyLabel + ' 0.0 ms'
-        : l.latencyLabel + ' ' + ms.toStringAsFixed(1) + ' ms';
+    final text =
+        '${l.latencyLabel} ${LatencyPresenter.format(ms <= 0 ? 0.0 : ms)}';
     return Tooltip(
       message: l.latencyTip,
       waitDuration: const Duration(milliseconds: 350),
@@ -732,7 +732,7 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
                         ? LatencyMode.estimated
                         : LatencyMode.zero))));
 
-    final Color c = latencyColorByMode(
+    final Color c = LatencyPresenter.colorByMode(
       mode: effMode,
       ms: widget.latencyMs,
       p: p,
@@ -740,9 +740,9 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
 
     final String text = switch (effMode) {
       LatencyMode.probing => '↻ 测定中',
-      LatencyMode.measured => widget.latencyMs.toStringAsFixed(1) + ' ms',
-      LatencyMode.estimated => widget.latencyMs.toStringAsFixed(1) + ' ms',
-      LatencyMode.zero => '0.0 ms',
+      LatencyMode.measured => LatencyPresenter.format(widget.latencyMs),
+      LatencyMode.estimated => LatencyPresenter.format(widget.latencyMs),
+      LatencyMode.zero => LatencyPresenter.format(0.0),
       LatencyMode.unmeasured => l.latUnmeasured,
     };
 

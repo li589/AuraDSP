@@ -270,6 +270,15 @@ abstract final class PluginInsertStage {
 
   static const defaultStage = postReverb;
 
+  /// 全部插入阶段（唯一枚举源；下拉等 UI 必须迭代本表，禁止手写列表）。
+  static const List<int> values = [
+    preDsp,
+    preVendor,
+    postVendor,
+    postReverb,
+    postLimiter,
+  ];
+
   static String labelOf(int stage) {
     switch (stage) {
       case preDsp:

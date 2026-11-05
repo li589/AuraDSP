@@ -1130,7 +1130,7 @@ extension StateEvents on AppModel {
     // 会把徽标刷成 "NaN ms"（历史事故）。此时与失败同处理——清除旧值，
     // 卡片 Badge 静默保持「未测量」与 Tooltip 说明。
     if (rc == 0 && deviceRate > 0) {
-      _measuredLatencyMs[comp] = samples / deviceRate * 1000.0;
+      _measuredLatencyMs[comp] = samplesToMs(samples, deviceRate);
     } else {
       _measuredLatencyMs.remove(comp);
     }

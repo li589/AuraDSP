@@ -456,6 +456,25 @@
       }
     }
   },
+  "dspBypassHint": "DSP 已旁路 · 点击激活处理",
+  "dspActiveHint": "DSP 正在处理 · 点击切换全局旁路",
+  "pdcLatencyTooltip": "全链路端到端总延迟: {ms} ms\n点击触发全链路测量与时钟同步",
+  "@pdcLatencyTooltip": {
+    "placeholders": {
+      "ms": {
+        "type": "String"
+      }
+    }
+  },
+  "chainFreqRefreshTooltip": "重新测算全链路频响与端到端延迟",
+  "chainLatencyMeasuredMsg": "已完成全链路延迟测定，端到端延迟已更新为 {ms} ms",
+  "@chainLatencyMeasuredMsg": {
+    "placeholders": {
+      "ms": {
+        "type": "String"
+      }
+    }
+  },
   "bassBoost": "低音增强",
   "bassGain": "增强量",
   "reverb": "混响",

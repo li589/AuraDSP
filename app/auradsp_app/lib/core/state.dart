@@ -1199,7 +1199,7 @@ class AppModel extends ChangeNotifier {
     // 第三方插件槽位延迟
     for (var s = 0; s < PluginManager.kMaxSlots; s++) {
       if (pluginManager.isSlotActive(s) && !pluginManager.isSlotBypassed(s) && deviceRate > 0) {
-        totalMs += (pluginManager.getSlotLatency(s) / deviceRate) * 1000.0;
+        totalMs += samplesToMs(pluginManager.getSlotLatency(s), deviceRate);
       }
     }
     return totalMs;
@@ -1223,7 +1223,7 @@ class AppModel extends ChangeNotifier {
         convReady &&
         convFrames > 0 &&
         deviceRate > 0) {
-      final ms = (convFrames / deviceRate) * 1000.0;
+      final ms = samplesToMs(convFrames, deviceRate);
       return (ms: ms, measured: false, estimated: true, mode: LatencyMode.estimated);
     }
 
@@ -1387,35 +1387,50 @@ enum LatencyMode {
   unmeasured, // 未测定（微弱灰）
 }
 
-/// 全局统一延迟状态色彩动力学（严谨工业级）
-Color latencyColorByMode({
-  required LatencyMode mode,
-  required double ms,
-  required AuraPalette p,
-}) {
-  switch (mode) {
-    case LatencyMode.probing:
-      return p.accent;
-    case LatencyMode.measured:
-      if (ms <= 5.0) return p.success;   // < 5ms: 录音监听级高保真绿
-      if (ms <= 15.0) return p.accent;   // 5~15ms: 极佳低延迟青
-      if (ms <= 30.0) return p.warning;  // 15~30ms: 暖琥珀
-      return p.accent2;                  // > 30ms: 缓冲级警示橙红
-    case LatencyMode.estimated:
-      if (ms <= 15.0) return p.accent;
-      if (ms <= 30.0) return p.warning;
-      return p.accent2;
-    case LatencyMode.zero:
-      return p.success;   // 0.0ms 零算法延迟（实时样本级），统一为高保真绿！
-    case LatencyMode.unmeasured:
-      return p.textDim;
+/// 延迟展示与换算的唯一入口：格式化、配色、样本→毫秒一律走这里。
+/// 新增展示点不得再手写 `toStringAsFixed(1)` 或 `samples / rate * 1000`。
+abstract final class LatencyPresenter {
+  /// 一位小数的毫秒数值（供 StatReadout 等数值/单位分离的控件使用）。
+  static String number(double ms) => ms.toStringAsFixed(1);
+
+  /// 标准展示串：`12.3 ms`。
+  static String format(double ms) => '${number(ms)} ms';
+
+  /// 聚合延迟配色（主监视舱 / 首页读数等无模式场景）。
+  static Color color(double ms, AuraPalette p) {
+    if (ms <= 0) return p.textDim;
+    if (ms <= 5) return p.success;
+    if (ms <= 15) return p.accent;
+    if (ms <= 30) return p.warning;
+    return p.accent2;
+  }
+
+  /// 模式感知配色（组件级延迟徽标）。
+  static Color colorByMode({
+    required LatencyMode mode,
+    required double ms,
+    required AuraPalette p,
+  }) {
+    switch (mode) {
+      case LatencyMode.probing:
+        return p.accent;
+      case LatencyMode.measured:
+        if (ms <= 5.0) return p.success;   // < 5ms: 录音监听级高保真绿
+        if (ms <= 15.0) return p.accent;   // 5~15ms: 极佳低延迟青
+        if (ms <= 30.0) return p.warning;  // 15~30ms: 暖琥珀
+        return p.accent2;                  // > 30ms: 缓冲级警示橙红
+      case LatencyMode.estimated:
+        if (ms <= 15.0) return p.accent;
+        if (ms <= 30.0) return p.warning;
+        return p.accent2;
+      case LatencyMode.zero:
+        return p.success;   // 0.0ms 零算法延迟（实时样本级），统一为高保真绿！
+      case LatencyMode.unmeasured:
+        return p.textDim;
+    }
   }
 }
 
-Color latencyColor(double ms, AuraPalette p) {
-  if (ms <= 0) return p.textDim;
-  if (ms <= 5) return p.success;
-  if (ms <= 15) return p.accent;
-  if (ms <= 30) return p.warning;
-  return p.accent2;
-}
+/// 样本数 → 毫秒（唯一换算口径）；采样率未知（0）时返回 0，避免 NaN/Infinity。
+double samplesToMs(int samples, int rate) =>
+    rate > 0 ? samples / rate * 1000.0 : 0.0;
