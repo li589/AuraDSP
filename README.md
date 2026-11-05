@@ -1,6 +1,6 @@
 # AuraDSP
 
-![version](https://img.shields.io/badge/version-0.5.0-2f81f7?style=flat-square)
+![version](https://img.shields.io/badge/version-0.1.0-2f81f7?style=flat-square)
 ![platform](https://img.shields.io/badge/platform-Windows_10%2F11_%7C_Linux_%7C_Android-0078d6?style=flat-square)
 ![engine](https://img.shields.io/badge/engine-C%2B%2B20-00599c?style=flat-square)
 ![ui](https://img.shields.io/badge/UI-Flutter_3.47-02569b?style=flat-square)
@@ -74,7 +74,7 @@ UI 与引擎之间只有一层 **C ABI**（`engine/auradsp_engine.h`），UI 不
 | **Desktop** | Windows 10 / 11 | 进程内 WASAPI 泵 + `auradsp_engine.dll`（DLL 进程内 FFI） | ● 主力，全功能 |
 | **Root** | Android（KSU / Magisk） | AIDL effects HAL 注入，系统级全局 | ● 端到端打通 + 重启持久化 |
 | **Rootless** | Android APK | 会话级 AudioEffect 前台服务 | ○ 蓝本 `source/RootlessJamesDSP` |
-| **Linux** | Ubuntu（PulseAudio） | 引擎 `libauradsp_engine.so`（与 Windows 同一 C ABI / 同 56 符号）+ PulseAudio simple API 输出 | ✅ 一期已交付（`feature/linux` 已合入 `dev`，PR #21）：引擎与 App 闭环、CI 全绿，Ubuntu 24.04 真机验证通过；三模式功能对等（S5a：系统 / 虚拟 sink / snd-aloop 驱动，真机回环采集走 `.monitor` 源）；桌面体验齐备（S5b：XDG 目录拆分、托盘 PNG、XDG 自启、MPRIS 媒体会话）；治理收尾完成（S5c：插件目录 UI 按 D-7 隐藏、死依赖清理、库加载单点化）；真机轮次另修复输出泵饿死、Impeller 软件 GL 重绘损坏与频谱门三项（详见 `docs/40-回顾/Linux移植收官回顾-2026-11-02.md`，验证步骤见同目录《Linux真机验证清单》）；二期续加 **ALSA 直连专家模式**（D-6 二期：period 256 帧直连输出/采集、driver 模式直采 `hw:Loopback`，设置页可切换，默认仍 PulseAudio） 与 **插件宿主全量**（D-7 二期：VST3/CLAP 进程内托管 + 双宿主隔离 `plugin_host_x64`/`plugin_host_x86` 与 32 位桥，CI 活体实证）；其后完成细致打磨三期（驱动健壮性/状态可见性/设置完整性）与代码安全+边界审查（IPC 对端认证等 8 项修复，详见 `docs/40-回顾/Linux打磨与安全审查-2026-11-02.md`）；其后 **X11 插件编辑器 GUI**（2026-11-04：顶层容器 + 最小 XEmbed 宿主，CLAP/VST3/VST2 三格式编辑器对等开放）与 **VST2 Linux 跟进**（ELF 入口判定扫描 + 位桥深扫/加载）落地；2026-11-05 全项目深度审查收尾 Linux 侧：虚拟 sink 生命周期治理（退出/切离自动卸载、残留先卸后装）与 PA/PipeWire 重启后输出死亡自动恢复 |
+| **Linux** | Ubuntu（PulseAudio / PipeWire） | 引擎 `libauradsp_engine.so`（与 Windows 同一 C ABI / 同 56 符号） + PulseAudio simple API 输出（ALSA 直连为专家模式） | ✅ 已交付，与 Windows 功能对等：三模式（系统 / 虚拟 sink / snd-aloop 驱动）+ ALSA 专家模式、VST3/CLAP/VST2 插件宿主（进程内 + 双宿主隔离 + 32 位桥）与 X11 编辑器、托盘 / XDG 自启 / MPRIS；2026-11-05 全项目深度审查收尾（虚拟 sink 生命周期治理、输出端点死亡自动恢复）。演进全程见 `docs/40-回顾/Linux移植收官回顾-2026-11-02.md` 与深度审查报告 |
 
 **Windows 四种音频后端**（`app/auradsp_app/lib/core/audio_modes.dart`）：
 

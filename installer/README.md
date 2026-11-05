@@ -4,7 +4,7 @@
 
 本项目目录汇总了 AuraDSP 面向所有支持平台的安装包制作、打包脚本、元数据管理，以及**自主研发的 Windows 安装向导子项目**。所有发行产物均遵循统一的工程标准，最终成果集中输出至根目录下的 `dist/` 目录。
 
-> **当前状态（2026-11-05）**：本目录为**规范与设计阶段**，安装程序实现尚未落地（全项目深度审查 S1 已确认）；现行有效的安装侧规约以设计文档为准，其中 Windows 侧新增「驱动残留检测与自动重装铁律（DRV 规约）」见 `docs/02_windows_installer_design.md` §4.2，驱动侧 `01_vaio_driver/install_driver.ps1` 已按此规约实现安装前残留清理。
+> **当前状态（2026-11-06）**：**发布规范已裁定**（版本号 `vXX.XX.X`、首版 v0.1.0、仅 Win+Linux、只从 `main` 构建、门禁全绿、每平台驱动包+便携包+正式安装包三件齐备，见 `docs/01_distribution_architecture.md` 发布总则）。**Linux 部分已落地**：打包入口 `linux/pack.sh`（deb / 驱动配置包 / AppImage / tar.gz 便携包 + Flatpak/Snap 清单），总体设计与实施规划见 `docs/05_installer设计与实施规划-2026-11-06.md`。Windows 正式安装包（自研向导）仍按 `docs/02_windows_installer_design.md` 推进、尚未落地；其「驱动残留检测与自动重装铁律（DRV 规约）」见该设计 §4.2，驱动侧 `01_vaio_driver/install_driver.ps1` 已按此实现。
 
 ---
 

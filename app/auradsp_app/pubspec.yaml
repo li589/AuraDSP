@@ -1,7 +1,7 @@
 name: auradsp_app
 description: "AuraDSP — 跨平台音频效果应用（UI 层）。APP = AuraDSP Engines + UI 主体框架。"
 publish_to: "none"
-version: 0.5.0+1
+version: 0.1.0+1
 
 environment:
   sdk: ^3.13.5

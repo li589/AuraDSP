@@ -2,6 +2,14 @@
 
 本文档定义了 AuraDSP (JamesDSP Desktop & Multiplatform) 的全平台打包与发布技术架构，明确各平台编译产物如何被采集、校验、打包并最终汇聚到 `dist/` 根发布目录。
 
+> **发布规范总则（2026-11-06 owner 裁定，本文件为其落点）**
+> - **版本号**：格式 `vXX.XX.X`——主版本、次版本各最多两位数，修订号一位起；**首个正式版本为 v0.1.0**（此前 0.5.0 为开发期内部版本，不再沿用）。
+> - **平台范围**：当前发行仅含 **Windows + Linux** 桌面；Android / macOS 为后续阶段（规格预留，不阻塞当前发行）。
+> - **发行分支**：正式发行**只能从 `main` 分支构建**（开发走 `feature/* → dev → main` 单向合并，见 AGENT.md 分支策略）。
+> - **发行门禁**：构建发行前，CI 八 job、双平台冒烟与 Dart 单测必须全绿；任一红灯不得发行。
+> - **完整发行**：每个平台必须同时具备三件——**驱动包、便携包、正式安装包**（构成见 §2.3），缺一不算完整发行。
+> - **前置条件**：`installer/` 子项目（打包工具链与各平台安装包实现）完善后方可首发；Linux 部分已于 2026-11-06 落地（见 `installer/linux/pack.sh` 与 05 号设计规划），Windows 部分按 02 号设计推进。
+
 ---
 
 ## 1. 发行流水线总览 (Pipeline Architecture)
@@ -52,16 +60,17 @@ flowchart TD
 ### 2.1 统一版本真相源 (Single Source of Truth)
 AuraDSP 的版本号统一定义在 `app/auradsp_app/pubspec.yaml`：
 ```yaml
-version: 0.5.0+1
+version: 0.1.0+1
 ```
 其中：
-- `0.5.0` 为语义化版本号 `SEMVER`（Major.Minor.Patch）。
+- `0.1.0` 为版本号 `Major.Minor.Patch`，格式受发布总则约束：对外标签写作 `v0.1.0`（`vXX.XX.X`——主、次版本各最多两位数，修订号一位起；修订号超过 9 时进位次版本）。首个正式版本即 `v0.1.0`。
 - `+1` 为构建序号 `BUILD_NUMBER`。
 
-在跨平台打包工具启动时，由 `installer/shared/metadata/version_resolver.py`（或类似脚本）直接解析 `pubspec.yaml`，向各平台打包工具导出统一的环境变量：
-- `AURADSP_VERSION="0.5.0"`
+在跨平台打包工具启动时，由 `installer/shared/version_resolver.py` 直接解析 `pubspec.yaml`，向各平台打包工具导出统一的环境变量：
+- `AURADSP_VERSION="0.1.0"`
 - `AURADSP_BUILD="1"`
-- `AURADSP_FULL_VERSION="0.5.0.1"`
+- `AURADSP_FULL_VERSION="0.1.0.1"`
+- `AURADSP_TAG="v0.1.0"`
 
 ### 2.2 产物命名范式
 所有存入 `dist/` 的发行文件名必须遵循严谨、自解释的命名结构，方便终端用户识别与 CI 自动抓取：
@@ -77,7 +86,19 @@ AuraDSP-v{VERSION}-android-arm64-v8a.apk    # Android 64位真机包
 AuraDSP-v{VERSION}-android-universal.apk    # Android 全架构通用包
 AuraDSP-v{VERSION}.aab                      # Android Google Play 商店包
 AuraDSP-v{VERSION}-macOS-Universal.dmg      # macOS 通用架构 DMG 安装镜像
+AuraDSP-Driver-x64-v{VERSION}.zip           # Windows 驱动包（AuraVAIO 驱动 + install_driver.ps1）
+auradsp-driver-loopback_{VERSION}_all.deb   # Linux 驱动包（snd-aloop 自启配置，见 03 §6）
+AuraDSP-Linux-x64-v{VERSION}.tar.gz         # Linux 便携包（AppImage 的等价补充形态）
 ```
+
+### 2.3 完整发行构成（每平台三件，缺一不可）
+
+| 平台 | 驱动包 | 便携包 | 正式安装包 |
+| :--- | :--- | :--- | :--- |
+| Windows | `AuraDSP-Driver-x64-v{VERSION}.zip`（AuraVAIO 驱动 + `install_driver.ps1`，含 DRV 规约残留清理） | `AuraDSP-Windows-x64-v{VERSION}.zip`（绿色包） | `AuraDSP-Setup-x64-v{VERSION}.exe`（自研安装向导，见 02） |
+| Linux | `auradsp-driver-loopback_{VERSION}_all.deb`（snd-aloop 模块自启 + 参数配置，见 03 §6） | `AuraDSP-v{VERSION}-x86_64.AppImage` + `AuraDSP-Linux-x64-v{VERSION}.tar.gz` | `auradsp_{VERSION}_amd64.deb`（见 03 §2） |
+
+扩展资源全量包（§4）作为 Release 附件随同发布，不计入三件构成。
 
 ---
 
@@ -89,10 +110,10 @@ AuraDSP-v{VERSION}-macOS-Universal.dmg      # macOS 通用架构 DMG 安装镜�
 
 **校验清单格式示例**：
 ```text
-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  AuraDSP-Windows-x64-v0.5.0.zip
-a8f5f167f44f4964e6c998dee827110c01759f33b30bcd8822533036ca6d5f70  AuraDSP-Setup-x64-v0.5.0.exe
-7d1a54127b222502f5b79b5fb0803061152a44f92b37e23c65c541ce5d5eabc1  auradsp_0.5.0_amd64.deb
-b5a2c96250612366ea8c4146d73f5d44547047106130ea0945a1a227a80c611e  AuraDSP-v0.5.0-x86_64.AppImage
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  AuraDSP-Windows-x64-v0.1.0.zip
+a8f5f167f44f4964e6c998dee827110c01759f33b30bcd8822533036ca6d5f70  AuraDSP-Setup-x64-v0.1.0.exe
+7d1a54127b222502f5b79b5fb0803061152a44f92b37e23c65c541ce5d5eabc1  auradsp_0.1.0_amd64.deb
+b5a2c96250612366ea8c4146d73f5d44547047106130ea0945a1a227a80c611e  AuraDSP-v0.1.0-x86_64.AppImage
 ```
 
 ---
@@ -120,4 +141,10 @@ AuraDSP 包含较为庞大的声学核心资源库（DDC 耳机校准曲线、IR
 | **package-android** | `ubuntu-latest` | `bash installer/android/pack.sh` | `dist/*.apk`, `dist/*.aab` |
 | **package-macos** | `macos-latest` | `bash installer/macos/pack.sh` | `dist/*.dmg` |
 | **release-publish** | `ubuntu-latest` | 汇集全部 Artifacts 并生成 `SHA256SUMS.txt` | 自动发布到 GitHub Release |
+
+**发行门禁（与发布总则一致，CI 流水线必须强制）**：
+
+1. 发行构建只接受 `main` 分支上、且标签为 `vXX.XX.X` 格式的提交；标签版本必须与 `pubspec.yaml` 一致（由 version_resolver 校验，不一致即中止）。
+2. 触发发行前，该提交的 CI 八 job 必须全绿（success），且双平台冒烟（Windows 全量 / Linux 口径）与 Dart 单测无 FAIL。
+3. 每平台三件产物（§2.3）齐备且通过 `dist_manifest.py --check` 与 SHA256 清单校验后，才允许 publish 到 GitHub Release。
 
