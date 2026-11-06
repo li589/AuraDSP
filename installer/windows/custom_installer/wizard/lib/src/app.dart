@@ -65,6 +65,7 @@ class _SetupShellState extends State<SetupShell> {
   bool _openSound = false;
   bool _awaitingElevation = false;
   bool _finishDesktopShortcut = true;
+  DateTime _lastProgressPaint = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
@@ -369,6 +370,28 @@ class _SetupShellState extends State<SetupShell> {
     }
   }
 
+  /// 进度事件节流：解压约 1600 个文件会产生同样多的事件，逐条 setState
+  /// 会让整棵进度页跟着重建（叠加背景动画就是 GPU/内存暴涨的主因）。
+  /// 60ms 一次足够平滑；日志只保留最近 120 条，避免列表无限增长。
+  void _onProgress(ProgressEvent e) {
+    if (!mounted) return;
+    final now = DateTime.now();
+    final force = e.step == 'done' || e.step == 'restore';
+    if (!force && now.difference(_lastProgressPaint).inMilliseconds < 60) {
+      return;
+    }
+    _lastProgressPaint = now;
+    setState(() {
+      _events.add(e);
+      if (_events.length > 120) {
+        _events.removeRange(0, _events.length - 120);
+      }
+      if (e.fraction != null && e.fraction! > _fraction) {
+        _fraction = e.fraction!;
+      }
+    });
+  }
+
   Future<void> _runInstall() async {
     setState(() {
       _page = _Page.progress;
@@ -376,13 +399,7 @@ class _SetupShellState extends State<SetupShell> {
       _events.clear();
       _fraction = 0;
     });
-    final r = await _engine.install(_options, (e) {
-      if (!mounted) return;
-      setState(() {
-        _events.add(e);
-        if (e.fraction != null && e.fraction! > _fraction) _fraction = e.fraction!;
-      });
-    }, plan: _plan);
+    final r = await _engine.install(_options, _onProgress, plan: _plan);
     if (!mounted) return;
     setState(() {
       _running = false;
@@ -401,13 +418,7 @@ class _SetupShellState extends State<SetupShell> {
       _events.clear();
       _fraction = 0;
     });
-    final r = await _engine.uninstall(m, keepData: _keepData, sink: (e) {
-      if (!mounted) return;
-      setState(() {
-        _events.add(e);
-        if (e.fraction != null && e.fraction! > _fraction) _fraction = e.fraction!;
-      });
-    });
+    final r = await _engine.uninstall(m, keepData: _keepData, sink: _onProgress);
     if (!mounted) return;
     setState(() {
       _running = false;

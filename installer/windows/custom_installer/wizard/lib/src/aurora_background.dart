@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -5,7 +6,11 @@ import 'package:flutter/material.dart';
 import 'theme.dart';
 
 /// 全窗极光背景：3 团缓慢漂移的径向光斑 + 暗角（设计 §4.2）。
-/// 以低频动画驱动（整周期 26s），重绘成本可控。
+///
+/// 性能口径：不要用 AnimationController.repeat() —— 它按 vsync 60fps
+/// 全窗重绘 4 个大半径 RadialGradient（每帧新建 Shader），实测能把 GPU
+/// 推到 75%、内存推到 1G+。改为 24 档量化 + 900ms Timer（约 1.1fps），
+/// 并用 RepaintBoundary 隔离内容层，重绘成本降到原来的约 2%。
 class AuroraBackground extends StatefulWidget {
   const AuroraBackground({super.key, required this.child});
   final Widget child;
@@ -14,28 +19,31 @@ class AuroraBackground extends StatefulWidget {
   State<AuroraBackground> createState() => _AuroraBackgroundState();
 }
 
-class _AuroraBackgroundState extends State<AuroraBackground>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 26),
-  )..repeat();
+class _AuroraBackgroundState extends State<AuroraBackground> {
+  static const int _steps = 24;
+  Timer? _timer;
+  int _step = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 900), (_) {
+      if (!mounted) return;
+      setState(() => _step = (_step + 1) % _steps);
+    });
+  }
 
   @override
   void dispose() {
-    _c.dispose();
+    _timer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (context, child) => CustomPaint(
-        painter: _AuroraPainter(_c.value),
-        child: child,
-      ),
-      child: widget.child,
+    return CustomPaint(
+      painter: _AuroraPainter(_step / _steps),
+      child: RepaintBoundary(child: widget.child),
     );
   }
 }

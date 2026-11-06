@@ -70,3 +70,12 @@ python installer/windows/pack.py --build-installer --mode all --resources core
   避免 QuickEdit「选择」模式挂起导致黑窗口关不掉。
 - 卸载前按镜像名强杀 auradsp_app / plugin_host_x64 / plugin_host_x86，
   删除阶段再守卫一次并重试；仍被占用的文件在向导退出后由隐藏脚本自动补删。
+
+## 8. 进程守卫安全与性能口径（2026-11-06 第六轮）
+
+- 守卫进程按可执行文件完整路径核对（只处理本安装目录下的
+  auradsp_app.exe / plugin_host_x64.exe / plugin_host_x86.exe），
+  不再按进程名匹配或按镜像名强杀，避免误伤同名软件与别家插件宿主；
+  路径查询失败时宁可不杀。
+- 极光背景由 60fps 全窗重绘改为 24 档 / 900ms 低频重绘 + 图层隔离；
+  进度事件 60ms 节流、日志上限 120 条，显著降低内存与 GPU 占用。

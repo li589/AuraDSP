@@ -109,8 +109,8 @@ class InstallEngine {
       // 1) 进程守卫
       sink(const ProgressEvent('guard', 'check', 0.02));
       if (o.closeRunningApps) {
-        await closeGuardedProcesses();
-      } else if ((await guardedPids()).isNotEmpty) {
+        await closeGuardedProcesses(installDir: o.installDir);
+      } else if ((await guardedPids(installDir: o.installDir)).isNotEmpty) {
         throw StateError('AuraDSP 正在运行，请先关闭后重试');
       }
 
@@ -379,7 +379,7 @@ $s.Save()
     final leftovers = <String>[];
     try {
       sink(const ProgressEvent('guard', 'check', 0.02));
-      await closeGuardedProcesses();
+      await closeGuardedProcesses(installDir: manifest.installDir);
       final elevated = isElevated();
 
       // 1) ASIO：只要 DLL 在就反注册（含用户事后手动注册的情况），幂等。
@@ -468,7 +468,7 @@ $s.Save()
       sink(const ProgressEvent('cleanup', 'files', 0.65));
       // 删文件前再清一次守卫进程：安装后扫描插件可能拉起 plugin_host_x64，
       // 且在首轮守卫之后仍可能被重新拉起；按镜像名强杀兜底。
-      await closeGuardedProcesses();
+      await closeGuardedProcesses(installDir: manifest.installDir);
       final programPaths = manifest.files.map((f) => f.path).toSet();
       final dir = Directory(manifest.installDir);
       if (await dir.exists()) {

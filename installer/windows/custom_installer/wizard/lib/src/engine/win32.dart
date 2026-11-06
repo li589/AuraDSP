@@ -9,6 +9,7 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:ffi/ffi.dart';
+import 'package:path/path.dart' as p;
 import 'package:win32/win32.dart';
 
 const int kHkeyCurrentUser = 0x80000001;
@@ -165,39 +166,85 @@ Future<int> registerAsioDll(String dllPath, {required bool register}) async {
   return r.exitCode;
 }
 
-const kGuardedImages = ['auradsp_app.exe', 'plugin_host_x64.exe', 'plugin_host_x86.exe'];
+const kGuardedImages = <String>[
+  'auradsp_app.exe',
+  'plugin_host_x64.exe',
+  'plugin_host_x86.exe',
+];
 
-/// 枚举受守卫进程的 PID（tasklist CSV 解析，与系统语言无关）。
-Future<List<int>> guardedPids() async {
-  final pids = <int>[];
-  for (final image in kGuardedImages) {
-    final r = await Process.run(
-        'tasklist', ['/FI', 'IMAGENAME eq $image', '/FO', 'CSV', '/NH']);
-    if (r.exitCode != 0) continue;
-    for (final line in (r.stdout as String).split('\n')) {
-      final m = RegExp(r'^"[^"]+","(\d+)"').firstMatch(line.trim());
-      if (m != null) pids.add(int.parse(m.group(1)!));
-    }
+/// 解析 PowerShell 输出的 `pid|可执行文件路径` 行（与系统语言无关）。
+Map<int, String> parseProcessPaths(String output) {
+  final result = <int, String>{};
+  for (final raw in output.split(RegExp(r'\r?\n'))) {
+    final line = raw.trim();
+    final i = line.indexOf('|');
+    if (i <= 0) continue;
+    final id = int.tryParse(line.substring(0, i).trim());
+    final exePath = line.substring(i + 1).trim();
+    // 取不到路径的一律不碰：宁可漏杀，也不能误伤同名进程。
+    if (id == null || exePath.isEmpty) continue;
+    result[id] = exePath;
   }
-  return pids;
+  return result;
 }
 
-/// 优雅关闭（taskkill 无 /F 发送关闭信号）→ 等待 → 强制结束。
-Future<void> closeGuardedProcesses() async {
-  final pids = await guardedPids();
+/// 只保留可执行文件确实位于本安装目录下的 PID（纯函数，可单测）。
+///
+/// 关键：`auradsp_app.exe` / `plugin_host_x64.exe` 都是通用名，网上存在同名软件；
+/// 按进程名匹配会误杀。这里以 Win32_Process.ExecutablePath 为准，并排除
+/// 系统 PID 与向导自身，避免 PID 复用或自杀。
+Set<int> ownedProcessPids(Map<int, String> paths, String installDir) {
+  if (installDir.trim().isEmpty) return <int>{};
+  final root =
+      p.windows.normalize(installDir.replaceAll('/', r'\')).toLowerCase();
+  final prefix = root.endsWith(r'\') ? root : '$root\\';
+  final owned = <int>{};
+  paths.forEach((id, exePath) {
+    if (id <= 4 || id == pid) return;
+    final normalized =
+        p.windows.normalize(exePath.replaceAll('/', r'\')).toLowerCase();
+    if (normalized.startsWith(prefix)) owned.add(id);
+  });
+  return owned;
+}
+
+/// 枚举「路径确属本安装目录」的守卫进程。
+/// 用 Get-CimInstance 拿 ExecutablePath 做路径核对，而不是只按名字匹配。
+Future<List<int>> guardedPids({required String? installDir}) async {
+  if (installDir == null || installDir.trim().isEmpty) return <int>[];
+  final names = kGuardedImages.map((n) => "'$n'").join(', ');
+  final script = '\$names = @($names)\n'
+      'Get-CimInstance Win32_Process | '
+      'Where-Object { \$names -contains \$_.Name } |\n'
+      '  ForEach-Object { "\$(\$_.ProcessId)|\$(\$_.ExecutablePath)" }';
+  try {
+    final r = await Process.run(
+        'powershell.exe', ['-NoProfile', '-Command', script]);
+    if (r.exitCode != 0) return <int>[];
+    return ownedProcessPids(
+            parseProcessPaths(r.stdout.toString()), installDir)
+        .toList();
+  } catch (_) {
+    // 查询失败宁可不杀：绝不退化成按进程名全杀。
+    return <int>[];
+  }
+}
+
+/// 优雅关闭 → 等待 → **仅对复核过路径的 PID** 强杀。
+/// 不使用 /F /IM（按名全杀）也不使用 /T（连带子进程树，可能杀到用户的 DAW）。
+Future<void> closeGuardedProcesses({required String? installDir}) async {
+  final pids = await guardedPids(installDir: installDir);
   if (pids.isEmpty) return;
-  // 先优雅关闭（无 /F，给宿主/主程序保存状态的机会）。
-  for (final pid in pids) {
-    await Process.run('taskkill', ['/PID', '$pid']);
+  for (final id in pids) {
+    await Process.run('taskkill', ['/PID', '$id']);
   }
-  for (var i = 0; i < 6; i++) {
-    await Future<void>.delayed(const Duration(milliseconds: 400));
-    if ((await guardedPids()).isEmpty) return;
-  }
-  // 按镜像名强杀兜底：覆盖 PID 竞态、无窗口控制台进程（taskkill 无 /F
-  // 对这类进程常无效），以及主程序退出后又被重新拉起的插件宿主实例。
-  for (final image in kGuardedImages) {
-    await Process.run('taskkill', ['/F', '/IM', image, '/T']);
+  // 固定等待后再查一次即可，避免每轮轮询都启动一个 PowerShell 进程
+  // （原实现最多 8 次 CIM 查询，既慢又推高内存）。
+  await Future<void>.delayed(const Duration(milliseconds: 1200));
+  // 强杀前重新核对路径：等待期间 PID 可能已被其它进程复用。
+  final still = await guardedPids(installDir: installDir);
+  for (final id in still) {
+    await Process.run('taskkill', ['/F', '/PID', '$id']);
   }
   await Future<void>.delayed(const Duration(milliseconds: 300));
 }

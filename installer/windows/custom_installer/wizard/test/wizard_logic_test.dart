@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:auradsp_setup/src/args.dart';
 import 'package:auradsp_setup/src/engine/cleanup_policy.dart';
 import 'package:auradsp_setup/src/engine/install_engine.dart';
@@ -360,6 +362,48 @@ void main() {
       expect(s, contains(r'C:\Temp\S'));
       expect(s, contains(r'$targets = @('));
       expect(s, contains('Remove-Item -LiteralPath'));
+    });
+  });
+
+  group('进程守卫路径核对（防误杀同名进程）', () {
+    test('parseProcessPaths 解析 pid|path，跳过取不到路径的项', () {
+      const out = '1234|C:\\Program Files\\AuraDSP\\auradsp_app.exe\r\n'
+          '5678|C:\\Other\\auradsp_app.exe\r\n'
+          '9999|\r\n'
+          'bad|line\r\n';
+      final m = parseProcessPaths(out);
+      expect(m.length, 2);
+      expect(m[1234], r'C:\Program Files\AuraDSP\auradsp_app.exe');
+      expect(m[5678], r'C:\Other\auradsp_app.exe');
+    });
+
+    test('ownedProcessPids 只认安装目录下的可执行文件', () {
+      final paths = <int, String>{
+        100: r'C:\Program Files\AuraDSP\auradsp_app.exe',
+        101: r'C:\Program Files\AuraDSP\plugin_host_x64.exe',
+        102: r'C:\Program Files\AuraDSP\sub\plugin_host_x86.exe',
+        200: r'C:\Other\auradsp_app.exe', // 网上同名软件
+        201: r'D:\Games\plugin_host_x64.exe', // 别家同名宿主
+        202: r'C:\Program Files\AuraDSPEx\auradsp_app.exe', // 前缀相似但不是子目录
+        4: r'C:\Program Files\AuraDSP\sys.exe', // 系统 PID
+        pid: r'C:\Program Files\AuraDSP\me.exe', // 向导自身
+      };
+      final owned = ownedProcessPids(paths, r'C:\Program Files\AuraDSP');
+      expect(owned, <int>{100, 101, 102});
+      expect(ownedProcessPids(paths, ''), isEmpty,
+          reason: '没有安装目录时宁可不杀');
+    });
+
+    test('大小写与斜杠归一', () {
+      final owned = ownedProcessPids(<int, String>{
+        300: 'c:/program files/auradsp/PLUGIN_HOST_X64.EXE'.replaceAll('/', r'\'),
+      }, r'C:\Program Files\AuraDSP\');
+      expect(owned, <int>{300});
+    });
+
+    test('缺安装目录时直接返回空，不查询不杀', () async {
+      expect(await guardedPids(installDir: null), isEmpty);
+      expect(await guardedPids(installDir: '   '), isEmpty);
     });
   });
 }
