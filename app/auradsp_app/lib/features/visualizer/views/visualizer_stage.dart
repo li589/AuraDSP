@@ -58,12 +58,11 @@ class VisualizerStage extends StatefulWidget {
   State<VisualizerStage> createState() => _VisualizerStageState();
 }
 
-class _VisualizerStageState extends State<VisualizerStage>
-    with SingleTickerProviderStateMixin {
+class _VisualizerStageState extends State<VisualizerStage> {
   final PeakPhysicsEngine _peakEngine = PeakPhysicsEngine();
   final WaveformSynthesizer _waveformSynth = WaveformSynthesizer();
 
-  late final AnimationController _animController;
+  Timer? _timelineTimer;
   Timer? _hudHideTimer;
   bool _hudVisible = true;
 
@@ -89,11 +88,6 @@ class _VisualizerStageState extends State<VisualizerStage>
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 10),
-    )..addListener(_onTick);
-
     widget.spectrum.addListener(_onSpectrumFrame);
     // 默认静止：只有收到真实有声帧后时间轴才启动。
     _syncTimeline();
@@ -103,18 +97,17 @@ class _VisualizerStageState extends State<VisualizerStage>
     });
   }
 
-  /// 2026-10-31：时间轴每两帧推进一次（30fps）。Intel 核显上
-  /// 60fps 全屏重绘会让光栅线程落后、GPU 表面排队（实测可视化页可涨到
-  /// 2GB+）；30fps 对慢速旋转/流动观感无差别，帧生产量减半。
-  int _tickParity = 0;
+  /// 产帧节奏：固定 30 Hz 时间轴驱动，不再跟着 vsync 空跑。
+  /// 旧实现用 AnimationController.repeat() + 每两帧推进一次，在 60 Hz 屏上
+  /// 时间轴约 30 Hz，但在 144 Hz 屏上变成约 72 Hz（时间轴 2.3 倍速），
+  /// 且 UI/Raster 线程按刷新率空转。改为按时间轴节奏定时产帧后，
+  /// 任意刷新率下都稳定在 ~30 Hz。
+  static const Duration _timelinePeriod = Duration(milliseconds: 33);
+  static const double _timelineStep = 0.032;
 
-  /// 每帧仅推进时间轴（视口通过 repaint 监听直接重绘，不重建页面）。
-  void _onTick() {
+  void _onTimelineTick() {
     if (!widget.active || !widget.playing || !_audible) return;
-    _tickParity ^= 1;
-    if (_tickParity == 0) {
-      _time.value += 0.032;
-    }
+    _time.value += _timelineStep;
   }
 
   /// 时间轴启停的唯一入口：三者同时成立才产帧（页面可见、引擎在播放、
@@ -122,9 +115,12 @@ class _VisualizerStageState extends State<VisualizerStage>
   void _syncTimeline() {
     final shouldRun = widget.active && widget.playing && _audible;
     if (shouldRun) {
-      if (!_animController.isAnimating) _animController.repeat();
+      _timelineTimer ??= Timer.periodic(_timelinePeriod, (_) {
+        _onTimelineTick();
+      });
     } else {
-      if (_animController.isAnimating) _animController.stop();
+      _timelineTimer?.cancel();
+      _timelineTimer = null;
     }
   }
 
@@ -199,11 +195,11 @@ class _VisualizerStageState extends State<VisualizerStage>
   @override
   void dispose() {
     _hudHideTimer?.cancel();
+    _timelineTimer?.cancel();
     _silenceTimer?.cancel();
     widget.spectrum.removeListener(_onSpectrumFrame);
     _gatedSpectrum.dispose();
     _time.dispose();
-    _animController.dispose();
     super.dispose();
   }
 
