@@ -95,3 +95,7 @@ test/vst/
 test/plugins/
 test/smoke/*.clap
 core/desktop/windows/build-x86/
+
+# --- 性能测量过程目录：脚本/报告已归档，原始采样与临时构建不入库 ---
+2026-11-06/**/work/
+
