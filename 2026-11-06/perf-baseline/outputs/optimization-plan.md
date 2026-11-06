@@ -81,11 +81,37 @@
 - **风险**：低；歌词切换延迟需验收。
 - **实时安全**：否。
 
-### P1-4 修复 profile 播放态访问违例
-- **证据**：profile 在舞台进入播放态时必崩（Impeller 与 Skia 均复现，`0xC0000005`），直接导致本阶段无法采集 timeline/heap/CPU sampling。
-- **做法**：最小二分定位（关闭氛围层/关闭时间驱动样式/HUD 玻璃层逐项排除），确认是否与 `ui.ImageFilter`/shader/离屏层在 profile 下的 finalizer 相关。
-- **预期收益**：无直接性能收益，但**解锁后续所有深度归因**（P2-3 依赖它）。
-- **风险**：中；属于独立缺陷修复，建议单独 PR。
+### P1-4 修复 profile 播放态访问违例（已定位：引擎采样器；已规避）
+
+- **结论**：不是本应用代码问题。cdb 符号化显示崩点在
+  `flutter_windows.dll!dart::ProfilerNativeStackWalker::CallerFP` →
+  `Profiler::SampleThread` → `ThreadInterrupterWin::Interrupt`，错误偏移恒为
+  `+0x8b3dd0`，访问地址落在主线程栈底未提交页（如 `0x1000c0`）。官方空模板
+  工程（仅 `AnimationController` + `CustomPaint`）在同一 Flutter 3.47.9 /
+  Dart 3.13.7 下复现同一偏移。因此“氛围层 / 时间驱动样式 / HUD 玻璃层”的
+  二分假设不成立：在主页（不含任何可视化）同样复现。
+- **触发条件**：`flutter run --profile` 注入 `enable-dart-profiling=true` 后，
+  引擎以 1 kHz（`--profile_period=1000`）采样；采样线程沿 frame pointer
+  回溯被中断线程的 native 栈时越过已提交区。release 无该路径
+  （`SchedulerBinding` 的 `TimelineTask` 仅在 `!kReleaseMode` 存在，且 release
+  启动器不注入采样开关）。
+- **规避**：把采样周期放宽到 10 ms（100 Hz）。`flutter run` 原生支持
+  `--dart-flags` 透传（flutter_tools 的 `desktop_device.dart` 会把 `dart-flags=…`
+  作为引擎开关写入 `FLUTTER_ENGINE_SWITCH_*`）：
+
+  ```
+  flutter run -d windows --profile --dart-flags=--profile_period=10000
+  ```
+
+  直启 `Profile\auradsp_app.exe` 时等价注入：
+  `FLUTTER_ENGINE_SWITCHES=2`、`FLUTTER_ENGINE_SWITCH_1=enable-dart-profiling=true`、
+  `FLUTTER_ENGINE_SWITCH_2=dart-flags=--profile_period=10000`。
+- **验证**：粉噪播放 + 可视化页连续采样 300 s 无崩溃；`getFlagList` 显示
+  `profile_period=10000`、`profiler=true`、`profile_vm=true`；累计 1980 个 CPU
+  采样（对应 27500+ 函数符号），`getAllocationProfile(gc=true)`（两个 isolate
+  堆约 15.96 MB）与 `getMemoryUsage` 均正常返回。
+- **残留风险**：1 kHz 仍未完全稳定（对照实验出现启动 2 s 内崩溃）；100 Hz 为
+  实测可用档。根本修复需引擎/SDK 升级，随 P2-3 一起排期。
 - **实时安全**：否。
 
 ### P1-5 图像缓存与离屏层审计
@@ -122,10 +148,14 @@
 
 ## 施工后遗留清单（2026-11-06 P0 落地后）
 
-1. **profile 播放态访问违例 0xC0000005（未修）**：profile 构建进入播放态必崩，Impeller/Skia 均复现，
-   release 不复现。P0 四项全部只涉及 UI 侧，与崩溃无关联；无法用低风险改动定位到具体帧
-   （需要二分氛围层/时间驱动样式/HUD 玻璃层，改动面超出本轮约束）。保持为 P1-4，单独排查。
-   影响：profile 下无法采集 timeline/heap/CPU sampling，深度归因仍被阻塞。
+1. **profile 播放态访问违例 0xC0000005（已定位 + 已规避）**：根因是 Flutter
+   3.47.9（Dart 3.13.7）Windows profile 引擎的 CPU 采样器：默认 1 kHz 采样时
+   `ProfilerNativeStackWalker::CallerFP` 沿 frame pointer 回溯到主线程栈底
+   未提交页（偏移恒为 `flutter_windows.dll+0x8b3dd0`），官方空模板工程同样复现。
+   release 无采样路径，故不复现。规避：profile 采集一律用 100 Hz
+   （`flutter run -d windows --profile --dart-flags=--profile_period=10000`，
+   或直启 Profile exe 时注入同名引擎开关）。详见 P1-4。
+   影响已解除：profile 下堆/分配快照与 CPU 采样均可正常采集。
 2. **P0-3 收益量级修正**：方案预估 −210 MB / −96 MB 基于旧 85 fps 全屏卷积节奏；在 P0-2 之后
    （30 Hz、HUD 仅覆盖岛区）实测 −78 MB / −65 MB。后续若恢复逐帧全屏特效，需重新评估。
 3. **GPU Process Memory 计数器口径**：`gpu_sampler.ps1` 的 shared 为进程级常驻值，跨次运行会随
