@@ -22,18 +22,28 @@ bool PluginChainComponent::prepare(double sampleRate, uint32_t maxBlockSize) {
     if (m_maxBlock == maxBlockSize) return true;
     m_maxBlock = maxBlockSize;
 
-    for (size_t s = 0; s < m_delayLines.size(); ++s) {
-        m_delayLines[s].prepare(DelayLine::kMaxDelay);
-        m_multiDelayLines[s].prepare(MultiDelayLine::kMaxDelay);
-    }
+    /* 延迟线不在 create 阶段预分配：绝大多数会话没有插件（默认槽位全空），
+     * 8.4MB/handle 的 PDC 缓冲纯属浪费。首次挂载插件时由控制线程
+     * ensureDelayLines() 补建，早于插件发布为 active，音频线程仍零分配。 */
     return true;
+}
+
+bool PluginChainComponent::ensureDelayLines() noexcept {
+    if (m_delaysReady.load(std::memory_order_acquire)) return true;
+    bool ok = true;
+    for (size_t s = 0; s < m_multiDelayLines.size(); ++s) {
+        ok = m_multiDelayLines[s].prepare(MultiDelayLine::kMaxDelay) && ok;
+    }
+    /* 部分失败时保持 false，下次挂载仍会补齐；已分配的槽位重复 prepare
+     * 只会替换为同样大小缓冲，控制线程上可忽略。 */
+    if (ok) m_delaysReady.store(true, std::memory_order_release);
+    return ok;
 }
 
 void PluginChainComponent::reset() {
     if (!m_host) return;
     for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
         m_host->unloadPluginSlot(slot);
-        m_delayLines[slot].reset();
         m_multiDelayLines[slot].reset();
         m_lastMasks[slot] = 0;
     }
@@ -50,7 +60,6 @@ void PluginChainComponent::setEnabled(bool enable) noexcept {
          * 首块按「无延迟历史」重建（m_lastMasks 一并清零，走既有
          * mask 变化复位路径），避免旧音频注入。 */
         for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
-            m_delayLines[slot].reset();
             m_multiDelayLines[slot].reset();
             m_lastMasks[slot] = 0;
         }
