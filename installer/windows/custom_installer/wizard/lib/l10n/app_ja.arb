@@ -1,1 +1,100 @@
-{"@@locale":"ja","allUsers":"すべてのユーザーにインストール（管理者が必要）","appTitle":"AuraDSP セットアップ","back":"戻る","close":"閉じる","compAsio":"AuraASIO ドライバー（DAW に AuraDSP を公開）","compDdc":"厳選ヘッドホン/スピーカー DDC キャリブレーションをプリインストール","compVaio":"AuraVAIO 仮想オーディオデバイスドライバー","customInstall":"カスタムインストール","done":"完了","errorBody":"操作が失敗し、完了したステップは可能な限りロールバックされました。詳細：","errorTitle":"問題が発生しました","finishTitle":"インストール完了","installDirLabel":"インストール先","keepData":"プリセットとキャリブレーションデータを保持","launchApp":"AuraDSP を今すぐ起動","licenseAgree":"ライセンス契約（GPL-3.0 / 同梱コンポーネントのライセンス）を読み、同意します","needsElevation":"この選択には管理者権限が必要です。ウィザードは Windows に昇格を要求して続行します。","openSound":"Windows サウンド設定を開く","optionsTitle":"インストールオプション","progressTitle":"インストール中…","quickInstall":"今すぐインストール","scAutostart":"Windows 起動時に開始","scDesktop":"デスクトップショートカット","scStartMenu":"スタートメニュー項目","startInstall":"インストール開始","startUninstall":"アンインストール","stepAsio":"ASIO ドライバーを登録","stepCleanup":"ファイルを削除","stepDone":"完了","stepDriver":"仮想オーディオドライバーをインストール","stepExtract":"ファイルを展開","stepGuard":"実行中プロセスを確認","stepRegistry":"システム登録を書き込み","stepShortcuts":"ショートカットを作成","stepUninstaller":"アンインストーラーを準備","uninstallBody":"このデバイスから AuraDSP とそのコンポーネントを削除します。","uninstallProgressTitle":"アンインストール中…","uninstallTitle":"AuraDSP のアンインストール","uninstalledTitle":"アンインストール完了","warningsTitle":"完了しました（注意事項あり）：","welcomeBody":"クロスプラットフォームのグローバルオーディオエフェクトシステム：リアルタイム DSP チェーン、プラグインホスティング、仮想オーディオデバイスでシステム全体のサウンドを。","welcomeTitle":"AuraDSP へようこそ"}
+{
+  "@@locale": "ja",
+  "appTitle": "AuraDSP セットアップ",
+  "welcomeTitle": "AuraDSP へようこそ",
+  "welcomeBody": "クロスプラットフォームのグローバルオーディオエフェクトシステム：リアルタイム DSP チェーン、プラグインホスティング、仮想オーディオデバイスでシステム全体のサウンドを。",
+  "licenseAgree": "ライセンス契約（GPL-3.0 / 同梱コンポーネントのライセンス）を読み、同意します",
+  "quickInstall": "今すぐインストール",
+  "quickUpdate": "今すぐ更新",
+  "customInstall": "カスタムインストール",
+  "optionsTitle": "インストールオプション",
+  "installDirLabel": "インストール先",
+  "dirAutoAppendHint": "最後のフォルダーが AuraDSP でない場合は自動追加します（例：D:\\Games → D:\\Games\\AuraDSP）",
+  "updateDirLocked": "上書き更新では既存のフォルダーを使用し、設定とデータを保持します。",
+  "driverGroupTitle": "ドライバー（任意・既定で選択）",
+  "driverOptionalHint": "チェックを外すと自動インストールのみスキップします。ドライバーと手動用スクリプトはインストール先に残ります。",
+  "compAsio": "AuraASIO ドライバー（DAW に AuraDSP を公開）",
+  "compVaio": "AuraVAIO 仮想オーディオデバイスドライバー",
+  "compDdc": "厳選ヘッドホン/スピーカー DDC キャリブレーションをプリインストール",
+  "allUsers": "すべてのユーザーにインストール（管理者が必要）",
+  "scDesktop": "デスクトップショートカット",
+  "scStartMenu": "スタートメニュー項目",
+  "scAutostart": "Windows 起動時に開始",
+  "needsElevation": "この選択には管理者権限が必要です。ウィザードは Windows に昇格を要求して続行します。",
+  "signWarnTitle": "AuraVAIO はテスト署名ドライバーです",
+  "signWarnShort": "64 ビット Windows は既定でテスト署名カーネルドライバーを拒否します。テスト署名モードを有効にしないとドライバーは読み込まれません（本体は影響なし）。",
+  "signGuideTitle": "ドライバー署名の設定",
+  "signGuideBody": "AuraVAIO は自己生成したテスト証明書を使用しており、Microsoft の Attestation/EV 署名ではありません。\n\n【対象 OS】64 ビット Windows（Win7 / 8.1 / 10 / 11）はすべて既定でテスト署名カーネルドライバーを拒否します。32 ビット版のみ概ね制限されません。Windows 11 は Secure Boot やメモリ整合性などの条件が増えるだけで、「Win10 以前は影響なし」ではありません。\n\n【方法 A・永続（推奨）】\n1. 管理者としてコマンドプロンプトを開き、bcdedit /set testsigning on を実行\n2. 再起動します。右下に「テスト モード」と表示されるのは正常です。\n3. 「Secure Boot ポリシーで保護されています」と出た場合は BIOS で Secure Boot を無効化（BitLocker は一時停止）。\n4. Windows 11 で依然として失敗する場合：Windows セキュリティ → デバイスのセキュリティ → コアの分離 → メモリ整合性をオフにして再起動。\n5. 管理者として <インストール先>\\driver\\install_vaio.ps1 -Action install を実行\n元に戻す：bcdedit /set testsigning off 実行後に再起動。\n\n【方法 B・一時（今回の起動のみ）】\n設定 → システム → 回復 → 詳細なスタートアップ → 今すぐ再起動 → トラブルシューティング → 詳細オプション → スタートアップ設定 → 再起動 → 7 または F7「ドライバー署名の強制を無効にする」。次回再起動で解除されます。\n\nAuraASIO はユーザーモード COM コンポーネントのため、上記は不要です。詳細は <インストール先>\\driver\\README.txt を参照。",
+  "signViewGuide": "設定手順を見る",
+  "openDriverReadme": "ドライバー説明を開く",
+  "manualDriverHint": "インストール先の driver\\ にドライバーと手動インストール用スクリプトを保持します。後から管理者として導入できます。",
+  "updateDetected": "AuraDSP v{oldVer} がインストール済みです。v{newVer} へ更新します（設定とデータは保持）。",
+  "@updateDetected": {
+    "placeholders": {
+      "oldVer": {"type": "String"},
+      "newVer": {"type": "String"}
+    }
+  },
+  "updateRepair": "同じバージョン v{ver} がインストール済みです。修復／再インストールします（設定とデータは保持）。",
+  "@updateRepair": {
+    "placeholders": {
+      "ver": {"type": "String"}
+    }
+  },
+  "updateDowngrade": "インストール済み v{oldVer} はこのパッケージ v{newVer} より新しいため、先に旧版をアンインストールしてください。",
+  "@updateDowngrade": {
+    "placeholders": {
+      "oldVer": {"type": "String"},
+      "newVer": {"type": "String"}
+    }
+  },
+  "blockedHint": "設定の非互換を避けるため、自動ダウングレードは行いません。",
+  "updateFrom": "v{oldVer} から v{newVer} へ更新しました",
+  "@updateFrom": {
+    "placeholders": {
+      "oldVer": {"type": "String"},
+      "newVer": {"type": "String"}
+    }
+  },
+  "finishUpdatedTitle": "更新完了",
+  "awaitingElevation": "Windows の管理者権限の承認を待っています…UAC で「はい」を選択してください。",
+  "elevDeniedTitle": "管理者権限を取得できませんでした",
+  "elevDeniedBody": "昇格要求がキャンセルまたは拒否されました。再試行するか、現在の権限で続行できます（仮想オーディオドライバーと全ユーザーインストールはスキップされます）。",
+  "elevUninstallDeniedBody": "昇格要求がキャンセルまたは拒否されました。続行するとドライバー・デバイス・システム登録の削除がスキップされ、残存物が残る可能性があります。再試行を推奨します。",
+  "elevRetry": "再試行",
+  "elevContinue": "このまま続行",
+  "elevCancel": "戻る",
+  "finishDesktopShortcut": "デスクトップショートカットを作成",
+  "back": "戻る",
+  "startInstall": "インストール開始",
+  "progressTitle": "インストール中…",
+  "stepGuard": "実行中プロセスを確認",
+  "stepBackup": "旧バージョンをバックアップ",
+  "stepRestore": "旧バージョンを復元",
+  "stepExtract": "ファイルを展開",
+  "stepAsio": "ASIO ドライバーを登録",
+  "stepDriver": "仮想オーディオドライバーをインストール",
+  "stepShortcuts": "ショートカットを作成",
+  "stepRegistry": "システム登録を書き込み",
+  "stepUninstaller": "アンインストーラーを準備",
+  "stepCleanup": "ファイルを削除",
+  "stepDone": "完了",
+  "finishTitle": "インストール完了",
+  "warningsTitle": "完了しました（注意事項あり）：",
+  "launchApp": "AuraDSP を今すぐ起動",
+  "openSound": "Windows サウンド設定を開く",
+  "done": "完了",
+  "errorTitle": "問題が発生しました",
+  "errorBody": "操作が失敗し、完了したステップは可能な限りロールバックされました。詳細：",
+  "close": "閉じる",
+  "uninstallTitle": "AuraDSP のアンインストール",
+  "uninstallBody": "このデバイスから AuraDSP とそのコンポーネントを削除します。",
+  "uninstallProgressTitle": "アンインストール中…",
+  "uninstalledTitle": "アンインストール完了",
+  "startUninstall": "アンインストール",
+  "keepData": "設定・プリセット・キャリブレーションデータを保持",
+  "keepDataHint": "%APPDATA%\\AuraDSP（設定 / プリセット / キャリブレーション / セッション）と、インストール先に自分で追加したファイルを保持します。ドライバー・レジストリ・ショートカットは削除されます。",
+  "uninstallDeleteAllHint": "上記のユーザーデータも削除されます。元に戻せません。",
+  "uninstallKeptTitle": "保持したユーザーデータ：",
+  "uninstallCleanNote": "プログラムファイル・ドライバー・レジストリ・ショートカットを削除しました。"
+}

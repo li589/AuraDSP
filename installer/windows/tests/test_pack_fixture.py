@@ -104,8 +104,11 @@ def main() -> int:
         names = read_zip(dz)[0] if dz.exists() else []
         for want in ("AuraVaio.sys", "AuraVaio.inf", "AuraVaio.cat",
                      "install_driver.ps1", "auraasio_driver.dll",
-                     "register_asio.ps1"):
+                     "register_asio.ps1", "install_vaio.ps1", "README.txt"):
             check(f"含 {want}", want in names)
+        check("驱动包含签名教程",
+              b"Win7" in read_zip(dz)[1]["README.txt"]
+              and b"testsigning" in read_zip(dz)[1]["README.txt"])
 
         print("== portable core ==")
         r = run_pack("--mode", "portable", "--resources", "core", *common)
@@ -148,8 +151,14 @@ def main() -> int:
               all(i.compress_type == zipfile.ZIP_STORED
                   for i in wz.infolist()))
         pz2 = zipfile.ZipFile(_io.BytesIO(blob[op:op + lp]))
+        payload_names = pz2.namelist()
         check("ZIP-P 含 payload/auraasio_driver.dll（规范名）",
-              "payload/auraasio_driver.dll" in pz2.namelist())
+              "payload/auraasio_driver.dll" in payload_names)
+        # 取消勾选驱动也不能过滤 driver/：手动脚本与驱动必须随包保留。
+        for rel in ("install_vaio.ps1", "README.txt", "register_asio.ps1",
+                    "auraasio_driver.dll", "AuraVaio.inf"):
+            check(f"ZIP-P 恒保留 driver/{rel}",
+                  f"payload/driver/{rel}" in payload_names)
 
         print("== ASIO 别名归一化 ==")
         alias = base / "AuraAsioDriver.dll"

@@ -24,6 +24,15 @@ class InstallOptions {
   bool autostart;
   bool closeRunningApps;
 
+  /// 覆盖升级时沿用旧安装的目录与组件选择（快捷方式等新选项保持不变）。
+  void applyFrom(InstallManifest m) {
+    installDir = m.installDir;
+    allUsers = m.allUsers;
+    asio = m.components.contains('asio');
+    vaio = m.components.contains('vaio');
+    ddcPresets = m.components.contains('ddc');
+  }
+
   Map<String, dynamic> toJson() => {
         'installDir': installDir,
         'allUsers': allUsers,
@@ -74,6 +83,8 @@ class InstallManifest {
     required this.files,
     required this.shortcuts,
     required this.installedAtIso,
+    this.previousFullVersion,
+    this.updateMode = 'fresh',
   });
 
   final String version;
@@ -84,6 +95,10 @@ class InstallManifest {
   final List<ManifestFile> files;
   final List<String> shortcuts; // .lnk 绝对路径
   final String installedAtIso;
+  /// 升级前的版本（全新安装为 null），用于完成页展示与升级台账。
+  final String? previousFullVersion;
+  /// fresh / upgrade / repair
+  final String updateMode;
 
   int get totalBytes => files.fold(0, (a, f) => a + f.size);
   int get estimatedSizeKb => (totalBytes / 1024).ceil();
@@ -97,6 +112,9 @@ class InstallManifest {
         'files': files.map((f) => f.toJson()).toList(),
         'shortcuts': shortcuts,
         'installedAt': installedAtIso,
+        if (previousFullVersion != null)
+          'previousFullVersion': previousFullVersion,
+        'updateMode': updateMode,
       };
 
   String encode() => const JsonEncoder.withIndent('  ').convert(toJson());
@@ -112,6 +130,8 @@ class InstallManifest {
             .toList(),
         shortcuts: (j['shortcuts'] as List).cast<String>(),
         installedAtIso: j['installedAt'] as String? ?? '',
+        previousFullVersion: j['previousFullVersion'] as String?,
+        updateMode: j['updateMode'] as String? ?? 'fresh',
       );
 
   static InstallManifest decode(String text) =>
@@ -143,8 +163,18 @@ class ProgressEvent {
 typedef ProgressSink = void Function(ProgressEvent e);
 
 class EngineResult {
-  const EngineResult({required this.ok, this.error, this.warnings = const []});
+  const EngineResult({
+    required this.ok,
+    this.error,
+    this.warnings = const [],
+    this.keptPaths = const [],
+    this.leftoverPaths = const [],
+  });
   final bool ok;
   final String? error;
   final List<String> warnings;
+  /// 卸载时明确保留的用户数据位置（完成页展示，避免「以为数据没了」）。
+  final List<String> keptPaths;
+  /// 被占用、需等向导进程退出后由隐藏清理脚本删除的文件（绝对路径）。
+  final List<String> leftoverPaths;
 }

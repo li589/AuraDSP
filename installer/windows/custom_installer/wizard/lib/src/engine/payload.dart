@@ -31,12 +31,11 @@ Future<void> slicePayloadToFile(
 }
 
 /// 组件过滤：返回该相对路径（payload/ 前缀已剥离）是否应解压。
-bool Function(String rel) componentFilter({
-  required bool vaio,
-  required bool ddcPresets,
-}) {
+///
+/// driver/ 恒保留——「不勾选驱动」只表示不执行安装/注册，驱动文件与
+/// 手动安装脚本仍必须落在安装目录，供用户事后以管理员身份补装。
+bool Function(String rel) componentFilter({required bool ddcPresets}) {
   return (rel) {
-    if (rel.startsWith('driver/') && !vaio) return false;
     if (rel.startsWith('resources/ddc/') && !ddcPresets) return false;
     return true;
   };

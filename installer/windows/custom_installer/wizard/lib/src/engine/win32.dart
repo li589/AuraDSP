@@ -112,6 +112,29 @@ bool registryDeleteTree(int hive, String subKey) {
   }
 }
 
+/// 隐藏窗口启动退出后清理脚本（SW_HIDE）。
+///
+/// 不能用可见 cmd：控制台一旦被鼠标点选进入 QuickEdit「选择」模式就会挂起，
+/// 用户看到的「清理残留窗口关不掉」正是这个。PowerShell 自身再带
+/// -WindowStyle Hidden，双重保证不出现任何窗口。
+bool spawnHiddenCleanup(String scriptPath) {
+  final op = 'open'.toNativeUtf16();
+  final root = Platform.environment['SystemRoot'] ?? r'C:\Windows';
+  final exe = '$root\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+  final file = exe.toNativeUtf16();
+  final params =
+      '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$scriptPath"'
+          .toNativeUtf16();
+  try {
+    final rc = ShellExecute(0, op, file, params, nullptr, 0 /* SW_HIDE */);
+    return rc > 32;
+  } finally {
+    calloc.free(op);
+    calloc.free(file);
+    calloc.free(params);
+  }
+}
+
 /// 以管理员身份重启指定 exe（ShellExecute runas）。返回是否已发起。
 bool relaunchElevated(String exe, String parameters) {
   final op = 'runas'.toNativeUtf16();
@@ -127,16 +150,19 @@ bool relaunchElevated(String exe, String parameters) {
   }
 }
 
-typedef _DllRegNative = Int32 Function();
-typedef _DllRegDart = int Function();
-
-/// 调用某 DLL 的 DllRegisterServer / DllUnregisterServer（ASIO 注册）。
-/// 返回 HRESULT（0 = S_OK）。
-int callDllRegisterServer(String dllPath, {required bool register}) {
-  final lib = DynamicLibrary.open(dllPath);
-  final fn = lib.lookupFunction<_DllRegNative, _DllRegDart>(
-      register ? 'DllRegisterServer' : 'DllUnregisterServer');
-  return fn();
+/// ASIO COM 注册/反注册：一律走 **独立 regsvr32 子进程**。
+///
+/// 重要：不能用 `DynamicLibrary.open()` 在向导进程内加载该 DLL ——
+/// dart:ffi 没有 close/FreeLibrary，向导会一直持有句柄：
+/// ① 卸载时删除 auraasio_driver.dll 必然报「被占用」（占用者就是卸载程序自己）；
+/// ② DLL 的 DllRegisterServer 是同步调用，一旦内部阻塞会冻结 UI isolate，
+///    表现为安装进度永远停滞。子进程退出即释放，且 Process.run 是异步的。
+/// 返回 regsvr32 退出码（0 = 成功）。
+Future<int> registerAsioDll(String dllPath, {required bool register}) async {
+  final root = Platform.environment['SystemRoot'] ?? r'C:\Windows';
+  final exe = '$root\\System32\\regsvr32.exe';
+  final r = await Process.run(exe, ['/s', if (!register) '/u', dllPath]);
+  return r.exitCode;
 }
 
 const kGuardedImages = ['auradsp_app.exe', 'plugin_host_x64.exe', 'plugin_host_x86.exe'];
@@ -159,15 +185,47 @@ Future<List<int>> guardedPids() async {
 /// 优雅关闭（taskkill 无 /F 发送关闭信号）→ 等待 → 强制结束。
 Future<void> closeGuardedProcesses() async {
   final pids = await guardedPids();
+  if (pids.isEmpty) return;
+  // 先优雅关闭（无 /F，给宿主/主程序保存状态的机会）。
   for (final pid in pids) {
     await Process.run('taskkill', ['/PID', '$pid']);
   }
-  if (pids.isEmpty) return;
   for (var i = 0; i < 6; i++) {
-    await Future<void>.delayed(const Duration(milliseconds: 500));
+    await Future<void>.delayed(const Duration(milliseconds: 400));
     if ((await guardedPids()).isEmpty) return;
   }
-  for (final pid in await guardedPids()) {
-    await Process.run('taskkill', ['/F', '/PID', '$pid']);
+  // 按镜像名强杀兜底：覆盖 PID 竞态、无窗口控制台进程（taskkill 无 /F
+  // 对这类进程常无效），以及主程序退出后又被重新拉起的插件宿主实例。
+  for (final image in kGuardedImages) {
+    await Process.run('taskkill', ['/F', '/IM', image, '/T']);
+  }
+  await Future<void>.delayed(const Duration(milliseconds: 300));
+}
+
+/// 解析 `reg query <key>` 输出为 名称→值（纯函数，可单测）。
+///
+/// 形如 `    InstallDir    REG_SZ    C:\Program Files\AuraDSP`；
+/// 值内可能含空格（Program Files），所以用正则而非 split。
+Map<String, String> parseRegQuery(String output) {
+  final result = <String, String>{};
+  final re = RegExp(
+      r'^\s*(\S+)\s+REG_(?:SZ|EXPAND_SZ|DWORD|QWORD)\s+(.+?)\s*$',
+      multiLine: true);
+  for (final m in re.allMatches(output)) {
+    result[m.group(1)!] = m.group(2)!.trim();
+  }
+  return result;
+}
+
+/// 只读查询注册表键下的值；键不存在或 reg 失败时返回空表。
+/// 用系统 `reg.exe` 而非未核实的 FFI 绑定，保证跨 Windows 版本可读。
+Future<Map<String, String>> registryReadValues(int hive, String subKey) async {
+  final hiveName = hive == kHkeyLocalMachine ? 'HKLM' : 'HKCU';
+  try {
+    final r = await Process.run('reg', ['query', '$hiveName\\$subKey']);
+    if (r.exitCode != 0) return <String, String>{};
+    return parseRegQuery(r.stdout.toString());
+  } catch (_) {
+    return <String, String>{};
   }
 }

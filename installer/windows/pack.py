@@ -253,13 +253,63 @@ REGISTER_ASIO_PS1 = """\
 param([switch]$Unregister)
 $ErrorActionPreference = "Stop"
 $dll = Join-Path $PSScriptRoot "auraasio_driver.dll"
-if (-not (Test-Path $dll)) { throw "auraasio_driver.dll 不在脚本同目录" }
+if (-not (Test-Path $dll)) {
+  $alt = Join-Path (Split-Path -Parent $PSScriptRoot) "auraasio_driver.dll"
+  if (Test-Path $alt) { $dll = $alt }
+}
+if (-not (Test-Path $dll)) { throw "auraasio_driver.dll 不在脚本目录或其上级目录" }
 $regsvr = "$env:SystemRoot\\System32\\regsvr32.exe"
 $args = if ($Unregister) { @("/s", "/u", $dll) } else { @("/s", $dll) }
 $p = Start-Process $regsvr -ArgumentList $args -Wait -PassThru
 if ($p.ExitCode -ne 0) { throw "regsvr32 退出码 $($p.ExitCode)" }
 Write-Host "AuraASIO $(if ($Unregister) { '反注册' } else { '注册' })完成: $dll"
 """
+
+# 随包手动安装资产（入库模板；driver zip 与 Setup 载荷共用同一组装函数）。
+# 用户取消勾选驱动时这些文件仍保留在 安装目录/driver/，供事后手动补装。
+DRIVER_TEMPLATE_DIR = ROOT / "installer" / "windows" / "custom_installer" / "driver"
+DRIVER_TEMPLATE_FILES = ("install_vaio.ps1", "README.txt")
+
+
+def stage_driver_files(
+    dest: Path,
+    driver_dir: Path,
+    asio: Path,
+    install_ps1: Path,
+    *,
+    include_asio_dll: bool,
+) -> int:
+    """组装随包 driver/ 目录：驱动产物 + 测试证书 + devcon + 手动脚本 + 说明。
+
+    返回拷贝的驱动产物数；缺模板直接失败（避免产出不可手动安装的包）。
+    README 以 UTF-8 BOM 落盘，兼容旧版记事本读取中文。
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for f in sorted(driver_dir.iterdir()):
+        if not f.is_file():
+            continue
+        is_payload = f.suffix.lower() in (".sys", ".inf", ".cat", ".cer")
+        is_devcon = f.name.lower() == "devcon.exe"
+        if is_payload or is_devcon:
+            shutil.copy2(f, dest / f.name)
+            copied += 1
+    if copied == 0:
+        raise die(f"驱动目录没有任何 .sys/.inf/.cat/.cer: {driver_dir}")
+    shutil.copy2(install_ps1, dest / install_ps1.name)
+    if include_asio_dll:
+        shutil.copy2(asio, dest / ASIO_DLL_NAME)
+    (dest / "register_asio.ps1").write_text(REGISTER_ASIO_PS1, encoding="utf-8")
+    for name in DRIVER_TEMPLATE_FILES:
+        src = DRIVER_TEMPLATE_DIR / name
+        if not src.is_file():
+            raise die(f"缺随包驱动模板: {src}")
+        if name.lower().endswith(".txt"):
+            (dest / name).write_text(
+                src.read_text(encoding="utf-8"), encoding="utf-8-sig")
+        else:
+            shutil.copy2(src, dest / name)
+    return copied
 
 
 # ---------------------------------------------------------------------------
@@ -285,17 +335,8 @@ def mode_driver(args, ver: dict[str, str], out: Path) -> Path:
         return dest
     with tempfile.TemporaryDirectory(prefix="auradsp-driver-") as td:
         stage = Path(td) / "driver"
-        stage.mkdir()
-        copied = 0
-        for f in sorted(driver_dir.iterdir()):
-            if f.is_file() and f.suffix.lower() in (".sys", ".inf", ".cat", ".cer"):
-                shutil.copy2(f, stage / f.name)
-                copied += 1
-        if copied == 0:
-            raise die(f"驱动目录没有任何 .sys/.inf/.cat/.cer: {driver_dir}")
-        shutil.copy2(install_ps1, stage / install_ps1.name)
-        shutil.copy2(asio, stage / ASIO_DLL_NAME)
-        (stage / "register_asio.ps1").write_text(REGISTER_ASIO_PS1, encoding="utf-8")
+        stage_driver_files(stage, driver_dir, asio, install_ps1,
+                           include_asio_dll=True)
         n = zip_dir(stage, dest, args.zip_level)
     log(f"driver: {dest.name}（{n} 条目，{dest.stat().st_size / 1e6:.1f} MB）")
     return dest
@@ -395,16 +436,13 @@ def mode_setup(args, ver: dict[str, str], out: Path) -> Path:
 
     td, work = prepare_staging_copy(args)
     with td:
-        # 载荷增补：ASIO 驱动本体 + driver/ 子目录
+        # 载荷增补：ASIO 驱动本体（安装目录根，供 FFI 注册）
+        # + driver/ 子目录（恒保留，含手动安装脚本、驱动与签名说明）
         shutil.copy2(asio, work / ASIO_DLL_NAME)
-        drv = work / "driver"
-        drv.mkdir(exist_ok=True)
-        for f in sorted(driver_dir.iterdir()):
-            if f.is_file() and f.suffix.lower() in (".sys", ".inf", ".cat", ".cer"):
-                shutil.copy2(f, drv / f.name)
         install_ps1 = (ROOT / "core" / "desktop" / "windows-drivers" /
                        "01_vaio_driver" / "install_driver.ps1")
-        shutil.copy2(install_ps1, drv / install_ps1.name)
+        stage_driver_files(work / "driver", driver_dir, asio, install_ps1,
+                           include_asio_dll=True)
 
         payload_zip = Path(td.name) / "payload.zip"
         zip_dir(work, payload_zip, args.zip_level, arc_prefix="payload/")

@@ -7,8 +7,11 @@ import 'package:window_manager/window_manager.dart';
 
 import 'args.dart';
 import 'aurora_background.dart';
+import 'engine/cleanup_policy.dart';
+import 'engine/driver_notice.dart';
 import 'engine/install_engine.dart';
 import 'engine/models.dart';
+import 'engine/update_policy.dart';
 import 'engine/win32.dart';
 import 'package:auradsp_setup/l10n/app_localizations.dart';
 import 'theme.dart';
@@ -45,6 +48,11 @@ class SetupShell extends StatefulWidget {
 class _SetupShellState extends State<SetupShell> {
   late _Page _page;
   late final InstallOptions _options;
+  late final TextEditingController _dirController;
+  late final FocusNode _dirFocus;
+  UpdatePlan? _plan;
+  bool _detecting = true;
+  late final Future<void> _resumeFuture;
   InstallManifest? _uninstallManifest;
   String? _manifestError;
 
@@ -55,21 +63,121 @@ class _SetupShellState extends State<SetupShell> {
   bool _keepData = true;
   bool _launchApp = true;
   bool _openSound = false;
+  bool _awaitingElevation = false;
+  bool _finishDesktopShortcut = true;
 
   @override
   void initState() {
     super.initState();
     _options = InstallOptions(installDir: defaultInstallDir(false));
+    _dirController = TextEditingController(text: _options.installDir);
+    _dirFocus = FocusNode()..addListener(_onDirFocusLost);
+    _finishDesktopShortcut = _options.desktopShortcut;
+    _keepData = widget.args.keepData ?? true;
     if (widget.args.mode == SetupMode.uninstall) {
+      _resumeFuture = Future<void>.value();
       _page = _Page.uninstallConfirm;
+      _detecting = false;
       _loadUninstallManifest();
+      if (widget.args.autoUninstall || widget.args.silent) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _uninstallManifest != null) _maybeElevateThenUninstall();
+        });
+      }
     } else {
       _page = _Page.welcome;
-      _restoreResumeOptions();
+      _resumeFuture = _restoreResumeOptions();
+      _detectInstalled();
     }
-    if (widget.args.silent) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _startSilent());
+  }
+
+  @override
+  void dispose() {
+    _dirFocus.removeListener(_onDirFocusLost);
+    _dirFocus.dispose();
+    _dirController.dispose();
+    super.dispose();
+  }
+
+  /// 探测已装实例 → 生成更新计划。提权重启时保留 resume 的用户选择，
+  /// 但升级/降级仍锁定为旧目录。
+  Future<void> _detectInstalled() async {
+    // 提权重启先恢复用户选择，再探测已装实例，避免两者竞态覆盖安装目录。
+    await _resumeFuture;
+    final installed = await readInstalledInfo();
+    final plan = planUpdate(
+      newFullVersion: widget.wizard.fullVersion,
+      requestedDir: _options.installDir,
+      defaultDir: defaultInstallDir(false),
+      installed: installed,
+    );
+    if (!mounted) return;
+    setState(() {
+      _plan = plan;
+      _detecting = false;
+      if (widget.args.resumeOptions == null && plan.previous?.manifest != null) {
+        _options.applyFrom(plan.previous!.manifest!);
+      }
+      _options.installDir = (plan.isOverwrite || plan.isBlocked)
+          ? plan.installDir
+          : normalizeInstallDir(_options.installDir, plan.installDir);
+      _dirController.text = _options.installDir;
+    });
+    if (widget.args.autoStart && !widget.args.silent) {
+      // 提权重启后自动继续安装，无需用户再点一次「开始安装」。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _maybeElevateThenInstall();
+      });
+    } else if (widget.args.silent) {
+      _startSilent();
     }
+  }
+
+  void _onDirFocusLost() {
+    if (!_dirFocus.hasFocus) _commitDir();
+  }
+
+  /// 目录末段规范化（自动补 AuraDSP）；覆盖安装/降级锁定旧目录。
+  void _commitDir() {
+    final plan = _plan;
+    final normalized = normalizeInstallDir(
+        _dirController.text, defaultInstallDir(_options.allUsers));
+    final effective = (plan != null && (plan.isOverwrite || plan.isBlocked))
+        ? plan.installDir
+        : normalized;
+    _options.installDir = effective;
+    if (_dirController.text != effective) {
+      _dirController.text = effective;
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _openDriverReadme() async {
+    final f = p.join(_options.installDir, kDriverReadmeRel);
+    if (!File(f).existsSync()) return;
+    await Process.start('notepad', [f], mode: ProcessStartMode.detached);
+  }
+
+  void _showSignGuide(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Aurora.panel,
+        title: Text(l.signGuideTitle),
+        content: SizedBox(
+          width: 560,
+          child: SingleChildScrollView(
+            child: Text(l.signGuideBody,
+                style: const TextStyle(fontSize: 12.5, height: 1.6)),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(), child: Text(l.close)),
+        ],
+      ),
+    );
   }
 
   void _loadUninstallManifest() {
@@ -106,6 +214,7 @@ class _SetupShellState extends State<SetupShell> {
         _options.startMenuShortcut = restored.startMenuShortcut;
         _options.autostart = restored.autostart;
         _options.closeRunningApps = restored.closeRunningApps;
+        _dirController.text = _options.installDir;
         _page = _Page.options;
       });
     } catch (_) {
@@ -119,8 +228,9 @@ class _SetupShellState extends State<SetupShell> {
 
   void _startSilent() {
     if (widget.args.mode == SetupMode.uninstall) {
-      if (_uninstallManifest != null) _runUninstall();
+      if (_uninstallManifest != null) _maybeElevateThenUninstall();
     } else {
+      _commitDir();
       _options.closeRunningApps = true;
       _runInstall();
     }
@@ -128,33 +238,135 @@ class _SetupShellState extends State<SetupShell> {
 
   InstallEngine get _engine => InstallEngine(args: widget.args, wizard: widget.wizard);
 
-  Future<void> _maybeElevateThenInstall() async {
-    final needsAdmin = _options.allUsers || _options.vaio;
-    if (needsAdmin && !isElevated()) {
-      final session = widget.args.sessionDir ?? Directory.systemTemp.path;
-      final stateFile = File(p.join(session, 'resume_options.json'));
-      await stateFile.writeAsString(jsonEncode(_options.toJson()));
-      final self = Platform.resolvedExecutable;
-      final params = StringBuffer('--resume-options "${stateFile.path}"');
-      if (widget.args.setupExe != null) {
-        params.write(' --setup-exe "${widget.args.setupExe}"');
-      }
-      if (widget.args.payloadOff != null) {
-        params.write(' --payload-off ${widget.args.payloadOff}');
-      }
-      if (widget.args.payloadLen != null) {
-        params.write(' --payload-len ${widget.args.payloadLen}');
-      }
-      if (widget.args.sessionDir != null) {
-        params.write(' --session-dir "${widget.args.sessionDir}"');
-      }
-      if (relaunchElevated(self, params.toString())) {
-        await windowManager.close();
-        return;
-      }
-      // 提权被拒绝：以降级方式继续（VAIO 步会给警告）。
+  /// 提权协议：写状态 → 请求 UAC → 成功则让新进程带 --auto-start /
+  /// --auto-uninstall 自动继续；失败则明确让用户选择，不静默降级、不卡住。
+  Future<bool> _requestElevation({
+    required bool autoStart,
+    required bool autoUninstall,
+  }) async {
+    final session = widget.args.sessionDir ?? Directory.systemTemp.path;
+    final stateFile = File(p.join(session, 'resume_options.json'));
+    await stateFile.writeAsString(jsonEncode(_options.toJson()));
+    final params =
+        StringBuffer('--resume-options "${stateFile.path}" --elevated');
+    if (autoStart) params.write(' --auto-start');
+    if (autoUninstall) {
+      params.write(' --auto-uninstall --mode uninstall');
+      params.write(_keepData ? ' --keep-data' : ' --no-keep-data');
     }
-    _runInstall();
+    if (widget.args.setupExe != null) {
+      params.write(' --setup-exe "${widget.args.setupExe}"');
+    }
+    if (widget.args.payloadOff != null) {
+      params.write(' --payload-off ${widget.args.payloadOff}');
+    }
+    if (widget.args.payloadLen != null) {
+      params.write(' --payload-len ${widget.args.payloadLen}');
+    }
+    if (widget.args.sessionDir != null) {
+      params.write(' --session-dir "${widget.args.sessionDir}"');
+    }
+    return relaunchElevated(Platform.resolvedExecutable, params.toString());
+  }
+
+  /// ShellExecute 是同步 FFI：先把「等待授权」层渲染出来再调用，
+  /// 否则 UAC 弹窗期间 UI isolate 被阻塞，界面看起来就是卡在进度页。
+  Future<void> _showElevationWait() async {
+    if (!mounted) return;
+    setState(() => _awaitingElevation = true);
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+  }
+
+  Future<void> _exitAfterElevation() async {
+    // session 目录要留给提权后的新进程（resume_options.json / payload.zip），
+    // 不能走 _closeWindow() 的延迟清理；直接退出进程。
+    exit(0);
+  }
+
+  Future<String> _elevationDeniedDialog({required bool uninstall}) async {
+    final l = AppLocalizations.of(context);
+    final v = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Aurora.panel,
+        title: Text(l.elevDeniedTitle),
+        content:
+            Text(uninstall ? l.elevUninstallDeniedBody : l.elevDeniedBody),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop('cancel'),
+              child: Text(l.elevCancel)),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop('continue'),
+              child: Text(l.elevContinue)),
+          FilledButton(
+              onPressed: () => Navigator.of(ctx).pop('retry'),
+              child: Text(l.elevRetry)),
+        ],
+      ),
+    );
+    return v ?? 'cancel';
+  }
+
+  Future<void> _maybeElevateThenInstall() async {
+    _commitDir();
+    final needsAdmin = _options.allUsers || _options.vaio;
+    // autoStart 进程仍未提权说明提权失败，直接降级安装，避免 UAC 循环弹窗。
+    if (!needsAdmin || isElevated() || widget.args.autoStart) {
+      _runInstall();
+      return;
+    }
+    await _showElevationWait();
+    final ok = await _requestElevation(autoStart: true, autoUninstall: false);
+    if (!mounted) return;
+    setState(() => _awaitingElevation = false);
+    if (ok) {
+      await _exitAfterElevation();
+      return;
+    }
+    if (widget.args.silent) {
+      _runInstall();
+      return;
+    }
+    final choice = await _elevationDeniedDialog(uninstall: false);
+    if (!mounted) return;
+    if (choice == 'retry') {
+      _maybeElevateThenInstall();
+    } else if (choice == 'continue') {
+      _runInstall();
+    }
+    // cancel：留在选项页，用户可自行调整或重试，不会卡在进度页。
+  }
+
+  /// 卸载一律请求管理员权限（清 HKLM / 设备节点 / 证书 / 公共快捷方式），
+  /// 与常见软件「设置 → 应用 → 卸载」弹 UAC 的行为一致。
+  Future<void> _maybeElevateThenUninstall() async {
+    if (_uninstallManifest == null) return;
+    // autoUninstall 进程仍未提权 = 提权失败，降级卸载并给出警告，不再循环弹 UAC。
+    if (isElevated() || widget.args.autoUninstall) {
+      _runUninstall();
+      return;
+    }
+    await _showElevationWait();
+    final ok = await _requestElevation(autoStart: false, autoUninstall: true);
+    if (!mounted) return;
+    setState(() => _awaitingElevation = false);
+    if (ok) {
+      await _exitAfterElevation();
+      return;
+    }
+    if (widget.args.silent || widget.args.autoUninstall) {
+      _runUninstall();
+      return;
+    }
+    final choice = await _elevationDeniedDialog(uninstall: true);
+    if (!mounted) return;
+    if (choice == 'retry') {
+      _maybeElevateThenUninstall();
+    } else if (choice == 'continue') {
+      _runUninstall();
+    }
   }
 
   Future<void> _runInstall() async {
@@ -170,7 +382,7 @@ class _SetupShellState extends State<SetupShell> {
         _events.add(e);
         if (e.fraction != null && e.fraction! > _fraction) _fraction = e.fraction!;
       });
-    });
+    }, plan: _plan);
     if (!mounted) return;
     setState(() {
       _running = false;
@@ -207,6 +419,11 @@ class _SetupShellState extends State<SetupShell> {
 
   Future<void> _finishAndClose() async {
     if (_page == _Page.finish && _result?.ok == true) {
+      if (widget.args.mode == SetupMode.install) {
+        // 完成页的最终决定优先于安装前的默认勾选（可补建或取消）。
+        await _engine.setDesktopShortcut(_options.installDir,
+            create: _finishDesktopShortcut);
+      }
       if (widget.args.mode == SetupMode.install && _launchApp) {
         final exe = p.join(_options.installDir, 'auradsp_app.exe');
         if (File(exe).existsSync()) {
@@ -221,16 +438,21 @@ class _SetupShellState extends State<SetupShell> {
   }
 
   Future<void> _closeWindow() async {
-    // 会话目录自清理：起一个延迟删除的 cmd（向导自身文件在其中，需等进程退出）。
-    final session = widget.args.sessionDir;
-    if (session != null) {
+    // 退出后清理：隐藏的 PowerShell 脚本（SW_HIDE + -WindowStyle Hidden）。
+    // 绝不能用可见 cmd —— 控制台被点选进入 QuickEdit「选择」模式会挂起，
+    // 用户就看到一个永远关不掉的黑窗口。脚本顺便重试删除被占用文件。
+    final session = widget.args.sessionDir ?? '';
+    final leftovers = _result?.leftoverPaths ?? const <String>[];
+    if (session.isNotEmpty || leftovers.isNotEmpty) {
       try {
-        await Process.start(
-          'cmd',
-          ['/c', 'ping -n 3 127.0.0.1 >nul & rmdir /s /q "$session"'],
-          mode: ProcessStartMode.detached,
-          runInShell: true,
-        );
+        final script = File(p.join(Directory.systemTemp.path,
+            'auradsp-cleanup-$pid.ps1'));
+        // Windows PowerShell 5.1 按 ANSI 读取无 BOM 脚本，中文路径会乱码；
+        // 手写 BOM + utf8 编码等价于 Python 的 utf-8-sig。
+        script.writeAsStringSync(
+            '\uFEFF${buildCleanupScript(session: session, leftovers: leftovers)}',
+            encoding: utf8);
+        spawnHiddenCleanup(script.path);
       } catch (_) {}
     }
     await windowManager.close();
@@ -239,22 +461,45 @@ class _SetupShellState extends State<SetupShell> {
   // ------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
-      body: AuroraBackground(
-        child: Column(
-          children: [
-            _titleBar(context),
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _brandRail(context),
-                  Expanded(child: _pageBody(context)),
-                ],
+      body: Stack(
+        children: [
+          AuroraBackground(
+            child: Column(
+              children: [
+                _titleBar(context),
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _brandRail(context),
+                      Expanded(child: _pageBody(context)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_awaitingElevation)
+            Positioned.fill(
+              child: ColoredBox(
+                color: Colors.black.withValues(alpha: 0.62),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 16),
+                      Text(l.awaitingElevation,
+                          style: const TextStyle(
+                              color: Aurora.text, fontSize: 13.5)),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -379,6 +624,11 @@ class _SetupShellState extends State<SetupShell> {
 
   Widget _welcomePage(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final plan = _plan;
+    final blocked = plan?.isBlocked ?? false;
+    final isUpdate = plan?.mode == UpdateMode.upgrade;
+    final ready = _licenseAccepted && !blocked && !_detecting;
+    final banner = _updateBanner(context, plan);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -386,6 +636,8 @@ class _SetupShellState extends State<SetupShell> {
             style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w600)),
         const SizedBox(height: 14),
         Text(l.welcomeBody, style: const TextStyle(color: Aurora.textDim, height: 1.55)),
+        const SizedBox(height: 14),
+        if (banner != null) banner,
         const Spacer(),
         InkWell(
           onTap: () => setState(() => _licenseAccepted = !_licenseAccepted),
@@ -407,7 +659,7 @@ class _SetupShellState extends State<SetupShell> {
         Row(
           children: [
             FilledButton(
-              onPressed: _licenseAccepted
+              onPressed: ready
                   ? () {
                       _options.closeRunningApps = true;
                       _maybeElevateThenInstall();
@@ -415,14 +667,12 @@ class _SetupShellState extends State<SetupShell> {
                   : null,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                child: Text(l.quickInstall),
+                child: Text(isUpdate ? l.quickUpdate : l.quickInstall),
               ),
             ),
             const SizedBox(width: 12),
             OutlinedButton(
-              onPressed: _licenseAccepted
-                  ? () => setState(() => _page = _Page.options)
-                  : null,
+              onPressed: ready ? () => setState(() => _page = _Page.options) : null,
               child: Text(l.customInstall),
             ),
           ],
@@ -431,9 +681,49 @@ class _SetupShellState extends State<SetupShell> {
     );
   }
 
+  /// 欢迎页更新态横幅：全新安装不显示，降级给出拦截说明。
+  Widget? _updateBanner(BuildContext context, UpdatePlan? plan) {
+    final l = AppLocalizations.of(context);
+    if (plan == null) return null;
+    final oldVer = plan.previous?.fullVersion ?? '0.0.0';
+    final newVer = widget.wizard.fullVersion;
+    final (String text, Color color) = switch (plan.mode) {
+      UpdateMode.upgrade => (l.updateDetected(oldVer, newVer), Aurora.accent),
+      UpdateMode.repair => (l.updateRepair(newVer), Aurora.accent),
+      UpdateMode.downgradeBlocked => (
+          '${l.updateDowngrade(oldVer, newVer)}\n${l.blockedHint}',
+          Aurora.warning
+        ),
+      UpdateMode.fresh => ('', Aurora.textDim),
+    };
+    if (text.isEmpty) return null;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(plan.isBlocked ? Icons.error_outline : Icons.system_update_alt,
+              size: 18, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+              child: Text(text,
+                  style: TextStyle(color: color, fontSize: 12.5, height: 1.5))),
+        ],
+      ),
+    );
+  }
+
   Widget _optionsPage(BuildContext context) {
     final l = AppLocalizations.of(context);
     final needsAdmin = _options.allUsers || _options.vaio;
+    final locked = (_plan?.isOverwrite ?? false) || (_plan?.isBlocked ?? false);
+    final blocked = _plan?.isBlocked ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -442,35 +732,68 @@ class _SetupShellState extends State<SetupShell> {
         const SizedBox(height: 18),
         Text(l.installDirLabel, style: const TextStyle(color: Aurora.textDim, fontSize: 12.5)),
         const SizedBox(height: 6),
-        TextFormField(
-          initialValue: _options.installDir,
+        TextField(
+          controller: _dirController,
+          focusNode: _dirFocus,
+          readOnly: locked,
           onChanged: (v) => _options.installDir = v.trim(),
+          onSubmitted: (_) => _commitDir(),
           style: const TextStyle(fontSize: 13.5),
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             isDense: true,
             filled: true,
             fillColor: Aurora.panel,
-            border: OutlineInputBorder(borderSide: BorderSide(color: Aurora.hairline)),
+            border: const OutlineInputBorder(
+                borderSide: BorderSide(color: Aurora.hairline)),
+            helperText: locked ? l.updateDirLocked : l.dirAutoAppendHint,
+            helperStyle: const TextStyle(color: Aurora.textDim, fontSize: 11),
+            suffixIcon: locked
+                ? const Icon(Icons.lock_outline, size: 16, color: Aurora.textDim)
+                : null,
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 10),
         Expanded(
           child: SingleChildScrollView(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _checkRow(l.allUsers, _options.allUsers, (v) {
                   _options.allUsers = v;
-                  _options.installDir = defaultInstallDir(v);
+                  if (!locked) {
+                    _options.installDir = defaultInstallDir(v);
+                    _dirController.text = _options.installDir;
+                  }
                 }),
+                const Divider(height: 18),
+                Text(l.driverGroupTitle,
+                    style: const TextStyle(
+                        fontSize: 13.5, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: Text(l.driverOptionalHint,
+                      style: const TextStyle(
+                          color: Aurora.textDim, fontSize: 11.5, height: 1.4)),
+                ),
                 _checkRow(l.compAsio, _options.asio, (v) => _options.asio = v),
                 _checkRow(l.compVaio, _options.vaio, (v) => _options.vaio = v),
-                _checkRow(l.compDdc, _options.ddcPresets, (v) => _options.ddcPresets = v),
-                const Divider(height: 22),
+                if (_options.vaio) _signWarning(context),
+                _checkRow(l.compDdc, _options.ddcPresets,
+                    (v) => _options.ddcPresets = v),
+                const Divider(height: 18),
                 _checkRow(l.scDesktop, _options.desktopShortcut,
                     (v) => _options.desktopShortcut = v),
                 _checkRow(l.scStartMenu, _options.startMenuShortcut,
                     (v) => _options.startMenuShortcut = v),
-                _checkRow(l.scAutostart, _options.autostart, (v) => _options.autostart = v),
+                _checkRow(l.scAutostart, _options.autostart,
+                    (v) => _options.autostart = v),
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: Text(l.manualDriverHint,
+                      style: const TextStyle(color: Aurora.textDim, fontSize: 11.5)),
+                ),
                 if (needsAdmin && !isElevated())
                   Padding(
                     padding: const EdgeInsets.only(top: 10),
@@ -489,13 +812,16 @@ class _SetupShellState extends State<SetupShell> {
         Row(
           children: [
             OutlinedButton(
-                onPressed: () => setState(() => _page = _Page.welcome), child: Text(l.back)),
+                onPressed: () => setState(() => _page = _Page.welcome),
+                child: Text(l.back)),
             const Spacer(),
             FilledButton(
-              onPressed: () {
-                _options.closeRunningApps = true;
-                _maybeElevateThenInstall();
-              },
+              onPressed: blocked
+                  ? null
+                  : () {
+                      _options.closeRunningApps = true;
+                      _maybeElevateThenInstall();
+                    },
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                 child: Text(l.startInstall),
@@ -504,6 +830,45 @@ class _SetupShellState extends State<SetupShell> {
           ],
         ),
       ],
+    );
+  }
+
+  /// VAIO 测试签名风险卡片：短提示 + 完整教程弹窗入口。
+  Widget _signWarning(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Container(
+      margin: const EdgeInsets.only(left: 12, right: 8, bottom: 6),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Aurora.warning.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Aurora.warning.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.warning_amber_outlined, size: 16, color: Aurora.warning),
+            const SizedBox(width: 8),
+            Expanded(
+                child: Text(l.signWarnTitle,
+                    style: const TextStyle(
+                        color: Aurora.warning,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600))),
+          ]),
+          const SizedBox(height: 6),
+          Text(l.signWarnShort,
+              style: const TextStyle(
+                  color: Aurora.textDim, fontSize: 11.5, height: 1.5)),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+                onPressed: () => _showSignGuide(context),
+                child: Text(l.signViewGuide)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -523,6 +888,8 @@ class _SetupShellState extends State<SetupShell> {
     final l = AppLocalizations.of(context);
     return switch (step) {
       'guard' => l.stepGuard,
+      'backup' => l.stepBackup,
+      'restore' => l.stepRestore,
       'extract' => l.stepExtract,
       'asio' => l.stepAsio,
       'driver' => l.stepDriver,
@@ -581,6 +948,7 @@ class _SetupShellState extends State<SetupShell> {
   Widget _finishPage(BuildContext context) {
     final l = AppLocalizations.of(context);
     final isUninstall = widget.args.mode == SetupMode.uninstall;
+    final isUpdate = _plan?.mode == UpdateMode.upgrade;
     final warnings = _result?.warnings ?? const <String>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -588,8 +956,16 @@ class _SetupShellState extends State<SetupShell> {
         const SizedBox(height: 8),
         const AnimatedCheck(),
         const SizedBox(height: 18),
-        Text(isUninstall ? l.uninstalledTitle : l.finishTitle,
+        Text(
+            isUninstall
+                ? l.uninstalledTitle
+                : (isUpdate ? l.finishUpdatedTitle : l.finishTitle),
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600)),
+        if (isUpdate && !isUninstall && _plan?.previous != null) ...[
+          const SizedBox(height: 6),
+          Text(l.updateFrom(_plan!.previous!.fullVersion, widget.wizard.fullVersion),
+              style: const TextStyle(color: Aurora.accent, fontSize: 12.5)),
+        ],
         if (warnings.isNotEmpty) ...[
           const SizedBox(height: 14),
           Text(l.warningsTitle, style: const TextStyle(color: Aurora.warning, fontSize: 13)),
@@ -602,9 +978,37 @@ class _SetupShellState extends State<SetupShell> {
           ),
         ] else
           const Spacer(),
+        if (isUninstall) ...[
+          Text(l.uninstallCleanNote,
+              style: const TextStyle(color: Aurora.textDim, fontSize: 12)),
+          if (_result?.keptPaths.isNotEmpty ?? false) ...[
+            const SizedBox(height: 8),
+            Text(l.uninstallKeptTitle,
+                style: const TextStyle(color: Aurora.accent, fontSize: 12)),
+            for (final path in _result!.keptPaths)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, top: 2),
+                child: Text(path,
+                    style: const TextStyle(
+                        color: Aurora.textDim, fontSize: 11.5)),
+              ),
+          ],
+          const SizedBox(height: 8),
+        ],
         if (!isUninstall) ...[
+          _checkRow(l.finishDesktopShortcut, _finishDesktopShortcut,
+              (v) => _finishDesktopShortcut = v),
           _checkRow(l.launchApp, _launchApp, (v) => _launchApp = v),
           _checkRow(l.openSound, _openSound, (v) => _openSound = v),
+          if (_options.vaio)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _openDriverReadme,
+                icon: const Icon(Icons.description_outlined, size: 16),
+                label: Text(l.openDriverReadme),
+              ),
+            ),
           const SizedBox(height: 8),
         ],
         Align(
@@ -665,11 +1069,21 @@ class _SetupShellState extends State<SetupShell> {
               style: const TextStyle(color: Aurora.error, fontSize: 12.5)),
         const Spacer(),
         _checkRow(l.keepData, _keepData, (v) => _keepData = v),
+        Padding(
+          padding: const EdgeInsets.only(left: 12, right: 8, top: 4),
+          child: Text(
+            _keepData ? l.keepDataHint : l.uninstallDeleteAllHint,
+            style: TextStyle(
+                color: _keepData ? Aurora.textDim : Aurora.warning,
+                fontSize: 11.5,
+                height: 1.5),
+          ),
+        ),
         const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerRight,
           child: FilledButton(
-            onPressed: m == null || _running ? null : _runUninstall,
+            onPressed: m == null || _running ? null : _maybeElevateThenUninstall,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
               child: Text(l.startUninstall),

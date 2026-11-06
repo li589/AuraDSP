@@ -15,6 +15,9 @@ class SetupArgs {
     this.silent = false,
     this.elevated = false,
     this.resumeOptions,
+    this.autoStart = false,
+    this.autoUninstall = false,
+    this.keepData,
   });
 
   final SetupMode mode;
@@ -38,6 +41,15 @@ class SetupArgs {
   /// 提权重启时携带的选项状态文件（读后即删）。
   final String? resumeOptions;
 
+  /// 提权重启后自动开始安装（无需用户再点一次「开始安装」）。
+  final bool autoStart;
+
+  /// 提权重启后自动开始卸载（从「设置 → 应用 → 卸载」触发）。
+  final bool autoUninstall;
+
+  /// 提权重启时继承的「保留用户数据」选择；null = 使用 UI 默认值。
+  final bool? keepData;
+
   bool get hasPayload => setupExe != null && payloadOff != null && payloadLen != null;
 
   static SetupArgs parse(List<String> argv) {
@@ -49,6 +61,9 @@ class SetupArgs {
     String? resume;
     var silent = false;
     var elevated = false;
+    var autoStart = false;
+    var autoUninstall = false;
+    bool? keepData;
 
     String? valueAfter(int i) =>
         i + 1 < argv.length && !argv[i + 1].startsWith('--') ? argv[i + 1] : null;
@@ -82,6 +97,15 @@ class SetupArgs {
           silent = true;
         case '--elevated':
           elevated = true;
+        case '--auto-start':
+          autoStart = true;
+        case '--auto-uninstall':
+          autoUninstall = true;
+          mode = SetupMode.uninstall;
+        case '--keep-data':
+          keepData = true;
+        case '--no-keep-data':
+          keepData = false;
       }
     }
     return SetupArgs(
@@ -93,6 +117,9 @@ class SetupArgs {
       silent: silent,
       elevated: elevated,
       resumeOptions: resume,
+      autoStart: autoStart,
+      autoUninstall: autoUninstall,
+      keepData: keepData,
     );
   }
 }

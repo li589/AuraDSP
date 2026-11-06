@@ -4,7 +4,7 @@
 
 本项目目录汇总了 AuraDSP 面向所有支持平台的安装包制作、打包脚本、元数据管理，以及**自主研发的 Windows 安装向导子项目**。所有发行产物均遵循统一的工程标准，最终成果集中输出至根目录下的 `dist/` 目录。
 
-> **当前状态（2026-11-07）**：**发布规范已裁定**（版本号 `vXX.XX.X`、首版 v0.1.0、仅 Win+Linux、只从 `main` 构建、门禁全绿、每平台驱动包+便携包+正式安装包三件齐备，见 `docs/01_distribution_architecture.md` 发布总则）。**双侧均已落地到「拉取即可构建发行包」**：Linux 入口 `linux/pack.sh --build`（一键：引擎→bundle→同步→deb / 驱动配置包 / AppImage / tar.gz）；Windows 入口 `windows/pack.py`（全量可传参，driver/portable/setup 三模式 + 资源自动合并），配自研两段式安装程序（C++ 引导壳 + Flutter 极光向导，见 `docs/02_windows_installer_design.md` 与 `docs/20-执行/Windows安装程序与打包脚本实施设计-2026-11-06.md`），由 `.github/workflows/windows-installer.yml` 在 windows-latest 持续验证编译与打包逻辑。资源包独立版本线（`resources-v*`，从 0.0.1 起）见 01 §2.4。未决外部项：Windows 驱动正式签名（Attestation/EV，现为测试签名，见 05 号规划风险项）。
+> **当前状态（2026-11-06）**：**发布规范已裁定**（版本号 `vXX.XX.X`、首版 v0.1.0、仅 Win+Linux、只从 `main` 构建、门禁全绿、每平台驱动包+便携包+正式安装包三件齐备，见 `docs/01_distribution_architecture.md` 发布总则）。**双侧均已落地到「拉取即可构建发行包」**：Linux 入口 `linux/pack.sh --build`（一键：引擎→bundle→同步→deb / 驱动配置包 / AppImage / tar.gz）；Windows 入口 `windows/pack.py`（全量可传参，driver/portable/setup 三模式 + 资源自动合并），配自研两段式安装程序（C++ 引导壳 + Flutter 极光向导，见 `docs/02_windows_installer_design.md` 与 `docs/20-执行/Windows安装程序与打包脚本实施设计-2026-11-06.md`），由 `.github/workflows/windows-installer.yml` 在 windows-latest 持续验证编译与打包逻辑。资源包独立版本线（`resources-v*`，从 0.0.1 起）见 01 §2.4。未决外部项：Windows 驱动正式签名（Attestation/EV，现为测试签名，见 05 号规划风险项）。
 
 ---
 
