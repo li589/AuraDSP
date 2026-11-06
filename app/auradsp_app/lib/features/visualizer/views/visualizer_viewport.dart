@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:ui' as ui;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -19,30 +22,42 @@ import 'visualizer_db_scale.dart';
 /// 2026-10-31 内存优化：旧实现每帧 `build(time)` 新建一个画笔，Path /
 /// Paint / Shader 等 Skia 原生对象只能等 GC finalizer 回收；在核显上还会
 /// 让光栅线程落后、GPU 表面排队（实测可视化页可涨到 2GB+）。
-/// 单层合批渲染画笔：将背景氛围层与主视效画笔合并到同一个 Canvas 进行绘制
-/// 彻底废除双层全屏 RepaintBoundary 堆叠，消除双份全屏离屏 Surface 显存占用与 GPU 排队。
+/// 单层合批渲染画笔：氛围层以**预烘焙位图**参与合成，主视效画笔照常绘制。
+///
+/// 2026-11-06（P1-2）：氛围层（全屏径向渐变 + 64 微尘 + 地平线）此前每帧
+/// 都被重算进主画布，其中全屏径向渐变是光栅线程最贵的一笔。现在改由
+/// [_VisualizerCanvasViewportState] 以 10 Hz 把整层烘焙成一张 DPR 位图，
+/// 每帧只做一次 1:1 纹理贴图，观感不变（微尘/光晕本就是慢动作）且不新增
+/// 离屏层——仍是同一个 CustomPaint/RepaintBoundary 单层合成。
 class _CompositeVisualizerPainter extends CustomPainter {
-  final CustomPainter? ambience;
+  final ValueListenable<ui.Image?>? ambienceImage;
   final CustomPainter mainPainter;
   final ValueListenable<double>? mainTime;
-  final ValueListenable<double>? ambienceTime;
+
+  /// 烘焙位图与画布像素 1:1，禁用采样即可保证与矢量绘制逐像素一致。
+  final Paint _bakedPaint = Paint()
+    ..filterQuality = FilterQuality.none
+    ..isAntiAlias = false;
 
   _CompositeVisualizerPainter({
-    this.ambience,
+    this.ambienceImage,
     required this.mainPainter,
     this.mainTime,
-    this.ambienceTime,
-  }) : super(repaint: mainTime ?? ambienceTime);
+  }) : super(repaint: mainTime ?? ambienceImage);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final a = ambience;
-    if (a != null) {
-      final at = ambienceTime;
-      if (at != null && a is VisualizerTimeAware) {
-        (a as VisualizerTimeAware).setVisualizerTime(at.value);
+    final il = ambienceImage;
+    if (il != null) {
+      final img = il.value;
+      if (img != null) {
+        canvas.drawImageRect(
+          img,
+          Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+          Offset.zero & size,
+          _bakedPaint,
+        );
       }
-      a.paint(canvas, size);
     }
     final mt = mainTime;
     final mp = mainPainter;
@@ -54,7 +69,8 @@ class _CompositeVisualizerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CompositeVisualizerPainter oldDelegate) {
-    if (oldDelegate.ambience != ambience || oldDelegate.mainPainter != mainPainter) {
+    if (oldDelegate.ambienceImage != ambienceImage ||
+        oldDelegate.mainPainter != mainPainter) {
       return true;
     }
     return mainTime == null;
@@ -96,15 +112,37 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   CustomPainter? _ambience;
   Object? _ambienceKey;
 
-  /// 氛围层时间轴：独立的 ~20fps 节流通知（星点漂移/光晕呼吸本就是慢动作，
-  /// 无需跟随 30fps 主画布；旧实现每帧重建整屏径向渐变）。
+  /// 氛围层时间轴：独立的 ~10fps 节流通知。星点漂移/光晕呼吸本就是慢动作，
+  /// 10 Hz 更新在 30 Hz 主画布上肉眼不可分辨（旧实现是 30 帧全屏径向渐变）。
   final ValueNotifier<double> _ambienceTime = ValueNotifier<double>(0.0);
+
+  /// 烘焙产物：整层氛围位图（像素尺寸 = 画布逻辑尺寸 × DPR）。
+  final ValueNotifier<ui.Image?> _ambienceImage =
+      ValueNotifier<ui.Image?>(null);
+
+  /// 已退役但仍可能被最近几帧 Picture 引用的位图，延迟释放避免重放已销毁图像。
+  final List<ui.Image> _retiredImages = <ui.Image>[];
+
+  Size _canvasSize = Size.zero;
+  double _devicePixelRatio = 1.0;
+  bool _baking = false;
+  bool _bakePending = false;
 
   @override
   void initState() {
     super.initState();
     _ambienceTime.value = widget.time.value;
     widget.time.addListener(_onTime);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    if (dpr != _devicePixelRatio) {
+      _devicePixelRatio = dpr;
+      if (_canvasSize != Size.zero) _scheduleAmbienceBake();
+    }
   }
 
   @override
@@ -120,12 +158,82 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   void dispose() {
     widget.time.removeListener(_onTime);
     _ambienceTime.dispose();
+    final current = _ambienceImage.value;
+    _ambienceImage.dispose();
+    // 仍在退役队列里的位图由各自的延迟计时器释放；当前位图同样延迟，避免
+    // 光栅线程重放已销毁图像。
+    if (current != null) {
+      Timer(const Duration(milliseconds: 400), current.dispose);
+    }
     super.dispose();
   }
 
   void _onTime() {
-    if (widget.time.value - _ambienceTime.value >= 0.05) {
+    if (_canvasSize == Size.zero) return;
+    if (widget.time.value - _ambienceTime.value >= _ambiencePeriod) {
       _ambienceTime.value = widget.time.value;
+      _scheduleAmbienceBake();
+    }
+  }
+
+  /// 氛围层烘焙刷新周期：10 Hz。全屏径向渐变从「每帧一次」降为「每 100 ms 一次」。
+  static const double _ambiencePeriod = 0.1;
+
+  /// 触发一次烘焙；烘焙是异步的（Picture → GPU 纹理），同一时刻只允许一次在飞。
+  void _scheduleAmbienceBake() {
+    if (!mounted || _ambience == null || _canvasSize.isEmpty) return;
+    if (_baking) {
+      _bakePending = true;
+      return;
+    }
+    unawaited(_bakeAmbience());
+  }
+
+  Future<void> _bakeAmbience() async {
+    _baking = true;
+    final painter = _ambience;
+    final size = _canvasSize;
+    final dpr = _devicePixelRatio;
+    if (painter == null || size.isEmpty) {
+      _baking = false;
+      return;
+    }
+    final ambienceClock = _ambienceTime.value;
+    if (painter is VisualizerTimeAware) {
+      (painter as VisualizerTimeAware).setVisualizerTime(ambienceClock);
+    }
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.scale(dpr, dpr);
+    painter.paint(canvas, size);
+    final picture = recorder.endRecording();
+    ui.Image? image;
+    try {
+      image = await picture.toImage(
+        (size.width * dpr).round(),
+        (size.height * dpr).round(),
+      );
+    } finally {
+      picture.dispose();
+      _baking = false;
+    }
+    if (!mounted) {
+      image.dispose();
+      return;
+    }
+    final previous = _ambienceImage.value;
+    _ambienceImage.value = image;
+    if (previous != null) {
+      // 上一帧（甚至上上帧）的 Picture 可能仍在光栅线程排队，延迟 300 ms 再释放。
+      _retiredImages.add(previous);
+      Timer(const Duration(milliseconds: 300), () {
+        _retiredImages.remove(previous);
+        previous.dispose();
+      });
+    }
+    if (_bakePending) {
+      _bakePending = false;
+      _scheduleAmbienceBake();
     }
   }
 
@@ -175,6 +283,8 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         animationTime: widget.time.value,
         intensity: 0.55 + widget.config.bloom * 0.45,
       );
+      // 调色板/强度变化必须重新烘焙，否则会继续贴旧位图。
+      _scheduleAmbienceBake();
     }
     return _ambience!;
   }
@@ -205,23 +315,33 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
 
         final delegate = _delegateFor(renderedBands, peaks);
         final bool usesAmbience = _usesAmbience(widget.config.style);
-        final CustomPainter? ambienceDelegate =
-            usesAmbience ? _ambienceFor(renderedBands) : null;
+        if (usesAmbience) _ambienceFor(renderedBands);
 
-        // 单层合批渲染：将背景氛围与主画笔合为一个 CustomPaint，0 额外 GPU 离屏缓冲
-        final paintLayer = RepaintBoundary(
-          child: CustomPaint(
-            // 内容每帧都在变：显式告知光栅缓存不要为它保留离屏层，
-            // 否则 30 Hz 变化的全屏 Picture 会在 GPU 侧持续占住大块 Shared 内存。
-            willChange: true,
-            painter: _CompositeVisualizerPainter(
-              ambience: ambienceDelegate,
-              mainPainter: delegate,
-              mainTime: delegate is VisualizerTimeAware ? widget.time : null,
-              ambienceTime: usesAmbience ? _ambienceTime : null,
-            ),
-            child: const SizedBox.expand(),
-          ),
+        // 单层合批渲染：氛围层以 10 Hz 烘焙位图参与合成，主画笔照常绘制；
+        // 仍只有一个 CustomPaint / RepaintBoundary，不新增全屏离屏层。
+        final paintLayer = LayoutBuilder(
+          builder: (context, constraints) {
+            final size = constraints.biggest;
+            if (size.isFinite && size != _canvasSize) {
+              _canvasSize = size;
+              _scheduleAmbienceBake();
+            }
+            return RepaintBoundary(
+              child: CustomPaint(
+                // 主内容每帧都在变：显式告知光栅缓存不要为它保留离屏层，
+                // 否则 30 Hz 变化的全屏 Picture 会在 GPU 侧持续占住大块 Shared 内存。
+                willChange: true,
+                painter: _CompositeVisualizerPainter(
+                  ambienceImage: usesAmbience ? _ambienceImage : null,
+                  mainPainter: delegate,
+                  mainTime: delegate is VisualizerTimeAware
+                      ? widget.time
+                      : null,
+                ),
+                child: const SizedBox.expand(),
+              ),
+            );
+          },
         );
 
         Widget body;
