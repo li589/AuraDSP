@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'dart:ui' show Offset;
+import 'dart:typed_data';
 
 /// 真实感高刷时域波形与立体声利萨如相位序列合成器（带双向声学惯性平滑与软饱和防突变）
 class WaveformSynthesizer {
@@ -7,7 +7,9 @@ class WaveformSynthesizer {
 
   final List<double> waveL = List.filled(pointCount, 0.0);
   final List<double> waveR = List.filled(pointCount, 0.0);
-  final List<Offset> lissajousPoints = List.filled(pointCount, Offset.zero);
+
+  /// 利萨如坐标按 x,y 交错写入固定长度缓冲：整场播放零逐帧 Offset 分配。
+  final Float32List lissajousXY = Float32List(pointCount * 2);
 
   double _phase = 0.0;
   double _smoothedAmpL = 0.0;
@@ -31,7 +33,7 @@ class WaveformSynthesizer {
       _smoothedTreble = 0.0;
       waveL.fillRange(0, pointCount, 0.0);
       waveR.fillRange(0, pointCount, 0.0);
-      lissajousPoints.fillRange(0, pointCount, Offset.zero);
+      lissajousXY.fillRange(0, pointCount * 2, 0.0);
       return;
     }
 
@@ -77,7 +79,8 @@ class WaveformSynthesizer {
       // Mid/Side 45° 旋转利萨如映射: M = (L+R)/sqrt(2), S = (L-R)/sqrt(2)
       final m = (yL + yR) * 0.7071;
       final s = (yL - yR) * 0.7071;
-      lissajousPoints[i] = Offset(s, -m);
+      lissajousXY[i * 2] = s;
+      lissajousXY[i * 2 + 1] = -m;
     }
   }
 

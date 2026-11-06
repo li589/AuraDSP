@@ -16,6 +16,9 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
 
   /// 整场播放复用同一个 Paint（shader 实例由 GpuShaderService 持有）。
   final Paint _shaderPaint = Paint();
+  final Paint _fallbackBgPaint = Paint();
+  final Paint _fallbackRingPaint = Paint()..style = PaintingStyle.stroke;
+  final Color _fallbackRingColor;
   Shader? _fallbackShader;
   Size _fallbackSize = Size.zero;
   int _fallbackBass = -1;
@@ -26,7 +29,7 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
     required this.palette,
     required this.time,
     required this.sensitivity,
-  });
+  }) : _fallbackRingColor = palette.primary.withValues(alpha: 0.7);
 
   @override
   void setVisualizerTime(double t) => time = t;
@@ -99,14 +102,13 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
         ],
       ).createShader(rect);
     }
-    final bgPaint = Paint()..shader = _fallbackShader;
-    canvas.drawRect(rect, bgPaint);
+    _fallbackBgPaint.shader = _fallbackShader;
+    canvas.drawRect(rect, _fallbackBgPaint);
 
-    final ringPaint = Paint()
-      ..style = PaintingStyle.stroke
+    _fallbackRingPaint
       ..strokeWidth = 2.0 + bass * 3.0
-      ..color = palette.primary.withValues(alpha: 0.7);
-    canvas.drawCircle(center, r, ringPaint);
+      ..color = _fallbackRingColor;
+    canvas.drawCircle(center, r, _fallbackRingPaint);
   }
 
   @override

@@ -211,6 +211,9 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         // 单层合批渲染：将背景氛围与主画笔合为一个 CustomPaint，0 额外 GPU 离屏缓冲
         final paintLayer = RepaintBoundary(
           child: CustomPaint(
+            // 内容每帧都在变：显式告知光栅缓存不要为它保留离屏层，
+            // 否则 30 Hz 变化的全屏 Picture 会在 GPU 侧持续占住大块 Shared 内存。
+            willChange: true,
             painter: _CompositeVisualizerPainter(
               ambience: ambienceDelegate,
               mainPainter: delegate,

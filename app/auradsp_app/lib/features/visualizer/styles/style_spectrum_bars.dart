@@ -1,4 +1,6 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' show PointMode;
 import 'package:flutter/material.dart';
 
 import '../../../engine/auradsp_ffi.dart' show VizBands;
@@ -23,6 +25,23 @@ class SpectrumBarsPainter extends CustomPainter {
   Shader? _barShader;
   Size _barShaderSize = Size.zero;
 
+  /// 全部柱体合并到两条 Path（实心 + 辉光衬底）一次性提交：把每帧 2×N
+  /// 次 drawRRect 降到 2 次 drawPath，路径对象跨帧复用。
+  final Path _barPath = Path();
+  final Path _glowPath = Path();
+
+  /// 峰值悬浮线合并为一条 Path（纯水平线段，与逐条 drawLine 视觉等价）。
+  final Path _peakPath = Path();
+
+  /// dB 网格线坐标缓冲：3 横 + 3 纵，原地覆写后一次批量提交。
+  final Float32List _gridLines = Float32List(6 * 4);
+
+  static const Radius _barRadius = Radius.circular(2.0);
+  static const Radius _glowRadius = Radius.circular(3.0);
+
+  /// 辉光色只取决于 bloom（画笔实例跨帧复用），构造时算好。
+  final Color _glowColor;
+
   SpectrumBarsPainter({
     required this.bands,
     required this.peaks,
@@ -30,7 +49,8 @@ class SpectrumBarsPainter extends CustomPainter {
     required this.showGrid,
     required this.showPeaks,
     required this.bloom,
-  }) {
+  }) : _glowColor =
+            palette.glow.withValues(alpha: (bloom * 0.16).clamp(0.0, 0.32)) {
     _gridPaint.color = palette.grid;
     _peakPaint.color = palette.peak;
   }
@@ -66,7 +86,7 @@ class SpectrumBarsPainter extends CustomPainter {
       // 长时间播放会把进程内存推到 GB 级并拖慢光栅线程。改用加宽底衬模拟辉光。
       _glowPaint
         ..shader = null
-        ..color = palette.glow.withValues(alpha: (bloom * 0.16).clamp(0.0, 0.32));
+        ..color = _glowColor;
     }
 
     // 均匀柱宽与对称边距排布，消除高低频宽窄不一致问题
@@ -76,6 +96,10 @@ class SpectrumBarsPainter extends CustomPainter {
     final double actualTotalSpan = barCount * barWidth + totalGaps;
     final double leftOffset = (size.width - actualTotalSpan) / 2.0;
 
+    _barPath.reset();
+    if (drawGlow) _glowPath.reset();
+    if (hasPeaks) _peakPath.reset();
+
     for (var i = 0; i < barCount; i++) {
       final v = bands[i].clamp(0.0, 1.0);
       final h = v * (size.height - 4.0); // 留出顶部峰值线物理间隙
@@ -84,24 +108,30 @@ class SpectrumBarsPainter extends CustomPainter {
       final top = size.height - h;
 
       if (h > 0.5) {
-        final barRect = Rect.fromLTWH(left, top, barWidth, h);
-        final rrect = RRect.fromRectAndRadius(barRect, const Radius.circular(2.0));
-
-        canvas.drawRRect(rrect, _barPaint);
+        // 直接用 LTRB 构造圆角矩形，省掉中间 Rect 对象
+        _barPath.addRRect(RRect.fromLTRBAndCorners(
+          left,
+          top,
+          left + barWidth,
+          size.height,
+          topLeft: _barRadius,
+          topRight: _barRadius,
+        ));
 
         // 辉光底衬（加宽矩形，无模糊图层）
         if (drawGlow && h > 4.0) {
-          canvas.drawRRect(
-            RRect.fromRectAndRadius(
-              Rect.fromLTWH(left - 1.0, top - 1.5, barWidth + 2.0, h + 2.0),
-              const Radius.circular(3.0),
-            ),
-            _glowPaint,
-          );
+          _glowPath.addRRect(RRect.fromLTRBAndCorners(
+            left - 1.0,
+            top - 1.5,
+            left + barWidth + 1.0,
+            size.height + 0.5,
+            topLeft: _glowRadius,
+            topRight: _glowRadius,
+          ));
         }
       }
 
-      // 绘制物理峰值保持小白条（清晰悬浮于柱顶，绝不淹没覆盖）
+      // 物理峰值保持小白条（清晰悬浮于柱顶，绝不淹没覆盖）
       if (hasPeaks) {
         final pkVal = peaks[i].clamp(0.0, 1.0);
         if (pkVal > 0.015) {
@@ -110,29 +140,40 @@ class SpectrumBarsPainter extends CustomPainter {
           final pkY = math.min(barTopY - 2.5, peakTargetY - 2.5);
 
           if (pkY >= 0) {
-            canvas.drawLine(
-              Offset(left, pkY),
-              Offset(left + barWidth, pkY),
-              _peakPaint,
-            );
+            _peakPath
+              ..moveTo(left, pkY)
+              ..lineTo(left + barWidth, pkY);
           }
         }
       }
     }
+
+    if (drawGlow) canvas.drawPath(_glowPath, _glowPaint);
+    canvas.drawPath(_barPath, _barPaint);
+    if (hasPeaks) canvas.drawPath(_peakPath, _peakPaint);
   }
 
   void _drawGrid(Canvas canvas, Size size) {
+    final g = _gridLines;
+    var o = 0;
     // 横向 dB 网格线（4 等分：0, -15, -30, -45 dBFS）
     for (var i = 1; i < 4; i++) {
       final y = size.height * i / 4.0;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), _gridPaint);
+      g[o++] = 0;
+      g[o++] = y;
+      g[o++] = size.width;
+      g[o++] = y;
     }
 
     // 纵向对数频率参考线（100Hz, 1kHz, 10kHz）
     for (final hz in const [100.0, 1000.0, 10000.0]) {
       final x = VizBands.logX(hz) * size.width;
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), _gridPaint);
+      g[o++] = x;
+      g[o++] = 0;
+      g[o++] = x;
+      g[o++] = size.height;
     }
+    canvas.drawRawPoints(PointMode.lines, g, _gridPaint);
   }
 
   @override

@@ -32,12 +32,29 @@ class AtmospherePainter extends CustomPainter implements VisualizerTimeAware {
   Shader? _haloShader;
   int _haloLevel = -1;
 
+  /// 微尘闪烁的 alpha 与地平线余晖都是连续量，按 32 档量化后预计算颜色表，
+  /// 消除每帧 64 次以上 `Color.withValues` 分配（量化误差 < 0.011 alpha，不可见）。
+  static const int _alphaLevels = 32;
+  static const double _speckAlphaMax = 0.34;
+  static const double _horizonAlphaMax = 0.135;
+  final List<Color> _speckColorsA;
+  final List<Color> _speckColorsB;
+  final List<Color> _horizonColors;
+
+  static List<Color> _buildAlphaTable(Color base, double maxAlpha) =>
+      List<Color>.generate(
+        _alphaLevels,
+        (i) => base.withValues(alpha: i / (_alphaLevels - 1) * maxAlpha),
+      );
+
   AtmospherePainter({
     required this.bands,
     required this.palette,
     required this.animationTime,
     this.intensity = 0.6,
-  });
+  })  : _speckColorsA = _buildAlphaTable(palette.primary, _speckAlphaMax),
+        _speckColorsB = _buildAlphaTable(palette.secondary, _speckAlphaMax),
+        _horizonColors = _buildAlphaTable(palette.glow, _horizonAlphaMax);
 
   @override
   void setVisualizerTime(double time) => animationTime = time;
@@ -101,8 +118,12 @@ class AtmospherePainter extends CustomPainter implements VisualizerTimeAware {
       final y = h * v + math.cos(t * 0.24 + phase * 1.3) * h * 0.016;
       final twinkle = 0.5 + 0.5 * math.sin(t * 0.9 + phase * 2.0);
 
-      _speckPaint.color = (i % 3 == 0 ? palette.secondary : palette.primary)
-          .withValues(alpha: (0.06 + twinkle * 0.22) * activation);
+      final alpha = (0.06 + twinkle * 0.22) * activation;
+      final level = (alpha / _speckAlphaMax * (_alphaLevels - 1))
+          .round()
+          .clamp(0, _alphaLevels - 1);
+      _speckPaint.color =
+          i % 3 == 0 ? _speckColorsB[level] : _speckColorsA[level];
       canvas.drawCircle(
         Offset(x, y),
         baseSize * (0.55 + twinkle * 0.45),
@@ -110,9 +131,13 @@ class AtmospherePainter extends CustomPainter implements VisualizerTimeAware {
       );
     }
 
-    // 地平线余晖：低频能量越强越亮
+    // 地平线余晖：低频能量越强越亮（颜色按 32 档量化查表）
+    final horizonAlpha = 0.035 + activation * 0.1;
+    final horizonLevel = (horizonAlpha / _horizonAlphaMax * (_alphaLevels - 1))
+        .round()
+        .clamp(0, _alphaLevels - 1);
     _horizonPaint
-      ..color = palette.glow.withValues(alpha: 0.035 + activation * 0.1)
+      ..color = _horizonColors[horizonLevel]
       ..strokeWidth = 1.0 + bass * 1.4;
     canvas.drawLine(
       Offset(0, h * 0.94),

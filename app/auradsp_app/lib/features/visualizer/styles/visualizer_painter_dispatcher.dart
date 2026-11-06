@@ -38,7 +38,7 @@ CustomPainter buildVisualizerPainter({
 
     case VisualizerStyle.goniometer:
       return GoniometerPainter(
-        points: waveformSynth.lissajousPoints,
+        points: waveformSynth.lissajousXY,
         palette: palette,
         showGrid: config.showGrid,
         bloom: config.bloom,

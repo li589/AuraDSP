@@ -83,7 +83,30 @@ class ParticleTornadoPainter extends CustomPainter
     required this.bloom,
     required this.animationTime,
     this.lineWidth = 1.5,
-  });
+  })  : _alphaTables = List.generate(
+          3,
+          (c) => List<Color>.generate(
+            _alphaLevels,
+            (i) => [
+              palette.primary,
+              palette.secondary,
+              palette.peak,
+            ][c].withValues(alpha: i / (_alphaLevels - 1)),
+          ),
+        );
+
+  /// 粒子/拖尾/地面尘的 alpha 是连续量：按 32 档量化查预计算颜色表，
+  /// 消除每帧 200+ 次 `Color.withValues` 分配（误差 ≤ 1/31 alpha，不可见）。
+  static const int _alphaLevels = 32;
+  static const int _cPrimary = 0;
+  static const int _cSecondary = 1;
+  static const int _cPeak = 2;
+  final List<List<Color>> _alphaTables;
+
+  Color _colorAt(int base, double alpha) {
+    final i = (alpha.clamp(0.0, 1.0) * (_alphaLevels - 1)).round();
+    return _alphaTables[base][i];
+  }
 
   @override
   void setVisualizerTime(double time) => animationTime = time;
@@ -202,17 +225,16 @@ class ParticleTornadoPainter extends CustomPainter
     if (bloom > 0.05) {
       final bl = (_smoothedBass * 7).round().clamp(0, 7);
       final glowCenterX = _axisX(cx, sway, 0.35);
-      final glowRect = Rect.fromCenter(
-        center: Offset(glowCenterX, baseY - funnelH * 0.35),
-        width: maxR * 3.6,
-        height: funnelH * 1.1,
-      );
       _glowPaint.shader = _getOrCreateShader('glow_$bl', () => RadialGradient(
         colors: [
           palette.glow.withValues(alpha: (0.06 + bloom * 0.14 + (bl / 7.0) * 0.10)),
           palette.glow.withValues(alpha: 0.0),
         ],
-      ).createShader(glowRect));
+      ).createShader(Rect.fromCenter(
+        center: Offset(glowCenterX, baseY - funnelH * 0.35),
+        width: maxR * 3.6,
+        height: funnelH * 1.1,
+      )));
       canvas.drawOval(
         Rect.fromCenter(
           center: Offset(glowCenterX, baseY - funnelH * 0.35),
@@ -263,7 +285,6 @@ class ParticleTornadoPainter extends CustomPainter
     final bq = bl / 7.0;
 
     // a. 底部广域环境微光沉降池（Shader 按档位缓存，档位变了才重建）
-    final hazeRect = Rect.fromCenter(center: center, width: maxR * 3.8, height: minDim * 0.30);
     _hazePaint.shader = _getOrCreateShader('haze_$bl', () => RadialGradient(
       colors: [
         palette.secondary.withValues(alpha: 0.16 + bq * 0.18),
@@ -271,7 +292,11 @@ class ParticleTornadoPainter extends CustomPainter
         palette.glow.withValues(alpha: 0.0),
       ],
       stops: const [0.0, 0.45, 1.0],
-    ).createShader(hazeRect));
+    ).createShader(Rect.fromCenter(
+      center: center,
+      width: maxR * 3.8,
+      height: minDim * 0.30,
+    )));
     canvas.drawOval(
       Rect.fromCenter(
         center: center,
@@ -288,7 +313,6 @@ class ParticleTornadoPainter extends CustomPainter
       final rw = maxR * mul;
       final rh = rw * _pitchSin;
       final ringAlpha = (0.12 - ri * 0.03 + bq * 0.14).clamp(0.02, 0.35);
-      final ringRect = Rect.fromCenter(center: center, width: rw, height: rh);
 
       _ringPaint
         ..shader = _getOrCreateShader('ring_$bl', () => SweepGradient(
@@ -298,7 +322,11 @@ class ParticleTornadoPainter extends CustomPainter
             palette.primary.withValues(alpha: ringAlpha * 0.5),
             palette.primary.withValues(alpha: ringAlpha),
           ],
-        ).createShader(ringRect))
+        ).createShader(Rect.fromCenter(
+          center: center,
+          width: rw,
+          height: rh,
+        )))
         ..strokeWidth = (1.2 + (2 - ri) * 0.4) * (lineWidth / 1.5);
 
       canvas.drawOval(
@@ -309,7 +337,6 @@ class ParticleTornadoPainter extends CustomPainter
 
     // c. 风眼中心深邃极核（中央极度致密的高能焦点，Shader 复用）
     final coreR = maxR * (0.18 + bq * 0.07);
-    final coreRect = Rect.fromCenter(center: center, width: coreR * 2, height: coreR * 2 * _pitchSin);
     _hazePaint.shader = _getOrCreateShader('core_$bl', () => RadialGradient(
       colors: [
         palette.peak.withValues(alpha: 0.30 + bq * 0.40),
@@ -317,7 +344,11 @@ class ParticleTornadoPainter extends CustomPainter
         palette.primary.withValues(alpha: 0.0),
       ],
       stops: const [0.0, 0.45, 1.0],
-    ).createShader(coreRect));
+    ).createShader(Rect.fromCenter(
+      center: center,
+      width: coreR * 2,
+      height: coreR * 2 * _pitchSin,
+    )));
     canvas.drawOval(
       Rect.fromCenter(center: center, width: coreR * 2, height: coreR * 2 * _pitchSin),
       _hazePaint,
@@ -430,13 +461,6 @@ class ParticleTornadoPainter extends CustomPainter
     }
     _conePath.close();
 
-    final coneRect = Rect.fromLTWH(
-      cx - maxR * 1.4,
-      baseY - funnelH,
-      maxR * 2.8,
-      funnelH,
-    );
-
     final bl = (bass * 7).round().clamp(0, 7);
     final bq = bl / 7.0;
     // 核心微光体积填充：底部浓、上部自然淡出（key 带档位，否则首帧后冻结）
@@ -449,7 +473,12 @@ class ParticleTornadoPainter extends CustomPainter
         palette.glow.withValues(alpha: 0.0),
       ],
       stops: const [0.0, 0.55, 1.0],
-    ).createShader(coneRect));
+    ).createShader(Rect.fromLTWH(
+      cx - maxR * 1.4,
+      baseY - funnelH,
+      maxR * 2.8,
+      funnelH,
+    )));
 
     canvas.drawPath(_conePath, _conePaint);
   }
@@ -489,9 +518,9 @@ class ParticleTornadoPainter extends CustomPainter
 
       final alpha = (0.04 + depth * 0.22 + twinkle * 0.10 + treble * 0.12)
           .clamp(0.0, 1.0);
-      final pColor = (i % 3 == 0) ? palette.secondary : palette.primary;
 
-      _groundPaint.color = pColor.withValues(alpha: alpha);
+      _groundPaint.color =
+          _colorAt(i % 3 == 0 ? _cSecondary : _cPrimary, alpha);
       canvas.drawCircle(
         Offset(x, y),
         sizeSeed * (0.65 + depth * 0.70 + bass * 0.20),
@@ -560,11 +589,11 @@ class ParticleTornadoPainter extends CustomPainter
           (isCore ? 1.0 : (0.65 + front * 0.85)) *
           (1.0 + energyNorm * 0.45);
 
-      final color = isCore
-          ? (i % 7 == 0 ? palette.peak : palette.secondary)
+      final baseColor = isCore
+          ? (i % 7 == 0 ? _cPeak : _cSecondary)
           : (i % 11 == 0
-              ? palette.peak
-              : (i % 3 == 0 ? palette.secondary : palette.primary));
+              ? _cPeak
+              : (i % 3 == 0 ? _cSecondary : _cPrimary));
 
       // 运动矢量拖尾绘制
       final tailU = (rise - tailRise) % 1.0;
@@ -580,14 +609,15 @@ class ParticleTornadoPainter extends CustomPainter
         final tailY = baseY - tailU * funnelH + tailSinA * tailR * _pitchSin;
 
         _trailPaint
-          ..color = color.withValues(alpha: alpha * 0.38)
+          ..color = _colorAt(baseColor, alpha * 0.38)
           ..strokeWidth = math.max(0.7, size * 0.65);
         canvas.drawLine(Offset(tailX, tailY), Offset(x, y), _trailPaint);
       }
 
       // 核心微粒光点绘制
-      _particlePaint.color = color.withValues(
-        alpha: isCore ? (alpha * 1.15).clamp(0.0, 1.0) : alpha,
+      _particlePaint.color = _colorAt(
+        baseColor,
+        isCore ? (alpha * 1.15).clamp(0.0, 1.0) : alpha,
       );
       canvas.drawCircle(Offset(x, y), math.max(0.65, size), _particlePaint);
     }

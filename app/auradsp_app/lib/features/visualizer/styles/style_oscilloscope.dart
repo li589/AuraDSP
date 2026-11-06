@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'dart:ui' show PointMode;
 import 'package:flutter/material.dart';
 import '../models/visualizer_themes.dart';
 
@@ -11,7 +13,6 @@ class OscilloscopePainter extends CustomPainter {
   final double lineWidth;
 
   final Paint _gridPaint = Paint()..strokeWidth = 1;
-  final Paint _zeroLinePaint = Paint()..strokeWidth = 1;
   final Paint _waveLPaint = Paint()..style = PaintingStyle.stroke;
   final Paint _waveRPaint = Paint()..style = PaintingStyle.stroke;
   final Paint _glowPaint = Paint()..style = PaintingStyle.stroke;
@@ -20,6 +21,12 @@ class OscilloscopePainter extends CustomPainter {
   final Path _pathL = Path();
   final Path _pathR = Path();
 
+  /// 网格线坐标缓冲：1 条零线 + 7 竖线 + 5 横线，全部原地覆写后一次批量提交。
+  final Float32List _gridLines = Float32List(13 * 4);
+
+  /// 辉光色只取决于 bloom（画笔实例跨帧复用），构造时算好。
+  final Color _glowColor;
+
   OscilloscopePainter({
     required this.waveL,
     required this.waveR,
@@ -27,9 +34,8 @@ class OscilloscopePainter extends CustomPainter {
     required this.showGrid,
     required this.bloom,
     this.lineWidth = 1.5,
-  }) {
+  }) : _glowColor = palette.glow.withValues(alpha: (bloom * 0.22).clamp(0.0, 0.36)) {
     _gridPaint.color = palette.grid;
-    _zeroLinePaint.color = palette.grid.withValues(alpha: 0.35);
 
     _waveLPaint
       ..color = palette.primary
@@ -90,7 +96,7 @@ class OscilloscopePainter extends CustomPainter {
     // 荧光余辉 Glow 模拟（加宽低透地平描，避免每帧模糊图层）
     if (bloom > 0.1) {
       _glowPaint
-        ..color = palette.glow.withValues(alpha: (bloom * 0.22).clamp(0.0, 0.36))
+        ..color = _glowColor
         ..strokeWidth = lineWidth * 2.0 + bloom * 4.0
         ..maskFilter = null;
       canvas.drawPath(pathL, _glowPaint);
@@ -103,20 +109,31 @@ class OscilloscopePainter extends CustomPainter {
   }
 
   void _drawOscilloscopeGrid(Canvas canvas, Size size, double centerY) {
-    // 零电平中心实线
-    canvas.drawLine(Offset(0, centerY), Offset(size.width, centerY), _zeroLinePaint);
+    // 零电平中心实线 + 8/6 分度网格：全部写入同一坐标缓冲后一次提交
+    final g = _gridLines;
+    var o = 0;
+    g[o++] = 0;
+    g[o++] = centerY;
+    g[o++] = size.width;
+    g[o++] = centerY;
 
-    // 8 格分度网格
     const divX = 8;
     const divY = 6;
     for (var i = 1; i < divX; i++) {
       final x = size.width * i / divX;
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), _gridPaint);
+      g[o++] = x;
+      g[o++] = 0;
+      g[o++] = x;
+      g[o++] = size.height;
     }
     for (var j = 1; j < divY; j++) {
       final y = size.height * j / divY;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), _gridPaint);
+      g[o++] = 0;
+      g[o++] = y;
+      g[o++] = size.width;
+      g[o++] = y;
     }
+    canvas.drawRawPoints(PointMode.lines, g, _gridPaint);
   }
 
   @override

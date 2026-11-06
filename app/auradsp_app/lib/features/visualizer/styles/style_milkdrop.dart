@@ -33,6 +33,27 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
   final Path _strokePath = Path();
   final Paint _strokePaint = Paint()..style = PaintingStyle.stroke;
 
+  /// 背景/微光/中心光晕画笔改为成员复用（旧实现每帧 new Paint）。
+  final Paint _bgPaint = Paint();
+  final Paint _shimmerPaint = Paint();
+  final Paint _glowPaint = Paint();
+
+  /// 全屏矩形按尺寸缓存，避免每帧两次 `Rect.fromLTWH`。
+  Rect? _fullRect;
+  Size _fullRectSize = Size.zero;
+
+  /// 旋转角 16 档量化下的对齐向量，构造时预计算，消除每帧 2 个 Alignment。
+  static const int _rotSteps = 16;
+  final List<Alignment> _shimmerBegin;
+  final List<Alignment> _shimmerEnd;
+
+  /// 同心环颜色：8 环 × 16 档 mid，构造时预计算（旧实现每帧 Color.lerp）
+  static const int _energyLevels = 16;
+  final List<List<Color>> _ringColors;
+
+  /// 星芒射线颜色缓存：[(rotStep,rayIndex)][alphaLevel]，懒填充后整场复用。
+  final List<List<Color?>> _rayFadeCache;
+
   /// 着色器缓存：按尺寸与低音离散量化复用，彻底消灭逐帧创建 SkShader
   static final Map<String, Shader> _shaderCache = {};
 
@@ -56,7 +77,28 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
     required this.time,
     required this.sensitivity,
     this.lineWidth = 1.5,
-  });
+  })  : _shimmerBegin = List.generate(_rotSteps, (s) {
+          final a = s * math.pi / 8;
+          return Alignment(math.cos(a) * 0.8, math.sin(a) * 0.8);
+        }),
+        _shimmerEnd = List.generate(_rotSteps, (s) {
+          final a = s * math.pi / 8;
+          return Alignment(-math.cos(a) * 0.8, -math.sin(a) * 0.8);
+        }),
+        _ringColors = List.generate(8, (i) {
+          final frac = (i + 1) / 8.0;
+          final base = Color.lerp(palette.primary, palette.secondary, frac)!;
+          return List<Color>.generate(_energyLevels, (l) {
+            final mid = l / (_energyLevels - 1) * 2.0;
+            final alpha =
+                (0.16 + (1.0 - frac) * 0.5 * (0.5 + mid * 0.5)).clamp(0.0, 0.8);
+            return base.withValues(alpha: alpha);
+          });
+        }),
+        _rayFadeCache = List.generate(
+          _rotSteps * 72,
+          (_) => List<Color?>.filled(_energyLevels, null),
+        );
 
   @override
   void setVisualizerTime(double t) => time = t;
@@ -100,40 +142,39 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
     final midLvl = (mid * 4.0).round().clamp(0, 4);
 
     // 1. 背景：径向衰减 + 缓慢旋转的椭圆微光（Shader 复用，整屏流动且零内存泄漏）
+    if (_fullRect == null || _fullRectSize != size) {
+      _fullRectSize = size;
+      _fullRect = Rect.fromLTWH(0, 0, size.width, size.height);
+    }
+    final fullRect = _fullRect!;
+
     final zoomFactor = preset.zoom.clamp(0.8, 1.4) + (bassLvl / 4.0) * 0.08;
-    final bgPaint = Paint()
-      ..shader = _getOrCreateShader('milk_bg_x___', () => RadialGradient(
-        center: Alignment.center,
-        radius: 0.9 * zoomFactor,
-        colors: [
-          palette.secondary
-              .withValues(alpha: (0.12 * preset.decay + (bassLvl / 4.0) * 0.18).clamp(0.0, 0.6)),
-          palette.primary.withValues(alpha: (0.05 * preset.decay).clamp(0.0, 0.4)),
-          const Color(0x00000000),
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)));
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), bgPaint);
+    _bgPaint.shader = _getOrCreateShader('milk_bg_x___', () => RadialGradient(
+      center: Alignment.center,
+      radius: 0.9 * zoomFactor,
+      colors: [
+        palette.secondary
+            .withValues(alpha: (0.12 * preset.decay + (bassLvl / 4.0) * 0.18).clamp(0.0, 0.6)),
+        palette.primary.withValues(alpha: (0.05 * preset.decay).clamp(0.0, 0.4)),
+        const Color(0x00000000),
+      ],
+    ).createShader(fullRect));
+    canvas.drawRect(fullRect, _bgPaint);
 
     final rot = _rotation;
     // 旋转角按 16 档量化以复用旋转微光着色器
-    final rotStep = (rot * 8 / math.pi).round() % 16;
-    final quantRot = rotStep * math.pi / 8;
-    final shimmerBegin =
-        Alignment(math.cos(quantRot) * 0.8, math.sin(quantRot) * 0.8);
-    final shimmerEnd =
-        Alignment(-math.cos(quantRot) * 0.8, -math.sin(quantRot) * 0.8);
-    final shimmerPaint = Paint()
-      ..shader = _getOrCreateShader('milk_shim_x___', () => LinearGradient(
-        begin: shimmerBegin,
-        end: shimmerEnd,
-        colors: [
-          palette.primary.withValues(alpha: 0.05 + (midLvl / 4.0) * 0.05),
-          const Color(0x00000000),
-          palette.secondary.withValues(alpha: 0.04 + (bassLvl / 4.0) * 0.04),
-        ],
-        stops: const [0.0, 0.5, 1.0],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)));
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), shimmerPaint);
+    final rotStep = (rot * 8 / math.pi).round() % _rotSteps;
+    _shimmerPaint.shader = _getOrCreateShader('milk_shim_x___', () => LinearGradient(
+      begin: _shimmerBegin[rotStep],
+      end: _shimmerEnd[rotStep],
+      colors: [
+        palette.primary.withValues(alpha: 0.05 + (midLvl / 4.0) * 0.05),
+        const Color(0x00000000),
+        palette.secondary.withValues(alpha: 0.04 + (bassLvl / 4.0) * 0.04),
+      ],
+      stops: const [0.0, 0.5, 1.0],
+    ).createShader(fullRect));
+    canvas.drawRect(fullRect, _shimmerPaint);
 
     // 2. 根据 Preset WaveMode 呈现不同 MilkDrop 经典拓扑
     switch (preset.waveMode % 3) {
@@ -187,12 +228,11 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
       }
       _strokePath.close();
 
-      final alpha =
-          (0.16 + (1.0 - frac) * 0.5 * (0.5 + mid * 0.5)).clamp(0.0, 0.8);
-      final color = Color.lerp(palette.primary, palette.secondary, frac)!;
+      final midLevel =
+          (mid * (_energyLevels - 1) / 2.0).round().clamp(0, _energyLevels - 1);
       _strokePaint
         ..strokeWidth = lineWidth + bass * 2.0
-        ..color = color.withValues(alpha: alpha);
+        ..color = _ringColors[i][midLevel];
       canvas.drawPath(_strokePath, _strokePaint);
     }
   }
@@ -250,19 +290,19 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
   ) {
     const rays = 36;
     final rot = _rotation;
+    final rotStep = (rot * 8 / math.pi).round() % _rotSteps;
 
     final coreBassLvl = (bass * 4.0).round().clamp(0, 4);
     // 中心柔光（Shader 缓存复用）
-    final glow = Paint()
-      ..shader = _getOrCreateShader('milk_glow____', () => RadialGradient(
-        colors: [
-          palette.glow.withValues(alpha: 0.14 + (coreBassLvl / 4.0) * 0.12),
-          palette.glow.withValues(alpha: 0.0),
-        ],
-      ).createShader(
-        Rect.fromCircle(center: Offset(cx, cy), radius: r * 0.42),
-      ));
-    canvas.drawCircle(Offset(cx, cy), r * 0.42, glow);
+    _glowPaint.shader = _getOrCreateShader('milk_glow____', () => RadialGradient(
+      colors: [
+        palette.glow.withValues(alpha: 0.14 + (coreBassLvl / 4.0) * 0.12),
+        palette.glow.withValues(alpha: 0.0),
+      ],
+    ).createShader(
+      Rect.fromCircle(center: Offset(cx, cy), radius: r * 0.42),
+    ));
+    canvas.drawCircle(Offset(cx, cy), r * 0.42, _glowPaint);
 
     for (var i = 0; i < rays; i++) {
       final normPos = i / rays;
@@ -274,7 +314,12 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
           0.26 * math.sin(theta * 3.0 + rot * 1.2) +
           0.10 * math.sin(theta * 7.0 - rot * 0.9);
       _drawRay(canvas, cx, cy, angle, amp, asym, r,
-          innerFactor: 0.22, outerFactor: 0.34, alphaScale: 1.0, bass: bass, mid: mid);
+          innerFactor: 0.22,
+          outerFactor: 0.34,
+          alphaScale: 1.0,
+          bass: bass,
+          mid: mid,
+          cacheSlot: rotStep * 72 + i * 2);
 
       // 短内芒：错开半格相位，速度略快，制造层次
       if (i.isEven) {
@@ -284,7 +329,8 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
             outerFactor: 0.22,
             alphaScale: 0.5,
             bass: bass,
-            mid: mid);
+            mid: mid,
+            cacheSlot: rotStep * 72 + i * 2 + 1);
       }
     }
   }
@@ -302,6 +348,7 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
     required double alphaScale,
     required double bass,
     required double mid,
+    required int cacheSlot,
   }) {
     final inner = r * innerFactor * (1.0 + mid * 0.4);
     final outer = r * (outerFactor + amp * 0.46 + bass * 0.2) * asym;
@@ -309,17 +356,21 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
     final y1 = cy + inner * math.sin(angle);
     final x2 = cx + outer * math.cos(angle);
     final y2 = cy + outer * math.sin(angle);
-    final color = Color.lerp(
-      palette.primary,
-      palette.secondary,
-      (angle / (2.0 * math.pi)) % 1.0,
-    )!;
+
+    final alpha = ((0.32 + amp * 0.55) * alphaScale).clamp(0.0, 1.0);
+    final level = (alpha * (_energyLevels - 1)).round();
+    final bucket = _rayFadeCache[cacheSlot];
+    var fade = bucket[level];
+    if (fade == null) {
+      final frac = (angle / (2.0 * math.pi)) % 1.0;
+      fade = Color.lerp(palette.primary, palette.secondary, frac)!
+          .withValues(alpha: level / (_energyLevels - 1));
+      bucket[level] = fade;
+    }
     _strokePaint
       ..strokeWidth = lineWidth * (0.9 + 0.4 * alphaScale)
       ..strokeCap = StrokeCap.round
-      ..color = color.withValues(
-        alpha: ((0.32 + amp * 0.55) * alphaScale).clamp(0.0, 1.0),
-      );
+      ..color = fade;
     canvas.drawLine(Offset(x1, y1), Offset(x2, y2), _strokePaint);
   }
 
