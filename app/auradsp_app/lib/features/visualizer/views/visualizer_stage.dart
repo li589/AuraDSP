@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
@@ -71,6 +72,20 @@ class _VisualizerStageState extends State<VisualizerStage>
   /// （2026-10-31 审查发现的“背景不动/旋转跳变”根因）。
   final ValueNotifier<double> _time = ValueNotifier<double>(0.0);
 
+  /// P0-1 静默门控：频谱能量与电平都低于门限并持续 [_silenceHold] 后判定
+  /// 为“无声”，停掉时间轴——可见但无声的舞台不再产帧。门限 −60 dBFS /
+  /// 0.001 归一化频谱（刻度见 VisualizerPeakReadout：peak*60−60 即 dBFS）。
+  static const double _audibleLevelDb = -60.0;
+  static const double _audibleBandPeak = 0.001;
+  static const Duration _silenceHold = Duration(seconds: 2);
+  bool _audible = false;
+  Timer? _silenceTimer;
+
+  /// 门控后的频谱代理：静默期不再向下游转发，数据驱动样式也不会因
+  /// 零值帧重建/重绘。
+  late final ValueNotifier<List<double>> _gatedSpectrum =
+      ValueNotifier<List<double>>(widget.spectrum.value);
+
   @override
   void initState() {
     super.initState();
@@ -79,9 +94,9 @@ class _VisualizerStageState extends State<VisualizerStage>
       duration: const Duration(seconds: 10),
     )..addListener(_onTick);
 
-    if (widget.active && widget.playing) {
-      _animController.repeat();
-    }
+    widget.spectrum.addListener(_onSpectrumFrame);
+    // 默认静止：只有收到真实有声帧后时间轴才启动。
+    _syncTimeline();
     _startHudTimer();
     GpuShaderService.instance.initialize().then((_) {
       if (mounted) setState(() {});
@@ -95,24 +110,86 @@ class _VisualizerStageState extends State<VisualizerStage>
 
   /// 每帧仅推进时间轴（视口通过 repaint 监听直接重绘，不重建页面）。
   void _onTick() {
-    if (!widget.active || !widget.playing) return;
+    if (!widget.active || !widget.playing || !_audible) return;
     _tickParity ^= 1;
     if (_tickParity == 0) {
       _time.value += 0.032;
     }
   }
 
+  /// 时间轴启停的唯一入口：三者同时成立才产帧（页面可见、引擎在播放、
+  /// 真实能量未静默）。
+  void _syncTimeline() {
+    final shouldRun = widget.active && widget.playing && _audible;
+    if (shouldRun) {
+      if (!_animController.isAnimating) _animController.repeat();
+    } else {
+      if (_animController.isAnimating) _animController.stop();
+    }
+  }
+
+  /// 频谱帧到达：用真实能量判定有声/静默（不改变 `viz` 事件本身，
+  /// 只决定 UI 侧是否消费）。
+  void _onSpectrumFrame() {
+    if (!widget.active || !widget.playing) return;
+    final bands = widget.spectrum.value;
+    var peak = 0.0;
+    for (final v in bands) {
+      if (v > peak) peak = v;
+    }
+    final level = math.max(widget.levelL.value, widget.levelR.value);
+    if (level > _audibleLevelDb || peak > _audibleBandPeak) {
+      _markAudible();
+    } else {
+      _markSilenced();
+    }
+  }
+
+  /// 有声帧：立即开闸（首个有声帧不等待防抖）。
+  void _markAudible() {
+    _silenceTimer?.cancel();
+    _silenceTimer = null;
+    _audible = true;
+    _gatedSpectrum.value = widget.spectrum.value;
+    _syncTimeline();
+  }
+
+  /// 静默帧：连续静默满 [_silenceHold] 才停，避免句间停顿/轻音误判。
+  /// 若静默期间不再有新帧，Timer 到期同样会停，不依赖后续通知。
+  void _markSilenced() {
+    if (!_audible) {
+      _syncTimeline();
+      return;
+    }
+    // 迟滞窗口内继续转发静默帧，让柱体/峰值自然衰减到底再冻结，
+    // 而不是停在最后一张有声帧上。
+    _gatedSpectrum.value = widget.spectrum.value;
+    _silenceTimer ??= Timer(_silenceHold, () {
+      _silenceTimer = null;
+      if (!mounted || !widget.active || !widget.playing) return;
+      _audible = false;
+      _syncTimeline();
+    });
+  }
+
   @override
   void didUpdateWidget(VisualizerStage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.spectrum != widget.spectrum) {
+      oldWidget.spectrum.removeListener(_onSpectrumFrame);
+      widget.spectrum.addListener(_onSpectrumFrame);
+      _gatedSpectrum.value = widget.spectrum.value;
+    }
     final shouldRun = widget.active && widget.playing;
     final wasRunning = oldWidget.active && oldWidget.playing;
     if (shouldRun != wasRunning) {
-      if (shouldRun) {
-        if (!_animController.isAnimating) _animController.repeat();
-      } else {
-        if (_animController.isAnimating) _animController.stop();
+      if (!shouldRun) {
+        // 暂停/切页/无媒体：立刻关闸，不等待迟滞。
+        _silenceTimer?.cancel();
+        _silenceTimer = null;
+        _audible = false;
       }
+      _syncTimeline();
     }
     if (widget.playing != oldWidget.playing) {
       _syncHudWithPlayback();
@@ -122,6 +199,9 @@ class _VisualizerStageState extends State<VisualizerStage>
   @override
   void dispose() {
     _hudHideTimer?.cancel();
+    _silenceTimer?.cancel();
+    widget.spectrum.removeListener(_onSpectrumFrame);
+    _gatedSpectrum.dispose();
     _time.dispose();
     _animController.dispose();
     super.dispose();
@@ -375,7 +455,7 @@ class _VisualizerStageState extends State<VisualizerStage>
               if (widget.playing)
                 VisualizerCanvasViewport(
                   time: _time,
-                  spectrum: widget.spectrum,
+                  spectrum: _gatedSpectrum,
                   levelL: widget.levelL,
                   levelR: widget.levelR,
                   config: widget.config,
