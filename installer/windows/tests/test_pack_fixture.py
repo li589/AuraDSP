@@ -44,6 +44,18 @@ def make_zip(path: Path, entries: dict[str, bytes]) -> None:
             zf.writestr(name, data)
 
 
+def read_zip(path: Path) -> tuple[list[str], dict[str, bytes]]:
+    """读 zip 条目名与内容快照并立即关闭句柄。
+
+    Windows 上未关闭的 ZipFile 句柄会让 TemporaryDirectory 清理
+    撞 WinError 32（文件被占用删不掉）；Linux 允许删除打开中的
+    文件，本地不暴露——CI annotation 实锤过一次。
+    """
+    with zipfile.ZipFile(path) as zf:
+        names = zf.namelist()
+        return names, {n: zf.read(n) for n in names}
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="auradsp-packtest-") as td:
         base = Path(td)
@@ -89,7 +101,7 @@ def main() -> int:
         r = run_pack("--mode", "driver", *common)
         check("exit 0", r.returncode == 0, r.stderr.strip()[-200:])
         dz = out / "AuraDSP-Driver-x64-v0.1.0.zip"
-        names = zipfile.ZipFile(dz).namelist() if dz.exists() else []
+        names = read_zip(dz)[0] if dz.exists() else []
         for want in ("AuraVaio.sys", "AuraVaio.inf", "AuraVaio.cat",
                      "install_driver.ps1", "auraasio_driver.dll",
                      "register_asio.ps1"):
@@ -98,28 +110,25 @@ def main() -> int:
         print("== portable core ==")
         r = run_pack("--mode", "portable", "--resources", "core", *common)
         check("exit 0", r.returncode == 0, r.stderr.strip()[-200:])
-        pz = zipfile.ZipFile(out / "AuraDSP-Windows-x64-v0.1.0.zip")
-        names = pz.namelist()
+        names, contents = read_zip(out / "AuraDSP-Windows-x64-v0.1.0.zip")
         check("含主程序", "auradsp_app.exe" in names)
         check("含核心资源", "resources/liveprog/a.eel" in names)
         check("build-info 有 pack 记录",
-              b"pack.resources: core" in pz.read("build-info.txt"))
+              b"pack.resources: core" in contents["build-info.txt"])
 
         print("== portable addons（合并语义） ==")
         r = run_pack("--mode", "portable", "--resources", "addons", *common)
         check("exit 0", r.returncode == 0, r.stderr.strip()[-200:])
-        pz = zipfile.ZipFile(out / "AuraDSP-Windows-x64-v0.1.0.zip")
-        names = pz.namelist()
+        names, contents = read_zip(out / "AuraDSP-Windows-x64-v0.1.0.zip")
         check("full 包文件已合并", "resources/liveprog/full.eel" in names)
         check("addon 包文件已合并", "resources/convolver/space.irs" in names)
-        check("同名以 full 覆盖", pz.read("resources/ddc/core.vdc") == b"full-override")
+        check("同名以 full 覆盖", contents["resources/ddc/core.vdc"] == b"full-override")
         check("user_data 被隔离", not any("user_data" in n for n in names))
 
         print("== portable none ==")
         r = run_pack("--mode", "portable", "--resources", "none", *common)
         check("exit 0", r.returncode == 0, r.stderr.strip()[-200:])
-        pz = zipfile.ZipFile(out / "AuraDSP-Windows-x64-v0.1.0.zip")
-        names = pz.namelist()
+        names, _contents = read_zip(out / "AuraDSP-Windows-x64-v0.1.0.zip")
         check("资源已剔除", "resources/liveprog/a.eel" not in names)
         check("manifest 保留", "resources/manifest.json" in names)
 
@@ -148,7 +157,7 @@ def main() -> int:
         r = run_pack("--mode", "driver", *common,
                      "--asio-driver", str(alias))  # 后置覆盖
         check("别名输入 exit 0", r.returncode == 0, r.stderr.strip()[-200:])
-        names = zipfile.ZipFile(dz).namelist()
+        names = read_zip(dz)[0]
         check("驱动包内归一化为规范名",
               "auraasio_driver.dll" in names
               and "AuraAsioDriver.dll" not in names)
