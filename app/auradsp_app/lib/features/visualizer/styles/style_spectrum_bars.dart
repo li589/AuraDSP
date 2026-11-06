@@ -1,10 +1,9 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:ui' show PointMode;
 import 'package:flutter/material.dart';
 
-import '../../../engine/auradsp_ffi.dart' show VizBands;
 import '../models/visualizer_themes.dart';
+import 'visualizer_static_grid.dart';
 
 /// 柱状频谱渲染画笔（均匀宽频柱、防抖动弹道与清晰悬浮峰值线）
 class SpectrumBarsPainter extends CustomPainter {
@@ -153,28 +152,8 @@ class SpectrumBarsPainter extends CustomPainter {
     if (hasPeaks) canvas.drawPath(_peakPath, _peakPaint);
   }
 
-  void _drawGrid(Canvas canvas, Size size) {
-    final g = _gridLines;
-    var o = 0;
-    // 横向 dB 网格线（4 等分：0, -15, -30, -45 dBFS）
-    for (var i = 1; i < 4; i++) {
-      final y = size.height * i / 4.0;
-      g[o++] = 0;
-      g[o++] = y;
-      g[o++] = size.width;
-      g[o++] = y;
-    }
-
-    // 纵向对数频率参考线（100Hz, 1kHz, 10kHz）
-    for (final hz in const [100.0, 1000.0, 10000.0]) {
-      final x = VizBands.logX(hz) * size.width;
-      g[o++] = x;
-      g[o++] = 0;
-      g[o++] = x;
-      g[o++] = size.height;
-    }
-    canvas.drawRawPoints(PointMode.lines, g, _gridPaint);
-  }
+  void _drawGrid(Canvas canvas, Size size) =>
+      paintBarsGrid(canvas, size, _gridPaint, _gridLines);
 
   @override
   bool shouldRepaint(covariant SpectrumBarsPainter oldDelegate) => true;

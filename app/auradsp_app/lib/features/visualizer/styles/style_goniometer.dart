@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:ui' show PointMode;
 import 'package:flutter/material.dart';
 import '../models/visualizer_themes.dart';
+import 'visualizer_static_grid.dart';
 
 /// 利萨如相位与立体声度极坐标仪 (Goniometer) 渲染画笔
 class GoniometerPainter extends CustomPainter {
@@ -95,26 +95,15 @@ class GoniometerPainter extends CustomPainter {
     canvas.drawPath(path, _tracePaint);
   }
 
-  void _drawPolarGrid(Canvas canvas, Offset center, double radius) {
-    // 绘制 3 层同心圆
-    canvas.drawCircle(center, radius * 0.33, _gridPaint);
-    canvas.drawCircle(center, radius * 0.66, _gridPaint);
-    canvas.drawCircle(center, radius, _gridPaint);
-
-    // 绘制 45° 立体声交叉坐标轴 (L / R / M / S)：四条线段一次性批量提交
-    final g = _gridLines;
-    final dx = radius * 0.707;
-    final dy = radius * 0.707;
-    g[0] = center.dx - dx;
-    g[1] = center.dy - dy;
-    g[2] = center.dx + dx;
-    g[3] = center.dy + dy;
-    g[4] = center.dx - dx;
-    g[5] = center.dy + dy;
-    g[6] = center.dx + dx;
-    g[7] = center.dy - dy;
-    canvas.drawRawPoints(PointMode.lines, g, _axisPaint);
-  }
+  void _drawPolarGrid(Canvas canvas, Offset center, double radius) =>
+      paintPolarGrid(
+        canvas,
+        center,
+        radius,
+        _gridPaint,
+        _axisPaint,
+        _gridLines,
+      );
 
   @override
   bool shouldRepaint(covariant GoniometerPainter oldDelegate) => true;

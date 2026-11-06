@@ -1,7 +1,7 @@
 import 'dart:typed_data';
-import 'dart:ui' show PointMode;
 import 'package:flutter/material.dart';
 import '../models/visualizer_themes.dart';
+import 'visualizer_static_grid.dart';
 
 /// 实时双通道示波器渲染画笔（支持光滑曲线样条与动态微调线宽）
 class OscilloscopePainter extends CustomPainter {
@@ -60,7 +60,7 @@ class OscilloscopePainter extends CustomPainter {
 
     // 绘制示波器参考网格
     if (showGrid) {
-      _drawOscilloscopeGrid(canvas, size, centerY);
+      _drawOscilloscopeGrid(canvas, size);
     }
 
     final n = waveL.length;
@@ -108,33 +108,8 @@ class OscilloscopePainter extends CustomPainter {
     canvas.drawPath(pathL, _waveLPaint);
   }
 
-  void _drawOscilloscopeGrid(Canvas canvas, Size size, double centerY) {
-    // 零电平中心实线 + 8/6 分度网格：全部写入同一坐标缓冲后一次提交
-    final g = _gridLines;
-    var o = 0;
-    g[o++] = 0;
-    g[o++] = centerY;
-    g[o++] = size.width;
-    g[o++] = centerY;
-
-    const divX = 8;
-    const divY = 6;
-    for (var i = 1; i < divX; i++) {
-      final x = size.width * i / divX;
-      g[o++] = x;
-      g[o++] = 0;
-      g[o++] = x;
-      g[o++] = size.height;
-    }
-    for (var j = 1; j < divY; j++) {
-      final y = size.height * j / divY;
-      g[o++] = 0;
-      g[o++] = y;
-      g[o++] = size.width;
-      g[o++] = y;
-    }
-    canvas.drawRawPoints(PointMode.lines, g, _gridPaint);
-  }
+  void _drawOscilloscopeGrid(Canvas canvas, Size size) =>
+      paintOscilloscopeGrid(canvas, size, _gridPaint, _gridLines);
 
   @override
   bool shouldRepaint(covariant OscilloscopePainter oldDelegate) => true;

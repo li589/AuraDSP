@@ -486,35 +486,38 @@ class _VisualizerStageState extends State<VisualizerStage> {
               if (widget.config.showLyrics && widget.mediaSync != null)
                 Positioned.fill(child: _buildLyricsLayer(context, p)),
 
-              // 底部悬浮控制岛 HUD
+              // 底部悬浮控制岛 HUD：独立 RepaintBoundary，HUD 自身淡入淡出
+              // 不参与画布层的光栅，避免把静态/动态画面拖入重绘。
               Align(
                 alignment: Alignment.bottomCenter,
                 child: Padding(
                   padding: EdgeInsets.only(bottom: expanded ? 20 : 16),
-                  child: VisualizerHud(
-                    config: widget.config,
-                    displayMode: widget.displayMode,
-                    visible: _hudVisible,
-                    onStyleChanged: (style) {
-                      _onUserPointerActivity();
-                      widget.onStyleChanged(style);
-                    },
-                    onDisplayModeChanged: (mode) {
-                      _onUserPointerActivity();
-                      widget.onDisplayModeChanged(mode);
-                    },
-                    onToggleLyrics: () {
-                      _onUserPointerActivity();
-                      widget.onToggleLyrics();
-                    },
-                    onOpenDrawer: () {
-                      _onUserPointerActivity();
-                      widget.onOpenDrawer();
-                    },
-                    onResetPeaks: () {
-                      _onUserPointerActivity();
-                      _resetPeaks();
-                    },
+                  child: RepaintBoundary(
+                    child: VisualizerHud(
+                      config: widget.config,
+                      displayMode: widget.displayMode,
+                      visible: _hudVisible,
+                      onStyleChanged: (style) {
+                        _onUserPointerActivity();
+                        widget.onStyleChanged(style);
+                      },
+                      onDisplayModeChanged: (mode) {
+                        _onUserPointerActivity();
+                        widget.onDisplayModeChanged(mode);
+                      },
+                      onToggleLyrics: () {
+                        _onUserPointerActivity();
+                        widget.onToggleLyrics();
+                      },
+                      onOpenDrawer: () {
+                        _onUserPointerActivity();
+                        widget.onOpenDrawer();
+                      },
+                      onResetPeaks: () {
+                        _onUserPointerActivity();
+                        _resetPeaks();
+                      },
+                    ),
                   ),
                 ),
               ),

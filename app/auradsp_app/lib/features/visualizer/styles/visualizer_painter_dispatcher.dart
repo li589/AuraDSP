@@ -16,6 +16,9 @@ import 'style_spectrum_bars.dart';
 import 'style_tornado.dart';
 
 /// 可视化画笔分发器：按选中风格将音频特征状态路由至对应高性能 CustomPainter
+///
+/// [showGrid] 为可选覆盖：P2-1 把静态网格抽到独立缓存层后，动态画笔不再
+/// 自己绘制网格（传 `false`），避免每帧重绘这份不变内容。
 CustomPainter buildVisualizerPainter({
   required VisualizerStyle style,
   required VisualizerConfig config,
@@ -24,14 +27,16 @@ CustomPainter buildVisualizerPainter({
   required List<double> peaks,
   required WaveformSynthesizer waveformSynth,
   required double time,
+  bool? showGrid,
 }) {
+  final grid = showGrid ?? config.showGrid;
   switch (style) {
     case VisualizerStyle.oscilloscope:
       return OscilloscopePainter(
         waveL: waveformSynth.waveL,
         waveR: waveformSynth.waveR,
         palette: palette,
-        showGrid: config.showGrid,
+        showGrid: grid,
         bloom: config.bloom,
         lineWidth: config.lineWidth,
       );
@@ -40,7 +45,7 @@ CustomPainter buildVisualizerPainter({
       return GoniometerPainter(
         points: waveformSynth.lissajousXY,
         palette: palette,
-        showGrid: config.showGrid,
+        showGrid: grid,
         bloom: config.bloom,
         lineWidth: config.lineWidth,
       );
@@ -96,7 +101,7 @@ CustomPainter buildVisualizerPainter({
         bands: rawBands,
         peaks: peaks,
         palette: palette,
-        showGrid: config.showGrid,
+        showGrid: grid,
         showPeaks: config.showPeaks,
         bloom: config.bloom,
       );
