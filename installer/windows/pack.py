@@ -42,6 +42,15 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+# Windows 上标准流默认走本地代码页（如 en-US 的 cp1252），print 中文
+# 日志会直接 UnicodeEncodeError 崩溃（windows-installer CI 实测踩中；
+# zh-CN 机器是 cp936 能过，所以本地从不暴露）。一律重配为 UTF-8。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+    except (AttributeError, ValueError):
+        pass
+
 ROOT = Path(__file__).resolve().parents[2]
 FOOTER_MAGIC = b"AURASTP1"
 FOOTER_FMT = "<8sIIQQQQ32s"  # magic, fmtVer, flags, offW, lenW, offP, lenP, sha256P

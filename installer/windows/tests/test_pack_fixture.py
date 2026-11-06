@@ -14,6 +14,13 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+# 同 pack.py：Windows 旧代码页下 print 中文会崩，先重配标准流。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 ROOT = Path(__file__).resolve().parents[3]
 PACK = ROOT / "installer" / "windows" / "pack.py"
 FAILURES: list[str] = []
@@ -27,7 +34,8 @@ def check(name: str, cond: bool, extra: str = "") -> None:
 
 def run_pack(*argv: str) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(PACK), *argv],
-                          capture_output=True, text=True)
+                          capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
 
 
 def make_zip(path: Path, entries: dict[str, bytes]) -> None:
