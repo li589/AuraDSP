@@ -1,0 +1,568 @@
+{
+ "label": "home_idle",
+ "pid": 21672,
+ "seconds": 30.0,
+ "summary": {
+  "rss_avg_mb": 220.26,
+  "rss_max_mb": 220.58,
+  "private_avg_mb": 235.61,
+  "private_max_mb": 236.54,
+  "cpu_avg_pct_core": 0.9,
+  "cpu_max_pct_core": 3.1,
+  "cpu_cores": 32,
+  "threads_avg": 50.2
+ },
+ "rows": [
+  {
+   "t": 1.0,
+   "rss_mb": 219.32,
+   "private_mb": 235.02,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 2.02,
+   "rss_mb": 219.32,
+   "private_mb": 235.02,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 3.02,
+   "rss_mb": 219.39,
+   "private_mb": 235.02,
+   "cpu_pct_core": 1.6,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 4.03,
+   "rss_mb": 219.51,
+   "private_mb": 235.02,
+   "cpu_pct_core": 3.1,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 5.04,
+   "rss_mb": 219.57,
+   "private_mb": 235.02,
+   "cpu_pct_core": 1.6,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 6.05,
+   "rss_mb": 219.57,
+   "private_mb": 235.02,
+   "cpu_pct_core": 6.2,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 7.06,
+   "rss_mb": 219.64,
+   "private_mb": 235.02,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 8.06,
+   "rss_mb": 219.7,
+   "private_mb": 235.02,
+   "cpu_pct_core": 3.1,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 9.07,
+   "rss_mb": 219.82,
+   "private_mb": 235.02,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 10.08,
+   "rss_mb": 219.82,
+   "private_mb": 235.02,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 11.09,
+   "rss_mb": 219.97,
+   "private_mb": 236.54,
+   "cpu_pct_core": 3.1,
+   "threads": 51,
+   "handles": 711
+  },
+  {
+   "t": 12.1,
+   "rss_mb": 219.97,
+   "private_mb": 236.54,
+   "cpu_pct_core": 0.0,
+   "threads": 51,
+   "handles": 711
+  },
+  {
+   "t": 13.11,
+   "rss_mb": 220.04,
+   "private_mb": 236.54,
+   "cpu_pct_core": 0.0,
+   "threads": 51,
+   "handles": 711
+  },
+  {
+   "t": 14.12,
+   "rss_mb": 220.16,
+   "private_mb": 236.54,
+   "cpu_pct_core": 1.6,
+   "threads": 51,
+   "handles": 711
+  },
+  {
+   "t": 15.13,
+   "rss_mb": 220.21,
+   "private_mb": 235.52,
+   "cpu_pct_core": 1.5,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 16.13,
+   "rss_mb": 220.21,
+   "private_mb": 235.52,
+   "cpu_pct_core": 3.1,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 17.14,
+   "rss_mb": 220.27,
+   "private_mb": 235.52,
+   "cpu_pct_core": 3.1,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 18.15,
+   "rss_mb": 220.33,
+   "private_mb": 235.52,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 19.16,
+   "rss_mb": 220.46,
+   "private_mb": 235.52,
+   "cpu_pct_core": 1.6,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 20.17,
+   "rss_mb": 220.46,
+   "private_mb": 235.52,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 21.18,
+   "rss_mb": 220.46,
+   "private_mb": 235.52,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 22.19,
+   "rss_mb": 220.46,
+   "private_mb": 235.52,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 23.2,
+   "rss_mb": 220.46,
+   "private_mb": 235.52,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 24.21,
+   "rss_mb": 220.52,
+   "private_mb": 235.52,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 25.22,
+   "rss_mb": 220.52,
+   "private_mb": 235.52,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 26.23,
+   "rss_mb": 220.52,
+   "private_mb": 235.52,
+   "cpu_pct_core": 1.5,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 27.24,
+   "rss_mb": 220.52,
+   "private_mb": 235.52,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 28.25,
+   "rss_mb": 220.52,
+   "private_mb": 235.52,
+   "cpu_pct_core": 1.5,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 29.26,
+   "rss_mb": 220.52,
+   "private_mb": 235.52,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 710
+  },
+  {
+   "t": 30.27,
+   "rss_mb": 220.58,
+   "private_mb": 235.52,
+   "cpu_pct_core": 1.5,
+   "threads": 50,
+   "handles": 710
+  }
+ ],
+ "vmMemoryStart": {
+  "heapUsage": 16042128,
+  "heapCapacity": 16801792,
+  "externalUsage": 2944,
+  "heapUsedMB": 15.3,
+  "heapCapacityMB": 16.02,
+  "externalMB": 0.0
+ },
+ "allocation": {
+  "totalBytesCurrent": 26304976,
+  "top": [
+   {
+    "class": null,
+    "bytesCurrent": 6356320,
+    "instancesCurrent": 1,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 1
+   },
+   {
+    "class": null,
+    "bytesCurrent": 4352800,
+    "instancesCurrent": 27205,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 27205
+   },
+   {
+    "class": null,
+    "bytesCurrent": 2452912,
+    "instancesCurrent": 21644,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 21644
+   },
+   {
+    "class": null,
+    "bytesCurrent": 2382384,
+    "instancesCurrent": 34923,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 34923
+   },
+   {
+    "class": null,
+    "bytesCurrent": 2145440,
+    "instancesCurrent": 26818,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 26818
+   },
+   {
+    "class": null,
+    "bytesCurrent": 1921104,
+    "instancesCurrent": 19997,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 19997
+   },
+   {
+    "class": null,
+    "bytesCurrent": 1079040,
+    "instancesCurrent": 11240,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 11240
+   },
+   {
+    "class": null,
+    "bytesCurrent": 943872,
+    "instancesCurrent": 4916,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 4916
+   },
+   {
+    "class": null,
+    "bytesCurrent": 524512,
+    "instancesCurrent": 2,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 2
+   },
+   {
+    "class": null,
+    "bytesCurrent": 321440,
+    "instancesCurrent": 2,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 2
+   },
+   {
+    "class": null,
+    "bytesCurrent": 301200,
+    "instancesCurrent": 6275,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 6275
+   },
+   {
+    "class": null,
+    "bytesCurrent": 300256,
+    "instancesCurrent": 3554,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 3554
+   },
+   {
+    "class": null,
+    "bytesCurrent": 222336,
+    "instancesCurrent": 1089,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 1089
+   },
+   {
+    "class": null,
+    "bytesCurrent": 217488,
+    "instancesCurrent": 4531,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 4531
+   },
+   {
+    "class": null,
+    "bytesCurrent": 216000,
+    "instancesCurrent": 4500,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 4500
+   },
+   {
+    "class": null,
+    "bytesCurrent": 201680,
+    "instancesCurrent": 2521,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 2521
+   },
+   {
+    "class": null,
+    "bytesCurrent": 187776,
+    "instancesCurrent": 489,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 489
+   },
+   {
+    "class": null,
+    "bytesCurrent": 142016,
+    "instancesCurrent": 4438,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 4438
+   },
+   {
+    "class": null,
+    "bytesCurrent": 118272,
+    "instancesCurrent": 528,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 528
+   },
+   {
+    "class": null,
+    "bytesCurrent": 111360,
+    "instancesCurrent": 1740,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 1740
+   },
+   {
+    "class": null,
+    "bytesCurrent": 97632,
+    "instancesCurrent": 678,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 678
+   },
+   {
+    "class": null,
+    "bytesCurrent": 93296,
+    "instancesCurrent": 1772,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 1772
+   },
+   {
+    "class": null,
+    "bytesCurrent": 85472,
+    "instancesCurrent": 1761,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 1761
+   },
+   {
+    "class": null,
+    "bytesCurrent": 79808,
+    "instancesCurrent": 2494,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 2494
+   },
+   {
+    "class": null,
+    "bytesCurrent": 78560,
+    "instancesCurrent": 982,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 982
+   },
+   {
+    "class": null,
+    "bytesCurrent": 78240,
+    "instancesCurrent": 2445,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 2445
+   },
+   {
+    "class": null,
+    "bytesCurrent": 70416,
+    "instancesCurrent": 489,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 489
+   },
+   {
+    "class": null,
+    "bytesCurrent": 55920,
+    "instancesCurrent": 1165,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 1165
+   },
+   {
+    "class": null,
+    "bytesCurrent": 55440,
+    "instancesCurrent": 385,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 385
+   },
+   {
+    "class": null,
+    "bytesCurrent": 36576,
+    "instancesCurrent": 397,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 397
+   },
+   {
+    "class": null,
+    "bytesCurrent": 34912,
+    "instancesCurrent": 1091,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 1091
+   },
+   {
+    "class": null,
+    "bytesCurrent": 32928,
+    "instancesCurrent": 686,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 686
+   },
+   {
+    "class": null,
+    "bytesCurrent": 32192,
+    "instancesCurrent": 204,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 204
+   },
+   {
+    "class": null,
+    "bytesCurrent": 29520,
+    "instancesCurrent": 205,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 205
+   },
+   {
+    "class": null,
+    "bytesCurrent": 29232,
+    "instancesCurrent": 203,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 203
+   },
+   {
+    "class": null,
+    "bytesCurrent": 29040,
+    "instancesCurrent": 605,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 605
+   },
+   {
+    "class": null,
+    "bytesCurrent": 28128,
+    "instancesCurrent": 586,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 586
+   },
+   {
+    "class": null,
+    "bytesCurrent": 25920,
+    "instancesCurrent": 511,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 511
+   },
+   {
+    "class": null,
+    "bytesCurrent": 25856,
+    "instancesCurrent": 202,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 202
+   },
+   {
+    "class": null,
+    "bytesCurrent": 24320,
+    "instancesCurrent": 38,
+    "bytesAccumulated": null,
+    "instancesAccumulated": 38
+   }
+  ]
+ },
+ "vmMemoryEnd": {
+  "heapUsage": 15093632,
+  "heapCapacity": 17850368,
+  "externalUsage": 2944,
+  "heapUsedMB": 14.39,
+  "heapCapacityMB": 17.02,
+  "externalMB": 0.0
+ },
+ "vmIsolates": [
+  {
+   "id": "isolates/1876987999836407",
+   "name": "main"
+  },
+  {
+   "id": "isolates/8867529323479907",
+   "name": "audioIsolateMain"
+  }
+ ]
+}

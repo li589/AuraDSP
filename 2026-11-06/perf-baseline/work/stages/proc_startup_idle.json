@@ -1,0 +1,848 @@
+{
+ "label": "startup_idle",
+ "pid": 17968,
+ "seconds": 60.0,
+ "summary": {
+  "rss_avg_mb": 218.76,
+  "rss_max_mb": 219.6,
+  "private_avg_mb": 244.52,
+  "private_max_mb": 245.3,
+  "cpu_avg_pct_core": 1.0,
+  "cpu_max_pct_core": 4.6,
+  "cpu_cores": 32,
+  "threads_avg": 51.8
+ },
+ "rows": [
+  {
+   "t": 1.0,
+   "rss_mb": 216.76,
+   "private_mb": 243.38,
+   "cpu_pct_core": 0.0,
+   "threads": 53,
+   "handles": 521
+  },
+  {
+   "t": 2.01,
+   "rss_mb": 216.84,
+   "private_mb": 243.4,
+   "cpu_pct_core": 3.1,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 3.01,
+   "rss_mb": 216.9,
+   "private_mb": 243.4,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 4.02,
+   "rss_mb": 216.96,
+   "private_mb": 243.4,
+   "cpu_pct_core": 3.1,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 5.03,
+   "rss_mb": 217.03,
+   "private_mb": 243.4,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 6.04,
+   "rss_mb": 217.05,
+   "private_mb": 243.9,
+   "cpu_pct_core": 1.5,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 7.05,
+   "rss_mb": 217.15,
+   "private_mb": 243.9,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 8.06,
+   "rss_mb": 217.15,
+   "private_mb": 243.9,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 9.07,
+   "rss_mb": 217.21,
+   "private_mb": 243.9,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 10.08,
+   "rss_mb": 217.34,
+   "private_mb": 243.9,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 11.09,
+   "rss_mb": 217.4,
+   "private_mb": 243.9,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 12.1,
+   "rss_mb": 217.4,
+   "private_mb": 243.9,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 13.1,
+   "rss_mb": 217.46,
+   "private_mb": 243.9,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 14.11,
+   "rss_mb": 217.53,
+   "private_mb": 243.9,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 15.12,
+   "rss_mb": 217.65,
+   "private_mb": 243.9,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 16.13,
+   "rss_mb": 217.65,
+   "private_mb": 243.9,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 17.14,
+   "rss_mb": 217.7,
+   "private_mb": 244.4,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 18.15,
+   "rss_mb": 217.78,
+   "private_mb": 244.4,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 19.16,
+   "rss_mb": 217.84,
+   "private_mb": 244.4,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 20.17,
+   "rss_mb": 217.9,
+   "private_mb": 244.4,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 21.17,
+   "rss_mb": 217.96,
+   "private_mb": 244.4,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 22.18,
+   "rss_mb": 218.03,
+   "private_mb": 244.4,
+   "cpu_pct_core": 4.6,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 23.19,
+   "rss_mb": 218.09,
+   "private_mb": 244.4,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 24.2,
+   "rss_mb": 218.15,
+   "private_mb": 244.4,
+   "cpu_pct_core": 1.5,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 25.21,
+   "rss_mb": 218.15,
+   "private_mb": 244.4,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 26.23,
+   "rss_mb": 218.28,
+   "private_mb": 244.4,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 27.23,
+   "rss_mb": 218.3,
+   "private_mb": 244.9,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 28.25,
+   "rss_mb": 218.4,
+   "private_mb": 244.9,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 29.25,
+   "rss_mb": 218.4,
+   "private_mb": 244.9,
+   "cpu_pct_core": 1.6,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 30.27,
+   "rss_mb": 218.46,
+   "private_mb": 244.9,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 31.27,
+   "rss_mb": 218.59,
+   "private_mb": 244.9,
+   "cpu_pct_core": 0.0,
+   "threads": 54,
+   "handles": 523
+  },
+  {
+   "t": 32.28,
+   "rss_mb": 218.59,
+   "private_mb": 244.8,
+   "cpu_pct_core": 0.0,
+   "threads": 51,
+   "handles": 522
+  },
+  {
+   "t": 33.29,
+   "rss_mb": 218.59,
+   "private_mb": 244.8,
+   "cpu_pct_core": 1.5,
+   "threads": 51,
+   "handles": 522
+  },
+  {
+   "t": 34.3,
+   "rss_mb": 218.66,
+   "private_mb": 244.8,
+   "cpu_pct_core": 1.6,
+   "threads": 51,
+   "handles": 522
+  },
+  {
+   "t": 35.31,
+   "rss_mb": 218.72,
+   "private_mb": 244.8,
+   "cpu_pct_core": 4.6,
+   "threads": 51,
+   "handles": 522
+  },
+  {
+   "t": 36.32,
+   "rss_mb": 218.78,
+   "private_mb": 244.8,
+   "cpu_pct_core": 0.0,
+   "threads": 51,
+   "handles": 522
+  },
+  {
+   "t": 37.33,
+   "rss_mb": 218.79,
+   "private_mb": 244.8,
+   "cpu_pct_core": 0.0,
+   "threads": 51,
+   "handles": 522
+  },
+  {
+   "t": 38.34,
+   "rss_mb": 218.95,
+   "private_mb": 245.3,
+   "cpu_pct_core": 1.5,
+   "threads": 51,
+   "handles": 521
+  },
+  {
+   "t": 39.35,
+   "rss_mb": 219.02,
+   "private_mb": 245.3,
+   "cpu_pct_core": 3.1,
+   "threads": 51,
+   "handles": 521
+  },
+  {
+   "t": 40.36,
+   "rss_mb": 219.09,
+   "private_mb": 245.3,
+   "cpu_pct_core": 0.0,
+   "threads": 51,
+   "handles": 521
+  },
+  {
+   "t": 41.37,
+   "rss_mb": 219.16,
+   "private_mb": 245.3,
+   "cpu_pct_core": 1.6,
+   "threads": 51,
+   "handles": 521
+  },
+  {
+   "t": 42.38,
+   "rss_mb": 219.3,
+   "private_mb": 245.3,
+   "cpu_pct_core": 1.5,
+   "threads": 51,
+   "handles": 521
+  },
+  {
+   "t": 43.39,
+   "rss_mb": 219.29,
+   "private_mb": 244.3,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 44.39,
+   "rss_mb": 219.35,
+   "private_mb": 244.3,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 45.4,
+   "rss_mb": 219.41,
+   "private_mb": 244.3,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 46.41,
+   "rss_mb": 219.41,
+   "private_mb": 244.3,
+   "cpu_pct_core": 1.6,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 47.42,
+   "rss_mb": 219.41,
+   "private_mb": 244.3,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 48.43,
+   "rss_mb": 219.47,
+   "private_mb": 244.3,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 49.44,
+   "rss_mb": 219.47,
+   "private_mb": 244.3,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 50.45,
+   "rss_mb": 219.47,
+   "private_mb": 244.3,
+   "cpu_pct_core": 4.6,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 51.46,
+   "rss_mb": 219.47,
+   "private_mb": 244.3,
+   "cpu_pct_core": 3.1,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 52.47,
+   "rss_mb": 219.47,
+   "private_mb": 244.3,
+   "cpu_pct_core": 1.5,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 53.48,
+   "rss_mb": 219.47,
+   "private_mb": 244.3,
+   "cpu_pct_core": 3.1,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 54.49,
+   "rss_mb": 219.54,
+   "private_mb": 244.3,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 55.5,
+   "rss_mb": 219.54,
+   "private_mb": 244.3,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 56.51,
+   "rss_mb": 219.54,
+   "private_mb": 244.3,
+   "cpu_pct_core": 1.5,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 57.52,
+   "rss_mb": 219.54,
+   "private_mb": 244.3,
+   "cpu_pct_core": 3.1,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 58.53,
+   "rss_mb": 219.54,
+   "private_mb": 244.3,
+   "cpu_pct_core": 3.1,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 59.54,
+   "rss_mb": 219.6,
+   "private_mb": 244.3,
+   "cpu_pct_core": 3.1,
+   "threads": 50,
+   "handles": 520
+  },
+  {
+   "t": 60.55,
+   "rss_mb": 219.6,
+   "private_mb": 244.3,
+   "cpu_pct_core": 0.0,
+   "threads": 50,
+   "handles": 520
+  }
+ ],
+ "vmMemoryStart": {
+  "heapUsage": 16135024,
+  "heapCapacity": 17326080,
+  "externalUsage": 2912,
+  "heapUsedMB": 15.39,
+  "heapCapacityMB": 16.52,
+  "externalMB": 0.0
+ },
+ "allocation": {
+  "totalBytesCurrent": 26293664,
+  "top": [
+   {
+    "class": "InstructionsSection",
+    "library": "",
+    "bytesCurrent": 6356320,
+    "instancesCurrent": 1,
+    "bytesAccumulated": 6356320,
+    "instancesAccumulated": 1
+   },
+   {
+    "class": "Code",
+    "library": "",
+    "bytesCurrent": 4352800,
+    "instancesCurrent": 27205,
+    "bytesAccumulated": 4352800,
+    "instancesAccumulated": 27205
+   },
+   {
+    "class": "CodeSourceMap",
+    "library": "",
+    "bytesCurrent": 2452912,
+    "instancesCurrent": 21644,
+    "bytesAccumulated": 2452912,
+    "instancesAccumulated": 21644
+   },
+   {
+    "class": "_OneByteString",
+    "library": "dart:core",
+    "bytesCurrent": 2382592,
+    "instancesCurrent": 34924,
+    "bytesAccumulated": 2382592,
+    "instancesAccumulated": 34924
+   },
+   {
+    "class": "Function",
+    "library": "",
+    "bytesCurrent": 2145440,
+    "instancesCurrent": 26818,
+    "bytesAccumulated": 2145440,
+    "instancesAccumulated": 26818
+   },
+   {
+    "class": "_List",
+    "library": "dart:core",
+    "bytesCurrent": 1920528,
+    "instancesCurrent": 19978,
+    "bytesAccumulated": 1920528,
+    "instancesAccumulated": 19978
+   },
+   {
+    "class": "Field",
+    "library": "",
+    "bytesCurrent": 1079040,
+    "instancesCurrent": 11240,
+    "bytesAccumulated": 1079040,
+    "instancesAccumulated": 11240
+   },
+   {
+    "class": "Class",
+    "library": "",
+    "bytesCurrent": 943872,
+    "instancesCurrent": 4916,
+    "bytesAccumulated": 943872,
+    "instancesAccumulated": 4916
+   },
+   {
+    "class": "WeakArray",
+    "library": "",
+    "bytesCurrent": 524512,
+    "instancesCurrent": 2,
+    "bytesAccumulated": 524512,
+    "instancesAccumulated": 2
+   },
+   {
+    "class": "ObjectPool",
+    "library": "",
+    "bytesCurrent": 321440,
+    "instancesCurrent": 2,
+    "bytesAccumulated": 321440,
+    "instancesAccumulated": 2
+   },
+   {
+    "class": "_Type",
+    "library": "dart:core",
+    "bytesCurrent": 301152,
+    "instancesCurrent": 6274,
+    "bytesAccumulated": 301152,
+    "instancesAccumulated": 6274
+   },
+   {
+    "class": "_TwoByteString",
+    "library": "dart:core",
+    "bytesCurrent": 300256,
+    "instancesCurrent": 3554,
+    "bytesAccumulated": 300256,
+    "instancesAccumulated": 3554
+   },
+   {
+    "class": "_ImmutableList",
+    "library": "dart:core",
+    "bytesCurrent": 222336,
+    "instancesCurrent": 1089,
+    "bytesAccumulated": 222336,
+    "instancesAccumulated": 1089
+   },
+   {
+    "class": "ClosureData",
+    "library": "",
+    "bytesCurrent": 217488,
+    "instancesCurrent": 4531,
+    "bytesAccumulated": 217488,
+    "instancesAccumulated": 4531
+   },
+   {
+    "class": "_Location",
+    "library": "package:flutter/src/widgets/widget_inspector.dart",
+    "bytesCurrent": 216000,
+    "instancesCurrent": 4500,
+    "bytesAccumulated": 216000,
+    "instancesAccumulated": 4500
+   },
+   {
+    "class": "_FunctionType",
+    "library": "dart:core",
+    "bytesCurrent": 201680,
+    "instancesCurrent": 2521,
+    "bytesAccumulated": 201680,
+    "instancesAccumulated": 2521
+   },
+   {
+    "class": "SemanticsConfiguration",
+    "library": "package:flutter/src/semantics/semantics.dart",
+    "bytesCurrent": 187776,
+    "instancesCurrent": 489,
+    "bytesAccumulated": 187776,
+    "instancesAccumulated": 489
+   },
+   {
+    "class": "_GrowableList",
+    "library": "dart:core",
+    "bytesCurrent": 141824,
+    "instancesCurrent": 4432,
+    "bytesAccumulated": 141824,
+    "instancesAccumulated": 4432
+   },
+   {
+    "class": "TextStyle",
+    "library": "package:flutter/src/painting/text_style.dart",
+    "bytesCurrent": 116704,
+    "instancesCurrent": 521,
+    "bytesAccumulated": 116704,
+    "instancesAccumulated": 521
+   },
+   {
+    "class": "_Map",
+    "library": "dart:_compact_hash",
+    "bytesCurrent": 110208,
+    "instancesCurrent": 1722,
+    "bytesAccumulated": 110208,
+    "instancesAccumulated": 1722
+   },
+   {
+    "class": "Library",
+    "library": "",
+    "bytesCurrent": 97632,
+    "instancesCurrent": 678,
+    "bytesAccumulated": 97632,
+    "instancesAccumulated": 678
+   },
+   {
+    "class": "TypeArguments",
+    "library": "",
+    "bytesCurrent": 92912,
+    "instancesCurrent": 1766,
+    "bytesAccumulated": 92912,
+    "instancesAccumulated": 1766
+   },
+   {
+    "class": "_Closure",
+    "library": "dart:core",
+    "bytesCurrent": 83504,
+    "instancesCurrent": 1720,
+    "bytesAccumulated": 83504,
+    "instancesAccumulated": 1720
+   },
+   {
+    "class": "Offset",
+    "library": "dart:ui",
+    "bytesCurrent": 79808,
+    "instancesCurrent": 2494,
+    "bytesAccumulated": 79808,
+    "instancesAccumulated": 2494
+   },
+   {
+    "class": "Script",
+    "library": "",
+    "bytesCurrent": 78560,
+    "instancesCurrent": 982,
+    "bytesAccumulated": 78560,
+    "instancesAccumulated": 982
+   },
+   {
+    "class": "AttributedString",
+    "library": "package:flutter/src/semantics/semantics.dart",
+    "bytesCurrent": 78240,
+    "instancesCurrent": 2445,
+    "bytesAccumulated": 78240,
+    "instancesAccumulated": 2445
+   },
+   {
+    "class": "_RenderObjectSemantics",
+    "library": "package:flutter/src/rendering/object.dart",
+    "bytesCurrent": 70416,
+    "instancesCurrent": 489,
+    "bytesAccumulated": 70416,
+    "instancesAccumulated": 489
+   },
+   {
+    "class": "_HashSetEntry",
+    "library": "dart:collection",
+    "bytesCurrent": 55920,
+    "instancesCurrent": 1165,
+    "bytesAccumulated": 55920,
+    "instancesAccumulated": 1165
+   },
+   {
+    "class": "SingleChildRenderObjectElement",
+    "library": "package:flutter/src/widgets/framework.dart",
+    "bytesCurrent": 55440,
+    "instancesCurrent": 385,
+    "bytesAccumulated": 55440,
+    "instancesAccumulated": 385
+   },
+   {
+    "class": "_Int8List",
+    "library": "dart:typed_data",
+    "bytesCurrent": 36576,
+    "instancesCurrent": 397,
+    "bytesAccumulated": 36576,
+    "instancesAccumulated": 397
+   },
+   {
+    "class": "PatchClass",
+    "library": "",
+    "bytesCurrent": 34912,
+    "instancesCurrent": 1091,
+    "bytesAccumulated": 34912,
+    "instancesAccumulated": 1091
+   },
+   {
+    "class": "_Uint32List",
+    "library": "dart:typed_data",
+    "bytesCurrent": 33792,
+    "instancesCurrent": 198,
+    "bytesAccumulated": 33792,
+    "instancesAccumulated": 198
+   },
+   {
+    "class": "SizedBox",
+    "library": "package:flutter/src/widgets/basic.dart",
+    "bytesCurrent": 32928,
+    "instancesCurrent": 686,
+    "bytesAccumulated": 32928,
+    "instancesAccumulated": 686
+   },
+   {
+    "class": "StatefulElement",
+    "library": "package:flutter/src/widgets/framework.dart",
+    "bytesCurrent": 29520,
+    "instancesCurrent": 205,
+    "bytesAccumulated": 29520,
+    "instancesAccumulated": 205
+   },
+   {
+    "class": "TextPainter",
+    "library": "package:flutter/src/painting/text_painter.dart",
+    "bytesCurrent": 29232,
+    "instancesCurrent": 203,
+    "bytesAccumulated": 29232,
+    "instancesAccumulated": 203
+   },
+   {
+    "class": "TypeParameters",
+    "library": "",
+    "bytesCurrent": 29040,
+    "instancesCurrent": 605,
+    "bytesAccumulated": 29040,
+    "instancesAccumulated": 605
+   },
+   {
+    "class": "_HashSet",
+    "library": "dart:collection",
+    "bytesCurrent": 27984,
+    "instancesCurrent": 583,
+    "bytesAccumulated": 27984,
+    "instancesAccumulated": 583
+   },
+   {
+    "class": "PcDescriptors",
+    "library": "",
+    "bytesCurrent": 25920,
+    "instancesCurrent": 511,
+    "bytesAccumulated": 25920,
+    "instancesAccumulated": 511
+   },
+   {
+    "class": "ParamSpec",
+    "library": "package:auradsp_app/core/param_schema.dart",
+    "bytesCurrent": 25856,
+    "instancesCurrent": 202,
+    "bytesAccumulated": 25856,
+    "instancesAccumulated": 202
+   },
+   {
+    "class": "SemanticsProperties",
+    "library": "package:flutter/src/semantics/semantics.dart",
+    "bytesCurrent": 24320,
+    "instancesCurrent": 38,
+    "bytesAccumulated": 24320,
+    "instancesAccumulated": 38
+   }
+  ]
+ },
+ "vmMemoryEnd": {
+  "heapUsage": 15083248,
+  "heapCapacity": 17850368,
+  "externalUsage": 2912,
+  "heapUsedMB": 14.38,
+  "heapCapacityMB": 17.02,
+  "externalMB": 0.0
+ },
+ "vmIsolates": [
+  {
+   "id": "isolates/8637739126461403",
+   "name": "main"
+  },
+  {
+   "id": "isolates/8274263073091115",
+   "name": "audioIsolateMain"
+  }
+ ]
+}

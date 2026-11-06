@@ -1,0 +1,137 @@
+{
+ "label": "ctr_tunnelShader_forced",
+ "pid": 30536,
+ "seconds": 15.0,
+ "summary": {
+  "rss_avg_mb": 337.8,
+  "rss_max_mb": 339.26,
+  "private_avg_mb": 339.05,
+  "private_max_mb": 340.61,
+  "cpu_avg_pct_core": 167.88,
+  "cpu_max_pct_core": 175.0,
+  "cpu_cores": 32,
+  "threads_avg": 53.4
+ },
+ "rows": [
+  {
+   "t": 1.0,
+   "rss_mb": 343.34,
+   "private_mb": 344.67,
+   "cpu_pct_core": 165.6,
+   "threads": 53,
+   "handles": 951
+  },
+  {
+   "t": 2.01,
+   "rss_mb": 341.48,
+   "private_mb": 343.17,
+   "cpu_pct_core": 162.5,
+   "threads": 53,
+   "handles": 951
+  },
+  {
+   "t": 3.02,
+   "rss_mb": 337.54,
+   "private_mb": 338.79,
+   "cpu_pct_core": 172.2,
+   "threads": 53,
+   "handles": 951
+  },
+  {
+   "t": 4.03,
+   "rss_mb": 338.91,
+   "private_mb": 340.29,
+   "cpu_pct_core": 172.4,
+   "threads": 53,
+   "handles": 951
+  },
+  {
+   "t": 5.04,
+   "rss_mb": 337.22,
+   "private_mb": 338.29,
+   "cpu_pct_core": 171.9,
+   "threads": 53,
+   "handles": 951
+  },
+  {
+   "t": 6.05,
+   "rss_mb": 338.79,
+   "private_mb": 339.79,
+   "cpu_pct_core": 161.5,
+   "threads": 53,
+   "handles": 948
+  },
+  {
+   "t": 7.09,
+   "rss_mb": 337.04,
+   "private_mb": 338.29,
+   "cpu_pct_core": 169.7,
+   "threads": 53,
+   "handles": 946
+  },
+  {
+   "t": 8.1,
+   "rss_mb": 338.43,
+   "private_mb": 339.79,
+   "cpu_pct_core": 170.7,
+   "threads": 53,
+   "handles": 946
+  },
+  {
+   "t": 9.12,
+   "rss_mb": 336.67,
+   "private_mb": 337.79,
+   "cpu_pct_core": 155.5,
+   "threads": 53,
+   "handles": 946
+  },
+  {
+   "t": 10.13,
+   "rss_mb": 338.04,
+   "private_mb": 339.29,
+   "cpu_pct_core": 164.6,
+   "threads": 53,
+   "handles": 946
+  },
+  {
+   "t": 11.14,
+   "rss_mb": 336.67,
+   "private_mb": 338.1,
+   "cpu_pct_core": 167.6,
+   "threads": 54,
+   "handles": 948
+  },
+  {
+   "t": 12.15,
+   "rss_mb": 338.26,
+   "private_mb": 339.11,
+   "cpu_pct_core": 167.2,
+   "threads": 54,
+   "handles": 948
+  },
+  {
+   "t": 13.16,
+   "rss_mb": 336.46,
+   "private_mb": 338.11,
+   "cpu_pct_core": 172.4,
+   "threads": 54,
+   "handles": 948
+  },
+  {
+   "t": 14.17,
+   "rss_mb": 337.88,
+   "private_mb": 339.11,
+   "cpu_pct_core": 166.1,
+   "threads": 54,
+   "handles": 948
+  },
+  {
+   "t": 15.18,
+   "rss_mb": 339.26,
+   "private_mb": 340.61,
+   "cpu_pct_core": 175.0,
+   "threads": 54,
+   "handles": 948
+  }
+ ]
+}
