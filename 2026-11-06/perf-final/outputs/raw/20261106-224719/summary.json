@@ -1,0 +1,157 @@
+{
+  "generated_at": "2026-11-06T22:49:25",
+  "mode": "sysapo",
+  "exe": "D:\\temp_desktop\\Proj\\JamesDSP\\app\\auradsp_app\\build\\windows\\x64\\runner\\Release\\auradsp_app.exe",
+  "exe_mtime": "2026-11-06T18:45:04",
+  "results": [
+    {
+      "mode": "sysapo",
+      "scenario": "startup",
+      "seconds": 15.0,
+      "rss_avg_mb": 273.52,
+      "rss_max_mb": 273.79,
+      "private_avg_mb": 275.83,
+      "cpu_avg_pct_core": 0.53,
+      "cpu_max_pct_core": 1.6,
+      "gpu_3d_avg": 0.0,
+      "gpu_3d_max": 0.0,
+      "gpu_shared_avg_mb": 100.3,
+      "gpu_dedicated_avg_mb": 0.0,
+      "threads_avg": 52.0,
+      "verdict": "PASS"
+    },
+    {
+      "mode": "sysapo",
+      "scenario": "viz",
+      "seconds": 15.0,
+      "rss_avg_mb": 332.43,
+      "rss_max_mb": 332.7,
+      "private_avg_mb": 332.49,
+      "cpu_avg_pct_core": 0.78,
+      "cpu_max_pct_core": 3.1,
+      "gpu_3d_avg": 0.0,
+      "gpu_3d_max": 0.0,
+      "gpu_shared_avg_mb": 151.0,
+      "gpu_dedicated_avg_mb": 0.0,
+      "threads_avg": 52.0,
+      "verdict": "PASS"
+    },
+    {
+      "mode": "sysapo",
+      "scenario": "play",
+      "seconds": 15.0,
+      "rss_avg_mb": 372.38,
+      "rss_max_mb": 387.43,
+      "private_avg_mb": 368.28,
+      "cpu_avg_pct_core": 38.05,
+      "cpu_max_pct_core": 51.6,
+      "gpu_3d_avg": 17.43,
+      "gpu_3d_max": 18.69,
+      "gpu_shared_avg_mb": 131.0,
+      "gpu_dedicated_avg_mb": 0.0,
+      "threads_avg": 50.0,
+      "verdict": "PASS"
+    },
+    {
+      "mode": "sysapo",
+      "scenario": "minimized",
+      "seconds": 15.0,
+      "rss_avg_mb": 329.83,
+      "rss_max_mb": 330.87,
+      "private_avg_mb": 324.4,
+      "cpu_avg_pct_core": 1.93,
+      "cpu_max_pct_core": 4.6,
+      "gpu_3d_avg": 0.0,
+      "gpu_3d_max": 0.0,
+      "gpu_shared_avg_mb": 130.4,
+      "gpu_dedicated_avg_mb": 0.0,
+      "threads_avg": 49.0,
+      "verdict": "PASS"
+    }
+  ],
+  "reference": {
+    "sysapo/startup": {
+      "rss_avg_mb": 310.4,
+      "cpu_avg_pct_core": 0.6,
+      "gpu_3d_avg": null
+    },
+    "sysapo/viz": {
+      "rss_avg_mb": 333.9,
+      "cpu_avg_pct_core": 1.1,
+      "gpu_3d_avg": 0.0
+    },
+    "sysapo/play": {
+      "rss_avg_mb": 372.3,
+      "cpu_avg_pct_core": 38.4,
+      "gpu_3d_avg": 13.5
+    },
+    "sysapo/minimized": {
+      "rss_avg_mb": 375.0,
+      "cpu_avg_pct_core": 3.6,
+      "gpu_3d_avg": 2.3
+    },
+    "vb/startup": {
+      "rss_avg_mb": 453.2,
+      "cpu_avg_pct_core": 167.5,
+      "gpu_3d_avg": 33.4
+    },
+    "vb/viz": {
+      "rss_avg_mb": 469.7,
+      "cpu_avg_pct_core": 26.9,
+      "gpu_3d_avg": 4.4
+    },
+    "vb/play": {
+      "rss_avg_mb": 552.6,
+      "cpu_avg_pct_core": 46.0,
+      "gpu_3d_avg": 12.3
+    },
+    "vb/minimized": {
+      "rss_avg_mb": 552.0,
+      "cpu_avg_pct_core": 46.0,
+      "gpu_3d_avg": 2.3
+    }
+  },
+  "thresholds": {
+    "sysapo/startup": {
+      "rss_avg_mb": 360,
+      "cpu_avg_pct_core": 12,
+      "gpu_3d_avg": 8
+    },
+    "sysapo/viz": {
+      "rss_avg_mb": 430,
+      "cpu_avg_pct_core": 12,
+      "gpu_3d_avg": 8
+    },
+    "sysapo/play": {
+      "rss_avg_mb": 520,
+      "cpu_avg_pct_core": 90,
+      "gpu_3d_avg": 30
+    },
+    "sysapo/minimized": {
+      "rss_avg_mb": 500,
+      "cpu_avg_pct_core": 12,
+      "gpu_3d_avg": 8
+    },
+    "vb/startup": {
+      "rss_avg_mb": 650,
+      "cpu_avg_pct_core": 260,
+      "gpu_3d_avg": 60
+    },
+    "vb/viz": {
+      "rss_avg_mb": 650,
+      "cpu_avg_pct_core": 260,
+      "gpu_3d_avg": 20
+    },
+    "vb/play": {
+      "rss_avg_mb": 760,
+      "cpu_avg_pct_core": 280,
+      "gpu_3d_avg": 40
+    },
+    "vb/minimized": {
+      "rss_avg_mb": 760,
+      "cpu_avg_pct_core": 280,
+      "gpu_3d_avg": 40
+    }
+  },
+  "strict": false
+}

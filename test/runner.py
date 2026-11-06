@@ -4,13 +4,15 @@
 支持运行：
 1. 全量引擎 smoke 测试: python test/runner.py --smoke
 2. UI 自动化验证测试: python test/runner.py --ui [test_name]
-3. 默认全量验证 (smoke): python test/runner.py
+3. Windows 性能回归（人工前台会话，四场景）: python test/runner.py --perf
+4. 默认全量验证 (smoke): python test/runner.py
 """
 
 import argparse
 import os
 import subprocess
 import sys
+from datetime import datetime
 
 # 子进程继承：GBK 控制台下 smoke/UI 脚本 print 含 '⟹'、替换字符等会
 # UnicodeEncodeError 崩溃（2026-10-26 实测 smoke_rt_vendor_flags / smoke_d6_
@@ -620,12 +622,56 @@ def run_ui_tests(target=None):
     return 0 if all_pass else 1
 
 
+def run_perf_regression(scenario="all", mode="sysapo", strict=False):
+    """Windows 性能回归：转发 tools/perf_regression.py（实现位于 tools/windows/）。
+
+    不属于 --smoke 常驻门禁：会移动鼠标、最小化窗口，必须有前台桌面会话。
+    产物默认落在 <repo>/.tmp/perf-regression/<时间戳>/（已 gitignore）。
+    """
+    print("========================================")
+    print("  AuraDSP Windows Perf Regression     ")
+    print("========================================")
+    if not platform_supported("windows"):
+        print(f"  SKIPPED (requires windows, current {CURRENT_PLATFORM})")
+        print("========================================")
+        return 0
+    tool = os.path.join(ROOT_DIR, "tools", "perf_regression.py")
+    if not os.path.exists(tool):
+        print(f"[ERROR] 性能回归入口缺失: {tool}")
+        return 1
+    exe = os.path.join(ROOT_DIR, "app", "auradsp_app", "build", "windows",
+                       "x64", "runner", "Release", "auradsp_app.exe")
+    if not os.path.exists(exe):
+        print("[ERROR] 缺少 release 产物，先执行：")
+        print("        flutter build windows --release --no-tree-shake-icons")
+        return 1
+    outdir = os.path.join(ROOT_DIR, ".tmp", "perf-regression",
+                          datetime.now().strftime("%Y%m%d-%H%M%S"))
+    cmd = [sys.executable, tool, "--mode", mode, "--scenario", scenario,
+           "--outdir", outdir]
+    if strict:
+        cmd.append("--strict")
+    print(f"[perf] mode={mode} scenario={scenario} strict={strict}")
+    res = subprocess.run(cmd, cwd=ROOT_DIR, check=False)
+    return res.returncode
+
+
 def main():
     parser = argparse.ArgumentParser(description="AuraDSP Test Runner")
     parser.add_argument("--smoke", action="store_true", help="Run C++ engine smoke tests")
     parser.add_argument("--ui", nargs="?", const="all", help="Run UI automation tests (or specify test name)")
+    parser.add_argument("--perf", nargs="?", const="all",
+                        choices=["all", "startup", "viz", "play", "minimized"],
+                        help="Run Windows perf regression (or specify one scenario)")
+    parser.add_argument("--perf-mode", default="sysapo",
+                        choices=["sysapo", "voicemeeter_api"],
+                        help="Perf regression audio mode (default: sysapo)")
+    parser.add_argument("--perf-strict", action="store_true",
+                        help="Perf regression exits non-zero when thresholds are exceeded")
     args = parser.parse_args()
 
+    if args.perf:
+        return run_perf_regression(args.perf, args.perf_mode, args.perf_strict)
     if args.ui:
         target = None if args.ui == "all" else args.ui
         return run_ui_tests(target)

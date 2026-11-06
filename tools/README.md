@@ -74,7 +74,34 @@
 
 ---
 
-## 5. 运行方式
+## 5. 性能回归（Windows，需前台桌面会话）
+
+| 工具 | 用途 |
+|---|---|
+| `windows/perf_regression.py` | 四场景（启动空载 / 可视化静默 / 播放态 / 最小化）内存·CPU·GPU 采集，输出 JSON + CSV + 截图，路径全部由脚本自身推导 |
+| `windows/gpu_sampler.ps1` | 按 PID 采 `\GPU Engine(*)\Utilization Percentage` 与 `\GPU Process Memory(*)`（tab 分隔 CSV） |
+| `perf_regression.py` | 根级薄转发，命令行不变 |
+
+```bash
+flutter build windows --release --no-tree-shake-icons   # 先出 release
+python tools/perf_regression.py                        # 四场景 sysapo
+python tools/perf_regression.py --mode voicemeeter_api # VB attach
+python tools/perf_regression.py --scenario play --strict
+# 编排入口（同样转发到 tools/windows/）：
+python test/runner.py --perf --perf-strict
+python test/runner.py --perf viz --perf-mode voicemeeter_api
+```
+
+**不属于 `--smoke` 常驻门禁**：会移动鼠标、最小化窗口，必须有真实桌面会话。
+产物默认在 `<repo>/.tmp/perf-regression/<时间戳>/`（gitignore）：`summary.json` 是
+机器可读总表，`stages.csv` 是一行一场景的对照表，`proc_<scene>.json` 是逐秒原始样本，
+`stage_<scene>.png` 用来确认点击落点。阈值是“本机最终值 ≈1.3–1.5 倍”的软门禁，
+不加 `--strict` 只打印 WARN；VB 的 CPU 由 8 路引擎泵送主导，阈值刻意放宽。
+详见 `2026-11-06/perf-final/outputs/perf-final-report.md`。
+
+---
+
+## 6. 运行方式
 
 ```bash
 python tools/bin/run_tests.py --smoke     # 转发 test/runner.py --smoke
@@ -82,6 +109,7 @@ python tools/bin/run_tests.py --ui        # 转发 test/runner.py --ui
 # 或直接用原生入口：
 python test/runner.py --smoke
 python test/runner.py --ui
+python test/runner.py --perf              # Windows 性能回归（四场景）
 ```
 
 受限网络下推送：
