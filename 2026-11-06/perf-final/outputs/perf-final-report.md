@@ -389,7 +389,7 @@ python tools/perf_regression.py --mode voicemeeter_api --scenario viz
 
 | 模式 | 场景 | 参考 RSS/CPU/GPU | 阈值 RSS/CPU/GPU |
 | --- | --- | --- | --- |
-| sysapo | startup | 273.5 / 0.5 / 0 | 330 / 10 / 5 |
+| sysapo | startup | 273.5 / 0.5 / 0 | 330 / 20 / 5 |
 | sysapo | viz | 332.4 / 0.8 / 0 | 400 / 10 / 5 |
 | sysapo | play | 372.4 / 38.0 / 14.5 | 480 / 70 / 25 |
 | sysapo | minimized | 329.8 / 1.9 / 0 | 430 / 8 / 5 |
@@ -399,6 +399,8 @@ python tools/perf_regression.py --mode voicemeeter_api --scenario viz
 | vb | minimized | 510.6 / 5.2 / 0 | 620 / 15 / 5 |
 
 阈值取参考值约 1.2–1.3 倍，**只拦数量级回归**：同机不同时段 RSS 会差 10–20 MB，CPU/GPU 会差几个百分点，属正常漂移。VB 的 CPU 由 8 路泵送 + 主页 viz 事件重绘主导，刻意放宽。
+
+启动态的 CPU 例外：它包含一次性的着色器/字体/首帧工作，实测同一构建 0.5–12% core 波动（RSS 反而稳定在 242–274 MB）。因此 startup 的 CPU 阈值放到 20，避免把正常的首帧抖动判成回归；真正要拦的是"启动后持续空转"（那会是 100%+）。
 
 ### 8.5 运行注意
 

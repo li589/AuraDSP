@@ -86,7 +86,7 @@ REFERENCE = {
 # VB 的 CPU 由 8 路引擎泵送 + 主页 viz 事件驱动重绘主导，阈值刻意放宽；
 # 它只用于“别把引擎改造搞崩”，不是 UI 指标。
 THRESHOLDS = {
-    ("sysapo", "startup"): {"rss_avg_mb": 330, "cpu_avg_pct_core": 10, "gpu_3d_avg": 5},
+    ("sysapo", "startup"): {"rss_avg_mb": 330, "cpu_avg_pct_core": 20, "gpu_3d_avg": 5},
     ("sysapo", "viz"): {"rss_avg_mb": 400, "cpu_avg_pct_core": 10, "gpu_3d_avg": 5},
     ("sysapo", "play"): {"rss_avg_mb": 480, "cpu_avg_pct_core": 70, "gpu_3d_avg": 25},
     ("sysapo", "minimized"): {"rss_avg_mb": 430, "cpu_avg_pct_core": 8, "gpu_3d_avg": 5},
