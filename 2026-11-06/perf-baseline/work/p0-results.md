@@ -74,4 +74,21 @@ CPU/帧率是可比的硬指标。采样：`work/gpu_p02.csv`、`work/p02_out.lo
 `viz` 事件已被隔离层停推，UI 侧无帧可产。可见态两侧一致（约 66–67% CPU）。
 采样：`work/gpu_p04_before_min.csv`、`work/gpu_p04_after_min.csv`、`work/stages_p04/`。
 
+## 四项全部完成后的最终复测
+
+最终代码（P0-1/2/3/4 全部落地）重新构建 release（临时插桩已全部回退），同口径采样。
+
+| 场景 | 指标 | 基线 | 最终 | 变化 |
+|---|---|---|---|---|
+| 播放态 + 频谱全零 + 关歌词 | RSS avg/max (MB) | 602 / 662 | 363.2 / 363.3 | −239 MB |
+| 同上 | CPU avg %core | 163.8 | 0.9（max 4.7） | −162.9 pp |
+| 同上 | GPU 3D avg | 32.0% | 0.00% | −32 pp |
+| 可视化页未播放（稳定 60 s 后） | RSS avg/max (MB) | 349.5 / 350 | 314.1 / 314.7 | −35 MB |
+| 同上 | CPU avg %core | 1.2 | 0.84 | −0.36 pp |
+| 同上 | GPU 3D avg | 1.9% | 0.00% | −1.9 pp |
+
+采样：`work/stages_final/`、`work/gpu_final_forced.csv`、`work/gpu_final_idle.csv`。
+GPU shared 计数器跨次运行不可比（见遗留清单），此处不列入结论。
+
+
 
