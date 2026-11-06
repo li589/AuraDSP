@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../../core/design.dart';
 import '../../../core/theme.dart';
 import '../../../core/ui_helpers.dart';
+import '../../../platform/adapters.dart';
 import '../controllers/peak_physics_engine.dart';
 import '../controllers/waveform_synthesizer.dart';
 import '../lyrics/services/media_sync_service.dart';
@@ -80,6 +81,11 @@ class _VisualizerStageState extends State<VisualizerStage> {
   bool _audible = false;
   Timer? _silenceTimer;
 
+  /// 窗口可见性：最小化/托盘隐藏时与 `active` 一样参与时间轴门控。
+  /// 隔离层（setVizSuspended）只停了 `viz` 事件推送，UI 侧此前仍会按
+  /// 30 Hz 空转，两者必须一起停。
+  bool _windowVisible = PlatformAdapters.instance.window.isVisible;
+
   /// 门控后的频谱代理：静默期不再向下游转发，数据驱动样式也不会因
   /// 零值帧重建/重绘。
   late final ValueNotifier<List<double>> _gatedSpectrum =
@@ -89,6 +95,8 @@ class _VisualizerStageState extends State<VisualizerStage> {
   void initState() {
     super.initState();
     widget.spectrum.addListener(_onSpectrumFrame);
+    PlatformAdapters.instance.window.visibleListenable
+        .addListener(_onWindowVisibility);
     // 默认静止：只有收到真实有声帧后时间轴才启动。
     _syncTimeline();
     _startHudTimer();
@@ -106,14 +114,24 @@ class _VisualizerStageState extends State<VisualizerStage> {
   static const double _timelineStep = 0.032;
 
   void _onTimelineTick() {
-    if (!widget.active || !widget.playing || !_audible) return;
+    if (!widget.active || !widget.playing || !_audible || !_windowVisible) {
+      return;
+    }
     _time.value += _timelineStep;
   }
 
-  /// 时间轴启停的唯一入口：三者同时成立才产帧（页面可见、引擎在播放、
-  /// 真实能量未静默）。
+  void _onWindowVisibility() {
+    final visible = PlatformAdapters.instance.window.isVisible;
+    if (visible == _windowVisible) return;
+    _windowVisible = visible;
+    _syncTimeline();
+  }
+
+  /// 时间轴启停的唯一入口：四者同时成立才产帧（页面可见、窗口可见、
+  /// 引擎在播放、真实能量未静默）。
   void _syncTimeline() {
-    final shouldRun = widget.active && widget.playing && _audible;
+    final shouldRun =
+        widget.active && widget.playing && _audible && _windowVisible;
     if (shouldRun) {
       _timelineTimer ??= Timer.periodic(_timelinePeriod, (_) {
         _onTimelineTick();
@@ -198,6 +216,8 @@ class _VisualizerStageState extends State<VisualizerStage> {
     _timelineTimer?.cancel();
     _silenceTimer?.cancel();
     widget.spectrum.removeListener(_onSpectrumFrame);
+    PlatformAdapters.instance.window.visibleListenable
+        .removeListener(_onWindowVisibility);
     _gatedSpectrum.dispose();
     _time.dispose();
     super.dispose();

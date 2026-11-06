@@ -56,3 +56,22 @@ CPU/帧率是可比的硬指标。采样：`work/gpu_p02.csv`、`work/p02_out.lo
 卷积与离屏纹理的绝对开销随之减小。方向正确，量级需按当前帧率修正。
 采样：`work/gpu_p03_before.csv`、`work/gpu_p03_after.csv`、`work/stages_p03/`。
 
+## P0-4 不可见/最小化彻底停渲染
+
+核对结果：隔离层 `setVizSuspended` 只在窗口不可见时停 `viz` 事件推送（`state_events`
+还会丢弃剩余事件），UI 侧时间轴此前完全没有看窗口可见性，属于遗漏。现在舞台同时监听
+`PlatformAdapters.instance.window.visibleListenable`，最小化/托盘隐藏时与 `active`
+一起参与时间轴门控。
+
+用临时插桩（强制播放 + 500 ms 合成频谱 + 帧计数，测完已回退），最小化窗口后采样 20 s：
+
+| 阶段 | 产帧 | CPU avg %core | GPU 3D avg | GPU shared | RSS avg (MB) |
+|---|---|---|---|---|---|
+| 改前 | 17 fps | 36.9 | 19.5% | 258 MB | 503 |
+| 改后 | 2 fps | 3.59 | 2.29% | 242 MB | 481 |
+
+残留的 2 fps 来自 500 ms 合成频谱插桩本身（不可见时模型仍被直接写值）；真实运行时
+`viz` 事件已被隔离层停推，UI 侧无帧可产。可见态两侧一致（约 66–67% CPU）。
+采样：`work/gpu_p04_before_min.csv`、`work/gpu_p04_after_min.csv`、`work/stages_p04/`。
+
+
