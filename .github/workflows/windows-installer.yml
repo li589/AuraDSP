@@ -67,8 +67,29 @@ jobs:
       - name: pack.py fixture 全模式冒烟（含 Setup 拼装与 --verify）
         shell: pwsh
         run: |
-          python installer/windows/tests/test_pack_fixture.py
-          if ($LASTEXITCODE -ne 0) { throw "pack fixture test failed" }
+          $out = python installer/windows/tests/test_pack_fixture.py 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          $out | Write-Host
+          New-Item -ItemType Directory -Force build/installer | Out-Null
+          $out | Set-Content build/installer/fixture-output.txt
+          if ($code -ne 0) {
+            # 失败细节同步打成 check annotation：job 日志经 blob 通道
+            # 不稳定（本机多次下载被掐断），annotation 走 API 可直读
+            ($out -split "`n") |
+              Where-Object { $_ -match 'FAIL|Error|Traceback|error' } |
+              Select-Object -First 40 |
+              ForEach-Object { Write-Host "::error::$($_.Trim() -replace '%', '%25')" }
+            throw "pack fixture test failed"
+          }
+
+      - name: 上传 fixture 输出（失败诊断用）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-fixture-output
+          path: build/installer/fixture-output.txt
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: 上传 Setup 拼装验证产物（fixture 级）
         uses: actions/upload-artifact@v4
