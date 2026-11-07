@@ -4,26 +4,40 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../models/visualizer_themes.dart';
+import 'visualizer_sprite_atlas.dart';
 import 'visualizer_time_aware.dart';
 
-/// 星云流（Nebula Flow）：WMP 经典「柔雾星云」视觉语言（2026-11-07 重做）。
+/// 星云流（Nebula Flow）：WMP 经典「柔雾星云」视觉语言。
+///
+/// 2026-11-07 性能改造：所有云体/雾絮/星点改为**预烘焙精灵**。
+/// 旧实现每帧用 `canvas.scale` + `RadialGradient` 画大面积极坐标填充，
+/// 实测单核 CPU 96%、GPU 28.7%；换成位图采样后只剩纹理采样 + 混合。
+///
+/// 绘制路径（在目标渲染后端上验证过输出正确）：
+/// - 云体 / 雾絮：逐实例 `canvas.translate/rotate/scale` +
+///   `drawImageRect` + 预建 `Paint` 池（`ColorFilter.mode(色, modulate)`），
+///   每实例一个 Paint，颜色与 alpha 都在 Paint 池里，逐帧零分配；
+/// - 星点：一次 `drawRawAtlas`（`colors` 传 null），四档烘焙亮度精灵
+///   按固定种子挑选，形成「多数微星、少数亮星」的自然分布。
+///
+/// 注意：本机渲染后端在 `drawAtlas/drawRawAtlas` 传入逐实例 `colors`
+/// 时会丢掉纹理 alpha（退化成纯色四边形），因此**不使用逐实例 colors**。
 ///
 /// 构成：
-/// - [_cloudCount] 团半透明云体，全部由**预建径向渐变 Shader** 拉伸成
-///   椭圆精灵（1 次 `drawCircle`），边缘天生柔化，没有 MaskFilter、没有硬边；
-/// - 云体运动只有低频：缓慢横向漂移 + 呼吸式膨胀；
-///   高/中频只改变**亮度**（按档位换已缓存的 Shader），不改变轨迹，
-///   因此不会把云抖成噪点；
-/// - [_starCount] 颗稀疏星点，尺寸 1~3 px、柔光晕 + 亮点核，
-///   亮度随中高频轻微闪烁，位置固定、不形成网格或串珠；
-/// - 暗场与渐晕走 [_NebulaBackdropPainter]，由视口放进独立静态缓存层。
+/// - [_veilCount] 张大幕布云，铺满画面做低频云底；
+/// - [_billowCount] 个云团，每个两瓣错位叠加，剪影不是标准椭圆；
+/// - 1 枚中央柔光，让云层有共同光源；
+/// - [_wispCount] 枚小团絮（[VisualizerSpriteAtlas.puff]），
+///   宽 30~105 px、高 11~38 px，低 alpha 的不规则剪影 + 内部细颗粒，
+///   高频错位 + 缓慢旋转，给云体叠出肉眼可辨的湍流纹理；
+/// - [_starCount] 颗细小星点，尺寸 5.5~12 px（带十字芒）、亮核 0.9~1.9 px。
 ///
 /// 确定性 / 性能约定：
 /// - 种子编译期固定（`Float32List` + 固定 `math.Random`），运行期零随机；
-/// - 所有 Paint 跨帧复用；Shader 按「颜色 × 亮度档」缓存，不逐帧 createShader；
-/// - 逐帧分配为零（`Offset` 全部用 `canvas.translate`，无 Path / Paint /
-///   Shader / Color 新建）；
-/// - 每帧 draw 调用 83 次（10 幕布云 + 18×2 云团 + 1 中央柔光 + 18×2 星点）。
+/// - `Paint` 池、`Float32List` 缓冲跨帧复用，逐帧堆分配为零；
+/// - 不逐帧 createShader / 新建 Image / 使用 saveLayer / MaskFilter.blur；
+/// - 每帧 102 次 draw 调用（幕布 10 + 云团 36 + 柔光 1 + 细纹 54 + 星点 1）；
+///   静态暗场仍走 [NebulaBackdropPainter] 的独立缓存层（`willChange: false`）。
 class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
   final List<double> bands;
   final VisualizerPalette palette;
@@ -32,26 +46,41 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
 
   static const int _veilCount = 10;
   static const int _billowCount = 18;
-  static const int _cloudCount = _veilCount + _billowCount;
-  static const int _starCount = 18;
+  static const int _haloCount = 1;
+  static const int _wispCount = 54;
+  static const int _starCount = 190;
+
+  static const int _sliceBlob = 0;
+  static const int _sliceWide = 1;
+  static const int _sliceTall = 2;
 
   /// 云体种子：每个 11 项
   /// [x, y, 半径, 横向漂移速度, 纵向漂移速度, 漂移相位,
-  ///  呼吸相位, 呼吸速度, 颜色档(0~3), 纵向压扁系数, 类型(0=大幕布 1=云团)]
+  ///  呼吸相位, 呼吸速度, 颜色档(0~3), 纵向拉长系数, 类型(0=幕布 1=云团)]
   static final Float32List _cloudSeeds = _buildCloudSeeds();
 
-  /// 星点种子：每个 5 项 [x, y, 尺寸, 闪烁相位, 色档]
+  /// 星点种子：每个 5 项 [x, y, 尺寸系数, 闪烁相位, 亮度权重]
   static final Float32List _starSeeds = _buildStarSeeds();
 
-  final Paint _cloudPaint = Paint()..style = PaintingStyle.fill;
-  final Paint _starPaint = Paint()..style = PaintingStyle.fill;
+  /// 雾絮种子：每个 4 项 [相位, 旋转相位, 错位相位, alpha 系数]
+  static final Float32List _wispSeeds = _buildWispSeeds();
 
-  /// key = 色档 * 16 + 亮度档（整数键，避免逐帧字符串分配）。
-  final Map<int, Shader> _shaderCache = {};
+  /// 每个云实例用哪块子图（构造期固定）。
+  static final Int32List _cloudSliceOf = _buildCloudSliceOf();
 
-  /// 5 个基色的 alpha 查表：星点与泛光用查表取 Color，不逐帧 withValues。
+  /// 每个星点用哪档亮度的星点精灵（构造期固定）。
+  static final Int32List _starTierOf = _buildStarTierOf();
+
+  final VisualizerSpriteAtlas _atlas = VisualizerSpriteAtlas.instance;
+
+  final Float32List _starRst = Float32List(_starCount * 4);
+  final Float32List _starRects = Float32List(_starCount * 4);
+
   static const int _alphaLevels = 64;
-  final List<List<Color>> _alphaTables;
+
+  /// Paint 池：[slot * _alphaLevels + level]，颜色 + alpha 都在这里，
+  /// 运行期只做索引，不新建 ColorFilter / Color / Paint。
+  final List<Paint> _paints;
 
   double _lastTime = double.nan;
   double _energy = 0.0;
@@ -61,44 +90,65 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
     required this.palette,
     required this.bloom,
     required this.animationTime,
-  }) : _alphaTables = _buildAlphaTables(palette);
-
-  static List<List<Color>> _buildAlphaTables(VisualizerPalette palette) =>
-      List.generate(5, (c) {
-        final base = _baseColor(palette, c);
-        return List<Color>.generate(
-          _alphaLevels,
-          (i) => base.withValues(alpha: i / (_alphaLevels - 1)),
-        );
-      });
-
-  static Color _baseColor(VisualizerPalette palette, int slot) => switch (slot) {
-        0 => palette.primary,
-        1 => palette.secondary,
-        2 => palette.gradient.isNotEmpty ? palette.gradient.first : palette.primary,
-        3 => palette.gradient.length > 2 ? palette.gradient[2] : palette.secondary,
-        _ => palette.glow,
-      };
-
-  Color _colorAt(int slot, double alpha) {
-    final i = (alpha.clamp(0.0, 1.0) * (_alphaLevels - 1)).round();
-    return _alphaTables[slot][i];
+  }) : _paints = _buildPaintPool(palette) {
+    _fillStarRects();
   }
 
   @override
   void setVisualizerTime(double time) => animationTime = time;
 
+  static const int _slotCount = 6;
+
+  static List<Paint> _buildPaintPool(VisualizerPalette palette) {
+    final out = <Paint>[];
+    for (var s = 0; s < _slotCount; s++) {
+      final rgb = _baseColor(palette, s).toARGB32() & 0x00FFFFFF;
+      for (var i = 0; i < _alphaLevels; i++) {
+        final a = (i * 255 / (_alphaLevels - 1)).round();
+        out.add(
+          Paint()
+            ..filterQuality = FilterQuality.low
+            ..isAntiAlias = true
+            ..colorFilter = ColorFilter.mode(
+              Color((a << 24) | rgb),
+              BlendMode.modulate,
+            ),
+        );
+      }
+    }
+    return out;
+  }
+
+  static Color _baseColor(VisualizerPalette palette, int slot) => switch (slot) {
+        0 => palette.primary,
+        1 => palette.secondary,
+        2 =>
+          palette.gradient.isNotEmpty ? palette.gradient.first : palette.primary,
+        3 => palette.gradient.length > 2
+            ? palette.gradient[2]
+            : palette.secondary,
+        4 => palette.glow,
+        // 星点必须用最亮的 peak：旧版误用 gradient.first（深色底），
+        // 星点乘上深色后比云体更暗，会读成「暗十字」。
+        _ => palette.peak,
+      };
+
+  Paint _paintAt(int slot, double alpha) {
+    final i = (alpha.clamp(0.0, 1.0) * (_alphaLevels - 1)).round();
+    return _paints[slot * _alphaLevels + i];
+  }
+
   static Float32List _buildCloudSeeds() {
     final rnd = math.Random(20261107);
-    final out = Float32List(_cloudCount * 11);
-    for (var i = 0; i < _cloudCount; i++) {
+    final out = Float32List((_veilCount + _billowCount) * 11);
+    for (var i = 0; i < _veilCount + _billowCount; i++) {
       final o = i * 11;
       final billow = i >= _veilCount;
       out[o] = (rnd.nextDouble() * 2 - 1) * 1.05;
       out[o + 1] = 0.04 + rnd.nextDouble() * 0.92;
       out[o + 2] = billow
-          ? 0.14 + rnd.nextDouble() * 0.14
-          : 0.30 + rnd.nextDouble() * 0.16;
+          ? 0.13 + rnd.nextDouble() * 0.14
+          : 0.28 + rnd.nextDouble() * 0.16;
       out[o + 3] = 0.05 + rnd.nextDouble() * 0.10;
       out[o + 4] = 0.03 + rnd.nextDouble() * 0.07;
       out[o + 5] = rnd.nextDouble() * math.pi * 2;
@@ -116,13 +166,96 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
     final out = Float32List(_starCount * 5);
     for (var i = 0; i < _starCount; i++) {
       final o = i * 5;
-      out[o] = (rnd.nextDouble() * 2 - 1) * 0.94;
-      out[o + 1] = 0.08 + rnd.nextDouble() * 0.84;
-      out[o + 2] = 0.55 + rnd.nextDouble() * 0.85;
+      out[o] = (rnd.nextDouble() * 2 - 1) * 0.96;
+      out[o + 1] = 0.03 + rnd.nextDouble() * 0.94;
+      // 尺寸分布偏小：多数微星、少量稍大的星，避免「雨点」感。
+      // 指数 > 1 才会把分布压向 0；指数 < 1 反而让大多数星偏大。
+      out[o + 2] = math.pow(rnd.nextDouble(), 1.8).toDouble();
       out[o + 3] = rnd.nextDouble() * math.pi * 2;
-      out[o + 4] = rnd.nextDouble() < 0.35 ? 1.0 : 0.0;
+      out[o + 4] = math.pow(rnd.nextDouble(), 2.2).toDouble();
     }
     return out;
+  }
+
+  static Float32List _buildWispSeeds() {
+    final rnd = math.Random(3141592);
+    final out = Float32List(_wispCount * 4);
+    for (var i = 0; i < _wispCount; i++) {
+      final o = i * 4;
+      out[o] = rnd.nextDouble() * math.pi * 2;
+      out[o + 1] = rnd.nextDouble() * math.pi * 2;
+      out[o + 2] = rnd.nextDouble() * math.pi * 2;
+      out[o + 3] = 0.55 + rnd.nextDouble() * 0.65;
+    }
+    return out;
+  }
+
+  static Int32List _buildCloudSliceOf() {
+    final out =
+        Int32List(_veilCount + _billowCount * 2 + _haloCount);
+    var i = 0;
+    // 幕布：全部用横向云，覆盖画面宽度。
+    for (var k = 0; k < _veilCount; k++, i++) {
+      out[i] = _sliceWide;
+    }
+    // 云团：主瓣 + 副瓣，按种子的拉长系数选不同的剪影。
+    for (var k = 0; k < _billowCount; k++) {
+      final o = (_veilCount + k) * 11;
+      final aspect = _cloudSeeds[o + 9];
+      final main = aspect < 0.86
+          ? _sliceWide
+          : (aspect > 1.12 ? _sliceTall : _sliceBlob);
+      out[i++] = main;
+      out[i++] = main == _sliceBlob
+          ? _sliceTall
+          : (main == _sliceWide ? _sliceBlob : _sliceWide);
+    }
+    // 中央柔光。
+    out[i] = _sliceBlob;
+    return out;
+  }
+
+  static Int32List _buildStarTierOf() {
+    final out = Int32List(_starCount);
+    for (var i = 0; i < _starCount; i++) {
+      final w = _starSeeds[i * 5 + 4];
+      out[i] = w < 0.15 ? 0 : (w < 0.45 ? 1 : (w < 0.80 ? 2 : 3));
+    }
+    return out;
+  }
+
+  SpriteSlice _sliceAt(int index) => switch (index) {
+        _sliceWide => _atlas.blobWide,
+        _sliceTall => _atlas.blobTall,
+        _ => _atlas.blob,
+      };
+
+  SpriteSlice _starSliceAt(int tier) =>
+      _atlas.starTiers[tier.clamp(0, _atlas.starTiers.length - 1)];
+
+  void _fillStarRects() {
+    for (var i = 0; i < _starCount; i++) {
+      final s = _starSliceAt(_starTierOf[i]);
+      final o = i * 4;
+      _starRects[o] = s.rect[0];
+      _starRects[o + 1] = s.rect[1];
+      _starRects[o + 2] = s.rect[2];
+      _starRects[o + 3] = s.rect[3];
+    }
+  }
+
+  /// 画一个精灵实例：以中心对齐 `cx/cy`，等比缩放 + 旋转。
+  ///
+  /// `SpriteSlice.localRect` 是预构造的常量 `Rect`，因此这里逐帧不分配对象；
+  /// 颜色与 alpha 全部来自 Paint 池。
+  void _sprite(Canvas canvas, SpriteSlice s, double cx, double cy,
+      double scale, double rot, Paint paint) {
+    canvas.save();
+    canvas.translate(cx, cy);
+    if (rot != 0.0) canvas.rotate(rot);
+    canvas.scale(scale, scale);
+    canvas.drawImageRect(_atlas.image, s.srcRect, s.localRect, paint);
+    canvas.restore();
   }
 
   @override
@@ -150,117 +283,135 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
     final target = (bass * 0.35 + mid * 0.40 + treble * 0.25).clamp(0.0, 1.0);
     _energy += (target - _energy) * (dt * 3.2).clamp(0.0, 1.0);
 
-    // 低频缓慢漂移 + 呼吸膨胀；高频仅参与亮度（bucket）。
     final pulse = 1.0 + _energy * 0.10 + bass * 0.06;
-    final fieldR = minDim * (0.62 + _energy * 0.10);
+    final fieldR = minDim * (0.60 + _energy * 0.12);
 
-    for (var i = 0; i < _cloudCount; i++) {
+    // 1) 大幕布：铺满画面的低频云底，亮度最低。
+    for (var i = 0; i < _veilCount; i++) {
       final o = i * 11;
-      final billow = _cloudSeeds[o + 10] > 0.5;
-      final spread = billow ? 0.78 : 1.06;
       final driftX =
           math.sin(t * _cloudSeeds[o + 3] + _cloudSeeds[o + 5]) * fieldR * 0.10;
       final driftY =
           math.cos(t * _cloudSeeds[o + 4] + _cloudSeeds[o + 5]) * fieldR * 0.06;
       final breathe =
           1.0 + 0.14 * math.sin(t * _cloudSeeds[o + 7] + _cloudSeeds[o + 6]);
-      final x = cx + _cloudSeeds[o] * fieldR * spread + driftX;
+      final x = cx + _cloudSeeds[o] * fieldR * 1.08 + driftX;
+      final y = cy + (_cloudSeeds[o + 1] - 0.5) * h * 1.06 + driftY;
+      final r = minDim * _cloudSeeds[o + 2] * breathe * pulse;
+      final slice = _sliceAt(_cloudSliceOf[i]);
+      _sprite(
+        canvas,
+        slice,
+        x,
+        y,
+        (2.0 * r) / slice.height,
+        _cloudSeeds[o + 5] * 0.22,
+        _paintAt(_cloudSeeds[o + 8].toInt(), 0.075 + 0.10 * _energy),
+      );
+    }
+
+    // 2) 云团：主瓣 + 一瓣错位副瓣，剪影不再是标准椭圆。
+    var idx = _veilCount;
+    for (var k = 0; k < _billowCount; k++, idx += 2) {
+      final o = (_veilCount + k) * 11;
+      final driftX =
+          math.sin(t * _cloudSeeds[o + 3] + _cloudSeeds[o + 5]) * fieldR * 0.10;
+      final driftY =
+          math.cos(t * _cloudSeeds[o + 4] + _cloudSeeds[o + 5]) * fieldR * 0.06;
+      final breathe =
+          1.0 + 0.14 * math.sin(t * _cloudSeeds[o + 7] + _cloudSeeds[o + 6]);
+      final x = cx + _cloudSeeds[o] * fieldR * 0.78 + driftX;
       final y = cy + (_cloudSeeds[o + 1] - 0.5) * h * 1.02 + driftY;
       final r = minDim * _cloudSeeds[o + 2] * breathe * pulse;
-
-      // 大幕布压得很淡铺满画面；云团更亮、更集中，负责可见的团块结构。
-      // 亮度按 0~15 档量化进 Shader 缓存，同档复用同一份渐变。
-      final strength = billow
-          ? (0.18 + 0.92 * _energy) * (0.72 + 0.30 * breathe)
-          : (0.22 + 0.55 * _energy);
-      final bucket = (strength.clamp(0.0, 1.0) * 15).round();
       final slot = _cloudSeeds[o + 8].toInt();
-      final aspect = _cloudSeeds[o + 9];
-      final shader = _cloudShader(slot, bucket, billow);
-      _drawCloud(canvas, x, y, r, r * aspect, shader);
-      if (billow) {
-        // 云团用两瓣错位叠加，剪影不再是标准圆/椭圆。
-        final ang = _cloudSeeds[o + 5] + i * 0.73;
-        final lx = x + math.cos(ang) * r * 0.44;
-        final ly = y + math.sin(ang) * r * 0.34;
-        _drawCloud(canvas, lx, ly, r * 0.70, r * 0.70 * aspect, shader);
-      }
+      final alpha = 0.15 + 0.22 * _energy;
+
+      final mainSlice = _sliceAt(_cloudSliceOf[idx]);
+      _sprite(canvas, mainSlice, x, y, (2.0 * r) / mainSlice.height,
+          _cloudSeeds[o + 6] * 0.30, _paintAt(slot, alpha));
+
+      // 副瓣：偏移 + 更小 + 更淡，把圆形剪影打散。
+      final ang = _cloudSeeds[o + 5] + k * 0.73;
+      final lx = x + math.cos(ang) * r * 0.44;
+      final ly = y + math.sin(ang) * r * 0.34;
+      final lobeSlice = _sliceAt(_cloudSliceOf[idx + 1]);
+      _sprite(canvas, lobeSlice, lx, ly, (2.0 * r * 0.70) / lobeSlice.height,
+          ang * 0.5 + 0.6, _paintAt(slot, alpha * 0.72));
     }
 
-    // 中央柔光：让云层有共同的光源，避免整屏平铺。
-    _drawCloud(
+    // 3) 中央柔光：给云层一个共同的光源，避免整屏平铺。
+    _sprite(
       canvas,
+      _atlas.blob,
       cx,
       cy * 0.86,
-      fieldR * 0.86,
-      fieldR * 0.60,
-      _cloudShader(0, (18 + (_energy * 26).round()).clamp(0, 15), false),
+      (fieldR * 1.30) / _atlas.blob.height,
+      0.0,
+      _paintAt(0, 0.09 + 0.11 * _energy),
     );
 
-    _drawStars(canvas, w, h, t, treble);
-  }
+    // 4) 雾絮：贴在云团/幕布上做高频错位叠加，形成细密湍流纹理。
+    for (var k = 0; k < _wispCount; k++) {
+      final so = k * 4;
+      // 全部贴到云团上：幕布太淡，纤维落在幕布上会脱离云体、读成一道划痕。
+      final cloudIndex = _veilCount + (k % _billowCount);
+      final o = cloudIndex * 11;
+      final driftX =
+          math.sin(t * _cloudSeeds[o + 3] + _cloudSeeds[o + 5]) * fieldR * 0.10;
+      final driftY =
+          math.cos(t * _cloudSeeds[o + 4] + _cloudSeeds[o + 5]) * fieldR * 0.06;
+      final x = cx +
+          _cloudSeeds[o] * fieldR * 0.78 +
+          driftX +
+          math.sin(t * 1.35 + _wispSeeds[so + 2]) * fieldR * 0.055;
+      final y = cy +
+          (_cloudSeeds[o + 1] - 0.5) * h * 1.02 +
+          driftY +
+          math.cos(t * 1.10 + _wispSeeds[so + 2]) * fieldR * 0.040;
+      final r = minDim * _cloudSeeds[o + 2] * 0.42;
+      // 小团絮：宽度 ≈ r（30~105 px）、高度 0.36r（11~38 px），剪影不规则；
+      // 保持低 alpha，让它读作云体内部的湍流纹，而不是一块独立色斑。
+      _sprite(
+        canvas,
+        _atlas.puff,
+        x,
+        y,
+        (r * 1.0) / _atlas.puff.width,
+        _wispSeeds[so + 1] + t * 0.16,
+        _paintAt(
+          _cloudSeeds[o + 8].toInt(),
+          (0.07 + 0.10 * _energy) * _wispSeeds[so + 3],
+        ),
+      );
+    }
 
-  /// 云体 Shader：颜色 × 亮度档 × 类型缓存。
-  /// 单一色相 + 单调递减的通明度 profile（无中途换色），避免出现环状分层。
-  Shader _cloudShader(int colorIdx, int bucket, bool billow) {
-    final key = (billow ? 32 : 0) + colorIdx * 16 + bucket;
-    var shader = _shaderCache[key];
-    if (shader != null) return shader;
-    if (_shaderCache.length > 128) _shaderCache.clear();
-    final base = _baseColor(palette, colorIdx);
-    final peak = billow
-        ? 0.050 + 0.130 * (bucket / 15.0)
-        : 0.028 + 0.060 * (bucket / 15.0);
-    final p3 = billow ? peak * 0.56 : peak * 0.42;
-    final p4 = billow ? peak * 0.22 : peak * 0.16;
-    shader = RadialGradient(
-      colors: [
-        base.withValues(alpha: peak),
-        base.withValues(alpha: peak * (billow ? 0.88 : 0.78)),
-        base.withValues(alpha: p3),
-        base.withValues(alpha: p4),
-        base.withValues(alpha: 0.0),
-      ],
-      stops: const [0.0, 0.24, 0.50, 0.78, 1.0],
-    ).createShader(const Rect.fromLTRB(-1, -1, 1, 1));
-    _shaderCache[key] = shader;
-    return shader;
-  }
-
-  void _drawCloud(
-    Canvas canvas,
-    double cx,
-    double cy,
-    double rx,
-    double ry,
-    Shader shader,
-  ) {
-    _cloudPaint.shader = shader;
-    canvas.save();
-    canvas.translate(cx, cy);
-    canvas.scale(rx, ry);
-    canvas.drawCircle(Offset.zero, 1.0, _cloudPaint);
-    canvas.restore();
-    _cloudPaint.shader = null;
-  }
-
-  void _drawStars(Canvas canvas, double w, double h, double t, double treble) {
-    final cx = w / 2.0;
-    for (var i = 0; i < _starCount; i++) {
-      final o = i * 5;
+    // 5) 星点：一次 drawRawAtlas 提交全部实例。
+    //    亮度分布来自四档烘焙精灵（按固定种子挑选），闪烁只改变尺寸，
+    //    因此整批星点可以共用同一个 Paint。
+    final starAlpha = 0.30 + 0.70 * (0.35 + 0.65 * treble) * (0.30 + 0.70 * _energy);
+    for (var k = 0; k < _starCount; k++) {
+      final o = k * 5;
       final x = cx + _starSeeds[o] * w * 0.48;
       final y = _starSeeds[o + 1] * h;
-      final s = _starSeeds[o + 2];
-      final twinkle = 0.5 + 0.5 * math.sin(t * 1.05 + _starSeeds[o + 3]);
-      final bright = (0.30 + 0.55 * treble) * (0.55 + 0.45 * twinkle);
-      canvas.save();
-      canvas.translate(x, y);
-      _starPaint.color = _colorAt(_starSeeds[o + 4].toInt(), 0.028 + 0.05 * bright);
-      canvas.drawCircle(Offset.zero, 2.6 * s, _starPaint);
-      _starPaint.color = _colorAt(2, 0.12 + 0.42 * bright);
-      canvas.drawCircle(Offset.zero, 0.9 * s, _starPaint);
-      canvas.restore();
+      final twinkle = 0.5 + 0.5 * math.sin(t * 0.85 + _starSeeds[o + 3]);
+      // 5.5~12 px（含十字芒）：亮核落在 0.9~1.9 px，读作细颗粒而不是雨点。
+      final size = (5.5 + _starSeeds[o + 2] * 6.5) * (0.85 + 0.15 * twinkle);
+      final scale = size / 64.0;
+      final r = k * 4;
+      _starRst[r] = scale;
+      _starRst[r + 1] = 0.0;
+      _starRst[r + 2] = x - scale * 32.0;
+      _starRst[r + 3] = y - scale * 32.0;
     }
+    canvas.drawRawAtlas(
+      _atlas.image,
+      _starRst,
+      _starRects,
+      null,
+      BlendMode.srcOver,
+      null,
+      _paintAt(5, starAlpha),
+    );
   }
 
   double _avg(int from, int to) {

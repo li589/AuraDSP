@@ -1751,6 +1751,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get visualizerThemeAuroraGlow => '极光';
 
   @override
+  String get visualizerThemeEmeraldMist => '翡翠雾';
+
+  @override
   String get themeSwitchTip => '切换配色方案';
 
   @override

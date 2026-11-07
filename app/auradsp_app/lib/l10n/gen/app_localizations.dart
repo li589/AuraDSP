@@ -3376,6 +3376,12 @@ abstract class AppLocalizations {
   /// **'极光'**
   String get visualizerThemeAuroraGlow;
 
+  /// No description provided for @visualizerThemeEmeraldMist.
+  ///
+  /// In zh, this message translates to:
+  /// **'翡翠雾'**
+  String get visualizerThemeEmeraldMist;
+
   /// No description provided for @themeSwitchTip.
   ///
   /// In zh, this message translates to:

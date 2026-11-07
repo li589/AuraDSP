@@ -145,6 +145,10 @@ enum VisualizerColorTheme {
   aurora(
     id: 'aurora',
     label: 'Aurora Glow',
+  ),
+  emeraldMist(
+    id: 'emeraldMist',
+    label: 'Emerald Mist',
   );
 
   final String id;
@@ -452,6 +456,7 @@ extension VisualizerColorThemeL10n on VisualizerColorTheme {
         VisualizerColorTheme.amberTube => l.visualizerThemeAmberTube,
         VisualizerColorTheme.matrixGreen => l.visualizerThemeMatrixGreen,
         VisualizerColorTheme.aurora => l.visualizerThemeAuroraGlow,
+        VisualizerColorTheme.emeraldMist => l.visualizerThemeEmeraldMist,
       };
 }
 

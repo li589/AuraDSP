@@ -1878,6 +1878,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get visualizerThemeAuroraGlow => 'Aurora Glow';
 
   @override
+  String get visualizerThemeEmeraldMist => 'Emerald Mist';
+
+  @override
   String get themeSwitchTip => 'Cycle color scheme';
 
   @override

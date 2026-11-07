@@ -1772,6 +1772,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get visualizerThemeAuroraGlow => 'オーロラグロー';
 
   @override
+  String get visualizerThemeEmeraldMist => 'エメラルドミスト';
+
+  @override
   String get themeSwitchTip => '配色を切り替え';
 
   @override
