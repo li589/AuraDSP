@@ -403,23 +403,24 @@ class _StageStereoMeter extends StatelessWidget {
             final List<double> columns;
             if (chCount > 2) {
               final grid = model.vizStageChLevels.value;
-              final chLevels = model.vizChannelLevels.value;
               final dbL = (meterIndex >= 0 && meterIndex < levelsL.length)
                   ? levelsL[meterIndex]
                   : -120.0;
               final dbR = (meterIndex >= 0 && meterIndex < levelsR.length)
                   ? levelsR[meterIndex]
                   : -120.0;
+              // 节点作用域：矩阵模式下节点链是立体声（仅 FL/FR），其余声道
+              // 属总线输出口径。禁止在 -120 时借用输出 chLevels —— 那会把
+              // 立体声节点画成 8 柱（违反 Phase B G5 诚实显示）。
+              final activeCh = model.channelsMode == 0 ? 2 : chCount;
 
               columns = List<double>.generate(8, (c) {
+                if (c >= activeCh) return -120.0; // 作用域外：非活跃态（不涂亮）
                 if (c == 0) return dbL;
                 if (c == 1) return dbR;
                 final idx = meterIndex * kVizChannelMax + c;
                 if (idx >= 0 && idx < grid.length && grid[idx] > -119.0) {
                   return grid[idx];
-                }
-                if (c < chLevels.length && chLevels[c] > -119.0) {
-                  return chLevels[c];
                 }
                 return -120.0;
               });

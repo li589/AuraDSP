@@ -1099,6 +1099,17 @@ class AppLocalizationsZh extends AppLocalizations {
       '当输入音频或输出设备为多声道（4.0 / 5.1 / 7.1）时的 DSP 策略：离散多声道＝全声道独立流经 DSP，各效果器可独立指定作用声道，支持多声道插件与上混；矩阵下混＝折叠为立体声流经 DSP 效果器后再上混回填环绕声道（超低音直接直通）。「双耳虚拟环绕」开启时优先级最高，将自动以 HRIR 渲染为耳机立体声。';
 
   @override
+  String get upmixFill => '未使用声道填充';
+
+  @override
+  String get upmixFillHint => '关闭后立体声源不会填充未使用声道，环绕源不受影响，LFE 直通。';
+
+  @override
+  String meterBusScope(String bus, int ch) {
+    return '$bus · $ch 声道';
+  }
+
+  @override
   String get audioMode => '音频模式';
 
   @override

@@ -410,6 +410,11 @@ class _SpectrumCardState extends State<_SpectrumCard> {
           const SizedBox(height: AuraSpace.sm),
           const FreqAxis(),
           const SizedBox(height: AuraSpace.lg),
+          // 总线轴标识：8 根柱是「当前最热总线」的声道轴，不是 A1–B3 总线轴。
+          if (widget.model.vbActive) ...[
+            _MeterBusScope(model: widget.model),
+            const SizedBox(height: AuraSpace.xs),
+          ],
           _OutputLevelRow(model: widget.model, active: widget.active),
           const SizedBox(height: AuraSpace.sm + 2),
           Align(
@@ -512,6 +517,39 @@ class _OutputLevelRow extends StatelessWidget {
               ],
             );
           },
+        );
+      },
+    );
+  }
+}
+
+/// 主页电平区总线标识：读 VB 桥 status 的 `vizGrp`（当前 viz 跟随的总线组），
+/// 明示「这 8 根柱是哪条总线的声道」，避免把声道轴误读成 A1–B3 总线轴。
+/// 只改显示，不动电平数值口径；按 hbTick 心跳更新，不牵动外层重建。
+class _MeterBusScope extends StatelessWidget {
+  final AppModel model;
+  const _MeterBusScope({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+    return HbBuilder(
+      tick: model.hbTick,
+      builder: (context) {
+        if (!model.vbActive) return const SizedBox.shrink();
+        final g = (model.vbInfo['vizGrp'] as num?)?.toInt() ?? -1;
+        if (g < 0 || g > 7) return const SizedBox.shrink();
+        final names =
+            vbBusNames((model.vbInfo['edition'] as num?)?.toInt() ?? 0);
+        final bus = g < names.length ? names[g] : 'G${g + 1}';
+        final cc = model.vizChannelCount.value;
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            l.meterBusScope(bus, cc),
+            style: monoOf(p, size: 10, color: p.textDim),
+          ),
         );
       },
     );

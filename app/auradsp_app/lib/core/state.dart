@@ -192,6 +192,8 @@ class AppModel extends ChangeNotifier {
       inputBalanceR = ParamDefaults.inputBalanceR;
   int reverbPreset = -1;
   int channelsMode = 0;
+  // [channels.upmix_fill] 矩阵模式下是否将立体声铺满未使用声道（1=现状）。
+  int channelsUpmixFill = 1;
   int channelsCount = 2;
   int channelsCountMode = 0; // 0=自动, 1=手动
   // 音频处理模式 id（AudioModes.optionsFor(currentOs) 取值；'auto' 表跟随当前引擎）。

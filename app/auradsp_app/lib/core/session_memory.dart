@@ -60,6 +60,7 @@ abstract final class SessionMemory {
         'locale': m.locale.languageCode,
         'themeId': m.themeId.name,
         'channelsMode': m.channelsMode,
+        'channelsUpmixFill': m.channelsUpmixFill,
         'channelsCountMode': m.channelsCountMode,
         'channelsCount': m.channelsCount,
         'audioMode': m.audioMode,
@@ -117,6 +118,9 @@ abstract final class SessionMemory {
       if (session['channelsMode'] is num) {
         // clamp 同 state_core 镜像路径：历史 UI 的非法 2（"7.1"）不得复苏
         m.channelsMode = (session['channelsMode'] as num).toInt().clamp(0, 1);
+      }
+      if (session['channelsUpmixFill'] is num) {
+        m.channelsUpmixFill = (session['channelsUpmixFill'] as num).toInt().clamp(0, 1);
       }
       if (session['channelsCountMode'] is num) {
         m.channelsCountMode = (session['channelsCountMode'] as num).toInt().clamp(0, 1);

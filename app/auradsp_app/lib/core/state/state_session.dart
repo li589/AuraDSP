@@ -189,6 +189,7 @@ extension StateSession on AppModel {
       // （不预设持久化），此前恢复后 UI 分段控件显示"离散逐声道"，引擎却
       // 停在默认的矩阵模式——多声道策略在重启后静默降级。
       setInt('channels.mode', channelsMode);
+      setInt('channels.upmix_fill', channelsUpmixFill);
       setInt('channels.countMode', channelsCountMode);
       if (channelsCountMode == 1) {
         setInt('channels.count', channelsCount);

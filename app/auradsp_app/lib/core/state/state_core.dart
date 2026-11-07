@@ -227,6 +227,9 @@ extension StateCore on AppModel {
         // 会淤积在镜像与自动保存里——此处 clamp 保证镜像即引擎真相。
         channelsMode = v.toInt().clamp(0, 1);
         break;
+      case 'channels.upmix_fill':
+        channelsUpmixFill = v.toInt().clamp(0, 1);
+        break;
       case 'channels.countMode':
         channelsCountMode = v.toInt().clamp(0, 1);
         break;

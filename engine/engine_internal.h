@@ -142,6 +142,9 @@ struct Params {
     std::atomic<float>    post_gain_ch[8];
     /* latency_mode 已由 ADR-006 移除：延迟改为纯测量，不再有档位准入。 */
     std::atomic<int32_t>  channels_mode{0};     /* 0=stereo（Phase A，ADR-003） */
+    /* [channels.upmix_fill] 矩阵上混回填策略：1=现状（无条件铺满未使用
+     * 声道），0=仅回填「对应下混输入声道本块非严格零」的声道。 */
+    std::atomic<int32_t>  upmix_fill{1};
     /* WP0 脚手架：channels.count 的纯状态载体（0=自动/1=手动，同 bass.mode
      * 模式，不参与 DSP 计算，仅保证 UI 选择可回读）。 */
     std::atomic<int32_t>  channels_count_mode{0};
@@ -788,6 +791,9 @@ struct auradsp_handle_s {
     std::atomic<int> channel_count{2};   /* 驱动层交织缓冲的声道数（2=立体声） */
     float* mx_scratch = nullptr;         /* max_block*kMxMaxChannels，留存各声道 */
     float* mx_stereo = nullptr;          /* max_block*2，下混后的立体声链输出 */
+    /* [channels.upmix_fill] 源活动保持窗（帧，RT 独占；0=该声道不填充）。
+     * 严格零判定 + ~250ms 保持，避免乐句间隙/静音段来回跳变。 */
+    int upmix_hold[kMxMaxChannels] = {};
 
     /* WP5: post_gain 逐声道输出平滑状态（一阶平滑 10ms，RT 独占） */
     float post_gain_sm[8] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};

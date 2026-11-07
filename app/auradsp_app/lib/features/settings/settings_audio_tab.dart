@@ -173,13 +173,39 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
     SectionCard(
       title: l.channelMode,
       hint: l.channelPhaseA,
-      child: AuraSegmented<int>(
-        segments: [
-          AuraSegment(0, l.channelsMatrix),
-          AuraSegment(1, l.channelsDiscrete),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AuraSegmented<int>(
+            segments: [
+              AuraSegment(0, l.channelsMatrix),
+              AuraSegment(1, l.channelsDiscrete),
+            ],
+            selected: model.channelsMode.clamp(0, 1),
+            onChanged: (v) => model.setInt('channels.mode', v),
+          ),
+          // [channels.upmix_fill] 仅矩阵模式相关：关闭后立体声源不铺满
+          // 未使用声道；环绕源（5.1/7.1 有源声道）与 LFE 直通不受影响。
+          if (model.channelsMode == 0) ...[
+            const SizedBox(height: AuraSpace.sm),
+            Row(
+              children: [
+                Text(l.upmixFill, style: captionOf(p, color: p.text)),
+                const Spacer(),
+                AuraSwitch(
+                  value: model.channelsUpmixFill != 0,
+                  onChanged: (on) =>
+                      model.setInt('channels.upmix_fill', on ? 1 : 0),
+                ),
+              ],
+            ),
+            const SizedBox(height: AuraSpace.xs),
+            Text(
+              l.upmixFillHint,
+              style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
+            ),
+          ],
         ],
-        selected: model.channelsMode.clamp(0, 1),
-        onChanged: (v) => model.setInt('channels.mode', v),
       ),
     ),
   ];

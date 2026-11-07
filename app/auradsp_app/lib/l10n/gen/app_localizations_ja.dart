@@ -1112,6 +1112,18 @@ class AppLocalizationsJa extends AppLocalizations {
       '入力またはデバイスがマルチチャンネル（4.0 / 5.1 / 7.1）時のDSP方針：ディスクリート＝全チャンネルが独立してDSPを通過、エフェクターごとのマスク設定やアップミックスに対応；マトリックス＝ステレオに畳み込んでDSP処理後に再展開（LFE直通）。バイノーラル仮想サラウンド有効時はそちらが最優先されます。';
 
   @override
+  String get upmixFill => '未使用チャンネルの充填';
+
+  @override
+  String get upmixFillHint =>
+      'オフにするとステレオ音源は未使用チャンネルを埋めません。サラウンド音源は影響を受けず、LFE は直通します。';
+
+  @override
+  String meterBusScope(String bus, int ch) {
+    return '$bus · $ch ch';
+  }
+
+  @override
   String get audioMode => 'オーディオモード';
 
   @override
