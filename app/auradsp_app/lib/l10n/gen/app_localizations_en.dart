@@ -3241,6 +3241,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get vbRouteReleasing => 'Releasing · passthrough';
 
   @override
+  String get vbRouteFailed => 'Failed · passthrough';
+
+  @override
+  String get vbRouteNotApplied => 'Not active · passthrough';
+
+  @override
   String get plugUnloading => 'Unloading…';
 
   @override

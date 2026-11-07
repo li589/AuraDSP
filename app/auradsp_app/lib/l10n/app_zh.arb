@@ -1427,6 +1427,8 @@
   "plugLoading": "加载中…",
   "vbRouteLoading": "加载中 · 直通",
   "vbRouteReleasing": "释放中 · 直通",
+  "vbRouteFailed": "失败 · 直通",
+  "vbRouteNotApplied": "未生效 · 直通",
   "plugUnloading": "卸载中…",
   "plugStateActive": "生效",
   "plugStateBypassed": "旁路",

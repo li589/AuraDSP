@@ -3080,6 +3080,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get vbRouteReleasing => '解放中・スルー';
 
   @override
+  String get vbRouteFailed => '失敗・スルー';
+
+  @override
+  String get vbRouteNotApplied => '未反映・スルー';
+
+  @override
   String get plugUnloading => 'アンロード中…';
 
   @override

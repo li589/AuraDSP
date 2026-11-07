@@ -36,11 +36,13 @@ extension VbAsioState on AppModel {
   /// 异步语义（2026-11-07）：界面不等原生返回。开路要建引擎+回放效果器/脚本+
   /// 后台挂插件（重插件 2-4s），关路要逐槽旁路再销毁；底层结构锁在后台补挂
   /// 期间可能被持有 2-4s。这里只发命令 + 入"在途表"，由心跳 routeState 收尾，
-  /// 动画与禁点由 [vbRouteBusy] 驱动，绝不阻塞 UI 心跳。
+  /// 动画由 [vbRouteBusy] 驱动（不夺走行内控件），绝不阻塞 UI 心跳。
   void setVbBus(int group, bool on) {
     if (group < 0 || group > 7) return;
-    // 在途期间拒绝重复点击/重复命令（用户明确：加载期不允许再点、不重复入队）。
-    if (vbRouteBusy(group)) return;
+    // 在途期间允许**反向**操作（用户可直接取消加载 / 立刻关回），只拒绝同向
+    // 重复点击（那只会把同一目标重复下发）。用户口径：加载态不得夺走行内
+    // 控件——开关照常可操作。
+    if (vbRouteBusy(group) && vbRoutePendingOn(group) == on) return;
     final next = on ? (vbBusMask | (1 << group)) : (vbBusMask & ~(1 << group));
     if (next == vbBusMask) return;
     vbBusMask = next & 0xFF;
@@ -67,7 +69,8 @@ extension VbAsioState on AppModel {
   bool vbRoutePendingOn(int g) => vbRoutePending[g] ?? false;
 
   /// 心跳 routeState 确认目标达成 → 清在途，UI 从"加载中/释放中"回到稳态。
-  /// 开=就绪(2)，关=已关闭(0)；超时兜底避免桥异常时开关永久锁死。
+  /// 开=就绪(2) 或失败/超时(3)——3 也是确定终态（该路直通，不再等待）；
+  /// 关=已关闭(0)。超时兜底避免桥异常时开关永久锁死。
   void vbReconcileRoutePending() {
     if (vbRoutePending.isEmpty) return;
     final st = (vbInfo['routeState'] as List?)
@@ -78,7 +81,9 @@ extension VbAsioState on AppModel {
     for (final e in vbRoutePending.entries) {
       final state = (st != null && e.key < st.length) ? st[e.key] : -1;
       final bit = (vbBusMask >> e.key) & 1;
-      final reached = e.value ? (state == 2) : (state == 0 && bit == 0);
+      final reached = e.value
+          ? (state == 2 || state == 3) // 3=失败/超时，已收敛，不再等
+          : (state == 0 && bit == 0);
       if (reached) done.add(e.key);
     }
     for (final g in done) {

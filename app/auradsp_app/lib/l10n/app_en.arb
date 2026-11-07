@@ -1291,6 +1291,8 @@
   "plugLoading": "Loading…",
   "vbRouteLoading": "Loading · passthrough",
   "vbRouteReleasing": "Releasing · passthrough",
+  "vbRouteFailed": "Failed · passthrough",
+  "vbRouteNotApplied": "Not active · passthrough",
   "plugUnloading": "Unloading…",
   "plugStateActive": "Active",
   "plugStateBypassed": "Bypassed",

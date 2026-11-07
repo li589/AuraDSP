@@ -243,6 +243,31 @@ public:
         ReleaseSRWLockExclusive(&lock_);
     }
 
+    // 逐槽回放（调用方已确保音频线程不接触 engine）。
+    // 与 Replay 的差别是**返回该槽是否真的落位**：重建后桥要按槽更新
+    // "该组已装载位图"，否则 routeState 永远停在"加载中"、插件链永不开启
+    // （2026-11-07 真机反馈：CHANGE 重建后整路卡加载态）。
+    // 返回 false 的语义：槽未挂载（不计数）或装载失败（调用方记失败位）。
+    bool ReplaySlot(void* engine, const Fns& fns, int slot, bool* mounted) {
+        if (mounted) *mounted = false;
+        if (!engine || !fns.Ready() || slot < 0 || slot >= kSlots) return false;
+        AcquireSRWLockExclusive(&lock_);
+        const Cfg c = cfg_[slot];
+        if (!c.loaded) {
+            ReleaseSRWLockExclusive(&lock_);
+            return false;
+        }
+        if (mounted) *mounted = true;
+        const bool ok = fns.load(engine, slot, c.path, c.id) == 1;
+        if (ok) {
+            fns.setChannels(engine, slot, c.channels);
+            fns.setStage(engine, slot, c.stage);
+            fns.setBypass(engine, slot, c.bypass);
+        }
+        ReleaseSRWLockExclusive(&lock_);
+        return ok;
+    }
+
 private:
     SRWLOCK lock_;
     Cfg cfg_[kSlots];

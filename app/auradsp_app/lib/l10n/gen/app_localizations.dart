@@ -5836,6 +5836,18 @@ abstract class AppLocalizations {
   /// **'释放中 · 直通'**
   String get vbRouteReleasing;
 
+  /// No description provided for @vbRouteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'失败 · 直通'**
+  String get vbRouteFailed;
+
+  /// No description provided for @vbRouteNotApplied.
+  ///
+  /// In zh, this message translates to:
+  /// **'未生效 · 直通'**
+  String get vbRouteNotApplied;
+
   /// No description provided for @plugUnloading.
   ///
   /// In zh, this message translates to:

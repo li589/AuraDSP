@@ -78,7 +78,8 @@ class _VbBuses extends StatelessWidget {
         const <double>[];
     final live = (info['grpLive'] as num?)?.toInt() ?? 0;
     // 按路状态（桥 status.routeState）：0=路关闭(直通)，1=加载中(该路仍直通)，
-    // 2=就绪(DSP 处理中)。加载中必须显式可见，不能让人以为已在处理。
+    // 2=就绪(DSP 处理中)，3=失败/超时(直通，链保持关闭)。加载中必须显式可见，
+    // 不能让人以为已在处理；1/3 都由桥收敛，UI 不自行保持"加载"。
     final routeStates = (info['routeState'] as List?)
             ?.map((e) => (e as num?)?.toInt() ?? 0)
             .toList() ??
@@ -246,7 +247,8 @@ class _VbBusRow extends StatelessWidget {
   /// hover 气泡说明语义；勾选 = 挂载的插件处理该路。
   final bool pluginOn;
   final ValueChanged<bool> onPluginToggle;
-  /// 桥上报的按路状态：0=关(直通)，1=加载中(仍直通)，2=就绪。
+  /// 桥上报的按路状态：0=关(直通)，1=加载中(仍直通)，2=就绪，
+  /// 3=失败/超时(直通)。1/3 都是桥侧收敛后的确定态，动画只由 1 驱动。
   final int state;
   /// 异步启停在途（本地立即置位，心跳收尾）：true=建/挂载中，false=释放中。
   /// 在途期间该路**始终直通**（不断声），开关禁点防命令堆积。
@@ -278,23 +280,30 @@ class _VbBusRow extends StatelessWidget {
                 style: monoOf(p, size: 12,
                     color: live ? p.text : p.textDim)),
           ),
-          // 加载中：该路引擎/插件尚在装载，音频走直通。明确标注，避免
-          // "开关已开 = 已在处理"的误判（重插件 2-4s，脚本还要编译）。
-          // 心跳约 1s 一拍，刚打开时上报的还是旧状态（0），所以只要「开且
-          // 未就绪」都标注，不依赖严格的 state==1。
-          // 在途（异步启停）：小面积加载/释放动画 + "直通"语义标注，
-          // 让人明确"在加载但没断声"。动画只重绘角标（RepaintBoundary），
-          // 不整行/整卡跟帧。心跳约 1s 一拍，所以本地 in-flight 优先显示。
+          // 路状态指示（2026-11-07 真机反馈修正）：转圈只在**真的在途**时出现，
+          // 且是挂在名称与电平表之间的 10px 角标——行内其余内容（名称、电平表、
+          // 复选框、开关）始终原样可见可操作，绝不替换整行。
+          // state：0=关(直通) 1=加载中(直通) 2=就绪 3=失败/超时(直通)。
+          // 1 只在桥还可能在等的窗口内出现（native 侧集齐/失败/20s 超时一律收敛到
+          // 2 或 3）；3 用静态文案，不再转圈。此处**没有**"静态加载中…"分支：
+          // 那正是之前"永久挂着看起来在加载"的观感来源。
           if (busy) ...[
             const SizedBox(width: 6),
             _RouteBusyBadge(
               label: pendingOn ? l.vbRouteLoading : l.vbRouteReleasing,
               color: p.accent,
             ),
-          ] else if (on && state != 2) ...[
-            const SizedBox(width: 4),
-            Text(l.plugLoading,
-                style: monoOf(p, size: 10, color: p.accent)),
+          ] else if (state == 1) ...[
+            const SizedBox(width: 6),
+            _RouteBusyBadge(label: l.vbRouteLoading, color: p.accent),
+          ] else if (state == 3) ...[
+            const SizedBox(width: 6),
+            Text(l.vbRouteFailed,
+                style: monoOf(p, size: 10, color: p.warning)),
+          ] else if (on && state == 0) ...[
+            const SizedBox(width: 6),
+            Text(l.vbRouteNotApplied,
+                style: monoOf(p, size: 10, color: p.textDim)),
           ],
           Expanded(child: _LedMeter(peak: live ? peak : 0.0, on: on)),
           const SizedBox(width: AuraSpace.sm),
@@ -319,7 +328,9 @@ class _VbBusRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AuraSpace.xs),
-          _MiniToggle(on: on, onToggle: onToggle, enabled: !busy),
+          // 开关始终可操作：加载/释放期间也允许反向点击（取消加载或立刻关回），
+          // 命令去重由 model.setVbBus 负责——加载态不得夺走行内控件。
+          _MiniToggle(on: on, onToggle: onToggle),
         ],
       ),
     );
@@ -382,38 +393,31 @@ class _LedMeter extends StatelessWidget {
 class _MiniToggle extends StatelessWidget {
   final bool on;
   final ValueChanged<bool> onToggle;
-  /// 在途禁点：异步加载/释放期间不接受重复点击（避免命令堆积）。
-  final bool enabled;
-  const _MiniToggle(
-      {required this.on, required this.onToggle, this.enabled = true});
+  const _MiniToggle({required this.on, required this.onToggle});
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     return GestureDetector(
-      onTap: enabled ? () => onToggle(!on) : null,
-      child: Opacity(
-        opacity: enabled ? 1.0 : 0.55,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOut,
-          width: 30,
-          height: 18,
-          padding: const EdgeInsets.all(2),
+      onTap: () => onToggle(!on),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        width: 30,
+        height: 18,
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(9),
+          color: on ? p.accent : p.panelRaised,
+          border: Border.all(color: on ? p.accent : p.hairline, width: 1),
+        ),
+        alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          width: 12,
+          height: 12,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
-            color: on ? p.accent : p.panelRaised,
-            border: Border.all(
-                color: on ? p.accent : p.hairline, width: 1),
-          ),
-          alignment: on ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: on ? p.accentContrast : p.textDim,
-            ),
+            shape: BoxShape.circle,
+            color: on ? p.accentContrast : p.textDim,
           ),
         ),
       ),

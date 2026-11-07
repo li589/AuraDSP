@@ -161,6 +161,8 @@ static const LONG kProtectExitWakes = 12;      // 12 × 500ms = 6s 低于 50% �
 // 该组插件集是否装载完成（前台同步 + 后台补齐）。
 // 未完成 → 链保持关闭：音频只走厂商 DSP，绝不混入"半套插件"的加工程度。
 static bool PluginsReadyForGroup(int g);
+// 该组是否有装载失败/超时缺口：有则链必须保持关闭（不放半套插件进处理）。
+static bool GroupHasLoadFailure(int g);
 
 static void ApplyPluginGroupMask() {
     if (!g_pluginFns.HasChainEnable()) return;
@@ -175,8 +177,9 @@ static void ApplyPluginGroupMask() {
     for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
         void* e = g_b.ctx.eng[g];
         if (!e) continue;
-        // 插件没装完的组不开链：新开一路时先直通，装载完成才进处理。
-        const int on = ((eff >> g) & 1) && PluginsReadyForGroup(g);
+        // 插件没装完/装失败/超时的组不开链：新开一路时先直通，装载完成才进处理。
+        const int on = ((eff >> g) & 1) && PluginsReadyForGroup(g) &&
+                      !GroupHasLoadFailure(g);
         g_pluginFns.chainSetEnabled(e, on);
     }
 }
@@ -264,6 +267,19 @@ struct PendingGroupLoad {
     int group = -1;  // >=0 = 只补这一组（开路/重建后按路补挂）；-1 = 全组
 };
 static std::deque<PendingGroupLoad> g_bgJobs;
+// 后台正在装的 (组,槽)：用于去重——job 已出队但实例还没落位时，重复入队
+// 会二次实例化（重插件多花 2-4s 且白占内存）。-1 = 空闲。
+static std::atomic<int> g_bgActiveGroup{-1};
+static std::atomic<int> g_bgActiveSlot{-1};
+
+static void BeginBgActive(int g, int slot) {
+    g_bgActiveGroup.store(g, std::memory_order_release);
+    g_bgActiveSlot.store(slot, std::memory_order_release);
+}
+static void EndBgActive() {
+    g_bgActiveSlot.store(-1, std::memory_order_release);
+    g_bgActiveGroup.store(-1, std::memory_order_release);
+}
 
 // 引擎级互斥：后台补齐与 unload/同步 load 不得并发碰同一组引擎。
 static std::mutex g_engineMut;
@@ -271,6 +287,45 @@ static std::mutex g_engineMut;
 // 每组已加载槽位位图（bit slot）：判定该组是否就绪（决定预设即时应用还是
 // 挂起）；由同步加载、后台补齐、卸载共同维护。
 static std::atomic<uint32_t> g_grpLoaded[PumpCtx::kMaxGroups];
+
+// 加载终态兜底（2026-11-07 真机反馈：路行永久停在"加载中"、永不收敛）。
+// 旧判据只有"已加载位图"，任何一次装载失败/漏调度都会让该组永远凑不齐：
+//   - routeState 恒为 1（UI 一直转圈）；
+//   - 插件链永不开启（插件静默失效）。
+// 下面三组标记把"失败"也变成确定终态：failed 置位的槽位视为已结算（不再等），
+// 该组判"失败·直通"；超时（kRouteSettleMs）未集齐同样判失败，绝不允许无限挂起。
+static std::atomic<uint32_t> g_grpFailed[PumpCtx::kMaxGroups];    // 装载失败槽位
+static std::atomic<uint64_t> g_grpWaitAt[PumpCtx::kMaxGroups];   // 最近期望装载时刻(ms)
+static std::atomic<bool> g_grpCreateFail[PumpCtx::kMaxGroups];   // 建引擎失败
+static const uint64_t kRouteSettleMs = 20000;
+
+// 清掉该路的失败/超时/建引擎失败标记（开路、建成功后调用）。
+static void ClearGroupLoadFlags(int g) {
+    if (g < 0 || g >= PumpCtx::kMaxGroups) return;
+    g_grpFailed[g].store(0, std::memory_order_release);
+    g_grpCreateFail[g].store(false, std::memory_order_release);
+    g_grpWaitAt[g].store(0, std::memory_order_release);
+}
+
+// 该组是否有装载失败/建引擎失败（链必须保持关闭，避免"半套插件"）。
+static bool GroupHasLoadFailure(int g) {
+    if (g < 0 || g >= PumpCtx::kMaxGroups) return true;
+    return g_grpCreateFail[g].load(std::memory_order_acquire) ||
+           g_grpFailed[g].load(std::memory_order_acquire) != 0;
+}
+
+// 该路是否已到确定终态：全部集齐，或失败位已覆盖缺口，或已超时。
+// routeState 的 1（加载中）只允许出现在这里返回 false 的窗口内。
+static bool GroupRouteSettled(int g, uint64_t now) {
+    const uint32_t want = g_pluginMirror.LoadedMask();
+    const uint32_t got = g_grpLoaded[g].load(std::memory_order_acquire);
+    const uint32_t failed = g_grpFailed[g].load(std::memory_order_acquire);
+    if ((got & want) == want) return true;                // 集齐
+    if (g_grpCreateFail[g].load(std::memory_order_acquire)) return true;
+    if ((want & ~(got | failed)) == 0) return true;       // 缺口全部是失败槽
+    const uint64_t at = g_grpWaitAt[g].load(std::memory_order_acquire);
+    return at != 0 && now >= at && now - at >= kRouteSettleMs;  // 超时
+}
 
 // 路开关异步化（2026-11-07）：Dart 侧启停不得等待 g_engineMut——后台补挂
 // 单实例要 2-4s，期间同步拿锁会让 UI 心跳停摆、后续命令排队。拿不到锁时
@@ -298,10 +353,23 @@ static bool GroupNeedsPlugin(int g) {
     return ((bm >> g) & 1) != 0;
 }
 
+// 该路是否要"吃插件链"= 路开着 AND 该路插件复选框勾选。
+// 复选框未勾选的路不预建插件实例（该路插件不参与处理，实例纯属浪费），
+// 于是它没有可等的东西——routeState 应该瞬时就绪，不该出现"加载中"
+// （2026-11-07 用户口径：无插件可加载的路连加载态都不该出现）。
+// 之后勾选复选框会由 BackfillGroupsForMask 现场补挂（只加载、不卸载）。
+static bool GroupWantsPluginChain(int g) {
+    if (!GroupNeedsPlugin(g)) return false;
+    const int pm = InterlockedCompareExchange(&g_pluginGroupMask, 0, 0);
+    return ((pm >> g) & 1) != 0;
+}
+
 // 该组插件集是否装载完成：已挂载槽位全部落到该组引擎。
+// 不吃插件链的路无需等待（返回 true），否则无插件的路会被错误地判成加载中。
 static bool PluginsReadyForGroup(int g) {
     if (g < 0 || g >= PumpCtx::kMaxGroups) return false;
     if (!g_b.ctx.eng[g]) return false;
+    if (!GroupWantsPluginChain(g)) return true;
     const uint32_t want = g_pluginMirror.LoadedMask();
     const uint32_t got = g_grpLoaded[g].load(std::memory_order_acquire);
     return (got & want) == want;
@@ -361,7 +429,12 @@ static bool LoadGroupForSlot(int g, int slot, const char* path, const char* id) 
         g_pluginMirror.SetLoad(slot, path, id ? id : "", stage, wantBypass,
                                wantCh);
     }
-    if (g_pluginFns.load(e, slot, path, id ? id : "") != 1) return false;
+    if (g_pluginFns.load(e, slot, path, id ? id : "") != 1) {
+        // 失败必须记成终态：否则该组永远"未集齐"——routeState 恒为 1，
+        // UI 永久停在加载态，链也永不开启（2026-11-07 真机根因之一）。
+        g_grpFailed[g].fetch_or(1u << slot, std::memory_order_acq_rel);
+        return false;
+    }
     g_pluginMirror.GetSlot(slot, &stage, &wantBypass, &wantCh);
     g_pluginFns.setChannels(e, slot, wantCh);
     g_pluginFns.setStage(e, slot, stage);
@@ -375,6 +448,7 @@ static bool LoadGroupForSlot(int g, int slot, const char* path, const char* id) 
         }
     }
     if (!preset.empty()) g_pluginFns.loadPreset(e, slot, preset.c_str());
+    g_grpFailed[g].fetch_and(~(1u << slot), std::memory_order_acq_rel);
     g_grpLoaded[g].fetch_or(1u << slot);
     // 该组集齐后才允许开链（加载期间保持旁路，避免半套插件出声）。
     if (PluginsReadyForGroup(g)) ApplyPluginGroupMask();
@@ -413,25 +487,29 @@ static void GroupLoadWorker() {
                 for (int g = 1; g < n; ++g) {
                     if (g_bgGen.load(std::memory_order_acquire) != job.gen)
                         break;
-                    if (!GroupNeedsPlugin(g)) continue;   // 关掉的路不加载
+                    if (!GroupWantsPluginChain(g)) continue;  // 关掉/不吃链的路不加载
                     // 同步加载可能已落在非 0 组（A1 关路时 syncG = 首个在用路）；
                     // 已加载的组别重复挂载（重复实例化浪费 2-4s 且白占内存）。
                     if (job.slot >= 0 &&
                         (g_grpLoaded[g].load(std::memory_order_acquire) &
                          (1u << job.slot)))
                         continue;
+                    BeginBgActive(g, job.slot);
                     LoadGroupForSlot(g, job.slot, job.path.c_str(),
                                      job.id.c_str());
+                    EndBgActive();
                 }
             }
             // 单组任务（开一路/重建后按路补挂）：只碰目标组。
             if (job.group >= 0 &&
                 g_bgGen.load(std::memory_order_acquire) == job.gen &&
-                GroupNeedsPlugin(job.group) && job.slot >= 0 &&
+                GroupWantsPluginChain(job.group) && job.slot >= 0 &&
                 !(g_grpLoaded[job.group].load(std::memory_order_acquire) &
                   (1u << job.slot))) {
+                BeginBgActive(job.group, job.slot);
                 LoadGroupForSlot(job.group, job.slot, job.path.c_str(),
                                  job.id.c_str());
+                EndBgActive();
                 // 该组已集齐时 LoadGroupForSlot 内部会重放掩码。
             }
             SetThreadPriority(thr, oldPrio);
@@ -464,6 +542,9 @@ static void StopBgThread() {
     if (InterlockedExchange(&g_loadSuspending, 0)) ApplyPluginGroupMask();
 }
 
+// 该 (组,槽) 是否已在队列里或正在后台装载（去重用）。
+static bool BgJobInFlight(int g, int s);
+
 // 掩码新使能的组：若镜像里已有插件、但该组实例尚缺（加载时被掩码跳过），
 // 后台补挂——否则该总线只有厂商 DSP、插件永远不生效。
 // added = 新使能位图；调用方保证与旧掩码已切换。
@@ -471,10 +552,12 @@ static void BackfillGroupsForMask(int added) {
     if (!added) return;
     std::vector<PendingGroupLoad> jobs;
     for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
-        if (!((added >> g) & 1) || !PluginEngineAt(g) || !GroupNeedsPlugin(g))
+        if (!((added >> g) & 1) || !PluginEngineAt(g) ||
+            !GroupWantsPluginChain(g))
             continue;
         for (int s = 0; s < auraplugin::kSlots; ++s) {
             if (g_grpLoaded[g].load() & (1u << s)) continue;
+            if (BgJobInFlight(g, s)) continue;
             char p[512] = {0};
             char id[128] = {0};
             int stage = 3, bypass = 1, ch = 0xFF;
@@ -488,21 +571,50 @@ static void BackfillGroupsForMask(int added) {
     }
     if (jobs.empty()) return;
     EnsureBgThread();
+    const uint64_t now = GetTickCount64();
     {
         std::lock_guard<std::mutex> lk(g_bgMutex);
-        for (auto& j : jobs) g_bgJobs.push_back(std::move(j));
+        for (auto& j : jobs) {
+            // 已入队的同 (组,槽) 不重复（重复实例化白耗 2-4s 与内存）。
+            bool dup = false;
+            for (const auto& q : g_bgJobs) {
+                if (q.group == j.group && q.slot == j.slot) { dup = true; break; }
+            }
+            if (dup) continue;
+            g_grpWaitAt[j.group].store(now, std::memory_order_release);
+            g_bgJobs.push_back(std::move(j));
+        }
     }
     g_bgCv.notify_one();
+}
+
+// 该 (组,槽) 是否已在队列里或正在后台装载（去重用）。
+static bool BgJobQueued(int g, int s) {
+    std::lock_guard<std::mutex> lk(g_bgMutex);
+    for (const auto& q : g_bgJobs) {
+        if (q.group == g && q.slot == s) return true;
+    }
+    return false;
+}
+static bool BgJobInFlight(int g, int s) {
+    if (g_bgActiveGroup.load(std::memory_order_acquire) == g &&
+        g_bgActiveSlot.load(std::memory_order_acquire) == s)
+        return true;
+    return BgJobQueued(g, s);
 }
 
 // 按路补挂（2026-11-07）：某一路的引擎刚建好时，把镜像里已挂载的槽位
 // 在该组实例化（后台线程，不阻塞开路命令；加载期间该路链保持关闭=直通）。
 static bool EnqueueGroupLoads(int g) {
     if (g < 0 || g >= PumpCtx::kMaxGroups || !PluginEngineAt(g)) return false;
+    // 不吃插件链的路没有可等的东西：不排队 = 该路瞬时就绪（无加载态）。
+    if (!GroupWantsPluginChain(g)) return false;
     std::vector<PendingGroupLoad> jobs;
     const uint32_t gen = g_bgGen.load(std::memory_order_acquire);
     for (int s = 0; s < auraplugin::kSlots; ++s) {
         if (g_grpLoaded[g].load() & (1u << s)) continue;
+        // 已在队列/正在装：不要再排（否则开关重复点击会二次实例化）。
+        if (BgJobInFlight(g, s)) continue;
         char p[512] = {0};
         char id[128] = {0};
         int stage = 3, bypass = 1, ch = 0xFF;
@@ -525,6 +637,9 @@ static bool EnqueueGroupLoads(int g) {
         std::lock_guard<std::mutex> lk(g_bgMutex);
         for (auto& j : jobs) g_bgJobs.push_back(std::move(j));
     }
+    // 记录"期望装载时刻"：超过 kRouteSettleMs 仍不集齐 → routeState 收敛为
+    // 失败（直通），UI 的加载态绝不无限挂起。
+    g_grpWaitAt[g].store(GetTickCount64(), std::memory_order_release);
     g_bgCv.notify_one();
     return true;
 }
@@ -724,6 +839,7 @@ void DestroyEngines() {
         if (g_b.ctx.eng[g] && g_b.ctx.destroy) g_b.ctx.destroy(g_b.ctx.eng[g]);
         g_b.ctx.eng[g] = nullptr;
         g_grpLoaded[g].store(0);
+        ClearGroupLoadFlags(g);
         // P3：句柄销毁后门控状态一并作废（避免下次 start 沿用旧 gated）。
         g_b.ctx.gate[g].Reset();
         g_b.ctx.gate[g].enabled = false;
@@ -756,10 +872,25 @@ void ConfigureGates(long long sr) {
 // 调用点必须在 MirrorReplay/StrMirrorReplay 之后；本函数只做插件实例化。
 void ReplayPluginsForEnabledGroups() {
     if (!g_pluginFns.Ready()) return;
+    // 逐槽回放并按槽更新"该组已加载位图"。旧实现只调 Replay 计数、不落位，
+    // 于是 CHANGE 重建后每组都永远"未集齐"：routeState 恒为 1（UI 永久加载中）
+    // 且插件链永不开启（插件静默失效）。这是 2026-11-07 真机反馈的根因之一。
     for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
-        if (!g_b.ctx.eng[g] || !GroupNeedsPlugin(g)) continue;
-        int ok = 0, failed = 0;
-        g_pluginMirror.Replay(g_b.ctx.eng[g], g_pluginFns, &ok, &failed);
+        void* e = g_b.ctx.eng[g];
+        if (!e || !GroupNeedsPlugin(g)) continue;
+        for (int s = 0; s < auraplugin::kSlots; ++s) {
+            bool mounted = false;
+            const bool ok = g_pluginMirror.ReplaySlot(e, g_pluginFns, s, &mounted);
+            if (!mounted) continue;
+            if (ok) {
+                g_grpLoaded[g].fetch_or(1u << s, std::memory_order_acq_rel);
+                g_grpFailed[g].fetch_and(~(1u << s), std::memory_order_acq_rel);
+            } else {
+                // 回放失败也是确定终态：记失败位，UI 显示"失败·直通"，不转圈。
+                g_grpFailed[g].fetch_or(1u << s, std::memory_order_acq_rel);
+            }
+        }
+        g_grpWaitAt[g].store(GetTickCount64(), std::memory_order_release);
     }
     // 新引擎出厂 = 链全开；按路掩码重放（未勾选组重新关闭）。
     // Z12：观测基准重算 + 保护态作废（热组/句柄已变）；守卫线程需在场
@@ -814,12 +945,24 @@ static bool CreateGroupEngineLocked(int g, float sr) {
         EnqueueGroupLoads(g);
         return true;
     }
-    if (!g_b.create) return false;
+    if (!g_b.create) {
+        g_grpCreateFail[g].store(true, std::memory_order_release);
+        return false;
+    }
     auto setP = g_b.eng
                    ? (FnEngSetParam)GetProcAddress(g_b.eng, "auradsp_set_param")
                    : nullptr;
     void* e = g_b.create(sr, 2048);
-    if (!e) return false;
+    if (!e) {
+        // 建引擎失败也必须是确定终态：否则该路 mask 位在、句柄永空，
+        // routeState 会永远停在 1（UI 无限转圈）。收敛为"失败·直通"。
+        g_grpCreateFail[g].store(true, std::memory_order_release);
+        return false;
+    }
+    // 全新句柄：无已装插件、无失败记录；装载等待窗口从此刻开始计（超时兜底）。
+    g_grpCreateFail[g].store(false, std::memory_order_release);
+    g_grpFailed[g].store(0, std::memory_order_release);
+    g_grpWaitAt[g].store(GetTickCount64(), std::memory_order_release);
     // 1) 效果器：镜像里的启用状态逐条回放；关闭的效果器在引擎内直通。
     MirrorReplayOne(e, setP);
     // 2) 脚本：先编译代码；编译成功后才按"已应用"状态启用。
@@ -854,6 +997,7 @@ static void DestroyGroupEngineLocked(int g) {
     void* e = InterlockedExchangePointer((PVOID volatile*)&g_b.ctx.eng[g],
                                          nullptr);
     g_grpLoaded[g].store(0);
+    ClearGroupLoadFlags(g);
     g_b.ctx.gate[g].Reset();
     g_b.ctx.gate[g].enabled = false;
     g_b.ctx.idleSamples[g] = 0;
@@ -911,6 +1055,8 @@ static bool ProcessGroupLifecycle(int onlyGroup) {
                                              ? g_b.ctx.sr
                                              : g_b.gateSr > 0 ? g_b.gateSr
                                                               : 48000);
+                // 失败已在 CreateGroupEngineLocked 内置 createFail 标记：
+                // routeState 会收敛为"失败·直通"，不会永远停"创建中"。
                 CreateGroupEngineLocked(g, sr);
                 touched = true;
             }
@@ -951,6 +1097,14 @@ void RebuildEngines(int groups, float sr) {
         for (int g = 0; g < want; ++g) {
             if (((bm >> g) & 1) == 0) continue;
             g_b.ctx.eng[g] = g_b.create(sr, 2048);
+            // 新句柄的装载等待窗口从此开始：超时（kRouteSettleMs）未集齐即
+            // 判失败，routeState 不会永远停在"加载中"。
+            if (g_b.ctx.eng[g]) {
+                ClearGroupLoadFlags(g);
+                g_grpWaitAt[g].store(GetTickCount64(), std::memory_order_release);
+            } else {
+                g_grpCreateFail[g].store(true, std::memory_order_release);
+            }
         }
         // nEng 保留为"版型槽数"（0..want），稀疏句柄由各调用点跳过 nullptr。
         g_b.ctx.nEng = want;
@@ -1325,6 +1479,13 @@ int vb_start(const char* engine_dll, const char* params_json) {
             for (int g = 0; g < want; ++g) {
                 if (((bm0 >> g) & 1) == 0) continue;
                 g_b.ctx.eng[g] = create(sr0, 2048);
+                if (g_b.ctx.eng[g]) {
+                    ClearGroupLoadFlags(g);
+                    g_grpWaitAt[g].store(GetTickCount64(),
+                                         std::memory_order_release);
+                } else {
+                    g_grpCreateFail[g].store(true, std::memory_order_release);
+                }
             }
             // nEng = 版型槽数（稀疏句柄由调用点跳过 nullptr）。
             g_b.ctx.nEng = want;
@@ -1488,18 +1649,41 @@ int vb_status(char* out, int cap) {
         }
     }
     const int gated = (gateGroups > 0 && gateGated == gateGroups) ? 1 : 0;
-    // 按路状态（2026-11-07）：0=路关闭/无句柄直通，1=已在建/插件装载中
-    // （该路直通），2=就绪（DSP 处理中）。UI 据此显示加载中，避免"看起来
-    // 在处理其实直通"的误解。
+    // 按路状态（2026-11-07）：0=路关闭(直通)，1=加载中(直通)，2=就绪(处理中)，
+    // 3=失败/超时(直通)。四态都必须能收敛：1 只允许出现在"还可能在等"的
+    // 窗口内（GroupRouteSettled=false），集齐/失败/建引擎失败/20s 超时一律
+    // 落到 2 或 3 —— UI 的加载动画只由 1 驱动，绝不允许无限挂住。
     char routeState[64] = {0};
     {
         int st[8] = {0};
         const int bm = InterlockedCompareExchange(&g_b.ctx.busMask, 0, 0) & 0xFF;
+        const uint64_t now = GetTickCount64();
+        const uint32_t want = g_pluginMirror.LoadedMask();
         for (int g = 0; g < 8; ++g) {
-            if (((bm >> g) & 1) == 0) {
-                st[g] = 0;
+            if (((bm >> g) & 1) == 0 || g >= g_b.groupCount) {
+                st[g] = 0;  // 路关闭 / 版型无此槽位：不存在该路
+                continue;
+            }
+            if (g_grpCreateFail[g].load(std::memory_order_acquire)) {
+                st[g] = 3;  // 建引擎失败：不会再有句柄，直接终态
+                continue;
+            }
+            if (!g_b.ctx.eng[g]) {
+                // 句柄由 ProcessGroupLifecycle 延迟创建：没有插件可等（want=0）
+                // 时不该显示加载中，就绪与否只取决于句柄何时发布；有插件可等
+                // 则给 20s 窗口，超时按失败收敛。
+                if (want == 0) st[g] = 2;
+                else st[g] = GroupRouteSettled(g, now) ? 3 : 1;
+                continue;
+            }
+            if (GroupHasLoadFailure(g)) {
+                st[g] = 3;  // 已有槽装载失败：链保持关闭，终态“失败·直通”
+                continue;
+            }
+            if (PluginsReadyForGroup(g)) {
+                st[g] = 2;  // 集齐（含“不该吃链”→ 瞬时就绪）
             } else {
-                st[g] = (g_b.ctx.eng[g] && PluginsReadyForGroup(g)) ? 2 : 1;
+                st[g] = GroupRouteSettled(g, now) ? 3 : 1;
             }
         }
         snprintf(routeState, sizeof(routeState), "[%d,%d,%d,%d,%d,%d,%d,%d]",
@@ -1714,8 +1898,13 @@ int vb_set_bus_mask(int mask) {
             // 反向操作以最后一次命令为准：先清掉相反方向的待办。
             if (closing) {
                 g_grpCreate[g].store(false);
+                // 关路即释放：该路装载进度/失败/超时记录一并作废。
+                ClearGroupLoadFlags(g);
             } else {
                 g_grpKill[g].store(false);
+                // 开路：重置终态标记并起算装载等待窗口（超时兜底从此刻计）。
+                ClearGroupLoadFlags(g);
+                g_grpWaitAt[g].store(GetTickCount64(), std::memory_order_release);
             }
             if (!eng.owns_lock()) {
                 if (closing) {
@@ -1742,8 +1931,7 @@ int vb_set_bus_mask(int mask) {
     // 其余在用路因漏槽而永远凑不齐（链一直关闭）。
     bool queued = false;
     for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
-        if (g_b.ctx.eng[g] && GroupNeedsPlugin(g) && EnqueueGroupLoads(g))
-            queued = true;
+        if (g_b.ctx.eng[g] && EnqueueGroupLoads(g)) queued = true;
     }
     if (suspend && !queued) EndLoadSuspensionIfIdle();
     // 让新增组的链按"插件是否就绪"重新落位；去掉的组已无句柄。
@@ -1805,10 +1993,14 @@ int vb_plugin_slot_load(int slot, const char* path, const char* plugin_id) {
     }
     SetThreadPriority(thr, oldPrio);
     if (rc0 != 1) {   // 首个在用组失败 = 整体失败（镜像未被改写）
+        // 同步组失败记成终态：否则该路永远"未集齐"，routeState 恒为 1。
+        g_grpFailed[syncG].fetch_or(1u << slot, std::memory_order_acq_rel);
         if (suspendSync) EndLoadSuspensionIfIdle();
         return 0;
     }
+    g_grpFailed[syncG].fetch_and(~(1u << slot), std::memory_order_acq_rel);
     g_grpLoaded[syncG].fetch_or(1u << slot);
+    g_grpWaitAt[syncG].store(GetTickCount64(), std::memory_order_release);
     // 新加载：该槽的挂起预设作废（旧请求属于上一次挂载）。
     {
         std::lock_guard<std::mutex> lk(g_pendMutex);
@@ -1862,6 +2054,8 @@ int vb_plugin_slot_unload(int slot) {
     }
     for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
         g_grpLoaded[g].fetch_and(~(1u << slot));
+        // 该槽已卸载：其失败/超时记录一并清掉（不再计入该路的终态判定）。
+        g_grpFailed[g].fetch_and(~(1u << slot), std::memory_order_acq_rel);
     }
     {
         std::lock_guard<std::mutex> lk(g_pendMutex);
@@ -1872,8 +2066,7 @@ int vb_plugin_slot_unload(int slot) {
     // 的槽位会让该组永远凑不齐（链一直关闭、该路一直直通）。
     bool queued = false;
     for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
-        if (g_b.ctx.eng[g] && GroupNeedsPlugin(g) && EnqueueGroupLoads(g))
-            queued = true;
+        if (g_b.ctx.eng[g] && EnqueueGroupLoads(g)) queued = true;
     }
     // 队列里可能还有被代际作废的补挂 job——worker 逐个取走后才算排空；
     // 若此刻已空则立即恢复用户/保护掩码。

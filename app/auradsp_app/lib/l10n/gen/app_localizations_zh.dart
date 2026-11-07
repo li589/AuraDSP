@@ -3055,6 +3055,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get vbRouteReleasing => '释放中 · 直通';
 
   @override
+  String get vbRouteFailed => '失败 · 直通';
+
+  @override
+  String get vbRouteNotApplied => '未生效 · 直通';
+
+  @override
   String get plugUnloading => '卸载中…';
 
   @override
