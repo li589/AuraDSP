@@ -505,7 +505,12 @@ void PluginHostManager::setChannelHint(int channels) {
     if (m_remoteMode && m_remoteClient) {
         m_remoteClient->setChannelHint(static_cast<uint32_t>(channels));
     }
-    if (m_remoteClientX86) {
+    /* 2026-11-07：x86 宿主惰性启动——格式提示只在宿主已拉起时转发。
+     * 旧实现在每次 prepare/setChannelHint 都走 IPC，而 IPC 会 ensureHost，
+     * 结果是"没挂任何 32 位插件也先拉起一个 plugin_host_x86"（VB 8 总线
+     * + 本地句柄 = 9 个宿主）。真正的 32 位挂载路径会在 load 前重发提示
+     * （见 loadPluginSlot 的 setChannelHint），故此处跳过不会丢格式。 */
+    if (m_remoteClientX86 && m_remoteClientX86->alive()) {
         m_remoteClientX86->setChannelHint(static_cast<uint32_t>(channels));
     }
     if (m_remoteMode && m_remoteClient) {

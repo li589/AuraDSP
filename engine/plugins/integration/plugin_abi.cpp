@@ -94,7 +94,8 @@ int auradsp_plugin_slot_load(auradsp_handle h, int slot, const char* path, const
     std::string id = plugin_id ? plugin_id : "";
     /* 控制线程先补建 PDC 延迟线，再发布插件的 active 状态；音频线程不分配。
      * 分配失败（OOM）时关闭 PDC：插件仍可加载，RT 走直通/无补偿，不崩。 */
-    if (h->plugin.chain && !h->plugin.chain->ensureDelayLines()) {
+    if (h->plugin.chain &&
+        !h->plugin.chain->ensureDelayLines((size_t)slot)) {
         h->plugin.chain->setPdc(false);
     }
     bool ok = host->loadPluginSlot((size_t)slot, path, id, h->sample_rate,
@@ -116,7 +117,8 @@ int auradsp_plugin_slot_load_async(auradsp_handle h, int slot, const char* path,
         slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
     std::string p = path ? path : "";
     std::string id = plugin_id ? plugin_id : "";
-    if (h->plugin.chain && !h->plugin.chain->ensureDelayLines()) {
+    if (h->plugin.chain &&
+        !h->plugin.chain->ensureDelayLines((size_t)slot)) {
         h->plugin.chain->setPdc(false);
     }
     return host->submitSlotLoadAsync((size_t)slot, p, id,

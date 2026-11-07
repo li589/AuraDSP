@@ -182,6 +182,20 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     return null;
   }
 
+  /// 桥接管音频后，本地句柄不再处理音频：它上面残留的插件实例（从非桥
+  /// 模式切过来时加载的）是纯重复内存——VB 8 路时是第 9 份，重插件下可
+  /// 达上百 MB。这里静默卸载本地各槽，pluginMirror 保留，桥停时由
+  /// [syncPluginMirrorToLocal] 按镜像重建。**不发 pluginSlotUnloaded 事件**，
+  /// 否则 UI 会在桥上还挂着的插件突然显示为已卸载。
+  void unloadLocalSlotsWhileBridged() {
+    final l = lib;
+    final h = handle;
+    if (l == null || h == null) return;
+    for (var i = 0; i < _kPluginSlots; ++i) {
+      AuraDspLib.pluginSlotUnloadWrap(l, h, i);
+    }
+  }
+
   /// 桥 stop 后把镜像同步回本地引擎（否则本地 handle 还挂着旧插件，
   /// 用户切回 WASAPI 时看到的与刚才在桥里编辑的不是同一套）。
   Future<void> syncPluginMirrorToLocal(
@@ -361,6 +375,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     source = null;
     bridgeManager.switchTo('vm', vb!);
     bridgeManager.replayPluginMirror(vb!, pluginMirror, send);
+    unloadLocalSlotsWhileBridged();
     bridgeVizNullLogged = false;
     bridgeNoCbLogged = false;
     bridgeVizOkLogged = false;
@@ -509,6 +524,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     asioBufSize = bufSize;
     asioOutPair = outPair;
     bridgeManager.replayPluginMirror(ab!, pluginMirror, send);
+    unloadLocalSlotsWhileBridged();
     bridgeVizNullLogged = false;
     bridgeNoCbLogged = false;
     bridgeVizOkLogged = false;
@@ -612,6 +628,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     bridgeManager.switchTo('vaio', vaio!);
     vaioOutputEndpointInUse = outputEndpointSubstr;
     bridgeManager.replayPluginMirror(vaio!, pluginMirror, send);
+    unloadLocalSlotsWhileBridged();
     bridgeVizNullLogged = false;
     bridgeNoCbLogged = false;
     bridgeVizOkLogged = false;

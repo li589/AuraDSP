@@ -21,11 +21,12 @@ public:
     bool prepare(double sampleRate, uint32_t maxBlockSize);
     void reset();
 
-    /* 延迟线按需分配（控制线程调用）。无插件时整条链不占 PDC 缓冲：
-     * 4 槽 × 8 通道 × 65536 采样 ≈ 8.4MB/handle。必须在插件被发布为
+    /* 延迟线按需分配（控制线程调用）。只准备**将要挂载的那个槽**：
+     * 每槽 8 通道 × 65536 采样 ≈ 2.1MB，旧实现一次把 4 槽全备好
+     * （8.4MB/handle），单插件会话白占 6.3MB×9。必须在插件被发布为
      * active 之前完成分配；音频线程自身不触发分配，且 delay line 空指针
      * / 未 prepare 路径已是直通（见 MultiDelayLine::process）。 */
-    bool ensureDelayLines() noexcept;
+    bool ensureDelayLines(size_t slot) noexcept;
 
     /* E16（2026-10-22）：平面 4 参 process() 已删除。该入口为 Phase 3 重构前
      * 遗留路径，全库无生产调用方（引擎链经 plugin_chain_adapter 只走
@@ -71,7 +72,9 @@ private:
 
     std::atomic<bool> m_pdcEnabled{false};
     std::atomic<bool> m_chainEnabled{true};
-    std::atomic<bool> m_delaysReady{false};
+    /* 位图：第 s 位 = 该槽的 PDC 延迟线已 prepare（控制线程写，音频线程
+     * 只在 process 里读写缓冲内容，不读该位）。 */
+    std::atomic<uint32_t> m_delaysReadyMask{0};
     /* E16 后平面 process() 已删除，立体声 DelayLine 无任何读路径；它只会在
      * 插件态随 ensureDelayLines 被 prepare，白占 2.0MB（4 槽 × 0.5MB）。 */
     std::array<MultiDelayLine, PluginHostManager::kMaxPluginSlots> m_multiDelayLines;
