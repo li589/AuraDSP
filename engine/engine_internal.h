@@ -142,9 +142,10 @@ struct Params {
     std::atomic<float>    post_gain_ch[8];
     /* latency_mode 已由 ADR-006 移除：延迟改为纯测量，不再有档位准入。 */
     std::atomic<int32_t>  channels_mode{0};     /* 0=stereo（Phase A，ADR-003） */
-    /* [channels.upmix_fill] 矩阵上混回填策略：1=现状（无条件铺满未使用
-     * 声道），0=仅回填「对应下混输入声道本块非严格零」的声道。 */
-    std::atomic<int32_t>  upmix_fill{1};
+    /* [channels.upmix_fill] 矩阵上混回填策略：1=无条件铺满未使用声道，
+     * 0=仅回填「对应下混输入声道本块非严格零」的声道。
+     * 出厂默认 0（2026-11-07）：未使用声道保持静默，用户需要时显式打开。 */
+    std::atomic<int32_t>  upmix_fill{0};
     /* WP0 脚手架：channels.count 的纯状态载体（0=自动/1=手动，同 bass.mode
      * 模式，不参与 DSP 计算，仅保证 UI 选择可回读）。 */
     std::atomic<int32_t>  channels_count_mode{0};

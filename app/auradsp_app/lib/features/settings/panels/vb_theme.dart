@@ -77,6 +77,12 @@ class _VbBuses extends StatelessWidget {
             .toList() ??
         const <double>[];
     final live = (info['grpLive'] as num?)?.toInt() ?? 0;
+    // 按路状态（桥 status.routeState）：0=路关闭(直通)，1=加载中(该路仍直通)，
+    // 2=就绪(DSP 处理中)。加载中必须显式可见，不能让人以为已在处理。
+    final routeStates = (info['routeState'] as List?)
+            ?.map((e) => (e as num?)?.toInt() ?? 0)
+            .toList() ??
+        const <int>[];
     final n = groups.clamp(0, names.length);
     if (n <= 0) return const SizedBox.shrink();
     return Padding(
@@ -95,6 +101,13 @@ class _VbBuses extends StatelessWidget {
               onToggle: (v) => model.setVbBus(g, v),
               pluginOn: (model.vbPluginGroupMask & (1 << g)) != 0,
               onPluginToggle: (v) => model.setVbPluginGroup(g, v),
+              state: g < routeStates.length
+                  ? routeStates[g]
+                  : ((model.vbBusMask & (1 << g)) != 0 ? 2 : 0),
+              // 异步启停的本地在途态：点击即置位（比 1s 心跳更快），
+              // 由心跳 routeState 收尾后解除。
+              busy: model.vbRouteBusy(g),
+              pendingOn: model.vbRoutePendingOn(g),
             ),
           const SizedBox(height: AuraSpace.sm),
           _VbProtectRow(model: model),
@@ -233,6 +246,12 @@ class _VbBusRow extends StatelessWidget {
   /// hover 气泡说明语义；勾选 = 挂载的插件处理该路。
   final bool pluginOn;
   final ValueChanged<bool> onPluginToggle;
+  /// 桥上报的按路状态：0=关(直通)，1=加载中(仍直通)，2=就绪。
+  final int state;
+  /// 异步启停在途（本地立即置位，心跳收尾）：true=建/挂载中，false=释放中。
+  /// 在途期间该路**始终直通**（不断声），开关禁点防命令堆积。
+  final bool busy;
+  final bool pendingOn;
   const _VbBusRow(
       {required this.name,
       required this.peak,
@@ -240,7 +259,10 @@ class _VbBusRow extends StatelessWidget {
       required this.on,
       required this.onToggle,
       required this.pluginOn,
-      required this.onPluginToggle});
+      required this.onPluginToggle,
+      this.state = 2,
+      this.busy = false,
+      this.pendingOn = true});
 
   @override
   Widget build(BuildContext context) {
@@ -256,11 +278,31 @@ class _VbBusRow extends StatelessWidget {
                 style: monoOf(p, size: 12,
                     color: live ? p.text : p.textDim)),
           ),
+          // 加载中：该路引擎/插件尚在装载，音频走直通。明确标注，避免
+          // "开关已开 = 已在处理"的误判（重插件 2-4s，脚本还要编译）。
+          // 心跳约 1s 一拍，刚打开时上报的还是旧状态（0），所以只要「开且
+          // 未就绪」都标注，不依赖严格的 state==1。
+          // 在途（异步启停）：小面积加载/释放动画 + "直通"语义标注，
+          // 让人明确"在加载但没断声"。动画只重绘角标（RepaintBoundary），
+          // 不整行/整卡跟帧。心跳约 1s 一拍，所以本地 in-flight 优先显示。
+          if (busy) ...[
+            const SizedBox(width: 6),
+            _RouteBusyBadge(
+              label: pendingOn ? l.vbRouteLoading : l.vbRouteReleasing,
+              color: p.accent,
+            ),
+          ] else if (on && state != 2) ...[
+            const SizedBox(width: 4),
+            Text(l.plugLoading,
+                style: monoOf(p, size: 10, color: p.accent)),
+          ],
           Expanded(child: _LedMeter(peak: live ? peak : 0.0, on: on)),
           const SizedBox(width: AuraSpace.sm),
           // 按路插件处理复选框（DSP 开关左侧）：视觉密度与 _MiniToggle 对齐。
-          // 通道处理开关（右侧）关闭时整组直通、插件不跑——复选框灰显但
-          // **保留勾选状态**（插件实例常驻，重开开关立即恢复，无重新加载）。
+          // 通道处理开关（右侧）关闭时整组直通、插件不跑；复选框灰显但保留
+          // 勾选状态（这是"该路插件是否参与处理"的用户意图）。注意：路开关
+          // 才是实例生死——关路会卸载该路实例与效果器/脚本内存，重开时整套
+          // 重新加载（重插件 2-4s，期间该路直通并显示"加载中"）。
           Tooltip(
             message: on ? l.vbPluginTooltip : l.vbPluginLockedHint,
             triggerMode: TooltipTriggerMode.tap,
@@ -277,7 +319,7 @@ class _VbBusRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AuraSpace.xs),
-          _MiniToggle(on: on, onToggle: onToggle),
+          _MiniToggle(on: on, onToggle: onToggle, enabled: !busy),
         ],
       ),
     );
@@ -340,34 +382,67 @@ class _LedMeter extends StatelessWidget {
 class _MiniToggle extends StatelessWidget {
   final bool on;
   final ValueChanged<bool> onToggle;
-  const _MiniToggle({required this.on, required this.onToggle});
+  /// 在途禁点：异步加载/释放期间不接受重复点击（避免命令堆积）。
+  final bool enabled;
+  const _MiniToggle(
+      {required this.on, required this.onToggle, this.enabled = true});
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     return GestureDetector(
-      onTap: () => onToggle(!on),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
-        width: 30,
-        height: 18,
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(9),
-          color: on ? p.accent : p.panelRaised,
-          border: Border.all(
-              color: on ? p.accent : p.hairline, width: 1),
-        ),
-        alignment: on ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          width: 12,
-          height: 12,
+      onTap: enabled ? () => onToggle(!on) : null,
+      child: Opacity(
+        opacity: enabled ? 1.0 : 0.55,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          width: 30,
+          height: 18,
+          padding: const EdgeInsets.all(2),
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: on ? p.accentContrast : p.textDim,
+            borderRadius: BorderRadius.circular(9),
+            color: on ? p.accent : p.panelRaised,
+            border: Border.all(
+                color: on ? p.accent : p.hairline, width: 1),
+          ),
+          alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: on ? p.accentContrast : p.textDim,
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 路开关的"在途"角标：微型进度环 + 文字（如「加载中 · 直通」）。
+/// 只在这里重绘，且尺寸固定（不引起行高/列宽跳动）。
+class _RouteBusyBadge extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _RouteBusyBadge({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return RepaintBoundary(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 10,
+            height: 10,
+            child: CircularProgressIndicator(strokeWidth: 1.6, color: color),
+          ),
+          const SizedBox(width: 4),
+          Text(label, style: monoOf(p, size: 10, color: color)),
+        ],
       ),
     );
   }

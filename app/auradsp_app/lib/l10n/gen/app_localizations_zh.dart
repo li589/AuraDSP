@@ -3049,6 +3049,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugLoading => '加载中…';
 
   @override
+  String get vbRouteLoading => '加载中 · 直通';
+
+  @override
+  String get vbRouteReleasing => '释放中 · 直通';
+
+  @override
   String get plugUnloading => '卸载中…';
 
   @override

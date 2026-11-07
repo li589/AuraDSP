@@ -253,26 +253,30 @@ check(abs(dst[0 * CH + 4]) < 1e-6, "仅 SR 有信号时 SL 严格静音 (左环�
 lib.auradsp_destroy(h)
 
 # ---------------------------------------------------------------- [4b] upmix_fill
-print("\n=== [4b] channels.upmix_fill 源活动门控（默认保持现状） ===")
+print("\n=== [4b] channels.upmix_fill 源活动门控（出厂默认 0） ===")
 h = new_engine()
 set_i32(h, "channels.count", 8)
 set_i32(h, "channels.mode", 0)
 rc, v = get_i32(h, "channels.upmix_fill")
-check(rc == 0 and v == 1, f"channels.upmix_fill 默认 1（现状铺满）(got {v})")
-check(set_i32(h, "channels.upmix_fill", 0) == 0, "channels.upmix_fill=0 接受")
-check(get_i32(h, "channels.upmix_fill")[1] == 0,
-      "channels.upmix_fill 回读 0")
+check(rc == 0 and v == 0, f"channels.upmix_fill 出厂默认 0（不填充）(got {v})")
+check(set_i32(h, "channels.upmix_fill", 1) == 0, "channels.upmix_fill=1 接受")
+check(get_i32(h, "channels.upmix_fill")[1] == 1,
+      "channels.upmix_fill 回读 1（可显式打开铺满）")
 lib.auradsp_destroy(h)
 
 F3 = 256
 
 
 def run_matrix8(fill, active_ch):
-    """8ch 矩阵模式跑一块；active_ch 指定哪些输入声道有信号。"""
+    """8ch 矩阵模式跑一块；active_ch 指定哪些输入声道有信号。
+
+    fill=None 表示不显式设置，使用引擎出厂默认（0）。
+    """
     e = new_engine()
     set_i32(e, "channels.count", 8)
     set_i32(e, "channels.mode", 0)
-    set_i32(e, "channels.upmix_fill", fill)
+    if fill is not None:
+        set_i32(e, "channels.upmix_fill", fill)
     s, d, sp_, dp_ = process(e, F3, 8)
     for i in range(F3):
         v = 0.25 * math.sin(2 * math.pi * 440.0 * i / 48000.0)
@@ -282,19 +286,25 @@ def run_matrix8(fill, active_ch):
     return e, d
 
 
-# 立体声源（仅 FL/FR 有信号）：门控关 → C/SL/SR/BL/BR 逐样本为 0
+# 立体声源（仅 FL/FR 有信号）
 e0, d_off = run_matrix8(0, {0, 1})
 e1, d_up = run_matrix8(1, {0, 1})
 bad = max(abs(d_off[i * 8 + c]) for i in range(F3) for c in (2, 4, 5, 6, 7))
 check(bad < 1e-6,
       f"upmix_fill=0 时立体声源 C/SL/SR/BL/BR 逐样本为 0 (max={bad:.2e})")
+# 出厂默认（不显式设置）即不填充：立体声 8ch 下 C/SL/SR/BL/BR 必须为 0
+e_def, d_def = run_matrix8(None, {0, 1})
+bad_def = max(abs(d_def[i * 8 + c]) for i in range(F3) for c in (2, 4, 5, 6, 7))
+check(bad_def < 1e-6,
+      f"出厂默认（未设置）时 C/SL/SR/BL/BR 逐样本为 0 (max={bad_def:.2e})")
+lib.auradsp_destroy(e_def)
 # FL/FR 必须与现状（fill=1）逐样本一致
 dev = max(abs(d_up[i * 8 + c] - d_off[i * 8 + c])
           for i in range(F3) for c in (0, 1))
 check(dev < 1e-6, f"upmix_fill 开关不影响 FL/FR (max dev={dev:.2e})")
-# 现状（fill=1）仍必须铺开（默认行为回归）
+# 显式 fill=1 仍必须铺开
 c_rms = math.sqrt(sum(d_up[i * 8 + 2] ** 2 for i in range(F3)) / F3)
-check(c_rms > 1e-4, f"upmix_fill=1 仍铺满 C (rms={c_rms:.4f})")
+check(c_rms > 1e-4, f"显式 upmix_fill=1 仍铺满 C (rms={c_rms:.4f})")
 lib.auradsp_destroy(e0)
 lib.auradsp_destroy(e1)
 

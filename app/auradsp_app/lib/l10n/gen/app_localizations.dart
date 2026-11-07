@@ -5824,6 +5824,18 @@ abstract class AppLocalizations {
   /// **'加载中…'**
   String get plugLoading;
 
+  /// No description provided for @vbRouteLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载中 · 直通'**
+  String get vbRouteLoading;
+
+  /// No description provided for @vbRouteReleasing.
+  ///
+  /// In zh, this message translates to:
+  /// **'释放中 · 直通'**
+  String get vbRouteReleasing;
+
   /// No description provided for @plugUnloading.
   ///
   /// In zh, this message translates to:

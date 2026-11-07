@@ -192,8 +192,9 @@ class AppModel extends ChangeNotifier {
       inputBalanceR = ParamDefaults.inputBalanceR;
   int reverbPreset = -1;
   int channelsMode = 0;
-  // [channels.upmix_fill] 矩阵模式下是否将立体声铺满未使用声道（1=现状）。
-  int channelsUpmixFill = 1;
+  // [channels.upmix_fill] 矩阵模式下是否将立体声铺满未使用声道。
+  // 2026-11-07 出厂默认改 0：未使用声道保持静默，需要时用户显式打开。
+  int channelsUpmixFill = 0;
   int channelsCount = 2;
   int channelsCountMode = 0; // 0=自动, 1=手动
   // 音频处理模式 id（AudioModes.optionsFor(currentOs) 取值；'auto' 表跟随当前引擎）。
@@ -241,9 +242,15 @@ class AppModel extends ChangeNotifier {
     scheduleAutoSave();
   }
   // VB 总线掩码（bit g=第 g 条总线进 DSP；落盘，进桥时下发；CHANGE 重建不丢）。
-  int vbBusMask = 0xFF;
+  // 出厂只开 A1/A2：未开的路不建引擎句柄（按需开路再建）。
+  int vbBusMask = 0x03;
   // 按路插件处理掩码（bit g=组 g 总线吃插件链；落盘，进桥时下发）。
-  int vbPluginGroupMask = 0xFF;
+  int vbPluginGroupMask = 0x03;
+  // 路开关在途状态（2026-11-07 异步化）：g → 目标 on/off。
+  // 点击即入表（UI 立刻显示加载/释放动画并暂禁重复点击），
+  // 心跳 routeState 到达目标（开=2 / 关=0）后清除；超时兜底防永久锁死。
+  final Map<int, bool> vbRoutePending = <int, bool>{};
+  final Map<int, int> vbRoutePendingAt = <int, int>{};
   // v2 按路编辑器目标总线（会话级，不落盘）。
   // 取值：kVbRouteUnselected(-2)=未选择（初值；v3.3 已撤除「全部」，
   // 本值不承载任何合法路语义）；0-7=具体路；-1=无有效选中路。
@@ -1038,11 +1045,11 @@ class AppModel extends ChangeNotifier {
       checkAsioDriverStatus();
       checkApoStatus();
     }
-    // VB 总线掩码：落盘值 0（=全关，无意义）回全开；其余取低 8 bit。
-    final m = config.vbBusMask & 0xFF;
-    vbBusMask = m == 0 ? 0xFF : m;
+    // VB 总线掩码：0 现在是合法状态（用户显式全关），不再回填全开；
+    // 键缺失时 fromJson 已给出厂默认 0x03（A1/A2）。
+    vbBusMask = config.vbBusMask & 0xFF;
     // 按路插件掩码：0（全关）是用户显式选择，直接取用；键缺失时
-    // fromJson 已给默认 0xFF。
+    // fromJson 已给出厂默认 0x03（A1/A2）。
     vbPluginGroupMask = config.vbPluginGroupMask & 0xFF;
     /* C4：按真实采样率重建 EQ 网格。必须放在 config 加载之后 ——
      * 字段初始化器早于构造函数体，那时 config 还是默认值。

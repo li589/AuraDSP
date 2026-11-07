@@ -1425,6 +1425,8 @@
   "plugRouteLocked": "已锁定",
   "plugChStereoOnly": "VB 模式每通道仅立体声（L/R）进入插件链",
   "plugLoading": "加载中…",
+  "vbRouteLoading": "加载中 · 直通",
+  "vbRouteReleasing": "释放中 · 直通",
   "plugUnloading": "卸载中…",
   "plugStateActive": "生效",
   "plugStateBypassed": "旁路",

@@ -32,19 +32,80 @@ extension VbAsioState on AppModel {
   // ---- Voicemeeter 桥 ----
 
   /// VB 总线开关：落盘 + 通知；桥在跑则即时下发（mask 活在 ctx，CHANGE 重建不丢）。
+  ///
+  /// 异步语义（2026-11-07）：界面不等原生返回。开路要建引擎+回放效果器/脚本+
+  /// 后台挂插件（重插件 2-4s），关路要逐槽旁路再销毁；底层结构锁在后台补挂
+  /// 期间可能被持有 2-4s。这里只发命令 + 入"在途表"，由心跳 routeState 收尾，
+  /// 动画与禁点由 [vbRouteBusy] 驱动，绝不阻塞 UI 心跳。
   void setVbBus(int group, bool on) {
     if (group < 0 || group > 7) return;
+    // 在途期间拒绝重复点击/重复命令（用户明确：加载期不允许再点、不重复入队）。
+    if (vbRouteBusy(group)) return;
     final next = on ? (vbBusMask | (1 << group)) : (vbBusMask & ~(1 << group));
     if (next == vbBusMask) return;
     vbBusMask = next & 0xFF;
     config.vbBusMask = vbBusMask;
     ConfigManager.save(config);
+    vbRoutePending[group] = on;
+    vbRoutePendingAt[group] = DateTime.now().millisecondsSinceEpoch;
     _toIso?.send({'cmd': 'setBusMask', 'mask': vbBusMask});
     // 关掉当前编辑器所在总线后，目标路会脱离有效掩码 → 与按路插件开关
     // 走同一回落逻辑（否则 UI 下拉指向不存在的 items）。
     _fallbackVbPluginEditorGroup();
     _notifyUi();
   }
+
+  /// 该路是否有在途启停（UI 据此禁点 + 显示加载/释放动画）。
+  /// 纯读：超时清理交给 [vbReconcileRoutePending]（避免 build 期改状态）。
+  bool vbRouteBusy(int g) {
+    final at = vbRoutePendingAt[g];
+    if (at == null) return false;
+    return DateTime.now().millisecondsSinceEpoch - at <= _kVbRoutePendingMs;
+  }
+
+  /// 在途目标是"打开"（true=加载中；false=释放中）。仅在 busy 时有意义。
+  bool vbRoutePendingOn(int g) => vbRoutePending[g] ?? false;
+
+  /// 心跳 routeState 确认目标达成 → 清在途，UI 从"加载中/释放中"回到稳态。
+  /// 开=就绪(2)，关=已关闭(0)；超时兜底避免桥异常时开关永久锁死。
+  void vbReconcileRoutePending() {
+    if (vbRoutePending.isEmpty) return;
+    final st = (vbInfo['routeState'] as List?)
+        ?.map((e) => (e as num?)?.toInt() ?? 0)
+        .toList();
+    var changed = false;
+    final done = <int>[];
+    for (final e in vbRoutePending.entries) {
+      final state = (st != null && e.key < st.length) ? st[e.key] : -1;
+      final bit = (vbBusMask >> e.key) & 1;
+      final reached = e.value ? (state == 2) : (state == 0 && bit == 0);
+      if (reached) done.add(e.key);
+    }
+    for (final g in done) {
+      vbRoutePending.remove(g);
+      vbRoutePendingAt.remove(g);
+      changed = true;
+    }
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    vbRoutePendingAt.removeWhere((g, at) {
+      if (nowMs - at <= _kVbRoutePendingMs) return false;
+      vbRoutePending.remove(g);
+      changed = true;
+      return true;
+    });
+    if (changed) _notifyUi();
+  }
+
+  /// 桥停/失活：清空在途（否则开关会等到超时才解禁）。
+  void vbClearRoutePending() {
+    if (vbRoutePending.isEmpty) return;
+    vbRoutePending.clear();
+    vbRoutePendingAt.clear();
+    _notifyUi();
+  }
+
+  static const int _kVbRoutePendingMs = 20000;
+
 
   /// VB 按路插件处理开关：bit g = 组 g 总线吃插件链（厂商 DSP 不受影响）。
   void setVbPluginGroup(int group, bool on) {
@@ -77,8 +138,8 @@ extension VbAsioState on AppModel {
   void setVbPluginGroupAll(bool on) {
     final next = on ? 0xFF : 0x00;
     if (next == vbPluginGroupMask) return;
-    // 全关在 UI 语义 = 「全部不勾」；落盘仍用原值（0 回全开口径只影响加载），
-    // 这里直接保存 0xFF/0x00 原值：全关是用户显式选择。
+    // 全关 = 「全部不勾」：只影响有实例的路是否参与插件处理，不决定实例
+    // 生死（实例由路开关 mask 决定）。全关仍是合法显式选择，原值落盘。
     vbPluginGroupMask = next;
     config.vbPluginGroupMask = next;
     ConfigManager.save(config);

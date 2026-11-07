@@ -210,6 +210,18 @@ public:
         return loaded;
     }
 
+    // 已挂载槽位位图（bit slot）：桥用它判定"该组插件集是否装载完成"
+    // （与每组已加载位图比对）。空镜像 = 0 = 无插件，天然就绪。
+    uint32_t LoadedMask() {
+        uint32_t m = 0;
+        AcquireSRWLockExclusive(&lock_);
+        for (int i = 0; i < kSlots; ++i) {
+            if (cfg_[i].loaded) m |= (1u << i);
+        }
+        ReleaseSRWLockExclusive(&lock_);
+        return m;
+    }
+
     // 重建后回放（调用方已确保音频线程不接触 engine）。返回成功/失败槽数。
     void Replay(void* engine, const Fns& fns, int* ok, int* failed) {
         if (ok) *ok = 0;

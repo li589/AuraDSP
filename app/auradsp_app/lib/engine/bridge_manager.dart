@@ -400,13 +400,25 @@ class BridgeManager {
     required bool bypass,
   }) {
     var n = 0;
+    ({bool isFloat, double value})? lpEnable;
     for (final e in params.entries) {
+      // 脚本"已应用"位必须排在代码之后（加载顺序：效果器 → 编译 → 已应用）。
+      // 仅编译未应用时镜像里没有 enable=1，这里也就不会隐式启用。
+      if (e.key == 'liveprog.enable') {
+        lpEnable = e.value;
+        continue;
+      }
       b.setParam(e.key, isFloat: e.value.isFloat, value: e.value.value);
       ++n;
     }
     var ns = 0;
     for (final e in paramsStr.entries) {
       if (b.setParamStr(e.key, e.value) >= 0) ++ns;
+    }
+    if (lpEnable != null) {
+      b.setParam('liveprog.enable',
+          isFloat: lpEnable.isFloat, value: lpEnable.value);
+      ++n;
     }
     final bypassRc = b.setBypass(bypass);
     dbgLog('bridge(${_activeId ?? '?'}): replay params=$n str=$ns '

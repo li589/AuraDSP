@@ -3074,6 +3074,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugLoading => 'ロード中…';
 
   @override
+  String get vbRouteLoading => '読み込み中・スルー';
+
+  @override
+  String get vbRouteReleasing => '解放中・スルー';
+
+  @override
   String get plugUnloading => 'アンロード中…';
 
   @override

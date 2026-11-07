@@ -137,7 +137,8 @@ struct PumpCtx {
     volatile LONG userBypass = 0;
     // 总线处理掩码（bit g = 第 g 组进 DSP；0 = 该总线直通）。桥经 vb_set_bus_mask
     // 下发；电平表照常计量（仅跳过 process），重开即恢复，无需等 idle 退出。
-    volatile LONG busMask = 0xFF;
+    // 出厂只开 A1/A2（0x03）：其余总线按需建句柄，未建组走主对透传。
+    volatile LONG busMask = 0x03;
     // ---- P3 静音门控（bridge 专用；pump 不碰，enabled 恒 false 即原行为）----
     // 组级独立实例：只有有信号的总线才进 DSP，其余 7 组零消耗（方案 §3.3）。
     // 桥在 RebuildEngines（采样率已知处，控制线程）逐组 Configure 启用。
@@ -449,7 +450,15 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
     }
     // 无引擎桥（DLL 缺失/符号不全/组超预建）或本总线被 mask 关掉：主对透传，
     // 绝不吞声。电平表在上游已计量，不受影响；mask 与 idle 无关，重开即恢复。
-    if (!haveEng || c->eng[g] == nullptr || (mask & (1L << g)) == 0) {
+    // 判序：先 mask 再读句柄。控制线程关路时会先清 mask、等 rtInBlock 归零与
+    // workStuck 位清空，之后才拆句柄；故本块读到"无 mask"时绝不持有旧指针。
+    if (!haveEng || (mask & (1L << g)) == 0) {
+        if (outL != inL) memcpy(outL, inL, (size_t)n * sizeof(float));
+        if (outR != inR) memcpy(outR, inR, (size_t)n * sizeof(float));
+        return;
+    }
+    void* eng = c->eng[g];
+    if (eng == nullptr) {
         if (outL != inL) memcpy(outL, inL, (size_t)n * sizeof(float));
         if (outR != inR) memcpy(outR, inR, (size_t)n * sizeof(float));
         return;
@@ -507,7 +516,7 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
             // L0：per-group process 耗时打点（QPC ~50ns × 8 组，可忽略）。
             LARGE_INTEGER gt0, gt1;
             QueryPerformanceCounter(&gt0);
-            c->process(c->eng[g], sIn, sOut, (int)n);
+            c->process(eng, sIn, sOut, (int)n);
             QueryPerformanceCounter(&gt1);
             if (g < 8) {
                 const uint64_t gt = (uint64_t)(gt1.QuadPart - gt0.QuadPart);

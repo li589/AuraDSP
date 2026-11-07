@@ -1289,6 +1289,8 @@
   "plugRouteLocked": "Locked",
   "plugChStereoOnly": "VB mode feeds only stereo (L/R) per bus into the plugin chain",
   "plugLoading": "Loading…",
+  "vbRouteLoading": "Loading · passthrough",
+  "vbRouteReleasing": "Releasing · passthrough",
   "plugUnloading": "Unloading…",
   "plugStateActive": "Active",
   "plugStateBypassed": "Bypassed",

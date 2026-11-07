@@ -1404,8 +1404,9 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_CUSTOM_SET_STANDARD_GET("channels.mode", channels_mode, ParamType::kInt32, set_channels_mode),
     /* WP0 脚手架：channels.count 的自动/手动模式状态载体（纯状态）。 */
     PARAM_INT("channels.countMode", channels_count_mode, 0, 1, nullptr),
-    /* [channels.upmix_fill] 矩阵上混回填策略：1=现状（铺满未使用声道），
-     * 0=仅回填有源的声道（严格零判定 + ~250ms 保持）。默认 1 保持现状。 */
+    /* [channels.upmix_fill] 矩阵上混回填策略：1=铺满未使用声道，
+     * 0=仅回填有源的声道（严格零判定 + ~250ms 保持）。
+     * 出厂默认 0（2026-11-07）：未使用声道保持静默。 */
     PARAM_BOOL("channels.upmix_fill", upmix_fill, nullptr),
     PARAM_CUSTOM("gate.maxIrSeconds", set_gate_max_ir_seconds, get_gate_max_ir_seconds),
     PARAM_CUSTOM("gate.maxFileMb", set_gate_max_file_mb, get_gate_max_file_mb),

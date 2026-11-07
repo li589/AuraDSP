@@ -139,9 +139,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // 回放，桥内另有镜像应对 CHANGE 重建（与 paramMirror 同口径）。
   final Map<String, String> paramStrMirror = {};
   // VB 总线掩码（session 级；进桥/重建后下发，CHANGE 重建不丢——掩码活在 ctx）。
-  int vbBusMask = 0xFF;
+  // 出厂只开 A1/A2：其余路按需开路再建句柄。
+  int vbBusMask = 0x03;
   // 按路插件处理掩码（bit g = 组 g 总线吃插件链；进桥后与 busMask 同步下发）。
-  int vbPluginGroupMask = 0xFF;
+  int vbPluginGroupMask = 0x03;
   // Z12 超预算自动保护（进桥后与 pluginGroupMask 同步下发；桥默认开）。
   bool vbAutoProtect = true;
 

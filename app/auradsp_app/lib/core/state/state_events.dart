@@ -844,6 +844,13 @@ extension StateEvents on AppModel {
         final was = vbActive;
         vbActive = (raw['running'] as bool?) ?? false;
         vbInfo = Map<String, dynamic>.from(raw);
+        // 路开关在途收尾（2026-11-07 异步化）：心跳确认目标达成才解除
+        // "加载中/释放中"标注与开关禁点；桥停则直接清空，不让界面等到超时。
+        if (vbActive) {
+          vbReconcileRoutePending();
+        } else {
+          vbClearRoutePending();
+        }
         if (vbActive && !was) {
           // VB 上升沿：清掉上一会话的残留帧，基线归零，活数据随后流入。
           // A5（2026-10-22 审查）：进 VB 时编辑器目标路可能还是上一会话
