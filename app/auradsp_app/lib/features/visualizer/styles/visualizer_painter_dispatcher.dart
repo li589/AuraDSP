@@ -10,6 +10,7 @@ import 'style_fluid.dart';
 import 'style_goniometer.dart';
 import 'style_gpu_shader.dart';
 import 'style_milkdrop.dart';
+import 'style_mirror_weave.dart';
 import 'style_oscilloscope.dart';
 import 'style_pulse_orb.dart';
 import 'style_spectrum_bars.dart';
@@ -116,6 +117,15 @@ CustomPainter buildVisualizerPainter({
 
     case VisualizerStyle.tornado:
       return ParticleTornadoPainter(
+        bands: rawBands,
+        palette: palette,
+        bloom: config.bloom,
+        animationTime: time,
+        lineWidth: config.lineWidth,
+      );
+
+    case VisualizerStyle.mirrorWeave:
+      return MirrorWeavePainter(
         bands: rawBands,
         palette: palette,
         bloom: config.bloom,

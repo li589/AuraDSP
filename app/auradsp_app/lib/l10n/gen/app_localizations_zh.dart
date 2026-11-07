@@ -1733,6 +1733,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get visualizerStyleTornado => '粒子龙卷风';
 
   @override
+  String get visualizerStyleMirrorWeave => '镜像织带';
+
+  @override
   String get visualizerThemeSystem => '跟随系统';
 
   @override

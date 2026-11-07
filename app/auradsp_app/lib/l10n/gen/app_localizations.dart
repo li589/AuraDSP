@@ -3340,6 +3340,12 @@ abstract class AppLocalizations {
   /// **'粒子龙卷风'**
   String get visualizerStyleTornado;
 
+  /// No description provided for @visualizerStyleMirrorWeave.
+  ///
+  /// In zh, this message translates to:
+  /// **'镜像织带'**
+  String get visualizerStyleMirrorWeave;
+
   /// No description provided for @visualizerThemeSystem.
   ///
   /// In zh, this message translates to:

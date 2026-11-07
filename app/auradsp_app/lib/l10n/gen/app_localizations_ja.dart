@@ -1754,6 +1754,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get visualizerStyleTornado => 'パーティクル竜巻';
 
   @override
+  String get visualizerStyleMirrorWeave => 'ミラーウィーブ';
+
+  @override
   String get visualizerThemeSystem => 'システムテーマ';
 
   @override

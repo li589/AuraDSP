@@ -629,6 +629,7 @@
   "visualizerStyleMilkdrop": "MilkDrop",
   "visualizerStyleFluid": "Fluid Dynamics",
   "visualizerStyleTornado": "Particle Tornado",
+  "visualizerStyleMirrorWeave": "Mirrored Weave",
   "visualizerThemeSystem": "System Theme",
   "visualizerThemeNeonCyber": "Cyber Neon",
   "visualizerThemeAmberTube": "Amber Tube",

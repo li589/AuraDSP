@@ -91,6 +91,15 @@ enum VisualizerStyle {
     label: 'Particle Tornado',
     icon: Icons.cyclone_rounded,
     description: 'Coherent particle funnel vortex with depth-sorted orbiting dust',
+  ),
+
+  /// 镜像织带：Winamp / WMP 经典流动折线环带
+  mirrorWeave(
+    id: 'mirrorWeave',
+    label: 'Mirrored Weave',
+    icon: Icons.multiline_chart_rounded,
+    description:
+        'Bilaterally mirrored spectrum ribbons and traveling polygon rings',
   );
 
   final String id;
@@ -427,6 +436,7 @@ extension VisualizerStyleL10n on VisualizerStyle {
         VisualizerStyle.milkDrop => l.visualizerStyleMilkdrop,
         VisualizerStyle.fluidDynamics => l.visualizerStyleFluid,
         VisualizerStyle.tornado => l.visualizerStyleTornado,
+        VisualizerStyle.mirrorWeave => l.visualizerStyleMirrorWeave,
       };
 }
 

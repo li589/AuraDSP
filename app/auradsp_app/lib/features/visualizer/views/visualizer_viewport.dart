@@ -11,6 +11,7 @@ import '../controllers/waveform_synthesizer.dart';
 import '../models/visualizer_themes.dart';
 import '../models/visualizer_types.dart';
 import '../styles/style_atmosphere.dart';
+import '../styles/style_tornado.dart';
 import '../styles/visualizer_painter_dispatcher.dart';
 import '../styles/visualizer_static_grid.dart';
 import '../styles/visualizer_time_aware.dart';
@@ -55,23 +56,29 @@ class _CompositeVisualizerPainter extends CustomPainter {
   }
 }
 
-/// 静态层画笔：烘焙氛围位图 + 网格基底。两者都与音频帧无关（氛围位图
-/// 10 Hz 刷新，网格只在风格/调色板变化时重建），因此本层允许光栅缓存
+/// 静态层画笔：风格基底 + 烘焙氛围位图 + 网格基底。三者都与音频帧无关
+/// （基底只在风格/调色板变化时重建，氛围位图 10 Hz 刷新，网格只在风格/
+/// 调色板变化时重建），因此本层允许光栅缓存
 /// （`willChange: false`），避免 30 Hz 动态层把它一起拖入每帧重绘。
 class _StaticLayerPainter extends CustomPainter {
   final ValueListenable<ui.Image?>? ambienceImage;
   final CustomPainter? grid;
+
+  /// 风格自带的静态基底（如龙卷风的暗场/地面辉光/中轴光柱）。
+  final CustomPainter? backdrop;
 
   /// 烘焙位图与画布像素 1:1，禁用采样即可保证与矢量绘制逐像素一致。
   final Paint _bakedPaint = Paint()
     ..filterQuality = FilterQuality.none
     ..isAntiAlias = false;
 
-  _StaticLayerPainter({this.ambienceImage, this.grid})
+  _StaticLayerPainter({this.ambienceImage, this.grid, this.backdrop})
       : super(repaint: ambienceImage);
 
   @override
   void paint(Canvas canvas, Size size) {
+    final b = backdrop;
+    if (b != null) b.paint(canvas, size);
     final il = ambienceImage;
     if (il != null) {
       final img = il.value;
@@ -90,7 +97,9 @@ class _StaticLayerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _StaticLayerPainter oldDelegate) =>
-      oldDelegate.ambienceImage != ambienceImage || oldDelegate.grid != grid;
+      oldDelegate.ambienceImage != ambienceImage ||
+      oldDelegate.grid != grid ||
+      oldDelegate.backdrop != backdrop;
 }
 
 /// 视效主舞台活跃渲染画布视口
@@ -131,6 +140,10 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   /// 静态网格画笔墨迹只在风格/调色板变化时重建，配合独立缓存层永不逐帧重绘。
   CustomPainter? _gridPainter;
   Object? _gridKey;
+
+  /// 风格自带静态基底（龙卷风暗场/地面辉光/中轴光柱）。
+  CustomPainter? _backdrop;
+  Object? _backdropKey;
 
   /// 氛围层时间轴：独立的 ~10fps 节流通知。星点漂移/光晕呼吸本就是慢动作，
   /// 10 Hz 更新在 30 Hz 主画布上肉眼不可分辨（旧实现是 30 帧全屏径向渐变）。
@@ -315,6 +328,20 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
     return _gridPainter;
   }
 
+  /// 每风格静态基底：只有龙卷风目前自带一层可烘焙的基底。
+  CustomPainter? _backdropFor() {
+    if (widget.config.style != VisualizerStyle.tornado) return null;
+    final key = (widget.palette, widget.config.bloom);
+    if (_backdrop == null || _backdropKey != key) {
+      _backdropKey = key;
+      _backdrop = TornadoBackdropPainter(
+        palette: widget.palette,
+        bloom: widget.config.bloom,
+      );
+    }
+    return _backdrop;
+  }
+
   CustomPainter _ambienceFor(List<double> renderedBands) {
     final key = (widget.palette, widget.config.bloom, renderedBands);
     if (_ambience == null || _ambienceKey != key) {
@@ -363,9 +390,10 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         );
         final bool usesAmbience = _usesAmbience(widget.config.style);
         if (usesAmbience) _ambienceFor(renderedBands);
+        final backdropPainter = _backdropFor();
 
         final bool hasStaticLayer =
-            usesAmbience || gridPainter != null;
+            usesAmbience || gridPainter != null || backdropPainter != null;
 
         // 两层分工：静态层（氛围位图 + 网格基底，允许缓存）在下，
         // 动态层（主视效，willChange 不缓存）在上，层间互不影响缓存命中。
@@ -387,6 +415,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
                       painter: _StaticLayerPainter(
                         ambienceImage: usesAmbience ? _ambienceImage : null,
                         grid: gridPainter,
+                        backdrop: backdropPainter,
                       ),
                       child: const SizedBox.expand(),
                     ),
