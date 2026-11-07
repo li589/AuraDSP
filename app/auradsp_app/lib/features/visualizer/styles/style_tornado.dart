@@ -33,7 +33,7 @@ class ParticleTornadoPainter extends CustomPainter
   static const int _groundPairCount = 20;
   static const int _ribbonPairCount = 3;
   static const int _ribbonSamples = 40;
-  static const double _pitchSin = 0.34; // sin(~20°) 俯视椭圆压缩比
+  static const double _pitchSin = 0.52; // sin(~31°) 俯视椭圆压缩比
 
   static final Float32List _particleSeeds = _buildParticleSeeds();
 
@@ -43,6 +43,11 @@ class ParticleTornadoPainter extends CustomPainter
   /// 三条对流光带的基准相位；左右镜像由绘制时 ±cos 保证，无需成对种子。
   static final Float32List _ribbonPhases =
       Float32List.fromList(const [0.55, 2.35, 4.15]);
+
+  /// 每条光带的纵向扭转率刻意错开：若三者相同，sinA(u) 会在相同高度
+  /// 同步穿过前后分界，叠成一片横向条纹；错开后才会互相穿插成编织感。
+  static final Float32List _ribbonTwists =
+      Float32List.fromList(const [5.2, 6.6, 8.1]);
 
   final Paint _fillPaint = Paint()..style = PaintingStyle.fill;
   final Paint _strokePaint = Paint()..style = PaintingStyle.stroke;
@@ -56,6 +61,10 @@ class ParticleTornadoPainter extends CustomPainter
   final Path _pathOuter = Path();
   final Path _pathMid = Path();
   final Path _pathCore = Path();
+
+  /// 外廓描边专用：只含左右两条母线，不闭合，避免在漏斗上口/根部
+  /// 画出一条横贯的直线弦。
+  final Path _pathOutline = Path();
   final Path _ribbonBack = Path();
   final Path _ribbonFront = Path();
 
@@ -196,6 +205,7 @@ class ParticleTornadoPainter extends CustomPainter
     _buildFunnelPath(_pathOuter, cx, baseY, maxR, funnelH, 1.0, n);
     _buildFunnelPath(_pathMid, cx, baseY, maxR, funnelH, 0.70, n);
     _buildFunnelPath(_pathCore, cx, baseY, maxR, funnelH, 0.42, n);
+    _buildFunnelOutline(_pathOutline, cx, baseY, maxR, funnelH, n);
     _fillPaint.color = _colorAt(
       _cPrimary,
       (0.045 + _smoothedBass * 0.075).clamp(0.0, 1.0),
@@ -249,7 +259,7 @@ class ParticleTornadoPainter extends CustomPainter
         (0.10 + _smoothedBass * 0.14).clamp(0.0, 1.0),
       )
       ..strokeWidth = lineWidth * 0.9;
-    canvas.drawPath(_pathOuter, _strokePaint);
+    canvas.drawPath(_pathOutline, _strokePaint);
 
     _drawTopEye(canvas, cx, baseY, maxR, funnelH, _smoothedBass, bl);
 
@@ -307,6 +317,37 @@ class ParticleTornadoPainter extends CustomPainter
     path.close();
   }
 
+  /// 漏斗外廓母线：左缘自上而下 + 右缘自下而上，不 close，
+  /// 所以描边只勾左右轮廓，不会横穿上口或根部。
+  void _buildFunnelOutline(
+    Path path,
+    double cx,
+    double baseY,
+    double maxR,
+    double funnelH,
+    int n,
+  ) {
+    path.reset();
+    const samples = 26;
+    for (var s = 0; s <= samples; s++) {
+      final u = s / samples;
+      final rx =
+          maxR * _profile(u) * (1.0 + _bandAt(u, n) * 0.17);
+      final y = baseY - u * funnelH;
+      if (s == 0) {
+        path.moveTo(cx - rx, y);
+      } else {
+        path.lineTo(cx - rx, y);
+      }
+    }
+    for (var s = samples; s >= 0; s--) {
+      final u = s / samples;
+      final rx =
+          maxR * _profile(u) * (1.0 + _bandAt(u, n) * 0.17);
+      path.lineTo(cx + rx, baseY - u * funnelH);
+    }
+  }
+
   /// 对流光带：每条带在 +cos / -cos 两侧各画一份，横向坐标严格成对，
   /// 因此左右轮廓是同一组采样点的镜像。
   void _buildRibbons(
@@ -322,12 +363,13 @@ class ParticleTornadoPainter extends CustomPainter
     path.reset();
     for (var sIdx = 0; sIdx < _ribbonPairCount; sIdx++) {
       final basePhase = _ribbonPhases[sIdx];
+      final twist = _ribbonTwists[sIdx];
       var started = false;
       for (var k = 0; k <= _ribbonSamples; k++) {
         final u = k / _ribbonSamples;
         final angle = basePhase +
             _spin * 0.90 +
-            u * 6.4 +
+            u * twist +
             0.16 * math.sin(t * 0.5 + basePhase);
         final sinA = math.sin(angle);
         final belongs = front ? sinA >= 0.0 : sinA < 0.0;
@@ -757,20 +799,17 @@ class TornadoBackdropPainter extends CustomPainter {
         ),
       );
 
+    // 中轴光柱用单位径向渐变 + 竖向拉伸，横向与纵向都自然淡出，
+    // 避免窄矩形线性渐变留下两条笔直的竖直硬边。
     _axisPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
+      ..shader = RadialGradient(
         colors: [
-          palette.primary.withValues(alpha: 0.0),
-          palette.primary.withValues(alpha: 0.020 + bloom * 0.02),
+          palette.primary.withValues(alpha: 0.012 + bloom * 0.012),
+          palette.primary.withValues(alpha: 0.008 + bloom * 0.008),
           palette.primary.withValues(alpha: 0.0),
         ],
-        stops: const [0.12, 0.55, 0.92],
-      ).createShader(
-        Rect.fromLTWH(cx - size.width * 0.05, size.height * 0.12,
-            size.width * 0.10, size.height * 0.76),
-      );
+        stops: const [0.0, 0.55, 1.0],
+      ).createShader(const Rect.fromLTRB(-1, -1, 1, 1));
   }
 
   @override
@@ -778,8 +817,12 @@ class TornadoBackdropPainter extends CustomPainter {
     if (size.width <= 0 || size.height <= 0) return;
     _ensureShaders(size);
     canvas.drawRect(Offset.zero & size, _bgPaint!);
-    canvas.drawRect(Offset.zero & size, _axisPaint!);
     final cx = size.width / 2.0;
+    canvas.save();
+    canvas.translate(cx, size.height * 0.50);
+    canvas.scale(size.width * 0.11, size.height * 0.42);
+    canvas.drawCircle(Offset.zero, 1.0, _axisPaint!);
+    canvas.restore();
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset(cx, size.height * 0.88),

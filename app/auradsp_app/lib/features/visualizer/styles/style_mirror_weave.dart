@@ -42,6 +42,10 @@ class MirrorWeavePainter extends CustomPainter implements VisualizerTimeAware {
 
   final List<Path> _layerPaths =
       List<Path>.generate(_layers, (_) => Path());
+
+  /// 仅含左右两条流动折线的开放路径，用于描边，避免闭环上下弦线。
+  final List<Path> _edgePaths =
+      List<Path>.generate(_layers, (_) => Path());
   final List<Path> _ringPaths =
       List<Path>.generate(_ringCount, (_) => Path());
   final Path _rungPath = Path();
@@ -112,7 +116,19 @@ class MirrorWeavePainter extends CustomPainter implements VisualizerTimeAware {
     _drawTravelingRings(canvas, cx, top, span, baseHalf, t, n, bass, treble);
 
     for (var layer = 0; layer < _layers; layer++) {
-      _buildLayer(_layerPaths[layer], layer, cx, top, span, baseHalf, t, n, bass, mid);
+      _buildLayer(
+        _layerPaths[layer],
+        _edgePaths[layer],
+        layer,
+        cx,
+        top,
+        span,
+        baseHalf,
+        t,
+        n,
+        bass,
+        mid,
+      );
       _fillPaint.color = _colorAt(
         2,
         (0.015 + _smoothedBass * 0.025 + layer * 0.004).clamp(0.0, 1.0),
@@ -128,7 +144,7 @@ class MirrorWeavePainter extends CustomPainter implements VisualizerTimeAware {
               .clamp(0.0, 1.0),
         )
         ..strokeWidth = lineWidth * _layerWidth[layer];
-      canvas.drawPath(_layerPaths[layer], _strokePaint);
+      canvas.drawPath(_edgePaths[layer], _strokePaint);
     }
 
     // 横向织线：只在中层取样，把左右边缘缝合成「织带」质感。
@@ -167,6 +183,7 @@ class MirrorWeavePainter extends CustomPainter implements VisualizerTimeAware {
   /// 且 x 只取 `cx ± halfWidth`，因此闭环轮廓关于中轴严格镜像。
   void _buildLayer(
     Path path,
+    Path edge,
     int layer,
     double cx,
     double top,
@@ -178,6 +195,7 @@ class MirrorWeavePainter extends CustomPainter implements VisualizerTimeAware {
     double mid,
   ) {
     path.reset();
+    edge.reset();
     final phase = layer * 1.85;
     final flow = 0.14 * math.sin(t * 0.42 + phase);
     for (var j = 0; j <= _samples; j++) {
@@ -197,8 +215,10 @@ class MirrorWeavePainter extends CustomPainter implements VisualizerTimeAware {
           math.sin(t * 0.85 + u * 4.4 + phase) * span * 0.012;
       if (j == 0) {
         path.moveTo(cx - half, y);
+        edge.moveTo(cx - half, y);
       } else {
         path.lineTo(cx - half, y);
+        edge.lineTo(cx - half, y);
       }
     }
     for (var j = _samples; j >= 0; j--) {
@@ -217,6 +237,11 @@ class MirrorWeavePainter extends CustomPainter implements VisualizerTimeAware {
           u * span +
           math.sin(t * 0.85 + u * 4.4 + phase) * span * 0.012;
       path.lineTo(cx + half, y);
+      if (j == _samples) {
+        edge.moveTo(cx + half, y);
+      } else {
+        edge.lineTo(cx + half, y);
+      }
     }
     path.close();
   }
