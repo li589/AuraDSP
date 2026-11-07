@@ -762,7 +762,7 @@
   "visualizerStyleMilkdrop": "MilkDrop",
   "visualizerStyleFluid": "流体动力学",
   "visualizerStyleTornado": "粒子龙卷风",
-  "visualizerStyleMirrorWeave": "镜像织带",
+  "visualizerStyleNebulaFlow": "星云流",
   "visualizerThemeSystem": "跟随系统",
   "visualizerThemeNeonCyber": "赛博霓虹",
   "visualizerThemeAmberTube": "琥珀电子管",
@@ -1744,3 +1744,4 @@
   "ambientLabel": "频谱光晕",
   "ambientHint": "主页背景随音乐起伏的光晕；关闭后完全停绘，可省 GPU"
 }
+

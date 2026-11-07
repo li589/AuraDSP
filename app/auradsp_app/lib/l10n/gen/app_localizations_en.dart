@@ -1860,7 +1860,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get visualizerStyleTornado => 'Particle Tornado';
 
   @override
-  String get visualizerStyleMirrorWeave => 'Mirrored Weave';
+  String get visualizerStyleNebulaFlow => 'Nebula Flow';
 
   @override
   String get visualizerThemeSystem => 'System Theme';

@@ -11,6 +11,7 @@ import '../controllers/waveform_synthesizer.dart';
 import '../models/visualizer_themes.dart';
 import '../models/visualizer_types.dart';
 import '../styles/style_atmosphere.dart';
+import '../styles/style_nebula_flow.dart';
 import '../styles/style_tornado.dart';
 import '../styles/visualizer_painter_dispatcher.dart';
 import '../styles/visualizer_static_grid.dart';
@@ -276,7 +277,8 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         VisualizerStyle.tunnelShader ||
         VisualizerStyle.milkDrop ||
         VisualizerStyle.fluidDynamics ||
-        VisualizerStyle.tornado =>
+        VisualizerStyle.tornado ||
+        VisualizerStyle.nebulaFlow =>
           false,
         _ => true,
       };
@@ -328,16 +330,24 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
     return _gridPainter;
   }
 
-  /// 每风格静态基底：只有龙卷风目前自带一层可烘焙的基底。
+  /// 每风格静态基底：龙卷风与星云流各自带一层可烘焙的暗场/渐晕。
   CustomPainter? _backdropFor() {
-    if (widget.config.style != VisualizerStyle.tornado) return null;
-    final key = (widget.palette, widget.config.bloom);
+    final style = widget.config.style;
+    if (style != VisualizerStyle.tornado && style != VisualizerStyle.nebulaFlow) {
+      return null;
+    }
+    final key = (widget.palette, widget.config.bloom, style);
     if (_backdrop == null || _backdropKey != key) {
       _backdropKey = key;
-      _backdrop = TornadoBackdropPainter(
-        palette: widget.palette,
-        bloom: widget.config.bloom,
-      );
+      _backdrop = style == VisualizerStyle.tornado
+          ? TornadoBackdropPainter(
+              palette: widget.palette,
+              bloom: widget.config.bloom,
+            )
+          : NebulaBackdropPainter(
+              palette: widget.palette,
+              bloom: widget.config.bloom,
+            );
     }
     return _backdrop;
   }

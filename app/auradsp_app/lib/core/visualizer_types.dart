@@ -93,13 +93,12 @@ enum VisualizerStyle {
     description: 'Coherent particle funnel vortex with depth-sorted orbiting dust',
   ),
 
-  /// 镜像织带：Winamp / WMP 经典流动折线环带
-  mirrorWeave(
-    id: 'mirrorWeave',
-    label: 'Mirrored Weave',
-    icon: Icons.multiline_chart_rounded,
-    description:
-        'Bilaterally mirrored spectrum ribbons and traveling polygon rings',
+  /// 星云流：WMP 经典柔雾星云（低频云团 + 稀疏星点）
+  nebulaFlow(
+    id: 'nebulaFlow',
+    label: 'Nebula Flow',
+    icon: Icons.cloud_rounded,
+    description: 'Soft volumetric cloud drift with sparse twinkling stars',
   );
 
   final String id;
@@ -115,8 +114,14 @@ enum VisualizerStyle {
   });
 
   /// 按持久化 id 解析（未知 id 回落到 bars）。
-  static VisualizerStyle fromId(String? id) => VisualizerStyle.values
-      .firstWhere((e) => e.id == id, orElse: () => VisualizerStyle.bars);
+  ///
+  /// 兼容旧 id：`mirrorWeave`（已下线的镜像织带）静默升级为星云流，
+  /// 保证用户已保存的配置 / 预设 / 会话记忆仍可读回。
+  static VisualizerStyle fromId(String? id) {
+    if (id == 'mirrorWeave') return VisualizerStyle.nebulaFlow;
+    return VisualizerStyle.values
+        .firstWhere((e) => e.id == id, orElse: () => VisualizerStyle.bars);
+  }
 }
 
 /// 可视化色彩主题
@@ -436,7 +441,7 @@ extension VisualizerStyleL10n on VisualizerStyle {
         VisualizerStyle.milkDrop => l.visualizerStyleMilkdrop,
         VisualizerStyle.fluidDynamics => l.visualizerStyleFluid,
         VisualizerStyle.tornado => l.visualizerStyleTornado,
-        VisualizerStyle.mirrorWeave => l.visualizerStyleMirrorWeave,
+        VisualizerStyle.nebulaFlow => l.visualizerStyleNebulaFlow,
       };
 }
 

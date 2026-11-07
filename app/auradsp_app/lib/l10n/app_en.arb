@@ -629,7 +629,7 @@
   "visualizerStyleMilkdrop": "MilkDrop",
   "visualizerStyleFluid": "Fluid Dynamics",
   "visualizerStyleTornado": "Particle Tornado",
-  "visualizerStyleMirrorWeave": "Mirrored Weave",
+  "visualizerStyleNebulaFlow": "Nebula Flow",
   "visualizerThemeSystem": "System Theme",
   "visualizerThemeNeonCyber": "Cyber Neon",
   "visualizerThemeAmberTube": "Amber Tube",
@@ -1608,3 +1608,4 @@
   "ambientLabel": "Spectrum glow",
   "ambientHint": "Glow behind the home page that follows the music. Turn it off to stop drawing entirely and save GPU."
 }
+

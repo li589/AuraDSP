@@ -629,7 +629,7 @@
   "visualizerStyleMilkdrop": "MilkDrop",
   "visualizerStyleFluid": "流体力学",
   "visualizerStyleTornado": "パーティクル竜巻",
-  "visualizerStyleMirrorWeave": "ミラーウィーブ",
+  "visualizerStyleNebulaFlow": "ネビュラフロー",
   "visualizerThemeSystem": "システムテーマ",
   "visualizerThemeNeonCyber": "サイバーネオン",
   "visualizerThemeAmberTube": "アンバー真空管",
@@ -1608,3 +1608,4 @@
   "ambientLabel": "スペクトルのグロー",
   "ambientHint": "ホーム背景で音楽に反応するグロー。オフにすると描画を完全に停止し GPU を節約します"
 }
+
