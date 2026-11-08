@@ -290,6 +290,20 @@
         0.0
       ]
     },
+    "liveprogmc": {
+      "enabled": false,
+      "codeHash": "",
+      "params": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
     "post": {
       "gain": -1.5,
       "limiterEnable": true,

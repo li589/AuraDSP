@@ -6580,6 +6580,12 @@ abstract class AppLocalizations {
   /// **'引擎内部错误'**
   String get errInternal;
 
+  /// No description provided for @errHostUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'宿主不可用'**
+  String get errHostUnavailable;
+
   /// No description provided for @lpFindReplace.
   ///
   /// In zh, this message translates to:

@@ -3480,6 +3480,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get errInternal => 'エンジン内部エラー';
 
   @override
+  String get errHostUnavailable => 'ホストが利用できません';
+
+  @override
   String get lpFindReplace => '検索と置換';
 
   @override

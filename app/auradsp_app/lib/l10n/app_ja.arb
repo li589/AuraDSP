@@ -1501,6 +1501,7 @@
   "errUnsupported": "非サポートの操作",
   "errReadOnly": "このパラメータは読み取り専用です",
   "errInternal": "エンジン内部エラー",
+  "errHostUnavailable": "ホストが利用できません",
   "lpFindReplace": "検索と置換",
   "lpSidebarLeft": "左パネル切り替え (アウトラインとライブラリ)",
   "lpSidebarRight": "右パネル切り替え (スライダーとコンソール)",

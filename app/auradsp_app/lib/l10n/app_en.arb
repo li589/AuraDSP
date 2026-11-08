@@ -1501,6 +1501,7 @@
   "errUnsupported": "Unsupported operation",
   "errReadOnly": "Parameter is read-only",
   "errInternal": "Internal engine error",
+  "errHostUnavailable": "Host unavailable",
   "lpFindReplace": "Find & Replace",
   "lpSidebarLeft": "Toggle Left Panel (Outline & Library)",
   "lpSidebarRight": "Toggle Right Panel (Sliders & Console)",

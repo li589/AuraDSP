@@ -3651,6 +3651,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get errInternal => 'Internal engine error';
 
   @override
+  String get errHostUnavailable => 'Host unavailable';
+
+  @override
   String get lpFindReplace => 'Find & Replace';
 
   @override

@@ -2,7 +2,7 @@ import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 
 /// B-2 引擎错误 reason-token 本地化与脱敏（计划 D2 §4.1-4.3）。
 ///
-/// 引擎侧契约：`<subject>: <reason-token>[ (detail)]`，token 白名单 15 个
+/// 引擎侧契约：`<subject>: <reason-token>[ (detail)]`，token 白名单 17 个
 /// （与 engine/ 各 set_error 字面量、l10n arb `errXxx` 词条、
 /// test/param_contract_test.dart Part H 三方同源）。
 ///
@@ -29,6 +29,7 @@ const Set<String> kEngineReasonTokens = {
   'unsupported',
   'read-only',
   'internal',
+  'host unavailable',
 };
 
 /// token → arb key（`engine closed` → `errEngineClosed`），Part H 契约共用。
@@ -87,6 +88,8 @@ String _localized(String token, AppLocalizations l) {
       return l.errReadOnly;
     case 'internal':
       return l.errInternal;
+    case 'host unavailable':
+      return l.errHostUnavailable;
   }
   return '';
 }

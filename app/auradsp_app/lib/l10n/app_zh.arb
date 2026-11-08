@@ -1630,6 +1630,7 @@
   "errUnsupported": "不支持的操作",
   "errReadOnly": "该参数为只读",
   "errInternal": "引擎内部错误",
+  "errHostUnavailable": "宿主不可用",
   "lpFindReplace": "查找与替换",
   "lpSidebarLeft": "切换左侧面板 (大纲与脚本库)",
   "lpSidebarRight": "切换右侧面板 (滑块与控制台)",

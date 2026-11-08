@@ -3450,6 +3450,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errInternal => '引擎内部错误';
 
   @override
+  String get errHostUnavailable => '宿主不可用';
+
+  @override
   String get lpFindReplace => '查找与替换';
 
   @override
