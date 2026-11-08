@@ -165,10 +165,12 @@ const Set<String> kEngineOnlyIds = {
   // ---- bass：oversample（UI 未暴露） ----
   'bass.intensity',
   'bass.oversample',
-  // ---- channels：声道数/模式查询（VM/isolate 直发） ----
+  // ---- channels：声道数/模式查询（VM/isolate 直发）；upmix_fill 为 AppState
+  // 直管（设置页开关、非 registry spec），同族登记 ----
   'channels.count',
   'channels.countMode',
   'channels.mode',
+  'channels.upmix_fill',
   // ---- comp：channel_mask（spec id = comp.channels；freq/gain 14 动态段已注册进 comp section） ----
   'comp.channel_mask',
   // ---- convolver：卷积 IR 查询/清空（副作用指令） ----
