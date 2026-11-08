@@ -8,7 +8,15 @@
 // 都不可能稳住帧率，必须先优化再合入。
 //
 // 注意：fluid 的模拟步进在 paint 内执行，其成本计入本测量；GPU shader
-// 两风格在测试环境无 FragmentProgram 时走回退路径，数字仅供参考。
+// 两风格在测试环境无 FragmentProgram 时走回退路径，数字仅供参考；
+// tornado / nebulaFlow 依赖异步解码的精灵图集，测试环境图集未就绪时
+// paint 直接跳过（实测 ~1us 为空转路径）——两者运行时是 drawRawAtlas
+// 批量提交，CPU 录制成本本就极低，真实开销在 GPU 侧，本基准不覆盖。
+//
+// 基线（2026-11-08，CI J6 runner，run 42494469015）：
+//   fluidDynamics 4704us（峰值 6575）——次重风格的 10 倍以上，是唯一
+//   需要自适应降质的风格；bars 433 / cyberGrid 261 / milkDrop 172 /
+//   oscilloscope 147 / goniometer 125 / pulseOrb 50 / shader 系 14。
 import 'dart:math' as math;
 import 'dart:ui';
 
