@@ -217,6 +217,11 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         # Win32 主程序只保留管道/看门狗/唤醒等平台原语。
         "${API}/plugins/platform/host/plugin_host_command.cpp"
         "${API}/plugins/platform/win32/host/plugin_shared_region.cpp"
+        # 平台日志实现（与 Linux 宿主含 log_linux.cpp 对称）：S1 给宿主
+        # 目标补了 AURADSP_DBG_LOG 定义后，ON 构建下格式/管理源会真实
+        # 调用 log_level/log_emit，宿主源表缺此文件即 LNK2001——由
+        # S2 的 J5 ON 步骤于 2026-11-08 首次实跑抓出。
+        "${API}/platform/windows/log_win.cpp"
         ${AURADSP_PLUGIN_HOST_SOURCES}
     )
     target_include_directories(${HOST_EXE_TARGET_NAME} PRIVATE
