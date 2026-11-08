@@ -122,6 +122,27 @@ jobs:
         run: cmake --preset windows-x64 -DAURADSP_BUILD_BRIDGES=OFF
       - name: Build
         run: cmake --build --preset windows-x64-release
+      # B-1 门禁进 CI（2026-11-08 审计·调试中3）：smoke_release_strings
+      # 此前只登记在 runner.py 的 PLATFORM_WINDOWS 集，CI 从未执行，
+      # 「防宏没接线」的反向断言长期空转。先对默认（OFF）产物跑正向
+      # 断言（Release DLL 无 [DBG ），再用独立构建树编一份 ON 产物跑
+      # 反向断言（引擎 DLL 与宿主 exe 都必须含 [DBG ）——产物同写
+      # 子工程 out/Release，后步会覆盖前步 DLL，故必须顺序执行。
+      - name: Release-strings gate (default OFF build)
+        run: python test/smoke/smoke_release_strings.py
+      - name: Configure ON variant (AURADSP_DBG_LOG)
+        run: cmake -S . -B build/windows/dbg-on -G "Visual Studio 18 2026" -A x64 -DAURADSP_BUILD_BRIDGES=OFF -DAURADSP_DBG_LOG=ON
+      - name: Build ON variant
+        run: cmake --build build/windows/dbg-on --config Release
+      - name: Release-strings gate (ON build, engine)
+        env:
+          AURADSP_EXPECT_DBG: "1"
+        run: python test/smoke/smoke_release_strings.py
+      - name: Release-strings gate (ON build, plugin host)
+        env:
+          AURADSP_EXPECT_DBG: "1"
+          AURADSP_DLL: core/desktop/windows/out/Release/plugin_host_x64.exe
+        run: python test/smoke/smoke_release_strings.py
 
   # J6 Dart 测试 --------------------------------------------------------
   dart-tests:
