@@ -233,6 +233,11 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         _CRT_SECURE_NO_WARNINGS
         AURADSP_HOST_INPROC=1
     )
+    # 2026-11-08 审计补接线：[DBG 调用点绝大多数在宿主进程编入的源里，
+    # 只给引擎定义时默认远程模式排障拿不到出事进程的日志。
+    if(AURADSP_DBG_LOG)
+        target_compile_definitions(${HOST_EXE_TARGET_NAME} PRIVATE AURADSP_DBG_LOG)
+    endif()
     target_compile_options(${HOST_EXE_TARGET_NAME} PRIVATE /utf-8 /W1 /EHa)
     set_property(TARGET ${HOST_EXE_TARGET_NAME} PROPERTY CXX_STANDARD 20)
     set_property(TARGET ${HOST_EXE_TARGET_NAME} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
