@@ -1,7 +1,7 @@
 // GENERATED FILE — DO NOT EDIT.
 // 由 tools/gen_param_contract.py 从引擎 C++ 源码生成（引擎侧默认快照）。
 // 消费方：app/test/param_contract_test.dart（默认值一致性 + 权威对账）。
-// 覆盖引擎参数 230 个（含 21 个 set 分支动态 id）。
+// 覆盖引擎参数 231 个（含 21 个 set 分支动态 id）。
 
 class ParamDefaultRow {
   final String engineId;
@@ -205,6 +205,7 @@ const List<ParamDefaultRow> kParamDefaultRows = [
   ParamDefaultRow('limiter.lookahead', 'limiter_lookahead', 0),
   ParamDefaultRow('channels.mode', 'channels_mode', 0),
   ParamDefaultRow('channels.countMode', 'channels_count_mode', 0),
+  ParamDefaultRow('channels.upmix_fill', 'upmix_fill', 0),
 ];
 
 /// 表内无 struct member 的 custom 参数 id（无默认可校验）。
@@ -429,5 +430,5 @@ const List<ParamRangeRow> kEngineRangeRows = [
 
 /// 引擎源码行数哨兵（param_table / internal / create 的行数）。
 /// header/create 变更而未重生 fixture → param_contract_test 行数断言失败。
-const String kContractLineCounts = 'param_table:1438;internal:909;create:624';
+const String kContractLineCounts = 'param_table:1442;internal:916;create:624';
 
