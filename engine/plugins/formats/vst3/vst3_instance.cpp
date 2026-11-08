@@ -6,6 +6,7 @@
 #include "plugin_bundle.h"
 #include "plugin_metadata_util.h"
 #include "plugins/plugin_limits.h"
+#include "plugins/preset_io.h"
 #include "vst3_metadata.h"
 #include "win32_util.h"
 
@@ -1766,12 +1767,14 @@ public:
             fs::create_directories(p.parent_path());
         }
 
-        std::ofstream ofs(filePath, std::ios::binary);
-        if (!ofs) {
-            return false;
-        }
-        ofs.write(reinterpret_cast<const char*>(data.data()), data.size());
-        return true;
+        // 原子写 + 写流校验（2026-11-08 审计·预设中2/低1）：旧实现直写
+        // 目标且不查流状态，磁盘满会留下截断文件却报成功。
+        return preset_io::writeFileAtomic(
+            filePath, [&data](std::ofstream& ofs) {
+                ofs.write(reinterpret_cast<const char*>(data.data()),
+                          static_cast<std::streamsize>(data.size()));
+                return ofs.good();
+            });
     }
 
     bool loadPreset(const std::string& filePath) override {
@@ -1794,6 +1797,9 @@ public:
         ifs.seekg(0, std::ios::beg);
         std::vector<uint8_t> buf(sz);
         ifs.read(reinterpret_cast<char*>(buf.data()), static_cast<std::streamsize>(sz));
+        // 读完整性（审计·预设低2）：尺寸读取后文件被截断/并发改写时
+        // 不得把零填充尾部送去 setState。
+        if (ifs.gcount() != static_cast<std::streamsize>(sz)) return false;
 
         // setState/setComponentState 属插件 main 线程交互（B3）。
         bool ok = false;
@@ -1801,12 +1807,18 @@ public:
             auto stream = new Vst3MemoryStream();
             stream->m_data = std::move(buf);
             Steinberg::tresult res = m_component->setState(stream);
+            bool ctrlOk = true;
             if (res == Steinberg::kResultOk && m_controller) {
                 stream->seek(0, Steinberg::IBStream::kIBSeekSet, nullptr);
-                m_controller->setComponentState(stream);
+                const Steinberg::tresult cres =
+                    m_controller->setComponentState(stream);
+                // 控制器结果计入成败（审计·预设低2）；kNotImplemented
+                // 表示控制器无状态处理、不算失败。
+                ctrlOk = (cres == Steinberg::kResultOk ||
+                          cres == Steinberg::kNotImplemented);
             }
             stream->release();
-            ok = (res == Steinberg::kResultOk);
+            ok = (res == Steinberg::kResultOk) && ctrlOk;
         }, 3000);
         if (!ran) {
             m_threadAbandoned.store(true, std::memory_order_release);

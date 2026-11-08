@@ -647,6 +647,75 @@ def run_vst2_chain(lib, lib_path, tmp, cc, cxx):
     check(abs(peak - 0.4) < 1e-3,
           f"[vst2] process 峰值 {peak:.4f} == 0.8×0.5"
           "（含宿主回调 ABI 绊线通过）")
+    # 预设节（2026-11-08 审计补覆盖）：身份对账 + .fxp 规范布局 +
+    # 截断拒绝。此前三格式均无负向预设用例。
+    lib.auradsp_plugin_slot_save_preset.restype = ctypes.c_int32
+    lib.auradsp_plugin_slot_save_preset.argtypes = [
+        ctypes.c_void_p, ctypes.c_int, ctypes.c_char_p]
+    lib.auradsp_plugin_slot_load_preset.restype = ctypes.c_int32
+    lib.auradsp_plugin_slot_load_preset.argtypes = [
+        ctypes.c_void_p, ctypes.c_int, ctypes.c_char_p]
+    import struct
+    pdir = os.path.join(vdir, "presets")
+    os.makedirs(pdir)
+    aur2 = os.path.join(pdir, "gain.aurapreset")
+    rc = lib.auradsp_plugin_slot_save_preset(H, 0, aur2.encode())
+    check(rc == 1 and os.path.getsize(aur2) > 20,
+          f"[vst2] save_preset 成功且 AUR2 文件成形（rc={rc}）")
+    raw = open(aur2, "rb").read()
+    magic, _ver, _kind, uid, psz = struct.unpack_from("<4sIIII", raw, 0)
+    check(magic == b"AUR2" and uid == 0x41757261
+          and 20 + psz <= len(raw),
+          f"[vst2] AUR2 头真值（magic={magic}, uid={uid:#x}, psz={psz}）")
+    # 身份不符：改 uniqueId 后必须被拒（A 插件预设不装 B 插件）。
+    bad = bytearray(raw)
+    struct.pack_into("<I", bad, 12, 0xDEADBEEF)
+    badp = os.path.join(pdir, "baduid.aurapreset")
+    open(badp, "wb").write(bad)
+    rc = lib.auradsp_plugin_slot_load_preset(H, 0, badp.encode())
+    check(rc == 0, f"[vst2] uniqueId 不符的 AUR2 预设被拒（rc={rc}）")
+    # payloadSize 谎报（截断形）：必须被拒。
+    tr = bytearray(raw)
+    struct.pack_into("<I", tr, 16, psz + 100)
+    trp = os.path.join(pdir, "trunc.aurapreset")
+    open(trp, "wb").write(tr)
+    rc = lib.auradsp_plugin_slot_load_preset(H, 0, trp.encode())
+    check(rc == 0, f"[vst2] payloadSize 谎报的预设被拒（rc={rc}）")
+    # 标准 .fxp（FxCk，规范大端布局）：chunk=gain 0.25，加载后
+    # 峰值应变 0.8×0.25；fxID 不符的同形文件必须被拒。
+    chunk = struct.pack("<f", 0.25)
+
+    def make_fxp(fxid):
+        return (b"CcnK" + struct.pack(">I", 52 + len(chunk)) + b"FxCk"
+                + struct.pack(">IIII", 1, fxid, 1, 1)
+                + b"AuraTestVST2".ljust(28, b"\0")
+                + struct.pack(">I", len(chunk)) + chunk)
+
+    fxp = os.path.join(pdir, "gain.fxp")
+    open(fxp, "wb").write(make_fxp(0x41757261))
+    rc = lib.auradsp_plugin_slot_load_preset(H, 0, fxp.encode())
+    check(rc == 1, f"[vst2] 标准 .fxp(FxCk) 按规范布局加载（rc={rc}）")
+    # chunk 生效的旁证：探针 process 增益写死 0.5（ABI 绊线设计），
+    # 改以回存校验——加载 fxp 后再 save，参数形态应带出 gain=0.25，
+    # 证明 setChunk 真的改了插件状态而非仅返回成功。
+    back = os.path.join(pdir, "back.aurapreset")
+    rc = lib.auradsp_plugin_slot_save_preset(H, 0, back.encode())
+    raw2 = open(back, "rb").read()
+    _m2, _v2, kind2, _u2, psz2 = struct.unpack_from("<4sIIII", raw2, 0)
+    gain_back = None
+    if kind2 == 1 and psz2 >= 8:  # params 形态：count + float[]
+        if struct.unpack_from("<I", raw2, 20)[0] >= 1:
+            gain_back = struct.unpack_from("<f", raw2, 24)[0]
+    check(rc == 1 and gain_back is not None
+          and abs(gain_back - 0.25) < 1e-6,
+          f"[vst2] .fxp chunk 生效：回存 gain={gain_back} == 0.25")
+    fxbad = os.path.join(pdir, "badid.fxp")
+    open(fxbad, "wb").write(make_fxp(0xDEADBEEF))
+    rc = lib.auradsp_plugin_slot_load_preset(H, 0, fxbad.encode())
+    check(rc == 0, f"[vst2] fxID 不符的 .fxp 被拒（rc={rc}）")
+    # 还原探针状态（AUR2 正本）。
+    rc = lib.auradsp_plugin_slot_load_preset(H, 0, aur2.encode())
+    check(rc == 1, f"[vst2] AUR2 正本可再加载（rc={rc}）")
     lib.auradsp_destroy(H)
 
     # 桥加载（进程模式）：32 位 VST2 经 x86 宿主加载出声——补齐
@@ -765,6 +834,18 @@ def run_vst3_chain(lib, tmp, cxx):
     peak = process_peak(lib, H, src, dst)
     check(abs(peak - 0.4) < 1e-3,
           f"[vst3] process 峰值 {peak:.4f} == 0.8×0.5（VST3 实例真实生效）")
+    # 预设上限行为断言（2026-11-08 审计补覆盖）：PLG-01 的 256MiB
+    # 上限此前只有源码不变量断言，这里以稀疏文件行为验证——超限
+    # 文件必须在分配前被拒（load_preset 返回 0 且不挂死）。
+    lib.auradsp_plugin_slot_load_preset.restype = ctypes.c_int32
+    lib.auradsp_plugin_slot_load_preset.argtypes = [
+        ctypes.c_void_p, ctypes.c_int, ctypes.c_char_p]
+    big = os.path.join(vdir, "big.aurapreset")
+    with open(big, "wb") as f:
+        f.seek(256 * 1024 * 1024)
+        f.write(b"\0")
+    rc = lib.auradsp_plugin_slot_load_preset(H, 0, big.encode())
+    check(rc == 0, f"[vst3] 超 256MiB 预设被拒（rc={rc}）")
     lib.auradsp_destroy(H)
 
 
