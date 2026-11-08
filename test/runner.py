@@ -56,6 +56,7 @@ PLATFORM_ANY = {
     # 多声道 EEL 脚本级（2026-11-09，方案 B）：引擎 ctypes 活体，
     # 两平台可跑（产物缺失时 engine_artifact 自行报错口径同其他引擎门禁）。
     "smoke_liveprog_mc.py",
+    "smoke_liveprog_mc_stress.py",
 }
 
 # PLATFORM_LINUX（2026-11-01，测试补强轮）：与 PLATFORM_WINDOWS 对称的
@@ -341,6 +342,10 @@ def run_smoke_tests():
         # 多声道 EEL 脚本级门禁（2026-11-09，方案 B）：8 声道 spl 读写、
         # 逐声道增益、滑块与立体声隔离、回读/状态、未使能直通。
         "smoke_liveprog_mc.py",
+        # 多声道 EEL 边界/竞态门禁（2026-11-09，方案 B）：越界声道、
+        # num_ch 切换、坏脚本保旧码、unload、比特精确、非有限卫士、
+        # @block 语义、小块长、换码竞态压测。
+        "smoke_liveprog_mc_stress.py",
         # D6 门禁（2026-10-24）：补丁编号单点化。77 处 PATCHED 标记里 45 处不带
         # P-NNN，PATCHES.md 号称唯一真相源却九套编号并存（拿代码里的 B5 去查表
         # 查不到；P2.4 全仓只命中一处 PDF）。P-NNN 成为唯一权威标识，专项代号
