@@ -96,6 +96,7 @@ test/plugins/
 test/smoke/*.clap
 core/desktop/windows/build-x86/
 
-# --- 日期任务目录的过程产物：测量原始采样、临时构建、对照截图等 work/ 内容不入库 ---
-2026-*/**/work/
+# --- 日期任务目录（test/date/2026-XX-XX/<task>/）的过程产物 ---
+# work/ 放原始采样、临时构建、对照截图，不入库；outputs/ 结论文档正常入库。
+test/date/**/work/
 

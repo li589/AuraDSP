@@ -35,7 +35,8 @@
 | `vendor/` | **行业接口标准只读源码**：`plugin-api/`（CLAP / Steinberg VST3 官方头 / **VST2 Xaymar 净室 `vst.h`**）。原 `libjamesdsp/` 已于 2026-10-16 迁至 `engine/legacy/`（`a81dc04`） | 补丁必须 `[PATCHED-AuraDSP P-xxx]` + `engine/legacy/PATCHES.md` 登记；升级即重新提取覆盖。**VST2 编译只认 `vst2/vst.h`（BSD-3-Clause）；Steinberg 官方 2.4 归档仅 `source/` 只读，严禁入 vendor/Release** |
 | `assets/` | **运行资源**：`convolver/`、`ddc/`、`liveprog/` + `manifest.json`（本地 242.9MB，原 `resource/`，P3b 改名） | 打包与盘点走 `tools/resource_pipeline/`；勿把 python 脚本或日志混进资源树；`.irs`/`.vdc` **已不在 git 中**（D-2，2026-10-31 夜 `filter-repo` 重写全部历史 + force-push；重写前为 2443 个 / 241.6MB），门禁 `tools/bin/assets_untracked_scan.py` 守卫，**勿 `git add -f`** |
 | `app/` | Flutter 前端工程、L10n、各功能页、FFI 绑定 | 构建命令必须带 `--no-tree-shake-icons` |
-| `test/` | **全量测试套件**：`test/smoke/`（C++ 引擎单测）、`test/ui/`（UI 自动化置顶测试）、`test/data/`（测试数据） | 测试统一入口 `python test/runner.py` |
+| `test/` | **全量测试套件**：`test/smoke/`（C++ 引擎单测）、`test/ui/`（UI 自动化置顶测试）、`test/data/`（测试数据）、`test/date/`（**日期任务归档区**） | 测试统一入口 `python test/runner.py` |
+| `test/date/` | **日期任务归档区**：`test/date/2026-XX-XX/<task>/`（如 `perf-baseline`、`perf-final`）；每个任务固定 `work/`（原始采样、临时构建、对照截图）+ `outputs/`（结论文档、机器可读总表） | **根目录不再新建日期目录**：所有按日期组织的任务产物一律落 `test/date/2026-XX-XX/<task>/`；`work/` 由 `.gitignore`（`test/date/**/work/`）忽略、不入库，`outputs/` 正常跟踪；跨目录引用必须写全 `test/date/...` 路径 |
 | `tools/` | **开发辅助工具与小组件**：`bin/push_via_api.py`、`probe/gen_test_irs.py`、`probe/diag_rail_icons.py`、`probe/bench_effects.py` 等；另有 `resource_pipeline/`（资源打包）与 `calibration/`（校准转换） | 纯工具性质，不包含测试用例；`probe/` 为一次性探针、`archive/` 为过程产物，均不进门禁 |
 | `docs/` | 架构方案、UI 设计规范、决策记录 (ADR)、阶段报告；含 `参考技术手册/`（第三方 PDF 手册本地只读区，约 220MB，仅 README 清单入库） | 方案先行，设计更新后必须同步文档；参考手册区只读，禁改禁搬，规则见 `docs/参考技术手册/README.md` |
 | `.ai/` | **AI 自治沉淀区**：`.ai/memory/`（**项目记忆唯一入库真相源**：`MEMORY.md` 长期范式 + `YYYY-MM-DD.md` 当日过程）、`.ai/rules/`（硬规则与 UI 设计规范） | 各类智能体共享知识，无需人工介入。**注意**：`.workbuddy/memory/` 被 `.gitignore` 忽略、跨智能体不可见，只能当热副本，阶段结束必须搬迁合并到 `.ai/memory/`（规则见 `.ai/README.md` 记忆分工） |

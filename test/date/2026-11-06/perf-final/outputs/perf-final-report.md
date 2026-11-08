@@ -415,11 +415,11 @@ python tools/perf_regression.py --mode voicemeeter_api --scenario viz
 
 | 数据 | 位置 |
 | --- | --- |
-| 基线报告（S1–S9、样式矩阵、单变量、帧证据、分层归因） | `2026-11-06/perf-baseline/outputs/perf-baseline-report.md` |
-| 优化方案与施工后遗留清单（P0/P1/P2、profile 崩溃根因） | `2026-11-06/perf-baseline/outputs/optimization-plan.md` |
-| 静态审计（viz 无门控、Ticker 耦合、每帧分配清单、引擎预建） | `2026-11-06/perf-static-audit/outputs/perf-static-audit.md` |
-| 基线原始数据与脚本 | `2026-11-06/perf-baseline/work/`（`measure.py`、`ui.py`、`gpu_sampler.ps1`、各 stage 目录） |
-| `willChange` 负优化原始样本 | `2026-11-06/perf-baseline/work/wc/proc_willchange.json` |
+| 基线报告（S1–S9、样式矩阵、单变量、帧证据、分层归因） | `test/date/2026-11-06/perf-baseline/outputs/perf-baseline-report.md` |
+| 优化方案与施工后遗留清单（P0/P1/P2、profile 崩溃根因） | `test/date/2026-11-06/perf-baseline/outputs/optimization-plan.md` |
+| 静态审计（viz 无门控、Ticker 耦合、每帧分配清单、引擎预建） | `test/date/2026-11-06/perf-static-audit/outputs/perf-static-audit.md` |
+| 基线原始数据与脚本 | `test/date/2026-11-06/perf-baseline/work/`（`measure.py`、`ui.py`、`gpu_sampler.ps1`、各 stage 目录） |
+| `willChange` 负优化原始样本 | `test/date/2026-11-06/perf-baseline/work/wc/proc_willchange.json` |
 | 最终回归两次实跑 | `<repo>/.tmp/perf-regression/20261106-224719`（sysapo）、`20261106-224946`（VB）；归档副本见 `outputs/raw/<时间戳>/`（summary/stages/proc/gpu，截图未归档） |
 | 本报告机器可读总表 | 同目录 `final-metrics.csv` |
 

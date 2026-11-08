@@ -97,7 +97,7 @@ python test/runner.py --perf viz --perf-mode voicemeeter_api
 机器可读总表，`stages.csv` 是一行一场景的对照表，`proc_<scene>.json` 是逐秒原始样本，
 `stage_<scene>.png` 用来确认点击落点。阈值是“本机最终值 ≈1.3–1.5 倍”的软门禁，
 不加 `--strict` 只打印 WARN；VB 的 CPU 由 8 路引擎泵送主导，阈值刻意放宽。
-详见 `2026-11-06/perf-final/outputs/perf-final-report.md`。
+详见 `test/date/2026-11-06/perf-final/outputs/perf-final-report.md`。
 
 ---
 
