@@ -45,6 +45,11 @@ PLATFORM_ANY = {
     "smoke_ci_workflow.py",
     # S5b（2026-11-02）：XDG 目录规范源码守护，两平台可跑。
     "smoke_xdg_paths.py",
+    # 全修轮次（2026-11-08）：调试体系两门禁自 WINDOWS 集移入——均为
+    # 纯源码扫描（吞异常口径 R1–R4 + print/debugPrint 禁令），此前
+    # Linux CI J3 只 SKIP 不实跑，覆盖是假的（图集 R3 违规漏网实证）。
+    "smoke_d4b_swallow.py",
+    "smoke_debug_policy.py",
 }
 
 # PLATFORM_LINUX（2026-11-01，测试补强轮）：与 PLATFORM_WINDOWS 对称的
@@ -109,7 +114,8 @@ PLATFORM_WINDOWS = {
     "smoke_d1_latency_sr.py",
     "smoke_d7_asrc_consistency.py",
     "smoke_d5_slot_timeout.py",
-    "smoke_d4b_swallow.py",
+    # smoke_d4b_swallow.py：2026-11-08 移至 PLATFORM_ANY（见文件头各
+    # 集合），故自 PLATFORM_WINDOWS 摘除。
     "smoke_d6_patch_ids.py",
     "smoke_sr_rate_alignment.py",
     "smoke_eq_response.py",
@@ -172,7 +178,7 @@ PLATFORM_WINDOWS = {
     "smoke_dynamic_gr_and_gate.py",
     "smoke_multichannel_discrete.py",
     "smoke_effects_allparams.py",
-    "smoke_debug_policy.py",
+    # smoke_debug_policy.py：2026-11-08 移至 PLATFORM_ANY，自本集摘除。
     "smoke_oversample_aliasing.py",
     "smoke_reverb.py",
     "smoke_wp0_scaffold.py",
@@ -316,11 +322,11 @@ def run_smoke_tests():
         # D5 门禁（2026-10-24）：插件槽异步等待上界 150s → 5s + 墙钟收口 +
         # 超时兜底（同步 unload）+ timedOut 上报。数值与链路任一项回退即红。
         "smoke_d5_slot_timeout.py",
-        # D4-b 门禁（2026-10-24）：全仓静默异常。97 处 catch 既不留痕也不绑定
-        # 异常，泵循环更是整个迭代体包在 catch (_) {} + continue 里——一次类型
-        # 错误就能让可视化永远冻结且日志无痕。四类分治 + 四条规则（R1 空块必留痕
-        # /R2 循环包壳必限流/R3 禁匿名 catch/R4 理由不得敷衍），含规则引擎单测、
-        # 全仓扫描、接线完整性（part 共享 library import）与两处反向判红。
+        # D4-b 门禁（2026-10-24）：全仓静默异常。四类分治 + 四条规则
+        # （R1 空块必留痕/R2 循环包壳必限流/R3 禁匿名 catch/R4 理由
+        # 不得敷衍），含规则引擎单测、全仓扫描、接线完整性与反向判红。
+        # 平台分类在 PLATFORM_ANY（2026-11-08 自 WINDOWS 集移入：
+        # 纯源码扫描，Linux CI 必须实跑）。
         "smoke_d4b_swallow.py",
         # D6 门禁（2026-10-24）：补丁编号单点化。77 处 PATCHED 标记里 45 处不带
         # P-NNN，PATCHES.md 号称唯一真相源却九套编号并存（拿代码里的 B5 去查表
@@ -490,7 +496,8 @@ def run_smoke_tests():
     # （8 按声道效果器 mask=0 不变式 + arbmag/comp/eq 立体声实现语义登记）
     "smoke_effects_allparams.py",
     # 调试体系门禁（2026-11-01）：禁止业务代码直接 print/debugPrint；
-    # DebugTrace/HUD/命令行启动器必须存在，控件动作与引擎回执统一进 JSONL。
+    # DebugTrace/HUD/命令行启动器必须存在。平台分类在 PLATFORM_ANY
+    # （2026-11-08 自 WINDOWS 集移入，理由同 D4-b）。
     "smoke_debug_policy.py",
     "smoke_oversample_aliasing.py",
     "smoke_reverb.py",

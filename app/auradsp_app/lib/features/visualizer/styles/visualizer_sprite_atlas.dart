@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart' show rootBundle;
 
+import '../../../core/error_sink.dart';
 import 'visualizer_atlas_bake.dart';
 
 export 'visualizer_atlas_bake.dart' show SpriteSlice;
@@ -102,7 +103,10 @@ class VisualizerSpriteAtlas {
       final frame = await codec.getNextFrame();
       codec.dispose();
       _image = frame.image;
-    } catch (_) {
+    } catch (e, st) {
+      // D4-b 口径（2026-11-08 全修轮次顺带修复）：匿名丢弃异常是
+      // R3 违规——图集损坏必须在调试日志里留痕，不能静默失踪。
+      swallow(e, st);
       _failed = true;
     } finally {
       _loading = null;

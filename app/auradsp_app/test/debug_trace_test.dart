@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:auradsp_app/core/debug/debug_trace.dart';
+import 'package:auradsp_app/engine/debug_log.dart';
 import 'package:auradsp_app/features/debug/debug_hud.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -74,6 +75,26 @@ void main() {
     t.uiControl('eq.enable', true);
     t.flush();
     expect(t.lastEvents, isEmpty);
+  });
+
+  test('既有日志超轮转上限时打开即轮转（2026-11-08 审计·调试低4）', () {
+    final dir = Directory.systemTemp.createTempSync('aura_dbg_rot_');
+    final path = '${dir.path}/trace.jsonl';
+    File(path).writeAsStringSync('x' * (kLogRotateCapBytes + 1));
+    final t = DebugTrace.instance;
+    t.resetForTesting();
+    t.initFromArgs(['--debug', '--debug-log=$path']);
+    expect(t.enabled, isTrue);
+    final bak = File('$path.1');
+    expect(bak.existsSync(), isTrue, reason: '旧日志应改名 .1 留证');
+    expect(bak.lengthSync(), kLogRotateCapBytes + 1);
+    t.event('debug', 'after.rotate');
+    t.flush();
+    final first = File(path).readAsLinesSync().first;
+    expect((jsonDecode(first) as Map)['action'], 'session.start',
+        reason: '新文件应从本会话的 session.start 开始');
+    t.resetForTesting();
+    dir.deleteSync(recursive: true);
   });
 
   test('长字符串事件被截断，避免把脚本源码写满日志', () {
