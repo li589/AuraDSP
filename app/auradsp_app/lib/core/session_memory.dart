@@ -83,6 +83,8 @@ abstract final class SessionMemory {
         'ddcPath': m.ddcPath,
         'lpCode': m.lpCode,
         'lpDraftCode': m.lpDraftCode,
+        'lpMcCode': m.lpMcCode,
+        'lpMcDraftCode': m.lpMcDraftCode,
         'lpSliderValues': m.lpSliderValues.map((k, v) => MapEntry(k.toString(), v)),
         'arbmagString': m.arbmagString,
         'pluginPath': m.pluginManager.getSlotPlugin(0)?.path,
@@ -200,6 +202,12 @@ abstract final class SessionMemory {
       }
       if (session['lpDraftCode'] is String) {
         m.lpDraftCode = session['lpDraftCode'] as String;
+      }
+      if (session['lpMcCode'] is String) {
+        m.lpMcCode = session['lpMcCode'] as String;
+      }
+      if (session['lpMcDraftCode'] is String) {
+        m.lpMcDraftCode = session['lpMcDraftCode'] as String;
       }
       if (session['lpSliderValues'] is Map) {
         m.lpSliderValues.clear();

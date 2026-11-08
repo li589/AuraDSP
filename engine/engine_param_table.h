@@ -138,6 +138,10 @@ static void hook_liveprog_enable(auradsp_handle h) {
     if (h->open.load()) apply_liveprog(h);
 }
 
+static void hook_liveprogmc_enable(auradsp_handle h) {
+    if (h->open.load()) apply_liveprogmc(h);
+}
+
 static void hook_tube_enable(auradsp_handle h) {
     if (h->open.load()) apply_tube(h);
 }
@@ -943,6 +947,66 @@ static auradsp_status get_liveprog_status(auradsp_handle h, void* out_value, uin
     return AURADSP_OK;
 }
 
+/* ---- 多声道 Liveprog（liveprog.mc，方案 B）：与 liveprog.* 全套镜像 ---- */
+static auradsp_status set_liveprogmc_code(auradsp_handle h, const void* value, uint32_t bytes) {
+    if (!h->mc_lp) { set_error(h, "liveprogmc.code: host unavailable"); return AURADSP_E_IO; }
+    if (bytes == 0 || bytes > 256 * 1024) {
+        set_error(h, "liveprogmc.code: invalid length (1..256KiB)");
+        return AURADSP_E_PARAM;
+    }
+    char* buf = (char*)malloc((size_t)bytes + 1);
+    if (!buf) { set_error(h, "liveprogmc.code: out of memory"); return AURADSP_E_IO; }
+    memcpy(buf, value, bytes);
+    buf[bytes] = 0;
+    char* lp_new = (char*)malloc((size_t)bytes + 1);
+    if (!lp_new) {
+        free(buf);
+        set_error(h, "liveprogmc.code: out of memory (copy)");
+        return AURADSP_E_IO;
+    }
+    memcpy(lp_new, value, bytes);
+    lp_new[bytes] = 0;
+    const int rc = mc_liveprog_load(h->mc_lp, buf);
+    free(buf);
+    if (rc != 1) {
+        free(lp_new);
+        h->lp_mc_status = rc;
+        set_error(h, checkErrorCode(rc));
+        return AURADSP_E_PARAM;
+    }
+    mc_lp_refresh_sliders(h);
+    h->lp_mc_status = 1;
+    free(h->lp_mc_code);
+    h->lp_mc_code = lp_new;
+    h->lp_mc_code_len = bytes;
+    if (h->open.load() && h->p.lp_mc_enable.load(std::memory_order_relaxed))
+        apply_liveprogmc(h);
+    return AURADSP_OK;
+}
+
+static auradsp_status get_liveprogmc_code(auradsp_handle h, void* out_value, uint32_t bytes) {
+    if (bytes < 1) return AURADSP_E_PARAM;
+    if (!h->lp_mc_code) { *(char*)out_value = 0; return AURADSP_OK; }
+    if (bytes < h->lp_mc_code_len + 1) { set_error(h, "liveprogmc.code: buffer too small"); return AURADSP_E_PARAM; }
+    memcpy(out_value, h->lp_mc_code, h->lp_mc_code_len + 1);
+    return AURADSP_OK;
+}
+
+static auradsp_status set_liveprogmc_unload(auradsp_handle h, const void* /*value*/, uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    h->p.lp_mc_enable.store(0);
+    mc_liveprog_unload(h->mc_lp);
+    h->lp_mc_status = 0;
+    if (h->open.load()) apply_liveprogmc(h);
+    return AURADSP_OK;
+}
+
+static auradsp_status get_liveprogmc_status(auradsp_handle h, void* out_value, uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    *(int32_t*)out_value = h->lp_mc_status;
+    return AURADSP_OK;
+}
+
 static auradsp_status set_graph_order(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes < 16) return AURADSP_E_PARAM;
     char* ord = (char*)malloc((size_t)bytes + 1);
@@ -1036,6 +1100,21 @@ static auradsp_status handle_indexed_param_set(auradsp_handle h, const char* id,
             *h->lp_slider_ptr[idx] = v;
         return AURADSP_OK;
     }
+    if (!strncmp(id, "liveprogmc.param", 16) && bytes >= 4) {
+        char* end = nullptr;
+        long n = strtol(id + 16, &end, 10);
+        if (end == id + 16 || *end != '\0' || n < 1 || n > 64) {
+            set_error(h, "param: unsupported (unknown param id)");
+            return AURADSP_E_PARAM;
+        }
+        const int idx = (int)(n - 1);
+        const float v = *(const float*)value;
+        if (!std::isfinite(v)) { set_error(h, "param: rejected (NaN/Inf input)"); return AURADSP_E_PARAM; }
+        h->p.lp_mc_param[idx].store(v, std::memory_order_relaxed);
+        if (h->lp_mc_slider_ptr[idx])
+            *h->lp_mc_slider_ptr[idx] = v;
+        return AURADSP_OK;
+    }
     set_error(h, "param: unsupported (unknown param id)");
     return AURADSP_E_PARAM;
 }
@@ -1060,6 +1139,15 @@ static auradsp_status handle_indexed_param_get(auradsp_handle h, const char* id,
             return AURADSP_E_PARAM;
         }
         *(float*)out_value = h->p.lp_param[n - 1].load();
+        return AURADSP_OK;
+    }
+    if (!strncmp(id, "liveprogmc.param", 16) && bytes >= 4) {
+        char* end = nullptr;
+        long n = strtol(id + 16, &end, 10);
+        if (end == id + 16 || *end != '\0' || n < 1 || n > 64) {
+            return AURADSP_E_PARAM;
+        }
+        *(float*)out_value = h->p.lp_mc_param[n - 1].load();
         return AURADSP_OK;
     }
     return AURADSP_E_PARAM;
@@ -1369,6 +1457,10 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_CUSTOM("liveprog.code", set_liveprog_code, get_liveprog_code),
     PARAM_CUSTOM_SET_ONLY("liveprog.unload", set_liveprog_unload),
     PARAM_CUSTOM_GET_ONLY("liveprog.status", get_liveprog_status),
+    PARAM_BOOL("liveprogmc.enable", lp_mc_enable, hook_liveprogmc_enable),
+    PARAM_CUSTOM("liveprogmc.code", set_liveprogmc_code, get_liveprogmc_code),
+    PARAM_CUSTOM_SET_ONLY("liveprogmc.unload", set_liveprogmc_unload),
+    PARAM_CUSTOM_GET_ONLY("liveprogmc.status", get_liveprogmc_status),
 
     // 14 输入输出与全局配置 (Input, Post Gain, Limiter, System)
     PARAM_FLOAT("input.gain", input_gain, -15.0f, 15.0f, nullptr),

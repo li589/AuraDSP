@@ -220,6 +220,8 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     h->jdsp.auraConvMixUsed = 0;
     JamesDSPInitFxGains(&h->jdsp);
     LiveProgSetChannels(&h->jdsp, h->channel_count.load()); /* [PATCHED-AuraDSP P-038] 同步声道数环境 */
+    /* 多声道 EEL 脚本级宿主（方案 B）：与 jdsp 并行构造，环境口径一致。 */
+    h->mc_lp = mc_liveprog_create(sample_rate, h->channel_count.load());
     shelf_recalc(h);
     filter_recalc(h);
     apply_params_locked(h);
@@ -275,6 +277,9 @@ void auradsp_destroy(auradsp_handle h) {
     delete[] h->mx_stereo;
     delete[] h->haas_ring;
     free(h->lp_code);
+    mc_liveprog_destroy(h->mc_lp);
+    h->mc_lp = nullptr;
+    free(h->lp_mc_code);
     free(h->eq_curve);
     free(h->arbmag_string);
     delete h;
@@ -450,6 +455,9 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
                 viz_scan_out_peak(h, out, frames, ch);
             }
         }
+        /* 多声道 EEL 脚本级（方案 B）：模式分发后的母带位——脚本看到
+         * 全链处理完成的最终多声道信号。未使能/未编译时逐字节直通。 */
+        if (h->mc_lp) mc_liveprog_process(h->mc_lp, out, frames, ch);
         int vizInt = h->viz_interval.load(std::memory_order_relaxed);
         if (vizInt < 64) vizInt = 480;
         if (h->frames_since_viz >= vizInt) {

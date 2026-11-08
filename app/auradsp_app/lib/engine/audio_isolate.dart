@@ -771,6 +771,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iChCount = idp(ParamId.channelsCount);
             final iChCountMode = idp(ParamId.channelsCountMode);
             final iLpEn = idp('liveprog.enable'), iLpSt = idp('liveprog.status');
+            final iLpMcEn = idp('liveprogmc.enable'), iLpMcSt = idp('liveprogmc.status');
             final iCvEn = idp('convolver.enable'), iCvRd = idp('convolver.ready');
             final iCvF = idp('convolver.ir.frames'), iCvCh = idp('convolver.ir.channels');
             final iCvSr = idp('convolver.ir.srcRate'), iCvPk = idp('convolver.ir.peak');
@@ -926,6 +927,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'channelsCountMode': rdInt(iChCountMode) ?? 0,
                 'lpEnable': rdInt(iLpEn) ?? 0,
                 'lpStatus': rdInt(iLpSt) ?? 0,
+                'lpMcEnable': rdInt(iLpMcEn) ?? 0,
+                'lpMcStatus': rdInt(iLpMcSt) ?? 0,
                 'convEnable': rdInt(iCvEn) ?? 0,
                 'convReady': cvReady,
                 'convFrames': rdInt(iCvF) ?? 0,
@@ -1082,7 +1085,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'eqCurve': eqCurveRb,
               });
             } finally {
-              for (final q in [iBass, iBassG, iRev, iRevEng, iRevPre, iRevLfe, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iHsS, iExE, iExA, iExF, iBoG, iBoA, iEoG, iEoA, iToG, iToA, iCoG, iCoA, iRoG, iRoA, iGtE, iGtT, iGtA, iGtR, iGtG, iDsE, iDsF, iDsA, iLdE, iLdA, iBhH, iBhB, iBhS, iBhC, iFtE, iFtT, iFtF, iFtQ, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR, iArbE, iArbR, iArbN, iLpCode, iArbStr, iEqCurve]) {
+              for (final q in [iBass, iBassG, iRev, iRevEng, iRevPre, iRevLfe, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iLpMcEn, iLpMcSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iHsS, iExE, iExA, iExF, iBoG, iBoA, iEoG, iEoA, iToG, iToA, iCoG, iCoA, iRoG, iRoA, iGtE, iGtT, iGtA, iGtR, iGtG, iDsE, iDsF, iDsA, iLdE, iLdA, iBhH, iBhB, iBhS, iBhC, iFtE, iFtT, iFtF, iFtQ, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR, iArbE, iArbR, iArbN, iLpCode, iArbStr, iEqCurve]) {
                 malloc.free(q);
               }
             }

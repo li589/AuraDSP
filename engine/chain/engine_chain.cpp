@@ -255,6 +255,7 @@ void reset_channel_state(auradsp_handle h) {
     /* 4. liveprog 环境感知 [PATCHED-AuraDSP P-038] */
     const int cur_ch = h->channel_count.load(std::memory_order_relaxed);
     LiveProgSetChannels(&h->jdsp, cur_ch > 0 ? cur_ch : 2);
+    if (h->mc_lp) mc_liveprog_set_channels(h->mc_lp, cur_ch > 0 ? cur_ch : 2);
 
     /* 5. 请求 RT 侧清理独占状态（RT 在 auradsp_process 入口消费） */
     h->reset_req.store(1, std::memory_order_release);
@@ -494,6 +495,30 @@ void apply_liveprog(auradsp_handle h) {
         LiveProgEnable(&h->jdsp);
     else
         LiveProgDisable(&h->jdsp);
+}
+
+
+/* 多声道 Liveprog（方案 B）：同步环境（采样率/声道数）并下发使能。 */
+void apply_liveprogmc(auradsp_handle h) {
+    if (!h->mc_lp) return;
+    mc_liveprog_set_sample_rate(h->mc_lp,
+        (h->jdsp.trueSampleRate > 0.0f) ? h->jdsp.trueSampleRate : h->jdsp.fs);
+    const int cur_ch = h->channel_count.load(std::memory_order_relaxed);
+    mc_liveprog_set_channels(h->mc_lp, cur_ch > 0 ? cur_ch : 2);
+    mc_liveprog_set_enabled(h->mc_lp,
+        h->p.lp_mc_enable.load(std::memory_order_relaxed) ? 1 : 0);
+}
+
+
+/* MC 代码加载成功后刷新滑块指针并写回宿主存储值（平移 lp_refresh_sliders）。 */
+void mc_lp_refresh_sliders(auradsp_handle h) {
+    if (!h->mc_lp) return;
+    for (int i = 0; i < 64; ++i) {
+        h->lp_mc_slider_ptr[i] = mc_liveprog_slider_var(h->mc_lp, i + 1);
+        if (h->lp_mc_slider_ptr[i])
+            *h->lp_mc_slider_ptr[i] = h->p.lp_mc_param[i].load(std::memory_order_relaxed);
+    }
+    mc_liveprog_exec_slider_section(h->mc_lp);
 }
 
 

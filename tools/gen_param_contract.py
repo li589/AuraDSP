@@ -12,7 +12,7 @@
   app/auradsp_app/test/fixtures/param_defaults_contract.g.dart
     - kParamDefaultRows:      (engineId, member, cppDefault) 可默认校验的参数
     - kEngineCustomOnlyIds:   表内无 struct member 的 custom 参数
-    - kEngineDynamicParamIds: set 分支动态展开 id（stereo.bandN/input.balance.N/liveprog.paramN）
+    - kEngineDynamicParamIds: set 分支动态展开 id（stereo.bandN/input.balance.N/liveprog.paramN/liveprogmc.paramN）
     - kEngineRangeRows:       (engineId, min, max) FLOAT/INT 表内范围（Part F 消费）
     - kContractLineCounts:    两个 header + create 的行数哨兵；
                               header/create 变更而未重生 fixture → 测试红
@@ -38,6 +38,7 @@ DYNAMIC_IDS = (
     [f'stereo.band{i}' for i in range(1, 6)]
     + [f'input.balance.{i}' for i in range(1, 9)]
     + [f'liveprog.param{i}' for i in range(1, 9)]
+    + [f'liveprogmc.param{i}' for i in range(1, 9)]
 )
 
 

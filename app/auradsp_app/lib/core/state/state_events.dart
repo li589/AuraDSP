@@ -181,6 +181,13 @@ extension StateEvents on AppModel {
         limiterOn = (raw['limiterEnable'] as int) != 0;
         lpEnabled = (raw['lpEnable'] as int) != 0;
         lpStatus = raw['lpStatus'] as int;
+        if (raw['lpMcEnable'] != null) {
+          lpMcEnabled = (raw['lpMcEnable'] as int) != 0;
+        }
+        if (raw['lpMcStatus'] != null) {
+          lpMcStatus = raw['lpMcStatus'] as int;
+          if (lpMcStatus == 1) lpMcError = null;
+        }
         convEnabled = (raw['convEnable'] as int) != 0;
         convReady = (raw['convReady'] as int) != 0;
         // auto-bypass 的另一半：资源在此刻就绪且用户开关为开 → 立即生效，

@@ -308,6 +308,57 @@ extension StateChain on AppModel {
     scheduleAutoSave();
   }
 
+  // ---- 多声道 Liveprog（liveprog.mc，方案 B） ----
+
+  void setLiveprogMcEnabled(bool on) {
+    lpMcEnabled = on;
+    _notifyUi();
+    _markSent(ParamId.lpMcEnable);
+    send({
+      'cmd': 'setParam',
+      'id': ParamId.lpMcEnable,
+      'value': on ? 1 : 0,
+      'isFloat': false,
+    });
+    scheduleAutoSave();
+  }
+
+  void unloadLiveprogMc() {
+    lpMcEnabled = false;
+    lpMcStatus = 0;
+    lpMcError = null;
+    lpMcPresetCodeMismatch = false;
+    lpMcCompileMs = -1;
+    _notifyUi();
+    _markSent(ParamId.lpMcUnload);
+    send({
+      'cmd': 'setParam',
+      'id': ParamId.lpMcUnload,
+      'value': 0,
+      'isFloat': false,
+    });
+    scheduleAutoSave();
+  }
+
+  void setLiveprogMcParam(int index, double v) {
+    if (index >= 0 && index < 8) {
+      lpMcSliderValues[index + 1] = v;
+      lpMcParams[index] = v;
+    }
+    setFloat('liveprogmc.param${index + 1}', v);
+  }
+
+  void setLiveprogMcCode(String text) {
+    lpMcError = null;
+    final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    lpMcCompileMs = -1;
+    lpMcPresetCodeMismatch = false;
+    lpMcCode = normalized;
+    lpMcDraftCode = normalized;
+    send({'cmd': 'setParamStr', 'id': ParamId.lpMcCode, 'text': normalized});
+    scheduleAutoSave();
+  }
+
   void setLiveprogParam(int index, double v) {
     /* 2026-10-28：同步 lpSliderValues——10-27 滑块重构后本方法只下发
      * setFloat，用户调过的值不进 lpSliderValues；同签名代码重应用时

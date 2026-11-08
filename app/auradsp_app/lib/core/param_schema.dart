@@ -1466,6 +1466,19 @@ abstract final class ParamRegistry {
     getter: (m) => _lpCodeHash(m.lpCode),
     setter: (m, v) => {}, // 由 apply 特殊对账消费
   );
+  static final liveprogMcEnabled = ParamSpec<bool>(
+    id: 'liveprogmc.enable', section: 'liveprogmc', key: 'enabled',
+    type: ParamType.boolean, defaultValue: false,
+    order: 102,
+    getter: (m) => m.lpMcEnabled,
+    setter: (m, v) => m.setLiveprogMcEnabled(v),
+  );
+  static final liveprogMcCodeHash = ParamSpec<String>(
+    id: 'liveprogmc.codeHash', section: 'liveprogmc', key: 'codeHash',
+    type: ParamType.string, defaultValue: '',
+    getter: (m) => _lpCodeHash(m.lpMcCode),
+    setter: (m, v) => {}, // 由 apply 特殊对账消费
+  );
 
   /* =========================================================================
    * 21. 后级增益与主限幅器 (Post Gain & Main Limiter)
@@ -1997,6 +2010,34 @@ abstract final class ParamRegistry {
           m.setLiveprogEnabled(m.lpEnabled);
           for (var i = 0; i < 8; i++) {
             m.setLiveprogParam(i, m.lpParams[i]);
+          }
+        }
+      },
+    ),
+    // 20b. 多声道脚本（方案 B；与 liveprog 同构的特殊对账节）
+    ParamSection(
+      name: 'liveprogmc',
+      specs: [liveprogMcEnabled, liveprogMcCodeHash],
+      customApplyOnly: true,
+      customSnapshot: (m, map) {
+        map['params'] = List<double>.of(m.lpMcParams);
+      },
+      postApply: (m, lp, fullRewrite) {
+        if (lp.isNotEmpty) {
+          if (lp['params'] is List) {
+            final saved = (lp['params'] as List).map((e) => (e as num).toDouble()).toList();
+            for (var i = 0; i < saved.length && i < 8; i++) {
+              m.lpMcParams[i] = saved[i];
+            }
+          }
+          if (lp['enabled'] != null) m.lpMcEnabled = lp['enabled'] as bool;
+          final savedHash = lp['codeHash'] as String?;
+          m.lpMcPresetCodeMismatch = savedHash != null &&
+              savedHash.isNotEmpty &&
+              savedHash != _lpCodeHash(m.lpMcCode);
+          m.setLiveprogMcEnabled(m.lpMcEnabled);
+          for (var i = 0; i < 8; i++) {
+            m.setLiveprogMcParam(i, m.lpMcParams[i]);
           }
         }
       },

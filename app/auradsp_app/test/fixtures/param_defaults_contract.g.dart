@@ -1,7 +1,7 @@
 // GENERATED FILE — DO NOT EDIT.
 // 由 tools/gen_param_contract.py 从引擎 C++ 源码生成（引擎侧默认快照）。
 // 消费方：app/test/param_contract_test.dart（默认值一致性 + 权威对账）。
-// 覆盖引擎参数 231 个（含 21 个 set 分支动态 id）。
+// 覆盖引擎参数 235 个（含 29 个 set 分支动态 id）。
 
 class ParamDefaultRow {
   final String engineId;
@@ -185,6 +185,7 @@ const List<ParamDefaultRow> kParamDefaultRows = [
   ParamDefaultRow('loudness.channels', 'loudness_channels', 255),
   ParamDefaultRow('loudness.channel_mask', 'loudness_channels', 255),
   ParamDefaultRow('liveprog.enable', 'lp_enable', 0),
+  ParamDefaultRow('liveprogmc.enable', 'lp_mc_enable', 0),
   ParamDefaultRow('input.gain', 'input_gain', 0.0),
   ParamDefaultRow('post.gain', 'post_gain', 0.0),
   ParamDefaultRow('post.gain.c0', 'post_gain_ch', 0.0),
@@ -229,6 +230,9 @@ const List<String> kEngineCustomOnlyParamIds = [
   'liveprog.code',
   'liveprog.unload',
   'liveprog.status',
+  'liveprogmc.code',
+  'liveprogmc.unload',
+  'liveprogmc.status',
   'gr.limiter',
   'gr.comp',
   'gr.gate',
@@ -271,6 +275,14 @@ const List<String> kEngineDynamicParamIds = [
   'liveprog.param6',
   'liveprog.param7',
   'liveprog.param8',
+  'liveprogmc.param1',
+  'liveprogmc.param2',
+  'liveprogmc.param3',
+  'liveprogmc.param4',
+  'liveprogmc.param5',
+  'liveprogmc.param6',
+  'liveprogmc.param7',
+  'liveprogmc.param8',
 ];
 
 /// 引擎数值参数范围（FLOAT/INT 表内 min/max；BOOL 无范围）。
@@ -430,5 +442,5 @@ const List<ParamRangeRow> kEngineRangeRows = [
 
 /// 引擎源码行数哨兵（param_table / internal / create 的行数）。
 /// header/create 变更而未重生 fixture → param_contract_test 行数断言失败。
-const String kContractLineCounts = 'param_table:1442;internal:916;create:624';
+const String kContractLineCounts = 'param_table:1534;internal:928;create:632';
 

@@ -462,6 +462,14 @@ class AppModel extends ChangeNotifier {
   // 保留用户已调的滑块值；声明变化才采纳新默认值。
   String _lpDeclSig = '';
 
+  // 多声道 Liveprog（liveprog.mc，方案 B）：与立体声 lp* 平行、互不可见
+  bool lpMcEnabled = false;
+  int lpMcStatus = 0;
+  String? lpMcError;
+  final List<double> lpMcParams = List.filled(8, 0);
+  int lpMcCompileMs = -1;
+  bool lpMcPresetCodeMismatch = false;
+
   // 卷积 / IR（v1.1 M4）：meta 由引擎门卫校验后回读
   bool convEnabled = false, convReady = false;
   int convFrames = 0, convChannels = 0, convSrcRate = 0;
@@ -750,6 +758,14 @@ class AppModel extends ChangeNotifier {
 
   /// Liveprog 实时未编译草稿代码（软件关闭又打开不丢失正在编辑的代码）
   String? lpDraftCode;
+
+  /// 多声道 Liveprog 已应用代码与草稿（方案 B，独立于立体声）
+  String? lpMcCode;
+  String? lpMcDraftCode;
+
+  /// 多声道 Liveprog 滑块值/元数据（键为 slider 下标 1..64）
+  final Map<int, double> lpMcSliderValues = {};
+  final Map<int, EelSliderMeta> lpMcSliderMetas = {};
 
   /// Liveprog 扩展滑块参数表（支持 1..64 及自定义变量，以 meta.index 为键）
   final Map<int, double> lpSliderValues = {};

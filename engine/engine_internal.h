@@ -54,6 +54,7 @@ extern "C" {
 #include "legacy/jdsp/jdsp_header.h"
 #include "legacy/jdsp/Effects/eel2/fft.h"
 }
+#include "dsp/dsp_mc_liveprog.h" /* 多声道 EEL 脚本级宿主（方案 B） */
 
 /* legacy liveprogWrapper.c 的错误码转文案（未在头文件声明，全局符号） */
 extern "C" const char* checkErrorCode(int errCode);
@@ -152,6 +153,9 @@ struct Params {
     /* Liveprog（EEL2 实时可编程 DSP；vendor 补丁 P-001 提供 slider1..8） */
     std::atomic<int32_t>  lp_enable{0};
     std::atomic<float>    lp_param[64];         /* slider1..64（C++20 值初始化 = 0） */
+    /* 多声道 Liveprog（liveprog.mc，方案 B）：与立体声 lp_* 完全平行、互不可见 */
+    std::atomic<int32_t>  lp_mc_enable{0};
+    std::atomic<float>    lp_mc_param[64];      /* slider1..64（MC 独立） */
     /* 卷积 / 脉冲响应（v1.1 M4） */
     std::atomic<int32_t>  conv_enable{0};
     std::atomic<float>    conv_mix{1.0f};      /* 干湿比 [0,1]：1=纯湿（P-005） */
@@ -599,6 +603,12 @@ struct auradsp_handle_s {
     int    lp_status = 0;             /* 0=无代码 1=编译成功 <0=LiveProgStringParser 错误码 */
     char*  lp_code = nullptr;         /* 已下发代码副本（get_param 回读用） */
     size_t lp_code_len = 0;
+    /* 多声道 Liveprog 状态（方案 B） */
+    McLiveProgHost* mc_lp = nullptr;  /* create 时构造、destroy 时析构 */
+    float* lp_mc_slider_ptr[64] = {}; /* slider1..64 的 MC VM 寄存器指针 */
+    int    lp_mc_status = 0;          /* 0=无代码 1=编译成功 <0=错误码 */
+    char*  lp_mc_code = nullptr;      /* 已下发代码副本（get_param 回读用） */
+    size_t lp_mc_code_len = 0;
     /* 字符串回读副本（预设 §8.1 / 调研 §1：存原始串而非重序列化，避免格式漂移；析构释放） */
     char*  eq_curve = nullptr;        /* 已下发 eq.curve 原串副本（get_param 回读用） */
     size_t eq_curve_len = 0;
@@ -836,6 +846,8 @@ void apply_crossfeed(auradsp_handle h);
 void apply_eq(auradsp_handle h);
 void apply_fx_gains(auradsp_handle h);
 void apply_liveprog(auradsp_handle h);
+void apply_liveprogmc(auradsp_handle h);
+void mc_lp_refresh_sliders(auradsp_handle h);
 void apply_params_locked(auradsp_handle h);
 void apply_post(auradsp_handle h);
 void apply_reverb(auradsp_handle h);

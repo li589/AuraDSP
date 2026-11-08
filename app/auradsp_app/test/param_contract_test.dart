@@ -84,6 +84,7 @@ const Set<String> kNoEngineWriteSpecIds = {
   // 空实现 noop（setter 是 (m, v) {}）
   'bass.gain', // 派生字段，由 intensity 经 _mirror 回写
   'liveprog.codeHash', // 由 apply 特殊对账消费（FNV 哈希只读态）
+  'liveprogmc.codeHash', // 同 liveprog.codeHash（方案 B）
   'routing.modeCategory', // 宿主路由配置，ConfigManager 域
   'routing.attachmentMode', // 宿主路由配置，ConfigManager 域
   'routing.pipelineInput', // 宿主路由配置，ConfigManager 域
@@ -117,6 +118,7 @@ const Set<String> kNoEngineWriteSpecIds = {
 const Set<String> kNonRoundtripSpecIds = {
   'bass.gain', // noop：派生字段
   'liveprog.codeHash', // noop：只读哈希态
+  'liveprogmc.codeHash', // noop：只读哈希态（方案 B）
   'arbmag.string', // setter 仅 v.isNotEmpty 时写入，空串还原被跳过
   'arbmag.enable', // 实际生效值 = on && arbmagReady；testing 下引擎回显置 0
   'routing.modeCategory', // noop setter：值经 ConfigManager/快照对账路径应用
@@ -134,7 +136,7 @@ const Set<String> kUiOnlySpecIds = {
   // EQ UI 态（引擎无参；UI 曲线生成时消费，见 P-1）
   'eq.bandsCount', 'eq.q', 'eq.filter', 'eq.interp',
   // EQ 预设名 / 旁路（字段直赋或 toggleEqBypass 特路）
-  'eq.presetName', 'eq.bypass', 'liveprog.codeHash',
+  'eq.presetName', 'eq.bypass', 'liveprog.codeHash', 'liveprogmc.codeHash',
   // 宿主/路由配置（ConfigManager 域，不发电Engine）
   // 注：bass.mode 曾在此登记为 UI 专属——P-032 起引擎新增了同名状态载体
   // 参数（纯 UI 模式选择的状态回读通道，不参与 DSP 计算），故已移出。
@@ -247,6 +249,18 @@ const Set<String> kEngineOnlyIds = {
   'liveprog.param8',
   'liveprog.status',
   'liveprog.unload',
+  // ---- liveprogmc：多声道脚本（方案 B，同 liveprog 分支形态） ----
+  'liveprogmc.code',
+  'liveprogmc.param1',
+  'liveprogmc.param2',
+  'liveprogmc.param3',
+  'liveprogmc.param4',
+  'liveprogmc.param5',
+  'liveprogmc.param6',
+  'liveprogmc.param7',
+  'liveprogmc.param8',
+  'liveprogmc.status',
+  'liveprogmc.unload',
   // ---- loudness：声道掩码族（UI 不暴露逐效果掩码） ----
   'loudness.channel_mask',
   // ---- mode：全局模式查询 ----

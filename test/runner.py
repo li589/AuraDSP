@@ -53,6 +53,9 @@ PLATFORM_ANY = {
     # EEL 手册防漂移（2026-11-08）：手册条目 ↔ VM fnTable1 存在性 +
     # 定长签名个数 + 宿主环境条目齐备，纯源码扫描，两平台可跑。
     "smoke_eel_manual.py",
+    # 多声道 EEL 脚本级（2026-11-09，方案 B）：引擎 ctypes 活体，
+    # 两平台可跑（产物缺失时 engine_artifact 自行报错口径同其他引擎门禁）。
+    "smoke_liveprog_mc.py",
 }
 
 # PLATFORM_LINUX（2026-11-01，测试补强轮）：与 PLATFORM_WINDOWS 对称的
@@ -335,6 +338,9 @@ def run_smoke_tests():
         # 200 函数的存在性与定长签名比对（freembuf 幽灵条目、mldivide /
         # quadprog 等签名个数错误、num_ch 等宿主条目缺失的全量比对收口）。
         "smoke_eel_manual.py",
+        # 多声道 EEL 脚本级门禁（2026-11-09，方案 B）：8 声道 spl 读写、
+        # 逐声道增益、滑块与立体声隔离、回读/状态、未使能直通。
+        "smoke_liveprog_mc.py",
         # D6 门禁（2026-10-24）：补丁编号单点化。77 处 PATCHED 标记里 45 处不带
         # P-NNN，PATCHES.md 号称唯一真相源却九套编号并存（拿代码里的 B5 去查表
         # 查不到；P2.4 全仓只命中一处 PDF）。P-NNN 成为唯一权威标识，专项代号
