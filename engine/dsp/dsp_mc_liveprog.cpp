@@ -13,16 +13,12 @@
 #include "dsp_mc_liveprog.h"
 
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <ctime>
-
-#ifdef _WIN32
-#include <intrin.h>
-#include <windows.h>
-#endif
+#include <thread>
 
 #include "legacy/jdsp/jdsp_header.h" /* NSEEL API + compileContext + aura_eel_ram_clear */
 
@@ -56,7 +52,7 @@ struct McLiveProgHost {
     McSlot slots[kMcSlots];
     McSlot* active = nullptr;
     uint64_t procCount = 0;
-    volatile long inFlight = 0;
+    std::atomic<long> inFlight{0};
     std::atomic<int> enabled{0};
     float fs = 48000.0f;
     int channels = 2;
@@ -64,46 +60,28 @@ struct McLiveProgHost {
 
 namespace {
 
-/* 在途计数（与 liveprogWrapper 同实现：x86 lock 前缀 / POSIX __sync） */
-long mc_inflight_inc(volatile long* p) {
-#ifdef _WIN32
-    return _InterlockedIncrement(p);
-#else
-    return __sync_add_and_fetch(const_cast<long*>(p), 1);
-#endif
+/* 在途计数：std::atomic seq_cst 全序语义与 liveprogWrapper 的
+ * lock 前缀计数等价（换槽守卫只依赖「换指针后读到 0 ⇒ 无在途调用
+ * 持有旧快照」与计数单调性）。核心层零 OS API（平台隔离门禁口径），
+ * 故不用 legacy 的平台内建写法。 */
+long mc_inflight_inc(std::atomic<long>* p) {
+    return p->fetch_add(1, std::memory_order_seq_cst) + 1;
 }
-long mc_inflight_dec(volatile long* p) {
-#ifdef _WIN32
-    return _InterlockedDecrement(p);
-#else
-    return __sync_sub_and_fetch(const_cast<long*>(p), 1);
-#endif
+long mc_inflight_dec(std::atomic<long>* p) {
+    return p->fetch_sub(1, std::memory_order_seq_cst) - 1;
 }
-long mc_inflight_load(volatile long* p) {
-#ifdef _WIN32
-    return _InterlockedCompareExchange(p, 0, 0);
-#else
-    return __sync_val_compare_and_swap(const_cast<long*>(p), 0, 0);
-#endif
+long mc_inflight_load(std::atomic<long>* p) {
+    return p->load(std::memory_order_seq_cst);
 }
 double mc_now_ms() {
-#ifdef _WIN32
-    return (double)GetTickCount64();
-#else
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1000000.0;
-#endif
+    using namespace std::chrono;
+    return (double)duration_cast<microseconds>(
+               steady_clock::now().time_since_epoch())
+               .count() /
+           1000.0;
 }
 void mc_sleep_ms(unsigned int ms) {
-#ifdef _WIN32
-    Sleep(ms);
-#else
-    struct timespec ts;
-    ts.tv_sec = 0;
-    ts.tv_nsec = (long)ms * 1000000L;
-    nanosleep(&ts, nullptr);
-#endif
+    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
 
 void mc_slot_init_vm(McLiveProgHost* host, McSlot* s) {
