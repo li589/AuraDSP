@@ -1648,6 +1648,9 @@
   "lpCompilingScript": "正在编译脚本…",
   "lpEyebrowDsp": "可编程 DSP",
   "lpTitleEditor": "EEL2 编辑器",
+  "lpTargetStereo": "立体声脚本",
+  "lpTargetMultichannel": "多声道脚本",
+  "lpMcHint": "多声道模式（声道数 > 2）下运行，可读写全部 8 个声道 spl0..spl7",
   "lpBtnApplied": "已应用",
   "lpBtnUnapplied": "未应用",
   "lpBtnCompile": "编译",
@@ -1745,4 +1748,3 @@
   "ambientLabel": "频谱光晕",
   "ambientHint": "主页背景随音乐起伏的光晕；关闭后完全停绘，可省 GPU"
 }
-

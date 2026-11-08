@@ -1519,6 +1519,9 @@
   "lpCompilingScript": "Compiling script…",
   "lpEyebrowDsp": "Programmable DSP",
   "lpTitleEditor": "EEL2 Editor",
+  "lpTargetStereo": "Stereo Script",
+  "lpTargetMultichannel": "Multichannel Script",
+  "lpMcHint": "Runs in multichannel mode (channels > 2); reads/writes all 8 channels spl0..spl7",
   "lpBtnApplied": "Applied",
   "lpBtnUnapplied": "Unapplied",
   "lpBtnCompile": "Compile",
@@ -1609,4 +1612,3 @@
   "ambientLabel": "Spectrum glow",
   "ambientHint": "Glow behind the home page that follows the music. Turn it off to stop drawing entirely and save GPU."
 }
-

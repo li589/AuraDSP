@@ -6688,6 +6688,24 @@ abstract class AppLocalizations {
   /// **'EEL2 编辑器'**
   String get lpTitleEditor;
 
+  /// No description provided for @lpTargetStereo.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声脚本'**
+  String get lpTargetStereo;
+
+  /// No description provided for @lpTargetMultichannel.
+  ///
+  /// In zh, this message translates to:
+  /// **'多声道脚本'**
+  String get lpTargetMultichannel;
+
+  /// No description provided for @lpMcHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'多声道模式（声道数 > 2）下运行，可读写全部 8 个声道 spl0..spl7'**
+  String get lpMcHint;
+
   /// No description provided for @lpBtnApplied.
   ///
   /// In zh, this message translates to:

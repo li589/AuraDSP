@@ -1519,6 +1519,9 @@
   "lpCompilingScript": "スクリプトをコンパイル中…",
   "lpEyebrowDsp": "プログラマブル DSP",
   "lpTitleEditor": "EEL2 エディタ",
+  "lpTargetStereo": "ステレオスクリプト",
+  "lpTargetMultichannel": "マルチチャンネルスクリプト",
+  "lpMcHint": "マルチチャンネルモード（チャンネル数 > 2）で動作し、全 8 チャンネル spl0..spl7 を読み書きできます",
   "lpBtnApplied": "適用中",
   "lpBtnUnapplied": "未適用",
   "lpBtnCompile": "コンパイル",
@@ -1609,4 +1612,3 @@
   "ambientLabel": "スペクトルのグロー",
   "ambientHint": "ホーム背景で音楽に反応するグロー。オフにすると描画を完全に停止し GPU を節約します"
 }
-

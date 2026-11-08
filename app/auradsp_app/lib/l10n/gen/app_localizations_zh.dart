@@ -3504,6 +3504,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpTitleEditor => 'EEL2 编辑器';
 
   @override
+  String get lpTargetStereo => '立体声脚本';
+
+  @override
+  String get lpTargetMultichannel => '多声道脚本';
+
+  @override
+  String get lpMcHint => '多声道模式（声道数 > 2）下运行，可读写全部 8 个声道 spl0..spl7';
+
+  @override
   String get lpBtnApplied => '已应用';
 
   @override

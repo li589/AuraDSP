@@ -3706,6 +3706,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lpTitleEditor => 'EEL2 Editor';
 
   @override
+  String get lpTargetStereo => 'Stereo Script';
+
+  @override
+  String get lpTargetMultichannel => 'Multichannel Script';
+
+  @override
+  String get lpMcHint =>
+      'Runs in multichannel mode (channels > 2); reads/writes all 8 channels spl0..spl7';
+
+  @override
   String get lpBtnApplied => 'Applied';
 
   @override

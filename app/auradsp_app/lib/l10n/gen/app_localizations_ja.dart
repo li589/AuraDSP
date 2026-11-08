@@ -3535,6 +3535,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpTitleEditor => 'EEL2 エディタ';
 
   @override
+  String get lpTargetStereo => 'ステレオスクリプト';
+
+  @override
+  String get lpTargetMultichannel => 'マルチチャンネルスクリプト';
+
+  @override
+  String get lpMcHint =>
+      'マルチチャンネルモード（チャンネル数 > 2）で動作し、全 8 チャンネル spl0..spl7 を読み書きできます';
+
+  @override
   String get lpBtnApplied => '適用中';
 
   @override

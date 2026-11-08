@@ -787,6 +787,30 @@ class AppModel extends ChangeNotifier {
     return defaultVal;
   }
 
+  double getLiveprogMcSliderVal(int idx, double defaultVal) {
+    if (lpMcSliderValues.containsKey(idx)) {
+      return lpMcSliderValues[idx]!;
+    }
+    if (idx >= 1 && idx <= 8) {
+      return lpMcParams[idx - 1];
+    }
+    return defaultVal;
+  }
+
+  /// 多声道滑块写值（方案 B）：只推引擎参数，不做立体声那套代码文本
+  /// 对齐——MC 脚本的 slider 声明默认值在 setLiveprogMcCode 时采纳。
+  void setLiveprogMcSliderVal(int idx, double v, {EelSliderMeta? meta}) {
+    lpMcSliderValues[idx] = v;
+    if (idx >= 1 && idx <= 8) {
+      lpMcParams[idx - 1] = v;
+    }
+    if (idx >= 1 && idx <= 64) {
+      setFloat('liveprogmc.param$idx', v);
+    }
+    _notifyUi();
+    scheduleAutoSave();
+  }
+
   void setLiveprogSliderVal(int idx, double v, {EelSliderMeta? meta}) {
     lpSliderValues[idx] = v;
     if (idx >= 1 && idx <= 8) {

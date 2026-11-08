@@ -21,10 +21,15 @@ class LiveprogSlidersPanel extends StatefulWidget {
   final AppModel model;
   final Map<int, EelSliderMeta> activeSliders;
 
+  /// 方案 B：true 时脚本滑块读写多声道脚本级（liveprogmc.paramN），
+  /// 与立体声脚本滑块完全独立；输入/输出通道页签与目标无关。
+  final bool mcTarget;
+
   const LiveprogSlidersPanel({
     super.key,
     required this.model,
     required this.activeSliders,
+    this.mcTarget = false,
   });
 
   @override
@@ -104,7 +109,11 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
                     palette: p,
                     onTap: () {
                       for (final meta in scriptSliders) {
-                        m.setLiveprogSliderVal(meta.index, meta.defaultVal, meta: meta);
+                        widget.mcTarget
+                          ? m.setLiveprogMcSliderVal(meta.index, meta.defaultVal,
+                              meta: meta)
+                          : m.setLiveprogSliderVal(meta.index, meta.defaultVal,
+                              meta: meta);
                       }
                     },
                   ),
@@ -294,8 +303,12 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
           _LpSliderRow(
             model: m,
             meta: meta,
-            val: m.getLiveprogSliderVal(meta.index, meta.defaultVal),
-            onChanged: (v) => m.setLiveprogSliderVal(meta.index, v, meta: meta),
+            val: widget.mcTarget
+                ? m.getLiveprogMcSliderVal(meta.index, meta.defaultVal)
+                : m.getLiveprogSliderVal(meta.index, meta.defaultVal),
+            onChanged: (v) => widget.mcTarget
+                ? m.setLiveprogMcSliderVal(meta.index, v, meta: meta)
+                : m.setLiveprogSliderVal(meta.index, v, meta: meta),
           ),
       ],
     );

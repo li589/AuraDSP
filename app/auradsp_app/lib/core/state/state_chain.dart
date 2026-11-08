@@ -353,6 +353,23 @@ extension StateChain on AppModel {
     final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     lpMcCompileMs = -1;
     lpMcPresetCodeMismatch = false;
+    // 与立体声同口径：脚本内 sliderN: 声明为默认值单一来源——首次
+    // 出现（或声明变化）时采纳声明默认，用户已调值保留。
+    final metas = EelSliderParser.parse(normalized);
+    lpMcSliderMetas.clear();
+    lpMcSliderMetas.addAll(metas);
+    for (final meta in metas.values) {
+      if (!lpMcSliderValues.containsKey(meta.index)) {
+        var d = meta.defaultVal;
+        if (meta.minVal <= meta.maxVal) {
+          d = d.clamp(meta.minVal, meta.maxVal);
+        }
+        lpMcSliderValues[meta.index] = d;
+        if (meta.index >= 1 && meta.index <= 8) {
+          lpMcParams[meta.index - 1] = d;
+        }
+      }
+    }
     lpMcCode = normalized;
     lpMcDraftCode = normalized;
     send({'cmd': 'setParamStr', 'id': ParamId.lpMcCode, 'text': normalized});
