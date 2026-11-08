@@ -50,6 +50,9 @@ PLATFORM_ANY = {
     # Linux CI J3 只 SKIP 不实跑，覆盖是假的（图集 R3 违规漏网实证）。
     "smoke_d4b_swallow.py",
     "smoke_debug_policy.py",
+    # EEL 手册防漂移（2026-11-08）：手册条目 ↔ VM fnTable1 存在性 +
+    # 定长签名个数 + 宿主环境条目齐备，纯源码扫描，两平台可跑。
+    "smoke_eel_manual.py",
 }
 
 # PLATFORM_LINUX（2026-11-01，测试补强轮）：与 PLATFORM_WINDOWS 对称的
@@ -328,6 +331,10 @@ def run_smoke_tests():
         # 平台分类在 PLATFORM_ANY（2026-11-08 自 WINDOWS 集移入：
         # 纯源码扫描，Linux CI 必须实跑）。
         "smoke_d4b_swallow.py",
+        # EEL 手册防漂移门禁（2026-11-08）：手册 92 条 ↔ VM fnTable1
+        # 200 函数的存在性与定长签名比对（freembuf 幽灵条目、mldivide /
+        # quadprog 等签名个数错误、num_ch 等宿主条目缺失的全量比对收口）。
+        "smoke_eel_manual.py",
         # D6 门禁（2026-10-24）：补丁编号单点化。77 处 PATCHED 标记里 45 处不带
         # P-NNN，PATCHES.md 号称唯一真相源却九套编号并存（拿代码里的 B5 去查表
         # 查不到；P2.4 全仓只命中一处 PDF）。P-NNN 成为唯一权威标识，专项代号
