@@ -269,6 +269,12 @@ class InstallEngine {
       if (overwrite && hasOldManifest) {
         final stale = staleUpgradePaths(plan!.previous!.manifest, createdFiles);
         for (final rel in stale) {
+          // 删除守卫（2026-11-08 审计 F2）：上一版清单是磁盘数据，
+          // 其相对路径拼安装目录后必须仍在目录内才可删。
+          if (!_withinDir(o.installDir, rel)) {
+            warnings.add('旧清单含越界路径已跳过: $rel');
+            continue;
+          }
           final f = File(p.join(o.installDir, rel));
           if (await f.exists()) await f.delete();
         }
@@ -282,6 +288,7 @@ class InstallEngine {
         sink(const ProgressEvent('restore', 'rollback'));
         for (final f in createdFiles.reversed) {
           if (isUserPath(f.path)) continue;
+          if (!_withinDir(o.installDir, f.path)) continue;
           try {
             await File(p.join(o.installDir, f.path)).delete();
           } catch (_) {}
@@ -293,6 +300,7 @@ class InstallEngine {
         warnings.add('升级失败但缺少旧安装清单，已保留现有文件，请检查安装目录后重试');
       } else {
         for (final f in createdFiles.reversed) {
+          if (!_withinDir(o.installDir, f.path)) continue;
           try {
             await File(p.join(o.installDir, f.path)).delete();
           } catch (_) {}
@@ -305,6 +313,14 @@ class InstallEngine {
       }
       return EngineResult(ok: false, error: '$e', warnings: warnings);
     }
+  }
+
+  /// 清单相对路径的删除守卫（2026-11-08 审计 F2）：拼根目录后必须
+  /// 仍落在根内才允许作删除目标——清单是磁盘上的数据，篡改它不应
+  /// 能把删除引到目录之外（与卸载主体的枚举式口径对齐）。
+  bool _withinDir(String root, String rel) {
+    final r = p.normalize(root);
+    return p.isWithin(r, p.normalize(p.join(r, rel)));
   }
 
   Future<void> _restoreBackup(String backupDir, String installDir) async {
@@ -436,7 +452,15 @@ $s.Save()
         groupBases.add(g);
         links.add(p.join(g, 'AuraDSP.lnk'));
       }
+      // 清单里的快捷方式是绝对路径（审计 F2）：只删落在已知根
+      // （用户/公共配置目录、安装目录）之内的，清单外的路径永不
+      // 成为删除目标；本函数自拼的常见落点天然在根内。
+      final linkRoots = <String>[
+        ...linkDirs,
+        manifest.installDir,
+      ].map(p.normalize).toList();
       for (final s in links) {
+        if (!linkRoots.any((r) => p.isWithin(r, p.normalize(s)))) continue;
         try {
           final f = File(s);
           if (await f.exists()) await f.delete();

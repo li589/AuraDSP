@@ -222,8 +222,17 @@ def apply_resources(work_staging: Path, kind: str, packs_dir: Path,
             with zipfile.ZipFile(pack) as zf:
                 for info in zf.infolist():
                     name = info.filename
-                    if name.endswith("/") or name.startswith("user_data/"):
+                    # user_data 隔离按大小写不敏感判定（2026-11-08 审计
+                    # F5）：Windows 文件系统大小写不敏感，USER_DATA/ 变体
+                    # 会落进同一目录，敏感前缀检查不得被大小写绕开。
+                    if name.endswith("/") or name.lower().startswith("user_data/"):
                         continue  # 用户私有数据隔离（管线既定口径）
+                    # 单条目整读内存，设上限防一方包里的异常大条目吃爆
+                    # 构建机内存（审计 F5）。资源条目量级在 MB 级，
+                    # 512MiB 留足余量。
+                    if info.file_size > 512 * 1024 * 1024:
+                        raise die(f"资源包 {pack.name} 条目超上限: {name}"
+                                  f"（{info.file_size} 字节）")
                     target = res_dir / name
                     if not target.resolve().is_relative_to(res_dir.resolve()):
                         raise die(f"资源包 {pack.name} 含越界路径: {name}")

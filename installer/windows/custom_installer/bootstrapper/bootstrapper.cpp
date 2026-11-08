@@ -165,9 +165,17 @@ bool SanitizeEntryName(const std::string& name, std::wstring* out) {
         size_t slash = wide.find(L'\\', start);
         std::wstring comp = wide.substr(
             start, slash == std::wstring::npos ? slash : slash - start);
-        if (comp == L".." || comp.empty() && slash != std::wstring::npos &&
-                                   start != 0)
+        if (comp.empty() && slash != std::wstring::npos && start != 0)
             return false;
+        // 2026-11-08 审计 F3：分量加固。':' 分量是 NTFS ADS / 相对
+        // 盘符，一律拒；Win32 解析会剥除分量尾随的点与空格，故
+        // ".. " 之形会归一成 ".."——按剥除后的形态判定 ".."/"."。
+        if (comp.find(L':') != std::wstring::npos) return false;
+        std::wstring stripped = comp;
+        while (!stripped.empty() &&
+               (stripped.back() == L'.' || stripped.back() == L' '))
+            stripped.pop_back();
+        if (stripped == L".." || stripped == L".") return false;
         if (slash == std::wstring::npos) break;
         start = slash + 1;
     }
@@ -175,9 +183,25 @@ bool SanitizeEntryName(const std::string& name, std::wstring* out) {
     return true;
 }
 
+// Normalize an absolute path via GetFullPathNameW (lexical).
+bool NormalizePath(const std::wstring& in, std::wstring* out) {
+    DWORD need = GetFullPathNameW(in.c_str(), 0, nullptr, nullptr);
+    if (need == 0) return false;
+    std::wstring buf(need, L'\0');
+    if (GetFullPathNameW(in.c_str(), need, buf.data(), nullptr) == 0)
+        return false;
+    buf.resize(std::wcslen(buf.c_str()));
+    *out = buf;
+    return true;
+}
+
 // Extract a ZIP-STORED archive held in memory into destDir.
 bool ExtractStoredZip(const std::uint8_t* zip, size_t zipLen,
                       const std::wstring& destDir) {
+    // 2026-11-08 审计 F3 第二道防线：destDir 先归一，逐条目把最终
+    // 路径归一后复核仍在其内（分隔符感知），不单靠条目名净化。
+    std::wstring destRoot;
+    if (!NormalizePath(destDir, &destRoot)) return false;
     // Locate End Of Central Directory (comment length is 0 in our zips,
     // but scan the legal window anyway).
     size_t eocd = SIZE_MAX;
@@ -205,7 +229,12 @@ bool ExtractStoredZip(const std::uint8_t* zip, size_t zipLen,
         bool isDir = !name.empty() && name.back() == '/';
         std::wstring rel;
         if (!SanitizeEntryName(name, &rel)) return false;
-        std::wstring target = destDir + L"\\" + rel;
+        std::wstring target;
+        if (!NormalizePath(destRoot + L"\\" + rel, &target)) return false;
+        if (target.compare(0, destRoot.size(), destRoot) != 0 ||
+            target.size() <= destRoot.size() ||
+            target[destRoot.size()] != L'\\')
+            return false;
         if (isDir) {
             if (!EnsureDir(target)) return false;
             continue;

@@ -77,7 +77,8 @@ def main() -> int:
         make_zip(packs / "auradsp-resource-full.zip",
                  {"liveprog/full.eel": b"full", "ddc/core.vdc": b"full-override"})
         make_zip(packs / "auradsp-addon-test.zip",
-                 {"convolver/space.irs": b"irs", "user_data/secret.txt": b"no"})
+                 {"convolver/space.irs": b"irs", "user_data/secret.txt": b"no",
+                  "USER_DATA/case.txt": b"no2"})
 
         drv = base / "driver"
         drv.mkdir()
@@ -127,7 +128,8 @@ def main() -> int:
         check("full 包文件已合并", "resources/liveprog/full.eel" in names)
         check("addon 包文件已合并", "resources/convolver/space.irs" in names)
         check("同名以 full 覆盖", contents["resources/ddc/core.vdc"] == b"full-override")
-        check("user_data 被隔离", not any("user_data" in n for n in names))
+        check("user_data 被隔离（含大小写变体）",
+              not any("user_data" in n.lower() for n in names))
 
         print("== SHA256SUMS 对账（2026-11-08 审计·预设低3） ==")
         sums = packs / "SHA256SUMS.txt"
@@ -146,6 +148,23 @@ def main() -> int:
         r = run_pack("--mode", "portable", "--resources", "addons", *common)
         check("哈希不符时拒绝合并", r.returncode != 0)
         sums.unlink()
+
+        print("== 资源条目上限（2026-11-08 审计 F5） ==")
+        packs2 = base / "packs2"
+        packs2.mkdir()
+        with zipfile.ZipFile(packs2 / "auradsp-resource-full.zip", "w",
+                             zipfile.ZIP_DEFLATED) as zf:
+            with zf.open("huge/zeros.bin", mode="w",
+                         force_zip64=True) as fh:
+                chunk = b"\0" * (64 * 1024 * 1024)
+                for _ in range(9):  # 576MiB > 512MiB 单条目上限
+                    fh.write(chunk)
+        common2 = ["--staging", str(staging), "--driver-dir", str(drv),
+                   "--asio-driver", str(asio),
+                   "--installer-build-dir", str(inst),
+                   "--packs-dir", str(packs2), "--out", str(out)]
+        r = run_pack("--mode", "portable", "--resources", "full", *common2)
+        check("单条目超 512MiB 时拒绝合并", r.returncode != 0)
 
         print("== portable none ==")
         r = run_pack("--mode", "portable", "--resources", "none", *common)

@@ -6,8 +6,14 @@ import 'dart:io';
 
 import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as p;
 
 import 'models.dart';
+
+/// 解压上限（2026-11-08 审计 F4）：条目数与解压总量设顶，防高膨胀
+/// 比载荷写满安装盘（引导壳侧对段长有硬顶，向导侧此前无对应约束）。
+const _kMaxPayloadEntries = 100000;
+const _kMaxPayloadBytes = 4 * 1024 * 1024 * 1024; // 4 GiB
 
 /// 把 setupExe 中 [off, off+len) 的字节段写到 destFile（分块拷贝）。
 Future<void> slicePayloadToFile(
@@ -52,10 +58,14 @@ Future<List<ManifestFile>> extractPayload(
   final input = InputFileStream(zipPath);
   final archive = ZipDecoder().decodeStream(input);
   final entries = archive.files.where((f) => f.isFile).toList();
+  if (entries.length > _kMaxPayloadEntries) {
+    throw StateError('载荷条目数超上限: ${entries.length}');
+  }
   final total = entries.length;
   final written = <ManifestFile>[];
   final destRoot = Directory(destDir).absolute;
   var done = 0;
+  var totalBytes = 0;
   try {
     for (final entry in entries) {
       var rel = entry.name.replaceAll('\\', '/');
@@ -64,10 +74,18 @@ Future<List<ManifestFile>> extractPayload(
         done++;
         continue;
       }
-      final target = File('${destRoot.path}/$rel');
-      if (!target.absolute.path.startsWith(destRoot.path)) {
+      totalBytes += entry.size;
+      if (totalBytes > _kMaxPayloadBytes) {
+        throw StateError('载荷解压总量超上限: $totalBytes');
+      }
+      // 路径穿越防护（2026-11-08 审计 F1）：旧实现是裸字符串前缀
+      // 匹配，`../AuraDSP2/evil.dll` 能借同前缀兄弟目录绕过。改用
+      // package:path 的词法归一 + isWithin（分隔符感知）判定。
+      final targetPath = p.normalize(p.join(destRoot.path, rel));
+      if (!p.isWithin(destRoot.path, targetPath)) {
         throw StateError('载荷含越界路径: ${entry.name}');
       }
+      final target = File(targetPath);
       await target.parent.create(recursive: true);
       final out = OutputFileStream(target.path);
       entry.writeContent(out);

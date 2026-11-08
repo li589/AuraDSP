@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:auradsp_setup/src/args.dart';
 import 'package:auradsp_setup/src/engine/cleanup_policy.dart';
 import 'package:auradsp_setup/src/engine/install_engine.dart';
@@ -404,6 +405,56 @@ void main() {
     test('缺安装目录时直接返回空，不查询不杀', () async {
       expect(await guardedPids(installDir: null), isEmpty);
       expect(await guardedPids(installDir: '   '), isEmpty);
+    });
+  });
+
+  group('extractPayload 路径穿越防护（2026-11-08 审计 F1）', () {
+    Future<File> writeZip(Directory dir, Map<String, String> entries) async {
+      final archive = Archive();
+      entries.forEach((name, content) {
+        archive.addFile(ArchiveFile(name, content.length, content.codeUnits));
+      });
+      final zipFile = File('${dir.path}/payload.zip');
+      await zipFile.writeAsBytes(ZipEncoder().encode(archive));
+      return zipFile;
+    }
+
+    test('同前缀兄弟目录条目被拒（旧裸前缀检查会放行）', () async {
+      final tmp = await Directory.systemTemp.createTemp('auradsp-wiz-');
+      try {
+        final dest = Directory('${tmp.path}/AuraDSP');
+        final zip = await writeZip(tmp, {
+          'payload/ok.txt': 'fine',
+          'payload/../AuraDSP2/evil.txt': 'evil',
+        });
+        await expectLater(
+          extractPayload(zip.path, dest.path, include: (_) => true),
+          throwsStateError,
+        );
+        expect(File('${tmp.path}/AuraDSP2/evil.txt').existsSync(), isFalse,
+            reason: '越界条目不得落到同前缀兄弟目录');
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('正常条目解压 + payload/ 前缀剥离', () async {
+      final tmp = await Directory.systemTemp.createTemp('auradsp-wiz-');
+      try {
+        final dest = Directory('${tmp.path}/AuraDSP');
+        final zip = await writeZip(tmp, {
+          'payload/app.exe': 'bin',
+          'payload/resources/x.txt': 'res',
+        });
+        final written =
+            await extractPayload(zip.path, dest.path, include: (_) => true);
+        expect(written.map((f) => f.path),
+            containsAll(<String>['app.exe', 'resources/x.txt']));
+        expect(File('${dest.path}/app.exe').existsSync(), isTrue);
+        expect(File('${dest.path}/resources/x.txt').existsSync(), isTrue);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
     });
   });
 }
