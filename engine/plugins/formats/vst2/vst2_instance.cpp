@@ -112,7 +112,13 @@ static intptr_t safeCallDispatcher(vst_effect_t* effect, int32_t opcode, int32_t
         if (!effect || !effect->control) return 0;
         return effect->control(effect, opcode, index, value, ptr, opt);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        AURADSP_WARN_S("[DBG VST2] dispatcher triggered SEH exception on opcode " << opcode);
+        // 此处必须用 printf 形态：流式 AURADSP_WARN_S 在 ON 构建下会
+        // 在本函数内展开 std::ostringstream（需要对象展开的对象），
+        // 与 __try 同函数即触发 MSVC C2712——这是 ON 构建从未进过
+        // CI 时埋下的潜伏编译错误，2026-11-08 由 S2 的 J5 ON 步骤
+        // 首次实跑抓出。OFF 构建下两者都是 ((void)0)，无差别。
+        AURADSP_WARN("[DBG VST2] dispatcher triggered SEH exception on opcode %d",
+                     static_cast<int>(opcode));
         return 0;
     }
 }
