@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -13,15 +14,20 @@ import 'visualizer_time_aware.dart';
 /// 旧实现每帧用 `canvas.scale` + `RadialGradient` 画大面积极坐标填充，
 /// 实测单核 CPU 96%、GPU 28.7%；换成位图采样后只剩纹理采样 + 混合。
 ///
-/// 绘制路径（在目标渲染后端上验证过输出正确）：
-/// - 云体 / 雾絮：逐实例 `canvas.translate/rotate/scale` +
-///   `drawImageRect` + 预建 `Paint` 池（`ColorFilter.mode(色, modulate)`），
-///   每实例一个 Paint，颜色与 alpha 都在 Paint 池里，逐帧零分配；
-/// - 星点：一次 `drawRawAtlas`（`colors` 传 null），四档烘焙亮度精灵
-///   按固定种子挑选，形成「多数微星、少数亮星」的自然分布。
+/// 绘制路径（2026-11-07 内存修复后）：
+/// - 云体 / 雾絮 / 星点**全部**走 `drawRawAtlas`：图集里只有「白色密度」，
+///   颜色与 alpha 走逐实例 `colors` + `BlendMode.modulate`；颜色表是
+///   构造期建好的 `Int32List`，逐帧只做整数索引，零分配。
+/// - 逐实例 colors **必须**配 `BlendMode.modulate`：它是「纹理色 × 实例色」，
+///   纹理 alpha 保留；配 `srcOver` 才会丢掉纹理 alpha、退化成纯色四边形
+///   （旧版曾把 `srcOver` 的这个语义误判成「colors 不能用」）。
 ///
-/// 注意：本机渲染后端在 `drawAtlas/drawRawAtlas` 传入逐实例 `colors`
-/// 时会丢掉纹理 alpha（退化成纯色四边形），因此**不使用逐实例 colors**。
+/// 为什么不用 `Paint.colorFilter = ColorFilter.mode(...)`：
+/// 混合模式色彩滤镜在 Impeller 上是 `ColorFilterContents`，无法内联进片元
+/// 着色器，每次带滤镜的绘制都要开一个离屏子 pass 纹理；本样式每帧 100+ 次
+/// 精灵绘制，纹理池因此常驻数百 MB（实测 RSS 829 MB、GPU Shared 527 MB，
+/// 且均值≈峰值——是渲染目标常驻，不是渐进泄漏）。顶点色属于图集绘制本身，
+/// **不开任何离屏层**。
 ///
 /// 构成：
 /// - [_veilCount] 张大幕布云，铺满画面做低频云底；
@@ -34,10 +40,20 @@ import 'visualizer_time_aware.dart';
 ///
 /// 确定性 / 性能约定：
 /// - 种子编译期固定（`Float32List` + 固定 `math.Random`），运行期零随机；
-/// - `Paint` 池、`Float32List` 缓冲跨帧复用，逐帧堆分配为零；
+/// - 颜色表、顶点缓冲、实例色缓冲都在构造期分配、跨帧复用，逐帧堆分配为零；
 /// - 不逐帧 createShader / 新建 Image / 使用 saveLayer / MaskFilter.blur；
-/// - 每帧 102 次 draw 调用（幕布 10 + 云团 36 + 柔光 1 + 细纹 54 + 星点 1）；
-///   静态暗场仍走 [NebulaBackdropPainter] 的独立缓存层（`willChange: false`）。
+/// - 运行期**没有 ColorFilter、没有 ImageShader、没有 Paint 池**，全样式零离屏层；
+/// - 每帧 **2 次** draw 调用：云体+雾絮 101 个实例合成 1 次 `drawRawAtlas`，
+///   星点 190 个实例 1 次；静态暗场仍走 [NebulaBackdropPainter] 的独立缓存层
+///   （`willChange: false`）。
+///
+/// 稳态零烘焙依据：图集由 [VisualizerSpriteAtlas.instance] 在首帧
+/// `ensureImage()` 后**异步解码一次**（缺省读 `assets/viz/atlas_v1.png`），
+/// 解码前 `imageOrNull == null`、本样式跳过精灵批次，绝不退回同步烘焙。
+/// 解码入口不接受任何参数，缓存键里不存在音频派生量
+/// （bass/mid/treble、`_energy`、`bloom`、时间、画布尺寸都不进键）。`paint()`
+/// 中唯一的图像来源就是这张常驻图集，音频只改**颜色表索引与顶点变换**。
+/// 因此首帧之后的任意时长（含 120 s）烘焙次数恒为 0。
 class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
   final List<double> bands;
   final VisualizerPalette palette;
@@ -78,9 +94,28 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
 
   static const int _alphaLevels = 64;
 
-  /// Paint 池：[slot * _alphaLevels + level]，颜色 + alpha 都在这里，
-  /// 运行期只做索引，不新建 ColorFilter / Color / Paint。
-  final List<Paint> _paints;
+  /// 每帧精灵实例数（构造期常量，缓冲按它精确分配，不留空位）：
+  /// 幕布 10 + 云团主副瓣 18×2 + 中央柔光 1 + 雾絮 54。
+  static const int _cloudInstanceCount =
+      _veilCount + _billowCount * 2 + _haloCount + _wispCount;
+
+  /// 颜色表：[slot * _alphaLevels + level] → ARGB。颜色与 alpha 都编成整数，
+  /// 作为 `drawRawAtlas` 的逐实例 `colors`，运行期只做整数索引。
+  final Int32List _tints;
+
+  /// 云体+雾絮这一批的顶点缓冲（RST 4 项 / 图集矩形 4 项 / 颜色 1 项）。
+  final Float32List _spriteRst = Float32List(_cloudInstanceCount * 4);
+  final Float32List _spriteRects = Float32List(_cloudInstanceCount * 4);
+  final Int32List _spriteColors = Int32List(_cloudInstanceCount);
+  int _spriteIndex = 0;
+
+  /// 两批共用的绘制参数：只承载采样质量，颜色来自逐实例 colors。
+  final Paint _batchPaint = Paint()
+    ..filterQuality = FilterQuality.low
+    ..isAntiAlias = true
+    ..color = const Color(0xFFFFFFFF);
+
+  final Int32List _starColors = Int32List(_starCount);
 
   double _lastTime = double.nan;
   double _energy = 0.0;
@@ -90,7 +125,7 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
     required this.palette,
     required this.bloom,
     required this.animationTime,
-  }) : _paints = _buildPaintPool(palette) {
+  }) : _tints = _buildTintTable(palette) {
     _fillStarRects();
   }
 
@@ -99,21 +134,13 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
 
   static const int _slotCount = 6;
 
-  static List<Paint> _buildPaintPool(VisualizerPalette palette) {
-    final out = <Paint>[];
+  static Int32List _buildTintTable(VisualizerPalette palette) {
+    final out = Int32List(_slotCount * _alphaLevels);
     for (var s = 0; s < _slotCount; s++) {
       final rgb = _baseColor(palette, s).toARGB32() & 0x00FFFFFF;
       for (var i = 0; i < _alphaLevels; i++) {
         final a = (i * 255 / (_alphaLevels - 1)).round();
-        out.add(
-          Paint()
-            ..filterQuality = FilterQuality.low
-            ..isAntiAlias = true
-            ..colorFilter = ColorFilter.mode(
-              Color((a << 24) | rgb),
-              BlendMode.modulate,
-            ),
-        );
+        out[s * _alphaLevels + i] = (a << 24) | rgb;
       }
     }
     return out;
@@ -133,9 +160,10 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
         _ => palette.peak,
       };
 
-  Paint _paintAt(int slot, double alpha) {
+  /// 取颜色表里的 ARGB（颜色 + alpha），运行期零分配。
+  int _tintAt(int slot, double alpha) {
     final i = (alpha.clamp(0.0, 1.0) * (_alphaLevels - 1)).round();
-    return _paints[slot * _alphaLevels + i];
+    return _tints[slot * _alphaLevels + i];
   }
 
   static Float32List _buildCloudSeeds() {
@@ -244,23 +272,59 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
     }
   }
 
-  /// 画一个精灵实例：以中心对齐 `cx/cy`，等比缩放 + 旋转。
+  /// 追加一个精灵实例（不即时绘制）：中心对齐 `cx/cy`，等比缩放 + 旋转。
   ///
-  /// `SpriteSlice.localRect` 是预构造的常量 `Rect`，因此这里逐帧不分配对象；
-  /// 颜色与 alpha 全部来自 Paint 池。
-  void _sprite(Canvas canvas, SpriteSlice s, double cx, double cy,
-      double scale, double rot, Paint paint) {
-    canvas.save();
-    canvas.translate(cx, cy);
-    if (rot != 0.0) canvas.rotate(rot);
-    canvas.scale(scale, scale);
-    canvas.drawImageRect(_atlas.image, s.srcRect, s.localRect, paint);
-    canvas.restore();
+  /// 等价于旧实现的 `translate/rotate/scale + drawImageRect(localRect)`，
+  /// 但只写顶点缓冲：RST 采用 Skia 的 `[scos, ssin, tx, ty]` 约定——矩形
+  /// 左上角映射到 `(tx, ty)`，因此把子图中心平移到目标点的偏移是
+  /// `(scos·w/2 − ssin·h/2, ssin·w/2 + scos·h/2)`。逐帧不分配对象。
+  void _appendSprite(SpriteSlice s, double cx, double cy, double scale,
+      double rot, int argb) {
+    if (_spriteIndex >= _cloudInstanceCount) return;
+    final i = _spriteIndex++;
+    final o = i * 4;
+    final cosA = rot == 0.0 ? 1.0 : math.cos(rot);
+    final sinA = rot == 0.0 ? 0.0 : math.sin(rot);
+    final sc = scale * cosA;
+    final ss = scale * sinA;
+    final hw = s.width * 0.5;
+    final hh = s.height * 0.5;
+    _spriteRects[o] = s.rect[0];
+    _spriteRects[o + 1] = s.rect[1];
+    _spriteRects[o + 2] = s.rect[2];
+    _spriteRects[o + 3] = s.rect[3];
+    _spriteRst[o] = sc;
+    _spriteRst[o + 1] = ss;
+    _spriteRst[o + 2] = cx - (sc * hw - ss * hh);
+    _spriteRst[o + 3] = cy - (ss * hw + sc * hh);
+    _spriteColors[i] = argb;
+  }
+
+  /// 一次提交整批精灵：`BlendMode.modulate` 把实例色乘到纹理上，
+  /// 纹理 alpha 保留，不开任何离屏层。
+  void _flushSprites(Canvas canvas, ui.Image atlas) {
+    canvas.drawRawAtlas(
+      atlas,
+      _spriteRst,
+      _spriteRects,
+      _spriteColors,
+      BlendMode.modulate,
+      null,
+      _batchPaint,
+    );
+    assert(_spriteIndex <= _cloudInstanceCount);
+    _spriteIndex = 0;
   }
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
+    // 资源路径：首帧发起一次异步解码；未完成（或解码失败）的那几帧直接
+    // 跳过精灵批次，绝不退回同步烘焙。
+    _atlas.ensureImage();
+    final ui.Image? atlas = _atlas.imageOrNull;
+    if (atlas == null) return;
+
     final n = bands.length;
     if (n == 0) return;
 
@@ -299,14 +363,13 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
       final y = cy + (_cloudSeeds[o + 1] - 0.5) * h * 1.06 + driftY;
       final r = minDim * _cloudSeeds[o + 2] * breathe * pulse;
       final slice = _sliceAt(_cloudSliceOf[i]);
-      _sprite(
-        canvas,
+      _appendSprite(
         slice,
         x,
         y,
         (2.0 * r) / slice.height,
         _cloudSeeds[o + 5] * 0.22,
-        _paintAt(_cloudSeeds[o + 8].toInt(), 0.075 + 0.10 * _energy),
+        _tintAt(_cloudSeeds[o + 8].toInt(), 0.075 + 0.10 * _energy),
       );
     }
 
@@ -327,27 +390,26 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
       final alpha = 0.15 + 0.22 * _energy;
 
       final mainSlice = _sliceAt(_cloudSliceOf[idx]);
-      _sprite(canvas, mainSlice, x, y, (2.0 * r) / mainSlice.height,
-          _cloudSeeds[o + 6] * 0.30, _paintAt(slot, alpha));
+      _appendSprite(mainSlice, x, y, (2.0 * r) / mainSlice.height,
+          _cloudSeeds[o + 6] * 0.30, _tintAt(slot, alpha));
 
       // 副瓣：偏移 + 更小 + 更淡，把圆形剪影打散。
       final ang = _cloudSeeds[o + 5] + k * 0.73;
       final lx = x + math.cos(ang) * r * 0.44;
       final ly = y + math.sin(ang) * r * 0.34;
       final lobeSlice = _sliceAt(_cloudSliceOf[idx + 1]);
-      _sprite(canvas, lobeSlice, lx, ly, (2.0 * r * 0.70) / lobeSlice.height,
-          ang * 0.5 + 0.6, _paintAt(slot, alpha * 0.72));
+      _appendSprite(lobeSlice, lx, ly, (2.0 * r * 0.70) / lobeSlice.height,
+          ang * 0.5 + 0.6, _tintAt(slot, alpha * 0.72));
     }
 
     // 3) 中央柔光：给云层一个共同的光源，避免整屏平铺。
-    _sprite(
-      canvas,
+    _appendSprite(
       _atlas.blob,
       cx,
       cy * 0.86,
       (fieldR * 1.30) / _atlas.blob.height,
       0.0,
-      _paintAt(0, 0.09 + 0.11 * _energy),
+      _tintAt(0, 0.09 + 0.11 * _energy),
     );
 
     // 4) 雾絮：贴在云团/幕布上做高频错位叠加，形成细密湍流纹理。
@@ -371,24 +433,28 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
       final r = minDim * _cloudSeeds[o + 2] * 0.42;
       // 小团絮：宽度 ≈ r（30~105 px）、高度 0.36r（11~38 px），剪影不规则；
       // 保持低 alpha，让它读作云体内部的湍流纹，而不是一块独立色斑。
-      _sprite(
-        canvas,
+      _appendSprite(
         _atlas.puff,
         x,
         y,
         (r * 1.0) / _atlas.puff.width,
         _wispSeeds[so + 1] + t * 0.16,
-        _paintAt(
+        _tintAt(
           _cloudSeeds[o + 8].toInt(),
           (0.07 + 0.10 * _energy) * _wispSeeds[so + 3],
         ),
       );
     }
 
+    // 云体+雾絮整批提交：101 个实例 = 1 次 draw（旧版是 101 次 drawImageRect，
+    // 每次带混合模式 ColorFilter，在 Impeller 上各开一个离屏子 pass）。
+    _flushSprites(canvas, atlas);
+
     // 5) 星点：一次 drawRawAtlas 提交全部实例。
-    //    亮度分布来自四档烘焙精灵（按固定种子挑选），闪烁只改变尺寸，
-    //    因此整批星点可以共用同一个 Paint。
-    final starAlpha = 0.30 + 0.70 * (0.35 + 0.65 * treble) * (0.30 + 0.70 * _energy);
+    //    亮度分布来自四档烘焙精灵（按固定种子挑选），闪烁只改变尺寸；
+    //    alpha 走逐实例 colors（整批同值），不挂 ColorFilter。
+    final starArgb =
+        _tintAt(5, 0.30 + 0.70 * (0.35 + 0.65 * treble) * (0.30 + 0.70 * _energy));
     for (var k = 0; k < _starCount; k++) {
       final o = k * 5;
       final x = cx + _starSeeds[o] * w * 0.48;
@@ -402,15 +468,16 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
       _starRst[r + 1] = 0.0;
       _starRst[r + 2] = x - scale * 32.0;
       _starRst[r + 3] = y - scale * 32.0;
+      _starColors[k] = starArgb;
     }
     canvas.drawRawAtlas(
-      _atlas.image,
+      atlas,
       _starRst,
       _starRects,
+      _starColors,
+      BlendMode.modulate,
       null,
-      BlendMode.srcOver,
-      null,
-      _paintAt(5, starAlpha),
+      _batchPaint,
     );
   }
 

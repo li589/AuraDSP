@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -13,15 +14,18 @@ import 'visualizer_time_aware.dart';
 /// 大面积半透明填充，单核 CPU 96.1%、GPU 28.7%、RSS 469MB。本版把柔光
 /// 全部换成**启动时烘焙一次的锥体精灵**，运行期只做位图采样。
 ///
-/// 绘制路径：
-/// - 浅盘 / 锥体 / 雾絮：逐实例 `canvas.translate/rotate/scale` +
-///   `drawImageRect` + 预建 `Paint` 池（`ColorFilter.mode(色, modulate)`），
-///   颜色与 alpha 全在 Paint 池里，逐帧零分配；
-/// - 星点：一次 `drawRawAtlas`（`colors` 传 null），四档烘焙亮度精灵按
-///   固定种子挑选。
+/// 绘制路径（2026-11-07 内存修复后）：
+/// - 浅盘 / 锥体 / 雾絮 / 星点**全部**走 `drawRawAtlas`：图集里只有
+///   「白色密度」，颜色与 alpha 走逐实例 `colors` + `BlendMode.modulate`；
+///   颜色表是构造期建好的 `Int32List`，逐帧只做整数索引，零分配。
+/// - 逐实例 colors **必须**配 `BlendMode.modulate`：它是「纹理色 × 实例色」，
+///   纹理 alpha 保留；配 `srcOver` 才会丢掉纹理 alpha、退化成纯色四边形。
 ///
-/// 注意：本机渲染后端在 `drawAtlas/drawRawAtlas` 传入逐实例 `colors`
-/// 时会丢掉纹理 alpha（退化成纯色四边形），因此**不使用逐实例 colors**。
+/// 为什么不用 `Paint.colorFilter = ColorFilter.mode(...)`：
+/// 混合模式色彩滤镜在 Impeller 上是 `ColorFilterContents`，无法内联进片元
+/// 着色器，每次带滤镜的绘制都要开一个离屏子 pass 纹理；本样式每帧 30 次
+/// 精灵绘制，纹理池因此常驻数百 MB（实测 RSS 829 MB、GPU Shared 527 MB，
+/// 且均值≈峰值——是渲染目标常驻，不是渐进泄漏）。
 ///
 /// 构成：
 /// - 底部浅盘 2 层（宽柔光 + 亮核），收进发光落点；
@@ -34,10 +38,20 @@ import 'visualizer_time_aware.dart';
 /// - [_starCount] 颗细小星点。
 ///
 /// 确定性 / 性能约定：
-/// - 种子编译期固定，运行期零随机；Paint 池与缓冲跨帧复用，逐帧零分配；
+/// - 种子编译期固定，运行期零随机；颜色表与顶点缓冲跨帧复用，逐帧零分配；
 /// - 不逐帧 createShader / 新建 Image / saveLayer / MaskFilter.blur；
-/// - 每帧 31 次 draw 调用（浅盘 2 + 锥体 2 + 细纹 26 + 星点 1）；静态暗场
-///   仍走 [TornadoBackdropPainter] 的独立缓存层（`willChange: false`）。
+/// - 运行期**没有 ColorFilter、没有 ImageShader、没有 Paint 池**，零离屏层；
+/// - 每帧 **2 次** draw 调用：浅盘+锥体+细纹 30 个实例合成 1 次
+///   `drawRawAtlas`，星点 44 个实例 1 次；静态暗场仍走
+///   [TornadoBackdropPainter] 的独立缓存层（`willChange: false`）。
+///
+/// 稳态零烘焙依据：图集由 [VisualizerSpriteAtlas.instance] 在首帧
+/// `ensureImage()` 后**异步解码一次**（缺省读 `assets/viz/atlas_v1.png`），
+/// 解码前 `imageOrNull == null`、本样式跳过精灵批次，绝不退回同步烘焙。
+/// 解码入口不接受任何参数，缓存键里不存在音频派生量
+/// （bass/mid/treble、`_smoothedBass`、`bloom`、时间、画布尺寸都不进键）。
+/// `paint()` 中唯一的图像来源就是这张常驻图集，音频只改**颜色表索引与顶点
+/// 变换**。因此首帧之后的任意时长（含 120 s）烘焙次数恒为 0。
 class ParticleTornadoPainter extends CustomPainter
     implements VisualizerTimeAware {
   final List<double> bands;
@@ -73,8 +87,26 @@ class ParticleTornadoPainter extends CustomPainter
 
   static const int _alphaLevels = 64;
 
-  /// Paint 池：[slot * _alphaLevels + level]。
-  final List<Paint> _paints;
+  /// 每帧精灵实例数（构造期常量，缓冲按它精确分配，不留空位）：
+  /// 浅盘 2 + 锥体 2 + 细纹 26。
+  static const int _spriteInstanceCount =
+      2 + 2 + _wispCount;
+
+  /// 颜色表：[slot * _alphaLevels + level] → ARGB，作为逐实例 `colors`。
+  final Int32List _tints;
+
+  final Float32List _spriteRst = Float32List(_spriteInstanceCount * 4);
+  final Float32List _spriteRects = Float32List(_spriteInstanceCount * 4);
+  final Int32List _spriteColors = Int32List(_spriteInstanceCount);
+  int _spriteIndex = 0;
+
+  /// 两批共用的绘制参数：只承载采样质量，颜色来自逐实例 colors。
+  final Paint _batchPaint = Paint()
+    ..filterQuality = FilterQuality.low
+    ..isAntiAlias = true
+    ..color = const Color(0xFFFFFFFF);
+
+  final Int32List _starColors = Int32List(_starCount);
 
   double _lastTime = double.nan;
   double _smoothedBass = 0.0;
@@ -86,7 +118,7 @@ class ParticleTornadoPainter extends CustomPainter
     required this.bloom,
     required this.animationTime,
     this.lineWidth = 1.5,
-  }) : _paints = _buildPaintPool(palette) {
+  }) : _tints = _buildTintTable(palette) {
     _fillStarRects();
   }
 
@@ -95,30 +127,23 @@ class ParticleTornadoPainter extends CustomPainter
 
   static const int _slotCount = 3;
 
-  static List<Paint> _buildPaintPool(VisualizerPalette palette) {
+  static Int32List _buildTintTable(VisualizerPalette palette) {
     final bases = [palette.primary, palette.secondary, palette.peak];
-    final out = <Paint>[];
+    final out = Int32List(_slotCount * _alphaLevels);
     for (var s = 0; s < _slotCount; s++) {
       final rgb = bases[s].toARGB32() & 0x00FFFFFF;
       for (var i = 0; i < _alphaLevels; i++) {
         final a = (i * 255 / (_alphaLevels - 1)).round();
-        out.add(
-          Paint()
-            ..filterQuality = FilterQuality.low
-            ..isAntiAlias = true
-            ..colorFilter = ColorFilter.mode(
-              Color((a << 24) | rgb),
-              BlendMode.modulate,
-            ),
-        );
+        out[s * _alphaLevels + i] = (a << 24) | rgb;
       }
     }
     return out;
   }
 
-  Paint _paintAt(int slot, double alpha) {
+  /// 取颜色表里的 ARGB（颜色 + alpha），运行期零分配。
+  int _tintAt(int slot, double alpha) {
     final i = (alpha.clamp(0.0, 1.0) * (_alphaLevels - 1)).round();
-    return _paints[slot * _alphaLevels + i];
+    return _tints[slot * _alphaLevels + i];
   }
 
   static Float32List _buildStarSeeds() {
@@ -158,15 +183,47 @@ class ParticleTornadoPainter extends CustomPainter
     }
   }
 
-  /// 画一个精灵实例：以中心对齐 `cx/cy`，等比缩放 + 旋转。
-  void _sprite(Canvas canvas, SpriteSlice s, double cx, double cy,
-      double scale, double rot, Paint paint) {
-    canvas.save();
-    canvas.translate(cx, cy);
-    if (rot != 0.0) canvas.rotate(rot);
-    canvas.scale(scale, scale);
-    canvas.drawImageRect(_atlas.image, s.srcRect, s.localRect, paint);
-    canvas.restore();
+  /// 追加一个精灵实例（不即时绘制）：中心对齐 `cx/cy`，等比缩放 + 旋转。
+  ///
+  /// RST 采用 Skia 的 `[scos, ssin, tx, ty]` 约定——矩形左上角映射到
+  /// `(tx, ty)`，因此把子图中心平移到目标点的偏移是
+  /// `(scos·w/2 − ssin·h/2, ssin·w/2 + scos·h/2)`。逐帧不分配对象。
+  void _appendSprite(SpriteSlice s, double cx, double cy, double scale,
+      double rot, int argb) {
+    if (_spriteIndex >= _spriteInstanceCount) return;
+    final i = _spriteIndex++;
+    final o = i * 4;
+    final cosA = rot == 0.0 ? 1.0 : math.cos(rot);
+    final sinA = rot == 0.0 ? 0.0 : math.sin(rot);
+    final sc = scale * cosA;
+    final ss = scale * sinA;
+    final hw = s.width * 0.5;
+    final hh = s.height * 0.5;
+    _spriteRects[o] = s.rect[0];
+    _spriteRects[o + 1] = s.rect[1];
+    _spriteRects[o + 2] = s.rect[2];
+    _spriteRects[o + 3] = s.rect[3];
+    _spriteRst[o] = sc;
+    _spriteRst[o + 1] = ss;
+    _spriteRst[o + 2] = cx - (sc * hw - ss * hh);
+    _spriteRst[o + 3] = cy - (ss * hw + sc * hh);
+    _spriteColors[i] = argb;
+  }
+
+  /// 一次提交整批精灵：`BlendMode.modulate` 把实例色乘到纹理上，
+  /// 纹理 alpha 保留，不开任何离屏层。
+  void _flushSprites(Canvas canvas, ui.Image atlas) {
+    canvas.drawRawAtlas(
+      atlas,
+      _spriteRst,
+      _spriteRects,
+      _spriteColors,
+      BlendMode.modulate,
+      null,
+      _batchPaint,
+    );
+    assert(_spriteIndex <= _spriteInstanceCount);
+    _spriteIndex = 0;
   }
 
   /// 漏斗母线（与烘焙精灵共用同一条曲线，雾絮才能准确贴在锥面上）。
@@ -175,6 +232,12 @@ class ParticleTornadoPainter extends CustomPainter
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
+    // 资源路径：首帧发起一次异步解码；未完成（或解码失败）的那几帧直接
+    // 跳过精灵批次，绝不退回同步烘焙。
+    _atlas.ensureImage();
+    final ui.Image? atlas = _atlas.imageOrNull;
+    if (atlas == null) return;
+
     final n = bands.length;
     if (n == 0) return;
 
@@ -206,19 +269,19 @@ class ParticleTornadoPainter extends CustomPainter
 
     // 1) 底部浅盘：宽柔光 + 亮核。
     final saucerW = maxR * 1.90 * (1.0 + _pulse * 0.10);
-    _sprite(canvas, _atlas.saucer, cx, baseY, saucerW / _atlas.saucer.width,
-        0.0, _paintAt(1, 0.085 + 0.10 * bq));
-    _sprite(canvas, _atlas.saucer, cx, baseY, (saucerW * 0.52) / _atlas.saucer.width,
-        0.0, _paintAt(2, 0.16 + 0.22 * bq));
+    _appendSprite(_atlas.saucer, cx, baseY, saucerW / _atlas.saucer.width,
+        0.0, _tintAt(1, 0.085 + 0.10 * bq));
+    _appendSprite(_atlas.saucer, cx, baseY, (saucerW * 0.52) / _atlas.saucer.width,
+        0.0, _tintAt(2, 0.16 + 0.22 * bq));
 
     // 2) 锥体：外层 + 内层。精灵的锥底在精灵内 94% 处，对齐 baseY。
     //    烘焙图本身已带「横向柔边 + 顶部渐隐」，这里只调制整体亮度。
     final funnelScale = funnelH / 448.0;
     final funnelCenterY = baseY - 448.0 * 0.94 * funnelScale * 0.5;
-    _sprite(canvas, _atlas.funnelWide, cx, funnelCenterY, funnelScale, 0.0,
-        _paintAt(0, 0.52 + 0.24 * bq));
-    _sprite(canvas, _atlas.funnelCore, cx, funnelCenterY, funnelScale, 0.0,
-        _paintAt(1, 0.40 + 0.22 * bq));
+    _appendSprite(_atlas.funnelWide, cx, funnelCenterY, funnelScale, 0.0,
+        _tintAt(0, 0.52 + 0.24 * bq));
+    _appendSprite(_atlas.funnelCore, cx, funnelCenterY, funnelScale, 0.0,
+        _tintAt(1, 0.40 + 0.22 * bq));
 
     // 3) 细纹：细长纤维贴到锥面，u 连续分布（不再按 3 行等距排列，
     //    避免出现横向条带），不同相位的高频抖动叠出湍流纹理。
@@ -248,13 +311,17 @@ class ParticleTornadoPainter extends CustomPainter
       final topFade = u > 0.62 ? (1.0 - u) / 0.38 : 1.0;
       final rot = ang * 0.35 + 0.55;
       final mul = _bandParams[o + 3] * (0.55 + energy * 0.65);
-      _sprite(canvas, _atlas.puff, x, y,
+      _appendSprite(_atlas.puff, x, y,
           (localR * 0.70) / _atlas.puff.width, rot,
-          _paintAt(k.isEven ? 0 : 1, (0.12 * mul + 0.08 * bq) * topFade));
+          _tintAt(k.isEven ? 0 : 1, (0.12 * mul + 0.08 * bq) * topFade));
     }
 
+    // 浅盘+锥体+细纹整批提交：30 个实例 = 1 次 draw（旧版是 30 次
+    // drawImageRect，每次带混合模式 ColorFilter，各开一个离屏子 pass）。
+    _flushSprites(canvas, atlas);
+
     // 4) 星点：一次 drawRawAtlas 提交全部实例。
-    final starAlpha = 0.35 + 0.65 * (0.30 + 0.70 * energy);
+    final starArgb = _tintAt(2, 0.35 + 0.65 * (0.30 + 0.70 * energy));
     for (var k = 0; k < _starCount; k++) {
       final o = k * 5;
       final x = cx + _starSeeds[o] * maxR * 1.55;
@@ -267,15 +334,16 @@ class ParticleTornadoPainter extends CustomPainter
       _starRst[r + 1] = 0.0;
       _starRst[r + 2] = x - scale * 32.0;
       _starRst[r + 3] = y - scale * 32.0;
+      _starColors[k] = starArgb;
     }
     canvas.drawRawAtlas(
-      _atlas.image,
+      atlas,
       _starRst,
       _starRects,
+      _starColors,
+      BlendMode.modulate,
       null,
-      BlendMode.srcOver,
-      null,
-      _paintAt(2, starAlpha),
+      _batchPaint,
     );
   }
 

@@ -37,6 +37,8 @@ flutter:
     - assets/presets/plugin_tables.json
     - assets/tray_icon.ico
     - assets/tray_icon.png
+    # 构建期预烘焙的可视化精灵图集（tool/bake_viz_atlas_test.dart 生成）
+    - assets/viz/atlas_v1.png
 
   shaders:
     - shaders/aurora_wave.frag
