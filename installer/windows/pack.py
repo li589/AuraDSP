@@ -163,6 +163,26 @@ def resource_pack_paths(kind: str, packs_dir: Path) -> list[Path]:
     return ordered
 
 
+def load_sha256sums(packs_dir: Path) -> dict[str, str]:
+    """读取 packs_dir 下的 SHA256SUMS.txt（build_packages.py 生成、
+    随资源 Release 发布）→ {文件名: sha256 小写}。文件不存在返回空
+    dict（本地自建包流程不强制）；存在则 apply_resources 逐包对账，
+    这是发行规范 §4「验哈希再导入」在打包侧的执行点（2026-11-08
+    审计·预设低3：此前该契约只有文档、无代码执行）。"""
+    sums_file = packs_dir / "SHA256SUMS.txt"
+    if not sums_file.is_file():
+        return {}
+    out: dict[str, str] = {}
+    for line in sums_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) >= 2 and len(parts[0]) == 64:
+            out[Path(parts[-1]).name] = parts[0].lower()
+    return out
+
+
 def apply_resources(work_staging: Path, kind: str, packs_dir: Path,
                     what_if: bool) -> list[dict[str, str]]:
     """在 staging 副本上应用资源策略，返回合并记录（写入 build-info）。"""
@@ -186,8 +206,17 @@ def apply_resources(work_staging: Path, kind: str, packs_dir: Path,
     if kind in ("full", "addons") and not packs:
         raise die(f"--resources {kind} 需要资源包，但 {packs_dir} 下没有找到"
                   "（先跑 build_packages.py 或加 --rebuild-resource-packs）")
+    expected_sums = load_sha256sums(packs_dir)
     for pack in packs:
         sha = hashlib.sha256(pack.read_bytes()).hexdigest()
+        if expected_sums:
+            want = expected_sums.get(pack.name)
+            if want is None:
+                raise die(f"SHA256SUMS.txt 未登记资源包 {pack.name}，"
+                          "拒绝合并（发行完整性对账）")
+            if want != sha:
+                raise die(f"资源包 {pack.name} 的 SHA-256 与 "
+                          "SHA256SUMS.txt 不符，拒绝合并")
         count = 0
         if not what_if:
             with zipfile.ZipFile(pack) as zf:

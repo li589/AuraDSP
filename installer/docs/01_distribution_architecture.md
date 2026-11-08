@@ -142,6 +142,7 @@ AuraDSP 包含较为庞大的声学核心资源库（DDC 耳机校准曲线、IR
      - 每个本体 Release 的说明（`RELEASE_NOTES.md` 与 GitHub Release 正文）必须包含「配套资源包」条目：资源包版本号、tag、下载地址与 SHA-256 校验值（抄自资源包 Release 的 `SHA256SUMS.txt`）。
      - 下载地址为版本钉死的直链，不用浮动地址：`https://github.com/li589/AuraDSP/releases/download/resources-v{RESVER}/auradsp-resource-full.zip`（addons 同理换文件名）。钉死版本保证校验值长期有效、配套关系可复现。
      - 用户（及将来的向导内下载功能）取得资源包后，必须先比对 SHA-256 与上述条目一致才可导入；导入合并语义与打包侧一致（core→full→addons 顺序覆盖、`user_data/` 隔离，见 `installer/windows/pack.py` 的资源合并规则）。
+     - 校验执行点（2026-11-08 审计补齐，此前只有契约没有代码）：`build_packages.py` 构建后在 `dist/resources/` 生成 `SHA256SUMS.txt` 随 Release 发布；`pack.py` 合并资源包时若同目录存在该文件，逐包对账（未登记或哈希不符直接拒绝合并），fixture 测试覆盖放行/拒绝两路。App 运行时无资源包导入路径，用户手工放散文件时靠引擎逐文件门卫（IR/DDC 加载校验）兜底。
      - 本体安装包 / 便携包内置 core 预设保证开箱即用（上文第 1 点）；full 与 addons 属可选扩展，由用户从资源包 Release 按需获取。
 
 ---

@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -127,6 +128,24 @@ def main() -> int:
         check("addon 包文件已合并", "resources/convolver/space.irs" in names)
         check("同名以 full 覆盖", contents["resources/ddc/core.vdc"] == b"full-override")
         check("user_data 被隔离", not any("user_data" in n for n in names))
+
+        print("== SHA256SUMS 对账（2026-11-08 审计·预设低3） ==")
+        sums = packs / "SHA256SUMS.txt"
+        good_lines = []
+        for zp in sorted(packs.glob("auradsp-*.zip")):
+            digest = hashlib.sha256(zp.read_bytes()).hexdigest()
+            good_lines.append(f"{digest}  {zp.name}")
+        sums.write_text("\n".join(good_lines) + "\n", encoding="utf-8")
+        r = run_pack("--mode", "portable", "--resources", "addons", *common)
+        check("哈希相符时合并放行", r.returncode == 0,
+              r.stderr.strip()[-200:])
+        bad_lines = [ln.replace(ln[:64], "0" * 64, 1)
+                     if "auradsp-resource-full" in ln else ln
+                     for ln in good_lines]
+        sums.write_text("\n".join(bad_lines) + "\n", encoding="utf-8")
+        r = run_pack("--mode", "portable", "--resources", "addons", *common)
+        check("哈希不符时拒绝合并", r.returncode != 0)
+        sums.unlink()
 
         print("== portable none ==")
         r = run_pack("--mode", "portable", "--resources", "none", *common)
