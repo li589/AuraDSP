@@ -33,5 +33,6 @@ set(AURADSP_CORE_CXX_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/dsp/dsp_psycho.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/dsp/dsp_loudness.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/dsp/dsp_mc_reverb.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/dsp/dsp_mc_liveprog.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/dsp/dsp_dyneq.cpp"
 )
