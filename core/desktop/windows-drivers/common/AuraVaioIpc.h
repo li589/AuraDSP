@@ -154,10 +154,12 @@ typedef struct _AURA_INTERSECTION_LOG_ENTRY {
     ULONG   ExtraSampleRate;
     ULONG   ExtraChannelMask;
     GUID    ExtraSubFormat;
+    ULONGLONG Timestamp100ns;   // KeQuerySystemTime（100ns 单位，1601 纪元 UTC）
 } AURA_INTERSECTION_LOG_ENTRY, *PAURA_INTERSECTION_LOG_ENTRY;
 
 typedef struct _AURA_DEBUG_LOG {
-    ULONG                       Count;
+    ULONG                       Count;      // 有效条数（<= 32）
+    ULONG                       WriteIndex; // 环形写指针（单调递增，读清零时归零）
     AURA_INTERSECTION_LOG_ENTRY Entries[32];
 } AURA_DEBUG_LOG, *PAURA_DEBUG_LOG;
 

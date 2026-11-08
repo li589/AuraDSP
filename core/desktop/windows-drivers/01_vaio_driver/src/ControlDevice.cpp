@@ -27,6 +27,10 @@ static ULONG                    g_ulRingTotalSize       = 0;
 static PMDL                     g_pRingMdl              = NULL;
 static PVOID                    g_pMappedUserAddress    = NULL;
 static PEPROCESS                g_pMappedProcess        = NULL;
+// GET_DEBUG_LOG 持久持有者（2026-11-08 审计·调试低6）：最近一次成功
+// MAP 的进程。解映射时**不清**（校验要覆盖解映射后的窗口），持有者
+// 进程退出时由 Cleanup 路径清除。受 g_RingLock 保护。
+static PEPROCESS                g_pDebugLogHolder       = NULL;
 static KSPIN_LOCK               g_RingLock;
 static LONG                     g_lActiveRenderStreams  = 0;
 static LONG                     g_lActiveCaptureStreams = 0;
@@ -279,6 +283,11 @@ AuraControlDevice_DispatchCleanup(
         g_pMappedUserAddress = NULL;
         g_pMappedProcess = NULL;
     }
+    // 持有者进程退出：释放 GET_DEBUG_LOG 的持久持有记录（审计低6）。
+    if (g_pDebugLogHolder == currentProc)
+    {
+        g_pDebugLogHolder = NULL;
+    }
     KeReleaseSpinLock(&g_RingLock, oldIrql);
 
     Irp->IoStatus.Status = STATUS_SUCCESS;
@@ -423,6 +432,7 @@ AuraControlDevice_DispatchDeviceControl(
                 {
                     g_pMappedUserAddress = userVa;
                     g_pMappedProcess     = currentProc;
+                    g_pDebugLogHolder    = currentProc;
                 }
             }
 
@@ -515,11 +525,20 @@ AuraControlDevice_DispatchDeviceControl(
             PEPROCESS currentProc = PsGetCurrentProcess();
             BOOLEAN denied = FALSE;
             KeAcquireSpinLock(&g_RingLock, &oldIrql);
-            if (g_pMappedUserAddress != NULL &&
-                g_pMappedProcess != NULL &&
-                g_pMappedProcess != currentProc)
+            // 审计·调试低6：校验不能只在映射期生效——解映射后旧实现
+            // 任意本地进程都能读走并清掉日志。映射中以当前持有者为
+            // 准；解映射后以 g_pDebugLogHolder（最近一次成功 MAP 的
+            // 进程）为准，直到该进程退出由 Cleanup 清除记录。从未
+            // MAP 过时不设防（此时日志只有格式协商记录，探针工具的
+            // 独立读取依赖这一点）。
             {
-                denied = TRUE;
+                const PEPROCESS holder = (g_pMappedUserAddress != NULL)
+                                             ? g_pMappedProcess
+                                             : g_pDebugLogHolder;
+                if (holder != NULL && holder != currentProc)
+                {
+                    denied = TRUE;
+                }
             }
             KeReleaseSpinLock(&g_RingLock, oldIrql);
             if (denied)
@@ -533,6 +552,7 @@ AuraControlDevice_DispatchDeviceControl(
             KeAcquireSpinLock(&g_DebugLock, &oldIrql);
             RtlCopyMemory(pLog, &g_DebugLog, sizeof(AURA_DEBUG_LOG));
             g_DebugLog.Count = 0;
+            g_DebugLog.WriteIndex = 0;
             RtlZeroMemory(g_DebugLog.Entries, sizeof(g_DebugLog.Entries));
             KeReleaseSpinLock(&g_DebugLock, oldIrql);
             bytesReturned = sizeof(AURA_DEBUG_LOG);
@@ -778,10 +798,20 @@ AuraControlDevice_LogIntersection(
 {
     KIRQL oldIrql;
     KeAcquireSpinLock(&g_DebugLock, &oldIrql);
-    if (g_DebugLog.Count < 32)
+    // 审计·调试低7：真环形（写满后覆盖最旧）+ 驱动侧盖系统时间戳。
+    // 旧实现是 32 条写满即丢弃新条目且无时间：长会话里最关键的首
+    // 发交集记录反而留不住，也无法与用户态日志对时。
     {
-        g_DebugLog.Entries[g_DebugLog.Count] = *Entry;
-        g_DebugLog.Count++;
+        AURA_INTERSECTION_LOG_ENTRY stamped = *Entry;
+        LARGE_INTEGER now = {0};
+        KeQuerySystemTime(&now);
+        stamped.Timestamp100ns = static_cast<ULONGLONG>(now.QuadPart);
+        g_DebugLog.Entries[g_DebugLog.WriteIndex % 32] = stamped;
+        g_DebugLog.WriteIndex++;
+        if (g_DebugLog.Count < 32)
+        {
+            g_DebugLog.Count++;
+        }
     }
     KeReleaseSpinLock(&g_DebugLock, oldIrql);
 }

@@ -323,10 +323,20 @@ int main() {
         if (DeviceIoControl(hControl, IOCTL_AURAVAIO_GET_DEBUG_LOG, nullptr, 0,
                             &debugLog, sizeof(debugLog), &retBytes, nullptr)) {
             printf("\n================ 驱动层 DataRangeIntersection 诊断日志 (共 %lu 条) ================\n", debugLog.Count);
+            // 环形日志（审计低7）：最旧条目下标 = (WriteIndex - Count) % 32，
+            // 按时间顺序回放；Timestamp100ns 是系统时间（FILETIME 同源）。
+            const ULONG startIdx = (debugLog.WriteIndex - debugLog.Count) % 32;
             for (ULONG i = 0; i < debugLog.Count; ++i) {
-                const auto& e = debugLog.Entries[i];
-                printf("  [%2lu] Pin=%lu, Status=0x%08lX, InBufSize=%lu, OutBufLen=%lu, FormatSize=%lu\n",
-                       i, e.PinId, e.Status, e.FormatSize, e.OutputBufferLength, e.FormatSize);
+                const auto& e = debugLog.Entries[(startIdx + i) % 32];
+                FILETIME ft;
+                ft.dwLowDateTime = static_cast<DWORD>(e.Timestamp100ns & 0xFFFFFFFFull);
+                ft.dwHighDateTime = static_cast<DWORD>(e.Timestamp100ns >> 32);
+                SYSTEMTIME st = {0};
+                FileTimeToSystemTime(&ft, &st);
+                printf("  [%2lu] %04d-%02d-%02d %02d:%02d:%02d.%03dZ Pin=%lu, Status=0x%08lX, InBufSize=%lu, OutBufLen=%lu, FormatSize=%lu\n",
+                       i, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute,
+                       st.wSecond, st.wMilliseconds, e.PinId, e.Status,
+                       e.FormatSize, e.OutputBufferLength, e.FormatSize);
                 printf("       Client: reqCh=%lu, reqBits=%lu, reqRate=%lu, mask=0x%03lX\n",
                        e.ExtraChannels, e.ExtraBits, e.ExtraSampleRate, e.ExtraChannelMask);
                 printf("       ClientSubFormat: {%08lX-%04X-%04X...}, Specifier: {%08lX...}\n",

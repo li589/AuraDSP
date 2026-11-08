@@ -86,8 +86,11 @@ class UnmapRequest(ctypes.Structure):
     _fields_ = [("UserAddress", ctypes.c_void_p)]
 
 
-# AURA_DEBUG_LOG = ULONG Count + 32 * AURA_INTERSECTION_LOG_ENTRY(124B) = 3972B
-DEBUG_LOG_BUF = 4096
+# AURA_DEBUG_LOG = Count(4B) + WriteIndex(4B) + 32 * ENTRY(136B) = 4360B
+# （2026-11-08 审计低7 起 ENTRY 含 Timestamp100ns、头部加 WriteIndex；
+# 缓冲取 8192 留余量——驱动先验长度后验持有者，缓冲不足会先报
+# ERROR_INSUFFICIENT_BUFFER，掩盖本脚本要验的错误 5）
+DEBUG_LOG_BUF = 8192
 
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 kernel32.CreateFileW.restype = wintypes.HANDLE
