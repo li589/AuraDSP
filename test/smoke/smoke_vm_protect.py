@@ -129,6 +129,18 @@ try:
         sys.exit(1 if fails else 0)
 
     # ---- ① 注入超预算 → 保护激活（延迟 ~0.5-1s）----
+    # 前置：**必须有正在处理的音频组**。保护观测值（cbEmaUs/cbOverStreak）由
+    # RT 音频回调消费，vb_protect_test 的注入值也要靠下一次回调才被读到；
+    # 桥整体空闲（Voicemeeter 无客户端拉流）时 RT 不跑，注入永远不被读取，
+    # 守卫也就无从进入——这是环境前置不足，不是产品缺陷，记 SKIP 而非 FAIL。
+    _hot0 = st.get("hotGrp", -1)
+    if not (isinstance(_hot0, int) and 0 <= _hot0 < max(1, n_eng)):
+        note(f"无正在处理的音频组（hotGrp={_hot0}，handles={n_eng}）——"
+             "保护守卫需要真实 RT 回调才有观测对象，本机 Voicemeeter 无客户端拉流，跳过")
+        b.vb_protect_test(0, -1)
+        print("VMPROTECT FAILURES:", fails)
+        sys.exit(0)
+
     check("inject over-budget", b.vb_protect_test(budget * 2, 200) == 1)
     ok = wait_protect(1, 3.0)
     st = get_status()

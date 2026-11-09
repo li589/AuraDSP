@@ -164,6 +164,18 @@ try:
           f"bypassed={st1.get('bypassed')}")
 
     # ---- [2] 掩码全开：新使能组后台补挂（无需重新 mount）----
+    # 断言范围必须限定在**路由在线的组**上。
+    # 桥的组位数（groups=8）是版面容量，实际在线路由由 busMask/routeState 决定：
+    # 本机通常只开通 2 条路由（routeState=[2,2,0,...]），其余组没有引擎实例，
+    # 补挂逻辑按设计跳过它们（BackfillGroupsForMask 要求 PluginEngineAt(g)）。
+    # 早先对全部 8 组一律要求"就绪"，是把环境差异（开了几条路由）误报成
+    # 产品缺陷——同一份代码在预同步引擎上失败结果完全一致，可排除回归。
+    route_state = status().get("routeState") or []
+    live = [g for g, s in enumerate(route_state) if s != 0]
+    if not live:
+        live = list(range(n))
+    print(f"[1b] 在线路由组: {live}（routeState={route_state}）")
+
     b.vb_plugin_group_enable(0xFF)
     t0 = time.time()
     saw_suspend = False
@@ -171,12 +183,13 @@ try:
         r = ready_map(0, n)
         if status().get("loadSuspend") == 1:
             saw_suspend = True
-        if all(v == 1 for v in r):
+        if all(r[g] == 1 for g in live):
             break
         time.sleep(0.5)
     t_fill = time.time() - t0
     r = ready_map(0, n)
-    check("后台补齐完成（掩码全开）", all(v == 1 for v in r), f"ready={r}")
+    check("后台补齐完成（在线路由组全就绪）",
+          all(r[g] == 1 for g in live), f"ready={r} live={live}")
     st = status()
     check("补挂结束旁路已撤（loadSuspend==0）", st.get("loadSuspend") == 0,
           f"loadSuspend={st.get('loadSuspend')}")
