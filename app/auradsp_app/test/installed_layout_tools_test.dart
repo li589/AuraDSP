@@ -35,7 +35,7 @@ void main() {
       final pairs = <List<String>>[
         ['driver/install_vaio.ps1', '01_vaio_driver/install_driver.ps1'],
         ['driver/register_asio.ps1', '04_asio_driver/register_driver.ps1'],
-        ['driver/apo_config.py', '03_system_apo/apo_config.py'],
+        ['driver/apo_config.exe', 'out/Release/apo_config.exe'],
         [
           'driver/apo_inspect.exe',
           'windows-drivers/out/Release/apo_inspect.exe'
@@ -55,6 +55,15 @@ void main() {
       expect(port, contains('findInstalledFile'));
       expect(tools, contains('findInstalledFile'));
       expect(tools, contains('Platform.resolvedExecutable'));
+    });
+
+    test('APO 工具链零 Python 依赖（2026-11-09 §2.3 方案 A）', () {
+      // 真机实证：目标机无 Python 时旧链路（python apo_config.py）
+      // 必然失败。钉死 tools 实现不得再以 python 为执行体，且
+      // state 定位只认原生 apo_config.exe。
+      expect(tools, isNot(contains("'python'")));
+      expect(tools, isNot(contains('apo_config.py')));
+      expect(state, contains('driver/apo_config.exe'));
     });
 
     test('非 Windows 实现恒返回 null（定位不泄漏到其它平台）', () {
@@ -131,7 +140,7 @@ void main() {
     test('静默失败清零：状态查询与 ASIO 注册缺脚本均置错', () {
       expect(state, contains('APO 状态查询失败（脚本无有效输出）'));
       expect(state, contains('未找到 ASIO 注册脚本'));
-      expect(state, contains("lastApoError = '未找到 apo_config.py 驱动管理脚本'"));
+      expect(state, contains("lastApoError = '未找到 apo_config.exe 驱动管理工具'"));
       // 初始化后台探测保持静默，不攒陈旧报错
       expect(coreState, contains('checkApoStatus(silent: true)'));
     });

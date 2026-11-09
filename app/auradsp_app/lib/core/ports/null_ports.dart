@@ -123,12 +123,12 @@ final class NullWindowsSystem implements WindowsSystemPort {
       _fail();
 
   @override
-  Future<ProcessResult> apoStatus(String scriptPath, double timeout) async =>
+  Future<ProcessResult> apoStatus(String exePath, double timeout) async =>
       _fail();
 
   @override
   Future<ProcessResult> apoInstall(
-    String scriptPath, {
+    String exePath, {
     required String target,
     required bool composite,
     required bool elevated,
@@ -137,7 +137,7 @@ final class NullWindowsSystem implements WindowsSystemPort {
 
   @override
   Future<ProcessResult> apoUninstall(
-    String scriptPath, {
+    String exePath, {
     required String target,
     required bool elevated,
   }) async =>

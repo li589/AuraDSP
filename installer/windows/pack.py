@@ -232,8 +232,7 @@ def find_apo_inspect(explicit: str | None) -> Path | None:
 
 
 class ApoAssets(NamedTuple):
-    """APO 运维资产四件（同组进 driver/）。"""
-    config_py: Path    # apo_config.py：过渡期保留（app 切换 exe 后下线）
+    """APO 运维资产三件（同组进 driver/）。"""
     config_exe: Path   # apo_config.exe：原生移植版（§2.3 方案 A）
     apo_dll: Path      # AuraApo.dll：APO 本体（此前从未随包，附加必败）
     inspect: Path      # apo_inspect.exe：端点枚举
@@ -247,10 +246,6 @@ def resolve_apo_assets(args) -> ApoAssets:
     2026-11-09 §2.3 方案 A 补齐原生 apo_config.exe 与 AuraApo.dll：
     无 DLL 时脚本/工具在安装布局里无对象可挂，附加必然未生效。
     """
-    config_py = (ROOT / "core" / "desktop" / "windows-drivers" /
-                 "03_system_apo" / "apo_config.py")
-    if not config_py.is_file():
-        raise die(f"缺 apo_config.py: {config_py}")
     apo_inspect = find_apo_inspect(args.apo_inspect)
     if apo_inspect is None:
         raise die("找不到 apo_inspect.exe；先构建 windows-drivers 目标"
@@ -264,7 +259,7 @@ def resolve_apo_assets(args) -> ApoAssets:
     if apo_dll is None:
         raise die("找不到 AuraApo.dll；先构建 windows-drivers 目标"
                   "（含 AuraApo 目标），或用 --apo-dll 指定")
-    return ApoAssets(config_py, config_exe, apo_dll, apo_inspect)
+    return ApoAssets(config_exe, apo_dll, apo_inspect)
 
 
 def check_staging(staging: Path) -> None:
@@ -467,10 +462,9 @@ def stage_driver_files(
     if copied == 0:
         raise die(f"驱动目录没有任何 .sys/.inf/.cat/.cer: {driver_dir}")
     shutil.copy2(install_ps1, dest / install_ps1.name)
-    # APO 运维资产：app 侧附加/状态工具（过渡期 .py 与 .exe 并存，
-    # A3 切换后下线 .py）+ APO 本体 AuraApo.dll + 设备端点刷新
+    # APO 运维资产：app 侧附加/状态工具 apo_config.exe（原生版，
+    # 已替代 python 脚本）+ APO 本体 AuraApo.dll + 设备端点刷新
     # （apo_inspect.exe），与手动安装资产同组进 driver/。
-    shutil.copy2(apo.config_py, dest / apo.config_py.name)
     shutil.copy2(apo.config_exe, dest / apo.config_exe.name)
     shutil.copy2(apo.apo_dll, dest / apo.apo_dll.name)
     shutil.copy2(apo.inspect, dest / apo.inspect.name)

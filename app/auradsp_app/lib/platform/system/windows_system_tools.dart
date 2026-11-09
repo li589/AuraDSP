@@ -136,9 +136,8 @@ final class WindowsSystemTools implements WindowsSystemPort {
   }
 
   @override
-  Future<ProcessResult> apoStatus(String scriptPath, double timeout) {
-    return Process.run('python', [
-      scriptPath,
+  Future<ProcessResult> apoStatus(String exePath, double timeout) {
+    return Process.run(exePath, [
       'status',
       '--timeout',
       timeout.toString(),
@@ -148,7 +147,7 @@ final class WindowsSystemTools implements WindowsSystemPort {
 
   @override
   Future<ProcessResult> apoInstall(
-    String scriptPath, {
+    String exePath, {
     required String target,
     required bool composite,
     required bool elevated,
@@ -156,12 +155,11 @@ final class WindowsSystemTools implements WindowsSystemPort {
     if (elevated) {
       final modeArg = composite ? ", '--composite'" : '';
       final cmd =
-          "Start-Process python -Verb RunAs -Wait -ArgumentList "
-          "'\"$scriptPath\"', 'install', '\"$target\"', '--yes', '--force'$modeArg";
+          "Start-Process \"$exePath\" -Verb RunAs -Wait -ArgumentList "
+          "'install', '\"$target\"', '--yes', '--force'$modeArg";
       return Process.run('powershell', ['-Command', cmd]);
     }
-    return Process.run('python', [
-      scriptPath,
+    return Process.run(exePath, [
       'install',
       target,
       '--yes',
@@ -173,19 +171,18 @@ final class WindowsSystemTools implements WindowsSystemPort {
 
   @override
   Future<ProcessResult> apoUninstall(
-    String scriptPath, {
+    String exePath, {
     required String target,
     required bool elevated,
   }) {
     if (elevated) {
       final targetArg = target.isNotEmpty ? ", '\"$target\"'" : '';
       final cmd =
-          "Start-Process python -Verb RunAs -Wait -ArgumentList "
-          "'\"$scriptPath\"', 'uninstall'$targetArg, '--yes'";
+          "Start-Process \"$exePath\" -Verb RunAs -Wait -ArgumentList "
+          "'uninstall'$targetArg, '--yes'";
       return Process.run('powershell', ['-Command', cmd]);
     }
-    return Process.run('python', [
-      scriptPath,
+    return Process.run(exePath, [
       'uninstall',
       if (target.isNotEmpty) target,
       '--yes',

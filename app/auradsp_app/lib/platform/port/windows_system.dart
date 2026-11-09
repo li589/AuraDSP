@@ -41,20 +41,20 @@ abstract interface class WindowsSystemPort {
     bool bundled = false,
   });
 
-  /// apo_config.py status（非提权）。
-  Future<ProcessResult> apoStatus(String scriptPath, double timeout);
+  /// apo_config.exe status（非提权；原生工具，2026-11-09 §2.3）。
+  Future<ProcessResult> apoStatus(String exePath, double timeout);
 
-  /// apo_config.py install（可选 UAC 提权 / 复合插槽）。
+  /// apo_config.exe install（可选 UAC 提权 / 复合插槽）。
   Future<ProcessResult> apoInstall(
-    String scriptPath, {
+    String exePath, {
     required String target,
     required bool composite,
     required bool elevated,
   });
 
-  /// apo_config.py uninstall（可选 UAC 提权）。
+  /// apo_config.exe uninstall（可选 UAC 提权）。
   Future<ProcessResult> apoUninstall(
-    String scriptPath, {
+    String exePath, {
     required String target,
     required bool elevated,
   });

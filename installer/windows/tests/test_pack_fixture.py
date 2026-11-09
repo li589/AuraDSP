@@ -122,9 +122,9 @@ def main() -> int:
                      "install_driver.ps1", "auraasio_driver.dll",
                      "register_asio.ps1", "install_vaio.ps1", "README.txt",
                      # APO 运维资产随包（2026-11-09 V-03/F4 起；
-                     # §2.3 方案 A 补 apo_config.exe + AuraApo.dll）
-                     "apo_config.py", "apo_inspect.exe",
-                     "apo_config.exe", "AuraApo.dll"):
+                     # §2.3 方案 A 改原生 apo_config.exe + AuraApo.dll，
+                     # python 脚本已下线）
+                     "apo_inspect.exe", "apo_config.exe", "AuraApo.dll"):
             check(f"含 {want}", want in names)
         check("驱动包含签名教程",
               b"Win7" in read_zip(dz)[1]["README.txt"]
@@ -230,8 +230,7 @@ def main() -> int:
         # 取消勾选驱动也不能过滤 driver/：手动脚本与驱动必须随包保留。
         for rel in ("install_vaio.ps1", "README.txt", "register_asio.ps1",
                     "auraasio_driver.dll", "AuraVaioDriver.inf",
-                    "apo_config.py", "apo_inspect.exe",
-                    "apo_config.exe", "AuraApo.dll"):
+                    "apo_inspect.exe", "apo_config.exe", "AuraApo.dll"):
             check(f"ZIP-P 恒保留 driver/{rel}",
                   f"payload/driver/{rel}" in payload_names)
 

@@ -561,13 +561,14 @@ extension AudioModesState on AppModel {
 
   // ---- System APO 运维 ----
 
-  String? _findApoConfigScript() =>
-      windowsSystem.findInstalledFile(const ['driver/apo_config.py']) ??
+  // 原生工具定位（2026-11-09 §2.3 方案 A）：随包 driver/ 优先，
+  // 开发期回退 windows-drivers 构建产物。旧 python 脚本链路已下线
+  // ——目标机器无 Python 运行时是真机实证的断裂点，不再保留。
+  String? _findApoConfigTool() =>
+      windowsSystem.findInstalledFile(const ['driver/apo_config.exe']) ??
       windowsSystem.findRepoFile(const [
-        'core/desktop/windows-drivers/03_system_apo/apo_config.py',
-        'scripts/apo_config.py',
-        'apo_config.py',
-        '../scripts/apo_config.py',
+        'core/desktop/windows-drivers/out/Release/apo_config.exe',
+        'core/desktop/windows-drivers/out/Debug/apo_config.exe',
       ]);
 
   void setApoCompositeMode(bool enabled) {
@@ -587,9 +588,9 @@ extension AudioModesState on AppModel {
       return;
     }
     try {
-      final script = _findApoConfigScript();
+      final script = _findApoConfigTool();
       if (script == null) {
-        if (!silent) lastApoError = '未找到 apo_config.py 驱动管理脚本';
+        if (!silent) lastApoError = '未找到 apo_config.exe 驱动管理工具';
         _notifyUi();
         return;
       }
@@ -667,9 +668,9 @@ extension AudioModesState on AppModel {
     _notifyUi();
 
     try {
-      final script = _findApoConfigScript();
+      final script = _findApoConfigTool();
       if (script == null) {
-        lastApoError = '未找到 apo_config.py 驱动管理脚本';
+        lastApoError = '未找到 apo_config.exe 驱动管理工具';
         isApoOperating = false;
         _notifyUi();
         return false;
@@ -722,9 +723,9 @@ extension AudioModesState on AppModel {
     _notifyUi();
 
     try {
-      final script = _findApoConfigScript();
+      final script = _findApoConfigTool();
       if (script == null) {
-        lastApoError = '未找到 apo_config.py 驱动管理脚本';
+        lastApoError = '未找到 apo_config.exe 驱动管理工具';
         isApoOperating = false;
         _notifyUi();
         return false;
