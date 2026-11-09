@@ -514,9 +514,16 @@ final class WasapiOut implements AudioOut {
     started = false;
   }
 
+  /// FAIL 日志采样：异常照抛（上层计数/恢复语义不变），日志行
+  /// 只记前 5 次、之后每 200 次 1 次——端点死亡时泵 20ms 一轮
+  /// 重试，无采样即日志洪水（真机报告 2026-11-09）。
+  static final ThrottledLog _failLog = ThrottledLog('wasapi-fail', head: 5, every: 200);
+
   void _hr(String what, int hr) {
     if (hr < 0) {
-      dbgLog('WASAPI FAIL $what hr=0x${(hr & 0xFFFFFFFF).toRadixString(16)}');
+      if (_failLog.shouldLog) {
+        dbgLog('WASAPI FAIL $what hr=0x${(hr & 0xFFFFFFFF).toRadixString(16)}');
+      }
       throw StateError('WASAPI $what failed hr=0x${(hr & 0xFFFFFFFF).toRadixString(16)}'
           '${endpointName.isNotEmpty ? " (endpoint: $endpointName)" : ""}');
     }

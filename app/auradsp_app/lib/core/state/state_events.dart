@@ -83,6 +83,10 @@ extension StateEvents on AppModel {
             'outputEndpoint': config.vaioOutputEndpoint,
           });
         }
+        // 模式恢复取证（2026-11-09）：与 isolate 侧
+        // 'vaiomode: start requested' 的时间戳对齐，可判「桥是
+        // 就绪时起的还是用户点出来的」这一分支。
+        dbgLog('ready-restore: audioMode=$audioMode');
         // V-01：VAIO 检测此前只有手动按钮触发，启动后 vaioDetectInfo
         // 恒为空 map、驱动行恒显「未检测到」（真机误报根因 A）。就绪后
         // 自动探测一次；isolate 重启（采样率切换等）再 ready 时同样
@@ -685,7 +689,8 @@ extension StateEvents on AppModel {
         _notifyUi();
         // 设备被占是持续态（对端独占释放前不会好）：backoff 重起，
         // 5 次约 10s 还起不来才认命留 fatal 屏。其它错误直接留屏。
-        if (fatalMsg?.contains('0x8889000a') == true) {
+        if (fatalMsg?.contains('0x8889000a') == true ||
+            fatalMsg?.contains('0x88890004') == true) {
           _scheduleFatalRetry();
         }
         break;

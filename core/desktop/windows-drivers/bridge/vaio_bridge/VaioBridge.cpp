@@ -649,8 +649,17 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
     // 初始消费指针与内核当前写入位置对齐（避免刚开机把陈旧噪底播出来）
     ULONGLONG userBytesRead = pHeader ? pHeader->TotalBytesWritten : 0;
 
-    // 启动 WASAPI 播放
-    g_vaio.pAudioClient->Start();
+    // 启动 WASAPI 播放：HRESULT 必须查——失败时泵会在
+    // GetCurrentPadding 上永久空转而 status 仍报 running，
+    // 呈「无声无 viz」假象（取证 2026-11-09 候选 5）；把失败
+    // 写进 note 让 status 可见。
+    {
+        const HRESULT hrStart = g_vaio.pAudioClient->Start();
+        if (FAILED(hrStart)) {
+            snprintf(g_vaio.note, sizeof(g_vaio.note),
+                     "wasapi-render-start-failed: 0x%08lX", hrStart);
+        }
+    }
 
     while (!InterlockedCompareExchange(&g_vaio.stopEvent, 0, 0)) {
         // 动态检测驱动共享环上的声道配置变更
@@ -1456,7 +1465,7 @@ int vaio_status(char* out, int cap) {
 
     const int n = _snprintf_s(
         out, (size_t)cap, _TRUNCATE,
-        "{\"running\":%s,\"frames\":%llu,\"sr\":%lu,\"channels\":%lu,\"bits\":%lu,\"ringSr\":%lu,"
+        "{\"running\":%s,\"frames\":%llu,\"sr\":%lu,\"channels\":%lu,\"bits\":%lu,\"ringSr\":%lu,\"ringCh\":%lu,\"outCh\":%lu,\"outBits\":%lu,"
         "\"peakIn\":%.4f,\"peakOut\":%.4f,\"maxPumpUs\":%.2f,\"startRc\":%d,\"note\":\"%s\","
         "\"outputEndpoint\":\"%s\",\"engineOk\":%s,\"enginePath\":\"%s\","
         "\"paramsApplied\":%d,\"paramsFailed\":%d,\"bypass\":%ld,\"testKind\":%ld,"
@@ -1467,6 +1476,9 @@ int vaio_status(char* out, int cap) {
         reportedCh,
         g_vaio.ringBits,
         g_vaio.ringSampleRate,
+        g_vaio.ringChannels,
+        g_vaio.wasapiChannels,
+        g_vaio.wasapiBits,
         g_vaio.peakIn,
         g_vaio.peakOut,
         g_vaio.maxPumpUs,

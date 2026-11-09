@@ -2347,18 +2347,24 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         }
       } catch (e, st) {
-        // 错误节流：同一消息 3s 内只上报一次，防 UI 事件洪泛（5ms 一轮的循环）
+        // 错误节流：同一消息 3s 内只上报一次，防 UI 事件洪泛（5ms 一轮的循环）。
+        // 日志文件同口径节流：旧实现只节流 UI 事件、日志每轮照写，
+        // 端点死亡时 20ms 一对洪水行刷满日志（真机报告 2026-11-09）。
         final now = DateTime.now().millisecondsSinceEpoch;
         final msg = e.toString();
-        dbgLog('PUMP ERROR: $msg\n$st');
         if (msg != lastPumpErr || now - lastPumpErrAt > 3000) {
           lastPumpErr = msg;
           lastPumpErrAt = now;
+          dbgLog('PUMP ERROR: $msg\n$st');
           send({'evt': 'error', 'msg': msg});
         }
-        // 端点死亡（WASAPI 认 0x8889000a；Linux 认输出后端 StateError，
-        // 见下。其余错误走上面的常规上报，不触发重启）。
-        if (msg.contains('0x8889000a')) {
+        // 端点死亡（WASAPI 认两个码：0x8889000a DEVICE_IN_USE 独占、
+        // 0x88890004 DEVICE_INVALIDATED 失效；Linux 认输出后端
+        // StateError，见下。其余错误走常规上报，不触发重启）。
+        // 教训（DRV-02 续）：此前 Windows 侧只认 0x8889000a，
+        // 0x88890004 每轮落 else 清零计数、400 轮 latch 永不触发，
+        // 泵对死端点无限重试（真机日志洪水实证）。
+        if (msg.contains('0x8889000a') || msg.contains('0x88890004')) {
           audioOutErrRounds++;
         } else if (PlatformProfile.isLinux &&
             audioOut != null &&

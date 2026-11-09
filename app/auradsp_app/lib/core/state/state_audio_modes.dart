@@ -173,6 +173,31 @@ extension AudioModesState on AppModel {
       if (composed != audioMode) {
         setAudioMode(composed);
       } else {
+        // 漂移对账：模式未变时旧实现只落盘，但 UI 模式与 isolate
+        // 桥状态可能已漂移（如持久化模式与就绪恢复不一致、桥启动
+        // 曾失败）——用户点遍输入输出都无声无 viz，唯独某次真
+        // 模式切换才把桥带起来（真机报告 2026-11-09 阶段 1-3）。
+        // 当前模式的桥未在运行时补发一次启动命令（isolate 侧
+        // 启动幂等），让漂移自愈。
+        if (PlatformProfile.supportsBridges) {
+          if (composed == 'vaio' && !vaioActive) {
+            dbgLog('pipeline.reconcile: resend vaiomode (vaioActive=false)');
+            _toIso?.send({
+              'cmd': 'vaiomode',
+              'on': true,
+              'outputEndpoint': config.vaioOutputEndpoint,
+            });
+          } else if (composed == 'asio' && !asioActive) {
+            dbgLog('pipeline.reconcile: resend asiomode (asioActive=false)');
+            _toIso?.send({
+              'cmd': 'asiomode',
+              'on': true,
+              'driver': config.asioDriver,
+              'bufSize': config.asioBufSize,
+              'outPair': config.asioOutPair,
+            });
+          }
+        }
         ConfigManager.save(config);
         _notifyUi();
       }
