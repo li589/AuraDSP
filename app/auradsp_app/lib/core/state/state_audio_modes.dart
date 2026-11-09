@@ -272,6 +272,10 @@ extension AudioModesState on AppModel {
             await windowsSystem.inspectAudioDevices(
           exePath,
         );
+        // 细分埋点（真机报告 2026-11-09 §1.1b：驱动区刷新闪退新点）：
+        // 与 I/O 区刷新共用本方法且后者正常，故把 inspect 返回、
+        // 解析空集、通知后三段分开记日志尾，下次复现凭尾迹定段。
+        dbgLog('devices.refresh: inspect exit=${res.exitCode}');
         if (res.exitCode == 0) {
           final stdout = (res.stdout as String).trim();
           final lines = stdout.split('\n');
@@ -303,6 +307,9 @@ extension AudioModesState on AppModel {
               lastAudioError = null;
               dbgLog('devices.refresh: done n=${items.length}');
               _notifyUi();
+              dbgLog('devices.refresh: notified');
+            } else {
+              dbgLog('devices.refresh: no endpoints parsed');
             }
           }
         } else {
@@ -311,6 +318,7 @@ extension AudioModesState on AppModel {
         }
       }
     } catch (e) {
+      dbgLog('devices.refresh: error $e');
       lastAudioError = '刷新音频设备失败: $e';
       _notifyUi();
     }
