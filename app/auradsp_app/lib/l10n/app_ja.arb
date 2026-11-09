@@ -436,6 +436,7 @@
   "tooltipOutputVaio": "AuraVAIO 仮想出力：仮想オーディオ端点へ出力し、ヘッドホンモニターミラーリングにも対応します",
   "tooltipOutputAsioClient": "AuraDSP ASIO Client：外部のプロ向け物理 ASIO オーディオインターフェースへ超低遅延出力します",
   "driverLayerTitle": "ドライバ情報と制御",
+  "osVersionLabel": "OS",
   "inputLayerTitle": "オーディオ入力",
   "outputLayerTitle": "オーディオ出力",
   "inputDisabledNotice": "入力端が無効になっています（録音キャプチャ一時停止中）",

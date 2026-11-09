@@ -399,6 +399,12 @@ class _AsioClientOutputSubpanel extends StatelessWidget {
             l.ioChannelPair(model.config.asioOutPair * 2 + 1,
                 model.config.asioOutPair * 2 + 2)),
         _InfoRow(l.ioOutputStatus, active ? l.ioAsioPassthrough : l.ioAsioReadyStatus),
+        // V-04/R4+R5：ASIO Client 的【设置】控件（驱动选择/缓冲/
+        // 声道对）归输出层管理，此前混在只读的驱动信息层。
+        const SizedBox(height: AuraSpace.sm),
+        HbBuilder(
+            tick: model.hbTick,
+            builder: (_) => _AsioClientDriverRow(model: model)),
       ],
     );
   }

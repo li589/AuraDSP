@@ -1294,6 +1294,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get driverLayerTitle => 'Driver Information & Controls';
 
   @override
+  String get osVersionLabel => 'Operating system';
+
+  @override
   String get inputLayerTitle => 'Audio Input';
 
   @override

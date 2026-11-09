@@ -1212,6 +1212,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get driverLayerTitle => 'ドライバ情報と制御';
 
   @override
+  String get osVersionLabel => 'OS';
+
+  @override
   String get inputLayerTitle => 'オーディオ入力';
 
   @override

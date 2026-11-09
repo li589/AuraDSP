@@ -3,41 +3,17 @@ part of '../../settings_page.dart';
 
 
 
-/* ---- 04 管线模式三层设备卡（ADR-009：驱动层 / 输入层 / 输出层） ---- */
-
-class _PipelineThreeLayerCard extends StatelessWidget {
-  final AppModel model;
-  const _PipelineThreeLayerCard({required this.model});
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 第一层：驱动的信息和按钮
-        _DriverLayer(model: model),
-
-        const SizedBox(height: AuraSpace.md),
-        Container(height: 1, color: p.hairline),
-        const SizedBox(height: AuraSpace.md),
-
-        // 第二层：输入的信息和开关
-        _InputLayer(model: model),
-
-        const SizedBox(height: AuraSpace.md),
-        Container(height: 1, color: p.hairline),
-        const SizedBox(height: AuraSpace.md),
-
-        // 第三层：输出的信息和开关
-        _OutputLayer(model: model),
-      ],
-    );
-  }
-}
-
-/* ---- 第一层：驱动的信息和控制 ---- */
+/* ---- 第一层：驱动信息（只读状态 + 安装/检查动作） ----
+ *
+ * V-04 重设计（2026-11-09，真机报告 §5.3/R3–R6）：
+ * - 本层只呈现 AuraDSP 自有驱动/引擎的客观状态（VAIO 三态、虚拟
+ *   ASIO 注册与 DAW 连接、WASAPI 引擎版本、OS 版本），恒显示，
+ *   不再按输入/输出组合裁剪（旧实现选 ASIO 输出时 VAIO 状态消失）；
+ * - 一切【设置】控件不在本层：ASIO Client 的驱动/缓冲/声道对已
+ *   下沉输出层（_AsioClientOutputSubpanel）；本层动作只有安装/
+ *   卸载/注册/检查一类；
+ * - 本层在管线与附加两种处理范式下都显示（_DynamicAudioPanel
+ *   组合），可见性不再被范式选择裁剪。 */
 
 class _DriverLayer extends StatelessWidget {
   final AppModel model;
@@ -47,38 +23,6 @@ class _DriverLayer extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     final p = paletteOf(context);
-
-    final widgets = <Widget>[];
-
-    // 如果输出是 ASIO Client：显示专业 ASIO 驱动选择、缓冲档、输出声道对、刷新入口
-    if (model.pipelineOutput == AudioModes.outputAsioClient) {
-      widgets.add(HbBuilder(
-          tick: model.hbTick,
-          builder: (_) => _AsioClientDriverRow(model: model)));
-    }
-
-    // 如果输入是虚拟 ASIO 驱动：显示 AuraDSP Virtual ASIO 驱动注册状态与 DAW 状态卡片
-    if (model.pipelineInput == AudioModes.inputAsioDriver) {
-      if (widgets.isNotEmpty) {
-        widgets.add(const SizedBox(height: AuraSpace.sm));
-      }
-      widgets.add(_VirtualAsioDriverCard(model: model));
-    }
-
-    // 如果输入或输出使用了 AuraVAIO：显示 AuraVAIO KMDF 虚拟声卡驱动状态
-    if (model.pipelineInput == AudioModes.inputVaio ||
-        model.pipelineOutput == AudioModes.outputVaio) {
-      if (widgets.isNotEmpty) {
-        widgets.add(const SizedBox(height: AuraSpace.sm));
-      }
-      widgets.add(_VaioDriverRow(model: model));
-    }
-
-    // 如果输入和输出均为 WASAPI 标准模式：显示 Windows WASAPI 引擎状态与刷新
-    if (model.pipelineInput == AudioModes.inputWasapi &&
-        model.pipelineOutput == AudioModes.outputWasapi) {
-      widgets.add(_WasapiDriverRow(model: model));
-    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,7 +36,13 @@ class _DriverLayer extends StatelessWidget {
           ],
         ),
         const SizedBox(height: AuraSpace.sm),
-        ...widgets,
+        _VaioDriverRow(model: model),
+        const SizedBox(height: AuraSpace.sm),
+        _VirtualAsioDriverCard(model: model),
+        const SizedBox(height: AuraSpace.sm),
+        _WasapiDriverRow(model: model),
+        const SizedBox(height: AuraSpace.xs),
+        _InfoRow(l.osVersionLabel, PlatformProfile.osVersion),
       ],
     );
   }
@@ -487,7 +437,9 @@ class _VirtualAsioDriverCard extends StatelessWidget {
           model.asioActive ? l.asioDawConnected : l.asioDawIdle,
         ),
         const SizedBox(height: AuraSpace.sm),
+        // R1：注册/反注册动作同行右对齐（旧实现卡底左对齐独占一行）。
         Wrap(
+          alignment: WrapAlignment.end,
           spacing: AuraSpace.sm,
           children: [
             if (!model.asioDriverInstalled)

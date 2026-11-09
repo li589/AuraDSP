@@ -145,6 +145,51 @@ void main() {
     });
   });
 
+  group('V-04 设备卡信息架构（F5）', () {
+    final hw = _read(
+        'app/auradsp_app/lib/features/settings/panels/hardware_drivers.dart');
+    final ioOut = _read(
+        'app/auradsp_app/lib/features/settings/panels/hardware_io_output.dart');
+    final sections =
+        _read('app/auradsp_app/lib/features/settings/panels/sections.dart');
+    final profile =
+        _read('app/auradsp_app/lib/platform/platform_profile.dart');
+
+    test('驱动层恒显示自有驱动状态 + OS 版本，且不含设置控件', () {
+      expect(hw, contains('PlatformProfile.osVersion'));
+      expect(profile, contains('get osVersion'));
+      final start = hw.indexOf('class _DriverLayer');
+      final end = hw.indexOf('class _AsioClientDriverRow');
+      expect(start, greaterThanOrEqualTo(0));
+      expect(end, greaterThan(start));
+      final layer = hw.substring(start, end);
+      // 状态行齐全，且 ASIO Client 设置行已下沉（R4）
+      expect(layer, contains('_VaioDriverRow'));
+      expect(layer, contains('_VirtualAsioDriverCard'));
+      expect(layer, contains('_WasapiDriverRow'));
+      expect(layer, isNot(contains('_AsioClientDriverRow(')));
+      // 旧的按输入/输出组合裁剪行已消除（R3/R5）
+      expect(layer, isNot(contains('pipelineInput ==')));
+      expect(layer, isNot(contains('pipelineOutput ==')));
+    });
+
+    test('ASIO Client 设置行落在输出层（R5）', () {
+      expect(ioOut, contains('_AsioClientDriverRow(model: model)'));
+    });
+
+    test('驱动层在范式分支之前组合渲染（R6）', () {
+      final di = sections.indexOf('_DriverLayer(model: model)');
+      final bi = sections.indexOf('categoryAttachment');
+      expect(di, greaterThanOrEqualTo(0));
+      expect(bi, greaterThan(di));
+      expect(sections, isNot(contains('_PipelineThreeLayerCard')));
+    });
+
+    test('注册按钮同行右对齐（R1）', () {
+      expect(hw, contains('WrapAlignment.end'));
+    });
+  });
+
   group('V-02 刷新链守卫（F0）', () {
     test('refreshAudioDevices 有埋点且工具缺失显式置错', () {
       expect(state, contains("dbgLog('devices.refresh: start')"));

@@ -2302,6 +2302,12 @@ abstract class AppLocalizations {
   /// **'驱动信息与控制'**
   String get driverLayerTitle;
 
+  /// No description provided for @osVersionLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'操作系统'**
+  String get osVersionLabel;
+
   /// No description provided for @inputLayerTitle.
   ///
   /// In zh, this message translates to:

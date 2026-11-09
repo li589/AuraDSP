@@ -569,6 +569,7 @@
   "tooltipOutputVaio": "AuraVAIO 虚拟输出：将声音输出至虚拟端点作为数字汇聚，可搭配物理耳机监听镜像使用",
   "tooltipOutputAsioClient": "AuraDSP ASIO Client：作为客户端对接外置物理专业 ASIO 声卡，享受超低延迟硬件监听",
   "driverLayerTitle": "驱动信息与控制",
+  "osVersionLabel": "操作系统",
   "inputLayerTitle": "音频输入",
   "outputLayerTitle": "音频输出",
   "inputDisabledNotice": "输入端已停用（音频采集暂停，处于静音/无输入状态）",

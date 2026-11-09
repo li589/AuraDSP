@@ -1196,6 +1196,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get driverLayerTitle => '驱动信息与控制';
 
   @override
+  String get osVersionLabel => '操作系统';
+
+  @override
   String get inputLayerTitle => '音频输入';
 
   @override

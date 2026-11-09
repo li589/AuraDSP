@@ -436,6 +436,7 @@
   "tooltipOutputVaio": "AuraVAIO Virtual Output: Render audio to the virtual cable endpoint, with optional headphone mirror",
   "tooltipOutputAsioClient": "AuraDSP ASIO Client: Output to external professional physical ASIO audio interfaces with ultra-low latency",
   "driverLayerTitle": "Driver Information & Controls",
+  "osVersionLabel": "Operating system",
   "inputLayerTitle": "Audio Input",
   "outputLayerTitle": "Audio Output",
   "inputDisabledNotice": "Input endpoint is disabled (audio capture paused)",

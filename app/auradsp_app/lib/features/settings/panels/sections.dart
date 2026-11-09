@@ -98,18 +98,32 @@ class _DynamicAudioPanel extends StatelessWidget {
       return _LinuxDevicePanel(model: model);
     }
 
-    // 1. 附加模式
-    if (model.modeCategory == AudioModes.categoryAttachment) {
-      if (model.attachmentMode == AudioModes.attachVoicemeeterApi) {
-        return HbBuilder(
-            tick: model.hbTick, builder: (_) => _VoicemeeterPanel(model: model));
-      } else {
-        return _SystemApoPanel(model: model);
-      }
-    }
-
-    // 2. 管线模式：三层设备显示卡（驱动层、输入层、输出层）
-    return _PipelineThreeLayerCard(model: model);
+    // V-04/R6：驱动信息层恒显示，可见性不再被处理范式裁剪；
+    // 范式只决定其下是附加面板还是管线输入/输出层。
+    final p = paletteOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _DriverLayer(model: model),
+        const SizedBox(height: AuraSpace.md),
+        Container(height: 1, color: p.hairline),
+        const SizedBox(height: AuraSpace.md),
+        if (model.modeCategory == AudioModes.categoryAttachment)
+          if (model.attachmentMode == AudioModes.attachVoicemeeterApi)
+            HbBuilder(
+                tick: model.hbTick,
+                builder: (_) => _VoicemeeterPanel(model: model))
+          else
+            _SystemApoPanel(model: model)
+        else ...[
+          _InputLayer(model: model),
+          const SizedBox(height: AuraSpace.md),
+          Container(height: 1, color: p.hairline),
+          const SizedBox(height: AuraSpace.md),
+          _OutputLayer(model: model),
+        ],
+      ],
+    );
   }
 }
 
