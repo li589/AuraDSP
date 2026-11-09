@@ -153,6 +153,11 @@ def main() -> int:
         names, contents = read_zip(out / "AuraDSP-Windows-x64-v0.1.0.zip")
         check("含主程序", "auradsp_app.exe" in names)
         check("含核心资源", "resources/liveprog/a.eel" in names)
+        # 便携与安装同布局：driver/ 驱动资产恒随包（2026-11-09 真机报告）
+        for want in ("auraasio_driver.dll", "driver/install_vaio.ps1",
+                     "driver/apo_config.exe", "driver/AuraApo.dll",
+                     "driver/apo_inspect.exe"):
+            check(f"便携含 {want}", want in names)
         check("build-info 有 pack 记录",
               b"pack.resources: core" in contents["build-info.txt"])
 

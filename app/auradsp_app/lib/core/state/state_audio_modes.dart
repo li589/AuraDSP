@@ -690,7 +690,14 @@ extension AudioModesState on AppModel {
 
       final ok = (res.exitCode == 0) && apoAttached;
       if (!ok && lastApoError == null) {
-        lastApoError = 'System APO 附加未生效，请确认在 UAC 提权弹窗中选择“是”以授予管理员权限';
+        // 失败文案按层区分（旧版一律归咎 UAC，对真机实证的
+        // 「提权已执行但工具侧失败」毫无诊断价值）：
+        // 提权进程退出码非 0 = UAC 拒绝/拉起失败；退出码 0 但
+        // 状态复查无附加记录 = 工具已运行但未完成附加（端点
+        // 匹配/注册表写入等），需看工具自身输出定位。
+        lastApoError = res.exitCode != 0
+            ? 'System APO 附加未生效：提权执行失败（退出码 ${res.exitCode}），请确认在 UAC 提权弹窗中选择“是”以授予管理员权限'
+            : 'System APO 附加未生效：提权工具已执行，但未产生附加记录（端点匹配或注册表写入未完成）。可用管理员终端进入 driver 目录运行 apo_config.exe install 查看具体原因';
       }
       isApoOperating = false;
       _notifyUi();

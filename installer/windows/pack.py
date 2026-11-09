@@ -539,6 +539,24 @@ def mode_portable(args, ver: dict[str, str], out: Path) -> Path:
         return dest
     td, work = prepare_staging_copy(args)
     with td:
+        # 与 setup 载荷同布局：ASIO 本体进根 + driver/ 恒保留。
+        # 便携与安装跑同一个 app，缺 driver/ 时 VAIO/ASIO/APO
+        # 面板找不到任何随包工具（真机报告 2026-11-09：便携包
+        # 无 apo_config.exe），故便携包同组装驱动资产。
+        asio = find_asio_driver(args.asio_driver)
+        driver_dir = find_driver_dir(args.driver_dir)
+        if asio is None:
+            raise die("找不到 auraasio_driver.dll；先跑 build_windows.ps1 全量构建"
+                      "（含 auraasio_driver 目标），或用 --asio-driver 指定")
+        if driver_dir is None:
+            raise die("找不到 VAIO 驱动产物目录（含 .sys 的目录）；"
+                      "先在 Windows 构建驱动，或用 --driver-dir 指定")
+        shutil.copy2(asio, work / ASIO_DLL_NAME)
+        install_ps1 = (ROOT / "core" / "desktop" / "windows-drivers" /
+                       "01_vaio_driver" / "install_driver.ps1")
+        apo = resolve_apo_assets(args)
+        stage_driver_files(work / "driver", driver_dir, asio, install_ps1,
+                           apo, include_asio_dll=True)
         n = zip_dir(work, dest, args.zip_level)
     log(f"portable: {dest.name}（{n} 条目，{dest.stat().st_size / 1e6:.1f} MB）")
     return dest
