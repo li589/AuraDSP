@@ -173,24 +173,29 @@ def write_commit(repo, c, cache):
     ensure_tree(repo, c["tree"], cache)
     a_ep, c_ep = epoch(c["ad"]), epoch(c["cd"])
     tried = []
-    for tz in TZ_CANDIDATES:
-        payload = commit_text(c["tree"], c["parents"], c["an"], c["ae"],
-                              (a_ep, fmt_tz(tz)), c["cn"], c["ce"],
-                              (c_ep, fmt_tz(tz)), c["msg"] + "\n")
-        if obj_sha(payload) == target:
-            got = subprocess.run(["git", "hash-object", "-w", "-t", "commit", "--stdin"],
-                                 input=payload, stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE)
-            if got.returncode != 0:
-                raise RuntimeError("写入 commit %s 失败: %s" % (
-                    target, got.stderr.decode("utf-8", "replace")[:300]))
-            actual = got.stdout.decode().strip()
-            if actual != target:
-                raise RuntimeError("commit SHA 不一致：期望 %s，写入 %s" % (target, actual))
-            _stats["commit"] += 1
-            print("  + %s  %s" % (target[:8], c["msg"].split("\n")[0][:66]))
-            return target
-        tried.append(fmt_tz(tz))
+    # 消息尾部换行也要试：GitHub 的 commit API 会把尾随 \n 归一化掉，
+    # 于是同一份改动经 push_via_api.py 推送后，远端对象比本地少一个字节。
+    # 两者都试，但**仍以 SHA 命中为准**，不降低校验强度。
+    for tail in ("\n", ""):
+        for tz in TZ_CANDIDATES:
+            payload = commit_text(c["tree"], c["parents"], c["an"], c["ae"],
+                                  (a_ep, fmt_tz(tz)), c["cn"], c["ce"],
+                                  (c_ep, fmt_tz(tz)), c["msg"] + tail)
+            if obj_sha(payload) == target:
+                got = subprocess.run(
+                    ["git", "hash-object", "-w", "-t", "commit", "--stdin"],
+                    input=payload, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                if got.returncode != 0:
+                    raise RuntimeError("写入 commit %s 失败: %s" % (
+                        target, got.stderr.decode("utf-8", "replace")[:300]))
+                actual = got.stdout.decode().strip()
+                if actual != target:
+                    raise RuntimeError("commit SHA 不一致：期望 %s，写入 %s"
+                                       % (target, actual))
+                _stats["commit"] += 1
+                print("  + %s  %s" % (target[:8], c["msg"].split("\n")[0][:66]))
+                return target
+            tried.append("%s%s" % (fmt_tz(tz), "" if tail else " 无尾换行"))
     raise RuntimeError(
         "无法还原提交 %s（提交说明：%s）。已试时区 %s；可能作者/提交者时区不同、"
         "提交带签名或消息经过改写。为避免写入与远端不一致的历史，已中止。"

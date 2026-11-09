@@ -199,7 +199,17 @@ def main():
         print("  [自愈] 工作区有未提交改动，跳过自动对齐；请手动："
               "git fetch origin %s && git reset --hard origin/%s" % (branch, branch))
     else:
-        sh("fetch", "origin", branch)
+        # 原生 fetch 在 github.com:443 不通时必定失败（本脚本存在的理由就是它不通），
+        # 所以失败后必须回落到 API 拉取，否则自愈步会把整个推送判成失败——
+        # 即便 ref 早已更新成功，仓库也会停在「已推送但本地未对齐」的半截状态。
+        try:
+            sh("fetch", "origin", branch)
+        except subprocess.CalledProcessError:
+            print("  [自愈] 原生 fetch 失败（github.com 不通），改用 API 拉取")
+            subprocess.check_call([
+                sys.executable,
+                os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "fetch_via_api.py"), branch])
         remote_ref = sh("rev-parse", "--verify", "refs/remotes/origin/%s" % branch)
         if remote_ref != parent:
             print("  [自愈] 警告：远端 %s != 已推送 %s，跳过 reset（手动检查）"
