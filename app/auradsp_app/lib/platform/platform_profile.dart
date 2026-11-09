@@ -22,6 +22,20 @@ abstract final class PlatformProfile {
   /// 操作系统版本串（设置页驱动信息区只读展示，真机报告 R3）。
   static String get osVersion => Platform.operatingSystemVersion;
 
+  /// 界面形态标签（左栏底部 / 关于页）：桌面形态（Windows/Linux）
+  /// 统一为 Desktop；Android、macOS 按平台显示（owner 口径，
+  /// macOS 显示 Macbook）。
+  static String get formLabel {
+    switch (os) {
+      case 'android':
+        return 'Android';
+      case 'macos':
+        return 'Macbook';
+      default:
+        return 'Desktop';
+    }
+  }
+
   static bool get isWindows => Platform.isWindows;
   static bool get isLinux => Platform.isLinux;
 

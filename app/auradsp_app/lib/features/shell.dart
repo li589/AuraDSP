@@ -17,6 +17,7 @@ import '../core/design.dart';
 import '../core/nav.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../platform/platform_profile.dart';
 import 'chain_page.dart';
 import 'effects_page.dart';
 import 'home_page.dart';
@@ -341,13 +342,10 @@ class _Rail extends StatelessWidget {
                     children: [
                       Container(height: 1, color: p.hairline),
                       const SizedBox(height: AuraSpace.md),
-                      Text('ENGINES · DESKTOP',
-                          style: monoOf(p, size: 10, color: p.textDim)),
-                      const SizedBox(height: AuraSpace.xs + 2),
                       Text(
                         info == null
                             ? l.engineForm
-                            : 'ABI v${info.abi} · ${info.deviceRate}Hz',
+                            : 'ABI v${info.abi} · ${PlatformProfile.formLabel}',
                         style: monoOf(p, size: 10,
                             color: p.textDim.withValues(alpha: 0.75)),
                       ),
