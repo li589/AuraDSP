@@ -231,6 +231,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setVaioInstallOk => 'AuraVAIO ドライバーのインストールと検証が完了しました！';
 
   @override
+  String get setVaioInstallUnverified =>
+      'ドライバーのインストールが反映されていません：AuraVAIO デバイスが検出されません（テスト署名が無効な環境ではドライバーを読み込めません。有効化して再試行してください）';
+
+  @override
   String get setDriverInstallFailed => 'ドライバーのインストールが完了しませんでした';
 
   @override
@@ -238,6 +242,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get setVaioUninstallOk => 'AuraVAIO ドライバーをアンインストールしました';
+
+  @override
+  String get setVaioUninstallUnverified =>
+      'ドライバーのアンインストールが反映されていません：AuraVAIO デバイスがまだ検出されます';
 
   @override
   String get setDriverUninstallFailed => 'アンインストールが完了しませんでした';

@@ -941,6 +941,9 @@ extension StateEvents on AppModel {
         break;
       case 'vaiodetect':
         vaioDetectInfo = Map<String, dynamic>.from(raw);
+        final waiter = vaioDetectWaiter;
+        if (waiter != null && !waiter.isCompleted) waiter.complete();
+        vaioDetectWaiter = null;
         _notifyUi();
         break;
       case 'asiodrivers':

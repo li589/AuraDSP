@@ -239,6 +239,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'AuraVAIO driver installed and verified successfully!';
 
   @override
+  String get setVaioInstallUnverified =>
+      'Driver install had no effect: AuraVAIO device is still not detected (the driver cannot load while test signing is off — enable it and retry)';
+
+  @override
   String get setDriverInstallFailed => 'Driver installation incomplete';
 
   @override
@@ -246,6 +250,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get setVaioUninstallOk => 'AuraVAIO driver uninstalled successfully';
+
+  @override
+  String get setVaioUninstallUnverified =>
+      'Driver uninstall had no effect: AuraVAIO device is still detected';
 
   @override
   String get setDriverUninstallFailed => 'Uninstall incomplete';

@@ -283,6 +283,14 @@ class AppModel extends ChangeNotifier {
   Map<String, dynamic> vaioInfo = {};
   Map<String, dynamic> vaioDetectInfo = {};
 
+  /// 等待下一次 vaiodetect 事件的完成器（安装/卸载后诚实校验用，
+  /// 真机报告 2026-11-09 §2.2）；事件到达时由 state_events 完成。
+  Completer<void>? vaioDetectWaiter;
+
+  /// 最近一次 VAIO 安装/卸载「脚本报成功但复检不符」标记：通知层
+  /// 据此改走未生效诚实文案（setVaioInstall/UninstallUnverified）。
+  bool vaioActionUnverified = false;
+
   // ADR-009 范式与细分项快捷 getter
   String get modeCategory => config.modeCategory;
   String get attachmentMode => config.attachmentMode;

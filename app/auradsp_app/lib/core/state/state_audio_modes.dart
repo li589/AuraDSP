@@ -343,8 +343,15 @@ extension AudioModesState on AppModel {
   // ---- VAIO 驱动安装 ----
 
   /// 一键 UAC 提权安装 AuraVAIO 虚拟声卡驱动
+  ///
+  /// 诚实口径（真机报告 2026-11-09 §2.2）：脚本退出码为 0 不等于
+  /// 安装成功——未开启测试签名的 Win11 上驱动包可被暂存而设备
+  /// 始终不出现。故装后必须等一次 vaiodetect 复检，found 为真才
+  /// 报成功；脚本成功但复检不符置 [vaioActionUnverified]，通知层
+  /// 改走未生效文案，不再假报成功。
   Future<bool> installVaioDriver({bool elevated = true}) async {
     if (!PlatformProfile.supportsBridges) return false;
+    vaioActionUnverified = false;
     try {
       final hit = _findVaioInstallScript();
       if (hit == null) {
@@ -362,10 +369,13 @@ extension AudioModesState on AppModel {
         elevated: elevated,
         bundled: hit.bundled,
       );
-      refreshVaioDetect();
+      final gotDetect = await awaitVaioDetect();
       await refreshAudioDevices();
-      final ok = res.exitCode == 0;
-      if (!ok) {
+      final scriptOk = res.exitCode == 0;
+      final found = vaioDetectInfo['found'] == true;
+      final ok = scriptOk && gotDetect && found;
+      vaioActionUnverified = scriptOk && !ok;
+      if (!scriptOk) {
         lastVaioError =
             'AuraVAIO 安装未完成 (退出码: ${res.exitCode})，请在 UAC 弹窗中选择允许提权';
       } else {
@@ -382,8 +392,11 @@ extension AudioModesState on AppModel {
   }
 
   /// 一键 UAC 提权卸载 AuraVAIO 虚拟声卡驱动
+  ///
+  /// 与安装同口径诚实校验：脚本成功后复检仍 found 则未生效。
   Future<bool> uninstallVaioDriver({bool elevated = true}) async {
     if (!PlatformProfile.supportsBridges) return false;
+    vaioActionUnverified = false;
     try {
       final hit = _findVaioInstallScript();
       if (hit == null) {
@@ -399,9 +412,12 @@ extension AudioModesState on AppModel {
         elevated: elevated,
         bundled: hit.bundled,
       );
-      refreshVaioDetect();
+      final gotDetect = await awaitVaioDetect();
       await refreshAudioDevices();
-      final ok = res.exitCode == 0;
+      final scriptOk = res.exitCode == 0;
+      final stillFound = vaioDetectInfo['found'] == true;
+      final ok = scriptOk && gotDetect && !stillFound;
+      vaioActionUnverified = scriptOk && !ok;
       if (ok) lastVaioError = null;
       _notifyUi();
       return ok;

@@ -233,6 +233,23 @@ extension VbAsioState on AppModel {
     _toIso?.send({'cmd': 'vaiodetect'});
   }
 
+  /// 触发探测并等待结果事件（安装/卸载后的诚实校验）：收到
+  /// vaiodetect 事件返回 true，超时返回 false（按未检出处理）。
+  Future<bool> awaitVaioDetect({
+    Duration timeout = const Duration(seconds: 6),
+  }) async {
+    final waiter = Completer<void>();
+    vaioDetectWaiter = waiter;
+    refreshVaioDetect();
+    try {
+      await waiter.future.timeout(timeout);
+      return true;
+    } on TimeoutException {
+      if (identical(vaioDetectWaiter, waiter)) vaioDetectWaiter = null;
+      return false;
+    }
+  }
+
   void _sendAsioRestart() {
     _toIso?.send({
       'cmd': 'asiorestart',

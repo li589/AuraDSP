@@ -228,6 +228,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setVaioInstallOk => 'AuraVAIO 驱动已成功安装并通过系统验收！';
 
   @override
+  String get setVaioInstallUnverified =>
+      '驱动安装未生效：仍未检测到 AuraVAIO 设备（未开启测试签名时驱动无法加载，请开启后重试）';
+
+  @override
   String get setDriverInstallFailed => '驱动安装未完成';
 
   @override
@@ -235,6 +239,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get setVaioUninstallOk => 'AuraVAIO 驱动已成功卸载';
+
+  @override
+  String get setVaioUninstallUnverified => '驱动卸载未生效：仍检测到 AuraVAIO 设备';
 
   @override
   String get setDriverUninstallFailed => '卸载未完成';

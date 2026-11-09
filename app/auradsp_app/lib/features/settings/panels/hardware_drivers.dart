@@ -300,7 +300,10 @@ class _VaioDriverRow extends StatelessWidget {
                       model.postNotice(
                         ok
                             ? l.setVaioInstallOk
-                            : (model.lastVaioError ?? l.setDriverInstallFailed),
+                            : (model.vaioActionUnverified
+                                ? l.setVaioInstallUnverified
+                                : (model.lastVaioError ??
+                                    l.setDriverInstallFailed)),
                         level: ok ? NoticeLevel.info : NoticeLevel.error,
                       );
                     },
@@ -313,7 +316,11 @@ class _VaioDriverRow extends StatelessWidget {
                     onTap: () async {
                       final ok = await model.uninstallVaioDriver(elevated: true);
                       model.postNotice(
-                        ok ? l.setVaioUninstallOk : l.setDriverUninstallFailed,
+                        ok
+                            ? l.setVaioUninstallOk
+                            : (model.vaioActionUnverified
+                                ? l.setVaioUninstallUnverified
+                                : l.setDriverUninstallFailed),
                         level: ok ? NoticeLevel.info : NoticeLevel.error,
                       );
                     },

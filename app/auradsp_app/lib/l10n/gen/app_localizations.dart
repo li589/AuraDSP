@@ -508,6 +508,12 @@ abstract class AppLocalizations {
   /// **'AuraVAIO 驱动已成功安装并通过系统验收！'**
   String get setVaioInstallOk;
 
+  /// No description provided for @setVaioInstallUnverified.
+  ///
+  /// In zh, this message translates to:
+  /// **'驱动安装未生效：仍未检测到 AuraVAIO 设备（未开启测试签名时驱动无法加载，请开启后重试）'**
+  String get setVaioInstallUnverified;
+
   /// No description provided for @setDriverInstallFailed.
   ///
   /// In zh, this message translates to:
@@ -525,6 +531,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'AuraVAIO 驱动已成功卸载'**
   String get setVaioUninstallOk;
+
+  /// No description provided for @setVaioUninstallUnverified.
+  ///
+  /// In zh, this message translates to:
+  /// **'驱动卸载未生效：仍检测到 AuraVAIO 设备'**
+  String get setVaioUninstallUnverified;
 
   /// No description provided for @setDriverUninstallFailed.
   ///
