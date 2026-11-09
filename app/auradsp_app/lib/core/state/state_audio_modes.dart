@@ -235,6 +235,13 @@ extension AudioModesState on AppModel {
         ? capItem.id
         : config.pipelineInputDevice;
     final outId = _deviceIdOf(config.pipelineOutputDevice);
+    if (capId.isEmpty && outId.isEmpty) {
+      // 双默认组合（细审 R-A H1）：空值在 isolate 侧都解为
+      // 「系统默认渲染端点」——捕获它又写回它，必反馈；这
+      // 恰是零配置路径，显式 ID 相等分支覆盖不到。
+      dbgLog('pipeline.capture: feedback pair blocked (both default)');
+      return null;
+    }
     if (capId.isNotEmpty && outId.isNotEmpty && capId == outId) {
       dbgLog('pipeline.capture: feedback pair blocked (cap==out)');
       return null;
@@ -261,6 +268,7 @@ extension AudioModesState on AppModel {
       if (payload == null) {
         if (captureActive) {
           _toIso?.send({'cmd': 'capturemode', 'on': false});
+          captureActive = false; // 与非捕获分支同口径本地清位（细审 R-A L3）
         }
         postNotice('输入与输出为同一端点，回录会自激啸叫，已阻止启动捕获链',
             level: NoticeLevel.warning);
@@ -448,8 +456,11 @@ extension AudioModesState on AppModel {
             } else {
               dbgLog('devices.refresh: no endpoints parsed', sync: true);
             }
+          } else {
+            dbgLog('devices.refresh: empty stdout', sync: true);
           }
         } else {
+          dbgLog('devices.refresh: inspect failed', sync: true);
           lastAudioError = '端点探测工具退出异常 (代码: ${res.exitCode})';
           _notifyUi();
         }

@@ -37,6 +37,10 @@ class WasapiCaptureSourceImpl implements WindowsCaptureSource {
   void Function()? onFailed;
 
   static const int _capFrames = 16384;
+  static const int _highWater = 8192;
+  static const int _targetDepth = 4096;
+  final ThrottledLog _dropLog =
+      ThrottledLog('capture-fifo-drop', head: 3, every: 200);
   final Float32List _fifo = Float32List(_capFrames * 2);
   int _r = 0; // 读游标（帧）
   int _n = 0; // 在仓帧数
@@ -97,6 +101,18 @@ class WasapiCaptureSourceImpl implements WindowsCaptureSource {
   }
 
   void _drain() {
+    // 深度管理（细审 R-A M1）：捕获/渲染双设备时钟漂移与
+    // 泵停顿会把 FIFO 深度单调推高、延迟永久累积——越过
+    // 高水位时丢最旧帧回落到目标深度，宁丢旧帧不攒延迟。
+    if (_n > _highWater) {
+      final drop = _n - _targetDepth;
+      _r = (_r + drop) % _capFrames;
+      _n -= drop;
+      _frac = 0;
+      if (_dropLog.shouldLog) {
+        dbgLog('capturemode: fifo drop $drop frames (depth mgmt)');
+      }
+    }
     final free = _capFrames - _n;
     // 仓满时本轮不排包：drainInto 守整包契约（装不下整包
     // 不读），剩余空间过小时强行排包只会把新包永久留在
@@ -157,6 +173,13 @@ class WindowsCaptureController {
   WasapiCaptureSourceImpl? _capture;
   Source? _savedSource;
 
+  /// 输出恢复锚（细审 R-A M2）：首次组建捕获链前 isolate
+  /// 输出所绑的端点 ID（null = 当时无 WasapiOut/非该类）。
+  /// detach 时据此把 audioOut 还回去，防止管线输出端点
+  /// 泄漏到直通范式与桥停回升路径。
+  String? _preAttachOutputId;
+  bool _outputWasRebuilt = false;
+
   bool get active => _capture != null;
 
   void _sendStatus(bool activeNow, String note) {
@@ -164,8 +187,14 @@ class WindowsCaptureController {
   }
 
   /// 拆捕获链：存档源按 [restoreSaved] 恢复（显式关链时
-  /// 恢复用户先前的测试源；被桥接管/被新源覆盖时不恢复）。
+  /// 恢复用户先前的测试源；被桥接管/被新源覆盖时不恢复），
+  /// 并把组建时重建过的输出端点还回去（_restoreOutputIfRebuilt）。
   void detach({required bool restoreSaved}) {
+    _detachCaptureOnly(restoreSaved: restoreSaved);
+    _restoreOutputIfRebuilt();
+  }
+
+  void _detachCaptureOnly({required bool restoreSaved}) {
     final cap = _capture;
     if (cap == null) return;
     _capture = null;
@@ -178,6 +207,20 @@ class WindowsCaptureController {
     dbgLog('capturemode: detached');
   }
 
+  /// 组建时重建过输出 → 按锚点重建回去（回滚口径同
+  /// _rebuildOutput）。桥接管路径下（start* 首行 detach）
+  /// 恢复同样正确：交接会停掉该实例，桥停后 resumeWasapi
+  /// 回升的正是用户原默认端点。
+  void _restoreOutputIfRebuilt() {
+    if (!_outputWasRebuilt) return;
+    _outputWasRebuilt = false;
+    final back = _preAttachOutputId;
+    _preAttachOutputId = null;
+    _rebuildOutput(back ?? '', _engineRate());
+    dbgLog('capturemode: output restored to '
+        '${back == null || back.isEmpty ? "(default)" : back}');
+  }
+
   /// 组建捕获链：输出端点对齐（必要时重建 WasapiOut 并校验
   /// 协商率 == 引擎率）→ 捕获设备 init/start → 装源。
   /// 任一步失败都回推 capturestatus(active:false, note)，
@@ -187,25 +230,51 @@ class WindowsCaptureController {
     required bool loopback,
     required String outputEndpoint,
   }) {
-    detach(restoreSaved: false);
+    _detachCaptureOnly(restoreSaved: false);
     _savedSource = _getSource();
     final engineRate = _engineRate();
+
+    // 输出恢复锚：首次组建时记下当时的输出端点（capturerestart
+    // 连环 attach 时锚已在，不覆盖——锚必须是链外原始端点）。
+    if (!_outputWasRebuilt) {
+      final cur0 = _getAudioOut();
+      _preAttachOutputId = cur0 is WasapiOut ? cur0.endpointId : null;
+    }
 
     final cur = _getAudioOut();
     final curId = cur is WasapiOut ? cur.endpointId : null;
     if (cur == null || curId != outputEndpoint) {
-      if (!_rebuildOutput(outputEndpoint, engineRate)) {
+      _outputWasRebuilt = true;
+      if (!_rebuildOutput(outputEndpoint, engineRate,
+          rollbackTo: _preAttachOutputId)) {
+        // _rebuildOutput 已回滚（优先回锚点）：以回滚结果为
+        // 新基线，锚点使命结束。
+        _outputWasRebuilt = false;
+        _preAttachOutputId = null;
         _sendStatus(false, 'output-init-failed');
         return;
       }
     }
     final out = _getAudioOut();
+    // 降级态存量实例可能从未 Start（细审 R-A L2）：无重建
+    // 路径也要确保渲染侧已启动，否则链报 active 却无声。
+    if (out != null && !out.started) {
+      try {
+        out.start();
+      } catch (e) {
+        dbgLog('capturemode: existing output start failed: $e');
+        _restoreOutputIfRebuilt();
+        _sendStatus(false, 'output-init-failed');
+        return;
+      }
+    }
     if (out != null && engineRate > 0 && out.sampleRate != engineRate) {
       // 设备拒绝以引擎率协商：本地链照常跑会变速变调，
       // 拒绝起链（输出保持已重建状态，用户可换端点或改
       // 引擎采样率后重试）。
       dbgLog('capturemode: rate mismatch out=${out.sampleRate} '
           'engine=$engineRate — refuse to attach');
+      _restoreOutputIfRebuilt();
       _sendStatus(false, 'rate-mismatch');
       return;
     }
@@ -220,6 +289,7 @@ class WindowsCaptureController {
       cap.start();
     } catch (e) {
       dbgLog('capturemode: capture init failed: $e');
+      _restoreOutputIfRebuilt();
       _sendStatus(false, 'capture-init-failed');
       return;
     }
@@ -236,7 +306,8 @@ class WindowsCaptureController {
   /// 按端点 ID 重建本地输出（新 WasapiOut 实例；旧实例先
   /// stop）。失败时回滚到默认端点实例（尽力保住本地输出），
   /// 回滚也失败则置空（泵的降级路径接管）。
-  bool _rebuildOutput(String endpointId, double engineRate) {
+  bool _rebuildOutput(String endpointId, double engineRate,
+      {String? rollbackTo}) {
     final old = _getAudioOut();
     try {
       old?.stop();
@@ -249,16 +320,24 @@ class WindowsCaptureController {
       n.start();
     } catch (e) {
       dbgLog('capturemode: output rebuild failed ($endpointId): $e');
-      final back = WasapiOut();
-      try {
-        back.init(
-            requestedSampleRate: engineRate > 0 ? engineRate.toInt() : null);
-        back.start();
-        _setAudioOut(back);
-      } catch (e2, st2) {
-        swallow(e2, st2);
-        _setAudioOut(null);
+      // 回滚优先回组建前锚点，其次默认端点（尽力保住本地
+      // 输出，不让一次失败把输出带走）。
+      final candidates = <String>[?rollbackTo, ''];
+      var restored = false;
+      for (final rb in candidates) {
+        final back = WasapiOut()..endpointId = rb;
+        try {
+          back.init(
+              requestedSampleRate: engineRate > 0 ? engineRate.toInt() : null);
+          back.start();
+          _setAudioOut(back);
+          restored = true;
+          break;
+        } catch (e2, st2) {
+          swallow(e2, st2);
+        }
       }
+      if (!restored) _setAudioOut(null);
       return false;
     }
     _setAudioOut(n);

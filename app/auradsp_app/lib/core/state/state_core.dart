@@ -791,6 +791,16 @@ extension StateCore on AppModel {
     _iso = null;
     _toIso = null;
     _fromIso = null;
+    // 桥/链 Active 旗标随 isolate 一起复位（细审 R-D M1）：
+    // 新 isolate 无任何链路，旗标陈旧会让 ready 的增量对账
+    // （applyPipelineChain 以 !active 为发送条件）跳过重发，
+    // 捕获链/ASIO 输入链在采样率切换、wasapiLost 自愈、
+    // fatal 重试后静默死亡且 UI 仍显示 active。
+    vaioActive = false;
+    asioActive = false;
+    vbActive = false;
+    captureActive = false;
+    captureNote = '';
     try {
       oldFrom?.close();
     } catch (e, st) { swallow(e, st); }

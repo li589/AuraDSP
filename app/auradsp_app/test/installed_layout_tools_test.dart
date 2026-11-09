@@ -208,6 +208,40 @@ void main() {
     test('inspectAudioDevices 带超时', () {
       expect(tools, contains('.timeout(const Duration(seconds: 10))'));
     });
+
+    test('刷新链全部埋点保持 sync 形（细审 R-D L9：防节流形静默退化）', () {
+      // devices.refresh 全段（state_audio_modes.dart）
+      for (final lit in [
+        r"dbgLog('devices.refresh: start', sync: true)",
+        r"dbgLog('devices.refresh: apo_inspect unavailable', sync: true)",
+        r"dbgLog('devices.refresh: inspect exit=${res.exitCode}', sync: true)",
+        r"dbgLog('devices.refresh: done n=${items.length}', sync: true)",
+        r"dbgLog('devices.refresh: notified', sync: true)",
+        r"dbgLog('devices.refresh: no endpoints parsed', sync: true)",
+        r"dbgLog('devices.refresh: empty stdout', sync: true)",
+        r"dbgLog('devices.refresh: inspect failed', sync: true)",
+        r"dbgLog('devices.refresh: error $e', sync: true)",
+      ]) {
+        expect(state, contains(lit), reason: '缺埋点 $lit');
+      }
+      // detect 双路 state 发送端（state_vb_asio.dart）
+      final vbAsio =
+          _read('app/auradsp_app/lib/core/state/state_vb_asio.dart');
+      expect(vbAsio,
+          contains(r"dbgLog('ui.refreshVaioDetect: send', sync: true)"));
+      expect(vbAsio,
+          contains(r"dbgLog('ui.refreshAsioDrivers: send', sync: true)"));
+      // detect 双路 isolate FFI 前后（audio_isolate.dart）
+      final iso = _read('app/auradsp_app/lib/engine/audio_isolate.dart');
+      for (final lit in [
+        r"dbgLog('vaiodetect: detect begin', sync: true)",
+        r"dbgLog('vaiodetect: detect done', sync: true)",
+        r"dbgLog('asiodetect: detect begin', sync: true)",
+        r"dbgLog('asiodetect: detect done', sync: true)",
+      ]) {
+        expect(iso, contains(lit), reason: '缺埋点 $lit');
+      }
+    });
   });
 
   group('通知组件化接线（④）', () {

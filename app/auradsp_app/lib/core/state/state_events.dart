@@ -93,8 +93,16 @@ extension StateEvents on AppModel {
         dbgLog('ready-restore: audioMode=$audioMode');
         // 全接线：捕获链/ASIO 输入链的恢复（模式簿记仍是
         // vaio，必须按链路合成补发，见上门控）。
-        if (pipelineChain == PipelineChain.capture ||
-            pipelineChain == PipelineChain.asio) {
+        if (pipelineChain == PipelineChain.capture) {
+          // 枚举先行（细审 R-A M3）：ready 时 wasapiDevices
+          // 尚空，loopback 标志（麦克风 vs 回录）与按名存值
+          // 都无从解析——刷新完成后按最新枚举对账起链。
+          refreshAudioDevices().then((_) {
+            if (pipelineChain == PipelineChain.capture) {
+              applyPipelineChain();
+            }
+          });
+        } else if (pipelineChain == PipelineChain.asio) {
           applyPipelineChain();
         }
         // V-01：VAIO 检测此前只有手动按钮触发，启动后 vaioDetectInfo

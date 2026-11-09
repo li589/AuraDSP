@@ -211,6 +211,7 @@ extension VbAsioState on AppModel {
 
   /// 触发一次 ASIO 驱动清单刷新（设置页进入/下拉点开时调）。
   void refreshAsioDrivers() {
+    dbgLog('ui.refreshAsioDrivers: send', sync: true);
     _toIso?.send({'cmd': 'asiodetect'});
   }
 

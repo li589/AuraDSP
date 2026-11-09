@@ -439,7 +439,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       send({'evt': 'asiodrivers', 'drivers': [], 'note': 'bridge-missing: $e'});
       return;
     }
+    dbgLog('asiodetect: detect begin', sync: true);
     final list = ab!.detect();
+    dbgLog('asiodetect: detect done', sync: true);
     if (list == null) {
       send({'evt': 'asiodrivers', 'drivers': [], 'note': 'detect-failed'});
       return;
