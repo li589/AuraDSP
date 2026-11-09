@@ -119,8 +119,8 @@ AuraDSP 的虚拟声卡与 ASIO 能力依赖系统级集成：
 **键值清单**：
 ```ini
 DisplayName = "AuraDSP"
-DisplayVersion = "0.5.0.1"
-Publisher = "AuraDSP Team"
+DisplayVersion = "0.1.0.1"
+Publisher = "AuraDSP Project"
 DisplayIcon = "C:\Path\To\auradsp_app.exe,0"
 InstallLocation = "C:\Path\To\AuraDSP"
 UninstallString = "\"C:\Path\To\AuraDSP\uninstall.exe\""
@@ -143,7 +143,7 @@ URLInfoAbout = "https://github.com/AuraDSP/AuraDSP"
 
 ## 5. 打包封装结构 (Single Setup EXE Packaging)
 
-安装包发布文件为一个单体可执行文件：`AuraDSP-Setup-x64-v0.5.0.exe`。
+安装包发布文件为一个单体可执行文件：`AuraDSP-Setup-x64-v0.1.0.exe`。
 它的内部物理结构由“**引导启动器（Bootstrapper）**”和“**高压缩 Payload 数据区**”融合构成：
 
 ```text

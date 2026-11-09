@@ -34,7 +34,7 @@
 | [ADR-009](adr/ADR-009-audio-processing-paradigms-and-settings-restructure.md) | Windows 底层音频两大交互范式（附加模式与管线模式）与设置面板重构 | 已接受 |
 | [ADR-010](adr/ADR-010-limiter-as-final-gate.md) | **限幅器是内置信号链的最后一道门**：post gain / 逐声道 trim / 响度补偿全部排在限幅器之前；例外登记（插件 stage 4、`limiter.channels` 掩码等） | 已接受 |
 | [ADR-011](adr/ADR-011-no-shared-mutable-dsp-state.md) | **控制线程与 RT 线程不得共享可变 DSP 状态**：三选一 —— 影子槽 + 原子发布 / 请求位 + RT 消费 / 同持 `jdsp_lock`；落地 L-01/L-02/L-03（逐声道池双槽化 + 拓扑重置请求位 + arbmag 主卷积加锁） | 已接受 |
-| [ADR-012](adr/ADR-012-linux-platform-rulings-and-branch-policy.md) | **Linux 平台三项产品语义裁定 + 分支策略**：D-5 Linux 音频后端**追求功能对等**（`system`/`virtual`/`driver` 三模式齐备，全部落在 PulseAudio 栈上，不需自研内核模块）、D-6 音频栈**PulseAudio simple API 优先**（ALSA 留二期）、D-7 首期**只做插件消费者 + 隐藏 Linux 插件目录 UI**；分支策略 `feature/linux → dev → main`（单向，`main` 合并由 `dev` 决定） | 已接受 |
+| [ADR-012](adr/ADR-012-linux-platform-rulings-and-branch-policy.md) | **Linux 平台三项产品语义裁定 + 分支策略**：D-5 Linux 音频后端**追求功能对等**（`system`/`virtual`/`driver` 三模式齐备，全部落在 PulseAudio 栈上，不需自研内核模块）、D-6 音频栈**PulseAudio simple API 优先**（ALSA 留二期）、D-7 首期**只做插件消费者 + 隐藏 Linux 插件目录 UI**；分支策略 `feature/linux → dev → main`（单向，`main` 合并由 `dev` 决定） | 已接受（二期已于 2026-11-02 落地：ALSA 专家模式 + 插件宿主全量对等，见 10-架构/Linux二期大项评估与插件宿主实施方案） |
 | [ADR-013](adr/ADR-013-vst2-support-and-clean-room-header.md) | **VST2 支持与净室头文件合规**：以 Xaymar BSD-3-Clause 净室 `vst.h` 为唯一编译源、退役仓库内非净室 LSP 头；64 位进程内 / 32 位 `plugin_host_x86`；32 位回调必须用 `intptr_t` 自定义签名；本期仅 Windows（Linux 侧 VST2 已于 2026-11-04 跟进落地） | 已接受 |
 
 > ADR-005 为预留号，留给「插件桥进程化」（见 ADR-004 §回退条件）。
@@ -130,7 +130,10 @@
 - [Windows插件体系与RT高优遗留项深度调研报告.md](30-审查/Windows插件体系与RT高优遗留项深度调研报告.md) — 2026-11-02 深度取证与调研：L-01~03 闭环对账、L-04 平滑方案、Windows 插件生态（VST3/CLAP/VST2/AU/LV2）与 32 位位桥架构
 - [全项目深度审查方案与报告-2026-11-05.md](30-审查/全项目深度审查方案与报告-2026-11-05.md) — 驱动/引擎/插件/App/跨组件全量深度审查（S0–S8 已结案）：7 条发现（DRV-01~04、FX-01、PLG-01、APP-01）全部修复闭环，含内核 VAIO 几何信任（P0）与控制设备 ACL/独占映射收紧，均经真机/CI 实证
 - [代码复用与重复集合审计-2026-11-05.md](30-审查/代码复用与重复集合审计-2026-11-05.md) — 全仓复用与重复集合审计（F/R 登记，P0–P2 已回填）
-- [未决任务复核-2026-10-31.md](30-审查/未决任务复核-2026-10-31.md) — 在册遗留逐项回代码/产物/分支取证（不采信历史文档口径）：**销账 5 项**（32 位插件挂载、dist zip 重打包、P-045/P-046 内存专项、L-04 淡出机制实为已具备仅缺接线、L-05 前提不成立改判误报并落 ADR-010）、**仍在册 8 项**（L-01/L-02/L-03 高危并发、L-04 参数切换未接淡出、VST2/AU/LV2 引擎侧无驱动、VB 掩码裁剪引擎、E1 `_onMessage` 拆分、dev→main 未合并）、**待裁定 3 项**；并修正 `assets` 跟踪实况口径漂移（2214 个 / 73MB → 实测 2443 个 / 241.6MB）。**后续**：D-1（限幅器链尾语义）当日裁定并落 [ADR-010](adr/ADR-010-limiter-as-final-gate.md)，新增门禁 `test/smoke/smoke_limiter_final_gate.py`（四路径 × 限幅开/关反向对照，已做反向验证转红）；**2026-10-31 晚**：L-01/L-02/L-03 三项高危并发合并为 P0 专项闭环（[ADR-011](adr/ADR-011-no-shared-mutable-dsp-state.md) + `test/smoke/smoke_pool_race.py` 四阶段反向验证全红 + PATCHES.md P-047/P-048），台账现为**销账 8 项、仍在册 5 项、待裁定 3 项**
+- [三面审计与全修收口-2026-11-08.md](30-审查/三面审计与全修收口-2026-11-08.md) — 预设系统 / 文件与目录安全 / 调试系统三面审计：无高危、7 中危，23 项 S0–S8 全修闭环（CI 八作业全绿）
+- [安装版四问题修复收口-2026-11-09.md](30-审查/安装版四问题修复收口-2026-11-09.md) — 安装版真机 e2e 四问题组 V-01..V-04 修复收口（F0–F5）：已安装布局统一寻址、VAIO 自动探测、APO 面板刷新合并、打包补齐 apo 工具、设置三层面板重排
+- [四观察项裁定执行收口-2026-11-09.md](30-审查/四观察项裁定执行收口-2026-11-09.md) — F3 busMask 裁定销账、L-04 混响自定义参数惯性平滑、F2 PDC 状态回同步、通知组件化（NoticeHost）四项裁定执行闭环
+- [未决任务复核-2026-10-31.md](30-审查/未决任务复核-2026-10-31.md) — 在册遗留逐项回代码/产物/分支取证（不采信历史文档口径）：**销账 5 项**（32 位插件挂载、dist zip 重打包、P-045/P-046 内存专项、L-04 淡出机制实为已具备仅缺接线、L-05 前提不成立改判误报并落 ADR-010）、**仍在册 8 项**（L-01/L-02/L-03 高危并发、L-04 参数切换未接淡出、VST2/AU/LV2 引擎侧无驱动、VB 掩码裁剪引擎、E1 `_onMessage` 拆分、dev→main 未合并）、**待裁定 3 项**；并修正 `assets` 跟踪实况口径漂移（2214 个 / 73MB → 实测 2443 个 / 241.6MB）。**后续**：D-1（限幅器链尾语义）当日裁定并落 [ADR-010](adr/ADR-010-limiter-as-final-gate.md)，新增门禁 `test/smoke/smoke_limiter_final_gate.py`（四路径 × 限幅开/关反向对照，已做反向验证转红）；**2026-10-31 晚**：L-01/L-02/L-03 三项高危并发合并为 P0 专项闭环（[ADR-011](adr/ADR-011-no-shared-mutable-dsp-state.md) + `test/smoke/smoke_pool_race.py` 四阶段反向验证全红 + PATCHES.md P-047/P-048），台账现为**销账 8 项、仍在册 5 项、待裁定 3 项**；**2026-11-09 后续**：F3 裁定销账、L-04 代码侧闭环、F2 PDC 销账（见四观察项裁定执行收口），仍在册收敛为真机侧事项（D-4 听试 / DRV-02 复现）与 LV2 暂缓、E1 拆分
 
 ### 3.9 工程治理与重组
 - [源码重组与目录规范方案-2026-10-13.md](源码重组与目录规范方案-2026-10-13.md) — scc 实测诊断（巨文件/DLL 散落/生成文件入仓/依赖倒挂）→ 目标目录树 → 命名/分层/DLL/文档/跨平台政策 → P0~P3 迁移分期（只动结构不改行为）
@@ -173,3 +176,4 @@
 4. **不复述代码**：文档记录**为什么**与**契约**，字段级细节以头文件注释为准（见 `engine/auradsp_engine.h` 参数语义表）。
 5. **每日沉淀**：会话记忆与教训写入 `.ai/memory/`（AI 自治沉淀区，无需人工介入）。
 6. **链接检查**：文档增删/移动后运行 `python tools/bin/check_doc_links.py`；活文档（`00-总览/`、`adr/`、根 `README.md`/`AGENT.md`/`CLAUDE.md`、`engine/AGENT.md`、UI 规范）应为 0 missing。`30-审查/` 与 `20-执行/` 中指向已删除/迁移文件的 dated 历史链接不原地改写，当前登记 11 条（`dsp_freeverb.cpp` 与 2026-10-20 迁移前的 `engine/host/*`）；`docs/参考技术手册/` 为第三方镜像，内部相对链接不纳入检查。
+7. **口径登记（2026-11-09 统一）**：许可证 = **GPL-3.0**（仓库根 `LICENSE`）；发行范围 = **Windows + Linux**、首个正式版 **v0.1.0**（只从 `main` 构建）、资源包独立版本线 **`resources-v*`**（首版 0.0.1）；作者归属 = **AuraDSP Project**（具体作者 li589）。与此冲突的旧表述以本登记与 `installer/docs/01` 发布总则为准；dated 记录不原地改写，只在活文档登记差异。
