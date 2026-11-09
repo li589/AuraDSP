@@ -76,7 +76,11 @@ extension StateEvents on AppModel {
           });
         }
         // 持久化的是 AuraVAIO 模式：就绪后自动进桥。
-        if (audioMode == 'vaio') {
+        // 全接线门控：合成链为捕获链/ASIO 输入链时不起 VAIO
+        // 桥（链路对账在下方统一补发正确命令）。
+        if (audioMode == 'vaio' &&
+            pipelineChain != PipelineChain.capture &&
+            pipelineChain != PipelineChain.asio) {
           _toIso?.send({
             'cmd': 'vaiomode',
             'on': true,
@@ -87,6 +91,12 @@ extension StateEvents on AppModel {
         // 'vaiomode: start requested' 的时间戳对齐，可判「桥是
         // 就绪时起的还是用户点出来的」这一分支。
         dbgLog('ready-restore: audioMode=$audioMode');
+        // 全接线：捕获链/ASIO 输入链的恢复（模式簿记仍是
+        // vaio，必须按链路合成补发，见上门控）。
+        if (pipelineChain == PipelineChain.capture ||
+            pipelineChain == PipelineChain.asio) {
+          applyPipelineChain();
+        }
         // V-01：VAIO 检测此前只有手动按钮触发，启动后 vaioDetectInfo
         // 恒为空 map、驱动行恒显「未检测到」（真机误报根因 A）。就绪后
         // 自动探测一次；isolate 重启（采样率切换等）再 ready 时同样
@@ -922,6 +932,28 @@ extension StateEvents on AppModel {
         }
         hbTick.value++;
         if (wasA != asioActive) _notifyUi();
+        break;
+      case 'capturestatus':
+        final wasCap = captureActive;
+        captureActive = (raw['active'] as bool?) ?? false;
+        captureNote = (raw['note'] as String?) ?? '';
+        if (!captureActive) {
+          if (captureNote == 'capture-lost') {
+            postNotice('音频捕获中断（设备断开或被占用），捕获链已停止',
+                level: NoticeLevel.warning);
+          } else if (captureNote == 'rate-mismatch') {
+            postNotice('输出设备拒绝以当前引擎采样率运行，捕获链未启动',
+                level: NoticeLevel.warning);
+          } else if (captureNote == 'output-init-failed') {
+            postNotice('输出设备打开失败，捕获链未启动',
+                level: NoticeLevel.error);
+          } else if (captureNote == 'capture-init-failed') {
+            postNotice('捕获设备打开失败，捕获链未启动',
+                level: NoticeLevel.error);
+          }
+        }
+        hbTick.value++;
+        if (wasCap != captureActive) _notifyUi();
         break;
       case 'vaiostatus':
         final wasV = vaioActive;

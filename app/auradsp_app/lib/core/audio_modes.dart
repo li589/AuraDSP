@@ -13,6 +13,12 @@
  * 即时生效；vaio/sysapo 选择仅持久化（VAIO 驱动点亮后接线）。
  * 方向锁定：WASAPI 渲染最终只收敛于 AuraVAIO 模式，sysapo 回归纯配置面；
  * 进程内链路是过渡形态，不再上新功能。
+ *
+ * 【2026-11-10 业主裁定变更】管线模式全接线推翻了上款对管线
+ * 输入侧的适用：管线输入 WASAPI 的回录捕获链（进程内本地链）
+ * 正式接线为受支持链路（见 composeChain）；「不再上新功能」
+ * 只余对 sysapo/附加范式的约束。管线合成规则以 composeChain
+ * 为唯一真相：输入第一次参与合成，切换输入即驱动链路起停。
  */
 import '../platform/platform_profile.dart';
 
@@ -148,6 +154,32 @@ abstract final class AudioModes {
     return 'vaio';
   }
 
+  /// 管线链路合成（全接线，2026-11-10 业主裁定）：输入第一次
+  /// 参与合成——链路由（输入, 输出）共同决定，切换任一端都
+  /// 必须重估链路（state 的 applyPipelineChain 是唯一下发方）。
+  ///
+  /// 规则（桥自带双端，输入选择从属于桥）：
+  /// - 输出 ASIO 客户端 或 输入 ASIO 驱动 -> asio 桥链；
+  /// - 输入 VAIO -> vaio 桥链（环的消费方只有 VAIO 桥）；
+  /// - 输入 WASAPI + 输出 WASAPI -> capture 本地捕获链
+  ///   （回录/直采 -> 本地引擎 -> 指定输出端点）；
+  /// - 输入 WASAPI + 输出 VAIO -> vaio 桥链（桥不接受外源
+  ///   注入；播放器须改投 VAIO 端点，面板指引已有此口径）；
+  /// - 其余/未知 -> vaio 桥链（历史默认）。
+  static PipelineChain composeChain({
+    required String input,
+    required String output,
+  }) {
+    if (output == outputAsioClient || input == inputAsioDriver) {
+      return PipelineChain.asio;
+    }
+    if (input == inputVaio) return PipelineChain.vaio;
+    if (input == inputWasapi && output == outputWasapi) {
+      return PipelineChain.capture;
+    }
+    return PipelineChain.vaio;
+  }
+
   /// 模式切换时对 pipelineOutput 的覆写（非损口径，2026-11-09
   /// 真机报告 §2.1）：引擎模式与输出端是多对一映射（wasapi/vaio
   /// 输出同合成 vaio 模式），覆写只纠正与模式硬冲突的选择——
@@ -165,6 +197,13 @@ abstract final class AudioModes {
     return outputWasapi;
   }
 }
+
+/// 管线链路种类（composeChain 的产出）：vaio/asio 为桥链，
+/// capture 为本地捕获链（进程内引擎 + WASAPI 捕获源 +
+/// 指定端点输出）。capture 不是 audioMode id——模式簿记仍由
+/// composeMode 产出（vaio），链路是管线类别内的子状态，由
+/// isolate 的 capturestatus 事件回填。
+enum PipelineChain { vaio, asio, capture }
 
 /// Linux 三模式卡的提示决策（打磨二期，纯逻辑可单测）。
 ///

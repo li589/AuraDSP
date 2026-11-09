@@ -72,11 +72,21 @@ extension AudioModesState on AppModel {
       }
     }
     if (wasVaio != isVaio) {
-      _toIso?.send({
-        'cmd': 'vaiomode',
-        'on': isVaio,
-        'outputEndpoint': config.vaioOutputEndpoint,
-      });
+      // 全接线：Windows 管线类别下链路由 composeChain 决定——
+      // 合成链为 capture/asio 时不按模式发 vaiomode，统一由
+      // 本函数末尾的 applyPipelineChain 分发（防先起 VAIO 桥
+      // 再被捕获链/ASIO 桥拆掉的空转）。
+      final chainBlocksVaio = isVaio &&
+          PlatformProfile.supportsBridges &&
+          config.modeCategory == AudioModes.categoryPipeline &&
+          pipelineChain != PipelineChain.vaio;
+      if (!chainBlocksVaio) {
+        _toIso?.send({
+          'cmd': 'vaiomode',
+          'on': isVaio,
+          'outputEndpoint': config.vaioOutputEndpoint,
+        });
+      }
       if (!isVaio) {
         vaioActive = false;
         vaioInfo = {};
@@ -87,6 +97,7 @@ extension AudioModesState on AppModel {
       // 虚拟 sink + monitor 采集；driver 接 snd-aloop 源；system 拆除）。
       _toIso?.send({'cmd': 'linuxmode', 'mode': valid});
     }
+    applyPipelineChain();
     _notifyUi();
   }
 
@@ -173,31 +184,13 @@ extension AudioModesState on AppModel {
       if (composed != audioMode) {
         setAudioMode(composed);
       } else {
-        // 漂移对账：模式未变时旧实现只落盘，但 UI 模式与 isolate
-        // 桥状态可能已漂移（如持久化模式与就绪恢复不一致、桥启动
-        // 曾失败）——用户点遍输入输出都无声无 viz，唯独某次真
-        // 模式切换才把桥带起来（真机报告 2026-11-09 阶段 1-3）。
-        // 当前模式的桥未在运行时补发一次启动命令（isolate 侧
-        // 启动幂等），让漂移自愈。
-        if (PlatformProfile.supportsBridges) {
-          if (composed == 'vaio' && !vaioActive) {
-            dbgLog('pipeline.reconcile: resend vaiomode (vaioActive=false)');
-            _toIso?.send({
-              'cmd': 'vaiomode',
-              'on': true,
-              'outputEndpoint': config.vaioOutputEndpoint,
-            });
-          } else if (composed == 'asio' && !asioActive) {
-            dbgLog('pipeline.reconcile: resend asiomode (asioActive=false)');
-            _toIso?.send({
-              'cmd': 'asiomode',
-              'on': true,
-              'driver': config.asioDriver,
-              'bufSize': config.asioBufSize,
-              'outPair': config.asioOutPair,
-            });
-          }
-        }
+        // 漂移对账统一收口（全接线，2026-11-10）：旧实现在此
+        // 内嵌 vaio/asio 补发，但附加类别下 composeMode 只产
+        // sysapo/vbcallback，该补发实际不可达（详审待代码细
+        // 审轮核销）；对账语义已由 applyPipelineChain 在
+        // setPipelineInput/Output/setAudioMode/ready 各路统
+        // 一承担，此处顺手收口捕获链状态。
+        applyPipelineChain();
         ConfigManager.save(config);
         _notifyUi();
       }
@@ -207,9 +200,132 @@ extension AudioModesState on AppModel {
     }
   }
 
+  /// 当前管线链路（仅管线类别内有意义；其余类别返回 null）。
+  PipelineChain? get pipelineChain =>
+      config.modeCategory == AudioModes.categoryPipeline
+          ? AudioModes.composeChain(
+              input: config.pipelineInput,
+              output: config.pipelineOutput,
+            )
+          : null;
+
+  /// 在枚举结果里按 id 或名称找端点（config 里存的设备值是
+  /// 「id 优先、缺失时名称」的下拉 value，两种形态都要认）。
+  AudioDeviceItem? _resolveWasapiDevice(String v) {
+    if (v.isEmpty) return null;
+    for (final d in wasapiDevices) {
+      if (d.id == v || d.name == v) return d;
+    }
+    return null;
+  }
+
+  /// 设备值的规范 id（枚举命中且有 id 时用 id，否则原值；
+  /// 空 = 默认端点）。
+  String _deviceIdOf(String v) {
+    final item = _resolveWasapiDevice(v);
+    return (item != null && item.id.isNotEmpty) ? item.id : v;
+  }
+
+  /// 构造捕获链命令（含反馈守卫）：回录端点与输出端点是
+  /// 同一设备时，我们的渲染会被自己抓回形成自激——拒绝
+  /// 起链并返回 null（调用方负责提示/停链）。
+  Map<String, dynamic>? _captureCommand(String cmd) {
+    final capItem = _resolveWasapiDevice(config.pipelineInputDevice);
+    final capId = (capItem != null && capItem.id.isNotEmpty)
+        ? capItem.id
+        : config.pipelineInputDevice;
+    final outId = _deviceIdOf(config.pipelineOutputDevice);
+    if (capId.isNotEmpty && outId.isNotEmpty && capId == outId) {
+      dbgLog('pipeline.capture: feedback pair blocked (cap==out)');
+      return null;
+    }
+    return {
+      'cmd': cmd,
+      'captureEndpoint': capId,
+      // 下拉默认项与渲染端点 = 回录；录音端点 = 直采。
+      'loopback': capItem?.isRender ?? true,
+      'outputEndpoint': outId,
+    };
+  }
+
+  /// 管线链路唯一下发方（全接线）：按 composeChain 的合成
+  /// 结果对齐 isolate 侧链路——切输入、切输出、切模式、
+  /// 就绪恢复都经此收口，杜绝「选择只落盘、链路不动」的
+  /// 漂移。桥链起停与 isolate 侧互斥（stopOtherBridges +
+  /// start* 拆捕获链）叠加，本函数只按状态位做增量对账。
+  void applyPipelineChain() {
+    if (!PlatformProfile.supportsBridges) return;
+    final chain = pipelineChain;
+    if (chain == PipelineChain.capture) {
+      final payload = _captureCommand('capturemode');
+      if (payload == null) {
+        if (captureActive) {
+          _toIso?.send({'cmd': 'capturemode', 'on': false});
+        }
+        postNotice('输入与输出为同一端点，回录会自激啸叫，已阻止启动捕获链',
+            level: NoticeLevel.warning);
+        return;
+      }
+      if (!captureActive) {
+        payload['on'] = true;
+        _toIso?.send(payload);
+        dbgLog('pipeline.chain: capturemode on');
+      }
+      return;
+    }
+    // 非捕获链：捕获链若在跑必须停（离开管线类别同理）。
+    if (captureActive) {
+      _toIso?.send({'cmd': 'capturemode', 'on': false});
+      captureActive = false;
+      dbgLog('pipeline.chain: capturemode off');
+    }
+    if (chain == PipelineChain.vaio && !vaioActive) {
+      dbgLog('pipeline.reconcile: resend vaiomode (vaioActive=false)');
+      _toIso?.send({
+        'cmd': 'vaiomode',
+        'on': true,
+        'outputEndpoint': config.vaioOutputEndpoint,
+      });
+    } else if (chain == PipelineChain.asio && !asioActive) {
+      dbgLog('pipeline.reconcile: resend asiomode (asioActive=false)');
+      _toIso?.send({
+        'cmd': 'asiomode',
+        'on': true,
+        'driver': config.asioDriver,
+        'bufSize': config.asioBufSize,
+        'outPair': config.asioOutPair,
+      });
+    }
+  }
+
+  /// 设备下拉变更（输入/输出端点）：捕获链在跑时热重建，
+  /// 未跑但合成结果是捕获链时顺势起链；其余链路不消费
+  /// 这两个字段（VAIO 落点是 vaioOutputEndpoint、ASIO 是
+  /// 驱动参数），不动。
+  void _pipelineDeviceChanged() {
+    if (!PlatformProfile.supportsBridges) return;
+    if (pipelineChain != PipelineChain.capture) return;
+    if (!captureActive) {
+      applyPipelineChain();
+      return;
+    }
+    final payload = _captureCommand('capturerestart');
+    if (payload == null) {
+      _toIso?.send({'cmd': 'capturemode', 'on': false});
+      postNotice('输入与输出为同一端点，回录会自激啸叫，已停止捕获链',
+          level: NoticeLevel.warning);
+      return;
+    }
+    _toIso?.send(payload);
+    dbgLog('pipeline.chain: capturerestart');
+  }
+
   /// ADR-009: 切换管线输入源（Virtual ASIO / AuraVAIO / WASAPI）
   void setPipelineInput(String inType) {
     config.pipelineInput = inType;
+    // 全接线：输入第一次真实驱动链路（此前只落盘——真机项
+    // 4「切输入无反应、链路靠输出点击带起来」的根源）。
+    applyPipelineChain();
     ConfigManager.save(config);
     _notifyUi();
   }
@@ -225,6 +341,9 @@ extension AudioModesState on AppModel {
       if (composed != audioMode) {
         setAudioMode(composed);
       } else {
+        // 模式未变也要对账链路（输入侧合成可能已变、桥可能
+        // 已漂移）：applyPipelineChain 统一承担。
+        applyPipelineChain();
         ConfigManager.save(config);
         _notifyUi();
       }
@@ -236,12 +355,14 @@ extension AudioModesState on AppModel {
 
   void setPipelineInputDevice(String device) {
     config.pipelineInputDevice = device;
+    _pipelineDeviceChanged();
     ConfigManager.save(config);
     _notifyUi();
   }
 
   void setPipelineOutputDevice(String device) {
     config.pipelineOutputDevice = device;
+    _pipelineDeviceChanged();
     ConfigManager.save(config);
     _notifyUi();
   }
