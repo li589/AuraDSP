@@ -438,8 +438,13 @@ class _SystemApoPanel extends StatelessWidget {
     final matched = endpoints.cast<AudioDeviceItem?>().firstWhere(
         (e) => e?.name == selEndpoint || e?.id == selEndpoint,
         orElse: () => null);
+    // 目标值用端点 ID（全局唯一）：用名称子串匹配时，同一
+    // 物理设备的扬声器/麦克风端点、VAIO 与物理的同名扬声器
+    // 都会造成「匹配到多个端点」（真机报告 2026-11-10）；
+    // ID 匹配永不歧义。旧配置存的名称仍兼容（工具按子串
+    // 匹配 id/name 两路，状态侧 apoAttached 亦然）。
     final selectedValue = matched != null
-        ? matched.name
+        ? matched.id
         : (selEndpoint.isEmpty ? '' : selEndpoint);
 
     return Column(
@@ -511,7 +516,7 @@ class _SystemApoPanel extends StatelessWidget {
                     ),
                   for (final ep in endpoints)
                     DropdownMenuItem<String>(
-                      value: ep.name,
+                      value: ep.id,
                       child: Row(
                         children: [
                           Icon(

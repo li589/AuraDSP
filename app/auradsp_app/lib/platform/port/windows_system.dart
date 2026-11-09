@@ -34,7 +34,7 @@ abstract interface class WindowsSystemPort {
   /// 注册/反注册 Virtual ASIO 驱动脚本。
   /// [bundled] = 随包脚本（register_asio.ps1：无参注册 / -Unregister
   /// 反注册）；false = 源码树开发脚本（register_driver.ps1，-Action 口径）。
-  Future<ProcessResult> asioDriverScript(
+  Future<ApoRunResult> asioDriverScript(
     String scriptPath, {
     required bool register,
     required bool elevated,

@@ -230,6 +230,10 @@ extension VbAsioState on AppModel {
 
   /// 触发一次 AuraVAIO 驱动与端点探测。
   void refreshVaioDetect() {
+    // 同步落盘：VAIO 输出面刷新按钮的闪退若发生在 native
+    // detect 内，进程猝死会吞掉缓冲日志（真机报告
+    // 2026-11-10 项 6）；入口/出口成对出现即可分层。
+    dbgLog('ui.refreshVaioDetect: send', sync: true);
     _toIso?.send({'cmd': 'vaiodetect'});
   }
 

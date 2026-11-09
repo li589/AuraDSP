@@ -93,29 +93,43 @@ final class WindowsSystemTools implements WindowsSystemPort {
   }
 
   @override
-  Future<ProcessResult> asioDriverScript(
+  Future<ApoRunResult> asioDriverScript(
     String scriptPath, {
     required bool register,
     required bool elevated,
     bool bundled = false,
-  }) {
+  }) async {
     if (bundled) {
       // 随包 register_asio.ps1（pack.py 生成）：无参 = 注册，
       // -Unregister 开关 = 反注册；没有 -Action 参数。
+      // -ResultFile 回传成败 JSON：提权进程输出跨不过 UAC
+      // 边界，与 APO 结果通道同方案（真机报告 2026-11-10：
+      // 便携形态注册失败只见 UAC 兜底文案，真因不可见）。
+      final resultFile = _asioResultFile();
+      _deleteQuietly(resultFile);
       if (elevated) {
-        final tail = register ? '' : ", '-Unregister'";
+        final tail = register
+            ? ", '-ResultFile', '\"${resultFile.path}\"'"
+            : ", '-Unregister', '-ResultFile', '\"${resultFile.path}\"'";
         final cmd =
             'Start-Process powershell -Verb RunAs -Wait -ArgumentList '
             '\'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"$scriptPath"\'$tail';
-        return Process.run('powershell', ['-Command', cmd]);
+        final res = await Process.run('powershell', ['-Command', cmd]);
+        return _apoResultFromFile(res.exitCode, resultFile);
       }
-      return Process.run('powershell', [
+      final res = await Process.run('powershell', [
         '-ExecutionPolicy',
         'Bypass',
         '-File',
         scriptPath,
         if (!register) '-Unregister',
+        '-ResultFile',
+        resultFile.path,
       ]);
+      final fromFile = _apoResultFromFile(res.exitCode, resultFile);
+      return fromFile.toolOk != null
+          ? fromFile
+          : ApoRunResult(exitCode: res.exitCode);
     }
     final action = register ? 'register' : 'unregister';
     if (elevated) {
@@ -123,9 +137,10 @@ final class WindowsSystemTools implements WindowsSystemPort {
           'Start-Process powershell -Verb RunAs -Wait -ArgumentList '
           '\'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"$scriptPath"\', '
           '\'-Action\', \'$action\'';
-      return Process.run('powershell', ['-Command', cmd]);
+      final res = await Process.run('powershell', ['-Command', cmd]);
+      return ApoRunResult(exitCode: res.exitCode);
     }
-    return Process.run('powershell', [
+    final res = await Process.run('powershell', [
       '-ExecutionPolicy',
       'Bypass',
       '-File',
@@ -133,8 +148,8 @@ final class WindowsSystemTools implements WindowsSystemPort {
       '-Action',
       action,
     ]);
+    return ApoRunResult(exitCode: res.exitCode);
   }
-
   @override
   Future<ProcessResult> apoStatus(String exePath, double timeout) {
     return Process.run(exePath, [
@@ -204,6 +219,9 @@ final class WindowsSystemTools implements WindowsSystemPort {
 
   File _apoResultFile() =>
       File('${Directory.systemTemp.path}\\auradsp_apo_result.json');
+
+  File _asioResultFile() =>
+      File('${Directory.systemTemp.path}\\auradsp_asio_result.json');
 
   void _deleteQuietly(File f) {
     try {

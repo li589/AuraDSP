@@ -513,7 +513,16 @@ extension AudioModesState on AppModel {
         bundled: hit.bundled,
       );
       await checkAsioDriverStatus();
-      final ok = res.exitCode == 0 && asioDriverInstalled;
+      // 脚本自报失败（结果文件通道）：呈现真实原因（DLL
+      // 缺失 / regsvr32 退出码等），不再用 UAC 兜底文案掩盖。
+      if (res.toolOk == false) {
+        lastAsioError =
+            'ASIO 驱动注册失败：${res.toolMessage ?? res.toolError ?? '脚本未报告原因'}';
+        _notifyUi();
+        return false;
+      }
+      final ok =
+          res.toolOk == true || (res.exitCode == 0 && asioDriverInstalled);
       if (!ok) {
         lastAsioError = 'ASIO 驱动注册未完成，请确认在 UAC 提权弹窗中选择“是”以授予管理员权限';
       } else {
@@ -546,7 +555,14 @@ extension AudioModesState on AppModel {
         bundled: hit.bundled,
       );
       await checkAsioDriverStatus();
-      final ok = res.exitCode == 0 && !asioDriverInstalled;
+      if (res.toolOk == false) {
+        lastAsioError =
+            'ASIO 驱动注销失败：${res.toolMessage ?? res.toolError ?? '脚本未报告原因'}';
+        _notifyUi();
+        return false;
+      }
+      final ok =
+          res.toolOk == true || (res.exitCode == 0 && !asioDriverInstalled);
       if (!ok) {
         lastAsioError = 'ASIO 驱动注销未完成';
       } else {

@@ -482,6 +482,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     dbgLog('asiomode: start rc=$rc');
     if (rc != 0) {
       final st = ab!.status();
+      dbgLog('asiomode: start failed note=${st?['note']}');
       send({
         'evt': 'asiostatus',
         'running': false,
@@ -577,6 +578,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     // 兜底回一个 found=false 事件，UI 侧按未检测到处理并保留 note 取证。
     // （native 侧崩溃 Dart 兜不住，属 V-02 待真机取证范畴。）
     Map<String, dynamic>? info;
+    dbgLog('vaiodetect: detect begin', sync: true);
     try {
       info = vaio!.detect();
     } catch (e) {
@@ -584,6 +586,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       send({'evt': 'vaiodetect', 'found': false, 'note': 'detect-failed: $e', 'endpoints': []});
       return;
     }
+    dbgLog('vaiodetect: detect done', sync: true);
     send({'evt': 'vaiodetect', ...?info});
   }
 
@@ -598,6 +601,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     }
     final rc = vaio!.start(AuraDspLib.loadedPath ?? '', '', outputEndpointSubstr: outputEndpointSubstr);
     dbgLog('vaiomode: start rc=$rc');
+    lastVaioGeo = ''; // 每次桥启动必落一条几何快照（噪声态取证）
     if (rc != 0) {
       final st = vaio!.status();
       send({

@@ -412,21 +412,36 @@ def refresh_build_info(staging_copy: Path, extra: dict[str, str]) -> None:
 REGISTER_ASIO_PS1 = """\
 # AuraDSP ASIO 驱动注册/反注册（pack.py 生成，随驱动包分发）
 # 用法（管理员 PowerShell）：
-#   .\\register_asio.ps1            注册 auraasio_driver.dll
-#   .\\register_asio.ps1 -Unregister 反注册
-param([switch]$Unregister)
+#   .\register_asio.ps1            注册 auraasio_driver.dll
+#   .\register_asio.ps1 -Unregister 反注册
+# -ResultFile：把成败 JSON 写回指定文件（提权进程的输出
+# 跨不过 UAC 边界，App 靠此文件读真实失败原因）。
+param([switch]$Unregister, [string]$ResultFile = "")
 $ErrorActionPreference = "Stop"
-$dll = Join-Path $PSScriptRoot "auraasio_driver.dll"
-if (-not (Test-Path $dll)) {
-  $alt = Join-Path (Split-Path -Parent $PSScriptRoot) "auraasio_driver.dll"
-  if (Test-Path $alt) { $dll = $alt }
+function Write-AsioResult([bool]$Ok, [string]$Message) {
+  if ($ResultFile) {
+    @{ ok = $Ok; message = $Message } | ConvertTo-Json -Compress |
+      Set-Content -LiteralPath $ResultFile -Encoding UTF8
+  }
 }
-if (-not (Test-Path $dll)) { throw "auraasio_driver.dll 不在脚本目录或其上级目录" }
-$regsvr = "$env:SystemRoot\\System32\\regsvr32.exe"
-$args = if ($Unregister) { @("/s", "/u", $dll) } else { @("/s", $dll) }
-$p = Start-Process $regsvr -ArgumentList $args -Wait -PassThru
-if ($p.ExitCode -ne 0) { throw "regsvr32 退出码 $($p.ExitCode)" }
-Write-Host "AuraASIO $(if ($Unregister) { '反注册' } else { '注册' })完成: $dll"
+try {
+  $dll = Join-Path $PSScriptRoot "auraasio_driver.dll"
+  if (-not (Test-Path $dll)) {
+    $alt = Join-Path (Split-Path -Parent $PSScriptRoot) "auraasio_driver.dll"
+    if (Test-Path $alt) { $dll = $alt }
+  }
+  if (-not (Test-Path $dll)) { throw "auraasio_driver.dll 不在脚本目录或其上级目录" }
+  $regsvr = "$env:SystemRoot\System32\regsvr32.exe"
+  $args = if ($Unregister) { @("/s", "/u", $dll) } else { @("/s", $dll) }
+  $p = Start-Process $regsvr -ArgumentList $args -Wait -PassThru
+  if ($p.ExitCode -ne 0) { throw "regsvr32 退出码 $($p.ExitCode)" }
+  $done = "AuraASIO $(if ($Unregister) { '反注册' } else { '注册' })完成: $dll"
+  Write-AsioResult $true $done
+  Write-Host $done
+} catch {
+  Write-AsioResult $false $_.Exception.Message
+  throw
+}
 """
 
 # 随包手动安装资产（入库模板；driver zip 与 Setup 载荷共用同一组装函数）。

@@ -114,13 +114,13 @@ final class NullWindowsSystem implements WindowsSystemPort {
       _fail();
 
   @override
-  Future<ProcessResult> asioDriverScript(
+  Future<ApoRunResult> asioDriverScript(
     String scriptPath, {
     required bool register,
     required bool elevated,
     bool bundled = false,
   }) async =>
-      _fail();
+      const ApoRunResult(exitCode: 1);
 
   @override
   Future<ProcessResult> apoStatus(String exePath, double timeout) async =>
