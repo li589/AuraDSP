@@ -147,6 +147,23 @@ abstract final class AudioModes {
     }
     return 'vaio';
   }
+
+  /// 模式切换时对 pipelineOutput 的覆写（非损口径，2026-11-09
+  /// 真机报告 §2.1）：引擎模式与输出端是多对一映射（wasapi/vaio
+  /// 输出同合成 vaio 模式），覆写只纠正与模式硬冲突的选择——
+  /// asio 模式必须 ASIO 输出；vaio 模式下残留的 ASIO 选择降为
+  /// VAIO；其余情况不得改动用户已选的兼容输出（历史上把
+  /// wasapi 覆写成 vaio，输出分段控件被拖回中间项、需二次
+  /// 点击才落位）。纯函数：setAudioMode 的 OS 归一化使
+  /// AppModel 级 Windows 管线用例无法在 Linux CI 运行，本
+  /// helper 即落位口径的可测接缝。
+  static String pipelineOutputForMode(String mode, String current) {
+    if (mode == 'asio') return outputAsioClient;
+    if (mode == 'vaio') {
+      return current == outputAsioClient ? outputVaio : current;
+    }
+    return outputWasapi;
+  }
 }
 
 /// Linux 三模式卡的提示决策（打磨二期，纯逻辑可单测）。
