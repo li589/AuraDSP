@@ -141,6 +141,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setConnIdle => '未连接 (等待 Voicemeeter 启动)';
 
   @override
+  String get setVbNotEnabled => 'Voicemeeter 未启用';
+
+  @override
   String get setDeviceDisconnected => '未连接设备';
 
   @override
@@ -194,6 +197,9 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get setApoSafetyNote =>
       '注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。';
+
+  @override
+  String get apoModeHint => '模式切换仅选择附加目标；实际附加 / 卸载由下方「一键附加」「一键卸载」执行。';
 
   @override
   String setDriverOffline(String name) {

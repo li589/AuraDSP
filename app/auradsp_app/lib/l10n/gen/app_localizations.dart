@@ -352,6 +352,12 @@ abstract class AppLocalizations {
   /// **'未连接 (等待 Voicemeeter 启动)'**
   String get setConnIdle;
 
+  /// No description provided for @setVbNotEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'Voicemeeter 未启用'**
+  String get setVbNotEnabled;
+
   /// No description provided for @setDeviceDisconnected.
   ///
   /// In zh, this message translates to:
@@ -447,6 +453,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。'**
   String get setApoSafetyNote;
+
+  /// No description provided for @apoModeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'模式切换仅选择附加目标；实际附加 / 卸载由下方「一键附加」「一键卸载」执行。'**
+  String get apoModeHint;
 
   /// No description provided for @setDriverOffline.
   ///

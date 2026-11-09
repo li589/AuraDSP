@@ -446,61 +446,69 @@ extension AudioModesState on AppModel {
   /// 一键注册 AuraDSP 虚拟 ASIO 驱动到系统（支持 Windows UAC 提权授权）
   Future<bool> registerAsioDriver({bool elevated = true}) async {
     if (!PlatformProfile.supportsBridges) return false;
+    // 脚本缺失不得静默 return false（旧实现 UI 只弹通用失败提示，
+    // 安装版上「一键注册」长期无声失败，见真机报告 §5.4-1）。
+    final hit = _findAsioRegisterScript();
+    if (hit == null) {
+      lastAsioError = '未找到 ASIO 注册脚本（随包 driver/register_asio.ps1 缺失）';
+      _notifyUi();
+      return false;
+    }
     try {
-      final hit = _findAsioRegisterScript();
-      if (hit != null) {
-        final res =
-            await windowsSystem.asioDriverScript(
-          hit.path,
-          register: true,
-          elevated: elevated,
-          bundled: hit.bundled,
-        );
-        await checkAsioDriverStatus();
-        final ok = res.exitCode == 0 && asioDriverInstalled;
-        if (!ok) {
-          lastAsioError = 'ASIO 驱动注册未完成，请确认在 UAC 提权弹窗中选择“是”以授予管理员权限';
-        } else {
-          lastAsioError = null;
-        }
-        _notifyUi();
-        return ok;
+      final res =
+          await windowsSystem.asioDriverScript(
+        hit.path,
+        register: true,
+        elevated: elevated,
+        bundled: hit.bundled,
+      );
+      await checkAsioDriverStatus();
+      final ok = res.exitCode == 0 && asioDriverInstalled;
+      if (!ok) {
+        lastAsioError = 'ASIO 驱动注册未完成，请确认在 UAC 提权弹窗中选择“是”以授予管理员权限';
+      } else {
+        lastAsioError = null;
       }
+      _notifyUi();
+      return ok;
     } catch (e) {
       lastAsioError = 'ASIO 驱动注册异常: $e';
       _notifyUi();
+      return false;
     }
-    return false;
   }
 
   /// 一键反注册 AuraDSP 虚拟 ASIO 驱动（支持 Windows UAC 提权授权）
   Future<bool> unregisterAsioDriver({bool elevated = true}) async {
     if (!PlatformProfile.supportsBridges) return false;
+    final hit = _findAsioRegisterScript();
+    if (hit == null) {
+      lastAsioError = '未找到 ASIO 注册脚本（随包 driver/register_asio.ps1 缺失）';
+      _notifyUi();
+      return false;
+    }
     try {
-      final hit = _findAsioRegisterScript();
-      if (hit != null) {
-        final res =
-            await windowsSystem.asioDriverScript(
-          hit.path,
-          register: false,
-          elevated: elevated,
-          bundled: hit.bundled,
-        );
-        await checkAsioDriverStatus();
-        final ok = res.exitCode == 0 && !asioDriverInstalled;
-        if (!ok) {
-          lastAsioError = 'ASIO 驱动注销未完成';
-        } else {
-          lastAsioError = null;
-        }
-        _notifyUi();
-        return ok;
+      final res =
+          await windowsSystem.asioDriverScript(
+        hit.path,
+        register: false,
+        elevated: elevated,
+        bundled: hit.bundled,
+      );
+      await checkAsioDriverStatus();
+      final ok = res.exitCode == 0 && !asioDriverInstalled;
+      if (!ok) {
+        lastAsioError = 'ASIO 驱动注销未完成';
+      } else {
+        lastAsioError = null;
       }
+      _notifyUi();
+      return ok;
     } catch (e) {
       lastAsioError = 'ASIO 驱动注销异常: $e';
       _notifyUi();
+      return false;
     }
-    return false;
   }
 
   ({String path, bool bundled})? _findAsioRegisterScript() {
@@ -533,8 +541,11 @@ extension AudioModesState on AppModel {
     _notifyUi();
   }
 
-  /// 检查 System APO 在系统注册与端点挂载状态，并检测心跳
-  Future<void> checkApoStatus({double timeout = 0.4}) async {
+  /// 检查 System APO 在系统注册与端点挂载状态，并检测心跳。
+  /// [silent] = 后台探测（模型初始化时）：脚本缺失/查询失败不置错误，
+  /// 避免用户未做任何操作就先攒下一条陈旧报错；UI 按钮与附加/卸载
+  /// 后的复查走默认（非静默），失败必须有可见反馈（V-03 静默点）。
+  Future<void> checkApoStatus({double timeout = 0.4, bool silent = false}) async {
     if (!PlatformProfile.supportsBridges) {
       apoAttached = false;
       apoHeartbeatAlive = false;
@@ -543,7 +554,12 @@ extension AudioModesState on AppModel {
     }
     try {
       final script = _findApoConfigScript();
-      if (script != null) {
+      if (script == null) {
+        if (!silent) lastApoError = '未找到 apo_config.py 驱动管理脚本';
+        _notifyUi();
+        return;
+      }
+      {
         final res =
             await windowsSystem.apoStatus(
           script,
@@ -596,6 +612,9 @@ extension AudioModesState on AppModel {
           }
         }
       }
+      // 脚本在但退出码非 0 / 无 JSON 输出：旧实现静默落到末尾刷新，
+      // 「刷新状态」看起来毫无反应——非静默调用必须给出可见原因。
+      if (!silent) lastApoError = 'APO 状态查询失败（脚本无有效输出）';
     } catch (e, st) {
       swallow(e, st);
     }

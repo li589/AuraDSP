@@ -143,6 +143,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setConnIdle => '未接続（Voicemeeter 起動待ち）';
 
   @override
+  String get setVbNotEnabled => 'Voicemeeter が有効になっていません';
+
+  @override
   String get setDeviceDisconnected => 'デバイス未接続';
 
   @override
@@ -196,6 +199,9 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get setApoSafetyNote =>
       'レジストリ保護：すべての変更は HKLM\\SOFTWARE\\AuraDSP\\Child APOs とディスク二層スナップショットで原子的に保護され、アンインストール時に元のドライバー構成を 100% 復元します。';
+
+  @override
+  String get apoModeHint => 'モード切替は附加先の選択のみです。実際の附加 / 解除は下の「一括附加」「一括解除」で実行します。';
 
   @override
   String setDriverOffline(String name) {

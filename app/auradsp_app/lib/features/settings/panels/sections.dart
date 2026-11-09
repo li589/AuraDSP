@@ -330,6 +330,19 @@ class _LinuxDevicePanel extends StatelessWidget {
   }
 }
 
+/// VB 桥 note 语义化（V-03/R2）：桥写入的 slug 形内部 token
+/// （如 no-voicemeeter-remote-dll）与 bridge-missing 前缀是诊断信息，
+/// 永不直接当用户文案外显，统一映射为「Voicemeeter 未启用」；
+/// 其余自由文本（如桥的人类可读状态）原样透传。
+String _vbNoteText(AppLocalizations l, Object? note) {
+  if (note is! String || note.isEmpty) return l.setConnIdle;
+  if (note.startsWith('bridge-missing') ||
+      RegExp(r'^[a-z0-9]+(-[a-z0-9]+)+$').hasMatch(note)) {
+    return l.setVbNotEnabled;
+  }
+  return note;
+}
+
 class _VoicemeeterPanel extends StatelessWidget {
   final AppModel model;
   const _VoicemeeterPanel({required this.model});
@@ -344,7 +357,7 @@ class _VoicemeeterPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _InfoRow(l.audioParadigm, '${l.paradigmAttachment} · ${l.modeVoicemeeterApi}'),
-        _InfoRow(l.setConnStatus, model.vbActive ? l.setConnActive : (note is String && note.isNotEmpty ? note : l.setConnIdle)),
+        _InfoRow(l.setConnStatus, model.vbActive ? l.setConnActive : _vbNoteText(l, note)),
         if (sr is num) _InfoRow(l.sampleRate, '${sr.toInt()} Hz'),
         if (model.vbActive)
           HbBuilder(tick: model.hbTick, builder: (_) => _VbBuses(model: model)),
@@ -418,6 +431,13 @@ class _SystemApoPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _InfoRow(l.audioParadigm, '${l.paradigmAttachment} · System APO'),
+        // V-03「选了没用」：模式切换只选择附加目标，实际附加/卸载由
+        // 下方一键按钮执行——明示语义，避免用户以为切换即生效。
+        Padding(
+          padding: const EdgeInsets.only(top: 2, bottom: 2),
+          child: Text(l.apoModeHint,
+              style: captionOf(p, color: p.textDim).copyWith(fontSize: 11)),
+        ),
         const SizedBox(height: AuraSpace.xs),
         Row(
           children: [
@@ -512,7 +532,13 @@ class _SystemApoPanel extends StatelessWidget {
             const SizedBox(width: AuraSpace.xs),
             AuraChip(l.asioRefresh,
                 icon: Icons.refresh_rounded,
-                onTap: () => model.refreshVaioDetect()),
+                // V-03：旧实现只发 vaiodetect，对 APO 状态毫无作用，
+                // 用户感知为「点刷新没反应」。端点列表（经 detect 回
+                // vaioPhysicalEndpoints）与 APO 挂载状态一并刷新。
+                onTap: () {
+                  model.refreshVaioDetect();
+                  model.checkApoStatus();
+                }),
           ],
         ),
         const SizedBox(height: AuraSpace.xs),

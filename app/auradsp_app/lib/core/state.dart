@@ -1083,7 +1083,7 @@ class AppModel extends ChangeNotifier {
     }
     if (!testing) {
       checkAsioDriverStatus();
-      checkApoStatus();
+      checkApoStatus(silent: true);
     }
     // VB 总线掩码：0 现在是合法状态（用户显式全关），不再回填全开；
     // 键缺失时 fromJson 已给出厂默认 0x03（A1/A2）。

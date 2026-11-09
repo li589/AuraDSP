@@ -144,6 +144,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setConnIdle => 'Not connected (waiting for Voicemeeter)';
 
   @override
+  String get setVbNotEnabled => 'Voicemeeter not enabled';
+
+  @override
   String get setDeviceDisconnected => 'Device not connected';
 
   @override
@@ -199,6 +202,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get setApoSafetyNote =>
       'Registry safety: all changes are atomically protected via HKLM\\SOFTWARE\\AuraDSP\\Child APOs plus a dual-layer disk snapshot; the original driver config is 100% restored on uninstall.';
+
+  @override
+  String get apoModeHint =>
+      'Switching modes only selects the attach target; use Attach / Detach below to actually apply or remove the APO.';
 
   @override
   String setDriverOffline(String name) {

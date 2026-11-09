@@ -59,6 +59,7 @@
   "setConnStatus": "连接状态",
   "setConnActive": "已连接 (活跃回调)",
   "setConnIdle": "未连接 (等待 Voicemeeter 启动)",
+  "setVbNotEnabled": "Voicemeeter 未启用",
   "setDeviceDisconnected": "未连接设备",
   "setEndpointShort": "端点",
   "setEndpointWithId": "音频端点 ({shortId})",
@@ -99,6 +100,7 @@
   "setCompositeSlot": "复合插槽",
   "setRefreshStatus": "刷新状态",
   "setApoSafetyNote": "注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。",
+  "apoModeHint": "模式切换仅选择附加目标；实际附加 / 卸载由下方「一键附加」「一键卸载」执行。",
   "setDriverOffline": "{name} [未检测到/离线]",
   "@setDriverOffline": {
     "placeholders": {

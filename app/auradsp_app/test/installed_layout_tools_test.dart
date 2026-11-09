@@ -108,6 +108,43 @@ void main() {
     });
   });
 
+  group('V-03 接线与静默点（F3）', () {
+    final sections =
+        _read('app/auradsp_app/lib/features/settings/panels/sections.dart');
+    final coreState = _read('app/auradsp_app/lib/core/state.dart');
+
+    test('APO 面板刷新 = 端点 detect + 状态查询合并', () {
+      expect(sections, contains('model.refreshVaioDetect();'));
+      expect(sections, contains('model.checkApoStatus();'));
+    });
+
+    test('VB 内部 token 语义化，不直接外显', () {
+      expect(sections, contains('_vbNoteText'));
+      expect(sections, contains('l.setVbNotEnabled'));
+      expect(sections, contains('no-voicemeeter-remote-dll'));
+    });
+
+    test('APO 模式语义说明在面板内明示', () {
+      expect(sections, contains('l.apoModeHint'));
+    });
+
+    test('静默失败清零：状态查询与 ASIO 注册缺脚本均置错', () {
+      expect(state, contains('APO 状态查询失败（脚本无有效输出）'));
+      expect(state, contains('未找到 ASIO 注册脚本'));
+      expect(state, contains("lastApoError = '未找到 apo_config.py 驱动管理脚本'"));
+      // 初始化后台探测保持静默，不攒陈旧报错
+      expect(coreState, contains('checkApoStatus(silent: true)'));
+    });
+
+    test('新词条三语齐全', () {
+      for (final lang in const ['zh', 'en', 'ja']) {
+        final arb = _read('app/auradsp_app/lib/l10n/app_$lang.arb');
+        expect(arb, contains('"setVbNotEnabled"'), reason: lang);
+        expect(arb, contains('"apoModeHint"'), reason: lang);
+      }
+    });
+  });
+
   group('V-02 刷新链守卫（F0）', () {
     test('refreshAudioDevices 有埋点且工具缺失显式置错', () {
       expect(state, contains("dbgLog('devices.refresh: start')"));
