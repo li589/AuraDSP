@@ -243,13 +243,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setDriverUninstallFailed => 'アンインストールが完了しませんでした';
 
   @override
-  String get setRedetect => '再検出';
+  String get setRedetect => '検出';
 
   @override
   String get setWasapiDesc => 'システム標準の WASAPI 共有/排他オーディオエンジン。追加ドライバー不要';
 
   @override
-  String get setRefreshDevice => 'デバイスを更新';
+  String get setRefreshDevice => '検出';
 
   @override
   String get setAsioRegisterUac => 'ドライバーを登録（UAC）';
@@ -1143,7 +1143,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get audioParadigmHint =>
-      'オーディオ接続形態の選択：アタッチメントモードはインプレース傍受、パイプラインモードはエンドツーエンド転送（ADR-009）';
+      'オーディオ接続形態の選択：アタッチメントモードはインプレース傍受、パイプラインモードはエンドツーエンド転送';
 
   @override
   String get paradigmAttachment => 'アタッチメントモード';
@@ -1294,7 +1294,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get asioDawIdle => '待機中 (DAW の接続待ち)';
 
   @override
-  String get asioStatusCheck => '状態確認';
+  String get asioStatusCheck => '検出';
 
   @override
   String get virtualSinkNotice =>

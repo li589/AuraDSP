@@ -535,7 +535,7 @@ abstract class AppLocalizations {
   /// No description provided for @setRedetect.
   ///
   /// In zh, this message translates to:
-  /// **'重新检测'**
+  /// **'检测'**
   String get setRedetect;
 
   /// No description provided for @setWasapiDesc.
@@ -547,7 +547,7 @@ abstract class AppLocalizations {
   /// No description provided for @setRefreshDevice.
   ///
   /// In zh, this message translates to:
-  /// **'刷新设备'**
+  /// **'检测'**
   String get setRefreshDevice;
 
   /// No description provided for @setAsioRegisterUac.
@@ -2179,7 +2179,7 @@ abstract class AppLocalizations {
   /// No description provided for @audioParadigmHint.
   ///
   /// In zh, this message translates to:
-  /// **'选择音频接入形态：附加模式原地挂载处理，普通管线模式端到端流转（ADR-009）'**
+  /// **'选择音频接入形态：附加模式原地挂载处理，普通管线模式端到端流转'**
   String get audioParadigmHint;
 
   /// No description provided for @paradigmAttachment.
@@ -2467,7 +2467,7 @@ abstract class AppLocalizations {
   /// No description provided for @asioStatusCheck.
   ///
   /// In zh, this message translates to:
-  /// **'检查状态'**
+  /// **'检测'**
   String get asioStatusCheck;
 
   /// No description provided for @virtualSinkNotice.

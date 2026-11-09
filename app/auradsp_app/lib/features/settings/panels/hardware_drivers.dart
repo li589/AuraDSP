@@ -409,11 +409,6 @@ class _VirtualAsioDriverCard extends StatelessWidget {
           children: [
             Text(l.asioDriverCardTitle,
                 style: sectionOf(p, color: p.text)),
-            AuraChip(
-              l.asioStatusCheck,
-              icon: Icons.refresh_rounded,
-              onTap: () => model.checkAsioDriverStatus(),
-            ),
           ],
         ),
         const SizedBox(height: AuraSpace.xs),
@@ -429,10 +424,17 @@ class _VirtualAsioDriverCard extends StatelessWidget {
         ),
         const SizedBox(height: AuraSpace.sm),
         // R1：注册/反注册动作同行右对齐（旧实现卡底左对齐独占一行）。
+        // 真机报告 2026-11-09：「检测」与注销/注册同行并排右对齐
+        // （旧实现检测钮在卡头、与注销分行）。
         Wrap(
           alignment: WrapAlignment.end,
           spacing: AuraSpace.sm,
           children: [
+            AuraChip(
+              l.asioStatusCheck,
+              icon: Icons.refresh_rounded,
+              onTap: () => model.checkAsioDriverStatus(),
+            ),
             if (!model.asioDriverInstalled)
               AuraChip(
                 l.setAsioRegisterUac,

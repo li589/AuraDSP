@@ -251,14 +251,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setDriverUninstallFailed => 'Uninstall incomplete';
 
   @override
-  String get setRedetect => 'Re-detect';
+  String get setRedetect => 'Detect';
 
   @override
   String get setWasapiDesc =>
       'System-level WASAPI shared/exclusive audio engine; no extra driver required';
 
   @override
-  String get setRefreshDevice => 'Refresh devices';
+  String get setRefreshDevice => 'Detect';
 
   @override
   String get setAsioRegisterUac => 'Register driver (UAC)';
@@ -1223,7 +1223,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get audioParadigmHint =>
-      'Select audio topology: Attachment Mode intercepts in-place; Pipeline Mode flows end-to-end (ADR-009)';
+      'Select audio topology: Attachment Mode intercepts in-place; Pipeline Mode flows end-to-end';
 
   @override
   String get paradigmAttachment => 'Attachment Mode';
@@ -1378,7 +1378,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get asioDawIdle => 'Idle (Waiting for DAW)';
 
   @override
-  String get asioStatusCheck => 'Check Status';
+  String get asioStatusCheck => 'Detect';
 
   @override
   String get virtualSinkNotice =>

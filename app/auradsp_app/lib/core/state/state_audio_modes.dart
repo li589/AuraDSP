@@ -21,9 +21,19 @@ extension AudioModesState on AppModel {
           ? AudioModes.attachVoicemeeterApi
           : AudioModes.attachSysApo;
     } else {
-      config.pipelineOutput = (valid == 'asio')
-          ? AudioModes.outputAsioClient
-          : (valid == 'vaio' ? AudioModes.outputVaio : AudioModes.outputWasapi);
+      // 模式↔输出端是多对一映射（vaio 模式同时承载 WASAPI 与 VAIO
+      // 输出）：覆写必须非损——vaio 时不得把用户已选的 WASAPI 输出
+      // 改成 VAIO，否则输出分段控件会被拖回中间项、需二次点击才
+      // 落位（vm-win10 真机报告 2026-11-09）。
+      if (valid == 'asio') {
+        config.pipelineOutput = AudioModes.outputAsioClient;
+      } else if (valid == 'vaio') {
+        if (config.pipelineOutput == AudioModes.outputAsioClient) {
+          config.pipelineOutput = AudioModes.outputVaio;
+        }
+      } else {
+        config.pipelineOutput = AudioModes.outputWasapi;
+      }
     }
     if (valid == audioMode && config.audioMode == valid) return;
     // P2 边界：模式切换会重建引擎链路（插件重挂）——先把各槽 A/B 预设

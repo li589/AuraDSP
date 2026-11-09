@@ -140,9 +140,15 @@ abstract final class SessionMemory {
               ? AudioModes.attachVoicemeeterApi
               : AudioModes.attachSysApo;
         } else {
-          m.config.pipelineOutput = (m.audioMode == 'asio')
-              ? AudioModes.outputAsioClient
-              : (m.audioMode == 'vaio' ? AudioModes.outputVaio : AudioModes.outputWasapi);
+          if (m.audioMode == 'asio') {
+            m.config.pipelineOutput = AudioModes.outputAsioClient;
+          } else if (m.audioMode == 'vaio') {
+            if (m.config.pipelineOutput == AudioModes.outputAsioClient) {
+              m.config.pipelineOutput = AudioModes.outputVaio;
+            }
+          } else {
+            m.config.pipelineOutput = AudioModes.outputWasapi;
+          }
         }
       }
       if (session['modeCategory'] is String) {

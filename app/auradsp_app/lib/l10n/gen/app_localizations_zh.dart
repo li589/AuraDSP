@@ -240,13 +240,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setDriverUninstallFailed => '卸载未完成';
 
   @override
-  String get setRedetect => '重新检测';
+  String get setRedetect => '检测';
 
   @override
   String get setWasapiDesc => '系统底层 WASAPI 共享/独占音频引擎，无额外驱动依赖';
 
   @override
-  String get setRefreshDevice => '刷新设备';
+  String get setRefreshDevice => '检测';
 
   @override
   String get setAsioRegisterUac => 'UAC提权注册驱动';
@@ -1128,7 +1128,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioParadigm => '处理范式';
 
   @override
-  String get audioParadigmHint => '选择音频接入形态：附加模式原地挂载处理，普通管线模式端到端流转（ADR-009）';
+  String get audioParadigmHint => '选择音频接入形态：附加模式原地挂载处理，普通管线模式端到端流转';
 
   @override
   String get paradigmAttachment => '附加模式';
@@ -1277,7 +1277,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get asioDawIdle => '空闲（等待 DAW 接入）';
 
   @override
-  String get asioStatusCheck => '检查状态';
+  String get asioStatusCheck => '检测';
 
   @override
   String get virtualSinkNotice =>
