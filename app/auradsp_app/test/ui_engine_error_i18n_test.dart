@@ -2,7 +2,7 @@ import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/engine_error_map.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
-import 'package:auradsp_app/features/shell.dart';
+import 'package:auradsp_app/features/notice_host.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,7 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// B-2（计划 D2 §4.3）：引擎错误展示层本地化 + 脱敏验收。
 /// - token 命中 → 三语词条；detail（含 gate.maxFileMb 等内部名）整体丢弃；
 /// - token 未命中 → scrub 兜底（内部名/盘符抹除），EEL 原文透传；
-/// - EventBanner 横幅显示本地化文案而非英文原文。
+/// - NoticeHost 横幅显示本地化文案而非英文原文。
 
 Map<String, dynamic> _guardMsg(String id, String msg) =>
     {'evt': 'paramResult', 'id': id, 'rc': -1, 'msg': msg};
@@ -67,10 +67,10 @@ void main() {
     });
   });
 
-  group('EventBanner 横幅本地化', () {
+  group('NoticeHost 横幅本地化', () {
     testWidgets('guard 拒绝显示中文词条而非英文原文', (tester) async {
       final model = AppModel(testing: true);
-      await tester.pumpWidget(_wrap(EventBanner(model: model)));
+      await tester.pumpWidget(_wrap(NoticeHost(model: model)));
       model.handleMessageForTesting(_guardMsg('convolver.ir',
           'convolver.ir: file too large (exceeds configured gate.maxFileMb)'));
       await tester.pump();
@@ -82,7 +82,7 @@ void main() {
 
     testWidgets('error 事件同样本地化', (tester) async {
       final model = AppModel(testing: true);
-      await tester.pumpWidget(_wrap(EventBanner(model: model)));
+      await tester.pumpWidget(_wrap(NoticeHost(model: model)));
       model.handleMessageForTesting({
         'evt': 'error',
         'msg': 'viz.fftSize: out of range (power of two within [1024, 8192])',

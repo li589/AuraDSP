@@ -17,6 +17,7 @@ import 'core/theme.dart';
 import 'platform/adapters.dart';
 import 'engine/debug_log.dart';
 import 'features/debug/debug_hud.dart';
+import 'features/notice_host.dart';
 import 'features/shell.dart';
 import 'features/widgets.dart';
 import 'l10n/gen/app_localizations.dart';
@@ -205,7 +206,7 @@ class ShellGate extends StatelessWidget {
             return Stack(
               children: [
                 AppShell(model: model),
-                EventBanner(model: model),
+                NoticeHost(model: model),
               ],
             );
         }

@@ -39,6 +39,7 @@ import '../platform/port/registry.dart';
 import '../platform/port/window.dart';
 import '../platform/port/windows_system.dart';
 import 'config.dart';
+import 'notice.dart';
 import 'audio_modes.dart';
 import 'eel_slider_parser.dart';
 import 'plugins/plugin_manager.dart';
@@ -964,6 +965,27 @@ class AppModel extends ChangeNotifier {
   void clearLastEngineError() {
     lastEngineError = null;
   }
+
+  /* ---- 通用通知队列（2026-11-09 通知组件化）----
+   * 全 app 瞬时通知的唯一投递口：页面/状态层经 postNotice 入队，
+   * shell 的 NoticeHost 逐条渲染为底部提醒框，不再各页面自行
+   * showSnackBar。引擎事件（上方 guard/error/info 一次性字段）是
+   * 本通道的专用前身，保持原字段与同因抑制不变；NoticeHost 先
+   * 消费它们、再消费本队列。队列保证同帧连发不互相吞掉。 */
+  final List<AppNotice> _noticeQueue = [];
+
+  /// 投递一条通用通知（text 须为已本地化文案）。
+  void postNotice(String text, {NoticeLevel level = NoticeLevel.info}) {
+    if (text.isEmpty) return;
+    _noticeQueue.add(AppNotice(text, level));
+    eventSeq.value = ++_guardSeq;
+  }
+
+  /// NoticeHost 消费端：取走队首一条（无则 null）。
+  AppNotice? takeNotice() =>
+      _noticeQueue.isEmpty ? null : _noticeQueue.removeAt(0);
+
+  bool get hasPendingNotice => _noticeQueue.isNotEmpty;
 
   /* ---- 事件同因抑制（防通知条刷屏，2026-10-18 UI 排查）----
    * 引擎 guard 拒绝（paramResult rc!=0）与 isolate 错误（error 事件）在
