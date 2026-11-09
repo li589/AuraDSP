@@ -75,6 +75,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('v0.1.0'), findsOneWidget);
+    expect(find.text('AuraDSP Project'), findsOneWidget);
     expect(find.text('开源协议'), findsOneWidget);
     expect(find.text('JamesDSP (libjamesdsp)'), findsOneWidget);
     expect(find.text('测试音频源'), findsNothing);

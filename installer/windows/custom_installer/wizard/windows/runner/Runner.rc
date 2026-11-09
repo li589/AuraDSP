@@ -89,11 +89,11 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.auradsp" "\0"
+            VALUE "CompanyName", "AuraDSP Project" "\0"
             VALUE "FileDescription", "auradsp_setup" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "auradsp_setup" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.auradsp. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 AuraDSP Project" "\0"
             VALUE "OriginalFilename", "auradsp_setup.exe" "\0"
             VALUE "ProductName", "auradsp_setup" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"

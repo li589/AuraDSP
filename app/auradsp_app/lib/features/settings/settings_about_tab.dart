@@ -93,6 +93,7 @@ List<Widget> buildAboutTab(BuildContext context, AppModel model) {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _InfoRow(l.aboutVersion, 'v$kAppVersion'),
+          _InfoRow(l.aboutDeveloper, 'AuraDSP Project'),
           _InfoRow(l.aboutForm, PlatformProfile.formLabel),
         ],
       ),

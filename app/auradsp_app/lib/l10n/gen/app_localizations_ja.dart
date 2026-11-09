@@ -1520,6 +1520,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get aboutForm => '形態';
 
   @override
+  String get aboutDeveloper => '開発者';
+
+  @override
   String get aboutRepo => 'ソースコード';
 
   @override

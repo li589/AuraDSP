@@ -66,7 +66,7 @@ EOF
     echo ""
     echo "  * Release $VERSION."
     echo ""
-    echo " -- li589 <3119317786@qq.com>  $(date -R)"
+    echo " -- AuraDSP Project <3119317786@qq.com>  $(date -R)"
 } > "$PKG/usr/share/doc/auradsp-driver-loopback/changelog"
 gzip -9 -n -f "$PKG/usr/share/doc/auradsp-driver-loopback/changelog"
 
@@ -82,7 +82,7 @@ Version: $VERSION
 Section: sound
 Priority: optional
 Architecture: all
-Maintainer: li589 <3119317786@qq.com>
+Maintainer: AuraDSP Project <3119317786@qq.com>
 Depends: kmod
 Recommends: alsa-utils
 Description: snd-aloop loopback configuration for AuraDSP driver mode

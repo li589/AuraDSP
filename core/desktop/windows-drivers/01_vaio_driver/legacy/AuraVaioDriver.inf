@@ -106,7 +106,7 @@ KSNODETYPE_SPEAKER        = "{DFF21CE1-F70F-11D0-B917-00A0C9223196}"
 PKEY_AudioEndpoint_Association      = "{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},2"
 PKEY_AudioEndpoint_PhysicalSpeakers = "{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},3"
 
-ProviderName              = "AuraDSP"
+ProviderName              = "AuraDSP Project"
 DiskName                  = "AuraVAIO Driver Installation Disk"
 AuraVAIO.DeviceDesc       = "AuraVAIO Virtual Audio Device"
 AuraVAIO.Wave.szPname     = "AuraVAIO"

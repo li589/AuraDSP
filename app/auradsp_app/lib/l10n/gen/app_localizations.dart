@@ -2878,6 +2878,12 @@ abstract class AppLocalizations {
   /// **'形态'**
   String get aboutForm;
 
+  /// No description provided for @aboutDeveloper.
+  ///
+  /// In zh, this message translates to:
+  /// **'开发商'**
+  String get aboutDeveloper;
+
   /// No description provided for @aboutRepo.
   ///
   /// In zh, this message translates to:

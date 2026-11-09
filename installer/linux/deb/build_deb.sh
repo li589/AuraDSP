@@ -58,7 +58,7 @@ EOF
     echo ""
     echo "  * Release $VERSION (see repository RELEASE_NOTES / git tag)."
     echo ""
-    echo " -- li589 <3119317786@qq.com>  $(date -R)"
+    echo " -- AuraDSP Project <3119317786@qq.com>  $(date -R)"
 } > "$PKG/usr/share/doc/auradsp/changelog"
 gzip -9 -n -f "$PKG/usr/share/doc/auradsp/changelog"
 
@@ -76,7 +76,7 @@ Version: $VERSION-1
 Section: sound
 Priority: optional
 Architecture: amd64
-Maintainer: li589 <3119317786@qq.com>
+Maintainer: AuraDSP Project <3119317786@qq.com>
 Installed-Size: $INSTALLED_SIZE
 Depends: libc6 (>= 2.35), libgtk-3-0t64 | libgtk-3-0 (>= 3.24), libstdc++6 (>= 11), libpulse0, libasound2t64 | libasound2
 Recommends: pulseaudio | pipewire-pulse, auradsp-driver-loopback

@@ -1605,6 +1605,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutForm => 'Form';
 
   @override
+  String get aboutDeveloper => 'Developer';
+
+  @override
   String get aboutRepo => 'Source code';
 
   @override

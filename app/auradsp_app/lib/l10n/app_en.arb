@@ -552,6 +552,7 @@
   "catAbout": "About",
   "aboutVersion": "Version",
   "aboutForm": "Form",
+  "aboutDeveloper": "Developer",
   "aboutRepo": "Source code",
   "aboutLicense": "License",
   "aboutRefs": "Built on",

@@ -57,7 +57,7 @@ param(
     [switch]$SkipSign,
 
     # 生成/复用测试证书时使用的主题名
-    [string]$CertSubject = 'CN=AuraDSP Test Signing',
+    [string]$CertSubject = 'CN=AuraDSP Project',
 
     # uninstall: 顺带删除上面那张测试证书（含 Root / TrustedPublisher 两份）
     [switch]$RemoveTestCert,

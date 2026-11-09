@@ -1501,6 +1501,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutForm => '形态';
 
   @override
+  String get aboutDeveloper => '开发商';
+
+  @override
   String get aboutRepo => '开源地址';
 
   @override

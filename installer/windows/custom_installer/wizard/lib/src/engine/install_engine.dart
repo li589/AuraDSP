@@ -77,7 +77,7 @@ class InstallEngine {
       {
         'DisplayName': 'AuraDSP',
         'DisplayVersion': fullVersion,
-        'Publisher': 'li589',
+        'Publisher': 'AuraDSP Project',
         'DisplayIcon': '$installDir\\auradsp_app.exe,0',
         'InstallLocation': installDir,
         'UninstallString': '"$installDir\\uninstall.exe"',
