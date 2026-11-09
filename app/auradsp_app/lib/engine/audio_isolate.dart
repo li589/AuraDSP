@@ -133,6 +133,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   int bridgeStatusPollAt = 0; // 上次 status 轮询（1s 节流）
   // P4 静音门控：桥上报 gated=1 时泵降到 50ms；gated=0 下一轮即回落 10ms。
   bool bridgeGated = false;
+    String lastVaioGeo = '';
   // 参数镜像：每次 setParam 记录，vb_start 后全量回放，保证两边一致。
   final Map<String, ({bool isFloat, double value})> paramMirror = {};
   // 字符串参数镜像（liveprog.code / arbmag.string）：成功才记；进 VB 时全量
@@ -2184,6 +2185,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                   'outputEndpoint': vaioOutputEndpointInUse,
               });
               bridgeGated = ((st['gated'] as num?)?.toInt() ?? 0) == 1;
+              // VAIO 几何快照（2026-11-09）：格式/声道几何元组变化
+              // 时落一行日志——噪声态时用户无需操作，事后从日志尾
+              // 即可读出当时的 bits/ringSr/ringCh/outCh/outBits，
+              // 对照端点实际格式终裁启动期几何采样嫌疑。
+              if (backend == 'vaio') {
+                final geo = '${st['bits']}/${st['ringSr']}/${st['ringCh']}'
+                    '/${st['sr']}/${st['outCh']}/${st['outBits']}';
+                if (geo != lastVaioGeo) {
+                  lastVaioGeo = geo;
+                  dbgLog('vaio-geometry: bits/ringSr/ringCh/sr/outCh/outBits = $geo');
+                }
+              }
             }
           }
         } catch (e, st) { swallowThrottled(e, st, 'pump-$vizBackend'); }
