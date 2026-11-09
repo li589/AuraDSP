@@ -204,6 +204,45 @@ def find_asio_driver(explicit: str | None) -> Path | None:
     return None
 
 
+def find_apo_inspect(explicit: str | None) -> Path | None:
+    """端点探测工具 apo_inspect.exe（windows-drivers CMake 目标产物）。
+
+    app 的设备刷新链靠它枚举 WASAPI 端点：缺了它安装版点刷新静默
+    无效（真机报告 V-02 关联项），故列为随包必备，找不到即拒绝打包。
+    """
+    if explicit:
+        p = Path(explicit)
+        return p if p.is_file() else None
+    base = ROOT / "core" / "desktop" / "windows-drivers" / "out"
+    for cfg in ("Release", "Debug"):
+        p = base / cfg / "apo_inspect.exe"
+        if p.is_file():
+            return p
+    if base.is_dir():
+        hits = [p for p in base.rglob("apo_inspect.exe")]
+        if hits:
+            return max(hits, key=lambda p: p.stat().st_mtime)
+    return None
+
+
+def resolve_apo_assets(args) -> tuple[Path, Path]:
+    """APO 运维资产：apo_config.py（仓库脚本）+ apo_inspect.exe（构建产物）。
+
+    app 侧 System APO 附加/状态查询与设备刷新都依赖这两件；历史上
+    从未进过载荷（真机报告 V-03 首因），自本轮起与 driver/ 同组装。
+    """
+    apo_config = (ROOT / "core" / "desktop" / "windows-drivers" /
+                  "03_system_apo" / "apo_config.py")
+    if not apo_config.is_file():
+        raise die(f"缺 apo_config.py: {apo_config}")
+    apo_inspect = find_apo_inspect(args.apo_inspect)
+    if apo_inspect is None:
+        raise die("找不到 apo_inspect.exe；先构建 windows-drivers 目标"
+                  "（build_windows.ps1 含 apo_inspect 目标），"
+                  "或用 --apo-inspect 指定")
+    return apo_config, apo_inspect
+
+
 def check_staging(staging: Path) -> None:
     if not staging.is_dir():
         raise die(f"staging 目录不存在: {staging}（先跑 build_windows.ps1 或 --build-staging）")
@@ -382,6 +421,8 @@ def stage_driver_files(
     driver_dir: Path,
     asio: Path,
     install_ps1: Path,
+    apo_config: Path,
+    apo_inspect: Path,
     *,
     include_asio_dll: bool,
 ) -> int:
@@ -403,6 +444,10 @@ def stage_driver_files(
     if copied == 0:
         raise die(f"驱动目录没有任何 .sys/.inf/.cat/.cer: {driver_dir}")
     shutil.copy2(install_ps1, dest / install_ps1.name)
+    # APO 运维资产：app 侧附加/状态（apo_config.py）与设备端点刷新
+    # （apo_inspect.exe）的随包依赖，与手动安装资产同组进 driver/。
+    shutil.copy2(apo_config, dest / apo_config.name)
+    shutil.copy2(apo_inspect, dest / apo_inspect.name)
     if include_asio_dll:
         shutil.copy2(asio, dest / ASIO_DLL_NAME)
     (dest / "register_asio.ps1").write_text(REGISTER_ASIO_PS1, encoding="utf-8")
@@ -435,6 +480,7 @@ def mode_driver(args, ver: dict[str, str], out: Path) -> Path:
                    "01_vaio_driver" / "install_driver.ps1")
     if not install_ps1.is_file():
         raise die(f"缺 install_driver.ps1: {install_ps1}")
+    apo_config, apo_inspect = resolve_apo_assets(args)
     dest = out / f"AuraDSP-Driver-x64-{ver['AURADSP_TAG']}.zip"
     if args.what_if:
         log(f"what-if: driver 包 ← {driver_dir} + {install_ps1.name} + {asio}")
@@ -442,6 +488,7 @@ def mode_driver(args, ver: dict[str, str], out: Path) -> Path:
     with tempfile.TemporaryDirectory(prefix="auradsp-driver-") as td:
         stage = Path(td) / "driver"
         stage_driver_files(stage, driver_dir, asio, install_ps1,
+                           apo_config, apo_inspect,
                            include_asio_dll=True)
         n = zip_dir(stage, dest, args.zip_level)
     log(f"driver: {dest.name}（{n} 条目，{dest.stat().st_size / 1e6:.1f} MB）")
@@ -553,7 +600,9 @@ def mode_setup(args, ver: dict[str, str], out: Path) -> Path:
         shutil.copy2(asio, work / ASIO_DLL_NAME)
         install_ps1 = (ROOT / "core" / "desktop" / "windows-drivers" /
                        "01_vaio_driver" / "install_driver.ps1")
+        apo_config, apo_inspect = resolve_apo_assets(args)
         stage_driver_files(work / "driver", driver_dir, asio, install_ps1,
+                           apo_config, apo_inspect,
                            include_asio_dll=True)
 
         payload_zip = Path(td.name) / "payload.zip"
@@ -705,6 +754,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                     help="打包前重编并测试签名 VAIO 驱动（默认只做新鲜度校验）")
     ap.add_argument("--driver-dir")
     ap.add_argument("--asio-driver")
+    ap.add_argument("--apo-inspect")
     ap.add_argument("--installer-build-dir")
     ap.add_argument("--build-installer", action="store_true")
     ap.add_argument("--version")
@@ -783,8 +833,10 @@ def main(argv: list[str]) -> int:
                  (sums.read_text(encoding="utf-8").splitlines() if sums.exists() else [])}
         for p in produced:
             lines[p.name] = f"{sha256_file(p)}  {p.name}"
+        # newline="\n" 钉死 LF：Windows 文本模式默认把 \n 翻译成 CRLF，
+        # 产物在 GNU sha256sum -c 下全行不匹配（2026-11-09 真机登记）。
         sums.write_text("\n".join(lines[k] for k in sorted(lines)) + "\n",
-                        encoding="utf-8")
+                        encoding="utf-8", newline="\n")
         log(f"SHA256SUMS.txt 已更新（{len(lines)} 条）")
     log("完成")
     return 0

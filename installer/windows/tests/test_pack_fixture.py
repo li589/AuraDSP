@@ -91,6 +91,8 @@ def main() -> int:
             (drv / name).write_bytes(b"drv")
         asio = base / "auraasio_driver.dll"
         asio.write_bytes(b"MZ-asio")
+        apo_inspect = base / "apo_inspect.exe"
+        apo_inspect.write_bytes(b"MZ-inspect")
 
         inst = base / "installer"
         (inst / "wizard" / "data").mkdir(parents=True)
@@ -101,7 +103,8 @@ def main() -> int:
 
         out = base / "out"
         common = ["--staging", str(staging), "--driver-dir", str(drv),
-                  "--asio-driver", str(asio), "--installer-build-dir", str(inst),
+                  "--asio-driver", str(asio), "--apo-inspect", str(apo_inspect),
+                  "--installer-build-dir", str(inst),
                   "--packs-dir", str(packs), "--out", str(out)]
 
         print("== driver 模式 ==")
@@ -112,7 +115,9 @@ def main() -> int:
         for want in ("AuraVaioDriver.sys", "AuraVaioDriver.inf",
                      "auravaiodriver.cat",
                      "install_driver.ps1", "auraasio_driver.dll",
-                     "register_asio.ps1", "install_vaio.ps1", "README.txt"):
+                     "register_asio.ps1", "install_vaio.ps1", "README.txt",
+                     # APO 运维资产随包（2026-11-09 V-03/F4 起）
+                     "apo_config.py", "apo_inspect.exe"):
             check(f"含 {want}", want in names)
         check("驱动包含签名教程",
               b"Win7" in read_zip(dz)[1]["README.txt"]
@@ -217,9 +222,18 @@ def main() -> int:
               "payload/auraasio_driver.dll" in payload_names)
         # 取消勾选驱动也不能过滤 driver/：手动脚本与驱动必须随包保留。
         for rel in ("install_vaio.ps1", "README.txt", "register_asio.ps1",
-                    "auraasio_driver.dll", "AuraVaioDriver.inf"):
+                    "auraasio_driver.dll", "AuraVaioDriver.inf",
+                    "apo_config.py", "apo_inspect.exe"):
             check(f"ZIP-P 恒保留 driver/{rel}",
                   f"payload/driver/{rel}" in payload_names)
+
+        print("== SHA256SUMS 换行钉死 LF（2026-11-09 F4） ==")
+        r = run_pack("--mode", "driver", "--sha256sums", *common)
+        check("exit 0", r.returncode == 0, r.stderr.strip()[-200:])
+        raw = (out / "SHA256SUMS.txt").read_bytes()
+        check("SHA256SUMS.txt 无 CR 字节", b"\r" not in raw)
+        check("SHA256SUMS.txt 登记 driver 包",
+              b"AuraDSP-Driver-x64-v0.1.0.zip" in raw)
 
         print("== ASIO 别名归一化 ==")
         alias = base / "AuraAsioDriver.dll"
