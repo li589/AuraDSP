@@ -1,4 +1,4 @@
-// settings_tabs_test.dart — 四大分类标签页独立性与卡片归位验证
+// settings_tabs_test.dart — 五大分类标签页独立性与卡片归位验证
 import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
@@ -18,7 +18,7 @@ Widget _app(AppModel model) => MaterialApp(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('设置页四页切换、卡片归位与去偏好小字验证', (tester) async {
+  testWidgets('设置页五页切换、卡片归位与去偏好小字验证', (tester) async {
     tester.view.physicalSize = const Size(1280, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -69,5 +69,14 @@ void main() {
     expect(find.text('粉噪'), findsOneWidget);
     // 引擎信息不在测试页
     expect(find.text('引擎'), findsNothing);
+
+    // 6. 切换到“关于”页 (tab 4，2026-11-09 新增)
+    await tester.tap(find.text('关于'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('v0.1.0'), findsOneWidget);
+    expect(find.text('开源协议'), findsOneWidget);
+    expect(find.text('JamesDSP (libjamesdsp)'), findsOneWidget);
+    expect(find.text('测试音频源'), findsNothing);
   });
 }

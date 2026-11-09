@@ -19,6 +19,7 @@ class _CatBar extends StatelessWidget {
     Icons.graphic_eq_rounded,
     Icons.memory_outlined,
     Icons.science_outlined,
+    Icons.info_outline,
   ];
 
   @override

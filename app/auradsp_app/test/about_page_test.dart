@@ -65,6 +65,16 @@ void main() {
       expect(nulls, contains('Future<bool> openUrl(String url) async => false'));
     });
 
+    test('_CatBar 图标表与分类数对齐（防 RangeError 回归）', () {
+      final sections =
+          _read('app/auradsp_app/lib/features/settings/panels/sections.dart');
+      final m = RegExp(r'static const _icons = \[([^\]]*)\]').firstMatch(sections);
+      expect(m, isNotNull);
+      final count = 'Icons.'.allMatches(m!.group(1)!).length;
+      expect(count, greaterThanOrEqualTo(5),
+          reason: '_CatBar._icons 必须覆盖全部分类（含关于=4）');
+    });
+
     test('左栏底部单行形态标签，旧两行不回归', () {
       final shell = _read('app/auradsp_app/lib/features/shell.dart');
       expect(shell, contains('PlatformProfile.formLabel'));
