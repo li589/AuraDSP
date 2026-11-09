@@ -69,10 +69,16 @@ def source_invariants():
           "ALSA 采集失败有专属 note")
     # 全项目审查 DRV-02（2026-11-05）：Linux 输出流死亡必须能累计到
     # 端点死亡判定（旧逻辑只认 WASAPI HRESULT，PA/ALSA 永远凑不齐）。
+    # 2026-11-10 细审 R-B 中 2 后机制变更：泵死亡计数改通用口径
+    # （任何泵轮异常累计、仅成功轮清零），原 Linux 特判
+    # （StateError + 后端名匹配）并入通用计数、不再单独存在
+    # ——PA/ALSA 的 StateError 同为泵轮异常、照常累计。本钉
+    # 改钉通用机制三构件：无条件累计 / 成功清零 / wasapiLost 出口。
     iso = read("lib/engine/audio_isolate.dart")
-    check("PlatformProfile.isLinux" in iso and "pa_simple" in iso
-          and "snd_pcm" in iso and "wasapiLost" in iso,
-          "[DRV-02] 泵对 Linux 输出后端 StateError 有端点死亡累计路径")
+    check("audioOutErrRounds++" in iso
+          and "audioOutErrRounds = 0; // 成功轮清零" in iso
+          and "wasapiLost" in iso,
+          "[DRV-02] 泵端点死亡通用计数（异常累计/成功清零/wasapiLost）")
 
 
 SND_PCM_STREAM_PLAYBACK = 0
