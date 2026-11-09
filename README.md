@@ -135,6 +135,7 @@ source/        第三方参考仓库只读快照 · dist/ 发布产物（不进 
 
 ## 许可证与致谢
 
+- 本项目以 [GNU GPL v3.0](LICENSE) 开源（全文见仓库根 `LICENSE`）。
 - 引擎核心衍生自 [JamesDSP](https://github.com/james34602/JamesDSPManager)（libjamesdsp，收编于 `engine/legacy/`），遵循其上游 GPL 系许可证；所有补丁登记在 `engine/legacy/PATCHES.md`。
 - 第三方插件 API（`vendor/`：CLAP / Steinberg VST3 / VST2 Xaymar 净室头）遵循各自许可证；VST2 仅以 BSD-3-Clause 净室头编译。
 - 运行资源（IR / VDC / Liveprog 脚本）来自上游社区，清单见 `assets/manifest.json`；参照项目快照溯源见 `source/ORIGIN.md` 与 `vendor/ORIGIN.md`。
