@@ -145,20 +145,25 @@ if ($Action -eq 'install') {
 
 if ($Action -eq 'uninstall') {
     Remove-DevconDevices
-    # Resolve the published oemXX.inf name instead of guessing: pnputil
-    # /delete-driver needs the published name, not the original INF name.
-    $published = ''
+    # Resolve the published oemXX.inf names instead of guessing:
+    # pnputil /delete-driver needs published names, not the original
+    # INF name. Parse /enum-drivers in per-driver blocks, tolerant of
+    # localized (zh-CN / en-US) pnputil key names. The previous
+    # English-only line parse silently resolved nothing on Chinese
+    # Windows, and the delete-by-original-name fallback is rejected
+    # by pnputil -- the package (and its endpoints) survived
+    # uninstall (real-machine report 2026-11-09). Same block-parse
+    # approach as the dev script's Get-AuraDriverPackages.
+    $enumOut = & $PnpUtil /enum-drivers 2>&1 | Out-String
+    $drvBlocks = [regex]::Split($enumOut, "(?=发布名称\s*:|Published Name\s*:)")
     $oemNames = @()
-    foreach ($line in (& $PnpUtil /enum-drivers 2>&1)) {
-        if ($line -match 'Published Name:\s*(\S+)') { $published = $Matches[1] }
-        elseif ($line -match 'Original Name:\s*(\S+)' -and
-                $Matches[1] -like '*AuraVaio*' -and $published) {
-            $oemNames += $published
-        }
+    foreach ($b in $drvBlocks) {
+        if ($b -notmatch 'auravaiodriver\.inf') { continue }
+        $pub = ([regex]::Match($b, '(?:发布名称|Published Name)\s*:\s*(\S+)')).Groups[1].Value
+        if ($pub) { $oemNames += $pub }
     }
     if ($oemNames.Count -eq 0) {
-        & $PnpUtil /delete-driver 'AuraVaioDriver.inf' /uninstall /force 2>&1 |
-            ForEach-Object { Write-Log "  pnputil: $_" }
+        Write-Log 'WARN: no published AuraVaioDriver package found in DriverStore (already removed?).'
     } else {
         foreach ($oem in ($oemNames | Select-Object -Unique)) {
             & $PnpUtil /delete-driver $oem /uninstall /force 2>&1 |

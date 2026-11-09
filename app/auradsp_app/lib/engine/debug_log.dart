@@ -97,10 +97,25 @@ void _rotateIfSessionOversized() {
   _openDbgFile();
 }
 
-void dbgLog(String msg) {
+/// [sync] = true 时绕过 flush 节流、写后立即落盘：只给「进程
+/// 可能在本次调用内死亡」的取证埋点用（如设备刷新链）——节流
+/// 窗口（200ms）内的原生闪退会把未落盘的缓冲整段带走，使日志
+/// 尾恰断在崩溃点之前、误导定位（真机报告 2026-11-09 实证：
+/// 多次刷新日志齐全而闪退那次无痕）。高频路径禁用。
+void dbgLog(String msg, {bool sync = false}) {
   try {
     if (_dbgF == null) {
       _openDbgFile();
+      if (!sync) return;
+      // sync 埋点的首条消息也必须落盘：重开后按下方常规路径写。
+      var first = msg;
+      if (first.length > _kMaxLineChars) {
+        first = '${first.substring(0, _kMaxLineChars)}…(truncated)';
+      }
+      final ts0 = DateTime.now().toIso8601String().substring(11, 23);
+      _writeDbgLine('$ts0 $first');
+      _dbgF!.flushSync();
+      _lastFlush = DateTime.now();
       return;
     }
     var line = msg;
@@ -111,7 +126,7 @@ void dbgLog(String msg) {
     _writeDbgLine('$ts $line');
     // 节流 flush：绝大多数调用只进用户态缓冲，不产生系统调用
     final now = DateTime.now();
-    if (now.difference(_lastFlush) >= _flushInterval) {
+    if (sync || now.difference(_lastFlush) >= _flushInterval) {
       _lastFlush = now;
       _dbgF!.flushSync();
       _rotateIfSessionOversized();

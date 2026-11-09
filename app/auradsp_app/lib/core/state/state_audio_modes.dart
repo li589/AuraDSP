@@ -243,7 +243,7 @@ extension AudioModesState on AppModel {
   /// 用户点刷新毫无反馈）；关键节点写 dbgLog 埋点，真机再现闪退时
   /// 可凭日志尾迹定位死在哪一段。
   Future<void> refreshAudioDevices() async {
-    dbgLog('devices.refresh: start');
+    dbgLog('devices.refresh: start', sync: true);
     try {
       refreshVaioDetect();
     } catch (e, st) {
@@ -253,7 +253,7 @@ extension AudioModesState on AppModel {
     try {
       final exePath = _findApoInspectExe();
       if (exePath == null) {
-        dbgLog('devices.refresh: apo_inspect unavailable');
+        dbgLog('devices.refresh: apo_inspect unavailable', sync: true);
         lastAudioError = '端点探测工具不可用（apo_inspect.exe 缺失）';
         _notifyUi();
         return;
@@ -266,7 +266,7 @@ extension AudioModesState on AppModel {
         // 细分埋点（真机报告 2026-11-09 §1.1b：驱动区刷新闪退新点）：
         // 与 I/O 区刷新共用本方法且后者正常，故把 inspect 返回、
         // 解析空集、通知后三段分开记日志尾，下次复现凭尾迹定段。
-        dbgLog('devices.refresh: inspect exit=${res.exitCode}');
+        dbgLog('devices.refresh: inspect exit=${res.exitCode}', sync: true);
         if (res.exitCode == 0) {
           final stdout = (res.stdout as String).trim();
           final lines = stdout.split('\n');
@@ -296,11 +296,11 @@ extension AudioModesState on AppModel {
             if (items.isNotEmpty) {
               wasapiDevices = items;
               lastAudioError = null;
-              dbgLog('devices.refresh: done n=${items.length}');
+              dbgLog('devices.refresh: done n=${items.length}', sync: true);
               _notifyUi();
-              dbgLog('devices.refresh: notified');
+              dbgLog('devices.refresh: notified', sync: true);
             } else {
-              dbgLog('devices.refresh: no endpoints parsed');
+              dbgLog('devices.refresh: no endpoints parsed', sync: true);
             }
           }
         } else {
@@ -309,7 +309,7 @@ extension AudioModesState on AppModel {
         }
       }
     } catch (e) {
-      dbgLog('devices.refresh: error $e');
+      dbgLog('devices.refresh: error $e', sync: true);
       lastAudioError = '刷新音频设备失败: $e';
       _notifyUi();
     }
