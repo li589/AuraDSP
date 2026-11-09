@@ -4,4 +4,7 @@
 abstract interface class ShellOpenPort {
   /// 用系统文件管理器打开路径（文件或目录）。失败返回 false，不抛异常。
   Future<bool> openPath(String path);
+
+  /// 用系统默认浏览器打开 URL（关于页外链用）。失败返回 false，不抛异常。
+  Future<bool> openUrl(String url);
 }

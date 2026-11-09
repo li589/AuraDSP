@@ -1511,6 +1511,27 @@ class AppLocalizationsJa extends AppLocalizations {
   String get catTest => 'テスト';
 
   @override
+  String get catAbout => 'について';
+
+  @override
+  String get aboutVersion => 'バージョン';
+
+  @override
+  String get aboutForm => '形態';
+
+  @override
+  String get aboutRepo => 'ソースコード';
+
+  @override
+  String get aboutLicense => 'ライセンス';
+
+  @override
+  String get aboutRefs => '参照プロジェクト';
+
+  @override
+  String get aboutOpenFailed => 'リンクを開けませんでした。手動でアクセスしてください';
+
+  @override
   String get pageHomeEyebrow => 'コンソール';
 
   @override

@@ -7,11 +7,13 @@
  *  - settings_audio_tab.dart      (音频：范式、设备、采样率、声道配置)
  *  - settings_system_tab.dart     (系统：引擎信息、持久化记忆、开机自启/托盘)
  *  - settings_test_tab.dart       (测试：音频测试源注入)
+ *  - settings_about_tab.dart      (关于：版本、开源地址/协议、参考项目)
  */
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../core/app_info.dart';
 import '../core/audio_modes.dart';
 import '../core/config.dart';
 import '../core/design.dart';
@@ -32,6 +34,7 @@ part 'settings/settings_appearance_tab.dart';
 part 'settings/settings_audio_tab.dart';
 part 'settings/settings_system_tab.dart';
 part 'settings/settings_test_tab.dart';
+part 'settings/settings_about_tab.dart';
 
 // 驱动/面板子组件
 part 'settings/panels/sections.dart';
@@ -49,7 +52,7 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  // 当前分类：0 外观 / 1 音频 / 2 系统 / 3 测试
+  // 当前分类：0 外观 / 1 音频 / 2 系统 / 3 测试 / 4 关于
   int _cat = 1;
 
   @override
@@ -74,6 +77,9 @@ class _SettingsPageState extends State<SettingsPage> {
           case 3:
             tabContent = buildTestTab(context, model);
             break;
+          case 4:
+            tabContent = buildAboutTab(context, model);
+            break;
           default:
             tabContent = buildAudioTab(context, model);
         }
@@ -93,7 +99,13 @@ class _SettingsPageState extends State<SettingsPage> {
               bottom: 0,
               child: _CatBar(
                 selected: _cat,
-                labels: [l.catAppearance, l.catAudio, l.catSystem, l.catTest],
+                labels: [
+                  l.catAppearance,
+                  l.catAudio,
+                  l.catSystem,
+                  l.catTest,
+                  l.catAbout
+                ],
                 onChanged: (v) => setState(() => _cat = v),
               ),
             ),

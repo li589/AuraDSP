@@ -1492,6 +1492,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get catTest => '测试';
 
   @override
+  String get catAbout => '关于';
+
+  @override
+  String get aboutVersion => '版本';
+
+  @override
+  String get aboutForm => '形态';
+
+  @override
+  String get aboutRepo => '开源地址';
+
+  @override
+  String get aboutLicense => '开源协议';
+
+  @override
+  String get aboutRefs => '参考核心项目';
+
+  @override
+  String get aboutOpenFailed => '链接打开失败，请手动访问';
+
+  @override
   String get pageHomeEyebrow => '控制台';
 
   @override

@@ -1596,6 +1596,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get catTest => 'Test';
 
   @override
+  String get catAbout => 'About';
+
+  @override
+  String get aboutVersion => 'Version';
+
+  @override
+  String get aboutForm => 'Form';
+
+  @override
+  String get aboutRepo => 'Source code';
+
+  @override
+  String get aboutLicense => 'License';
+
+  @override
+  String get aboutRefs => 'Built on';
+
+  @override
+  String get aboutOpenFailed =>
+      'Couldn\'t open the link — please visit it manually';
+
+  @override
   String get pageHomeEyebrow => 'CONSOLE';
 
   @override

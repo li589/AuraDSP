@@ -2860,6 +2860,48 @@ abstract class AppLocalizations {
   /// **'测试'**
   String get catTest;
 
+  /// No description provided for @catAbout.
+  ///
+  /// In zh, this message translates to:
+  /// **'关于'**
+  String get catAbout;
+
+  /// No description provided for @aboutVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'版本'**
+  String get aboutVersion;
+
+  /// No description provided for @aboutForm.
+  ///
+  /// In zh, this message translates to:
+  /// **'形态'**
+  String get aboutForm;
+
+  /// No description provided for @aboutRepo.
+  ///
+  /// In zh, this message translates to:
+  /// **'开源地址'**
+  String get aboutRepo;
+
+  /// No description provided for @aboutLicense.
+  ///
+  /// In zh, this message translates to:
+  /// **'开源协议'**
+  String get aboutLicense;
+
+  /// No description provided for @aboutRefs.
+  ///
+  /// In zh, this message translates to:
+  /// **'参考核心项目'**
+  String get aboutRefs;
+
+  /// No description provided for @aboutOpenFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'链接打开失败，请手动访问'**
+  String get aboutOpenFailed;
+
   /// No description provided for @pageHomeEyebrow.
   ///
   /// In zh, this message translates to:

@@ -82,6 +82,9 @@ final class NullShellOpen implements ShellOpenPort {
 
   @override
   Future<bool> openPath(String path) async => false;
+
+  @override
+  Future<bool> openUrl(String url) async => false;
 }
 
 final class NullWindowsSystem implements WindowsSystemPort {
