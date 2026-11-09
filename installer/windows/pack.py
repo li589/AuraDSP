@@ -431,8 +431,14 @@ def build_installer_artifacts(args) -> Path:
         raise die(f"引导壳构建完成但产物缺失: {shell}")
     wizard_dir = ROOT / "installer" / "windows" / "custom_installer" / "wizard"
     log("构建向导（flutter build windows）…")
-    subprocess.run(["flutter", "build", "windows", "--release",
-                    "--no-tree-shake-icons"], cwd=wizard_dir, check=True)
+    # 经 win_env_sanitize 启动：Windows 上 flutter 是 .bat 垫片，
+    # subprocess 直接 spawn 批处理会 FileNotFoundError（CreateProcess 只补 .exe）；
+    # 同时该脚本会归一化环境变量大小写重复键——否则 MSBuild 会因
+    # ArgumentException('path') 起不来编译器，编译"成功"却产出陈旧二进制。
+    env_sanitizer = ROOT / "tools" / "bin" / "win_env_sanitize.py"
+    subprocess.run([sys.executable, str(env_sanitizer), "flutter", "build",
+                    "windows", "--release", "--no-tree-shake-icons"],
+                   cwd=wizard_dir, check=True)
     runner = wizard_dir / "build" / "windows" / "x64" / "runner" / "Release"
     if not (runner / "auradsp_setup.exe").is_file():
         raise die(f"向导构建完成但产物缺失: {runner}")
