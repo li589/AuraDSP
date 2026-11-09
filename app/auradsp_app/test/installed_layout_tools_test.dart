@@ -201,7 +201,7 @@ void main() {
 
   group('V-02 刷新链守卫（F0）', () {
     test('refreshAudioDevices 有埋点且工具缺失显式置错', () {
-      expect(state, contains("dbgLog('devices.refresh: start')"));
+      expect(state, contains("dbgLog('devices.refresh: start', sync: true)"));
       expect(state, contains('端点探测工具不可用'));
     });
 
