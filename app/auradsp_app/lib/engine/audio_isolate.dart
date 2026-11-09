@@ -19,6 +19,7 @@ import 'package:ffi/ffi.dart';
 import 'auradsp_ffi.dart';
 import 'audio_out/audio_out.dart';
 import 'audio_out/audio_out_wasapi.dart';
+import 'audio_out/audio_in_wasapi.dart';
 import 'audio_out/alsa_ffi.dart';
 import 'audio_out/audio_in_alsa.dart';
 import 'audio_out/audio_in_linux.dart';
@@ -39,6 +40,7 @@ part 'audio_wav.dart';
 part 'audio_sources.dart';
 part 'audio_slots.dart';
 part 'audio_isolate_linux.dart';
+part 'audio_isolate_windows.dart';
 
 
 
@@ -99,6 +101,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   AuraDspLib? lib;
   Pointer<Void>? handle;
   AudioOut? audioOut;
+
+  /// 引擎建链采样率（init 时由 audioOut 协商值定格）：捕获链
+  /// 重建输出/捕获设备时以它为请求率，防设备协商漂移导致
+  /// 引擎变速变调（WindowsCaptureController 消费）。
+  double engineRateHz = 0;
   Source? source;
   bool bypass = false;
   // 5.1 直通（Phase 2）：file 源 raw 多声道绕开引擎直出（输出 untouched；
@@ -164,6 +171,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     deviceRate: () => audioOut?.sampleRate ?? 48000,
     alsaExpert: _cfgStr(cfg, 'linuxAudioBackend', 'pulse') == 'alsa',
     alsaCaptureDevice: _cfgStr(cfg, 'alsaCaptureDevice', ''),
+  );
+
+  // 全接线 W2（2026-11-10）：Windows 管线本地捕获链控制器
+  // （与 linuxModes 同构）。非 Windows 平台永不被命令触达，
+  // 构造零副作用。
+  final windowsCapture = WindowsCaptureController(
+    getSource: () => source,
+    setSource: (s) => source = s,
+    getAudioOut: () => audioOut,
+    setAudioOut: (o) => audioOut = o,
+    send: send,
+    engineRate: () => engineRateHz,
   );
 
   // P-041（2026-10-28）：本地引擎 load 走 _slotLoadAsync 异步任务，期间
@@ -306,6 +325,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   }
 
   void startVbBridge() {
+    windowsCapture.detach(restoreSaved: false);
     if (bridgeManager.isActive('vm')) return;
     dbgLog('vbmode: start requested');
     try {
@@ -450,6 +470,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       required int bufSize,
       required int outPair,
       int channels = 2}) {
+    windowsCapture.detach(restoreSaved: false);
     if (bridgeManager.isActive('asio')) return;
     dbgLog('asiomode: start requested driver="$driver" '
         'buf=$bufSize pair=$outPair ch=$channels');
@@ -591,6 +612,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   }
 
   void startVaioBridge({String outputEndpointSubstr = ''}) {
+    windowsCapture.detach(restoreSaved: false);
     if (bridgeManager.isActive('vaio')) return;
     dbgLog('vaiomode: start requested output="$outputEndpointSubstr"');
     try {
@@ -1228,6 +1250,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           if (srcBridge != null) {
             srcBridge.testStop();
           }
+          // 捕获链在跑时点测试源 = 用户显式接管本地链：先拆
+          // 捕获链（状态经 capturestatus 回 state 对账），再
+          // 按 kind 装新源/停源。
+          if (windowsCapture.active) {
+            windowsCapture.detach(restoreSaved: false);
+          }
           switch (kind) {
             case 'stop':
               source = null;
@@ -1279,6 +1307,30 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           break;
         case 'linuxstatus':
           linuxModes.reportStatus();
+          break;
+        case 'capturemode':
+          // 全接线 W2：本地捕获链组建/拆除（管线 WASAPI 输入+
+          // WASAPI 输出）。开链前先停任一在跑的桥（互斥）。
+          if (m['on'] as bool) {
+            stopOtherBridges('');
+            windowsCapture.attach(
+              captureEndpoint: (m['captureEndpoint'] as String?) ?? '',
+              loopback: (m['loopback'] as bool?) ?? true,
+              outputEndpoint: (m['outputEndpoint'] as String?) ?? '',
+            );
+          } else {
+            windowsCapture.detach(restoreSaved: true);
+          }
+          break;
+        case 'capturerestart':
+          // 端点参数变更：链在跑才热重建。
+          if (windowsCapture.active) {
+            windowsCapture.attach(
+              captureEndpoint: (m['captureEndpoint'] as String?) ?? '',
+              loopback: (m['loopback'] as bool?) ?? true,
+              outputEndpoint: (m['outputEndpoint'] as String?) ?? '',
+            );
+          }
           break;
         case 'vbmode':
           if (m['on'] as bool) {
@@ -2012,11 +2064,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       dbgLog('local audio out unsupported, degraded ready');
     }
     // 无输出设备时按请求速率建引擎（有设备则跟设备协商值）。
-    final engineRate = audioOut != null
-        ? audioOut.sampleRate.toDouble()
+    // initOut 别名：audioOut 自 W2 起会被控制器回调赋值（闭包
+    // 写捕获使字段的类型提升失效），本段判定走别名。
+    final initOut = audioOut;
+    final engineRate = initOut != null
+        ? initOut.sampleRate.toDouble()
         : (requestedRate > 0
             ? requestedRate.toDouble()
             : kFallbackSampleRate.toDouble());
+    engineRateHz = engineRate;
     handle = lib.create(engineRate, maxBlockFrames);
     dbgLog('auradsp_create rate=$engineRate '
         'maxBlock=$maxBlockFrames '
@@ -2040,7 +2096,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       audioOutError ??= 'wasapi-start: $e';
       dbgLog('AudioOut start failed, degraded ready: $e');
     }
-    if (audioOut != null && audioOut.started) {
+    if (initOut != null && initOut.started) {
       // 后端名取运行时类型（WasapiOut / PulseAudioOut）：旧文案在 Linux
       // 也写 WASAPI，S5c 改为平台中立（字段名 audioOut 是历史命名，
       // 类型实为 AudioOut 抽象，不在本阶段改名）。
