@@ -830,12 +830,30 @@ struct ProcResult {
 };
 
 std::wstring QuoteArg(const std::wstring& a) {
-    if (a.find_first_of(L" \t\"") == std::wstring::npos) return a;
+    // 标准 Windows 命令行引用（细审 R-C L-4）：旧实现只给
+    // 引号加反斜杠，参数尾随反斜杠会把闭合引号转义掉、反
+    // 斜杠序列也不翻倍。规则：引号前的反斜杠串翻倍再加一
+    // 条转义引号；结尾反斜杠串翻倍；空参数输出 ""（旧
+    // 实现会让空参数在拼接后消失）。
+    if (!a.empty() && a.find_first_of(L" \t\"") == std::wstring::npos)
+        return a;
     std::wstring q = L"\"";
+    size_t backslashes = 0;
     for (const wchar_t c : a) {
-        if (c == L'"') q += L'\\';
-        q += c;
+        if (c == L'\\') {
+            backslashes++;
+            continue;
+        }
+        if (c == L'"') {
+            q.append(backslashes * 2 + 1, L'\\');
+            q += L'"';
+        } else {
+            q.append(backslashes, L'\\');
+            q += c;
+        }
+        backslashes = 0;
     }
+    q.append(backslashes * 2, L'\\');
     q += L'"';
     return q;
 }
@@ -957,6 +975,9 @@ Heartbeat ReadHeartbeat(double timeoutSec) {
                         hb.seen = true;
                         hb.firstSeq = snap.seq;
                         hb.firstFrames = snap.framesTotal;
+                        hb.sr = snap.sampleRate;
+                        hb.nbs = snap.lastNbs;
+                        hb.pid = snap.pid;
                     } else if (snap.seq != hb.firstSeq &&
                                snap.framesTotal >= hb.firstFrames) {
                         hb.alive = true;
@@ -975,7 +996,14 @@ Heartbeat ReadHeartbeat(double timeoutSec) {
         if (GetTickCount64() >= deadline) break;
         Sleep(300);
     }
-    hb.alive = hb.seen;
+    if (hb.seen) {
+        // 见过但未推进（细审 R-C L-3）：alive 按口径为真，
+        // 但 seq/frames 此前恒 0、误导排障（APO 已加载但无
+        // 音频流时正属此态）——回填首快照实测值。
+        hb.alive = true;
+        hb.seq = hb.firstSeq;
+        hb.frames = hb.firstFrames;
+    }
     return hb;
 }
 
@@ -1166,18 +1194,32 @@ Json BackupEndpoint(const Endpoint& ep, const std::wstring& mode) {
         }
     }
 
-    // 1. 注册表 Child APOs 快照
-    RegWrite(HKEY_LOCAL_MACHINE, childSub, L"Version", RegSz(L"1"));
-    RegWrite(HKEY_LOCAL_MACHINE, childSub, L"EndpointId", RegSz(Utf8ToWide(ep.id)));
-    RegWrite(HKEY_LOCAL_MACHINE, childSub, L"DeviceName", RegSz(ep.name));
-    RegWrite(HKEY_LOCAL_MACHINE, childSub, L"Direction",
-             RegSz(ep.DirectionTitle()));
-    RegWrite(HKEY_LOCAL_MACHINE, childSub, L"InstallMode", RegSz(mode));
-    RegWrite(HKEY_LOCAL_MACHINE, childSub, L"HadFxPropertiesKey",
-             RegDword(hadKey ? 1 : 0));
-    RegWrite(HKEY_LOCAL_MACHINE, childSub, L"BackupTimestamp", RegSz(stamp));
-    for (const auto& [kn, v] : snapshot) {
-        RegWrite(HKEY_LOCAL_MACHINE, childSub, kn, v);
+    // 1. 注册表 Child APOs 快照。两条纪律（细审 R-C H-1/L-5）：
+    // 其一，已有快照时保留首份——重复 install 无条件覆写会把
+    // 已被改写的当前值当「原始值」存入，卸载还原的将是
+    // AuraDSP 自己的值、厂商原始 APO 值永久丢失；首份快照
+    // 才是原始基线。其二，写入成败必查并经 meta 的
+    // backup_failed 回传，CmdInstall 据此中止——变更已发生
+    // 却无备份，比不变更更危险。
+    const bool snapExists = RegKeyExists(HKEY_LOCAL_MACHINE, childSub);
+    bool snapOk = true;
+    if (!snapExists) {
+        snapOk &= RegWrite(HKEY_LOCAL_MACHINE, childSub, L"Version", RegSz(L"1"));
+        snapOk &= RegWrite(HKEY_LOCAL_MACHINE, childSub, L"EndpointId",
+                           RegSz(Utf8ToWide(ep.id)));
+        snapOk &= RegWrite(HKEY_LOCAL_MACHINE, childSub, L"DeviceName",
+                           RegSz(ep.name));
+        snapOk &= RegWrite(HKEY_LOCAL_MACHINE, childSub, L"Direction",
+                           RegSz(ep.DirectionTitle()));
+        snapOk &= RegWrite(HKEY_LOCAL_MACHINE, childSub, L"InstallMode",
+                           RegSz(mode));
+        snapOk &= RegWrite(HKEY_LOCAL_MACHINE, childSub,
+                           L"HadFxPropertiesKey", RegDword(hadKey ? 1 : 0));
+        snapOk &= RegWrite(HKEY_LOCAL_MACHINE, childSub, L"BackupTimestamp",
+                           RegSz(stamp));
+        for (const auto& [kn, v] : snapshot) {
+            snapOk &= RegWrite(HKEY_LOCAL_MACHINE, childSub, kn, v);
+        }
     }
 
     // 2. 磁盘 .reg / .json 快照
@@ -1209,10 +1251,14 @@ Json BackupEndpoint(const Endpoint& ep, const std::wstring& mode) {
          regExported ? Json::Str(WideToUtf8(regFile)) : Json{}},
         {"backup_at", Json::Str(WideToUtf8(stamp))},
         {"install_mode", Json::Str(WideToUtf8(mode))},
+        {"backup_preserved", Json::Bool(snapExists)},
         {"slots", Json::Obj(std::move(slotObj))},
     });
     // 与 Python json.dump(indent=2) 的可读落盘等价（缩进不影响解析）。
-    WriteFileUtf8(jsonFile, JsonString(meta));
+    const bool jsonOk = WriteFileUtf8(jsonFile, JsonString(meta));
+    if (!snapOk || !jsonOk || (hadKey && !regExported)) {
+        return Json::Obj({{"backup_failed", Json::Bool(true)}});
+    }
     return meta;
 }
 
@@ -1234,7 +1280,8 @@ RestoreResult RestoreEndpoint(const std::wstring& shortId) {
         stored[n] = std::move(v);
     }
 
-    // 注册表快照缺失 → 回退磁盘 JSON（文件名倒序，首个匹配）。
+    // 注册表快照缺失 → 回退磁盘 JSON（文件名正序，首个匹配：
+    // 最早一份才是未被后续重复 install 污染的原始基线，细审 R-C H-1）。
     if (stored.empty()) {
         const std::wstring dir = BackupDir();
         std::vector<std::wstring> files;
@@ -1246,7 +1293,7 @@ RestoreResult RestoreEndpoint(const std::wstring& shortId) {
             } while (FindNextFileW(h, &fd));
             FindClose(h);
         }
-        std::sort(files.begin(), files.end(), std::greater<>());
+        std::sort(files.begin(), files.end(), std::less<>());
         for (const auto& f : files) {
             std::string text;
             if (!ReadFileUtf8(dir + L"\\" + f, text)) continue;
@@ -1349,10 +1396,20 @@ RestoreResult RestoreEndpoint(const std::wstring& shortId) {
             }
         };
         bool writeOk = true;
+        auto restoreSlot = [&](const std::wstring& kn) {
+            const auto it = stored.find(kn);
+            if (it == stored.end()) return;
+            const RegValue& v = it->second;
+            if (v.IsSentinel()) {
+                RegDeleteValueW(k, kn.c_str());  // 失败忽略（Python 同）
+            } else if (!setValue(kn, v)) {
+                writeOk = false;
+            }
+        };
         if (installMode == L"composite") {
-            for (const std::wstring slot :
-                 {std::wstring(kFxBase) + L",13",
-                  std::wstring(kFxBase) + L",14"}) {
+            const std::wstring slot13 = std::wstring(kFxBase) + L",13";
+            const std::wstring slot14 = std::wstring(kFxBase) + L",14";
+            for (const std::wstring slot : {slot13, slot14}) {
                 const auto it = stored.find(slot);
                 if (it == stored.end() || it->second.IsSentinel()) {
                     RegDeleteValueW(k, slot.c_str());  // 失败忽略（Python 同）
@@ -1369,17 +1426,16 @@ RestoreResult RestoreEndpoint(const std::wstring& shortId) {
                     }
                 }
             }
-        } else {
+            // 复合模式下 install 同样改写了 ,0/ProcModes/
+            // DisableEnh（全模式共用写段），还原必须一并回滚
+            // （细审 R-C H-2）：旧实现只回 ,13/,14，其余槽在
+            // 「卸载完成」后仍处修改态。
             for (const auto& kn : SlotKeys()) {
-                const auto it = stored.find(kn);
-                if (it == stored.end()) continue;
-                const RegValue& v = it->second;
-                if (v.IsSentinel()) {
-                    RegDeleteValueW(k, kn.c_str());  // 失败忽略（Python 同）
-                } else if (!setValue(kn, v)) {
-                    writeOk = false;
-                }
+                if (kn == slot13 || kn == slot14) continue;
+                restoreSlot(kn);
             }
+        } else {
+            for (const auto& kn : SlotKeys()) restoreSlot(kn);
         }
         RegCloseKey(k);
         if (!writeOk) return {false, L"写入 FxProperties 失败"};
@@ -1497,6 +1553,7 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
             OutJson(Json::Obj({
                 {"ok", Json::Bool(false)},
                 {"error", Json::Str("admin_required")},
+                {"message", Json::Str("安装 System APO 需要管理员权限")},
             }));
         } else {
             OutLine("FATAL: 安装 System APO 需要管理员权限。请使用管理员身份运行或加 --elevate 参数。");
@@ -1572,7 +1629,19 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
     const bool win7 = IsWin7OrEarlier();
     if (win7 && mode == L"sfx-efx") mode = L"win7-sapo";
 
-    EnsureComRegistered();
+    if (!EnsureComRegistered()) {
+        const std::string msg = "AuraApo.dll 未注册且自动注册失败";
+        if (asJson) {
+            OutJson(Json::Obj({
+                {"ok", Json::Bool(false)},
+                {"error", Json::Str("apo_dll_register_failed")},
+                {"message", Json::Str(msg)},
+            }));
+        } else {
+            OutLine("FATAL: " + msg);
+        }
+        return 1;
+    }
 
     const auto testenv =
         RegRead(HKEY_LOCAL_MACHINE, kTestEnvKey, kTestEnvVal);
@@ -1581,17 +1650,39 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
     }
 
     Json meta = BackupEndpoint(ep, mode);
+    if (const Json* bf = meta.Find("backup_failed");
+        bf && bf->type == Json::Type::Bool && bf->boolean) {
+        const std::string msg = "备份端点原始值失败，已中止安装（未做任何改动）";
+        if (asJson) {
+            OutJson(Json::Obj({
+                {"ok", Json::Bool(false)},
+                {"error", Json::Str("backup_failed")},
+                {"message", Json::Str(msg)},
+            }));
+        } else {
+            OutLine("FATAL: " + msg);
+        }
+        return 1;
+    }
 
     const std::wstring shortGuid = ShortGuid(Utf8ToWide(ep.id));
     const std::wstring fxSub = ep.FxSub();
+    // 写成败必查（细审 R-C M-2）：旧实现 RegCreateKeyEx 失败
+    // 整段静默跳过、RegSetValueExW 返回值全弃，末尾仍报
+    // ok:true——ACL 异常/DLL 缺失时全链假成功。
+    bool fxOk = true;
     HKEY k = nullptr;
     if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, fxSub.c_str(), 0, nullptr, 0,
                         KEY_SET_VALUE | KEY_QUERY_VALUE, nullptr, &k,
                         nullptr) == ERROR_SUCCESS) {
         auto setSz = [&](const std::wstring& n, const std::wstring& v) {
-            RegSetValueExW(k, n.c_str(), 0, REG_SZ,
-                           reinterpret_cast<const BYTE*>(v.c_str()),
-                           static_cast<DWORD>((v.size() + 1) * sizeof(wchar_t)));
+            if (RegSetValueExW(
+                    k, n.c_str(), 0, REG_SZ,
+                    reinterpret_cast<const BYTE*>(v.c_str()),
+                    static_cast<DWORD>((v.size() + 1) * sizeof(wchar_t))) !=
+                ERROR_SUCCESS) {
+                fxOk = false;
+            }
         };
         setSz(std::wstring(kFxBase) + L",0", kNullGuid);
         if (win7 || mode == L"win7-sapo") {
@@ -1618,9 +1709,13 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
                     buf.push_back(L'\0');
                 }
                 buf.push_back(L'\0');
-                RegSetValueExW(k, slot.c_str(), 0, REG_MULTI_SZ,
-                               reinterpret_cast<const BYTE*>(buf.data()),
-                               static_cast<DWORD>(buf.size() * sizeof(wchar_t)));
+                if (RegSetValueExW(
+                        k, slot.c_str(), 0, REG_MULTI_SZ,
+                        reinterpret_cast<const BYTE*>(buf.data()),
+                        static_cast<DWORD>(buf.size() * sizeof(wchar_t))) !=
+                    ERROR_SUCCESS) {
+                    fxOk = false;
+                }
             }
         } else if (mode == L"sfx-only") {
             setSz(std::wstring(kFxBase) + L",5", kOurClsid);
@@ -1651,15 +1746,34 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
                         buf.push_back(L'\0');
                     }
                     buf.push_back(L'\0');
-                    RegSetValueExW(k, pmKey.c_str(), 0, REG_MULTI_SZ,
-                                   reinterpret_cast<const BYTE*>(buf.data()),
-                                   static_cast<DWORD>(buf.size() *
-                                                      sizeof(wchar_t)));
+                    if (RegSetValueExW(
+                            k, pmKey.c_str(), 0, REG_MULTI_SZ,
+                            reinterpret_cast<const BYTE*>(buf.data()),
+                            static_cast<DWORD>(buf.size() *
+                                               sizeof(wchar_t))) !=
+                        ERROR_SUCCESS) {
+                        fxOk = false;
+                    }
                 }
             }
         }
         RegDeleteValueW(k, (std::wstring(kDisableEnh) + L",5").c_str());
         RegCloseKey(k);
+    } else {
+        fxOk = false;
+    }
+    if (!fxOk) {
+        const std::string msg = "写入 FxProperties 失败（注册表键不可写）";
+        if (asJson) {
+            OutJson(Json::Obj({
+                {"ok", Json::Bool(false)},
+                {"error", Json::Str("fx_write_failed")},
+                {"message", Json::Str(msg)},
+            }));
+        } else {
+            OutLine("FATAL: " + msg);
+        }
+        return 1;
     }
 
     const bool restarted = RestartAudio();
@@ -1689,6 +1803,7 @@ int CmdUninstall(const std::wstring& target, bool asJson) {
             OutJson(Json::Obj({
                 {"ok", Json::Bool(false)},
                 {"error", Json::Str("admin_required")},
+                {"message", Json::Str("卸载 System APO 需要管理员权限")},
             }));
         } else {
             OutLine("FATAL: 卸载 System APO 需要管理员权限。请使用管理员身份运行或加 --elevate 参数。");
@@ -1781,14 +1896,27 @@ int CmdUninstall(const std::wstring& target, bool asJson) {
 
     const bool restarted = RestartAudio();
 
+    // 顶层 ok 必须反映端点级成败（细审 R-C M-1）：旧实现恒
+    // true，某端点还原失败时 App 全链假报卸载成功、APO 实
+    // 际仍挂载而用户无从知晓。
+    bool allOk = true;
+    for (const auto& [guid, r] : restoredText) {
+        if (!r.ok) allOk = false;
+    }
+
     if (asJson) {
-        OutJson(Json::Obj({
-            {"ok", Json::Bool(true)},
-            {"restored", Json::Arr(std::move(restored))},
-            {"audio_restarted", Json::Bool(restarted)},
-            {"remaining_count",
-             Json::Num(static_cast<double>(remaining.size()))},
-        }));
+        std::vector<std::pair<std::string, Json>> fields;
+        fields.emplace_back("ok", Json::Bool(allOk));
+        fields.emplace_back("restored", Json::Arr(std::move(restored)));
+        fields.emplace_back("audio_restarted", Json::Bool(restarted));
+        fields.emplace_back(
+            "remaining_count",
+            Json::Num(static_cast<double>(remaining.size())));
+        if (!allOk) {
+            fields.emplace_back(
+                "message", Json::Str("部分端点还原失败，见 restored 明细"));
+        }
+        OutJson(Json::Obj(std::move(fields)));
     } else {
         for (const auto& [guid, r] : restoredText) {
             OutLine("还原结果: " + WideToUtf8(guid) + " -> " +
@@ -1796,7 +1924,7 @@ int CmdUninstall(const std::wstring& target, bool asJson) {
         }
         OutLine(std::string("音频服务重启: ") + (restarted ? "成功" : "失败"));
     }
-    return 0;
+    return allOk ? 0 : 1;
 }
 
 // --elevate 自提权（对齐 Python run_elevated：RunAs 重拉自身并透传退出码）。
@@ -1853,7 +1981,7 @@ int wmain(int argc, wchar_t* argv[]) {
         if (args[i] == L"--result-file") g_resultFile = args[i + 1];
     }
     // 带结果文件时强制 JSON 发射：install/uninstall 的成败
-    // 结果都经 OutJson/OutErr 唯一出口，文件里留下的即
+    // 结果都经 OutJson 唯一出口，文件里留下的即
     // 最终裁定（含 error/message），App 据此呈现真实原因。
     if (!g_resultFile.empty() && !args.empty() &&
         (args[0] == L"install" || args[0] == L"uninstall")) {
@@ -1950,11 +2078,31 @@ int wmain(int argc, wchar_t* argv[]) {
     }
     if (verb == L"install") {
         if (args.size() < 2 || args[1].rfind(L"--", 0) == 0) {
-            OutLine("用法: apo_config install <端点名子串> [--mode sfx-efx|composite|sfx-only] [--yes] [--force] [--json]");
+            // 早期参数错误也走结果文件通道（细审 R-C L-1）：
+            // 此前只 OutLine 纯文本，带 result-file 的 App
+            // 调用读不到任何裁定（App 恒传 --yes+端点，此修
+            // 主要保 CLI/通道一致性）。
+            if (asJson) {
+                OutJson(Json::Obj({
+                    {"ok", Json::Bool(false)},
+                    {"error", Json::Str("missing_endpoint")},
+                    {"message", Json::Str("用法: apo_config install <端点名子串> [--mode sfx-efx|composite|sfx-only] [--yes] [--force] [--json]")},
+                }));
+            } else {
+                OutLine("用法: apo_config install <端点名子串> [--mode sfx-efx|composite|sfx-only] [--yes] [--force] [--json]");
+            }
             return 2;
         }
         if (!hasFlag(L"--yes")) {
-            OutLine("FATAL: 修改底层驱动配置需提供 --yes 确认参数");
+            if (asJson) {
+                OutJson(Json::Obj({
+                    {"ok", Json::Bool(false)},
+                    {"error", Json::Str("confirmation_required")},
+                    {"message", Json::Str("修改底层驱动配置需提供 --yes 确认参数")},
+                }));
+            } else {
+                OutLine("FATAL: 修改底层驱动配置需提供 --yes 确认参数");
+            }
             return 1;
         }
         std::wstring mode = L"sfx-efx";
@@ -1967,7 +2115,15 @@ int wmain(int argc, wchar_t* argv[]) {
     }
     if (verb == L"uninstall") {
         if (!hasFlag(L"--yes")) {
-            OutLine("FATAL: 卸载底层驱动配置需提供 --yes 确认参数");
+            if (asJson) {
+                OutJson(Json::Obj({
+                    {"ok", Json::Bool(false)},
+                    {"error", Json::Str("confirmation_required")},
+                    {"message", Json::Str("卸载底层驱动配置需提供 --yes 确认参数")},
+                }));
+            } else {
+                OutLine("FATAL: 卸载底层驱动配置需提供 --yes 确认参数");
+            }
             return 1;
         }
         std::wstring target;
@@ -1975,6 +2131,14 @@ int wmain(int argc, wchar_t* argv[]) {
         return CmdUninstall(target, asJson);
     }
 
-    OutLine("未知子命令: " + WideToUtf8(args[0]));
+    if (asJson) {
+        OutJson(Json::Obj({
+            {"ok", Json::Bool(false)},
+            {"error", Json::Str("unknown_command")},
+            {"message", Json::Str("未知子命令: " + WideToUtf8(args[0]))},
+        }));
+    } else {
+        OutLine("未知子命令: " + WideToUtf8(args[0]));
+    }
     return 2;
 }

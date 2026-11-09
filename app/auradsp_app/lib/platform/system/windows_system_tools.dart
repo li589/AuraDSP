@@ -152,12 +152,16 @@ final class WindowsSystemTools implements WindowsSystemPort {
   }
   @override
   Future<ProcessResult> apoStatus(String exePath, double timeout) {
+    // 进程级超时与 inspectAudioDevices 同口径（细审 R-C
+    // M-4）：--timeout 只约束工具内心跳等待，工具被拦截/
+    // 挂死时无进程级超时则 checkApoStatus 的 Future 永不
+    // 完成、设置页刷新悬挂无错误呈现。
     return Process.run(exePath, [
       'status',
       '--timeout',
       timeout.toString(),
       '--json',
-    ]);
+    ]).timeout(const Duration(seconds: 10));
   }
 
   @override

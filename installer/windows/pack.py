@@ -464,6 +464,12 @@ def stage_driver_files(
     返回拷贝的驱动产物数；缺模板直接失败（避免产出不可手动安装的包）。
     README 以 UTF-8 BOM 落盘，兼容旧版记事本读取中文。
     """
+    # 入口统一校验（细审 R-C L-6）：三模式此前只有 driver
+    # 模式在调用前验 install_ps1，portable/setup 缺失时
+    # copy2 抛未捕获 FileNotFoundError——在此单点 die，
+    # 三模式同口径。
+    if not install_ps1.is_file():
+        raise die(f"缺 install_driver.ps1: {install_ps1}")
     dest.mkdir(parents=True, exist_ok=True)
     copied = 0
     for f in sorted(driver_dir.iterdir()):
@@ -549,6 +555,13 @@ def prepare_staging_copy(args) -> tuple[tempfile.TemporaryDirectory, Path]:
 
 def mode_portable(args, ver: dict[str, str], out: Path) -> Path:
     dest = out / f"AuraDSP-Windows-x64-{ver['AURADSP_TAG']}.zip"
+    # 资产校验前置到 what-if 之前（细审 R-C L-6）：--what-if
+    # 预检也要报缺资产，与 driver 模式同口径；组装时复用。
+    install_ps1 = (ROOT / "core" / "desktop" / "windows-drivers" /
+                   "01_vaio_driver" / "install_driver.ps1")
+    if not install_ps1.is_file():
+        raise die(f"缺 install_driver.ps1: {install_ps1}")
+    apo = resolve_apo_assets(args)
     if args.what_if:
         log(f"what-if: portable 包 ← {args.staging}（resources={args.resources}）")
         return dest
@@ -567,9 +580,6 @@ def mode_portable(args, ver: dict[str, str], out: Path) -> Path:
             raise die("找不到 VAIO 驱动产物目录（含 .sys 的目录）；"
                       "先在 Windows 构建驱动，或用 --driver-dir 指定")
         shutil.copy2(asio, work / ASIO_DLL_NAME)
-        install_ps1 = (ROOT / "core" / "desktop" / "windows-drivers" /
-                       "01_vaio_driver" / "install_driver.ps1")
-        apo = resolve_apo_assets(args)
         stage_driver_files(work / "driver", driver_dir, asio, install_ps1,
                            apo, include_asio_dll=True)
         n = zip_dir(work, dest, args.zip_level)
@@ -641,6 +651,12 @@ def mode_setup(args, ver: dict[str, str], out: Path) -> Path:
         raise die("setup 模式必须有 VAIO 驱动产物（payload 的 driver/ 子目录）；"
                   "用 --driver-dir 指定")
     inst_dir = resolve_installer_dir(args)
+    # 资产校验前置到 what-if 之前（细审 R-C L-6，同 portable）。
+    install_ps1 = (ROOT / "core" / "desktop" / "windows-drivers" /
+                   "01_vaio_driver" / "install_driver.ps1")
+    if not install_ps1.is_file():
+        raise die(f"缺 install_driver.ps1: {install_ps1}")
+    apo = resolve_apo_assets(args)
     if args.what_if:
         log(f"what-if: setup ← shell {inst_dir} + staging {args.staging} "
             f"+ asio {asio} + driver {driver_dir}")
@@ -651,9 +667,6 @@ def mode_setup(args, ver: dict[str, str], out: Path) -> Path:
         # 载荷增补：ASIO 驱动本体（安装目录根，供 FFI 注册）
         # + driver/ 子目录（恒保留，含手动安装脚本、驱动与签名说明）
         shutil.copy2(asio, work / ASIO_DLL_NAME)
-        install_ps1 = (ROOT / "core" / "desktop" / "windows-drivers" /
-                       "01_vaio_driver" / "install_driver.ps1")
-        apo = resolve_apo_assets(args)
         stage_driver_files(work / "driver", driver_dir, asio, install_ps1,
                            apo,
                            include_asio_dll=True)

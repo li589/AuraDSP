@@ -789,10 +789,13 @@ extension AudioModesState on AppModel {
                 final name = e['DeviceName']?.toString().toLowerCase() ?? '';
                 final id = e['EndpointId']?.toString().toLowerCase() ?? '';
                 final t = target.toLowerCase();
-                return short.contains(t) ||
-                    name.contains(t) ||
-                    id.contains(t) ||
-                    t.contains(short);
+                // 精确匹配（细审 R-C M-3）：旧口径双向子串，
+                // 存量配置里的端点「名称」在多端点机器上可误
+                // 命中他端点、误报已附加。新口径只认全等——
+                // 存值来源是下拉的完整 id（现行）或完整名称
+                // （旧版），全等对两者都兼容。
+                return t.isNotEmpty &&
+                    (t == short || t == name || t == id);
               });
             }
 
@@ -873,7 +876,11 @@ extension AudioModesState on AppModel {
       await Future.delayed(const Duration(milliseconds: 600));
       await checkApoStatus(timeout: 0.6);
 
-      final ok = res.toolOk == true || ((res.exitCode == 0) && apoAttached);
+      // 裁定 = 工具自报与状态复查合取（细审 R-C M-2 的 App
+      // 侧一半）：toolOk 单独为真不再短路——工具写槽已改为
+      // 成败必查后 toolOk 可信，但复查未见附加时仍走下方
+      // 分层文案报未确认，不假报成功。
+      final ok = (res.toolOk ?? (res.exitCode == 0)) && apoAttached;
       if (!ok && lastApoError == null) {
         // 失败文案按层区分（旧版一律归咎 UAC，对真机实证的
         // 「提权已执行但工具侧失败」毫无诊断价值）：
@@ -930,9 +937,15 @@ extension AudioModesState on AppModel {
         lastApoError =
             'System APO 卸载失败：${res.toolMessage ?? res.toolError ?? '工具未报告原因'}';
       }
-      final ok = res.toolOk == true || (res.exitCode == 0 && res.toolOk == null);
+      // 裁定与 attach 对称（细审 R-C M-1 的 App 侧一半）：
+      // 此前 detach 完全不看复查结果，端点级还原失败时假
+      // 报成功。现口径：工具自报（或退出码）成功且复查确
+      // 认已摘除，才算卸载完成。
+      final ok = (res.toolOk ?? (res.exitCode == 0)) && !apoAttached;
       if (!ok && lastApoError == null) {
-        lastApoError = 'System APO 卸载未完成，请确认在 UAC 提权弹窗中选择“是”';
+        lastApoError = apoAttached
+            ? 'System APO 卸载后复查仍显示已附加，请重试或检查工具返回明细'
+            : 'System APO 卸载未完成，请确认在 UAC 提权弹窗中选择“是”';
       }
       isApoOperating = false;
       _notifyUi();
