@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   AuraVAIO 驱动装载 / 卸载 / 状态查询（Phase 4 验收 ①：设备管理器识别 AuraVAIO）。
 

@@ -39,6 +39,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 from pathlib import Path
 
@@ -114,6 +115,73 @@ def find_driver_dir(explicit: str | None) -> Path | None:
             (e.stat().st_mtime for e in d.iterdir() if e.is_file()), default=0))
 
     return max(candidates, key=score)
+
+
+# ---------------------------------------------------------------------------
+# VAIO 驱动的新鲜度校验与按需重编
+# ---------------------------------------------------------------------------
+# 为什么需要：VAIO 驱动**不在** build_windows.ps1 的构建目标里（那里只编引擎/
+# 桥/ASIO），pack.py 也只是把 `modern/x64/Release/AuraVaioDriver` 的**现成产物**
+# 打进 zip。于是「谁上次编的就是什么」——源码改了驱动，发行包里的驱动还是旧的。
+# 实测：源码含 11-08 的 ControlDevice.cpp 改动（调试日志权限加固），而发出去的
+# 驱动包仍是 11-05 的构建（sha256 都不一致）。这类"发出去的二进制与源码不符"
+# 最难发现：包能装、能用，只是没有新改动。
+#
+# 对策：打包前做新鲜度校验——驱动产物必须比所有驱动源文件都新；否则要么按需
+# 重编（--build-driver），要么直接中止，绝不默默发旧驱动。
+
+DRIVER_SRC_ROOT = ROOT / "core" / "desktop" / "windows-drivers" / "01_vaio_driver"
+
+
+def driver_source_files() -> list[Path]:
+    """驱动相关的全部输入（源码 + IPC 头 + inf + 工程文件）。"""
+    out: list[Path] = []
+    for pat in ("src/**/*.cpp", "src/**/*.h", "src/*.inf"):
+        out.extend(DRIVER_SRC_ROOT.glob(pat))
+    out.extend((DRIVER_SRC_ROOT.parent / "common").glob("*.h"))
+    out.extend(DRIVER_SRC_ROOT.glob("modern/*.vcxproj"))
+    return [p for p in out if p.is_file()]
+
+
+def check_driver_freshness(driver_dir: Path) -> list[str]:
+    """返回「产物比源码旧」的问题列表；空列表表示新鲜。"""
+    problems: list[str] = []
+    products = [driver_dir / "AuraVaioDriver.sys", driver_dir / "auravaiodriver.cat"]
+    missing = [p.name for p in products if not p.is_file()]
+    if missing:
+        return [f"驱动产物缺失: {', '.join(missing)}"]
+    oldest_product = min(p.stat().st_mtime for p in products)
+    newer: list[Path] = []
+    for src in driver_source_files():
+        try:
+            if src.stat().st_mtime > oldest_product + 1:
+                newer.append(src)
+        except OSError:
+            continue
+    if newer:
+        rel = sorted(str(p.relative_to(ROOT)) for p in newer)
+        problems.append(
+            f"驱动产物({oldest_product and products[0].name} "
+            f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(oldest_product))}) "
+            f"早于 {len(newer)} 个源文件：{', '.join(rel[:6])}"
+            + (" …" if len(rel) > 6 else ""))
+    return problems
+
+
+def build_driver(track: str = "modern", config: str = "Release") -> None:
+    """按需重编 + 测试签名 VAIO 驱动（内核驱动只能用 signtool 签）。"""
+    for script, args in (
+        ("build_drivers.ps1", ["-Track", track, "-Config", config]),
+        ("sign_drivers.ps1", []),
+    ):
+        p = DRIVER_SRC_ROOT / script
+        if not p.is_file():
+            raise die(f"缺少驱动构建脚本: {p}")
+        log(f"驱动构建: {script} {' '.join(args)}")
+        subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-File", str(p)] + args,
+            check=True, cwd=str(DRIVER_SRC_ROOT))
 
 
 # ASIO 驱动 DLL 的规范文件名（ADR-008：CMake 目标 auraasio_driver 的
@@ -633,6 +701,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     ap.add_argument("--build-type", default="Release", choices=("Release", "Debug"))
     ap.add_argument("--skip-drivers", action="store_true",
                     help="透传 build_windows.ps1 -SkipDrivers")
+    ap.add_argument("--build-driver", action="store_true",
+                    help="打包前重编并测试签名 VAIO 驱动（默认只做新鲜度校验）")
     ap.add_argument("--driver-dir")
     ap.add_argument("--asio-driver")
     ap.add_argument("--installer-build-dir")
@@ -671,6 +741,25 @@ def main(argv: list[str]) -> int:
                        check=True, cwd=ROOT)
     if modes != ["driver"]:  # driver 模式不需要 staging
         check_staging(args.staging)
+
+    # VAIO 驱动：按需重编 → 新鲜度校验 → 不新鲜就中止。
+    # 驱动不进 build_windows.ps1 的目标集，所以「谁上次编的就是什么」；
+    # 不加这道校验，打出来的包可能装着比源码旧的驱动（实测踩过：源码含
+    # 11-08 的调试日志权限加固，包里仍是 11-05 的构建）。
+    if "driver" in modes or "setup" in modes:
+        if args.build_driver and not args.what_if:
+            build_driver()
+        ddir = find_driver_dir(args.driver_dir)
+        if ddir is not None:
+            problems = check_driver_freshness(ddir)
+            if problems:
+                raise die(
+                    "VAIO 驱动产物比源码旧，拒绝打包（避免发出与源码不符的驱动）：\n  - "
+                    + "\n  - ".join(problems)
+                    + "\n  修法：加 --build-driver 自动重编并签名；或先跑 "
+                      "core/desktop/windows-drivers/01_vaio_driver/build_drivers.ps1 "
+                      "-Track modern -Config Release")
+            log(f"驱动新鲜度校验通过: {ddir}")
 
     out: Path = args.out
     if not args.what_if:
