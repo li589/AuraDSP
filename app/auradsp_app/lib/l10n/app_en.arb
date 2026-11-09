@@ -78,6 +78,7 @@
   "setDriverOffline": "{name} [not detected/offline]",
   "setVaioReady": "AuraVAIO KMDF driver ready (Sysvad virtual sound card)",
   "setVaioMissing": "AuraVAIO virtual sound card driver not detected",
+  "setVaioUnknown": "AuraVAIO driver status not checked yet",
   "setVaioDesc": "KMDF kernel-mode virtual audio driver providing a full-duplex virtual audio cable",
   "setInstallDriverUac": "Install driver (UAC)",
   "setInstallDriverUacPrompt": "Requesting administrator permission; please approve the system prompt to install audio driver components...",

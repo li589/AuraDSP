@@ -209,6 +209,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setVaioMissing => 'AuraVAIO 仮想サウンドカードドライバーが見つかりません';
 
   @override
+  String get setVaioUnknown => 'AuraVAIO ドライバーの状態は未検出です';
+
+  @override
   String get setVaioDesc => 'KMDF カーネルモード仮想オーディオドライバー。全二重の仮想オーディオケーブルを提供';
 
   @override

@@ -81,6 +81,33 @@ void main() {
     });
   });
 
+  group('V-01 检测状态机（F2）', () {
+    test('isolate ready 后自动触发一次 VAIO 检测', () {
+      final events =
+          _read('app/auradsp_app/lib/core/state/state_events.dart');
+      final i = events.indexOf("case 'ready':");
+      expect(i, greaterThanOrEqualTo(0));
+      final window = events.substring(i, i + 6000);
+      expect(window, contains('PlatformProfile.supportsBridges'));
+      expect(window, contains('refreshVaioDetect()'));
+    });
+
+    test('驱动行三态：未检测不显示为未安装', () {
+      final hw = _read(
+          'app/auradsp_app/lib/features/settings/panels/hardware_drivers.dart');
+      expect(hw, contains('det.isNotEmpty'));
+      expect(hw, contains('l.setVaioUnknown'));
+      expect(hw, contains('if (detected && !found)'));
+    });
+
+    test('setVaioUnknown 三语齐全', () {
+      for (final lang in const ['zh', 'en', 'ja']) {
+        final arb = _read('app/auradsp_app/lib/l10n/app_$lang.arb');
+        expect(arb, contains('"setVaioUnknown"'), reason: 'app_$lang.arb');
+      }
+    });
+  });
+
   group('V-02 刷新链守卫（F0）', () {
     test('refreshAudioDevices 有埋点且工具缺失显式置错', () {
       expect(state, contains("dbgLog('devices.refresh: start')"));

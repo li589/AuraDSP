@@ -214,6 +214,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'AuraVAIO virtual sound card driver not detected';
 
   @override
+  String get setVaioUnknown => 'AuraVAIO driver status not checked yet';
+
+  @override
   String get setVaioDesc =>
       'KMDF kernel-mode virtual audio driver providing a full-duplex virtual audio cable';
 

@@ -301,6 +301,9 @@ class _VaioDriverRow extends StatelessWidget {
     final p = paletteOf(context);
     final l = l10nOf(context);
     final det = model.vaioDetectInfo;
+    // 三态（V-01）：未检测（det 为空，自动检测尚未回）不得与「已检测
+    // 未发现」混为一谈——旧实现空 map 恒判 missing 是真机误报的显示面。
+    final detected = det.isNotEmpty;
     final found = det['found'] == true;
 
     return Column(
@@ -314,13 +317,15 @@ class _VaioDriverRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    found
-                        ? l.setVaioReady
-                        : l.setVaioMissing,
+                    !detected
+                        ? l.setVaioUnknown
+                        : (found ? l.setVaioReady : l.setVaioMissing),
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: found ? p.success : p.warning,
+                      color: !detected
+                          ? p.textDim
+                          : (found ? p.success : p.warning),
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -334,7 +339,7 @@ class _VaioDriverRow extends StatelessWidget {
             Wrap(
               spacing: AuraSpace.sm,
               children: [
-                if (!found)
+                if (detected && !found)
                   AuraChip(
                     l.setInstallDriverUac,
                     icon: Icons.admin_panel_settings,
@@ -355,7 +360,7 @@ class _VaioDriverRow extends StatelessWidget {
                       }
                     },
                   )
-                else
+                else if (found)
                   AuraChip(
                     l.setUninstallDriver,
                     icon: Icons.delete_outline,

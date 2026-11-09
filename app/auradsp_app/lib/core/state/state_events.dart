@@ -83,6 +83,13 @@ extension StateEvents on AppModel {
             'outputEndpoint': config.vaioOutputEndpoint,
           });
         }
+        // V-01：VAIO 检测此前只有手动按钮触发，启动后 vaioDetectInfo
+        // 恒为空 map、驱动行恒显「未检测到」（真机误报根因 A）。就绪后
+        // 自动探测一次；isolate 重启（采样率切换等）再 ready 时同样
+        // 刷新，保证检测状态与桥现状一致。
+        if (PlatformProfile.supportsBridges) {
+          refreshVaioDetect();
+        }
         // 会话回放必须落在音频后端就绪之后：VB/ASIO/VAIO 模式下桥引擎才是
         // 真正的处理路径，提前回放会把插件装到本地引擎、随后建桥时镜像为空
         // （表现为重启后插件未挂载）。

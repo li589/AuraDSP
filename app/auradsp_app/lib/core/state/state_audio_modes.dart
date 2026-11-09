@@ -339,6 +339,10 @@ extension AudioModesState on AppModel {
       final hit = _findVaioInstallScript();
       if (hit == null) {
         lastVaioError = '未找到 VAIO 驱动安装脚本（随包 driver/install_vaio.ps1 缺失）';
+        // V-01 根因 A：旧实现在此 early return，refreshVaioDetect 在
+        // 其后 → 点安装失败后检测仍不跑、界面恒显未检测到。失败路径
+        // 也必须刷新检测，让状态与真机现状对齐。
+        refreshVaioDetect();
         _notifyUi();
         return false;
       }
@@ -361,6 +365,7 @@ extension AudioModesState on AppModel {
       return ok;
     } catch (e) {
       lastVaioError = '安装驱动异常: $e';
+      refreshVaioDetect();
       _notifyUi();
       return false;
     }
@@ -371,7 +376,13 @@ extension AudioModesState on AppModel {
     if (!PlatformProfile.supportsBridges) return false;
     try {
       final hit = _findVaioInstallScript();
-      if (hit == null) return false;
+      if (hit == null) {
+        // 旧实现静默 return false：用户点卸载只看到通用失败提示。
+        lastVaioError = '未找到 VAIO 驱动安装脚本（随包 driver/install_vaio.ps1 缺失）';
+        refreshVaioDetect();
+        _notifyUi();
+        return false;
+      }
       final res = await windowsSystem.vaioDriver(
         hit.path,
         install: false,
@@ -386,6 +397,7 @@ extension AudioModesState on AppModel {
       return ok;
     } catch (e) {
       lastVaioError = '卸载异常: $e';
+      refreshVaioDetect();
       _notifyUi();
       return false;
     }

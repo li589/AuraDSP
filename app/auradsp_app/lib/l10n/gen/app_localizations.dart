@@ -466,6 +466,12 @@ abstract class AppLocalizations {
   /// **'未检测到 AuraVAIO 虚拟声卡驱动'**
   String get setVaioMissing;
 
+  /// No description provided for @setVaioUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 驱动状态未检测'**
+  String get setVaioUnknown;
+
   /// No description provided for @setVaioDesc.
   ///
   /// In zh, this message translates to:
