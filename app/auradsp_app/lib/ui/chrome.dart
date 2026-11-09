@@ -170,6 +170,19 @@ class _PageScaffoldState extends State<PageScaffold>
               ),
             ),
           ),
+          // 顶部守卫带（真机报告 2026-11-09 §2.5）：页眉随内容滚动，
+          // 滚到视口顶边附近时其控件残片会紧贴外壳顶栏形成无文字
+          // 灰框伪影。以页面底色覆盖 pageTop 高度带区，让残片在
+          // 带区内干净滑出。有氛围层的页面（主页）不加，避免压平
+          // 氛围渐变。
+          if (widget.ambient == null)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: AuraSpace.pageTop,
+              child: IgnorePointer(child: ColoredBox(color: p.bg)),
+            ),
         ],
       ),
     );
@@ -1281,8 +1294,10 @@ class _AuraDropdownState<T> extends State<AuraDropdown<T>> {
     final border = enabled
         ? (_hover ? p.accent.withValues(alpha: 0.6) : p.hairline)
         : p.hairline.withValues(alpha: 0.4);
+    // 静止底色不透明（2026-11-09 §2.5 硬化）：半透明底在页眉滚动
+    // 裁剪带会透出下层内容、读作无字灰框；实色后残片即控件本身。
     final bg = enabled
-        ? (_hover ? hoverOn(p) : p.panelRaised.withValues(alpha: 0.75))
+        ? (_hover ? hoverOn(p) : p.panelRaised)
         : p.panelRaised.withValues(alpha: 0.35);
 
     // 1. 无可用项时的留空占位状态
