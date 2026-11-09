@@ -197,6 +197,12 @@ struct VaioBridgeCtl {
     float* scratchOut = nullptr;      // 写入 WASAPI (frames * wasapiChannels)
     float* scratchProcIn = nullptr;   // 喂入 auradsp_process (frames * engineChannels)
     float* scratchProcOut = nullptr;  // 从 auradsp_process 产出 (frames * engineChannels)
+    float* scratchRing = nullptr;     // 环字节归一后的 float 帧 (重采样源)
+    BYTE* scratchRaw = nullptr;       // 环原始字节暂存 (frames * ringBlockAlign)
+
+    // WASAPI 混音格式分类（start 时按 GetMixFormat 定稿，泵写侧据此转换）
+    bool wasapiIsFloat = true;        // true = IEEE float32 直通
+    ULONG wasapiBits = 32;            // PCM 时为 16/32
 
     // 声道协商与多声道重映射状态
     int32_t engineChannels = 2;   // 引擎当前实际运行声道数 (2, 4, 6, 8)
@@ -345,6 +351,14 @@ void FreeScratchBuffers() {
         free(g_vaio.scratchProcOut);
         g_vaio.scratchProcOut = nullptr;
     }
+    if (g_vaio.scratchRing) {
+        free(g_vaio.scratchRing);
+        g_vaio.scratchRing = nullptr;
+    }
+    if (g_vaio.scratchRaw) {
+        free(g_vaio.scratchRaw);
+        g_vaio.scratchRaw = nullptr;
+    }
 }
 
 void SetEngineChannels(int32_t count) {
@@ -487,6 +501,49 @@ void RemapInterleavedAudio(const float* src, int srcCh, float* dst, int dstCh, i
     }
 }
 
+// 环数据格式归一（2026-11-09 真机报告 §1.2）：驱动引脚表契约——
+// 32 位恒为 IEEE float、16 位恒为 PCM int16（AuraVaoTables.h 的
+// data ranges）。历史上泵把环字节无条件当 float32 消费：端点协商
+// 出 PCM16 时 int16 样本对被拼成 float 位型，幅度近均匀散布至极
+// 大值——电平全红、输出破碎、旁路近静音（真机症状逐项吻合）。
+// 此处按共享头 BitsPerSample 归一后再进峰值/门控/引擎链。
+void ConvertRingToFloat(const BYTE* raw, float* dst, int frames, int channels, ULONG bits) {
+    const int n = frames * channels;
+    if (bits == 16) {
+        const int16_t* s = reinterpret_cast<const int16_t*>(raw);
+        for (int i = 0; i < n; ++i) dst[i] = (float)s[i] * (1.0f / 32768.0f);
+    } else {
+        memcpy(dst, raw, (size_t)n * sizeof(float));
+    }
+}
+
+// 线性插值重采样（环速率 → 输出速率，同 §1.2）：两端格式各自
+// 独立协商（引脚表 44100–192000），泵历史上 1:1 逐帧消费、无重
+// 采样，速率失配必然变调 + 周期跳读撕裂。phase 为本块首个输出
+// 帧在源帧坐标中的分数位置，ratio = 环率/输出率（调用方跨块
+// 携带分数相位）。源尾不足时钳到末帧（前视帧缺失的优雅降级）。
+void ResampleLinear(const float* src, int srcFrames, float* dst, int dstFrames,
+                    int channels, double phase, double ratio) {
+    if (srcFrames <= 0) {
+        memset(dst, 0, (size_t)dstFrames * channels * sizeof(float));
+        return;
+    }
+    for (int i = 0; i < dstFrames; ++i) {
+        const double pos = phase + (double)i * ratio;
+        const int idx = (int)pos;
+        float* d = dst + (size_t)i * channels;
+        if (idx >= srcFrames - 1) {
+            const float* s = src + (size_t)(srcFrames - 1) * channels;
+            for (int c = 0; c < channels; ++c) d[c] = s[c];
+        } else {
+            const float frac = (float)(pos - (double)idx);
+            const float* s0 = src + (size_t)idx * channels;
+            const float* s1 = s0 + channels;
+            for (int c = 0; c < channels; ++c) d[c] = s0[c] + (s1[c] - s0[c]) * frac;
+        }
+    }
+}
+
 void ReplayMirroredParams() {
     if (!g_vaio.pEngine || !g_vaio.fnSetParam) return;
     InitMirrorCs();
@@ -578,6 +635,17 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
     const ULONG wasapiChannels = g_vaio.wasapiChannels > 0 ? g_vaio.wasapiChannels : 2;
     BYTE* const pPayload = g_vaio.pRingPayload;
 
+    // 格式归一状态（§1.2）：位深/环速率随共享头动态跟随，输出侧
+    // 格式在 start 时已定稿。inRatio = 环率/输出率（每输出帧消耗
+    // 的环帧数），fracPhase 为重采样的跨块分数相位。
+    ULONG ringBits = g_vaio.ringBits > 0 ? g_vaio.ringBits : 32;
+    ULONG ringRate = g_vaio.ringSampleRate > 0 ? g_vaio.ringSampleRate : 48000;
+    const ULONG outRate = g_vaio.wasapiSampleRate > 0 ? g_vaio.wasapiSampleRate : 48000;
+    const bool outIsFloat = g_vaio.wasapiIsFloat;
+    const ULONG outBits = g_vaio.wasapiBits;
+    double inRatio = (double)ringRate / (double)outRate;
+    double fracPhase = 0.0;
+
     // 初始消费指针与内核当前写入位置对齐（避免刚开机把陈旧噪底播出来）
     ULONGLONG userBytesRead = pHeader ? pHeader->TotalBytesWritten : 0;
 
@@ -594,6 +662,24 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             if (g_vaio.countMode == 0) {
                 SetEngineChannels((int32_t)ringChannels);
             }
+        }
+
+        // 动态检测位深/采样率变更（端点格式变化时内核同步更新共享
+        // 头）：位深决定归一方式、速率决定重采样比，漏检即回到
+        // §1.2 的格式误读。
+        if (pHeader && pHeader->BitsPerSample > 0 && pHeader->BitsPerSample != ringBits) {
+            ringBits = pHeader->BitsPerSample;
+            g_vaio.ringBits = ringBits;
+            if (pHeader->BlockAlign > 0) {
+                blockAlign = pHeader->BlockAlign;
+                g_vaio.ringBlockAlign = blockAlign;
+            }
+        }
+        if (pHeader && pHeader->SampleRate > 0 && pHeader->SampleRate != ringRate) {
+            ringRate = pHeader->SampleRate;
+            g_vaio.ringSampleRate = ringRate;
+            inRatio = (double)ringRate / (double)outRate;
+            fracPhase = 0.0;
         }
 
         UINT32 padFrames = 0;
@@ -622,7 +708,16 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             framesToProcess = (UINT32)VaioBridgeCtl::kMaxFrames;
         }
 
-        const ULONG bytesToRead = framesToProcess * blockAlign;
+        // 本块的环帧消费量（速率归一）：输出 framesToProcess 帧
+        // 消耗 framesToProcess × inRatio 个环帧，分数部分以
+        // fracPhase 跨块携带。inRatio == 1 时 wholeInFrames 恒等
+        // 于 framesToProcess，与历史行为逐帧一致。
+        const double wantInFrames = fracPhase + (double)framesToProcess * inRatio;
+        ULONG wholeInFrames = (ULONG)wantInFrames;
+        const double nextPhase = wantInFrames - (double)wholeInFrames;
+        if (wholeInFrames > (ULONG)VaioBridgeCtl::kMaxFrames - 1) {
+            wholeInFrames = (ULONG)VaioBridgeCtl::kMaxFrames - 1;
+        }
 
         // D2：本块在途计数。FreeTestFile 的排空等待以此为准（原为 Sleep(50)
         // 猜毫秒数）。作用域到本轮 while 体末尾——本段内无 continue/break。
@@ -643,28 +738,49 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             }
         }
 
+        const ULONG availFrames = blockAlign > 0 ? (ULONG)(availBytes / blockAlign) : 0;
+        const ULONG minAvail = wholeInFrames > 0 ? wholeInFrames : 1;
+
         // 测试信号注入面（优先覆盖真实输入）
         if (g_vaio.tc.testKind != 0) {
             vmcore::FillTestSignalN(&g_vaio.tc, g_vaio.scratchIn, (long)framesToProcess, (int)ringChannels);
             // 测试注入时，虚拟声卡输入的音频同步步进丢弃，保持时序不滞后
-            if (availBytes >= bytesToRead) {
-                userBytesRead += bytesToRead;
+            if (availFrames >= wholeInFrames) {
+                userBytesRead += wholeInFrames * blockAlign;
             }
-        } else if (availBytes >= bytesToRead && pPayload && dataSize > 0) {
-            // 从共享内存循环队列读取渲染样本
+            fracPhase = nextPhase;
+        } else if (availFrames >= minAvail && pPayload && dataSize > 0 &&
+                   blockAlign <= 32 && ringChannels <= 8) {
+            // 从共享内存循环队列读取渲染样本原始字节（多读 1 帧
+            // 作插值前视，不推进消费指针），再按协商位深归一。
+            ULONG readInFrames = wholeInFrames + 1;
+            if (readInFrames > availFrames) readInFrames = availFrames;
+            const ULONG rawBytes = readInFrames * blockAlign;
             ULONG readOffset = (ULONG)(userBytesRead % dataSize);
             ULONG chunk1 = dataSize - readOffset;
-            if (chunk1 >= bytesToRead) {
-                memcpy(g_vaio.scratchIn, pPayload + readOffset, bytesToRead);
+            if (chunk1 >= rawBytes) {
+                memcpy(g_vaio.scratchRaw, pPayload + readOffset, rawBytes);
             } else {
-                ULONG chunk2 = bytesToRead - chunk1;
-                memcpy(g_vaio.scratchIn, pPayload + readOffset, chunk1);
-                memcpy((BYTE*)g_vaio.scratchIn + chunk1, pPayload, chunk2);
+                ULONG chunk2 = rawBytes - chunk1;
+                memcpy(g_vaio.scratchRaw, pPayload + readOffset, chunk1);
+                memcpy(g_vaio.scratchRaw + chunk1, pPayload, chunk2);
             }
-            userBytesRead += bytesToRead;
+            ConvertRingToFloat(g_vaio.scratchRaw, g_vaio.scratchRing,
+                               (int)readInFrames, (int)ringChannels, ringBits);
+            if (inRatio == 1.0) {
+                memcpy(g_vaio.scratchIn, g_vaio.scratchRing,
+                       (size_t)framesToProcess * ringChannels * sizeof(float));
+            } else {
+                ResampleLinear(g_vaio.scratchRing, (int)readInFrames,
+                               g_vaio.scratchIn, (int)framesToProcess,
+                               (int)ringChannels, fracPhase, inRatio);
+            }
+            userBytesRead += wholeInFrames * blockAlign;
+            fracPhase = nextPhase;
         } else {
             // 无新音频或欠载：静音填充以维持 WASAPI 时钟平滑走动
-            memset(g_vaio.scratchIn, 0, bytesToRead);
+            memset(g_vaio.scratchIn, 0,
+                   (size_t)framesToProcess * ringChannels * sizeof(float));
         }
 
         // DSP 音频处理与峰值计量
@@ -743,7 +859,26 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         BYTE* pDst = nullptr;
         hr = g_vaio.pRenderClient->GetBuffer(framesToProcess, &pDst);
         if (SUCCEEDED(hr) && pDst) {
-            memcpy(pDst, g_vaio.scratchOut, (size_t)framesToProcess * wasapiChannels * sizeof(float));
+            // 写侧与读侧对称（§1.2）：物理端点混音格式为 PCM 时
+            // 必须转换，直接灌 float 字节是同一类格式误读。
+            const int outSamples = (int)(framesToProcess * wasapiChannels);
+            if (outIsFloat) {
+                memcpy(pDst, g_vaio.scratchOut, (size_t)outSamples * sizeof(float));
+            } else if (outBits == 16) {
+                int16_t* d = reinterpret_cast<int16_t*>(pDst);
+                for (int s = 0; s < outSamples; ++s) {
+                    float v = g_vaio.scratchOut[s];
+                    if (v > 1.0f) v = 1.0f; else if (v < -1.0f) v = -1.0f;
+                    d[s] = (int16_t)(v * 32767.0f);
+                }
+            } else {  // PCM 32
+                int32_t* d = reinterpret_cast<int32_t*>(pDst);
+                for (int s = 0; s < outSamples; ++s) {
+                    double v = (double)g_vaio.scratchOut[s];
+                    if (v > 1.0) v = 1.0; else if (v < -1.0) v = -1.0;
+                    d[s] = (int32_t)(v * 2147483647.0);
+                }
+            }
             g_vaio.pRenderClient->ReleaseBuffer(framesToProcess, 0);
         }
 
@@ -1109,6 +1244,47 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.wasapiSampleRate = g_vaio.pMixFormat->nSamplesPerSec > 0 ? g_vaio.pMixFormat->nSamplesPerSec : 48000;
     g_vaio.wasapiChannels = g_vaio.pMixFormat->nChannels > 0 ? g_vaio.pMixFormat->nChannels : 2;
 
+    // 混音格式分类（§1.2 写侧）：共享模式常见 float32 或 PCM16/32；
+    // EXTENSIBLE 时真子格式在 SubFormat GUID——其 Data1 即 WAVE
+    // 格式标签（1=PCM、3=IEEE float），尾部为固定 WAVE 子格式
+    // 后缀。不支持的格式在启动期明确失败，不再带病灌字节。
+    {
+        const WAVEFORMATEX* fmt = g_vaio.pMixFormat;
+        DWORD subTag = 0;
+        if (fmt->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
+            fmt->cbSize >= (WORD)(sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX))) {
+            const WAVEFORMATEXTENSIBLE* ext =
+                reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(fmt);
+            static const BYTE kWaveTail[8] = {0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71};
+            if (ext->SubFormat.Data2 == 0 && ext->SubFormat.Data3 == 0x0010 &&
+                memcmp(ext->SubFormat.Data4, kWaveTail, 8) == 0) {
+                subTag = ext->SubFormat.Data1;
+            }
+        }
+        const DWORD tag = subTag ? subTag : (DWORD)fmt->wFormatTag;
+        const WORD bits = fmt->wBitsPerSample;
+        bool okFmt = true;
+        if (tag == WAVE_FORMAT_IEEE_FLOAT && bits == 32) {
+            g_vaio.wasapiIsFloat = true;
+            g_vaio.wasapiBits = 32;
+        } else if (tag == WAVE_FORMAT_PCM && (bits == 16 || bits == 32)) {
+            g_vaio.wasapiIsFloat = false;
+            g_vaio.wasapiBits = bits;
+        } else {
+            okFmt = false;
+        }
+        if (!okFmt) {
+            snprintf(g_vaio.note, sizeof(g_vaio.note),
+                     "wasapi-mix-format-unsupported: tag=0x%04lX bits=%u",
+                     (unsigned long)tag, (unsigned)bits);
+            UnmapAndCloseRing();
+            DestroyEngine();
+            DestroyWasapi();
+            g_vaio.startRc = -13;
+            return -13;
+        }
+    }
+
     REFERENCE_TIME bufferDuration = 200000; // 20ms
     /* D3：事件驱动。缓冲只有 20ms，而 Sleep(1)/Sleep(2) 的实际唤醒粒度是
      * 1~15.6ms —— 睡过头即欠载，且代码里看不出来。改为让 WASAPI 在每周期
@@ -1191,7 +1367,10 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.scratchOut = (float*)malloc(scratchBytes);
     g_vaio.scratchProcIn = (float*)malloc(scratchBytes);
     g_vaio.scratchProcOut = (float*)malloc(scratchBytes);
-    if (!g_vaio.scratchIn || !g_vaio.scratchOut || !g_vaio.scratchProcIn || !g_vaio.scratchProcOut) {
+    g_vaio.scratchRing = (float*)malloc(scratchBytes);
+    g_vaio.scratchRaw = (BYTE*)malloc(scratchBytes);
+    if (!g_vaio.scratchIn || !g_vaio.scratchOut || !g_vaio.scratchProcIn || !g_vaio.scratchProcOut ||
+        !g_vaio.scratchRing || !g_vaio.scratchRaw) {
         snprintf(g_vaio.note, sizeof(g_vaio.note), "malloc-scratch-failed");
         FreeScratchBuffers();
         UnmapAndCloseRing();
@@ -1204,6 +1383,8 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     memset(g_vaio.scratchOut, 0, scratchBytes);
     memset(g_vaio.scratchProcIn, 0, scratchBytes);
     memset(g_vaio.scratchProcOut, 0, scratchBytes);
+    memset(g_vaio.scratchRing, 0, scratchBytes);
+    memset(g_vaio.scratchRaw, 0, scratchBytes);
 
     // 7. 应用初始参数并回放镜像
     ApplyParamsString(params_json);
@@ -1275,7 +1456,7 @@ int vaio_status(char* out, int cap) {
 
     const int n = _snprintf_s(
         out, (size_t)cap, _TRUNCATE,
-        "{\"running\":%s,\"frames\":%llu,\"sr\":%lu,\"channels\":%lu,\"bits\":%lu,"
+        "{\"running\":%s,\"frames\":%llu,\"sr\":%lu,\"channels\":%lu,\"bits\":%lu,\"ringSr\":%lu,"
         "\"peakIn\":%.4f,\"peakOut\":%.4f,\"maxPumpUs\":%.2f,\"startRc\":%d,\"note\":\"%s\","
         "\"outputEndpoint\":\"%s\",\"engineOk\":%s,\"enginePath\":\"%s\","
         "\"paramsApplied\":%d,\"paramsFailed\":%d,\"bypass\":%ld,\"testKind\":%ld,"
@@ -1285,6 +1466,7 @@ int vaio_status(char* out, int cap) {
         g_vaio.wasapiSampleRate ? g_vaio.wasapiSampleRate : g_vaio.ringSampleRate,
         reportedCh,
         g_vaio.ringBits,
+        g_vaio.ringSampleRate,
         g_vaio.peakIn,
         g_vaio.peakOut,
         g_vaio.maxPumpUs,
