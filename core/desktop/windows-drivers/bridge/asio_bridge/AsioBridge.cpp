@@ -44,6 +44,26 @@ void PathForJsonA(const std::string& in, char* out, size_t cap) {
     out[j] = '\0';
 }
 
+// JSON 字符串转义（细审 R-D L6）：端点/驱动名含 " 或控制
+// 字符时，旧有 PathForJsonA（只换反斜杠）拼出的 JSON 损坏，
+// Dart 侧 jsonDecode 抛错被吞、detect/status 整体按缺失
+// 处理（误报未检测到/状态丢失）。名称类自由文本一律走本
+// 函数；路径仍用 PathForJsonA 的斜杠式（既有口径）。
+void EscapeJsonA(const std::string& in, char* out, size_t cap) {
+    size_t j = 0;
+    auto put = [&](char c) { if (j + 1 < cap) out[j++] = c; };
+    for (size_t i = 0; i < in.size(); ++i) {
+        const unsigned char c = (unsigned char)in[i];
+        if (c == '"' || c == '\\') { put('\\'); put((char)c); }
+        else if (c < 0x20) {
+            char u[8];
+            snprintf(u, sizeof(u), "\u%04x", c);
+            for (const char* p = u; *p; ++p) put(*p);
+        } else put((char)c);
+    }
+    out[j] = '\0';
+}
+
 using vmcore::FnEngCreate;
 using vmcore::FnEngAbi;
 using vmcore::FnEngDestroy;
@@ -243,8 +263,11 @@ int asio_detect(char* out, int cap) {
         PathForJsonA(d.dllPath, dll, sizeof(dll));
         char clsid[64] = {0};
         strncpy_s(clsid, d.clsid.c_str(), sizeof(clsid) - 1);
-        const char* name = d.nameUtf8.empty() ? d.name.c_str() : d.nameUtf8.c_str();
         // nameUtf8 为空时回退原始名（极端情况：ansi_to_utf8 失败）。
+        char nameEsc[512] = {0};
+        EscapeJsonA(d.nameUtf8.empty() ? d.name : d.nameUtf8, nameEsc,
+                    sizeof(nameEsc));
+        const char* name = nameEsc;
         const int w = _snprintf_s(
             out + n, (size_t)(cap - n), _TRUNCATE,
             "%s{\"name\":\"%s\",\"dll\":\"%s\",\"clsid\":\"%s\"}",
@@ -480,6 +503,10 @@ int asio_status(char* out, int cap) {
     g_b.lastStatusSwitches = sw;
     char eng[512] = {0};
     PathForJson(g_b.enginePath, eng, sizeof(eng));
+    char drvEsc[512] = {0};
+    EscapeJsonA(g_b.driverUtf8, drvEsc, sizeof(drvEsc));
+    char noteEsc[512] = {0};
+    EscapeJsonA(g_b.note, noteEsc, sizeof(noteEsc));
     const int n = snprintf(
         out, (size_t)cap,
         "{\"running\":%s,\"switches\":%llu,\"sr\":%.1f,\"nbs\":%ld,"
@@ -493,10 +520,10 @@ int asio_status(char* out, int cap) {
         "\"engine\":\"%s\",\"engineOk\":%s}",
         InterlockedCompareExchange(&g_b.running, 0, 0) ? "true" : "false",
         (unsigned long long)sw, g_b.sr, g_b.nbs,
-        g_b.driverUtf8.c_str(), g_b.outPair, g_b.ioCh,
+        drvEsc, g_b.outPair, g_b.ioCh,
         g_b.inCh, g_b.outCh, g_b.inLat, g_b.outLat,
         (double)g_b.host.peak_in(), (double)g_b.host.peak_out(), cbUs,
-        g_b.startRc, g_b.note,
+        g_b.startRc, noteEsc,
         (long)InterlockedCompareExchange(&g_b.userBypass, 0, 0),
         (long)InterlockedCompareExchange(&g_b.tc.testKind, 0, 0),
         g_b.paramsApplied, g_b.paramsFailed,

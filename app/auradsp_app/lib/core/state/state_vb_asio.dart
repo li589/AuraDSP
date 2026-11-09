@@ -243,9 +243,17 @@ extension VbAsioState on AppModel {
   Future<bool> awaitVaioDetect({
     Duration timeout = const Duration(seconds: 6),
   }) async {
-    final waiter = Completer<void>();
-    vaioDetectWaiter = waiter;
-    refreshVaioDetect();
+    // 并发并入（细审 R-D L2）：已有等待中的探测时并入同一
+    // 等待（结果事件同源）。旧实现无条件覆盖等待器：装/卸
+    // chip 在等待期不禁用，连点时先行 Completer 成孤儿、
+    // 走满 6s 超时并以未生效口径误发矛盾通知，还多跑一次
+    // 提权脚本。
+    var waiter = vaioDetectWaiter;
+    if (waiter == null || waiter.isCompleted) {
+      waiter = Completer<void>();
+      vaioDetectWaiter = waiter;
+      refreshVaioDetect();
+    }
     try {
       await waiter.future.timeout(timeout);
       return true;

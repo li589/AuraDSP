@@ -10,6 +10,7 @@ import 'dart:io';
 
 import 'config.dart';
 import 'audio_modes.dart';
+import '../platform/platform_profile.dart';
 import 'io/document_store.dart';
 import 'plugins/plugin_manager.dart';
 import 'presets.dart';
@@ -139,7 +140,10 @@ abstract final class SessionMemory {
           m.config.attachmentMode = (m.audioMode == 'vbcallback')
               ? AudioModes.attachVoicemeeterApi
               : AudioModes.attachSysApo;
-        } else {
+        } else if (!PlatformProfile.isLinux) {
+          // Windows 管线口径（细审 R-D L8）：Linux 模式集
+          // （system/virtual/driver）走 else 会把
+          // pipelineOutput 写成 'wasapi' 惰性落盘，不写。
           if (m.audioMode == 'asio') {
             m.config.pipelineOutput = AudioModes.outputAsioClient;
           } else if (m.audioMode == 'vaio') {

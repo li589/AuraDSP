@@ -162,12 +162,22 @@ if ($Action -eq 'uninstall') {
         $pub = ([regex]::Match($b, '(?:发布名称|Published Name)\s*:\s*(\S+)')).Groups[1].Value
         if ($pub) { $oemNames += $pub }
     }
+    # Deletion results are checked per package (review R-D
+    # L1): previously $LASTEXITCODE was never read and the
+    # final line claimed success unconditionally -- the log
+    # now tells the truth per package and in the summary.
+    $pkgDeleteFailed = $false
     if ($oemNames.Count -eq 0) {
         Write-Log 'WARN: no published AuraVaioDriver package found in DriverStore (already removed?).'
     } else {
         foreach ($oem in ($oemNames | Select-Object -Unique)) {
-            & $PnpUtil /delete-driver $oem /uninstall /force 2>&1 |
-                ForEach-Object { Write-Log "  pnputil($oem): $_" }
+            $delOut = & $PnpUtil /delete-driver $oem /uninstall /force 2>&1
+            $delCode = $LASTEXITCODE
+            $delOut | ForEach-Object { Write-Log "  pnputil($oem): $_" }
+            if ($delCode -ne 0) {
+                Write-Log "WARN: pnputil /delete-driver $oem failed (exit $delCode)."
+                $pkgDeleteFailed = $true
+            }
         }
     }
 
@@ -192,6 +202,10 @@ if ($Action -eq 'uninstall') {
             Write-Log 'WARN: no certificate thumbprint available; skipped cert cleanup.'
         }
     }
-    Write-Log 'Done. Device node and DriverStore package removed.'
+    if ($pkgDeleteFailed) {
+        Write-Log 'Done with warnings: device node removed, but one or more DriverStore packages could not be deleted (see WARN lines above).'
+    } else {
+        Write-Log 'Done. Device node and DriverStore package removed.'
+    }
     exit 0
 }

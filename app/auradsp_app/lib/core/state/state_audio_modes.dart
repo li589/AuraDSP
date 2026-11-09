@@ -23,8 +23,13 @@ extension AudioModesState on AppModel {
     } else {
       // 模式↔输出端多对一：覆写口径收敛在
       // AudioModes.pipelineOutputForMode（非损，见其注释）。
-      config.pipelineOutput =
-          AudioModes.pipelineOutputForMode(valid, config.pipelineOutput);
+      // Linux 不写（细审 R-D L8）：该纯函数是 Windows 管线
+      // 口径，Linux 下会把 pipelineOutput 覆写成 'wasapi'
+      // 惰性落盘（Linux 无消费者，污染配置无收益）。
+      if (!PlatformProfile.isLinux) {
+        config.pipelineOutput =
+            AudioModes.pipelineOutputForMode(valid, config.pipelineOutput);
+      }
     }
     if (valid == audioMode && config.audioMode == valid) return;
     // P2 边界：模式切换会重建引擎链路（插件重挂）——先把各槽 A/B 预设
@@ -532,8 +537,19 @@ extension AudioModesState on AppModel {
       final ok = scriptOk && gotDetect && found;
       vaioActionUnverified = scriptOk && !ok;
       if (!scriptOk) {
-        lastVaioError =
-            'AuraVAIO 安装未完成 (退出码: ${res.exitCode})，请在 UAC 弹窗中选择允许提权';
+        // 失败文案按退出码分因（细审 R-D L11）：旧实现一律
+        // 归咎 UAC，退出码 3（未开测试签名）/5（pnputil）/
+        // 6-7（devcon）时与真实原因不符、误导排障。退出码
+        // 口径见随包 install_vaio.ps1 文件头。
+        lastVaioError = switch (res.exitCode) {
+          2 => 'AuraVAIO 安装未完成 (退出码: 2)：需要管理员权限，请在 UAC 弹窗中选择允许提权',
+          3 => 'AuraVAIO 安装未完成 (退出码: 3)：系统未开启测试签名模式，测试签名的驱动无法安装',
+          4 => 'AuraVAIO 安装未完成 (退出码: 4)：随包驱动文件缺失',
+          5 => 'AuraVAIO 安装未完成 (退出码: 5)：pnputil 安装驱动失败，详情见 %TEMP%/auradsp-vaio-install.log',
+          6 => 'AuraVAIO 安装未完成 (退出码: 6)：devcon 创建设备节点失败，详情见 %TEMP%/auradsp-vaio-install.log',
+          7 => 'AuraVAIO 安装未完成 (退出码: 7)：随包 devcon.exe 缺失',
+          _ => 'AuraVAIO 安装未完成 (退出码: ${res.exitCode})，请在 UAC 弹窗中选择允许提权',
+        };
       } else {
         lastVaioError = null;
       }
@@ -574,7 +590,14 @@ extension AudioModesState on AppModel {
       final stillFound = vaioDetectInfo['found'] == true;
       final ok = scriptOk && gotDetect && !stillFound;
       vaioActionUnverified = scriptOk && !ok;
-      if (ok) lastVaioError = null;
+      if (ok) {
+        lastVaioError = null;
+      } else if (!scriptOk) {
+        // 与安装侧对称（细审 R-D L11）：旧实现卸载脚本失败
+        // 不写 lastVaioError，只剩面板通用文案兜底。
+        lastVaioError =
+            'AuraVAIO 卸载未完成 (退出码: ${res.exitCode})，请在 UAC 弹窗中选择允许提权';
+      }
       _notifyUi();
       return ok;
     } catch (e) {

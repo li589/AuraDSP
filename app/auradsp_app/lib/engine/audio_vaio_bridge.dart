@@ -50,7 +50,10 @@ class AuraVaioBridge implements AudioBridgeCommon {
   }
 
   /// 检测驱动存在性并获取物理端点列表。
-  Map<String, dynamic>? detect() => core.detectJson(8192);
+  // cap 32768（细审 R-D L7）：每端点最坏约 380B，8192 在
+  // 活动渲染端点 ≳20 个时 native 以 -1 收场、detect 恒
+  // null 误报未检测到；32768 覆盖约 80 个端点。
+  Map<String, dynamic>? detect() => core.detectJson(32768);
 
   /// 启动常驻泵。engineDll 传引擎绝对路径；outputEndpointSubstr 为目标物理输出设备子串。
   int start(String engineDll, String params, {String outputEndpointSubstr = ''}) =>

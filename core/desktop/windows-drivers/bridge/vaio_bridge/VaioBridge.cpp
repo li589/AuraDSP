@@ -52,6 +52,26 @@ void PathForJsonA(const std::string& in, char* out, size_t cap) {
     out[j] = '\0';
 }
 
+// JSON 字符串转义（细审 R-D L6）：端点/驱动名含 " 或控制
+// 字符时，旧有 PathForJsonA（只换反斜杠）拼出的 JSON 损坏，
+// Dart 侧 jsonDecode 抛错被吞、detect/status 整体按缺失
+// 处理（误报未检测到/状态丢失）。名称类自由文本一律走本
+// 函数；路径仍用 PathForJsonA 的斜杠式（既有口径）。
+void EscapeJsonA(const std::string& in, char* out, size_t cap) {
+    size_t j = 0;
+    auto put = [&](char c) { if (j + 1 < cap) out[j++] = c; };
+    for (size_t i = 0; i < in.size(); ++i) {
+        const unsigned char c = (unsigned char)in[i];
+        if (c == '"' || c == '\\') { put('\\'); put((char)c); }
+        else if (c < 0x20) {
+            char u[8];
+            snprintf(u, sizeof(u), "\u%04x", c);
+            for (const char* p = u; *p; ++p) put(*p);
+        } else put((char)c);
+    }
+    out[j] = '\0';
+}
+
 std::string WideToUtf8(const wchar_t* w) {
     if (!w || !*w) return {};
     const int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
@@ -1072,8 +1092,8 @@ int vaio_detect(char* out, int cap) {
     if (n < 0) return -1;
 
     for (size_t i = 0; i < endpoints.size(); ++i) {
-        char epNameEsc[256] = {0};
-        PathForJsonA(endpoints[i].first, epNameEsc, sizeof(epNameEsc));
+        char epNameEsc[1024] = {0};
+        EscapeJsonA(endpoints[i].first, epNameEsc, sizeof(epNameEsc));
         const int w = _snprintf_s(
             out + n, (size_t)(cap - n), _TRUNCATE,
             "%s{\"name\":\"%s\",\"id\":\"%s\"}",
@@ -1532,8 +1552,10 @@ int vaio_status(char* out, int cap) {
 
     char engPathEsc[MAX_PATH * 2] = {0};
     PathForJson(g_vaio.enginePath, engPathEsc, sizeof(engPathEsc));
-    char outEpEsc[256] = {0};
-    PathForJsonA(g_vaio.outEndpointName, outEpEsc, sizeof(outEpEsc));
+    char outEpEsc[1024] = {0};
+    EscapeJsonA(g_vaio.outEndpointName, outEpEsc, sizeof(outEpEsc));
+    char noteEsc[512] = {0};
+    EscapeJsonA(g_vaio.note, noteEsc, sizeof(noteEsc));
 
     const bool isRunning = (InterlockedCompareExchange(&g_vaio.running, 0, 0) == 1);
     const LONG effEngCh = InterlockedCompareExchange((volatile LONG*)&g_vaio.engineChannels, 0, 0);
@@ -1559,7 +1581,7 @@ int vaio_status(char* out, int cap) {
         g_vaio.peakOut,
         g_vaio.maxPumpUs,
         g_vaio.startRc,
-        g_vaio.note,
+        noteEsc,
         outEpEsc,
         (g_vaio.pEngine != nullptr) ? "true" : "false",
         engPathEsc,
