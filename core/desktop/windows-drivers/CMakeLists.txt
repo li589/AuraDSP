@@ -145,6 +145,17 @@ target_compile_options(apo_inspect PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET apo_inspect PROPERTY CXX_STANDARD 20)
 set_property(TARGET apo_inspect PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
+# APO 挂载管理 CLI（apo_config.py 的原生移植，2026-11-09 §2.3 方案 A）：
+# 注册表操作在 advapi32，提权/管理员判定在 shell32；端点枚举复用
+# auraapo_inspect。随安装包 driver/ 分发，替代 python 运行时依赖。
+add_executable(apo_config
+    "${APO}/apo_config.cpp"
+)
+target_link_libraries(apo_config PRIVATE auraapo_inspect ole32 version advapi32 shell32)
+target_compile_options(apo_config PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET apo_config PROPERTY CXX_STANDARD 20)
+set_property(TARGET apo_config PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
 add_executable(apo_selftest
     "${APO}/apo_selftest.cpp"
 )
