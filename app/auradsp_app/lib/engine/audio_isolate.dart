@@ -1416,6 +1416,16 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'rc': rc,
                 'status': statusJson,
               });
+              // F2：加载可能因延迟线分配失败触发引擎自动关 PDC，
+              // 回读引擎真值同步 UI（get_pdc 此前全仓无调用点）。
+              try {
+                send({
+                  'evt': 'pluginPdcSync',
+                  'pdc': AuraDspLib.pluginGetPdcWrap(lib, handle),
+                });
+              } catch (e) {
+                dbgLog('plugin: pdc sync read failed: $e');
+              }
             }
             break;
           }
@@ -1545,6 +1555,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                     'status':
                         AuraDspLib.pluginSlotGetStatusJson(l, h, slot),
                   });
+                }
+                // F2：同 pluginLoad——槽位加载后回读 PDC 引擎真值。
+                try {
+                  send({
+                    'evt': 'pluginPdcSync',
+                    'pdc': AuraDspLib.pluginGetPdcWrap(l, h),
+                  });
+                } catch (e) {
+                  dbgLog('plugin: pdc sync read failed: $e');
                 }
               }));
             }

@@ -1,5 +1,6 @@
 import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/notice.dart';
+import 'package:auradsp_app/core/plugins/plugin_manager.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
 import 'package:auradsp_app/features/notice_host.dart';
@@ -182,6 +183,31 @@ void main() {
       final base = m.eventSeq.value;
       m.postNotice('');
       expect(m.eventSeq.value, base);
+      expect(m.hasPendingNotice, isFalse);
+    });
+  });
+
+  group('PDC 引擎真值同步（F2，2026-11-09）', () {
+    test('引擎自动关 → 开关同步为关 + warning 通知', () {
+      final m = AppModel(testing: true);
+      m.pluginManager.setPdc(true);
+      expect(m.pluginManager.pdcEnabled, isTrue);
+      m.handleMessageForTesting({'evt': 'pluginPdcSync', 'pdc': false});
+      expect(m.pluginManager.pdcEnabled, isFalse);
+      expect(m.hasPendingNotice, isTrue);
+      final n = m.takeNotice();
+      expect(n?.level, NoticeLevel.warning);
+      expect(n?.text, contains('PDC'));
+      expect(n?.text, contains('已自动关闭'));
+    });
+
+    test('真值与 UI 一致时不通知；关→开同步也不通知', () {
+      final m = AppModel(testing: true);
+      m.handleMessageForTesting({'evt': 'pluginPdcSync', 'pdc': false});
+      expect(m.pluginManager.pdcEnabled, isFalse);
+      expect(m.hasPendingNotice, isFalse);
+      m.handleMessageForTesting({'evt': 'pluginPdcSync', 'pdc': true});
+      expect(m.pluginManager.pdcEnabled, isTrue);
       expect(m.hasPendingNotice, isFalse);
     });
   });

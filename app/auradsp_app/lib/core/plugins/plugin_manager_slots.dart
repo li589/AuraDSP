@@ -106,6 +106,16 @@ extension PluginManagerSlots on PluginManager {
     _notify();
   }
 
+  /// 引擎侧 PDC 真值同步（F2）：槽位加载时延迟线分配失败会触发
+  /// 引擎自动关 PDC（plugin_abi 的既定降级），该路径不经 setPdc
+  /// 命令回执——isolate 在加载后回读 auradsp_plugin_get_pdc 并经
+  /// pluginPdcSync 事件同步，UI 开关以引擎真值为准，不再撒谎。
+  void syncPdcFromEngine(bool actual) {
+    if (_pdcEnabled == actual) return;
+    _pdcEnabled = actual;
+    _notify();
+  }
+
   /// 打开插件原生 GUI 编辑器窗口
   ///
   /// C1：同一插件可同时挂多个槽位，标题必须带槽位号区分多个编辑器窗口。

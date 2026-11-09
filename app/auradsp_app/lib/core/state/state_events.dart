@@ -999,6 +999,21 @@ extension StateEvents on AppModel {
         scheduleAutoSave();
         _notifyUi();
         break;
+      case 'pluginPdcSync':
+        // F2：加载后引擎 PDC 真值同步。引擎侧 setPdc(false) 只有两类
+        // 触发：用户命令（走 pluginPdc 回执）与延迟线分配失败的自动
+        // 降级——此处 UI 曾为开、引擎为关，只可能是后者：同步开关
+        // 显示为关，并经通用通知告知用户（owner 裁定口径）。
+        final pdcActual = raw['pdc'] as bool;
+        final pdcWas = pluginManager.pdcEnabled;
+        pluginManager.syncPdcFromEngine(pdcActual);
+        if (pdcWas != pdcActual) scheduleAutoSave();
+        if (pdcWas && !pdcActual) {
+          postNotice('插件延迟补偿（PDC）已自动关闭：延迟线分配失败',
+              level: NoticeLevel.warning);
+        }
+        _notifyUi();
+        break;
       case 'pluginStatus':
         pluginManager.onPluginStatus(raw['status']);
         _notifyUi();

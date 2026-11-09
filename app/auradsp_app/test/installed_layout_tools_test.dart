@@ -223,6 +223,19 @@ void main() {
           reason: '通知必须经 AppModel.postNotice → NoticeHost 呈现');
     });
 
+    test('PDC 真值同步接线（F2/③）', () {
+      final isolate = _read('app/auradsp_app/lib/engine/audio_isolate.dart');
+      expect('pluginGetPdcWrap'.allMatches(isolate).length,
+          greaterThanOrEqualTo(2));
+      expect(isolate, contains("'pluginPdcSync'"));
+      final events = _read('app/auradsp_app/lib/core/state/state_events.dart');
+      expect(events, contains("case 'pluginPdcSync':"));
+      expect(events, contains('NoticeLevel.warning'));
+      final slots =
+          _read('app/auradsp_app/lib/core/plugins/plugin_manager_slots.dart');
+      expect(slots, contains('syncPdcFromEngine'));
+    });
+
     test('NoticeHost 消费通用队列 + main 挂载点已换', () {
       final host = _read('app/auradsp_app/lib/features/notice_host.dart');
       expect(host, contains('takeNotice()'));
