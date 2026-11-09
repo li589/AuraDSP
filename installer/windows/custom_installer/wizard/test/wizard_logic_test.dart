@@ -219,13 +219,13 @@ void main() {
     test('driver/ 恒保留；DDC 仍按勾选门控', () {
       final f = componentFilter(ddcPresets: false);
       expect(f('auradsp_app.exe'), isTrue);
-      expect(f('driver/AuraVaio.sys'), isTrue,
+      expect(f('driver/AuraVaioDriver.sys'), isTrue,
           reason: '不勾选 VAIO 也必须保留驱动与手动安装脚本');
       expect(f('driver/install_vaio.ps1'), isTrue);
       expect(f('resources/ddc/a.vdc'), isFalse);
       expect(f('resources/liveprog/a.eel'), isTrue);
       final g = componentFilter(ddcPresets: true);
-      expect(g('driver/AuraVaio.sys'), isTrue);
+      expect(g('driver/AuraVaioDriver.sys'), isTrue);
       expect(g('resources/ddc/a.vdc'), isTrue);
     });
   });

@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
 import sys
 import tempfile
@@ -80,10 +81,14 @@ def main() -> int:
                  {"convolver/space.irs": b"irs", "user_data/secret.txt": b"no",
                   "USER_DATA/case.txt": b"no2"})
 
+        # 产物名必须与 WDK 工程实际输出一致（modern/x64/Release/AuraVaioDriver/）：
+        # pack.py 的新鲜度闸门按 AuraVaioDriver.sys + auravaiodriver.cat 判定，
+        # 旧名 AuraVaio.* 会让闸门误报"产物缺失"（2026-11-09 CI 实锤）。
         drv = base / "driver"
         drv.mkdir()
-        for ext in ("sys", "inf", "cat"):
-            (drv / f"AuraVaio.{ext}").write_bytes(b"drv")
+        for name in ("AuraVaioDriver.sys", "AuraVaioDriver.inf",
+                     "auravaiodriver.cat"):
+            (drv / name).write_bytes(b"drv")
         asio = base / "auraasio_driver.dll"
         asio.write_bytes(b"MZ-asio")
 
@@ -104,13 +109,31 @@ def main() -> int:
         check("exit 0", r.returncode == 0, r.stderr.strip()[-200:])
         dz = out / "AuraDSP-Driver-x64-v0.1.0.zip"
         names = read_zip(dz)[0] if dz.exists() else []
-        for want in ("AuraVaio.sys", "AuraVaio.inf", "AuraVaio.cat",
+        for want in ("AuraVaioDriver.sys", "AuraVaioDriver.inf",
+                     "auravaiodriver.cat",
                      "install_driver.ps1", "auraasio_driver.dll",
                      "register_asio.ps1", "install_vaio.ps1", "README.txt"):
             check(f"含 {want}", want in names)
         check("驱动包含签名教程",
               b"Win7" in read_zip(dz)[1]["README.txt"]
               and b"testsigning" in read_zip(dz)[1]["README.txt"])
+
+        print("== driver 新鲜度闸门（c968a42） ==")
+        stale = base / "driver-stale"
+        stale.mkdir()
+        for name in ("AuraVaioDriver.sys", "auravaiodriver.cat"):
+            p = stale / name
+            p.write_bytes(b"drv")
+            os.utime(p, (0, 0))  # 产物停在 epoch → 必然早于源码
+        r = run_pack("--mode", "driver", *common, "--driver-dir", str(stale))
+        check("产物比源码旧时拒绝打包", r.returncode != 0
+              and "拒绝打包" in (r.stderr or r.stdout))
+        part = base / "driver-partial"
+        part.mkdir()
+        (part / "AuraVaioDriver.sys").write_bytes(b"drv")
+        r = run_pack("--mode", "driver", *common, "--driver-dir", str(part))
+        check("产物缺失时拒绝打包", r.returncode != 0
+              and "产物缺失" in (r.stderr or r.stdout))
 
         print("== portable core ==")
         r = run_pack("--mode", "portable", "--resources", "core", *common)
@@ -194,7 +217,7 @@ def main() -> int:
               "payload/auraasio_driver.dll" in payload_names)
         # 取消勾选驱动也不能过滤 driver/：手动脚本与驱动必须随包保留。
         for rel in ("install_vaio.ps1", "README.txt", "register_asio.ps1",
-                    "auraasio_driver.dll", "AuraVaio.inf"):
+                    "auraasio_driver.dll", "AuraVaioDriver.inf"):
             check(f"ZIP-P 恒保留 driver/{rel}",
                   f"payload/driver/{rel}" in payload_names)
 
