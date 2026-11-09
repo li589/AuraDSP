@@ -572,7 +572,17 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       send({'evt': 'vaiodetect', 'found': false, 'note': 'bridge-missing: $e', 'endpoints': []});
       return;
     }
-    final info = vaio!.detect();
+    // FFI detect() 的 Dart 层异常（符号/参数）不得穿透 isolate 消息处理：
+    // 兜底回一个 found=false 事件，UI 侧按未检测到处理并保留 note 取证。
+    // （native 侧崩溃 Dart 兜不住，属 V-02 待真机取证范畴。）
+    Map<String, dynamic>? info;
+    try {
+      info = vaio!.detect();
+    } catch (e) {
+      dbgLog('vaiodetect: detect() threw: $e');
+      send({'evt': 'vaiodetect', 'found': false, 'note': 'detect-failed: $e', 'endpoints': []});
+      return;
+    }
     send({'evt': 'vaiodetect', ...?info});
   }
 

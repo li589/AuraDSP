@@ -37,7 +37,10 @@ final class WindowsSystemTools implements WindowsSystemPort {
 
   @override
   Future<ProcessResult> inspectAudioDevices(String exePath) {
-    return Process.run(exePath, [], stdoutEncoding: utf8);
+    // 端点枚举是快工具；无超时时一旦挂死会拖住整个刷新链（V-02 卡住
+    // 现象的候选路径之一）。10 秒超时后异常上抛，由调用方置错误提示。
+    return Process.run(exePath, [], stdoutEncoding: utf8)
+        .timeout(const Duration(seconds: 10));
   }
 
   @override

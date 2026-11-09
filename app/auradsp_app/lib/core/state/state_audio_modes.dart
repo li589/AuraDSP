@@ -234,13 +234,30 @@ extension AudioModesState on AppModel {
 
   // ---- 设备枚举 ----
 
-  /// 刷新所有 WASAPI 端点与音频设备
+  /// 刷新所有 WASAPI 端点与音频设备。
+  ///
+  /// V-02 加固（2026-11-09）：三个「刷新设备」按钮均未 await 本方法，
+  /// 任何未捕获异常都会变成未处理异步错误——故全程守卫、绝不上抛；
+  /// 端点工具缺失时显式置 lastAudioError（旧行为是整段静默跳过，
+  /// 用户点刷新毫无反馈）；关键节点写 dbgLog 埋点，真机再现闪退时
+  /// 可凭日志尾迹定位死在哪一段。
   Future<void> refreshAudioDevices() async {
-    refreshVaioDetect();
+    dbgLog('devices.refresh: start');
+    try {
+      refreshVaioDetect();
+    } catch (e, st) {
+      swallow(e, st);
+    }
     if (_testing || !PlatformProfile.supportsBridges) return;
     try {
       final exePath = _findApoInspectExe();
-      if (exePath != null) {
+      if (exePath == null) {
+        dbgLog('devices.refresh: apo_inspect unavailable');
+        lastAudioError = '端点探测工具不可用（apo_inspect.exe 缺失）';
+        _notifyUi();
+        return;
+      }
+      {
         final res =
             await windowsSystem.inspectAudioDevices(
           exePath,
@@ -274,6 +291,7 @@ extension AudioModesState on AppModel {
             if (items.isNotEmpty) {
               wasapiDevices = items;
               lastAudioError = null;
+              dbgLog('devices.refresh: done n=${items.length}');
               _notifyUi();
             }
           }
