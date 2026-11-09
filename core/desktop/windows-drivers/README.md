@@ -236,7 +236,11 @@ EWDK 19041 的头文件有个不对称：`POOL_FLAG_*` **常量**在更早的
   进程退出由 MJ_CLEANUP 按进程解映射回收，不会永久锁死。
 - 验证：`01_vaio_driver/tools/test_drv04_exclusive.py`（双进程反
   劫持断言，真机运行；需先退出主程序/桥）。2026-11-05 已在
-  vm-win10 实测 170/5 双拒 + 持有者释放顺畅；DRV-03 经 VS2026 +
+  vm-win10 实测 170/5 双拒 + 持有者释放顺畅；**2026-11-09 以
+  `--with-debug-log` 首次真机运行 7/7 ALL PASS**（第 6 项：A 持有
+  映射期间 B 读 GET_DEBUG_LOG 被拒，`winerror=5`），驱动为 WDK
+  重编版（`.sys` SHA256 前 16 位 `2C64E03ACE123583`），结论见
+  `test/date/2026-11-09/vaio-driver-e2e/outputs/`。DRV-03 经 VS2026 +
   WDK 28000 Release 构建（0 警告 0 错误）与 vm-win10/vm-win7 双机
   探针验证。详见 `docs/30-审查/全项目深度审查方案与报告-2026-11-05.md`。
 
