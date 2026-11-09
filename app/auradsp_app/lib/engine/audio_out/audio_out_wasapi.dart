@@ -541,7 +541,10 @@ final class WasapiOut implements AudioOut {
   /// FAIL 日志采样：异常照抛（上层计数/恢复语义不变），日志行
   /// 只记前 5 次、之后每 200 次 1 次——端点死亡时泵 20ms 一轮
   /// 重试，无采样即日志洪水（真机报告 2026-11-09）。
-  static final ThrottledLog _failLog = ThrottledLog('wasapi-fail', head: 5, every: 200);
+  /// 实例级而非 static（细审 R-B 低 5）：static 计数跨实例/
+  /// 跨会话共享，第一个端点死亡吃满 head 后，换端点/新会话
+  /// 的 FAIL 首现也被采样吞掉、排障首证据缺失。
+  final ThrottledLog _failLog = ThrottledLog('wasapi-fail', head: 5, every: 200);
 
   void _hr(String what, int hr) {
     if (hr < 0) {

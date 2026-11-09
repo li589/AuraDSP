@@ -653,20 +653,58 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
     // GetCurrentPadding 上永久空转而 status 仍报 running，
     // 呈「无声无 viz」假象（取证 2026-11-09 候选 5）；把失败
     // 写进 note 让 status 可见。
+    //
+    // 端点死亡核算（细审 R-B 1/3）：渲染侧连续失败轮次计数，
+    // 健康轮（GetBuffer 成功）清零。Start 失败按周期重试
+    // （瞬时 busy 可自愈）；连续 400 轮失败判端点死亡——写
+    // wasapi-output-lost note、清 running 并退出泵，不再对
+    // 死端点永久空转假报在跑（与 Dart 本地泵 400 轮 latch
+    // 同口径；WASAPI 对象由 vaio_stop 统一销毁，其对已退出
+    // 的泵线程 Wait 立即返回，兼容本路径）。
+    bool renderStarted = false;
+    int renderFailRounds = 0;
+    HRESULT lastRenderHr = S_OK;
+    bool bitsNoteWritten = false;
     {
         const HRESULT hrStart = g_vaio.pAudioClient->Start();
         if (FAILED(hrStart)) {
+            lastRenderHr = hrStart;
             snprintf(g_vaio.note, sizeof(g_vaio.note),
                      "wasapi-render-start-failed: 0x%08lX", hrStart);
+        } else {
+            renderStarted = true;
         }
     }
 
     while (!InterlockedCompareExchange(&g_vaio.stopEvent, 0, 0)) {
+        // Start 未成功：按失败轮核算，每 50 轮重试一次 Start。
+        if (!renderStarted) {
+            renderFailRounds++;
+            if (renderFailRounds >= 400) {
+                snprintf(g_vaio.note, sizeof(g_vaio.note),
+                         "wasapi-output-lost: 0x%08lX", lastRenderHr);
+                InterlockedExchange(&g_vaio.running, 0);
+                break;
+            }
+            if (renderFailRounds % 50 == 0) {
+                const HRESULT hrRetry = g_vaio.pAudioClient->Start();
+                if (SUCCEEDED(hrRetry)) {
+                    renderStarted = true;
+                    renderFailRounds = 0;
+                    g_vaio.note[0] = '\0';
+                } else {
+                    lastRenderHr = hrRetry;
+                }
+            }
+            vmcore::WaitAudioPeriod(g_vaio.hAudioEvent);
+            continue;
+        }
+
         // 动态检测驱动共享环上的声道配置变更
         if (pHeader && pHeader->Channels != ringChannels && pHeader->Channels > 0) {
             ringChannels = pHeader->Channels;
             g_vaio.ringChannels = ringChannels;
-            blockAlign = pHeader->BlockAlign > 0 ? pHeader->BlockAlign : (ringChannels * sizeof(float));
+            blockAlign = pHeader->BlockAlign > 0 ? pHeader->BlockAlign : (ringChannels * (ringBits == 16 ? sizeof(int16_t) : sizeof(float)));
             g_vaio.ringBlockAlign = blockAlign;
             if (g_vaio.countMode == 0) {
                 SetEngineChannels((int32_t)ringChannels);
@@ -694,6 +732,16 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         UINT32 padFrames = 0;
         HRESULT hr = g_vaio.pAudioClient->GetCurrentPadding(&padFrames);
         if (FAILED(hr)) {
+            // 端点死亡核算：连续失败达闩值即判失联退出（见
+            // Start 处注释），不再永久空转。
+            renderFailRounds++;
+            lastRenderHr = hr;
+            if (renderFailRounds >= 400) {
+                snprintf(g_vaio.note, sizeof(g_vaio.note),
+                         "wasapi-output-lost: 0x%08lX", lastRenderHr);
+                InterlockedExchange(&g_vaio.running, 0);
+                break;
+            }
             /* D3：原来 Sleep(2)（实际 1~15.6ms，且是忙轮询）。改为等一个周期
              * 信号，带上界只为定期回看 stopEvent。 */
             vmcore::WaitAudioPeriod(g_vaio.hAudioEvent);
@@ -774,15 +822,29 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                 memcpy(g_vaio.scratchRaw, pPayload + readOffset, chunk1);
                 memcpy(g_vaio.scratchRaw + chunk1, pPayload, chunk2);
             }
-            ConvertRingToFloat(g_vaio.scratchRaw, g_vaio.scratchRing,
-                               (int)readInFrames, (int)ringChannels, ringBits);
-            if (inRatio == 1.0) {
-                memcpy(g_vaio.scratchIn, g_vaio.scratchRing,
-                       (size_t)framesToProcess * ringChannels * sizeof(float));
+            if (ringBits == 16 || ringBits == 32) {
+                ConvertRingToFloat(g_vaio.scratchRaw, g_vaio.scratchRing,
+                                   (int)readInFrames, (int)ringChannels, ringBits);
+                if (inRatio == 1.0) {
+                    memcpy(g_vaio.scratchIn, g_vaio.scratchRing,
+                           (size_t)framesToProcess * ringChannels * sizeof(float));
+                } else {
+                    ResampleLinear(g_vaio.scratchRing, (int)readInFrames,
+                                   g_vaio.scratchIn, (int)framesToProcess,
+                                   (int)ringChannels, fracPhase, inRatio);
+                }
             } else {
-                ResampleLinear(g_vaio.scratchRing, (int)readInFrames,
-                               g_vaio.scratchIn, (int)framesToProcess,
-                               (int)ringChannels, fracPhase, inRatio);
+                // 位深契约外（细审 R-B 6）：现行驱动引脚表只有
+                // float32/PCM16；未知位深绝不按 float 误读
+                // （§1.2 同型事故），整块静音、一次性落 note，
+                // 环消费照常推进（数据格式不可用但时序要维持）。
+                if (!bitsNoteWritten) {
+                    bitsNoteWritten = true;
+                    snprintf(g_vaio.note, sizeof(g_vaio.note),
+                             "ring-bits-unsupported: %lu", ringBits);
+                }
+                memset(g_vaio.scratchIn, 0,
+                       (size_t)framesToProcess * ringChannels * sizeof(float));
             }
             userBytesRead += wholeInFrames * blockAlign;
             fracPhase = nextPhase;
@@ -889,9 +951,23 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                 }
             }
             g_vaio.pRenderClient->ReleaseBuffer(framesToProcess, 0);
+            // 帧数只计成功写出（细审 R-B 8）：旧实现在
+            // GetBuffer 失败轮照常累加，frames 增长会掩盖
+            // 端点半死状态、削弱 status 取证。
+            g_vaio.totalPumpedFrames += framesToProcess;
+            renderFailRounds = 0; // 健康轮：死亡核算清零
+        } else {
+            // GetBuffer 失败计入死亡核算：端点半死时 padding
+            // 可读而写路全灭，正是要判出的形态（细审 R-B 1）。
+            renderFailRounds++;
+            if (FAILED(hr)) lastRenderHr = hr;
+            if (renderFailRounds >= 400) {
+                snprintf(g_vaio.note, sizeof(g_vaio.note),
+                         "wasapi-output-lost: 0x%08lX", lastRenderHr);
+                InterlockedExchange(&g_vaio.running, 0);
+                break;
+            }
         }
-
-        g_vaio.totalPumpedFrames += framesToProcess;
     }
 
     if (hMmcss) {
@@ -1077,7 +1153,7 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.ringChannels = g_vaio.pRingHeader->Channels ? g_vaio.pRingHeader->Channels : 2;
     g_vaio.ringSampleRate = g_vaio.pRingHeader->SampleRate ? g_vaio.pRingHeader->SampleRate : 48000;
     g_vaio.ringBits = g_vaio.pRingHeader->BitsPerSample ? g_vaio.pRingHeader->BitsPerSample : 32;
-    g_vaio.ringBlockAlign = g_vaio.pRingHeader->BlockAlign ? g_vaio.pRingHeader->BlockAlign : (g_vaio.ringChannels * sizeof(float));
+    g_vaio.ringBlockAlign = g_vaio.pRingHeader->BlockAlign ? g_vaio.pRingHeader->BlockAlign : (g_vaio.ringChannels * (g_vaio.ringBits == 16 ? sizeof(int16_t) : sizeof(float)));
 
     // 3. 动态加载 auradsp_engine.dll
     std::wstring used;

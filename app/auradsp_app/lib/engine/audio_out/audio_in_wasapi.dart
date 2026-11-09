@@ -465,7 +465,9 @@ final class WasapiCapture {
     return written;
   }
 
-  static final ThrottledLog _failLog = ThrottledLog(
+  // 实例级（与 WasapiOut 同口径，细审 R-B 低 5）：新会话
+  // 恢复 FAIL 首现的采样预算。
+  final ThrottledLog _failLog = ThrottledLog(
     'wasapi-in-fail',
     head: 5,
     every: 200,

@@ -35,7 +35,6 @@ import 'local_channel_policy.dart';
 
 
 import '../core/error_sink.dart';
-import '../platform/platform_profile.dart';
 part 'audio_wav.dart';
 part 'audio_sources.dart';
 part 'audio_slots.dart';
@@ -2140,10 +2139,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   final inBufEng = inPtrEng.asTypedList(maxBlock * 8);
   final outPtrEng8 = malloc<Float>(maxBlock * 8);
   final vizBuf = malloc<VizFrame>(8); // 持久化复用，零运行时堆分配
-  String? lastPumpErr;
   var lastPumpErrAt = 0;
-  // WASAPI 端点被占计数（0x8889000a = AUDCLNT_E_DEVICE_IN_USE：端点被独占，
-  // 典型是 VB 以独占/KS 方式开着同一设备。旧 client 在独占释放前永好不了，
+  // 泵连续失败计数（细审 R-B 2 后为通用计数：任何泵轮异常
+  // 都累计、仅成功轮清零；旧口径只认 WASAPI 死亡码两码并
+  // 对其余异常清零，交替错误下 latch 永不触发。阈值 400 轮
+  // 的由来：端点被占（0x8889000a = AUDCLNT_E_DEVICE_IN_USE，
+  // 典型是 VB 以独占/KS 方式开着同一设备）时旧 client 在独占释放前永好不了，
   // 必须等对端释放后重建链路）。
   // 连续 ~2s（400 轮）即上报一次（latch，不反复刷）；model 侧重启 isolate。
   var audioOutErrRounds = 0;
@@ -2421,46 +2422,34 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
           }
         }
+        audioOutErrRounds = 0; // 成功轮清零（死亡计数只许成功清零，细审 R-B 2）
       } catch (e, st) {
         // 错误节流：同一消息 3s 内只上报一次，防 UI 事件洪泛（5ms 一轮的循环）。
-        // 日志文件同口径节流：旧实现只节流 UI 事件、日志每轮照写，
-        // 端点死亡时 20ms 一对洪水行刷满日志（真机报告 2026-11-09）。
+        // 日志文件同口径节流（细审 R-B 2 改全局窗）：旧口径按
+        // 消息分别节流，端点死亡若在相邻轮次交替抛两种错误，
+        // 每条都算「新消息」逐轮落盘、节流被击穿。现口径为
+        // 全局 3s 窗：窗内任何 PUMP ERROR 不再落盘/上报；持
+        // 续抛错的当前消息会在窗到期后落下，最终证据不丢。
         final now = DateTime.now().millisecondsSinceEpoch;
         final msg = e.toString();
-        if (msg != lastPumpErr || now - lastPumpErrAt > 3000) {
-          lastPumpErr = msg;
+        if (now - lastPumpErrAt > 3000) {
           lastPumpErrAt = now;
           dbgLog('PUMP ERROR: $msg\n$st');
           send({'evt': 'error', 'msg': msg});
         }
-        // 端点死亡（WASAPI 认两个码：0x8889000a DEVICE_IN_USE 独占、
-        // 0x88890004 DEVICE_INVALIDATED 失效；Linux 认输出后端
-        // StateError，见下。其余错误走常规上报，不触发重启）。
-        // 教训（DRV-02 续）：此前 Windows 侧只认 0x8889000a，
-        // 0x88890004 每轮落 else 清零计数、400 轮 latch 永不触发，
-        // 泵对死端点无限重试（真机日志洪水实证）。
-        if (msg.contains('0x8889000a') || msg.contains('0x88890004')) {
-          audioOutErrRounds++;
-        } else if (PlatformProfile.isLinux &&
-            audioOut != null &&
-            e is StateError &&
-            (msg.contains('pa_simple') ||
-                msg.contains('PulseAudioOut') ||
-                msg.contains('snd_pcm') ||
-                msg.contains('AlsaAudioOut'))) {
-          // DRV-02（全项目审查 S7）：PA/PipeWire 重启或 ALSA 设备拔出后，
-          // pa_simple/snd_pcm 连接不可自愈，其错误文案永不含 WASAPI 的
-          // HRESULT——旧逻辑下计数恒被清零，泵无限重试、永不恢复，用户
-          // 永久无声。按同口径累计：连续 400 轮（≈2s）即判端点死亡，
-          // 借 wasapiLost 通道让 UI 重起 isolate 重建输出流（ALSA 的
-          // XRUN 在后端内自恢复、不抛错，不会误触发本路径）。
-          audioOutErrRounds++;
-        } else {
-          audioOutErrRounds = 0;
-        }
+        // 端点死亡计数（细审 R-B 2 + 低 4）：旧逻辑只认死亡
+        // 码（0x8889000a 独占 / 0x88890004 失效），其余异常落
+        // else 清零——交替错误下计数永不累积、400 轮 latch 永
+        // 不触发，与原洪水 bug 同构；且服务停止的 0x8889000f
+        // 也不在集合内。现口径：泵轮任何异常都累计、仅成功
+        // 轮清零（见 try 末尾）；连续 400 轮抛错即判链死亡走
+        // wasapiLost 自愈。Linux 侧同口径并入（DRV-02 的 PA/
+        // ALSA 特判并入通用计数：其错误文案不含 HRESULT，
+        // 旧特判靠 StateError+后端名匹配，现无需）。
+        audioOutErrRounds++;
         if (audioOutErrRounds >= 400) {
           audioOutErrRounds = -1000000; // latch：旧 client 已死，不可能自愈
-          dbgLog('PUMP: device invalidated 2s+, reporting wasapiLost');
+          dbgLog('PUMP: pump failing 400 rounds, reporting wasapiLost');
           send({'evt': 'wasapiLost'});
         }
       }
