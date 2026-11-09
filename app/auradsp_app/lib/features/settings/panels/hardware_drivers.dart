@@ -295,19 +295,14 @@ class _VaioDriverRow extends StatelessWidget {
                     icon: Icons.admin_panel_settings,
                     selected: true,
                     onTap: () async {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(l.setInstallDriverUacPrompt),
-                        duration: const Duration(milliseconds: 2000),
-                      ));
+                      model.postNotice(l.setInstallDriverUacPrompt);
                       final ok = await model.installVaioDriver(elevated: true);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(ok
-                              ? l.setVaioInstallOk
-                              : (model.lastVaioError ?? l.setDriverInstallFailed)),
-                          duration: const Duration(milliseconds: 2500),
-                        ));
-                      }
+                      model.postNotice(
+                        ok
+                            ? l.setVaioInstallOk
+                            : (model.lastVaioError ?? l.setDriverInstallFailed),
+                        level: ok ? NoticeLevel.info : NoticeLevel.error,
+                      );
                     },
                   )
                 else if (found)
@@ -317,14 +312,10 @@ class _VaioDriverRow extends StatelessWidget {
                     danger: true,
                     onTap: () async {
                       final ok = await model.uninstallVaioDriver(elevated: true);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(ok
-                              ? l.setVaioUninstallOk
-                              : l.setDriverUninstallFailed),
-                          duration: const Duration(milliseconds: 2000),
-                        ));
-                      }
+                      model.postNotice(
+                        ok ? l.setVaioUninstallOk : l.setDriverUninstallFailed,
+                        level: ok ? NoticeLevel.info : NoticeLevel.error,
+                      );
                     },
                   ),
                 AuraChip(
@@ -448,19 +439,14 @@ class _VirtualAsioDriverCard extends StatelessWidget {
                 icon: Icons.admin_panel_settings,
                 selected: true,
                 onTap: () async {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(l.setAsioRegisterPrompt),
-                    duration: const Duration(milliseconds: 1500),
-                  ));
+                  model.postNotice(l.setAsioRegisterPrompt);
                   final ok = await model.registerAsioDriver(elevated: true);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(ok
-                          ? l.setAsioRegisterOk
-                          : (model.lastAsioError ?? l.setAsioRegisterFailed)),
-                      duration: const Duration(milliseconds: 2500),
-                    ));
-                  }
+                  model.postNotice(
+                    ok
+                        ? l.setAsioRegisterOk
+                        : (model.lastAsioError ?? l.setAsioRegisterFailed),
+                    level: ok ? NoticeLevel.info : NoticeLevel.error,
+                  );
                 },
               )
             else
@@ -470,14 +456,12 @@ class _VirtualAsioDriverCard extends StatelessWidget {
                 danger: true,
                 onTap: () async {
                   final ok = await model.unregisterAsioDriver(elevated: true);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(ok
-                          ? l.setAsioUnregisterOk
-                          : (model.lastAsioError ?? l.setAsioUnregisterFailed)),
-                      duration: const Duration(milliseconds: 2000),
-                    ));
-                  }
+                  model.postNotice(
+                    ok
+                        ? l.setAsioUnregisterOk
+                        : (model.lastAsioError ?? l.setAsioUnregisterFailed),
+                    level: ok ? NoticeLevel.info : NoticeLevel.error,
+                  );
                 },
               ),
           ],

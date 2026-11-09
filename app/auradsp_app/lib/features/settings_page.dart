@@ -17,6 +17,7 @@ import '../core/config.dart';
 import '../core/design.dart';
 import '../core/path_memory.dart';
 import '../core/session_memory.dart';
+import '../core/notice.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';

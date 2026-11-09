@@ -698,18 +698,10 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
                   await widget.model.refreshAllComponentLatencies();
                   if (context.mounted) {
                     setState(() {});
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        duration: const Duration(milliseconds: 1400),
-                        behavior: SnackBarBehavior.floating,
-                        backgroundColor: p.panelRaised,
-                        content: Text(
-                          l.chainLatencyMeasuredMsg(
-                            LatencyPresenter.number(
-                              widget.model.fullChainLatencyMs,
-                            ),
-                          ),
-                          style: TextStyle(color: p.text, fontSize: 12),
+                    widget.model.postNotice(
+                      l.chainLatencyMeasuredMsg(
+                        LatencyPresenter.number(
+                          widget.model.fullChainLatencyMs,
                         ),
                       ),
                     );

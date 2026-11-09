@@ -258,6 +258,7 @@ void _safeShowMenu<T>(
 /// - 复原：清激活槽预设（继承的源预设不动）。
 /// - [locked]（编辑器打开）时全部禁用。
 class _AbPresetBar extends StatelessWidget {
+  final AppModel model;
   final PluginManager manager;
   final int slot;
   final int group;
@@ -266,6 +267,7 @@ class _AbPresetBar extends StatelessWidget {
   final List<String> routeNames;
 
   const _AbPresetBar({
+    required this.model,
     required this.manager,
     required this.slot,
     required this.group,
@@ -371,13 +373,7 @@ class _AbPresetBar extends StatelessWidget {
                 ? null
                 : () {
                     manager.resetAb(slot, group: group, ab: active);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(l10nOf(context).abResetDone),
-                        duration: const Duration(seconds: 1),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
+                    model.postNotice(l10nOf(context).abResetDone);
                   },
             icon: Icon(
               Icons.restart_alt_rounded,
@@ -875,6 +871,7 @@ class _ActivePluginHero extends StatelessWidget {
                 const Spacer(),
                 // v3.3 A/B 预设条（所有驱动模式显示；VB 点击展开继承下拉）。
                 _AbPresetBar(
+                  model: model,
                   manager: manager,
                   slot: slot,
                   group: isVb ? editorGroup : -1,

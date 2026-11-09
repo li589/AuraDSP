@@ -103,12 +103,7 @@ class _PresetCardState extends State<_PresetCard> {
                     onTap: () {
                       m.loadPreset(item);
                       _reload();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(l.presetLoadedFactory(item.name)),
-                          duration: const Duration(milliseconds: 1400),
-                        ));
-                      }
+                      m.postNotice(l.presetLoadedFactory(item.name));
                     },
                   ),
               ],
@@ -145,12 +140,7 @@ class _PresetCardState extends State<_PresetCard> {
                         onTap: () {
                           m.loadPreset(item);
                           _reload();
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                              content: Text(l.presetLoadedUser(item.name)),
-                              duration: const Duration(milliseconds: 1400),
-                            ));
-                          }
+                          m.postNotice(l.presetLoadedUser(item.name));
                         },
                       ),
                       const SizedBox(width: 2),
@@ -160,12 +150,12 @@ class _PresetCardState extends State<_PresetCard> {
                           final deleted = PresetLibrary.deletePreset(item);
                           if (!context.mounted) return;
                           _reload();
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                            content: Text(deleted
-                                ? l.presetDeleted
-                                : l.presetDeleteFail),
-                            duration: const Duration(milliseconds: 1200),
-                          ));
+                          m.postNotice(
+                            deleted ? l.presetDeleted : l.presetDeleteFail,
+                            level: deleted
+                                ? NoticeLevel.info
+                                : NoticeLevel.error,
+                          );
                         },
                         borderRadius: BorderRadius.circular(12),
                         child: Padding(
@@ -231,16 +221,14 @@ class _PresetCardState extends State<_PresetCard> {
                   final ok = m.saveAsUserPreset(name);
                   if (ok) _saveNameCtrl.clear();
                   _reload();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(!ok
-                          ? l.presetSaveFail
-                          : overwriting
-                              ? l.presetOverwritten(name)
-                              : l.presetSaved),
-                      duration: const Duration(milliseconds: 1400),
-                    ));
-                  }
+                  m.postNotice(
+                    !ok
+                        ? l.presetSaveFail
+                        : overwriting
+                            ? l.presetOverwritten(name)
+                            : l.presetSaved,
+                    level: ok ? NoticeLevel.info : NoticeLevel.error,
+                  );
                 },
               ),
             ],

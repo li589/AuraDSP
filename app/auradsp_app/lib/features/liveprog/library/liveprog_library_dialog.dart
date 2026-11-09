@@ -16,6 +16,7 @@ import '../../../core/design.dart';
 import '../../../core/error_sink.dart';
 import '../../../platform/adapters.dart';
 import '../../../core/path_memory.dart';
+import '../../../core/notice.dart';
 import '../../../core/state.dart';
 import '../../../core/theme.dart';
 import '../../../core/ui_helpers.dart';
@@ -262,23 +263,9 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
     final ok = LiveprogLibrary.save(fileName, widget.currentCode, targetDir);
     if (ok) {
       _loadScriptsForSelectedDir();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l.lpSave),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      widget.model.postNotice(l.lpSave);
     } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l.errIoFailed),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      widget.model.postNotice(l.errIoFailed, level: NoticeLevel.error);
     }
   }
 

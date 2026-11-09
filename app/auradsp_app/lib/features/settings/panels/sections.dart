@@ -662,14 +662,12 @@ class _SystemApoPanel extends StatelessWidget {
                   ? null
                   : () async {
                       final ok = await model.attachSystemApo();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(ok
-                              ? l.setApoRegistered
-                              : (model.lastApoError ?? l.setApoAttachFailed)),
-                          duration: const Duration(milliseconds: 2000),
-                        ));
-                      }
+                      model.postNotice(
+                        ok
+                            ? l.setApoRegistered
+                            : (model.lastApoError ?? l.setApoAttachFailed),
+                        level: ok ? NoticeLevel.info : NoticeLevel.error,
+                      );
                     },
             ),
             AuraChip(
@@ -680,14 +678,12 @@ class _SystemApoPanel extends StatelessWidget {
                   ? null
                   : () async {
                       final ok = await model.detachSystemApo();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(ok
-                              ? l.setApoUnregistered
-                              : (model.lastApoError ?? l.setApoUnregisterFailed)),
-                          duration: const Duration(milliseconds: 2000),
-                        ));
-                      }
+                      model.postNotice(
+                        ok
+                            ? l.setApoUnregistered
+                            : (model.lastApoError ?? l.setApoUnregisterFailed),
+                        level: ok ? NoticeLevel.info : NoticeLevel.error,
+                      );
                     },
             ),
             AuraChip(

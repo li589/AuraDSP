@@ -26,6 +26,7 @@ import '../core/engine_error_map.dart';
 import '../core/error_sink.dart';
 import '../core/io/resource_gate.dart';
 import '../core/path_memory.dart';
+import '../core/notice.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import '../l10n/gen/app_localizations.dart';
@@ -512,13 +513,10 @@ class _LiveprogPageState extends State<LiveprogPage> {
   /// 纯编译代码并载入虚拟机（应用状态下禁止编译；异常文本隔离）
   void _compile() {
     if (_tEnabled) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-        content: Text(
-          l10nOf(context).lpTooltipUnapplyToCompile,
-          style: TextStyle(color: paletteOf(context).text, fontSize: 13),
-        ),
-        duration: const Duration(seconds: 2),
-      ));
+      widget.model.postNotice(
+        l10nOf(context).lpTooltipUnapplyToCompile,
+        level: NoticeLevel.warning,
+      );
       return;
     }
 
@@ -528,13 +526,10 @@ class _LiveprogPageState extends State<LiveprogPage> {
     // 引擎必拒结构问题本地拦截
     final blocking = _issues.where((e) => e.blocking).toList();
     if (blocking.isNotEmpty) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-        content: Text(
-            '${l10nOf(context).lpBlockedByLint}：${blocking.first.message}',
-            style:
-                TextStyle(color: paletteOf(context).text, fontSize: 13)),
-        duration: const Duration(seconds: 3),
-      ));
+      widget.model.postNotice(
+        '${l10nOf(context).lpBlockedByLint}：${blocking.first.message}',
+        level: NoticeLevel.error,
+      );
       if (blocking.first.line > 0) _gotoLine(blocking.first.line);
       return;
     }
@@ -578,13 +573,10 @@ class _LiveprogPageState extends State<LiveprogPage> {
     }
     final hasCompiled = _tStatus == 1 && _tError == null;
     if (_isCodeDirty || _compiling || !hasCompiled) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-        content: Text(
-          l10nOf(context).lpTooltipCompileFirst,
-          style: TextStyle(color: paletteOf(context).text, fontSize: 13),
-        ),
-        duration: const Duration(seconds: 2),
-      ));
+      widget.model.postNotice(
+        l10nOf(context).lpTooltipCompileFirst,
+        level: NoticeLevel.warning,
+      );
       return;
     }
     if (_mc) {
@@ -712,12 +704,7 @@ dbg = 0;
         }
       } else {
         // 用户主动导入失败必须有反馈（旧实现只写日志，用户会误以为成功）
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(l10nOf(context).lpFileImportFailed),
-            duration: const Duration(seconds: 3),
-          ));
-        }
+        widget.model.postNotice(l.lpFileImportFailed, level: NoticeLevel.error);
       }
     }
   }
@@ -747,20 +734,10 @@ dbg = 0;
     }
     try {
       await file.writeAsString(_code.text, encoding: utf8);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(l.lpSave),
-          duration: const Duration(seconds: 2),
-        ));
-      }
+      widget.model.postNotice(l.lpSave);
     } catch (e, st) {
       swallow(e, st);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(l.lpSaveFailed),
-          duration: const Duration(seconds: 3),
-        ));
-      }
+      widget.model.postNotice(l.lpSaveFailed, level: NoticeLevel.error);
     }
   }
 

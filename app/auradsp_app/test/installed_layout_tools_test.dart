@@ -200,4 +200,38 @@ void main() {
       expect(tools, contains('.timeout(const Duration(seconds: 10))'));
     });
   });
+
+  group('通知组件化接线（④）', () {
+    Directory libDir() {
+      for (final base in const ['', '../', '../../']) {
+        final d = Directory('${base}app/auradsp_app/lib');
+        if (d.existsSync()) return d;
+      }
+      throw StateError('找不到 lib 目录（cwd=${Directory.current.path}）');
+    }
+
+    test('全仓 showSnackBar 只许出现在 NoticeHost', () {
+      final offenders = <String>[];
+      for (final entity in libDir().listSync(recursive: true)) {
+        if (entity is! File || !entity.path.endsWith('.dart')) continue;
+        if (entity.path.endsWith('features/notice_host.dart')) continue;
+        if (entity.readAsStringSync().contains('showSnackBar(')) {
+          offenders.add(entity.path);
+        }
+      }
+      expect(offenders, isEmpty,
+          reason: '通知必须经 AppModel.postNotice → NoticeHost 呈现');
+    });
+
+    test('NoticeHost 消费通用队列 + main 挂载点已换', () {
+      final host = _read('app/auradsp_app/lib/features/notice_host.dart');
+      expect(host, contains('takeNotice()'));
+      expect(host, contains('hasPendingNotice'));
+      final coreState = _read('app/auradsp_app/lib/core/state.dart');
+      expect(coreState, contains('void postNotice('));
+      final main = _read('app/auradsp_app/lib/main.dart');
+      expect(main, contains('NoticeHost(model: model)'));
+      expect(main, isNot(contains('EventBanner(')));
+    });
+  });
 }
