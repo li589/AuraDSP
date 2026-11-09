@@ -96,6 +96,9 @@ final class NullWindowsSystem implements WindowsSystemPort {
   String? findRepoFile(List<String> relativeCandidates) => null;
 
   @override
+  String? findInstalledFile(List<String> relativeCandidates) => null;
+
+  @override
   Future<ProcessResult> inspectAudioDevices(String exePath) async => _fail();
 
   @override
@@ -103,6 +106,7 @@ final class NullWindowsSystem implements WindowsSystemPort {
     String scriptPath, {
     required bool install,
     required bool elevated,
+    bool bundled = false,
   }) async =>
       _fail();
 
@@ -111,6 +115,7 @@ final class NullWindowsSystem implements WindowsSystemPort {
     String scriptPath, {
     required bool register,
     required bool elevated,
+    bool bundled = false,
   }) async =>
       _fail();
 

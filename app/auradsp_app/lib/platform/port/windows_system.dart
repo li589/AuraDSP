@@ -12,21 +12,33 @@ abstract interface class WindowsSystemPort {
   /// 从当前工作目录向上最多 4 层查找仓库内的文件（相对候选路径）。
   String? findRepoFile(List<String> relativeCandidates);
 
+  /// 以可执行文件所在目录为基准查找随包文件（安装版扁平布局）。
+  /// 候选为相对可执行文件目录的路径（如 `driver/install_vaio.ps1`）；
+  /// 不依赖当前工作目录——安装版定位必须走这一路，源码树查找只作
+  /// 开发期兜底（findRepoFile）。
+  String? findInstalledFile(List<String> relativeCandidates);
+
   /// 运行 apo_inspect.exe 获取端点 JSON。
   Future<ProcessResult> inspectAudioDevices(String exePath);
 
   /// 安装/卸载 AuraVAIO 驱动脚本。
+  /// [bundled] = 随包自包含脚本（install_vaio.ps1，无 -Config 参数）；
+  /// false = 源码树开发脚本（install_driver.ps1，带 -Config Release）。
   Future<ProcessResult> vaioDriver(
     String scriptPath, {
     required bool install,
     required bool elevated,
+    bool bundled = false,
   });
 
   /// 注册/反注册 Virtual ASIO 驱动脚本。
+  /// [bundled] = 随包脚本（register_asio.ps1：无参注册 / -Unregister
+  /// 反注册）；false = 源码树开发脚本（register_driver.ps1，-Action 口径）。
   Future<ProcessResult> asioDriverScript(
     String scriptPath, {
     required bool register,
     required bool elevated,
+    bool bundled = false,
   });
 
   /// apo_config.py status（非提权）。

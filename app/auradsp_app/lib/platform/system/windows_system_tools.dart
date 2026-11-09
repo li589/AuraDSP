@@ -36,6 +36,21 @@ final class WindowsSystemTools implements WindowsSystemPort {
   }
 
   @override
+  String? findInstalledFile(List<String> relativeCandidates) {
+    if (!available) return null;
+    try {
+      final dir = File(Platform.resolvedExecutable).parent;
+      for (final rel in relativeCandidates) {
+        final f = File('${dir.path}/$rel');
+        if (f.existsSync()) return f.path;
+      }
+    } catch (e, st) {
+      swallow(e, st);
+    }
+    return null;
+  }
+
+  @override
   Future<ProcessResult> inspectAudioDevices(String exePath) {
     // 端点枚举是快工具；无超时时一旦挂死会拖住整个刷新链（V-02 卡住
     // 现象的候选路径之一）。10 秒超时后异常上抛，由调用方置错误提示。
@@ -48,14 +63,19 @@ final class WindowsSystemTools implements WindowsSystemPort {
     String scriptPath, {
     required bool install,
     required bool elevated,
+    bool bundled = false,
   }) {
     if (elevated) {
       final action = install ? 'install' : 'uninstall';
-      final tail = install ? "'-Config', 'Release'" : "'-RemoveTestCert'";
+      // 随包 install_vaio.ps1 没有 -Config 参数（传了会参数绑定失败）；
+      // -RemoveTestCert 两脚本都接受，卸载尾巴一致。
+      final tail = install
+          ? (bundled ? '' : ", '-Config', 'Release'")
+          : ", '-RemoveTestCert'";
       final cmd =
           'Start-Process powershell -Verb RunAs -Wait -ArgumentList '
           '\'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"$scriptPath"\', '
-          '\'-Action\', \'$action\', $tail';
+          '\'-Action\', \'$action\'$tail';
       return Process.run('powershell', ['-Command', cmd]);
     }
     return Process.run('powershell', [
@@ -65,7 +85,10 @@ final class WindowsSystemTools implements WindowsSystemPort {
       scriptPath,
       '-Action',
       install ? 'install' : 'uninstall',
-      if (install) ...['-Config', 'Release'] else '-RemoveTestCert',
+      if (install)
+        ...[if (!bundled) ...['-Config', 'Release']]
+      else
+        '-RemoveTestCert',
     ]);
   }
 
@@ -74,7 +97,26 @@ final class WindowsSystemTools implements WindowsSystemPort {
     String scriptPath, {
     required bool register,
     required bool elevated,
+    bool bundled = false,
   }) {
+    if (bundled) {
+      // 随包 register_asio.ps1（pack.py 生成）：无参 = 注册，
+      // -Unregister 开关 = 反注册；没有 -Action 参数。
+      if (elevated) {
+        final tail = register ? '' : ", '-Unregister'";
+        final cmd =
+            'Start-Process powershell -Verb RunAs -Wait -ArgumentList '
+            '\'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"$scriptPath"\'$tail';
+        return Process.run('powershell', ['-Command', cmd]);
+      }
+      return Process.run('powershell', [
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        scriptPath,
+        if (!register) '-Unregister',
+      ]);
+    }
     final action = register ? 'register' : 'unregister';
     if (elevated) {
       final cmd =

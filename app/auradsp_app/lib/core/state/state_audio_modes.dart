@@ -307,16 +307,28 @@ extension AudioModesState on AppModel {
   }
 
   // ---- 辅助可执行文件查找（统一走 WindowsSystemPort）----
+  //
+  // 定位口径（2026-11-09 收口，V-01/V-03 共同根因）：一律随包优先
+  // （findInstalledFile，以可执行文件目录为基准的 driver/ 扁平布局）、
+  // 源码树兜底（findRepoFile，仅开发期成立）。bundled 标记随命中结果
+  // 一路带到 port 命令拼装：随包脚本与开发脚本的参数口径不同。
 
   String? _findApoInspectExe() =>
+      windowsSystem.findInstalledFile(const ['driver/apo_inspect.exe']) ??
       windowsSystem.findRepoFile(const [
         'core/desktop/windows-drivers/out/Release/apo_inspect.exe',
       ]);
 
-  String? _findVaioInstallScript() =>
-      windowsSystem.findRepoFile(const [
-        'core/desktop/windows-drivers/01_vaio_driver/install_driver.ps1',
-      ]);
+  ({String path, bool bundled})? _findVaioInstallScript() {
+    final bundled = windowsSystem
+        .findInstalledFile(const ['driver/install_vaio.ps1']);
+    if (bundled != null) return (path: bundled, bundled: true);
+    final repo = windowsSystem.findRepoFile(const [
+      'core/desktop/windows-drivers/01_vaio_driver/install_driver.ps1',
+    ]);
+    if (repo != null) return (path: repo, bundled: false);
+    return null;
+  }
 
   // ---- VAIO 驱动安装 ----
 
@@ -324,16 +336,17 @@ extension AudioModesState on AppModel {
   Future<bool> installVaioDriver({bool elevated = true}) async {
     if (!PlatformProfile.supportsBridges) return false;
     try {
-      final script = _findVaioInstallScript();
-      if (script == null) {
-        lastVaioError = '未找到 install_driver.ps1 安装脚本';
+      final hit = _findVaioInstallScript();
+      if (hit == null) {
+        lastVaioError = '未找到 VAIO 驱动安装脚本（随包 driver/install_vaio.ps1 缺失）';
         _notifyUi();
         return false;
       }
       final res = await windowsSystem.vaioDriver(
-        script,
+        hit.path,
         install: true,
         elevated: elevated,
+        bundled: hit.bundled,
       );
       refreshVaioDetect();
       await refreshAudioDevices();
@@ -357,12 +370,13 @@ extension AudioModesState on AppModel {
   Future<bool> uninstallVaioDriver({bool elevated = true}) async {
     if (!PlatformProfile.supportsBridges) return false;
     try {
-      final script = _findVaioInstallScript();
-      if (script == null) return false;
+      final hit = _findVaioInstallScript();
+      if (hit == null) return false;
       final res = await windowsSystem.vaioDriver(
-        script,
+        hit.path,
         install: false,
         elevated: elevated,
+        bundled: hit.bundled,
       );
       refreshVaioDetect();
       await refreshAudioDevices();
@@ -421,13 +435,14 @@ extension AudioModesState on AppModel {
   Future<bool> registerAsioDriver({bool elevated = true}) async {
     if (!PlatformProfile.supportsBridges) return false;
     try {
-      final script = _findAsioRegisterScript();
-      if (script != null) {
+      final hit = _findAsioRegisterScript();
+      if (hit != null) {
         final res =
             await windowsSystem.asioDriverScript(
-          script,
+          hit.path,
           register: true,
           elevated: elevated,
+          bundled: hit.bundled,
         );
         await checkAsioDriverStatus();
         final ok = res.exitCode == 0 && asioDriverInstalled;
@@ -450,13 +465,14 @@ extension AudioModesState on AppModel {
   Future<bool> unregisterAsioDriver({bool elevated = true}) async {
     if (!PlatformProfile.supportsBridges) return false;
     try {
-      final script = _findAsioRegisterScript();
-      if (script != null) {
+      final hit = _findAsioRegisterScript();
+      if (hit != null) {
         final res =
             await windowsSystem.asioDriverScript(
-          script,
+          hit.path,
           register: false,
           elevated: elevated,
+          bundled: hit.bundled,
         );
         await checkAsioDriverStatus();
         final ok = res.exitCode == 0 && !asioDriverInstalled;
@@ -475,17 +491,24 @@ extension AudioModesState on AppModel {
     return false;
   }
 
-  String? _findAsioRegisterScript() =>
-      windowsSystem.findRepoFile(const [
-        'core/desktop/windows-drivers/04_asio_driver/register_driver.ps1',
-        'scripts/register_driver.ps1',
-        'register_driver.ps1',
-        '../scripts/register_driver.ps1',
-      ]);
+  ({String path, bool bundled})? _findAsioRegisterScript() {
+    final bundled = windowsSystem
+        .findInstalledFile(const ['driver/register_asio.ps1']);
+    if (bundled != null) return (path: bundled, bundled: true);
+    final repo = windowsSystem.findRepoFile(const [
+      'core/desktop/windows-drivers/04_asio_driver/register_driver.ps1',
+      'scripts/register_driver.ps1',
+      'register_driver.ps1',
+      '../scripts/register_driver.ps1',
+    ]);
+    if (repo != null) return (path: repo, bundled: false);
+    return null;
+  }
 
   // ---- System APO 运维 ----
 
   String? _findApoConfigScript() =>
+      windowsSystem.findInstalledFile(const ['driver/apo_config.py']) ??
       windowsSystem.findRepoFile(const [
         'core/desktop/windows-drivers/03_system_apo/apo_config.py',
         'scripts/apo_config.py',
