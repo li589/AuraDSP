@@ -42,6 +42,7 @@ import tempfile
 import time
 import zipfile
 from pathlib import Path
+from typing import NamedTuple
 
 # Windows 上标准流默认走本地代码页（如 en-US 的 cp1252），print 中文
 # 日志会直接 UnicodeEncodeError 崩溃（windows-installer CI 实测踩中；
@@ -204,43 +205,66 @@ def find_asio_driver(explicit: str | None) -> Path | None:
     return None
 
 
+def _find_built(name: str, explicit: str | None) -> Path | None:
+    """在 windows-drivers 构建产物（out/<Config>）中定位单个文件。"""
+    if explicit:
+        p = Path(explicit)
+        return p if p.is_file() else None
+    base = ROOT / "core" / "desktop" / "windows-drivers" / "out"
+    for cfg in ("Release", "Debug"):
+        p = base / cfg / name
+        if p.is_file():
+            return p
+    if base.is_dir():
+        hits = [p for p in base.rglob(name)]
+        if hits:
+            return max(hits, key=lambda p: p.stat().st_mtime)
+    return None
+
+
 def find_apo_inspect(explicit: str | None) -> Path | None:
     """端点探测工具 apo_inspect.exe（windows-drivers CMake 目标产物）。
 
     app 的设备刷新链靠它枚举 WASAPI 端点：缺了它安装版点刷新静默
     无效（真机报告 V-02 关联项），故列为随包必备，找不到即拒绝打包。
     """
-    if explicit:
-        p = Path(explicit)
-        return p if p.is_file() else None
-    base = ROOT / "core" / "desktop" / "windows-drivers" / "out"
-    for cfg in ("Release", "Debug"):
-        p = base / cfg / "apo_inspect.exe"
-        if p.is_file():
-            return p
-    if base.is_dir():
-        hits = [p for p in base.rglob("apo_inspect.exe")]
-        if hits:
-            return max(hits, key=lambda p: p.stat().st_mtime)
-    return None
+    return _find_built("apo_inspect.exe", explicit)
 
 
-def resolve_apo_assets(args) -> tuple[Path, Path]:
-    """APO 运维资产：apo_config.py（仓库脚本）+ apo_inspect.exe（构建产物）。
+class ApoAssets(NamedTuple):
+    """APO 运维资产四件（同组进 driver/）。"""
+    config_py: Path    # apo_config.py：过渡期保留（app 切换 exe 后下线）
+    config_exe: Path   # apo_config.exe：原生移植版（§2.3 方案 A）
+    apo_dll: Path      # AuraApo.dll：APO 本体（此前从未随包，附加必败）
+    inspect: Path      # apo_inspect.exe：端点枚举
 
-    app 侧 System APO 附加/状态查询与设备刷新都依赖这两件；历史上
-    从未进过载荷（真机报告 V-03 首因），自本轮起与 driver/ 同组装。
+
+def resolve_apo_assets(args) -> ApoAssets:
+    """APO 运维资产：脚本（仓库）+ 三件构建产物（windows-drivers out/）。
+
+    app 侧 System APO 附加/状态查询与设备刷新都依赖它们；历史上
+    从未进过载荷（真机报告 V-03 首因），自 2026-11-09 F4 起同组装。
+    2026-11-09 §2.3 方案 A 补齐原生 apo_config.exe 与 AuraApo.dll：
+    无 DLL 时脚本/工具在安装布局里无对象可挂，附加必然未生效。
     """
-    apo_config = (ROOT / "core" / "desktop" / "windows-drivers" /
-                  "03_system_apo" / "apo_config.py")
-    if not apo_config.is_file():
-        raise die(f"缺 apo_config.py: {apo_config}")
+    config_py = (ROOT / "core" / "desktop" / "windows-drivers" /
+                 "03_system_apo" / "apo_config.py")
+    if not config_py.is_file():
+        raise die(f"缺 apo_config.py: {config_py}")
     apo_inspect = find_apo_inspect(args.apo_inspect)
     if apo_inspect is None:
         raise die("找不到 apo_inspect.exe；先构建 windows-drivers 目标"
                   "（build_windows.ps1 含 apo_inspect 目标），"
                   "或用 --apo-inspect 指定")
-    return apo_config, apo_inspect
+    config_exe = _find_built("apo_config.exe", args.apo_config)
+    if config_exe is None:
+        raise die("找不到 apo_config.exe；先构建 windows-drivers 目标"
+                  "（含 apo_config 目标），或用 --apo-config 指定")
+    apo_dll = _find_built("AuraApo.dll", args.apo_dll)
+    if apo_dll is None:
+        raise die("找不到 AuraApo.dll；先构建 windows-drivers 目标"
+                  "（含 AuraApo 目标），或用 --apo-dll 指定")
+    return ApoAssets(config_py, config_exe, apo_dll, apo_inspect)
 
 
 def check_staging(staging: Path) -> None:
@@ -421,8 +445,7 @@ def stage_driver_files(
     driver_dir: Path,
     asio: Path,
     install_ps1: Path,
-    apo_config: Path,
-    apo_inspect: Path,
+    apo: ApoAssets,
     *,
     include_asio_dll: bool,
 ) -> int:
@@ -444,10 +467,13 @@ def stage_driver_files(
     if copied == 0:
         raise die(f"驱动目录没有任何 .sys/.inf/.cat/.cer: {driver_dir}")
     shutil.copy2(install_ps1, dest / install_ps1.name)
-    # APO 运维资产：app 侧附加/状态（apo_config.py）与设备端点刷新
-    # （apo_inspect.exe）的随包依赖，与手动安装资产同组进 driver/。
-    shutil.copy2(apo_config, dest / apo_config.name)
-    shutil.copy2(apo_inspect, dest / apo_inspect.name)
+    # APO 运维资产：app 侧附加/状态工具（过渡期 .py 与 .exe 并存，
+    # A3 切换后下线 .py）+ APO 本体 AuraApo.dll + 设备端点刷新
+    # （apo_inspect.exe），与手动安装资产同组进 driver/。
+    shutil.copy2(apo.config_py, dest / apo.config_py.name)
+    shutil.copy2(apo.config_exe, dest / apo.config_exe.name)
+    shutil.copy2(apo.apo_dll, dest / apo.apo_dll.name)
+    shutil.copy2(apo.inspect, dest / apo.inspect.name)
     if include_asio_dll:
         shutil.copy2(asio, dest / ASIO_DLL_NAME)
     (dest / "register_asio.ps1").write_text(REGISTER_ASIO_PS1, encoding="utf-8")
@@ -480,7 +506,7 @@ def mode_driver(args, ver: dict[str, str], out: Path) -> Path:
                    "01_vaio_driver" / "install_driver.ps1")
     if not install_ps1.is_file():
         raise die(f"缺 install_driver.ps1: {install_ps1}")
-    apo_config, apo_inspect = resolve_apo_assets(args)
+    apo = resolve_apo_assets(args)
     dest = out / f"AuraDSP-Driver-x64-{ver['AURADSP_TAG']}.zip"
     if args.what_if:
         log(f"what-if: driver 包 ← {driver_dir} + {install_ps1.name} + {asio}")
@@ -488,7 +514,7 @@ def mode_driver(args, ver: dict[str, str], out: Path) -> Path:
     with tempfile.TemporaryDirectory(prefix="auradsp-driver-") as td:
         stage = Path(td) / "driver"
         stage_driver_files(stage, driver_dir, asio, install_ps1,
-                           apo_config, apo_inspect,
+                           apo,
                            include_asio_dll=True)
         n = zip_dir(stage, dest, args.zip_level)
     log(f"driver: {dest.name}（{n} 条目，{dest.stat().st_size / 1e6:.1f} MB）")
@@ -600,9 +626,9 @@ def mode_setup(args, ver: dict[str, str], out: Path) -> Path:
         shutil.copy2(asio, work / ASIO_DLL_NAME)
         install_ps1 = (ROOT / "core" / "desktop" / "windows-drivers" /
                        "01_vaio_driver" / "install_driver.ps1")
-        apo_config, apo_inspect = resolve_apo_assets(args)
+        apo = resolve_apo_assets(args)
         stage_driver_files(work / "driver", driver_dir, asio, install_ps1,
-                           apo_config, apo_inspect,
+                           apo,
                            include_asio_dll=True)
 
         payload_zip = Path(td.name) / "payload.zip"
@@ -755,6 +781,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     ap.add_argument("--driver-dir")
     ap.add_argument("--asio-driver")
     ap.add_argument("--apo-inspect")
+    ap.add_argument("--apo-config")
+    ap.add_argument("--apo-dll")
     ap.add_argument("--installer-build-dir")
     ap.add_argument("--build-installer", action="store_true")
     ap.add_argument("--version")
