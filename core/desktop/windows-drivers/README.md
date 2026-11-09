@@ -275,11 +275,20 @@ core\desktop\windows-drivers\01_vaio_driver\install_driver.ps1 -Action uninstall
 ```
 
 `install_driver.ps1` 做的事：体检 → （可选）生成/复用 `CN=AuraDSP Test Signing`
-自签证书并签 `.cat` + 导入 `Root`/`TrustedPublisher` → `pnputil /add-driver /install`
-→ `devcon install <inf> Root\AuraVAIO` → 复验。
+自签证书并签 `.cat` + 导入 `Root`/`TrustedPublisher` → **幂等清理** →
+`pnputil /add-driver /install` → `devcon install <inf> Root\AuraVAIO` →
+收敛到单节点 + 复验。
 **它不代改启动配置、也不代重启**：`testsigning` 未开时只打印
 `bcdedit /set testsigning on` + 重启命令后停下。
-默认 `-Action status` 纯只读；`install`/`uninstall` 需要显式指定并要求管理员。
+默认 `-Action status` 纯只读；`install` / `uninstall` / `cleanup` 需要显式指定并要求管理员；
+`-DryRun` 对三者都是只读预演（不签名、不删节点、不删包）。
+
+**新增动作（2026-11-09）**：`-Action cleanup` 把环境收敛到「1 个 MEDIA 节点
++ 1 份在用 oem 包」，移除重复安装残留的备用硬件 ID 节点与陈旧驱动包，不卸载驱动。
+成因：INF 同时声明 `Root\AuraVAIO` / `Root\AuraVaioDriver` 两个硬件 ID，旧脚本在
+`devcon install` 返回非零时直接 fallback 装备用 ID（此时主节点可能已建好），且安装前
+清理只查主 ID、依赖 devcon 输出文本判定 → 多次安装叠加成双节点。`vm-win10` 实测曾
+出现 2 个节点 / 4 份 oem 包，设备管理器里表现为两套 `AuraVAIO` 设备与带 `2-` 前缀的端点。
 
 手工等价命令：
 
@@ -294,10 +303,17 @@ devcon remove Root\AuraVAIO
 pnputil /delete-driver auravaiodriver.inf /uninstall /force
 ```
 
-验收判据：`设备管理器` 出现 **AuraVAIO Virtual Audio Device**；`声音设置` 的
-输出设备列表出现 **AuraVAIO**；`install_driver.ps1` 体检第 [4]/[6] 节中
-状态为 `OK`。本机实测（未提权）当前为：包三件套齐全、
-**未发现 AuraVAIO 设备**、本机 21 个 OK 音频端点中 AuraVAIO = 0 —— 即"已具备装载条件、尚未装载"。
+验收判据（2026-11-09 更新，以 `install_driver.ps1 -Action status` 输出为准）：
+- **[4] MEDIA 设备节点数 == 1**（按两个硬件 ID 精确匹配），状态 OK；
+- **[5] DriverStore 中 `auravaiodriver.inf` 只剩 1 份**（每次 `add-driver` 都会累积 oem 包）；
+- **[6] 名称含 AuraVAIO 的 OK 音频端点 ≈ 节点数 × 2**（每节点派生 1 扬声器 + 1 麦克风）。
+
+旧口径只写「Status 为 OK」，且 [6] 用前缀 `'AuraVAIO*'` 匹配端点名，会把双节点残留
+判成通过、把实际 4 个端点报成 0 —— 两处假阴性已修正。`vm-win10` 2026-11-09 实测：
+清理前 2 节点 / 4 包 / 4 个 OK 端点（含 `2-` 前缀），`-Action cleanup` 后 1 节点 / 1 包 /
+2 个 OK 端点，二次执行零移除；`test_drv04_exclusive.py --with-debug-log` 仍 7/7 ALL PASS，
+控制通道未受影响。详见
+`test/date/2026-11-09/vaio-driver-cleanup/outputs/清理幂等性真机验证结论.md`。
 
 > **已知缺口（legacy 轨真要装 Win7 时）**：INF 目前没有
 > `[<Service>.NT.CoInstallers]` 段与 `WdfCoinstaller01011.dll` 的

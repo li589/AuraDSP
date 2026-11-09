@@ -1,0 +1,25 @@
+﻿
+即将执行：
+  1) 测试签名       : 跳过
+  2) 幂等清理       : 移除全部 AuraVAIO 节点 + 全部同名 oem 包
+  3) 驱动入 DriverStore: pnputil /add-driver "C:\Users\li\AppData\Local\Temp\auradsp_s7\modern\x64\Debug\AuraVaioDriver\Au
+raVaioDriver.inf" /install
+  4) 创建设备节点 + 收敛到单节点: devcon install "C:\Users\li\AppData\Local\Temp\auradsp_s7\modern\x64\Debug\AuraVaioDriver\AuraVai
+oDriver.inf" Root\AuraVAIO
+
+
+[1/4] 安装前幂等清理
+
+[清理] 当前：MEDIA 节点 2 个 / DriverStore 同名包 4 个
+  保留节点  : （无，完全清理）
+  保留驱动包: （无，完全清理）
+  将移除    : 节点 2 个 / 驱动包 4 个
+    NODE  ROOT\MEDIA\0000  [Root\AuraVAIO]
+    NODE  ROOT\MEDIA\0001  [Root\AuraVaioDriver]
+    PKG   oem10.inf  (11/05/2026 21.17.30.265)
+    PKG   oem12.inf  (11/09/2026 14.12.19.452)
+    PKG   oem9.inf  (11/05/2026 20.55.5.700)
+    PKG   oem11.inf  (11/09/2026 13.46.2.47)
+  [预演] 未做任何改动。
+  [预演] 后续 add-driver / devcon install 步骤跳过。
+

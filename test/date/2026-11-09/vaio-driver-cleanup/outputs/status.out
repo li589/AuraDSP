@@ -1,0 +1,47 @@
+﻿
+=========== AuraVAIO 装载状态体检 ===========
+
+[1] 驱动包（Track=modern / Config=Debug）
+  INF  缺失 C:\Users\li\AppData\Local\Temp\auradsp_s7\modern\x64\Debug\AuraVaioDriver\AuraVaioDriver.inf
+  SYS  缺失 C:\Users\li\AppData\Local\Temp\auradsp_s7\modern\x64\Debug\AuraVaioDriver\AuraVaioDriver.sys
+  CAT  缺失 C:\Users\li\AppData\Local\Temp\auradsp_s7\modern\x64\Debug\AuraVaioDriver\auravaiodriver.cat
+  → 先构建：.\build_drivers.ps1 -Track modern -Config Debug
+
+[2] 权限
+  当前会话管理员: True
+
+[3] 测试签名开关（未签名 .sys 必须开）
+  testsigning = Yes
+
+[4] 已安装的 MEDIA 设备节点（按硬件 ID 精确匹配）
+
+Status HardwareId          InstanceId     
+------ ----------          ----------     
+OK     Root\AuraVAIO       ROOT\MEDIA\0000
+OK     Root\AuraVaioDriver ROOT\MEDIA\0001
+
+
+
+  → 验收判据：MEDIA 节点数 == 1，当前 2 个（重复安装残留，跑 -Action cleanup 收敛）
+
+[5] DriverStore 中的同名驱动包
+  auravaiodriver.inf 共 4 份：oem10.inf, oem12.inf, oem9.inf, oem11.inf
+  → 存在历次安装残留的旧包，跑 -Action cleanup 收敛到 1 份
+
+[6] 音频端点（验收 ①：出现在输出设备列表）
+  本机 OK 音频端点共 6 个；名称含 AuraVAIO 的 4 个
+  → 每个 MEDIA 节点派生 1 个扬声器 + 1 个麦克风端点；端点数 ≈ 节点数 × 2
+
+FriendlyName                           InstanceId                                                          
+------------                           ----------                                                          
+麦克风 (2- AuraVAIO Virtual Audio Device) SWD\MMDEVAPI\{0.0.1.00000000}.{C01B3B47-7EF8-464F-8C1D-C8F6004D2470}
+麦克风 (AuraVAIO Virtual Audio Device)    SWD\MMDEVAPI\{0.0.1.00000000}.{BF2228C0-3055-4BDB-91CC-EB8DD7E6CE68}
+扬声器 (AuraVAIO Virtual Audio Device)    SWD\MMDEVAPI\{0.0.0.00000000}.{AC8624B1-A2B1-47B1-AF60-AD2B8327B08E}
+扬声器 (2- AuraVAIO Virtual Audio Device) SWD\MMDEVAPI\{0.0.0.00000000}.{75C757AC-230B-4EC6-BDB8-F905666530A9}
+
+
+
+
+=============================================
+
+
