@@ -1,0 +1,4482 @@
+1) load IR rc: 0
+2) channels: 2
+3) get spectrum rc: 0
+4) L 通道前 8 带: [0.94, 0.0, 0.94, 0.94, 0.94, 0.94, 0.94, 0.94]
+   R 通道前 8 带: [0.999, 0.0, 0.999, 0.999, 0.999, 0.999, 0.999, 0.999]
+5) clear 后 get_param rc: -4 (非0即状态拒绝)
+PASS: smoke_convolver_spectrum passed successfully!
+Overall output levels: L=-10.46dBFS, R=-10.46dBFS
+Pass 1 stage levels (expect stages 0..20 all around -10.5 dBFS, 21..23/30..31 == -120, 24..29 GR == 0.0):
+  Stage 00: L=-10.46dBFS, R=-10.46dBFS
+  Stage 01: L=-10.46dBFS, R=-10.46dBFS
+  Stage 02: L=-10.46dBFS, R=-10.46dBFS
+  Stage 03: L=-10.46dBFS, R=-10.46dBFS
+  Stage 04: L=-10.46dBFS, R=-10.46dBFS
+  Stage 05: L=-10.46dBFS, R=-10.46dBFS
+  Stage 06: L=-10.46dBFS, R=-10.46dBFS
+  Stage 07: L=-10.46dBFS, R=-10.46dBFS
+  Stage 08: L=-10.46dBFS, R=-10.46dBFS
+  Stage 09: L=-10.46dBFS, R=-10.46dBFS
+  Stage 10: L=-10.46dBFS, R=-10.46dBFS
+  Stage 11: L=-10.46dBFS, R=-10.46dBFS
+  Stage 12: L=-10.46dBFS, R=-10.46dBFS
+  Stage 13: L=-10.46dBFS, R=-10.46dBFS
+  Stage 14: L=-10.46dBFS, R=-10.46dBFS
+  Stage 15: L=-10.46dBFS, R=-10.46dBFS
+  Stage 16: L=-10.46dBFS, R=-10.46dBFS
+  Stage 17: L=-10.46dBFS, R=-10.46dBFS
+  Stage 18: L=-10.46dBFS, R=-10.46dBFS
+  Stage 19: L=-10.46dBFS, R=-10.46dBFS
+  Stage 20: L=-10.46dBFS, R=-10.46dBFS
+
+Pass 2 with liveprog x2.0 gain:
+  Stage 00: L=-10.46dBFS
+  Stage 01: L=-10.46dBFS
+  Stage 02: L=-10.46dBFS
+  Stage 03: L=-10.46dBFS
+  Stage 04: L=-10.46dBFS
+  Stage 05: L=-10.46dBFS
+  Stage 06: L=-10.46dBFS
+  Stage 07: L=-4.44dBFS
+  Stage 08: L=-4.44dBFS
+  Stage 09: L=-4.44dBFS
+  Stage 10: L=-4.44dBFS
+  Stage 11: L=-4.44dBFS
+
+PASS: smoke_chain_meter passed successfully! All 20 per-stage meters validated.
+1) garbage.bin  rc=-1 err='convolver.ir: parse failed (unknown format, need WAV/FLAC)'
+1) fake.wav     rc=-1 err='convolver.ir: parse failed (WAV header corrupt)'
+1) nan.wav      rc=-1 err='convolver.ir: parse failed (NaN/Inf samples in file)'
+1) trunc.wav    rc=-1 err='convolver.ir: parse failed (WAV truncated)'
+2) delta48 load rc=0 ready=1 frames=64 ch=2 src=48000 peak=1.00
+3) enable rc=0 err='convolver.ir: parse failed (WAV truncated)'
+3) enable ok, latency=10.0 ms
+4) passthrough: out_peak=0.3000 max_diff=9.21e-06
+5) delta44 rc=0 src=44100 frames=70 ready=1
+6) disabled diff=0.00e+00
+7) clear: ready=0 enable=0
+8) mix set/get+clamp ok
+8) mix 0/0.5/1 rms=0.14243/0.21364/0.28486
+PASS: convolver + FileGate engine flow all OK
+reverb preset rc = 0 | err: 
+freeverb.enable rc = 0
+mode.latency rc = -1 | err: mode.latency: unsupported (removed by ADR-006, latency is measurement-only)
+mode.latency get rc = -1
+reverb off rc=0, latency=0.0 ms
+stereo.mix set 0.75 -> get 0.750 rc=0
+PASS: ADR-006 no-latency-gating contract + latency measurement + stereo mapping
+1) code rc=0 status=1 err=
+2) enabled gain: out_peak=0.6000 (expect 0.6)
+3) disabled: out_peak=0.3000 (expect 0.3)
+4) bad code rc=-1 status=-1 err='Syntax error at @init section'
+5) reload ok rc=0 status=1, slider1 persisted=2.0 -> peak=0.6000
+5b) sliders 2..8 roundtrip ok
+6) code roundtrip rc=0 match=True len=82
+7) unload: status=0 enable=0 peak=0.3000
+8) env variables perception in 2ch: out_peak=0.7500 (expect 0.75)
+8b) env variables perception in 6ch: out_peak=0.8500 (expect 0.85)
+9) @slider section runtime exec: out_peak=0.6000 (expect 0.60)
+PASS: liveprog engine flow all OK
+PASS  [A] create 成功
+PASS  [A] 无 RAM 脚本编译成功
+NOTE  psutil 缺失，跳过 [A] 内存断言
+PASS  [B] 第二次 create 成功
+PASS  [B] gmem 脚本编译成功
+PASS  [B] gmem 往返正确（0.4 → 0.2，说明首次分配全零）
+PASS  [C] 同 VM 重新编译成功
+PASS  [C] 重新编译后 gmem 已清零（0.5 残留会输出非零）
+PASS  [D] 再切回 gmem 脚本音频仍正确
+NOTE  psutil 缺失，跳过 [E] 内存断言
+PASS  [E] gmem 脚本编译成功
+NOTE  psutil 缺失，跳过 [F] 内存断言
+PASS  [F] 8 个 gmem 引擎编译成功
+PASS  [G] 深层 gmem 页按需提交且读写正确
+==============================================
+ALL PASS：liveprog gmem 惰性分配与语义
+seq=60 lvl=-10.46 dBFS
+bands[0:8]: ['0.122', '0.168', '0.168', '0.405', '0.808', '0.920', '0.865', '0.342']
+PASS: 60Hz lands in band4/5 (peak band=5=0.920), band0=0.122 (no DC leak)
+
+=== 1) 无资源组件：实测应成功 ===
+  PASS  bass 实测成功 (rc=0, samples=192)
+  PASS  eq 实测成功 (rc=0, samples=0)
+  PASS  shelf 实测成功 (rc=0, samples=0)
+
+=== 2) 需资源组件：不带资源必须是 -1「不可测」，不能是 0 ===
+  PASS  convolver 无资源返回 -1（而非伪造 0ms），实得 rc=-1
+  PASS  ddc 无资源返回 -1（而非伪造 0ms），实得 rc=-1
+  PASS  liveprog 无资源返回 -1（而非伪造 0ms），实得 rc=-1
+
+=== 3) 新符号存在，且 null 资源路径时行为与旧函数一致 ===
+  PASS  ddc 传 NULL 资源仍为 -1（不因新符号而放宽），实得 rc=-1
+  PASS  convolver 传 NULL 资源仍为 -1（不因新符号而放宽），实得 rc=-1
+  PASS  bass 传 NULL 资源仍走旧逻辑并实测成功 (rc=0)
+
+=== 4) 未知组件仍返回 -1 ===
+  PASS  未知组件返回 -1 (rc=-1)
+
+=== 5) haas 纯延迟线：按当前延迟实测（逐声道首非零取最大） ===
+  PASS  haas @12ms → samples=576 (expect≈576), rc=0
+  PASS  haas @5ms → samples=240 (expect≈240), rc=0
+  PASS  haas @3ms → samples=144 (expect≈144), rc=0
+  PASS  haas @0ms → samples=0 (expect≈0), rc=0
+
+=== 6) spatial：诚实测出 0ms（链上无前瞻，ITD 是耳间差） ===
+  PASS  spatial 实测成功且为 0 样本 (rc=0, samples=0)
+
+>>> 延迟探针契约验证通过 <<<
+blk 30 viz n=2 seq=20 band0=0.209 band5=0.907
+blk 60 viz n=2 seq=40 band0=0.126 band5=0.786
+blk 90 viz n=2 seq=60 band0=0.240 band5=0.791
+OK: 100 blocks x 1056 frames survived
+=== [1] 创建引擎实例 ===
+=== [2] 执行插件扫描 (快速扫描) ===
+Scanned 155 plugins
+Retrieved 155 plugin metadata entries:
+  [1] Auto-Tune EFX+ (VST3) - C:\Program Files\Common Files\VST3\Antares\Auto-Tune EFX+.vst3
+  [2] BC PatchWork Synth VST3 (VST3) - C:\Program Files\Common Files\VST3\Blue Cat Audio\BC PatchWork Synth VST3.vst3
+  [3] BC PatchWork VST3 (VST3) - C:\Program Files\Common Files\VST3\Blue Cat Audio\BC PatchWork VST3.vst3
+  [4] ConvologyXT_64 (VST3) - C:\Program Files\Common Files\VST3\ConvologyXT_64.vst3
+  [5] FabFilter Micro (VST3) - C:\Program Files\Common Files\VST3\FabFilter\FabFilter Micro.vst3
+=== [3] 状态初始校验 (未加载插件) ===
+=== [4] 测试插件加载与音频处理 ===
+Attempting to load plugin: ConvologyXT_64 from C:\Program Files\Common Files\VST3\ConvologyXT_64.vst3
+Load result: rc = 1
+Active status: hasActive=True, latency=288
+=== [5] 验证音频 process() 处理与直通旁路 ===
+Processed 24 x 256 frames, DC 0.5: max|out-in| = 0.200000
+Bypassed 256 frames, sample 0: out=0.5000
+=== [6] 插件卸载与销毁 ===
+ALL TESTS PASSED: M1 VST3/CLAP Plugin Host & Scanner smoke test 100% OK!
+=== [1] create engine (process mode) ===
+=== [2] remote scan ===
+remote scanned plugins: 155
+=== [3] remote load ConvologyXT_64 ===
+remote active, latency=416 frames (plugin 0 + transport 128 = 2.67 ms)
+=== [4] remote processing transforms the input ===
+=== [4a] layout integrity: ramp vector must stay dense across the proxy boundary ===
+  non-zero density: 100.0% (512/512); mean(ch0)=+0.4349 mean(ch1)=-0.4349
+  transport clean: seqGaps=0, inputOverflows=0, outputOverflows=0
+  depth invariant: inFlight=2, maxInFlight=2, depthTarget=2, depthViolations=0, depthDrops=0
+  per-callback latency: 256-frame callbacks -> transport 256, total 544 (288 + 2x128)
+=== [4b] replacing a loaded remote plugin keeps processing ===
+=== [4c] async replacement over a loaded remote slot ===
+=== [5] host process exists as child ===
+host pid: 1360
+=== [6] kill host; engine must survive and bypass ===
+engine survived; host crash reported and bypassed
+=== [7] reload relaunches host and restores processing ===
+reload restored processing; new host pid: 25648
+=== [8] destroy engine and reap host ===
+ALL TESTS PASSED: out-of-process plugin host smoke test OK
+=== [1] create engine + load Pro-Q 4 in process mode ===
+=== [2] open editor; it must live in the host process ===
+host pid=3940, container hwnd=0x290ec4
+=== [3] plugin GUI is mounted on the host container thread ===
+container tid=584, descendants=1, wrong-thread=0
+=== [4] container resize reaches the plugin child ===
+resized container 1707x795 -> 1711x941; child -> 1711x941
+=== [5] close editor and unload without killing the host ===
+ALL TESTS PASSED: out-of-process editor hosting OK
+=== [1] 扫描插件，定位 iZotope 目标 ===
+target: Ozone 12 Equalizer @ C:\Program Files\Common Files\VST3\iZotope\Ozone 12 Equalizer.vst3
+=== [2] 加载（门禁：setProcessing 返回 kNotImplemented 不得致命） ===
+load rc = 1
+hasActive=True latency=0
+=== [3] process() 音频存活（正弦向量，携带位置信息） ===
+tail RMS = 0.355302 (input RMS = 0.353553)
+=== [4] bypass 位精确直通 ===
+=== [5] 卸载与销毁 ===
+ALL TESTS PASSED: iZotope setProcessing-kNotImplemented tolerance 100% OK!
+Engine DLL: D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\auradsp_engine.dll
+Created AuraDSP engine: 66932800
+Scanned 155 plugin entries (scan rc=155)
+
+==========================================
+Testing: FabFilter Pro-Q 3 (VST3)
+Path: C:\Program Files\Common Files\VST3\FabFilter\FabFilter Pro-Q 3.vst3
+Vendor: FabFilter | Version: 1.0
+ID: 
+Load Slot 0 result: 1
+Unload Slot 0 result: 1
+PASS: FabFilter Pro-Q 3 load/unload verified!
+
+==========================================
+Testing: Ozone 12 Bass Control (VST3)
+Path: C:\Program Files\Common Files\VST3\iZotope\Ozone 12 Bass Control.vst3
+Vendor: iZotope, Inc. | Version: 12.1.0.1440
+ID: 
+Load Slot 0 result: 1
+Unload Slot 0 result: 1
+PASS: Ozone 12 Bass Control load/unload verified!
+[SKIP] Plugin Element FX not found on this machine.
+
+ALL 2 TARGET PLUGIN(S) VERIFIED SUCCESSFULLY!
+=== smoke_plugin_pdc (inproc mode) ===
+  plugin latency = 288 samples (6.00 ms)
+  [PDC OFF] active total latency = 288
+  [PDC OFF] bypass total latency = 0
+  [PDC ON]  bypass total latency = 288
+  [PDC ON]  active total latency = 288 (unchanged)
+  [PDC ON]  bypass output settled to 0.5 DC (delay applied)
+  PASS
+ALL TESTS PASSED: PDC bypass-preserving smoke OK
+=== smoke_plugin_bus (inproc mode) ===
+  VST3 busInfo: {'inputs': 2, 'outputs': 1, 'auxInputs': 1, 'auxOutputs': 0, 'mainInChannels': 2, 'mainOutChannels': 2}
+  VST3 processed peak = 0.249997
+  CLAP busInfo: {'inputs': 17, 'outputs': 17, 'auxInputs': 16, 'auxOutputs': 16, 'mainInChannels': 2, 'mainOutChannels': 2}
+ALL TESTS PASSED: bus/multichannel smoke OK
+PASS chain prepare
+PASS chain pdc delay lines
+PASS both load slot 0
+PASS slot active
+PASS slot latency match
+PASS total latency aggregation
+PASS stage 0 latency aggregation
+PASS stage 1 latency aggregation
+PASS stage 2 latency aggregation
+PASS stage 3 latency aggregation
+PASS stage 4 latency aggregation
+PASS direct and chain outputs match in all stages
+PASS chain actually processed audio
+PASS both load slot 1
+PASS two-slot stage latency sum
+PASS two slots in one stage match direct serial processing
+PASS inactive stage is bit-exact
+PASS bypassed stage latency is zero
+PASS chain bypass is bit-exact
+max diff L=0 R=0
+ALL TESTS PASSED
+PASS  plugin chain direct consistency
+stage=0 calls=3 outRms=0.185926 frames=512 latency=0
+stage=1 calls=6 outRms=0.186005 frames=512 latency=0
+stage=2 calls=9 outRms=0.186006 frames=512 latency=0
+stage=3 calls=12 outRms=0.186006 frames=512 latency=0
+stage=4 calls=15 outRms=0.186006 frames=512 latency=0
+long-run: calls=55 (+40) outRms=0.186006
+PASS  Pro-Q 4 telemetry on all five insert stages
+debug worst unselected diff vs control = 0
+PASS  plugin slot channels: mask roundtrip + 4ch select/pass-through
+=== [快扫] 共 155 条，抽检 10 条 ===
+=== [深扫] 共 161 条，抽检 10 条 ===
+
+[PASS] 20 个插件加载实例全部满足「扫描值 == 加载值」
+
+=== 快扫 ===
+  [PASS] auradsp_plugin_scan(deep=0) 返回 6
+  [PASS] Legacy32.vst3（x86-win）出现在扫描结果中（D1）
+  [PASS] Legacy32.vst3 is64Bit=false
+  [PASS] Legacy32.vst3 isCompatible=true（位桥在位）
+  [PASS] Legacy32.vst3 位桥在位时无错误文案：''
+  [PASS] Legacy32.vst3 vendor 非空
+  [PASS] Legacy32.vst3 vendor 不退化成名架构目录名 x86-win
+  [PASS] Modern64.vst3（x86_64-win）出现在扫描结果中
+  [PASS] Modern64.vst3 is64Bit=true
+  [PASS] Modern64.vst3 isCompatible=true
+  [PASS] Both.vst3 仅一条条目（实测 1）
+  [PASS] Both.vst3 解析到 x86_64-win（本进程架构优先）
+  [PASS] Legacy32.clap 恰有一条 CLAP 条目（实测 1）
+  [PASS] Legacy32.clap is64Bit=false
+  [PASS] Legacy32.clap isCompatible=true（位桥在位）
+  [PASS] Legacy32.clap 位桥在位时无错误文案
+  [PASS] Upper64.vst3（内层 .VST3 大写）出现在扫描结果中（D4a）
+  [PASS] Upper64.vst3 is64Bit=true
+  [PASS] Upper64.vst3 isCompatible=true
+  [PASS] MixedCase.VST3（bundle 目录大写）出现在扫描结果中（D4b）
+
+=== 深扫 ===
+  [PASS] auradsp_plugin_scan(deep=1) 返回 6
+  [PASS] Legacy32.vst3（x86-win）出现在扫描结果中（D1）
+  [PASS] Legacy32.vst3 is64Bit=false
+  [PASS] Legacy32.vst3 isCompatible=true（位桥在位）
+  [PASS] Legacy32.vst3 位桥在位时无错误文案：''
+  [PASS] Legacy32.vst3 vendor 非空
+  [PASS] Legacy32.vst3 vendor 不退化成名架构目录名 x86-win
+  [PASS] Modern64.vst3（x86_64-win）出现在扫描结果中
+  [PASS] Modern64.vst3 is64Bit=true
+  [PASS] Modern64.vst3 isCompatible=true
+  [PASS] Both.vst3 仅一条条目（实测 1）
+  [PASS] Both.vst3 解析到 x86_64-win（本进程架构优先）
+  [PASS] Legacy32.clap 恰有一条 CLAP 条目（实测 1）
+  [PASS] Legacy32.clap is64Bit=false
+  [PASS] Legacy32.clap isCompatible=true（位桥在位）
+  [PASS] Legacy32.clap 位桥在位时无错误文案
+  [PASS] Upper64.vst3（内层 .VST3 大写）出现在扫描结果中（D4a）
+  [PASS] Upper64.vst3 is64Bit=true
+  [PASS] Upper64.vst3 isCompatible=true
+  [PASS] MixedCase.VST3（bundle 目录大写）出现在扫描结果中（D4b）
+
+=== 加载路拒绝 ===
+  [PASS] auradsp_plugin_slot_load(32 位 VST3) 返回 0（实测 0）
+  [PASS] auradsp_plugin_slot_load(32 位 CLAP) 返回 0（实测 0）
+  [INFO] 扫描总计 6 条（含系统目录真实插件）
+
+SMOKE PASSED: 32-bit plugin detection OK (D1/D2/D3)
+
+=== [64位] 扫描 D:\temp_desktop\Proj\JamesDSP\test\vst2\x64 ===
+  [OK] [64位] 扫描结果含 AuraTestVST2
+  [OK] [64位] format=VST2（实际 VST2）
+  [OK] [64位] is64Bit=True
+  [OK] [64位] 快扫 name 非空
+  [OK] [64位] 快扫 path 非空
+=== [64位] 加载 + 音频 ===
+  [OK] [64位] slot_load rc=1
+  [OK] [64位] 解除挂载即旁路
+  [OK] [64位] 0.8 输入 → 0.400000（期望 0.4）
+  [OK] [64位] 设置旁路
+  [OK] [64位] 旁路输出 0.800000（期望 0.8）
+=== [64位] 编辑器 ===
+  [OK] [64位] 编辑器已打开
+  [OK] [64位] 编辑器关闭
+  [OK] [64位] 编辑器状态已清除
+=== [64位] 预设往返 ===
+  [OK] [64位] save_preset
+  [OK] [64位] 预设文件已生成（28 B）
+  [OK] [64位] 预设 magic=AUR2
+  [OK] [64位] load_preset
+  [OK] [64位] status.hasActive
+  [OK] [64位] 加载路 name='AuraTestVST2'
+  [OK] [64位] 加载路 vendor='AuraDSP'
+  [OK] [64位] 加载路 version='1.0.0'
+  [OK] [64位] unload
+  [OK] [64位] 卸载后 hasActive=False
+  [OK] [64位] 卸载后可重复加载
+
+=== [64位] 扫描 D:\temp_desktop\Proj\JamesDSP\test\vst2\x64 ===
+  [OK] [64位] 扫描结果含 AuraTestVST2
+  [OK] [64位] format=VST2（实际 VST2）
+  [OK] [64位] is64Bit=True
+  [OK] [64位] 深扫 name='AuraTestVST2'
+  [OK] [64位] 深扫 vendor='AuraDSP'
+  [OK] [64位] 深扫 version='1.0.0'
+  [OK] [64位] 深扫 id='41757261'
+=== [64位] 加载 + 音频 ===
+  [OK] [64位] slot_load rc=1
+  [OK] [64位] 解除挂载即旁路
+  [OK] [64位] 0.8 输入 → 0.400000（期望 0.4）
+  [OK] [64位] 设置旁路
+  [OK] [64位] 旁路输出 0.800000（期望 0.8）
+=== [64位] 编辑器 ===
+  [OK] [64位] 编辑器已打开
+  [OK] [64位] 编辑器关闭
+  [OK] [64位] 编辑器状态已清除
+=== [64位] 预设往返 ===
+  [OK] [64位] save_preset
+  [OK] [64位] 预设文件已生成（28 B）
+  [OK] [64位] 预设 magic=AUR2
+  [OK] [64位] load_preset
+  [OK] [64位] status.hasActive
+  [OK] [64位] 加载路 name='AuraTestVST2'
+  [OK] [64位] 加载路 vendor='AuraDSP'
+  [OK] [64位] 加载路 version='1.0.0'
+  [OK] [64位] unload
+  [OK] [64位] 卸载后 hasActive=False
+  [OK] [64位] 卸载后可重复加载
+
+=== [32位] 扫描 D:\temp_desktop\Proj\JamesDSP\test\vst2\x86 ===
+  [OK] [32位] 扫描结果含 AuraTestVST2
+  [OK] [32位] format=VST2（实际 VST2）
+  [OK] [32位] is64Bit=False
+  [OK] [32位] 深扫 name='AuraTestVST2'
+  [OK] [32位] 深扫 vendor='AuraDSP'
+  [OK] [32位] 深扫 version='1.0.0'
+  [OK] [32位] 深扫 id='41757261'
+=== [32位] 加载 + 音频 ===
+  [OK] [32位] slot_load rc=1
+  [OK] [32位] 解除挂载即旁路
+  [OK] [32位] 0.8 输入 → 0.400000（期望 0.4）
+  [OK] [32位] 设置旁路
+  [OK] [32位] 旁路输出 0.800000（期望 0.8）
+=== [32位] 编辑器 ===
+  [OK] [32位] 编辑器已打开
+  [OK] [32位] 编辑器关闭
+  [OK] [32位] 编辑器状态已清除
+=== [32位] 预设往返 ===
+  [OK] [32位] save_preset
+  [OK] [32位] 预设文件已生成（28 B）
+  [OK] [32位] 预设 magic=AUR2
+  [OK] [32位] load_preset
+  [OK] [32位] status.hasActive
+  [OK] [32位] 加载路 name='AuraTestVST2'
+  [OK] [32位] 加载路 vendor='AuraDSP'
+  [OK] [32位] 加载路 version='1.0.0'
+  [OK] [32位] status.remoteMode=True（实际 True）
+  [OK] [32位] unload
+  [OK] [32位] 卸载后 hasActive=False
+  [OK] [32位] 卸载后可重复加载
+
+=== [拒绝路径] 坏 magic + 非插件 DLL 过滤 ===
+  [OK] 坏 magic 探针仍可被发现（深扫回退快扫）
+  [OK] 坏 magic 加载被拒（rc=0）
+  [OK] 坏 magic 失败后槽未激活
+  [OK] 无 VSTPluginMain 导出的 DLL 被 PE 导出表过滤
+
+[PASS] VST2 64/32 位扫描、加载、音频、旁路、预设、卸载全链通过
+
+=== [64位] 扫描 D:\temp_desktop\Proj\JamesDSP\test\vst2\x64 ===
+  [OK] [64位] 扫描结果含 AuraTestVST2
+  [OK] [64位] format=VST2（实际 VST2）
+  [OK] [64位] is64Bit=True
+  [OK] [64位] 快扫 name 非空
+  [OK] [64位] 快扫 path 非空
+=== [64位] 加载 + 音频 ===
+  [OK] [64位] slot_load rc=1
+  [OK] [64位] 解除挂载即旁路
+  [OK] [64位] 0.8 输入 → 0.400000（期望 0.4）
+  [OK] [64位] 设置旁路
+  [OK] [64位] 旁路输出 0.800000（期望 0.8）
+=== [64位] 编辑器 ===
+  [OK] [64位] 编辑器已打开
+  [OK] [64位] 编辑器关闭
+  [OK] [64位] 编辑器状态已清除
+=== [64位] 预设往返 ===
+  [OK] [64位] save_preset
+  [OK] [64位] 预设文件已生成（28 B）
+  [OK] [64位] 预设 magic=AUR2
+  [OK] [64位] load_preset
+  [OK] [64位] status.hasActive
+  [OK] [64位] 加载路 name='AuraTestVST2'
+  [OK] [64位] 加载路 vendor='AuraDSP'
+  [OK] [64位] 加载路 version='1.0.0'
+  [OK] [64位] unload
+  [OK] [64位] 卸载后 hasActive=False
+  [OK] [64位] 卸载后可重复加载
+
+=== [64位] 扫描 D:\temp_desktop\Proj\JamesDSP\test\vst2\x64 ===
+  [OK] [64位] 扫描结果含 AuraTestVST2
+  [OK] [64位] format=VST2（实际 VST2）
+  [OK] [64位] is64Bit=True
+  [OK] [64位] 深扫 name='AuraTestVST2'
+  [OK] [64位] 深扫 vendor='AuraDSP'
+  [OK] [64位] 深扫 version='1.0.0'
+  [OK] [64位] 深扫 id='41757261'
+=== [64位] 加载 + 音频 ===
+  [OK] [64位] slot_load rc=1
+  [OK] [64位] 解除挂载即旁路
+  [OK] [64位] 0.8 输入 → 0.400000（期望 0.4）
+  [OK] [64位] 设置旁路
+  [OK] [64位] 旁路输出 0.800000（期望 0.8）
+=== [64位] 编辑器 ===
+  [OK] [64位] 编辑器已打开
+  [OK] [64位] 编辑器关闭
+  [OK] [64位] 编辑器状态已清除
+=== [64位] 预设往返 ===
+  [OK] [64位] save_preset
+  [OK] [64位] 预设文件已生成（28 B）
+  [OK] [64位] 预设 magic=AUR2
+  [OK] [64位] load_preset
+  [OK] [64位] status.hasActive
+  [OK] [64位] 加载路 name='AuraTestVST2'
+  [OK] [64位] 加载路 vendor='AuraDSP'
+  [OK] [64位] 加载路 version='1.0.0'
+  [OK] [64位] unload
+  [OK] [64位] 卸载后 hasActive=False
+  [OK] [64位] 卸载后可重复加载
+
+=== [32位] 扫描 D:\temp_desktop\Proj\JamesDSP\test\vst2\x86 ===
+  [OK] [32位] 扫描结果含 AuraTestVST2
+  [OK] [32位] format=VST2（实际 VST2）
+  [OK] [32位] is64Bit=False
+  [OK] [32位] 深扫 name='AuraTestVST2'
+  [OK] [32位] 深扫 vendor='AuraDSP'
+  [OK] [32位] 深扫 version='1.0.0'
+  [OK] [32位] 深扫 id='41757261'
+=== [32位] 加载 + 音频 ===
+  [OK] [32位] slot_load rc=1
+  [OK] [32位] 解除挂载即旁路
+  [OK] [32位] 0.8 输入 → 0.400000（期望 0.4）
+  [OK] [32位] 设置旁路
+  [OK] [32位] 旁路输出 0.800000（期望 0.8）
+=== [32位] 编辑器 ===
+  [OK] [32位] 编辑器已打开
+  [OK] [32位] 编辑器关闭
+  [OK] [32位] 编辑器状态已清除
+=== [32位] 预设往返 ===
+  [OK] [32位] save_preset
+  [OK] [32位] 预设文件已生成（28 B）
+  [OK] [32位] 预设 magic=AUR2
+  [OK] [32位] load_preset
+  [OK] [32位] status.hasActive
+  [OK] [32位] 加载路 name='AuraTestVST2'
+  [OK] [32位] 加载路 vendor='AuraDSP'
+  [OK] [32位] 加载路 version='1.0.0'
+  [OK] [32位] status.remoteMode=True（实际 True）
+  [OK] [32位] unload
+  [OK] [32位] 卸载后 hasActive=False
+  [OK] [32位] 卸载后可重复加载
+
+=== [拒绝路径] 坏 magic + 非插件 DLL 过滤 ===
+  [OK] 坏 magic 探针仍可被发现（深扫回退快扫）
+  [OK] 坏 magic 加载被拒（rc=0）
+  [OK] 坏 magic 失败后槽未激活
+  [OK] 无 VSTPluginMain 导出的 DLL 被 PE 导出表过滤
+
+[PASS] VST2 64/32 位扫描、加载、音频、旁路、预设、卸载全链通过
+=== [1] 双宿主源码与构建不变量 ===
+  PASS CMakeLists.txt 包含 plugin_host_x64 目标
+  PASS CMakeLists.txt 包含 plugin_host_x86 目标
+  PASS plugin_host_client.cpp 包含 x86 与 x64 宿主路径分派
+  PASS plugin_scanner.cpp 包含 remoteClientFor 位数路由
+  PASS 64 位宿主已就绪: D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\plugin_host_x64.exe
+  PASS 32 位桥宿主已就绪: D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\plugin_host_x86.exe
+  PASS plugin_host_x64.exe 是 AMD64 PE (0x8664)
+  PASS plugin_host_x86.exe 是 i386 PE (0x14c)
+
+=== [2] 32 位位桥活体全链测试 ===
+  PASS probe_gain_x86.clap 在位
+  PASS probe_gain_x86.clap 是 32 位 i386 二进制 (0x14c)
+  PASS auradsp_create 成功
+  PASS 32 位插件 slot_load 成功 (rc=1)
+  PASS status.hasActive == true
+  PASS status.remoteMode == true
+  PASS plugin.is64Bit == false (正确识别为 32 位)
+  PASS plugin.isCompatible == true (位桥支持兼容)
+  PASS plugin.name == 'Probe Gain' (got Probe Gain)
+  PASS 宿主子进程为 plugin_host_x86.exe (匹配到 1 个)
+  PASS auradsp_plugin_slot_set_bypass(0, 0) 解除旁路成功
+  PASS 32 位位桥音频处理输出峰值 = 0.4000 (期望 0.4000)
+
+=== [3] 真实 32 位 CLAP 与 VST3 外部插件验证 ===
+  PASS 真实 32 位 CLAP slot_load 成功 (rc=1)
+  PASS CLAP 格式正确
+  PASS CLAP is64Bit == false
+  PASS CLAP name == '3 Band EQ' (got 3 Band EQ)
+  PASS 真实 32 位 VST3 slot_load 成功 (rc=1)
+  PASS VST3 格式正确
+  PASS VST3 is64Bit == false
+  PASS VST3 name == '3 Band EQ' (got 3 Band EQ)
+  PASS 真实 32 位 VST3 音频输出正常 (peak=0.8000)
+
+ALL PASS: Windows 插件双宿主与 32 位位桥门禁全绿
+=== [1] 创建引擎句柄 ===
+Num plugin slots supported: 4
+=== [2] 扫描已安装效果器 ===
+Found 155 plugins
+Parsed 155 plugin entries
+Target plugin: Auto-Tune EFX+ at C:\Program Files\Common Files\VST3\Antares\Auto-Tune EFX+.vst3
+=== [3] 槽位 0 与 槽位 1 并行加载 ===
+Slot 0 load rc: 1
+Slot 1 load rc: 1
+=== [4] 检验阶段调整（Stage 0: Pre-DSP, Stage 4: Post-Limiter） ===
+Slot 0 stage: 0 (Pre-DSP), Slot 1 stage: 4 (Post-Limiter) OK!
+=== [5] 预设保存与加载序列化验证 ===
+Save preset rc: 1, file size: 4143 bytes
+Load preset rc: 1
+=== [6] 双插槽音频处理与旁路切换 ===
+Processed 256 frames with dual active slots: sample[0] L=0.5000, R=0.5000
+Processed 256 frames with bypassed slots: sample[0] L=0.5000, R=0.5000
+=== [7] 双插槽卸载验证 ===
+Calling unload 0...
+unl0 = 1
+Calling unload 1...
+unl1 = 1
+Calling destroy...
+Destroyed ok!
+ALL TESTS PASSED: Multi-slot, stage insert & preset serialization 100% OK!
+=== worker: inproc ===
+[inproc] loaded ConvologyXT_64, latency=288, remoteMode=None
+[inproc] plugin active after warm-up (global frame 128)
+[inproc] captured 33024 samples, seqGaps=None, overflows in/out=None/None
+=== worker: process ===
+[process] loaded ConvologyXT_64, latency=416, remoteMode=True
+[process] plugin active after warm-up (global frame 256)
+[process] captured 33024 samples, seqGaps=0, overflows in/out=0/0
+slot health: remoteFailed=False, bypassed=False (both modes)
+remote processCalls advanced: 227
+=== 跨模式比对 ===
+mode      latency   onset       peak  seqGaps  ovf(in/out)
+inproc        288     288   0.300000     None None/ None
+process       416     416   0.300000        0 0/    0
+latency delta = 128 (expected 128)
+onset delta = 128 (1 transport block(s)); in-proc onset 288 >= latency 288
+IR peak=0.300000, onset-window RMS=0.018750 (non-trivial)
+aligned comparison: max|diff|=0, differing samples=0/32192
+PASS: in-proc and out-of-process modes agree bit-exactly (after 128-frame transport alignment)
+passthrough frame0 = 0.500000 (expect 0.5)
+echo window [128, 10368) frames: peak=0.000000, nonzero>0.05: 0 samples
+slot: remoteFailed=False, seqGaps=0, ovf=0/0
+PASS: warm-up passthrough block not replayed (prime-block kick, no double-send)
+[1] enabled: max_diff=0.015520 outRMS=0.006745 OK
+[2] disabled: output bit-exact passthrough, total latency = 0 OK
+[3] re-enabled: max_diff=0.015520 (delay lines reset) OK
+[4] slot state preserved: hasActive=True bypassed=False processCalls=128 OK
+ALL TESTS PASSED: plugin chain enable switch 100% OK!
+[0] empty-chain steady diff = 0.011447 (baseline)
+[1] loaded ConvologyXT_64
+[2] active diff = 0.554631 (48x baseline)
+[3.0] bypass=0.011447 (== baseline) | resume=0.554631 (== active)
+[3.1] bypass=0.011447 (== baseline) | resume=0.554631 (== active)
+[3.2] bypass=0.011447 (== baseline) | resume=0.554631 (== active)
+[3.3] bypass=0.011447 (== baseline) | resume=0.554631 (== active)
+[3.4] bypass=0.011447 (== baseline) | resume=0.554631 (== active)
+[4] status sane: processCalls=24, seqGaps=None
+PASS: bypass lifecycle works across 5 cycles (bypass == empty-chain, resume == active, both steady-state exact)
+[0] bridge up, groups=8
+[0] test tone rc=0
+PASS  load rc==1 (rc=1)
+PASS  eng[0] 立即可用（同步） (ready=[1, 0, 0, 0, 0, 0, 0, 0])
+PASS  掩码外组未加载（跳过生效） (ready=[1, 0, 0, 0, 0, 0, 0, 0])
+[1] mask=0x01: load=4.13s ready=[1, 0, 0, 0, 0, 0, 0, 0]
+PASS  同步段不含逐组扇出（< 8s） (load=4.13s)
+PASS  挂载即旁路（P-041 mount-bypass） (bypassed=True)
+[1b] 在线路由组: [0, 1]（routeState=[2, 2, 0, 0, 0, 0, 0, 0]）
+PASS  后台补齐完成（在线路由组全就绪） (ready=[1, 1, 0, 0, 0, 0, 0, 0] live=[0, 1])
+PASS  补挂结束旁路已撤（loadSuspend==0） (loadSuspend=0)
+NOTE 预算 42666µs ≥ 8ms：加载旁路门不启用（本机 2048 帧常态），suspend_seen=False 仅记录
+[2] backfill 7 groups: 2.00s (total≈6.13s) suspend_seen=False stuckG=0 fanTimeouts=0
+PASS  解旁路后槽激活（bypassed==false） (bypassed=False)
+PASS  补挂后插件链恢复处理（processCalls 增长） (calls 7->42 frames=329728)
+PASS  unload rc==1
+PASS  unload 后全部清零 (ready=[0, 0, 0, 0, 0, 0, 0, 0])
+[3] unload cleared: ready=[0, 0, 0, 0, 0, 0, 0, 0]
+VMBRIDGE FAILURES: none
+PASS  host 进程存在（进程外模式懒启动） (pid=16208)
+PASS  宿主进程类 == BELOW_NORMAL（降级仍在） (BELOW_NORMAL)
+PASS  音频线程优先级 >= 15（MMCSS/兜底未被进程降级拖低） (max=15 TIME_CRITICAL)
+PASS  工作线程确实被降（存在相对优先级 <= 0 的线程） (prios=[0, 0, 0, 0, 0, 1, 15])
+[info] host threads: [0, 0, 0, 0, 0, 1, 15] → ['NORMAL', 'NORMAL', 'NORMAL', 'NORMAL', 'NORMAL', 'ABOVE_NORMAL', 'TIME_CRITICAL']
+HOST PRIORITY FAILURES: none
+PASS  test_host_quarantine.exe exists
+PASS  exit code 0
+PASS  valid JSON dict
+PASS  all assertions ok
+PASS  quiesce wait effective (unloadMs >= 50)
+PASS  quiesce wait bounded (unloadMs <= 2000)
+PASS  instance not destroyed (quarantined)
+PASS  no destructor inside process
+PASS  no instance calls on stuck instance
+PASS  slot inFlight cleared after quarantine
+PASS  no underflow after straggler exit
+PASS  quiesced unload still destroys
+HOSTQUARANTINE ALL PASSED
+=== [1] gate.maxIrSeconds / gate.maxFileMb 真正生效 (D1) ===
+  PASS  gate.maxIrSeconds 默认 30s (got 30.0)
+  PASS  gate.maxIrSeconds 可写可回读 (got 5.0)
+  PASS  40s IR 在 gate.maxIrSeconds=5 下被拒 (rc=-1)
+  PASS  40s IR 在 gate.maxIrSeconds=60 下放行 (rc=0)
+  PASS  gate.maxFileMb 默认 64 (got 64.0)
+  PASS  大文件在 gate.maxFileMb=1 下被拒 (rc=-1)
+
+=== [2] viz.fftSize 参数 (D1) ===
+  PASS  viz.fftSize 默认 4096 (got 4096)
+  PASS  viz.fftSize=2048 接受
+  PASS  viz.fftSize 回读 2048 (got 2048)
+  PASS  viz.fftSize=3000 (非2的幂) 拒绝
+  PASS  viz.fftSize=512 (<1024) 拒绝
+  PASS  viz.fftSize=16384 (>8192) 拒绝
+  PASS  reverb.preset=18 (上界) 接受
+  PASS  reverb.preset=19 (越界) 拒绝
+  PASS  reverb.preset=-3 (越界) 拒绝
+  PASS  reverb.preset 越界拒绝后保持 18 (got 18)
+
+=== [3] channels.count 契约 (D8) ===
+  PASS  channels.count 默认 2 (got 2)
+  PASS  channels.count=4 (Quad) 接受
+  PASS  channels.count=6 (5.1) 接受
+  PASS  channels.count=8 (7.1) 接受
+  PASS  channels.count=1 拒绝
+  PASS  channels.count=3 拒绝
+  PASS  channels.count=5 拒绝
+  PASS  channels.count=7 拒绝
+  PASS  channels.count=0 拒绝
+  PASS  channels.count=-1 拒绝
+  PASS  input.gain nan 拒绝 (rc=-1)
+  PASS  input.gain inf 拒绝 (rc=-1)
+  PASS  input.gain -inf 拒绝 (rc=-1)
+  PASS  NaN/Inf 拒绝后原值保持不变
+  PASS  拒绝后保持原值 8 (got 8)
+
+=== [4] 5.1 矩阵下混/上混左右隔离度验证 (Phase 2 ADR-003) ===
+  PASS  LFE 逐样本直通不经 DSP (max dev=0.00e+00)
+  PASS  FL 被处理链修改（与输入平均差 0.2186）
+  PASS  FL 幅度在合理范围 (in_rms=0.1768 out_rms=0.2024)
+  PASS  SL 被上混回填非零 (rms=0.1431)
+  PASS  SL 回填增益小于前置 (0.707 < 1.0)
+  PASS  仅 SL 有信号时 SL 输出非零 (左回填正确)
+  PASS  仅 SL 有信号时 FL 得到下混内容 (下混入左声道正确)
+  PASS  仅 SL 有信号时 FR 严格静音 (下混串扰已彻底消除!)
+  PASS  仅 SL 有信号时 SR 严格静音 (上混镜像颠倒已彻底修复!)
+  PASS  仅 SL 有信号时 LFE 保持静音
+  PASS  仅 SR 有信号时 SR 输出非零 (右回填正确)
+  PASS  仅 SR 有信号时 FR 得到下混内容 (下混入右声道正确)
+  PASS  仅 SR 有信号时 FL 严格静音 (左侧无串扰)
+  PASS  仅 SR 有信号时 SL 严格静音 (左环绕无镜像串扰)
+
+=== [4b] channels.upmix_fill 源活动门控（出厂默认 0） ===
+  PASS  channels.upmix_fill 出厂默认 0（不填充）(got 0)
+  PASS  channels.upmix_fill=1 接受
+  PASS  channels.upmix_fill 回读 1（可显式打开铺满）
+  PASS  upmix_fill=0 时立体声源 C/SL/SR/BL/BR 逐样本为 0 (max=0.00e+00)
+  PASS  出厂默认（未设置）时 C/SL/SR/BL/BR 逐样本为 0 (max=0.00e+00)
+  PASS  upmix_fill 开关不影响 FL/FR (max dev=0.00e+00)
+  PASS  显式 upmix_fill=1 仍铺满 C (rms=0.1268)
+  PASS  门控下 LFE 仍逐样本直通 (max dev=7.40e-09)
+  PASS  仅 LFE 有源时环绕声道保持 0 (max=0.00e+00)
+  PASS  5.1 全声道有源时开/关逐样本一致（无回归, max dev=0.00e+00）
+
+=== [5] 离散多声道与声道独立掩码 (Phase B Category A) ===
+  PASS  channels.mode=1 (离散多声道模式) 接受
+  PASS  channels.mode 回读 1 (got 1)
+  PASS  filter.channels 默认 0xFF (got 0xFF)
+  PASS  filter.channels 回读 0x01 (got 0x01)
+  PASS  FL (mask命中) 受到明显高通滤波 (diff=0.3070)
+  PASS  未选中声道 (FR/C/LFE/SL/SR) 100% 逐样本直通 (max dev=0.00e+00)
+  PASS  FR (mask命中) 受到滤波 (diff=0.3070)
+  PASS  FL (mask未命中) 恢复 100% 直通 (dev=0.00e+00)
+
+=== [5b] mode-0 LFE 直通不得绕过 NaN/Inf 卫士 ===
+  PASS  LFE 输出 NaN/Inf 被清零 (bad=0)
+
+=== [6] 立体声路径不受多声道改造影响 ===
+  PASS  立体声直通比例合理 (in=0.2810 out=0.2810)
+
+=== [7] 引擎默认值对齐 Dart ParamDefaults ===
+  PASS  gate.range 默认 -60 (got -60.0)
+  PASS  limiter.threshold 默认 -0.1 (got -0.10000000149011612)
+  PASS  dyneq.b1.release 默认 120 (got 120.0)
+  PASS  dyneq.b3.release 默认 120 (got 120.0)
+
+ALL TESTS PASSED: AppConfig wiring (D1) + multichannel matrix (D8/ADR-003) 100% OK!
+=== [0] ABI 版本门禁 ===
+  PASS  auradsp_abi() == 2
+  PASS  ctypes.sizeof(VizFrame) == 1600
+=== [1] ch=8 逐声道异幅 → per-channel 电平 ===
+  PASS  viz 帧可读
+  PASS  channel_count == 8
+  PASS  channel_levels 逐声道 == 20log10(幅值) ±0.5dB
+  PASS  输入级 stage_ch[12] 逐声道 == 输入幅值 ±0.5dB
+  PASS  stage_ch[13] 逐声道 == 输入幅值 ±0.5dB
+  PASS  stage_ch[14] 逐声道 == 输入幅值 ±0.5dB
+  PASS  stage_ch[15] 逐声道 == 输入幅值 ±0.5dB
+  PASS  stage_ch[16] 逐声道 == 输入幅值 ±0.5dB
+  PASS  stage_ch[18] 逐声道 == 输入幅值 ±0.5dB
+  PASS  stage_ch[19] 逐声道 == 输入幅值 ±0.5dB
+  PASS  stage_ch[17][2..7] == -120（Category B 作用域诚实）
+  PASS  stage_ch[17][0]/[1] == stage_levels_l/r[17]
+  PASS  stage_ch[20][2..7] == -120（Category B 作用域诚实）
+  PASS  stage_ch[20][0]/[1] == stage_levels_l/r[20]
+  PASS  vendor 段 stage_ch[0..11]：[0]/[1] 逐位一致 + [2..7] 恒 -120
+  PASS  GR 槽 stage_ch[24..29][*] == -120（单值语义）
+=== [2] ch=6 逐声道异幅 → per-channel 电平 ===
+  PASS  viz 帧可读
+  PASS  channel_count == 6
+  PASS  channel_levels 逐声道 == 20log10(幅值) ±0.5dB
+  PASS  channel_levels[6..7] == -120（声道数下降清槽）
+  PASS  输入级 stage_ch[12] 逐声道 == 输入幅值 ±0.5dB
+  PASS  stage_ch[13] 逐声道 == 输入幅值 ±0.5dB
+=== [3] gate 深门限 → stage_ch[13] 动态更新 ===
+  PASS  viz 帧可读
+  PASS  stage_ch[12] 保持输入原值（gate 前）
+  PASS  stage_ch[13][0] 过门不压
+  PASS  stage_ch[13][1] 深压（range -80dB）
+  PASS  stage_ch[13][2] 中等电平不压
+=== [4] filter(LP) 开 → stage_ch[15] 行被真实更新 ===
+  PASS  viz 帧可读
+  PASS  filter 后 stage_ch[15] 逐声道 == 输入幅值 ±1.0dB
+  PASS  stage_ch[15] 非陈旧值（MC 采样生效）
+=== [5][6] vendor 段 / GR 槽语义复断言（效果器动过后） ===
+  PASS  vendor 段 stage_ch[0..11]：[0]/[1] 逐位一致 + [2..7] 恒 -120
+  PASS  GR 槽 stage_ch[24..29][*] == -120
+=== [7] stereo 回归（MC→stereo 切换，无残留泄漏） ===
+  PASS  viz 帧可读
+  PASS  channel_count == 2
+  PASS  channel_levels[0]/[1] == level_l/r_dbfs（逐位一致）
+  PASS  channel_levels[2..7] == -120
+  PASS  stage_ch[*][0]/[1] == stage_levels_l/r（stereo 非 GR 槽逐位一致）
+  PASS  stage_ch[*][2..7] == -120（MC 残留不泄漏进 stereo 帧）
+=== [8] 矩阵模式（mode=0，默认值）per-channel 诚实性 ===
+  PASS  viz 帧可读
+  PASS  channel_count == 8（设备真实声道数）
+  PASS  channel_levels[0]/[1] == 下混+链输出（矩阵语义精确公式）
+  PASS  channel_levels[3]（LFE 逐样本直通契约）== 输入幅值
+  PASS  channel_levels[2]（C 矩阵回填）== 矩阵系数预期
+  PASS  channel_levels[4..7] 非 -120（不再假死）
+  PASS  stage_ch[13][2..7] == -120（stage 链立体声，诚实）
+  PASS  stage_ch[13][0]/[1] == stage_levels_l/r[13]
+
+ALL PASS: 多声道电平 Phase B 遥测验收全部通过
+=== [A] 源码不变式：RT 链不得写 vendor 开关 ===
+PASS  engine/chain 源文件可见
+PASS  engine/chain 无 RT 侧 vendor 开关写入
+PASS  engine/chain 无 save/restore 五连
+=== [B] 调用级门控接线（comp 的 FL/FR mask） ===
+PASS  comp 覆盖 FL/FR 时生效
+PASS  comp 不覆盖 FL/FR 时逐位跳过
+PASS  comp 对 mask 命中的 ch2/ch3 仍生效（防整体失效蒙过）
+=== [C] 竞态：MC 处理中翻转 tube.enable，结束后 vendor 开关必须归零 ===
+      参照（从未开过 tube）: 10972.216818914  (8 blocks = 91.6 ms)
+PASS  观测量非空转（tube 常开 → stereo 输出显著不同）
+PASS  竞态轮次充足（可判定）
+PASS  无 lost update（param=0 ⟹ vendor 开关为 0）
+RTVENDORFLAGS ALL PASSED (rounds=60 usable=60)
+=== [1] test_dll_dirs.exe（登记/幂等/引用计数/回收/环境变量） ===
+PASS  test_dll_dirs.exe exists
+PASS  exit code 0
+PASS  valid JSON dict
+PASS  all C++ assertions ok
+PASS  idempotent dir count (afterA==6, 200 calls stable)
+PASS  second plugin adds only own dir
+PASS  recovers to env-only baseline
+PASS  refs baseline restored
+=== [2] 源码不变式：不识别任何厂商名 / 无硬编码安装路径 ===
+PASS  win32_util.cpp 代码内无厂商名
+PASS  不再有 6 条字面量目录表
+=== [3] 源码不变式：卸载路径必须回收 cookie ===
+PASS  vst3_instance.cpp 调用 releasePluginDllDirectories
+PASS  vst3_instance.cpp setup/release 均在实例内（加载/卸载成对）
+PASS  clap_instance.cpp 调用 releasePluginDllDirectories
+PASS  clap_instance.cpp setup/release 均在实例内（加载/卸载成对）
+DLLDIRS ALL PASSED
+=== [A] 源码不变式：释放路径不得有固定 Sleep，必须接 guard + 排空 helper ===
+PASS  AsioBridge: FreeTestFile free of fixed Sleep
+PASS  AsioBridge: FreeTestFile waits deterministically
+PASS  AsioBridge: calls WaitRtDrained
+PASS  AsioBridge: polls rtInBlock
+PASS  VaioBridge: FreeTestFile free of fixed Sleep
+PASS  VaioBridge: FreeTestFile waits deterministically
+PASS  VaioBridge: calls WaitRtDrained
+PASS  VaioBridge: polls rtInBlock
+PASS  VmBridge: FreeTestFile free of fixed Sleep
+PASS  VmBridge: FreeTestFile waits deterministically
+PASS  VmBridge: calls WaitRtDrained
+PASS  VmBridge: polls rtInBlock
+PASS  AsioBridge: RT path uses RtInBlockGuard
+PASS  VaioBridge: RT path uses RtInBlockGuard
+PASS  VmBridge: old 3000-iteration spin loop removed
+PASS  VmBridge: only the start-retry backoff keeps Sleep(50)  (count=1)
+PASS  AsioBridge: zero Sleep(50) left  (count=0)
+PASS  VaioBridge: zero Sleep(50) left  (count=0)
+
+=== [B] rt_drain_test.exe（guard 成对/嵌套 + 排空三结局 + 排空延迟） ===
+PASS  rt_drain_test.exe exists
+PASS  exit code 0  (rc=0)
+PASS  valid JSON result  ({'pass': 10, 'fail': 0, 'ok': True})
+PASS  all C++ assertions ok  ({"pass": 10, "fail": 0, "ok": true})
+PASS  at least 10 assertions ran  (pass=10)
+PASS  guard pairing covered
+PASS  nested guard covered
+PASS  timeout path covered
+PASS  drain latency < 50ms (not a fixed sleep)  (16.0ms)
+
+=== [C] ASIO 实测：test_stop 不再是固定 50ms 睡眠 ===
+INFO  using driver: FL Studio ASIO
+PASS  30 test_stop cycles issued  (n=30)
+PASS  test_stop median well below 50ms  (median=0.00ms min=0.00 max=0.01)
+PASS  test_stop never a fixed sleep (max < 50ms)  (max=0.01ms)
+
+D2 ALL PASSED (30 checks)
+
+=== [A] 源码不变式：泵循环零 Sleep + EVENTCALLBACK 事件驱动 ===
+PASS  [A1] VaioPumpThreadProc 存在
+PASS  [A2] 泵循环体内零 Sleep（含注释外的一切调用）  (发现 0 处)
+PASS  [A3] 泵循环用 WaitAudioPeriod 等周期  (count=2)
+PASS  [A4] GetCurrentPadding 失败路径也走事件等待（不再 Sleep(2)）
+PASS  [A5] 缓冲满（framesNeeded==0）时等待下一周期信号
+PASS  [A6] Initialize 带 AUDCLNT_STREAMFLAGS_EVENTCALLBACK
+PASS  [A7] 创建 auto-reset 事件（bManualReset=FALSE）
+PASS  [A8] SetEventHandle 在 Start 之前挂上
+PASS  [A9] DestroyWasapi 回收事件句柄（不泄漏内核对象）
+PASS  [A10] 回收后置空（避免二次 CloseHandle）
+PASS  [A11] 等待上界是具名常量
+PASS  [A12] 头文件说明'上界不是预期超时，而是回看停止标志'
+
+=== [C] 测试自身的计时口径（不许用 15.6ms 分辨率的时钟量亚毫秒） ===
+PASS  [C1] 计时走 QueryPerformanceCounter
+PASS  [C2] 不出现 GetTickCount64（分辨率 15.6ms，量不了 3ms）
+PASS  [C3] 信号线程用自旋到点而非 Sleep（否则'3ms 后置位'不成立）
+PASS  [C4] 有同机 Sleep(1) 基线对照（断言不依赖具体机器的定时器分辨率）
+
+=== [B] vaio_pump_wait_test.exe（事件驱动等待，驱动无关） ===
+PASS  vaio_pump_wait_test.exe exists
+PASS  exit code 0  (rc=0)
+PASS  valid JSON result  ({'pass': 14, 'fail': 0, 'ok': True})
+PASS  all C++ assertions ok  ({"pass": 14, "fail": 0, "ok": true})
+PASS  at least 12 assertions ran  (pass=14)
+PASS  唤醒延迟 <= 6ms（3ms 信号后）  (wake latency after a 3ms signal = 3.01ms)
+PASS  事件唤醒显著快于 Sleep(1) 基线  (wake=3.0ms base=16.19ms)
+
+D3 ALL PASSED (23 checks)
+
+=== [A] 源码不变式：缺额 + 静音兜底 + 完整块长取 gcd + Init 清零 ===
+PASS  [A1] FFTCompanderProcessSamples 存在
+PASS  [A2] ProcessSamples 有启动缺额分支（mOutputDeficit）
+PASS  [A3] ProcessSamples 首次调用即定缺额（< 0 判定）
+PASS  [A4] ProcessSamples 单次至多推进一个 hop（防 FIFO 越界）
+PASS  [A5] comp_process_chunk 存在（填充→缺额→抽干）
+PASS  [A6] 抽干不足时补静音（不是保留输入）
+PASS  [A7] 缺额段写静音
+PASS  [A8] 不再有 `return outSampleCount` 的半截返回
+PASS  [A9] CompressorStartupDeficit 用完整块长取 gcd（不得先裁到 hop）  ('{\n\tif (ovpLen == 0)\n\t\treturn 0;\n\t/* 必须用**完整块长**，不能先裁到 ovpLen 再取 gcd：相位只由 blockLen 与\n\t * ovpLen 的最大公约数决定。实测教训：441 帧块 @hop')
+PASS  [A10] CompressorProcess 不再预切块（否则缺额按裁剪后块长算错）
+PASS  [A11] Init 清零 mInput（复用影子槽不得带上一份音频）
+PASS  [A12] Init 清零 mOverlapStage2dash（OLA 反馈态）
+PASS  [A13] Init 把缺额置 -1（待首次调用确定）
+PASS  [A14] FFTCompander 结构含 mOutputDeficit 字段
+PASS  [A15] MAX_OUTPUT_BUFFERS_DRS >= 4（缺额策略的队列峰值 = 2，留余量）  (值=4)
+PASS  [A16] compute_latency 按缺额修正 comp 延迟
+PASS  [A17] compute_latency 不再有 `workBlk >= ovpLen` 的块长门槛
+PASS  [A18] kCompLatProfile 注释已撤销「攒不满就直通」的错误结论
+
+=== [B] 启动段原声直通（DC=0.5 输入，前 D 个输出必须精确 0） ===
+PASS  48k blk=128 tf=0 启动段 128 样本为静音  (峰值=0.000000（缺陷版应 ≈0.5）)
+PASS  48k blk=128 tf=1 启动段 384 样本为静音  (峰值=0.000000（缺陷版应 ≈0.5）)
+PASS  48k blk=128 tf=2 启动段 384 样本为静音  (峰值=0.000000（缺陷版应 ≈0.5）)
+PASS  48k blk=192 tf=0 启动段 192 样本为静音  (峰值=0.000000（缺陷版应 ≈0.5）)
+PASS  48k blk=192 tf=1 启动段 448 样本为静音  (峰值=0.000000（缺陷版应 ≈0.5）)
+PASS  48k blk=192 tf=2 启动段 448 样本为静音  (峰值=0.000000（缺陷版应 ≈0.5）)
+PASS  48k blk=256 tf=0 D=0（无缺额，跳过启动断言）  (首活=520)
+PASS  48k blk=256 tf=1 启动段 256 样本为静音  (峰值=0.000000（缺陷版应 ≈0.5）)
+PASS  48k blk=256 tf=2 启动段 256 样本为静音  (峰值=0.000000（缺陷版应 ≈0.5）)
+PASS  48k blk=441 tf=0 启动段 255 样本为静音  (峰值=0.000000（缺陷版应 ≈0.5）)
+PASS  48k blk=441 tf=1 启动段 511 样本为静音  (峰值=0.000000（缺陷版应 ≈0.5）)
+PASS  48k blk=441 tf=2 启动段 511 样本为静音  (峰值=0.000000（缺陷版应 ≈0.5）)
+PASS  48k blk=480 tf=0 启动段 224 样本为静音  (峰值=0.000000（缺陷版应 ≈0.5）)
+PASS  48k blk=480 tf=1 启动段 480 样本为静音  (峰值=0.000000（缺陷版应 ≈0.5）)
+PASS  48k blk=480 tf=2 启动段 480 样本为静音  (峰值=0.000000（缺陷版应 ≈0.5）)
+PASS  48k blk=512 tf=0 D=0（无缺额，跳过启动断言）  (首活=520)
+PASS  48k blk=512 tf=1 D=0（无缺额，跳过启动断言）  (首活=385)
+PASS  48k blk=512 tf=2 D=0（无缺额，跳过启动断言）  (首活=31)
+
+=== [C] 稳态无饥饿（DC 输入下首活后不得再出现精确 0） ===
+PASS  48k blk=128 tf=1 首活后无静音洞  (首活=769 洞数=0)
+PASS  48k blk=192 tf=1 首活后无静音洞  (首活=833 洞数=0)
+PASS  48k blk=441 tf=1 首活后无静音洞  (首活=896 洞数=0)
+PASS  48k blk=480 tf=1 首活后无静音洞  (首活=865 洞数=0)
+PASS  48k blk=500 tf=1 首活后无静音洞  (首活=893 洞数=0)
+PASS  48k blk=512 tf=1 首活后无静音洞  (首活=385 洞数=0)
+PASS  48k blk=1024 tf=1 首活后无静音洞  (首活=385 洞数=0)
+
+=== [D] 脉冲位移 == fftLen-ovpLen + D（48k 逐帧精确） ===
+PASS  48k blk=128 tf=0 位移=1920（期望 1920）  (实测=1920)
+PASS  48k blk=128 tf=1 位移=3968（期望 3968）  (实测=3968)
+PASS  48k blk=128 tf=2 位移=2432（期望 2432）  (实测=2432)
+PASS  48k blk=192 tf=0 位移=1984（期望 1984）  (实测=1984)
+PASS  48k blk=192 tf=1 位移=4032（期望 4032）  (实测=4032)
+PASS  48k blk=192 tf=2 位移=2496（期望 2496）  (实测=2496)
+PASS  48k blk=256 tf=0 位移=1792（期望 1792）  (实测=1792)
+PASS  48k blk=256 tf=1 位移=3840（期望 3840）  (实测=3840)
+PASS  48k blk=256 tf=2 位移=2304（期望 2304）  (实测=2304)
+PASS  48k blk=384 tf=0 位移=1920（期望 1920）  (实测=1920)
+PASS  48k blk=384 tf=1 位移=3968（期望 3968）  (实测=3968)
+PASS  48k blk=384 tf=2 位移=2432（期望 2432）  (实测=2432)
+PASS  48k blk=441 tf=0 位移=2047（期望 2047）  (实测=2047)
+PASS  48k blk=441 tf=1 位移=4095（期望 4095）  (实测=4095)
+PASS  48k blk=441 tf=2 位移=2559（期望 2559）  (实测=2559)
+PASS  48k blk=480 tf=0 位移=2016（期望 2016）  (实测=2016)
+PASS  48k blk=480 tf=1 位移=4064（期望 4064）  (实测=4064)
+PASS  48k blk=480 tf=2 位移=2528（期望 2528）  (实测=2528)
+PASS  48k blk=512 tf=0 位移=1792（期望 1792）  (实测=1792)
+PASS  48k blk=512 tf=1 位移=3584（期望 3584）  (实测=3584)
+PASS  48k blk=512 tf=2 位移=2048（期望 2048）  (实测=2048)
+PASS  48k blk=1024 tf=0 位移=1792（期望 1792）  (实测=1792)
+PASS  48k blk=1024 tf=1 位移=3584（期望 3584）  (实测=3584)
+PASS  48k blk=1024 tf=2 位移=2048（期望 2048）  (实测=2048)
+
+=== [E] 上报延迟 == 实测延迟（ASRC 率按 ms 容差） ===
+PASS  48000/blk=128/tf1 上报==实测（且==(frames+D)/fs）  (rep=82.6667 meas=82.6667 want=82.6667)
+PASS  48000/blk=256/tf1 上报==实测（且==(frames+D)/fs）  (rep=80.0000 meas=80.0000 want=80.0000)
+PASS  48000/blk=441/tf1 上报==实测（且==(frames+D)/fs）  (rep=85.3125 meas=85.3125 want=85.3125)
+PASS  48000/blk=480/tf1 上报==实测（且==(frames+D)/fs）  (rep=84.6667 meas=84.6667 want=84.6667)
+PASS  48000/blk=512/tf1 上报==实测（且==(frames+D)/fs）  (rep=74.6667 meas=74.6667 want=74.6667)
+PASS  48000/blk=1024/tf1 上报==实测（且==(frames+D)/fs）  (rep=74.6667 meas=74.6667 want=74.6667)
+PASS  48000/blk=128/tf0 上报==实测（且==(frames+D)/fs）  (rep=40.0000 meas=40.0000 want=40.0000)
+PASS  48000/blk=441/tf0 上报==实测（且==(frames+D)/fs）  (rep=42.6458 meas=42.6458 want=42.6458)
+PASS  48000/blk=512/tf2 上报==实测（且==(frames+D)/fs）  (rep=42.6667 meas=42.6667 want=42.6667)
+PASS  48000/blk=441/tf2 上报==实测（且==(frames+D)/fs）  (rep=53.3125 meas=53.3125 want=53.3125)
+PASS  96000/blk=512/tf1 上报==实测（ASRC 容差 0.15ms）  (rep=80.0208 meas=80.0729 d=0.0521)
+PASS  96000/blk=1024/tf1 上报==实测（ASRC 容差 0.15ms）  (rep=74.6875 meas=74.7396 d=0.0521)
+PASS  192000/blk=2048/tf1 上报==实测（ASRC 容差 0.15ms）  (rep=74.6875 meas=74.7656 d=0.0781)
+PASS  192000/blk=1024/tf0 上报==实测（ASRC 容差 0.15ms）  (rep=37.3542 meas=37.4323 d=0.0781)
+PASS  上报-实测最差偏差 < 0.15ms  (worst=0.0781ms)
+
+B1-d ALL PASSED (82 checks)
+=== [A] 源码不变式 ===
+PASS  LatencyItem has 3 fields (tier/frames/ms)  (int tier;
+    int frames;  
+    float ms;)
+PASS  kLatComp retired from table (comp -> kCompLatProfile)
+PASS  kLatArbMag absent from table (latency = block length)
+PASS  compute_latency uses LatencyMs()
+PASS  compute_latency no direct .ms accumulation
+PASS  compute_latency converts arbmag by block length
+
+=== [B] 行为：结构性帧数按换算基准走（不是写死的毫秒常量） ===
+PASS  comp latency @48k ≈ 74.67ms (工作域 3584 帧)  (got 74.67ms (base=0.00, rc=0))
+PASS  comp latency @96k ≈ 74.67ms (工作域 3584 帧)  (got 74.67ms (base=0.02, rc=0))
+PASS  comp latency @192k ≈ 74.67ms (工作域 3584 帧)  (got 74.67ms (base=0.02, rc=0))
+PASS  comp latency is device-rate independent (ASRC work domain)  (48k=74.67 96k=74.67 192k=74.67)
+
+=== [C] 名义值与采样率无关（reverb 30ms） ===
+PASS  reverb nominal 30ms @48k  (got 30.000ms)
+PASS  reverb nominal 30ms @96k  (got 30.021ms)
+
+=== [D] 叠加口径自洽（48k comp+reverb） ===
+PASS  48k comp(74.67)+reverb(30) ≈ 104.67ms  (got 104.67ms)
+
+D1 ALL PASSED (13 checks)
+=== [A] 源码不变式 ===
+PASS  AURADSP_ASRC_TAPS defined  (#define AURADSP_ASRC_TAPS 64u)
+PASS  AURADSP_ASRC_TAPS == 64  (64)
+PASS  no local `const unsigned int asrc_taps` remains
+PASS  4 ASRC init calls (= 2 paths x 2 channels)  (n=4)
+PASS  all ASRC init calls use AURADSP_ASRC_TAPS
+PASS  kCompLatProfile has 4 tf profiles  (n=4)
+PASS  kCompLatProfile tf=1 is fftLen4096/ovp512/3584 frames  ((4096, 512, 3584))
+PASS  kCompLatProfile tf=3 is time-domain zero latency  ((0, 0, 0))
+PASS  kLatComp must NOT come back
+PASS  kLatLimiter must NOT come back (mode-dependent)
+PASS  AsrcRingLatencyMs defined
+PASS  compute_latency body extracted  (3139 chars)
+PASS  compute_latency reads work sample rate (jdsp.fs)
+PASS  compute_latency uses lat_sr for structural frames
+PASS  compute_latency calls AsrcRingLatencyMs
+PASS  compute_latency gates comp by ovpLen
+PASS  compute_latency keys limiter on lookahead
+PASS  no structural item converted with device rate
+
+=== [B] ASRC 路径实际生效（重采样没被改坏） ===
+PASS  96k passthrough produces finite non-silent output  (peak=0.1625)
+PASS  192k passthrough produces finite non-silent output  (peak=0.0856)
+
+=== [C] comp 延迟 = 工作域帧数，随 tf 变（块长口径已由 B1-d 修正） ===
+PASS  48k tf=0 comp ≈ 37.33ms  (got 37.333ms)
+PASS  48k tf=1 comp ≈ 74.67ms  (got 74.667ms)
+PASS  48k tf=2 comp ≈ 42.67ms  (got 42.667ms)
+PASS  48k tf=3 comp ≈ 0.00ms  (got 0.000ms)
+PASS  48k blk=256 (work=256) comp ≈ 80.00ms + asrc  (got 80.000ms want 80.000ms)
+PASS  48k blk=512 (work=512) comp ≈ 74.67ms + asrc  (got 74.667ms want 74.667ms)
+PASS  96k blk=512 (work=256) comp ≈ 80.00ms + asrc  (got 80.021ms want 80.021ms)
+PASS  96k blk=1024 (work=512) comp ≈ 74.67ms + asrc  (got 74.688ms want 74.687ms)
+PASS  192k blk=1024 (work=256) comp ≈ 80.00ms + asrc  (got 80.021ms want 80.021ms)
+PASS  192k blk=2048 (work=512) comp ≈ 74.67ms + asrc  (got 74.688ms want 74.687ms)
+
+=== [D] limiter 延迟随 lookahead 模式变（默认 0ms） ===
+PASS  48k lookahead=0 → 0ms  (got 0.000ms)
+PASS  48k lookahead=1 → ~1.5ms (not 2.0)  (got 1.479ms)
+PASS  96k lookahead=0 → 0ms  (got 0.021ms)
+PASS  96k lookahead=1 → ~1.5ms (not 2.0)  (got 1.510ms)
+
+=== [E] ASRC 中转环形缓冲分量 ceil(inFs/fs) ===
+PASS  48k ASRC ring ≈ 0.0000ms  (got 0.0000ms)
+PASS  96k ASRC ring ≈ 0.0208ms  (got 0.0208ms)
+PASS  192k ASRC ring ≈ 0.0208ms  (got 0.0208ms)
+
+=== [F] get_latency_ms 上报值 == 脉冲实测（报表不许骗人） ===
+PASS  48000/512/tf1/la0: reported == measured  (rep=74.667 meas=74.667 d=0.000)
+PASS  48000/512/tf1/la1: reported == measured  (rep=76.146 meas=76.146 d=0.000)
+PASS  48000/512/tf0/la0: reported == measured  (rep=37.333 meas=37.333 d=0.000)
+PASS  48000/512/tf2/la0: reported == measured  (rep=42.667 meas=42.667 d=0.000)
+PASS  48000/512/tf3/la0: reported == measured  (rep=0.000 meas=0.000 d=0.000)
+PASS  48000/256/tf1/la0: reported == measured  (rep=80.000 meas=80.000 d=0.000)
+PASS  96000/1024/tf1/la0: reported == measured  (rep=74.688 meas=74.740 d=0.052)
+PASS  96000/1024/tf1/la1: reported == measured  (rep=76.177 meas=76.229 d=0.052)
+PASS  96000/512/tf1/la0: reported == measured  (rep=80.021 meas=80.073 d=0.052)
+PASS  192000/2048/tf1/la0: reported == measured  (rep=74.688 meas=74.766 d=0.078)
+PASS  192000/2048/tf1/la1: reported == measured  (rep=76.182 meas=76.260 d=0.078)
+PASS  44100/512/tf1/la0: reported == measured  (rep=81.270 meas=81.270 d=0.000)
+PASS  worst reported-vs-measured deviation < 0.15ms  (worst=0.078ms)
+
+D7 ALL PASSED (50 checks)
+=== [A] 上界数值 ===
+PASS  kSlotTaskMaxWaitMs declared
+PASS  upper bound <= 10s  (5000ms)
+PASS  upper bound == 5000ms (as designed)  (5000ms)
+PASS  old 30000-iteration loop removed
+
+=== [B] 按墙钟收口，而非轮数 × 名义间隔 ===
+PASS  uses Stopwatch for the deadline
+PASS  loop condition is wall-clock
+PASS  no `for (int i = 0; i < <count>` polling
+
+=== [C] 超时兜底收口 ===
+PASS  timeout path calls synchronous unload
+PASS  fallback is guarded by try/catch
+
+=== [D] timedOut 随终态事件上报 ===
+PASS  pluginSlotLoaded event carries timedOut
+PASS  both events carry timedOut  (count=2)
+
+=== [E] 调用点接住三元组（rc, timedOut, accepted） ===
+PASS  both call sites destructure (rc, timedOut, accepted)  (found 2)
+PASS  _submitAndWait returns (int, bool, bool)
+PASS  rejected path skips terminal event  (count=2)
+
+=== [F] 超时仍归属失败语义（rc=0） ===
+PASS  timeout returns rc=0 + timedOut=true + accepted=true
+
+D5 ALL PASSED (15 checks)
+== [A] 规则引擎单元 ==
+PASS  R1+R3 catch(_) 空块  (R1 空 catch 块既未留痕也未标记（最差形态）)
+PASS  R3 只报匿名（非空块）  (R3 匿名 catch 丢弃异常（`_`），应绑定 `e` 或标记)
+PASS  R1 空块但绑定了 e  (R1 空 catch 块既未留痕也未标记（最差形态）)
+PASS  R2 循环包壳用 swallow 不够  (R2 循环体包壳必须 swallowThrottled( 留痕（当前留痕=swallow(）)
+PASS  R4 理由敷衍  (R4 标记理由不成立（'ok'）)
+PASS  合规：return 兜底  (viol=[])
+PASS  合规：清理路径标记  (viol=[])
+PASS  合规：循环包壳用 throttled  (viol=[])
+PASS  排除：注释里的 catch(_)  (viol=[])
+PASS  排除：字符串里的 catch(_)  (viol=[])
+PASS  排除：块注释里的 catch(_)  (viol=[])
+PASS  嵌套 try/catch 各自独立判定  (catches=2 viol=1)
+
+== [B] 全仓门禁 ==
+PASS  lib/ 无违规 catch 块  (违规 0 处：)
+PASS  扫描规模非空转（>= 140 处 catch）  (实际 190)
+PASS  存在 C 类（循环包壳）且已全部转 throttled  (分类={'A': 188, 'C': 1, 'B': 1})
+PASS  CLI 门禁退出码 0  (rc=0)
+PASS  CLI 输出含『全部通过』  (D4-b 静默异常扫描 —— lib/ 共 190 处 catch 块   分类：A=188  B=1  C=1  全部通过：无静默 catch 块。 )
+
+== [C] 覆盖证据 ==
+PASS  代码级 catch (_) 仅剩 1 处（debug_log 自引用）  (实际 1 处)
+PASS  热路径限流出口 10 处  (实际 10)
+PASS  普通留痕出口 >= 70 处  (实际 120)
+PASS  限流 tag 覆盖各自独立来源（多余或缺失都不行）  (缺=[] 多=[])
+PASS  泵循环 tag 由 activeId 派生且还原旧三个 tag  (tags=['pump-asio', 'pump-vaio', 'pump-vb'])
+
+== [D] 反向验证 ==
+PASS  反向验证锚点存在  (命中 7 次)
+PASS  改回 catch (_) {} 后门禁判红  (violations=['R1 空 catch 块既未留痕也未标记（最差形态）', 'R3 匿名 catch 丢弃异常（`_`），应绑定 `e` 或标记'])
+PASS  反向验证锚点 2 存在（泵循环派生 tag）
+PASS  泵循环退回 swallow 后 R2 判红  (violations=['R2 循环体包壳必须 swallowThrottled( 留痕（当前留痕=swallow(）'])
+
+== [E] 接线完整性 ==
+PASS  调用 swallow 的文件可达 error_sink 的 import  (缺 import：)
+PASS  接线文件数 >= 15  (实际 47)
+PASS  swallowThrottled 先判后建（shouldLog 在 dbgLog 之前）
+PASS  _site 跳过 error_sink 自身帧
+PASS  提供限流重置入口（供测试）
+
+D4-b ALL PASSED (31 checks)
+VM fnTable1 函数 200 个；手册条目 92 条
+手册函数名核查 124 个
+PASS: EEL 手册与 VM 函数表一致（存在性 + 定长签名 + 宿主条目）
+smoke_liveprog_mc: PASS (8ch spl rw / gains / slider isolation / readback / disable)
+smoke_liveprog_mc_stress: PASS (oob / num_ch / bad-keeps-old / unload / bit-exact / nonfinite / @block / small frames / race)
+EX1 per-channel gains: ok
+EX2 surround fill (256-sample delay, x0.7): ok
+EX3 center enhance: ok
+EX4 LFE guard (one-pole LP + clamp): ok
+smoke_liveprog_mc_examples: PASS (4 production examples verified)
+== [A] 规则引擎单元 ==
+PASS  G1 只写专项代号  (G1 标记未紧跟 P-NNN 编号（当前：'B5'）)
+PASS  G1 空标记  (G1 标记未紧跟 P-NNN 编号（当前：''）)
+PASS  G2 编号未登记  (G2 编号 P-999 未在 engine\legacy\PATCHES.md 登记)
+PASS  G1 编号写在说明文字里（漏网形态①）  (G1 标记未紧跟 P-NNN 编号（当前：'2026-10-09 分带展宽（P-002，见 PATCHES.md）'）)
+PASS  G1 日期在编号前（漏网形态②）  (G1 标记未紧跟 P-NNN 编号（当前：'2026-10-13 P-002'）)
+PASS  合规：编号+别名  (viol=[])
+PASS  合规：只有编号  (viol=[])
+PASS  合规：编号+日期  (viol=[])
+PASS  alias_of('P-018 B1-c') == 'B1-c'  (实际 'B1-c')
+PASS  alias_of('P-002') == ''  (实际 '')
+PASS  alias_of('P-002 2026-10-09') == ''  (实际 '')
+PASS  alias_of('P-023 M3.5-c') == 'M3.5-c'  (实际 'M3.5-c')
+PASS  alias_of('P-019 B1-d') == 'B1-d'  (实际 'B1-d')
+PASS  alias_of('P-013 上层 id 列表') == ''  (实际 '')
+
+== [B] 全仓门禁 ==
+PASS  代码标记无违规  ([])
+PASS  标记规模非空转（>= 70 处）  (实际 185)
+PASS  登记表规模（>= 25 条）  (实际 49)
+PASS  CLI 门禁退出码 0  (rc=0)
+PASS  CLI 输出含『全部通过』  (D6 补丁编号门禁 —— 代码标记 185 处 / 登记表 49 条   带专项代号别名 46 处，别名去重 12 个  全部通过：每个标记都有已登记的 P-NNN，别名映射唯一。 )
+
+== [C] 覆盖证据 ==
+PASS  15 个专项的标记数精确匹配
+PASS  别名集合精确（多余或缺失都不行）  (缺=[] 多=[])
+PASS  §7-4 口径：每处标记都能被 'PATCHED-AuraDSP P-' 捞到  (捞不到 0 处)
+PASS  无『日期在编号前』的旧写法  (0 个文件仍有)
+
+== [D] 反向判红 ==
+PASS  去掉编号 → G1 判红  (["G1 标记未紧跟 P-NNN 编号（当前：'B1-c'）"])
+PASS  换成未登记编号 → G2 判红  (['G2 编号 P-099 未在 engine\\legacy\\PATCHES.md 登记'])
+PASS  同一别名两个编号 → G3 判红  (conflicts=[('B1-c', 'P-018', 'P-020')])
+PASS  反向验证锚点存在（B5 标记）
+PASS  真实源码退回裸代号后判红  (["G1 标记未紧跟 P-NNN 编号（当前：'B5'）"])
+
+== [E] 登记表结构 ==
+PASS  登记表无重复编号  (49 条 / 去重 49)
+PASS  编号连续无缺（P-001..P-025）  (实际 [1, 2, 3]..[47, 48, 49])
+PASS  P-016..P-028 共 13 节齐全  (实际 13)
+PASS  10 个条目都有「位置」与「上游同步冲突风险」
+PASS  本次新撰写 6 节齐全  (实际 6)
+PASS  新撰写 6 节都有「动机」与「内容」
+PASS  文件头声明编号唯一性规则
+PASS  文件头说明别名降级
+
+D6 ALL PASSED (36 checks)
+DLL: D:\temp_desktop\Proj\JamesDSP\test\auradsp_engine.dll
+
+[A] 自研 filter (LP f0=1000Hz) 的 -3dB 频率
+     48000 Hz : gain@1000Hz = -3.00 dB   -3dB @ 1000 Hz
+     96000 Hz : gain@1000Hz = -3.00 dB   -3dB @ 1000 Hz
+    192000 Hz : gain@1000Hz = -2.95 dB   -3dB @ 1005 Hz
+PASS  [A] filter @48000Hz -3dB 频率 == 1000Hz  (实测 1000 Hz（相对 48k = 1.00x）)
+PASS  [A] filter @96000Hz -3dB 频率 == 1000Hz  (实测 1000 Hz（相对 48k = 1.00x）)
+PASS  [A] filter @192000Hz -3dB 频率 == 1000Hz  (实测 1005 Hz（相对 48k = 1.00x）)
+
+[B] 对照组 vendor EQ（曲线 1000Hz:-6dB）
+     48000 Hz : gain@1000Hz = -6.00 dB
+     96000 Hz : gain@1000Hz = -6.01 dB
+    192000 Hz : gain@1000Hz = -6.04 dB
+PASS  [B] vendor EQ @48000Hz gain@1000Hz ≈ -6dB  (实测 -6.00 dB)
+PASS  [B] vendor EQ @96000Hz gain@1000Hz ≈ -6dB  (实测 -6.01 dB)
+PASS  [B] vendor EQ @192000Hz gain@1000Hz ≈ -6dB  (实测 -6.04 dB)
+
+[C] eq.enable=0 的关闭语义
+    enable=1 -> -6.01 dB ; enable=0 -> -0.01 dB
+PASS  [C] eq.enable=0 后 EQ 停止作用  (关闭后仍为 -0.01 dB（期望 ≈ 0 dB）)
+
+[D] 多声道 IR 门卫（3/5/6/7/8 声道必须被显式拒绝）
+PASS  [D] 2 声道 IR 加载成功  (rc=0 err=)
+PASS  [D] 4 声道 IR 加载成功  (rc=0 err=)
+PASS  [D] 6 声道 IR 被显式拒绝  (rc=-1 err=convolver.ir: unsupported (channel count must be 1/2/4: stereo-pair convolver))
+PASS  [D] 8 声道 IR 被显式拒绝  (rc=-1 err=convolver.ir: unsupported (channel count must be 1/2/4: stereo-pair convolver))
+
+passed=11 failed=0
+ALL PASS
+=== C2 EQ 响应探针 ===
+  [PASS] 平坦曲线处处接近 0 dB
+  [PASS] 1kHz 点在提升点抬升
+  [PASS] 远离提升点回到 0 dB
+  [PASS] 低频被衰减
+  [PASS] 高频回到末端锚点
+  [PASS] 曲线单调抬升（无发散）
+  [PASS] 单点曲线返回错误
+  [PASS] 逆序输入被排序后接受
+  [PASS] 超 Nyquist 频点被钳位
+  [PASS] 重复调用结果一致（无隐藏状态）
+  [PASS] 44.1k / 48k 响应接近（差 <2dB）
+  UI 近似 vs 引擎实测 最大偏差: 22.53 dB
+  [PASS] 实测与 UI 近似确有差异（C2 前提成立）
+  [PASS] 无头与显式 eqm:1:0 逐点一致（向后兼容）
+  [PASS] PCHIP 与 Makima 响应不同（插值选项真实生效）
+  [PASS] IIR6 与 FIR 响应不同（架构选项真实生效）
+  [PASS] 非法 eqm 头回退默认（不断言崩溃、结果一致）
+
+=== 16/16 通过 ===
+=== 真实资源延迟探针 ===
+VDC: D:\myPrograms\AudioEffect\Impulse\JamesDSP\DDC\AKG 271S.vdc
+IR : D:\myPrograms\AudioEffect\Impulse\Convolver\0000测试.wav
+  VDC AKG 271S.v rc=0 samples=0
+  [PASS] VDC 带资源探测返回成功
+  [PASS] VDC 返回非负样本数
+  [PASS] VDC 样本数在合理范围
+  [PASS] VDC 重复探测结果稳定
+  卷积 0000测试.wav rc=0 samples=0
+  [PASS] 卷积 带资源探测返回成功
+  [PASS] 卷积 返回非负样本数
+  [PASS] 卷积 样本数在合理范围
+  [PASS] 卷积 重复探测结果稳定
+  [PASS] 无资源时拒绝探测而非返回 0 延迟
+  VDC 宽带响应 peak 比: min=1.048 max=1.328
+  [PASS] 真实 VDC 加载后输出被塑形（非恒等透传）
+  [PASS] 资源文件未被修改
+
+全部通过
+== [A] defines_viz_frame 判据单元 ==
+PASS  [A0] 本测试文件自身不被 M1 判红（拼装纪律仍有效）  (若失败：说明上方合成片段被改成了字面量，见「拼装纪律」注释)
+PASS  [A1] 完整手抄件 → True  (got True want True)
+PASS  [A2] 只有说明文字提到字段名 → False  (got False want False)
+PASS  [A3] v1 老形状（无 v2 字段）→ False  (got False want False)
+PASS  [A4] 已是导入形式 → False  (got False want False)
+PASS  [A5] 单引号字段元组 → True（不因引号风格漏网）  (got True want True)
+PASS  [A6] 无 ctypes.Structure 的普通脚本 → False  (got False want False)
+PASS  [A7] 方括号未闭合的畸形文本 → False 且不抛异常  (got False want False)
+== [B] 全仓镜像单源 ==
+PASS  [B1] 全仓 0 份重复 VizFrame 定义
+PASS  [B2] 导入 `from viz_frame import VizFrame` 的文件恰为已知 11 处  (差异={"missing": [], "extra": []})
+PASS  [B3] 原 8 个文件均已不再手抄字段表
+PASS  [B4] 已知导入方文件全部存在（防清单漂移）
+PASS  [B5] CLI --viz-only 退出码 0  ([PASS] ABI 一致：.def/engine.h/ffi.dart 三处 0 个符号逐一对应，元数全部一致
+[PASS] version script 一致：.map global 符号集与 .def 恒等（0 个）
+[PASS] viz 帧布局一致：11 字段 / 1600 字节，C 头 ↔ Python 镜像逐字段对齐，无重复镜像
+[PASS] 三座桥 ABI 一致：0 座桥共 0 个导出与头文件声明 1:1，Dart 硬绑定符号齐全、元数一致
+)
+PASS  [B6] CLI 报告 11 字段 / 1600 字节  (on script 一致：.map global 符号集与 .def 恒等（0 个）
+[PASS] viz 帧布局一致：11 字段 / 1600 字节，C 头 ↔ Python 镜像逐字段对齐，无重复镜像
+[PASS] 三座桥 ABI 一致：0 座桥共 0 个导出与头文件声明 1:1，Dart 硬绑定符号齐全、元数一致)
+== [C] 字段级独立期望（C 头 / 镜像 / FIELD_OFFSETS 三方互证）==
+PASS  [C1] C 头解析成功
+PASS  [C2] C 侧布局 == 手工期望表（名称/偏移/尺寸）  (got=[('seq', 0, 8), ('timestamp_ms', 8, 8), ('spectrum', 16, 128), ('eq_in_spectrum', 144, 128), ('level_l_dbfs', 272, 4), ('level_r_dbfs', 276, 4), ('stage_levels_l', 280, 128), ('stage_levels_r', 408, 128), ('channel_count', 536, 4), ('channel_levels', 540, 32), ('stage_ch_levels', 572, 1024)])
+PASS  [C3] C 侧总尺寸 == 1600  (got 1600)
+PASS  [C4] Python 镜像布局 == 同一张期望表  (got=[('seq', 0, 8), ('timestamp_ms', 8, 8), ('spectrum', 16, 128), ('eq_in_spectrum', 144, 128), ('level_l_dbfs', 272, 4), ('level_r_dbfs', 276, 4), ('stage_levels_l', 280, 128), ('stage_levels_r', 408, 128), ('channel_count', 536, 4), ('channel_levels', 540, 32), ('stage_ch_levels', 572, 1024)])
+PASS  [C5] VIZ_FRAME_SIZE == 1600  (got 1600)
+PASS  [C6] FIELD_OFFSETS 与期望表逐项一致  (got={'seq': 0, 'timestamp_ms': 8, 'spectrum': 16, 'eq_in_spectrum': 144, 'level_l_dbfs': 272, 'level_r_dbfs': 276, 'stage_levels_l': 280, 'stage_levels_r': 408, 'channel_count': 536, 'channel_levels': 540, 'stage_ch_levels': 572})
+PASS  [C7] 末字段止于 1596，尾填充 4 字节凑齐 1600  (last_end=1596)
+== [D] 反向判红（改临时副本，不碰真相源）==
+PASS  [D1] 临时新增手抄件被 M1 点名  (test/_tmp_dup_mirror_probe.py)
+PASS  [D1b] 删除后恢复 0 违规
+PASS  [D2-prep] 字段篡改确实改到了文本
+PASS  [D2a] 镜像尺寸错但哨兵未改 → 报导入失败（不崩）  ([M1] 发现第二份 VizFrame 定义：tools/bin/viz_frame.py（应改为 from viz_frame import VizFrame） | [M2] 导入 Python 镜像失败：AssertionError: VizFrame 与 auradsp_viz_frame 不同步：期望 1600 字节，实际 1536)
+PASS  [D2b-prep] 哨兵同步篡改
+PASS  [D2b] 绕过哨兵后由逐字段比对抓住 spectrum 错位  ([M1] 发现第二份 VizFrame 定义：tools/bin/viz_frame.py（应改为 from viz_frame import VizFrame） | [M2] 字段 spectrum 尺寸不一致：C 128 字节，Python 64 字节 | [M2] 字段 eq_in_spectrum 偏移不一致：C 144，Python 80 | [M2] 字段 level_l_dbfs 偏移不一致：C 272，Python 208 | [M2] 字段 level_r_dbfs 偏移不一致：C 276，Python 212 | [M2] 字段 stage_levels_l 偏移不一致：C)
+PASS  [D3-prep] 哨兵篡改确实改到了文本
+PASS  [D3] sizeof 哨兵丢失 → M3 判红  ([M3] 头文件缺少 `sizeof(auradsp_viz_frame) == 1600` 编译期哨兵)
+PASS  [D4-prep] ABI 篡改确实改到了文本
+PASS  [D4] ABI 版本不一致 → M3 判红  ([M3] ABI 版本不一致：engine_internal.h=3，viz_frame.py=2)
+PASS  [D5] 还原后门禁重新 0 违规
+== [E] 运行期活体：真实 DLL 读帧 + 越界哨兵 ==
+PASS  [E1] 引擎 auradsp_abi() == 镜像 AURADSP_ABI  (dll=2 mirror=2)
+PASS  [E2] viz_read 返回 >=1 帧  (got 7)
+PASS  [E2b] 引擎写入未越过镜像帧尺寸（256B 哨兵完好）  (越界 0 字节)
+PASS  [E3] 读到的帧 seq 全非零  ([1, 2, 3, 4, 5, 6, 7])
+PASS  [E3b] seq 严格单调递增（同一通道顺序读）  ([1, 2, 3, 4, 5, 6, 7])
+PASS  [E3c] channel_count 落在合理区间（1..8）  (got 2)
+
+==============================================
+ALL PASS: 38 项断言，§7-1 viz 镜像单源门禁全绿
+PASS  [A] abi_consistency --bridges-only 全绿 (3 桥 103 符号)
+PASS  [B] 引擎 auradsp_abi() == 2 (got 2)
+PASS  [B] asio_abi() == 2 (got 2)
+PASS  [B] vaio_abi() == 2 (got 2)
+PASS  [B] vb_abi() == 2 (got 2)
+PASS  [C1] 假引擎 ABI=999 被拒（rc!=0） (rc=-5)
+PASS  [C1] note 含 engine-abi-mismatch (note='engine-abi-mismatch: bridge=2 engine=999')
+PASS  [C2] 同代际假引擎不被 ABI 门拒绝 (rc=-4 note='buffers-failed: driver has 0 input channels (<2)')
+g7_2: all checks passed
+== [A] 解析单元 ==
+PASS  [A1] asio 桥头文件声明 16 项  (got 16)
+PASS  [A2] asio.def 导出 30 项  (got 30)
+PASS  [A1] vaio 桥头文件声明 16 项  (got 16)
+PASS  [A2] vaio.def 导出 30 项  (got 30)
+PASS  [A1] vb 桥头文件声明 29 项  (got 29)
+PASS  [A2] vb.def 导出 43 项  (got 43)
+PASS  [A3] Dart 必需符号 15 个  (got 15: _plugin_slot_close_editor,_plugin_slot_get_bypass,_plugin_slot_get_channels,_plugin_slot_get_insert_stage,_plugin_slot_get_latency,_plugin_slot_get_status,_plugin_slot_is_editor_open,_plugin_slot_load,_plugin_slot_load_preset,_plugin_slot_save_preset,_plugin_slot_set_bypass,_plugin_slot_set_channels,_plugin_slot_set_insert_stage,_plugin_slot_show_editor,_plugin_slot_unload)
+PASS  [A4] Dart 可选符号 7 个（_g 系列 + _abi）  (got 7: _abi,_plugin_slot_close_editor_g,_plugin_slot_is_editor_open_g,_plugin_slot_load_preset_g,_plugin_slot_save_preset_g,_plugin_slot_set_channels_g,_plugin_slot_show_editor_g)
+PASS  [A5] 可选符号全部以 _g/_abi 结尾（回落路径可辨识）
+PASS  [A6] 必需符号元数与 typedef 对上（load=3 / unload=1 / get_channels=1）  ({'_plugin_slot_close_editor': 1, '_plugin_slot_get_bypass': 1, '_plugin_slot_get_channels': 1, '_plugin_slot_get_insert_stage': 1})
+== [B] CLI 门禁 ==
+PASS  [B1] CLI --bridges-only 退出码 0  ([PASS] 三座桥 ABI 一致：103 个导出与头文件声明 1:1，Dart 硬绑定符号齐全、元数一致
+)
+PASS  [B2] 报告 103 个导出 1:1  ([PASS] 三座桥 ABI 一致：103 个导出与头文件声明 1:1，Dart 硬绑定符号齐全、元数一致)
+PASS  [B3] 有且仅有一套公共面（ab_*），无旧前缀重复导出  (见 [B1] 输出)
+== [C] 活体：真相源 DLL 真的导出 Dart 硬绑定符号 ==
+PASS  [C1] auraasio_bridge.dll 导出了全部 15 个 Dart 必需符号
+PASS  [C2] 假符号被 ctypes 拒绝（判据非空转）
+PASS  [C1] auravaio_bridge.dll 导出了全部 15 个 Dart 必需符号
+PASS  [C2] 假符号被 ctypes 拒绝（判据非空转）
+PASS  [C1] auravm_bridge.dll 导出了全部 15 个 Dart 必需符号
+PASS  [C2] 假符号被 ctypes 拒绝（判据非空转）
+== [D] 反向判红（改临时副本，不碰真相源）==
+PASS  [D1-prep] 撤除确实减少了 2 行  (34→32 行)
+PASS  [D1] asio 漏导出 → B1 报 2 项 + B2 报 2 项  ([B1] asio.def 漏导出 asio_plugin_slot_get_channels（头文件已声明，Dart 可能已在调用） | [B1] asio.def 漏导出 asio_plugin_slot_set_channels（头文件已声明，Dart 可能已在调用） | [B2] Dart 硬绑定 asio_plugin_slot_get_channels 在 asio.def 里没有导出（asio/vaio 这类桥下插件槽会直接抛 ArgumentError） | [B2] Dart 硬绑定 asio_plugin_slot_set_channels 在 asio.def 里没有导出（asio/vaio 这类桥下插件槽会直接抛 ArgumentError）)
+PASS  [D2] vb 多导出无声明 → B1 报 2 项（include 方拿不到原型）  ([B5] vb 桥实现（VmBridge.cpp）未引用 auradsp_abi ——加载引擎后的 ABI 强校验丢失 | [B1] vb.def 导出了 vb_plugin_auto_protect，但头文件没有声明（调用方 include 本头拿不到原型） | [B1] vb.def 导出了 vb_protect_test，但头文件没有声明（调用方 include 本头拿不到原型）)
+PASS  [D3-prep] 元数篡改确实改到了文本
+PASS  [D3] Dart typedef 元数漂移 → B3 报 3 项（三座桥各一）  ([B3] 元数不一致 asio_plugin_slot_set_channels：头文件 2 参 vs Dart 3 参 | [B3] 元数不一致 vaio_plugin_slot_set_channels：头文件 2 参 vs Dart 3 参 | [B3] 元数不一致 vb_plugin_slot_set_channels：头文件 2 参 vs Dart 3 参)
+PASS  [D4] 还原后门禁重新 0 违规
+== [E] 导出都有主（防死代码出口）==
+PASS  [E1] asio.def 无无主导出
+PASS  [E1] vaio.def 无无主导出
+PASS  [E1] vb.def 无无主导出
+
+==============================================
+ALL PASS: 28 项断言，§7-5 三桥 ABI 门禁全绿
+== [S] stereo 路径（本来就是 BassMono 输出，回归守卫）==
+PASS  [S1] stereo: stage16 两态相等（采样在 basspsycho 之前）  (off=-6.0206 on=-6.0206 diff=0.00e+00)
+PASS  [S1b] stereo: stage_ch[16][0] 与 stage_levels_l[16] 同源  (off=-6.0206 on=-6.0206)
+PASS  [S2] stereo: basspsycho 确实起效（输出 RMS 变化，非空转证明）  (off=0.352116 on=0.710504)
+== [M] 离散多声道路径（E4 修复对象）==
+PASS  [M1] MC: stage16 两态相等（采样点在 basspsycho 之前）  (off=-6.0206 on=-6.0206 diff=0.00e+00)
+PASS  [M1b] MC: stage_ch[16][0] 与 stage_levels_l[16] 同源  (off=-6.0206 on=-6.0206)
+PASS  [M2] MC: basspsycho 确实起效（输出 RMS 变化，非空转证明）  (off=0.176058 on=0.487640)
+== [X] 跨模式：同一输入下两模式的 stage16 读数应收敛 ==
+PASS  [X1] MC/stereo 的 stage16（bass off）量级一致  (stereo=-6.0206 mc=-6.0206)
+PASS  [X2] MC/stereo 的 stage16（bass on）量级一致（pre-fix 此处虚高判红）  (stereo=-6.0206 mc=-6.0206)
+
+==============================================
+ALL PASS: 8 项断言，E4 stage16 跨模式同语义门禁全绿
+[PASS] ABI 一致：.def/engine.h/ffi.dart 三处 56 个符号逐一对应，元数全部一致
+[PASS] version script 一致：.map global 符号集与 .def 恒等（56 个）
+[PASS] viz 帧布局一致：11 字段 / 1600 字节，C 头 ↔ Python 镜像逐字段对齐，无重复镜像
+[PASS] 三座桥 ABI 一致：3 座桥共 103 个导出与头文件声明 1:1，Dart 硬绑定符号齐全、元数一致
+== [A] ab_* 导出与契约版本 ==
+PASS  [A1] auravm_bridge.dll 导出全部 14 个 ab_* 符号
+PASS  [A2] auravm_bridge.dll ab_abi_version == 1 (got 1)
+PASS  [A1] auraasio_bridge.dll 导出全部 14 个 ab_* 符号
+PASS  [A2] auraasio_bridge.dll ab_abi_version == 1 (got 1)
+PASS  [A1] auravaio_bridge.dll 导出全部 14 个 ab_* 符号
+PASS  [A2] auravaio_bridge.dll ab_abi_version == 1 (got 1)
+== [B] ab_capabilities ==
+PASS  [B] vm capabilities.bridge 自报一致 ({"bridge": "vm", "busGroups": 8, "pluginGroups": 8, "autoProtect": true, "gating": true})
+PASS  [B] vm capabilities 声明 gating（P3 已接入）
+PASS  [B] asio capabilities.bridge 自报一致 ({"bridge": "asio", "busGroups": 1, "pluginGroups": 1, "autoProtect": false, "gating": true, "driverList": true})
+PASS  [B] asio capabilities 声明 gating（P3 已接入）
+PASS  [B] vaio capabilities.bridge 自报一致 ({"bridge": "vaio", "busGroups": 1, "pluginGroups": 1, "autoProtect": false, "gating": true, "endpoints": true})
+PASS  [B] vaio capabilities 声明 gating（P3 已接入）
+== [C] 旧前缀公共面已下线（过渡期清理）==
+PASS  [C] vm 不再导出旧前缀公共面（12 个）
+PASS  [C] asio 不再导出旧前缀公共面（12 个）
+PASS  [C] vaio 不再导出旧前缀公共面（12 个）
+== [D] VM 运行态：ab_start → status(gated/idleMs) → ab_stop ==
+PASS  [D1] ab_start rc==0
+PASS  [D2] frames 增长 (frames=122880)
+PASS  [D3] status 带 P3 键 gated/idleMs (gated=1 idleMs=554)
+PASS  [D4] ab_stop rc==0 (rc=0)
+PASS  [D5] stop 后 running=false (running=False)
+
+==============================================
+ALL PASS：P5 统一桥契约（ab_*）过渡期清理后冒烟全绿
+PASS  源码零 std::cout [DBG
+PASS  源码零 TEMP-DIAG
+PASS  源码 [DBG 仅在宏调用行（106 处有字面量）
+PASS  Release DLL 无 [DBG 
+PASS  Release DLL 无 TEMP-DIAG
+
+ALL PASS
+PASS  核心零 OS 头（windows/winsock/mmdeviceapi/audioclient）
+PASS  核心零 Win32 符号（_WIN32/WINAPI/_wfopen/MultiByteToWideChar/...）
+PASS  端口头纯声明: fs.h
+PASS  端口头纯声明: env.h
+PASS  端口头纯声明: log.h
+PASS  端口头纯声明: module.h
+PASS  端口头纯声明: time.h
+PASS  Windows 实现存在: win_compat.cpp
+PASS  Windows 实现存在: fs_win.cpp
+PASS  Windows 实现存在: env_win.cpp
+PASS  Windows 实现存在: log_win.cpp
+PASS  M2 远程宿主已迁出 plugins/host
+PASS  M2 远程宿主文件位于 platform/win32/host: auradsp_plugin_host_main.cpp
+PASS  M2 远程宿主文件位于 platform/win32/host: plugin_host_client.cpp
+PASS  M2 远程宿主文件位于 platform/win32/host: plugin_host_client.h
+PASS  M2 远程宿主文件位于 platform/win32/host: plugin_ipc_protocol.h
+PASS  M2 远程宿主文件位于 platform/win32/host: plugin_shared_region.cpp
+PASS  M2 远程宿主文件位于 platform/win32/host: plugin_shared_region.h
+PASS  M2 远程宿主文件位于 platform/win32/host: process_plugin_proxy.cpp
+PASS  M2 远程宿主文件位于 platform/win32/host: process_plugin_proxy.h
+PASS  M2 模块泵位于 platform/win32
+PASS  M2 模块泵已从 driver 移除
+PASS  M2 模块加载端口 Windows 实现存在
+PASS  M2 formats 零直接模块加载 API（LoadLibrary/GetProcAddress/FreeLibrary）
+PASS  CP-12 driver 零直接 OS 头（Win32 入口须经 platform/win32/port）
+PASS  CP-27 核心源表 engine/core_sources.cmake 存在
+PASS  CP-27 核心源表零 platform/ 源
+PASS  CP-27 核心源表含 chain/dsp 关键源
+PASS  R6 auradsp_core 源表存在
+PASS  R6 auradsp_core 零 platform/ 源
+PASS  R6 auradsp_engine 源表存在
+PASS  R6 engine 链入 auradsp_wincompat（CreateFile2 回退）
+PASS  R6 engine 编入 fs_win.cpp
+PASS  R6 engine 编入 env_win.cpp
+PASS  R6 engine 编入 log_win.cpp
+PASS  R6 AURADSP_PLUGIN_HOST_SOURCES 含 plugin_module.cpp
+PASS  R6 engine 引用 AURADSP_ENGINE_PLUGIN_SOURCES
+PASS  R6 插件源表开关分支存在
+PASS  R6 插件 ON 分支引用 host+integration 源表
+PASS  R6 插件 OFF 分支使用 ABI/链阶段 stub
+PASS  R6 插件 OFF 置 AURADSP_NO_PLUGINS
+PASS  R6 test_plugin_direct 编入 AURADSP_PLUGIN_HOST_SOURCES
+PASS  R6 test_plugin_chain 编入 AURADSP_PLUGIN_HOST_SOURCES
+PASS  R6 test_host_quarantine 编入 AURADSP_PLUGIN_HOST_SOURCES
+PASS  R6 auradsp_plugin_host 编入 AURADSP_PLUGIN_HOST_SOURCES
+PASS  R6 REMOTE=OFF 分支存在（≥1）
+PASS  R6 REMOTE=OFF 清空 AURADSP_PLUGIN_REMOTE_SOURCES
+PASS  R6 REMOTE=OFF 引擎置 AURADSP_HOST_INPROC
+PASS  R6 REMOTE=ON 块构建宿主目标
+PASS  R6 宿主目标仅在 REMOTE=ON 块内定义
+PASS  自检：扫描器能判红 OS 头
+PASS  自检：扫描器能判红 Win32 符号
+
+ALL PASS
+PASS  lib/ 业务文件零 Platform.is / defaultTargetPlatform（排除 platform/ 与 l10n/gen）
+PASS  唯一落点存在: platform/platform_profile.dart
+PASS  F7 lib/core 零 import/export features/ui（依赖方向单向）
+PASS  F9/F10 非 platform 文件零平台包/进程/注册表/环境直连
+PASS  F11 lib/core 只依赖 platform_profile/port（不依赖具体实现）
+PASS  PlatformProfile 成员齐全（os/能力位/configDir/pathKey/占位/库候选）
+PASS  AudioOut 端口存在: audio_out/audio_out.dart
+PASS  AudioOut 端口声明 write(frames)/currentPadding
+PASS  WASAPI 实现存在: audio_out/audio_out_wasapi.dart
+PASS  WasapiOut 实现 AudioOut 接口
+PASS  createAudioOut 工厂按能力位分派
+PASS  audio_isolate 不再定义 WasapiOut
+PASS  旧 part 文件已删除: audio_device.dart
+PASS  旧 part 文件已删除: audio_guid.dart
+PASS  自检：扫描器能判红 Platform.is
+PASS  自检：扫描器能判红 WasapiOut 定义
+PASS  自检：扫描器能判红 core→features 反向依赖
+PASS  自检：扫描器能判红 core→ui 反向依赖
+PASS  自检：F9 判红 file_selector
+PASS  自检：F10 判红 Process.run
+PASS  自检：F10 判红 reg.exe
+PASS  自检：F11 判红 core→adapters
+PASS  自检：F11 放行 core→port
+
+ALL PASS
+PASS  闭包非空且文件真实存在
+PASS  闭包不含 jamesdsp.c（E4）
+PASS  闭包不含 eel2/cpthread.c
+PASS  闭包不含 platform/windows 源
+PASS  闭包不含 plugins 的 Win32/formats/driver 源（D-7 裁剪）
+PASS  闭包正向包含 fs_linux.cpp
+PASS  闭包正向包含 env_linux.cpp
+PASS  闭包正向包含 log_linux.cpp
+PASS  闭包正向包含 module_linux.cpp
+PASS  闭包正向包含 plugin_chain_adapter_stub.cpp
+PASS  闭包正向包含 plugin_abi_stub.cpp
+PASS  闭包源文件零无守卫 Win32 头引用
+PASS  反向自检：扫描器能识别合成违规
+PASS  Linux CMake 存在
+PASS  Linux CMake 含 -include stdint.h（E3）
+PASS  Linux CMake 含 gcc shim 前置注入
+PASS  Linux CMake 含 --version-script=auradsp_engine.map（E2）
+PASS  Linux CMake 含 jamesdsp.c 排除（E4）
+PASS  auradsp_engine.map 存在且与 .def 同源一致（56 符号）
+PASS  gcc shim 头存在
+----
+PASS  smoke_linux_source_table: 全部通过（闭包 109 文件）
+engine: D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\auradsp_engine.dll (version 1.1.0)
+  PASS auradsp_create(48000, 1024) 非空
+  PASS eq_in_spectrum 峰值 0.6502 > 0.05（信号链真实执行）
+  PASS process 输出峰值 0.9886 > 0.05（in→out 真实处理）
+smoke_linux_engine_process: PASS
+  PASS sync_artifacts.py 可编译
+  PASS --what-if 无异常堆栈
+  PASS --what-if 退出码 0 ∈ (0, 2)
+  PASS --what-if 输出含汇总行
+smoke_sync_artifacts_tool: PASS
+  PASS job gate-static 存在
+  PASS job build-engine-linux 存在
+  PASS job smoke-linux 存在
+  PASS job abi-linux 存在
+  PASS job build-engine-windows 存在
+  PASS job dart-tests 存在
+  PASS job asset-guard 存在
+  PASS job build-app-linux 存在
+  PASS smoke-linux needs build-engine-linux
+  PASS dart-tests needs build-engine-linux
+  PASS build-app-linux needs build-engine-linux
+  PASS 触发分支含 feature/linux
+smoke_ci_workflow: PASS
+  PASS configDir reads XDG_CONFIG_HOME
+  PASS dataDir reads XDG_DATA_HOME
+  PASS PlatformProfile.dataDir exists
+  PASS no HOME fallback to '.' remains
+  PASS configDir/dataDir fall back to systemTemp when HOME missing
+  PASS ConfigManager.dataDir exists
+  PASS ConfigManager data path helpers exist
+  PASS legacy migration covers presets
+  PASS legacy migration covers session_state.json
+  PASS legacy migration covers plugin_data
+  PASS legacy migration covers plugin_presets
+  PASS legacy migration covers plugins
+  PASS legacy migration covers liveprog
+xdg_paths: PASS
+IR = 24000 frames (0.50s), max_block=1024
+const  n=1024   median=0.164ms  rms=0.5574
+jitter 1024/900/700  median=0.169ms  rms=0.5574
+jitter 1024/1023     median=0.194ms  rms=0.5576
+wide   1024/500      median=0.145ms  max=0.443ms  rms=0.5575
+severe 1024/300      median=0.142ms  max=0.362ms  rms=0.5575
+PASS: 块长抖动不再重建卷积器（P-008），代价与电平均与恒定块一致
+frames=112  eq.curve=60:9;300:0;1000:-9;8000:0;16000:9
+band   centerHz   in(dBFS)  out(dBFS)   H(dB)   resid
+   8     141.4    -36.65    -32.06    4.25   +0.34
+   9     178.9    -36.49    -33.36    2.89   +0.25
+  10     223.6    -35.87    -34.11    1.66   +0.10
+  11     280.6    -35.26    -34.72    0.42   +0.12
+  12     355.0    -34.25    -35.36   -1.24   +0.14
+  13     447.2    -34.07    -37.05   -3.01   +0.03
+  14     561.2    -33.38    -37.92   -4.73   +0.19
+  15     709.9    -33.00    -39.52   -6.52   +0.00
+  16     894.4    -33.03    -41.54   -8.62   +0.10
+  17    1118.0    -32.74    -41.42   -8.61   -0.07
+  18    1414.2    -32.04    -39.71   -7.51   -0.17
+  19    1788.9    -31.87    -38.53   -6.53   -0.14
+  20    2236.1    -31.66    -37.27   -5.53   -0.08
+  21    2806.2    -31.27    -35.90   -4.54   -0.10
+  22    3549.6    -31.12    -34.71   -3.53   -0.06
+  23    4472.1    -30.76    -33.41   -2.52   -0.12
+  24    5454.4    -30.82    -32.65   -1.70   -0.12
+  25    6485.9    -30.63    -31.80   -1.03   -0.13
+  26    7706.4    -30.63    -30.55    0.08   -0.00
+
+OK: eq_in peak=0.605 out peak=0.732, 最大残差 0.34 dB @band8
+PASS: 整链输出 == EQ 输入 + 实测响应，UI 合成公式成立
+PASS  set enable/get
+PASS  set freq/get
+PASS  freq low clamp 20
+PASS  freq high clamp 300
+PASS  disabled: antiphase LF passes
+PASS  enabled: antiphase LF matches theory (0.447 +-10%)
+PASS  enabled: antiphase 10Hz deeply cancelled (<-17dB)
+PASS  enabled: antiphase HF passes
+PASS  -3dB point at fc (0.707 +-15%)
+PASS  enabled: inphase LF untouched
+
+bassmono: all checks passed
+PASS  set enable/get
+PASS  set delay/get
+PASS  set mix/get
+PASS  set side/get
+PASS  side clamp non-zero ->1
+PASS  delay low clamp 0
+PASS  delay high clamp 25
+PASS  mix high clamp 1
+PASS  enabled: left dry at 0
+PASS  enabled: right delayed 576 +-1
+PASS  mix=0: right dry at 0
+PASS  disabled: right at 0
+PASS  delay 5ms -> 240 +-1
+PASS  side=1: left delayed 576 +-1
+PASS  side=1: right dry at 0
+
+haas: all checks passed
+PASS  enable set/get
+PASS  style set/get+clamp
+PASS  room set/get+clamp
+PASS  width set/get+clamp
+PASS  center set/get+clamp
+PASS  outgain set/get+clamp
+PASS  autogain set/get
+PASS  mix set/get+clamp
+PASS  elevation set/get+clamp
+PASS  fdn set/get
+PASS  late set/get+clamp
+PASS  headazim set/get+clamp
+PASS  headtrack set/get
+PASS  style=0 pushes cinema preset
+PASS  style=1 pushes imaging preset
+PASS  style=2 pushes neutral preset
+PASS  disabled bit-identical passthrough
+PASS  headazim steers the image (manual)
+PASS  headtrack flag alone is inert
+PASS  headtrack=1 consumes same headazim
+PASS  symmetric render (mirror in/out swap)
+PASS  binaural differs L/R (ITD/ILD active)
+PASS  contralateral present but weaker
+PASS  mix=0 returns dry signal
+PASS  elevation moves pinna notch (>2%)
+PASS  reflections energy-balanced (mono L~R)
+PASS  fdn alias: default reverb off
+PASS  fdn=1 migrates to unified reverb preset 5
+PASS  fdn=1 picks vendor engine on stereo/matrix topology
+PASS  late=1.0 migrates into freeverb.wet
+PASS  fdn=0 leaves unified reverb on
+PASS  early reflections tail grows with room
+PASS  B3c first reflection lands at image-source delay
+PASS  B3b allpass smears after last reflection tap
+PASS  room scales reflection geometry (bigger room = later first tap)
+PASS  center changes output (>2%)
+PASS  width steers contralateral ear (>2%)
+PASS  outgain +6dB doubles (+-5%)
+PASS  autogain bounded finite
+PASS  extreme params finite (no NaN/blowup)
+PASS  44.1k handle finite audible
+PASS  rapid automation finite+bounded
+PASS  odd frame counts finite (1/7/100/511/512)
+PASS  toggle off finite, on resumes audible
+PASS  96k handle finite audible (ITD clamp path)
+PASS  192k handle finite audible (ITD/allpass full length)
+
+spatial: all checks passed
+PASS  5.1 SL renders to both ears
+PASS  5.1 SL steers left
+PASS  5.1 SR steers right
+PASS  5.1 binaural zeros C/LFE/SL/SR
+PASS  5.1 C symmetric
+PASS  LFE reaches both ears
+PASS  LFE is low-passed
+PASS  7.1 BL steers left
+PASS  7.1 BR steers right
+PASS  8ch binaural zeros non-front
+PASS  headazim rotates binaural image
+PASS  mix=0 returns dry downmix (L only)
+PASS  binaural=0 keeps old discrete path
+PASS  4ch quad back-left finite
+PASS  binaural autogain finite/bounded
+PASS  binaural B3c reflections add IR tail
+
+spatial binaural: all checks passed
+PASS  set enable/get
+PASS  set amount/get
+PASS  set hifreq/get
+PASS  amount high clamp 1
+PASS  amount low clamp 0
+PASS  hifreq low clamp 3000
+PASS  hifreq high clamp 10000
+PASS  disabled passthrough
+PASS  amount=0 passthrough
+PASS  1kHz below crossover near-untouched (<6% lift)
+PASS  6kHz gains harmonic energy (>5%)
+PASS  6kHz lift > 1kHz lift (frequency selective)
+PASS  peak bounded (<0.3 at 0.1 in)
+PASS  higher crossover -> less lift
+
+exciter: all checks passed
+PASS  bass.outgain set/get
+PASS  outgain high clamp 6
+PASS  outgain low clamp -12
+PASS  autogain set/get
+PASS  gate inert when effect off
+PASS  +6dB doubles RMS (1.995 +-3%)
+PASS  -12dB -> 0.25 +-5%
+PASS  autogain returns to input level (+-10%)
+PASS  autogain clamp: tiny input not boosted past +12dB
+PASS  tube outgain +6dB doubles (+-5%)
+PASS  tube.outgain clamp
+PASS  tube.autogain set/get
+PASS  tube.autogain bounded finite
+PASS  eq.autogain set/get
+PASS  eq.autogain converges (+-25%)
+PASS  reverb.outgain clamp
+PASS  reverb outgain +6dB doubles (+-8%)
+PASS  reverb.autogain set/get
+PASS  reverb.autogain bounded finite
+
+fx_gain: all checks passed
+PASS  unloaded enable accepted (auto-bypass)
+PASS  enable readback == 1
+PASS  initial ready=0
+PASS  set GraphicEQ string
+PASS  ready after load
+PASS  nodeCount=5
+PASS  non-finite arbmag rejected (0;)
+PASS  non-finite arbmag rejected (0;)
+PASS  rejected arbmag keeps previous nodes
+PASS  enable succeeded
+PASS  get enable==1
+PASS  process block completed
+PASS  set arbmag.outgain == -3.5
+PASS  get arbmag.outgain == -3.5
+PASS  set arbmag.autogain == 1
+PASS  get arbmag.autogain == 1
+PASS  probe arbmag rc==0
+PASS  probe arbmag samples==0
+PASS  disable==0
+
+arbmag: all checks passed
+PASS  fresh handle eq.curve -> empty(rc=0)
+PASS  fresh handle arbmag.string -> empty(rc=0)
+PASS  fresh handle liveprog.code -> empty(rc=0)
+PASS  set eq.curve
+PASS  eq.curve roundtrip byte-exact
+PASS  set arbmag.string
+PASS  arbmag.string roundtrip byte-exact
+PASS  set liveprog.code
+PASS  liveprog.code roundtrip byte-exact
+PASS  re-set eq.curve
+PASS  eq.curve re-set reflected
+PASS  undersized buffer rejected (E_PARAM)
+PASS  exact-fit buffer accepted
+PASS  process after readback patch
+PASS  eq.curve with NaN gain rejected pair
+PASS  NaN EQ curve leaves finite state
+PASS  eq.curve bytes=0 rejected
+PASS  arbmag.string bytes=0 rejected
+PASS  liveprog.code bytes=0 rejected
+
+ALL STRING READBACK CHECKS PASSED
+PASS  gate.enable set/get
+PASS  threshold set/get
+PASS  threshold high clamp 0
+PASS  threshold low clamp -60
+PASS  attack set/get
+PASS  release set/get
+PASS  deesser set/get
+PASS  below threshold gated (near silence)
+PASS  above threshold passes
+PASS  deesser attenuates HF
+PASS  deesser leaves LF intact
+PASS  autogain stays near 1 when gate transparent
+
+gate_deesser: all checks passed
+PASS  enable set/get
+PASS  attack set/get
+PASS  release set/get+clamp
+PASS  mid freq clamp 99999->8000
+PASS  low q clamp 9->2 (shelf)
+PASS  high range clamp 99->24
+PASS  low.threshold set/get
+PASS  low.threshold clamp 99->0
+PASS  high.q set/get
+PASS  high.q clamp 99->2
+PASS  high.threshold set/get
+PASS  high.threshold clamp -99->-60
+PASS  mid thr clamp -99->-60
+PASS  disabled passthrough
+PASS  static +6dB in-band
+PASS  static out-of-band untouched
+PASS  dyn loud cut (>1dB)
+PASS  dyn quiet untouched
+PASS  dyn wrong-band untouched
+PASS  low shelf boosts lows
+PASS  high shelf boosts highs
+PASS  band off passthrough
+PASS  graph.effects rc
+PASS  graph.effects 21 entries
+PASS  graph.effects has dyneq
+PASS  graph.effects has spatial
+PASS  graph.effects no dead vdc
+PASS  dyneq exposed tier1
+PASS  graph.effects 1024 rejected (no truncation)
+
+dyneq: all checks passed
+PASS  missing file -> null
+PASS  silence decodes
+PASS  samples finite
+PASS  near silence
+
+mp3: all checks passed
+PASS  vm_detect.exe exists
+PASS  exit code 0
+PASS  valid JSON dict
+PASS  edition in 1..3
+PASS  tierReached in 1..3
+PASS  has editionName
+PASS  has installDir
+
+vm_detect: all checks passed
+PASS  vm_pump_test.exe exists
+PASS  exit code 0
+PASS  valid JSON dict
+PASS  frames kept real-time
+PASS  neutral passthrough maxDiff<1e-4
+PASS  sampleRate sane
+PASS  nbs in range
+PASS  groups>=1
+PASS  handles cover groups
+PASS  callback budget maxCbUs<20000
+PASS  changes counter present
+PASS  param run exit 0
+PASS  params applied==2
+PASS  params failed==0
+NOTE silent bus (peak=0.000000): acoustic unproven, plumbing proven
+PASS  change run exit 0
+PASS  changes >=3
+PASS  change run frames real-time
+
+vm_pump: all checks passed
+PASS  detect (Potato)
+PASS  start rc==0 (rc=0)
+PASS  frames growing (frames=147456)
+PASS  groups>=1 (groups=8)
+PASS  set_param applied (handles=2)
+PASS  viz_read ok (n=4)
+PASS  test_start tone (rc=0)
+PASS  testKind==1 (testKind=1)
+PASS  frames keep growing in test (frames=196608)
+PASS  vizGrp field plumbed (vizGrp=0)
+PASS  test_stop (rc=0)
+PASS  testKind==0 (testKind=0)
+PASS  get_param pre-change (rc=0 v=6.0)
+PASS  pre-change value kept (v=6.0)
+PASS  test_change accepted (rc=0)
+PASS  changes counted (0->1)
+PASS  rebuild completed (handles restored) (handles=8 note=rebuilt@48000Hz p1/1)
+PASS  frames resumed after rebuild (frames=12288)
+PASS  get_param post-change (rc=0 v=6.0)
+PASS  PARAM SURVIVED REBUILD (改设备不丢参) (before=6.0 after=6.0)
+PASS  set_param_str applied (n=2 live_eng=2 handles=8)
+PASS  liveprog enable (rc=2)
+PASS  liveprog status==1 (rc=0 st=1)
+PASS  liveprog code roundtrip (n=96 match=True)
+PASS  test_change#2 accepted (rc=0)
+PASS  rebuild#2 completed (handles=8 note=rebuilt@48000Hz p1/2 s1/1)
+PASS  liveprog status survived (rc=0 st=1)
+PASS  LIVEPROG SURVIVED REBUILD (n=96 match=True note=rebuilt@48000Hz p1/2 s1/1)
+PASS  liveprog disable (downstream restore) (rc=2)
+PASS  bus_mask g0 off (rc=0xfe)
+PASS  status busMask==0xFE (busMask=254)
+PASS  frames growing while masked (frames=65536)
+PASS  bus_mask clamps to 0xFF (rc=0xff)
+PASS  bus_mask restore (rc=0xff)
+PASS  maxGroupUs field plumbed (L0) (maxGroupUs=[269.2, 284.5, 249.9, 215.2, 259.9, 260.6, 302.2, 287.4])
+PASS  grpLive field plumbed (grpLive=255)
+PASS  plugin_group default==出厂 A1/A2 (0x03) (mask=0x3)
+PASS  plugin_group g0 off (rc=0xfe)
+PASS  plugin_group_mask==0xFE (mask=0xfe)
+PASS  frames growing while plugin-group masked (frames=116736)
+PASS  test_change#3 accepted (rc=0)
+PASS  rebuild#3 completed (changes=3 handles=8 note=rebuilt@48000Hz p1/2 s1/1)
+PASS  PLUGIN GROUP MASK SURVIVED REBUILD (mask=0xfe note=rebuilt@48000Hz p1/2 s1/1)
+PASS  plugin_group clamps to 0xFF (rc=0xff)
+PASS  plugin_group restore (rc=0xff)
+PASS  plugin_group_mask==0xFF after restore (mask=0xff)
+PASS  export vb_plugin_slot_show_editor_g present (missing (stale bridge DLL?))
+PASS  export vb_plugin_slot_close_editor_g present (missing (stale bridge DLL?))
+PASS  export vb_plugin_slot_is_editor_open_g present (missing (stale bridge DLL?))
+PASS  editor_g rejects out-of-range group (rc=0)
+PASS  editor_g is_open out-of-range group (rc=0)
+PASS  editor_g empty slot show==0 (rc=0)
+PASS  editor_g empty slot is_open==0 (rc=0)
+PASS  editor_g empty slot close==1 (idempotent; ABI live) (rc=1)
+PASS  export vb_plugin_slot_set_channels_g present (missing (stale bridge DLL?))
+PASS  set_channels_g rejects out-of-range group (rc=0)
+PASS  set_channels_g empty slot safe (rc=1)
+PASS  export vb_plugin_slot_save_preset_g present (missing (stale bridge DLL?))
+PASS  export vb_plugin_slot_load_preset_g present (missing (stale bridge DLL?))
+PASS  save_preset_g rejects out-of-range group (rc=0)
+PASS  load_preset_g rejects out-of-range group (rc=0)
+PASS  save_preset_g empty slot safe (rc=0)
+PASS  bypass on (rc=0)
+PASS  status bypass==1 (bypass=1)
+PASS  frames growing in bypass (frames=69632)
+PASS  bypass off (rc=0)
+PASS  status bypass==0 (bypass=0)
+PASS  stop (rc=0)
+PASS  running==false
+vm_bridge: all checks passed
+PASS  protect test export exists
+PASS  auto_protect on
+PASS  group_enable(0xFF)
+PASS  budgetUs>0 (budgetUs=42666 nbs=2048 sr=48000)
+NOTE  无正在处理的音频组（hotGrp=-1，handles=8）——保护守卫需要真实 RT 回调才有观测对象，本机 Voicemeeter 无客户端拉流，跳过
+VMPROTECT FAILURES: []
+PASS  vm_parallel_test.exe exists
+PASS  exit code 0
+PASS  valid JSON dict
+PASS  all scenarios ok (bit-exact/semantics/telemetry)
+PASS  perf assert ok
+PASS  worker pool sane
+PASS  multi-core machine has workers
+PASS  parallel wall < serial (real speedup)
+PASS  straggler all ok
+PASS  straggler fan-in bounded (max callback <100ms)
+PASS  straggler no engine re-entry
+PASS  straggler parallelOn intact (RT not mutate)
+PASS  straggler hung group resumed
+VMPARALLEL ALL PASSED
+PASS  apo_inspect.exe exists
+PASS  exit code 0
+PASS  valid JSON dict
+PASS  endpoints is list
+PASS  endpoint schema
+NOTE endpoints=48 readable=48
+PASS  protectedAudioDG in {-1,0,1}
+
+apo_inspect: all checks passed
+PASS  AuraApo.dll exists
+PASS  exports DllCanUnloadNow
+PASS  exports DllGetClassObject
+PASS  exports DllRegisterServer
+PASS  exports DllUnregisterServer
+NOTE not admin: skip regsvr32 round-trip (system mutation)
+
+apo_register: all checks passed
+NOTE  apo_selftest.exe 不存在（未构建 Release 产物），跳过
+apo_selftest: SKIPPED (not built)
+== smoke_asio_probe ==
+NOTE  asio_probe.exe 不存在（未构建 windows-drivers），跳过
+asio_probe: SKIPPED (not built)
+== smoke_asio_tone ==
+NOTE  asio_tone.exe 不存在（未构建 windows-drivers），跳过
+asio_tone: SKIPPED (not built)
+== smoke_asio_driver ==
+PASS  auraasio_driver.dll exists
+PASS  exports DllCanUnloadNow
+PASS  exports DllGetClassObject
+PASS  exports DllRegisterServer
+PASS  exports DllUnregisterServer
+PASS  DllGetClassObject(CLSID_AuraAsioDriver) S_OK
+PASS  IClassFactory::CreateInstance S_OK
+PASS  IASIO::init returned true
+PASS  IASIO::getDriverName is "AuraDSP Driver"
+PASS  IASIO::getDriverVersion >= 1
+PASS  IASIO::getChannels returns (2, 2)
+PASS  IASIO::getLatencies returns OK
+PASS  IASIO::getBufferSize returns (64, 2048, 256, -1)
+PASS  IASIO::canSampleRate accepts standard rates
+PASS  IASIO::canSampleRate rejects non-standard rate
+PASS  IASIO::getSampleRate default is 48000.0
+PASS  IASIO::setSampleRate 96000 OK
+PASS  IASIO::getSampleRate now 96000.0
+PASS  IASIO::getChannelInfo(Out 0) format is Float32LSB (19)
+PASS  IASIO::createBuffers S_OK
+PASS  IASIO double-buffers allocated non-null
+PASS  IASIO::start S_OK
+PASS  Audio pump active: received 17 switches in 100ms (expected ~19)
+PASS  IASIO::future(kAuraAsioFutureIsWasapiOpen) ASE_SUCCESS
+PASS  IASIO::future(kAuraAsioFutureGetWasapiTargetRate) ASE_SUCCESS
+PASS  IASIO::future(kAuraAsioFutureGetWasapiRenderedFrames) ASE_SUCCESS
+PASS  Phase 2 WASAPI sink active & rendering frames (>0)
+PASS  IASIO::future(kAuraAsioFutureIsDspLoaded) ASE_SUCCESS & loaded==1
+PASS  IASIO::future(kAuraAsioFutureGetBypass) default is 0 (processing)
+PASS  IASIO::future(kAuraAsioFutureSetBypass(1)) S_OK
+PASS  IASIO::future(kAuraAsioFutureGetBypass) now 1 (bypassed)
+PASS  IASIO::future(kAuraAsioFutureSetParam "post.gain"=6.0) S_OK
+PASS  IASIO::future(kAuraAsioFutureGetParam "post.gain") returns 6.0
+PASS  kAuraAsioFutureCopyLastOutputBlock S_OK
+PASS  Bypass=1 dry waveform matches input 0.1 (+-1%)
+PASS  Bypass=0 DSP post.gain +6dB doubles amplitude to ~0.2 (ratio ~2.0 +-2%)
+PASS  DSP post.gain 0dB returns amplitude to 0.1 (+-1%)
+PASS  IASIO::future(kAuraAsioFutureApplyParamsString) S_OK
+PASS  Param "bass.gain" applied via string verified 10.0
+PASS  IASIO::future(kAuraAsioFutureGetDspProcessedFrames) > 0
+PASS  IASIO::stop S_OK
+PASS  IASIO::disposeBuffers S_OK
+PASS  future(SetChannels(6)) ASE_SUCCESS
+PASS  future(GetChannels) == 6
+PASS  getChannels now (6, 6)
+PASS  getChannelInfo(In 6) valid Float32LSB
+PASS  getChannelInfo(Out 7) out-of-range rejected
+PASS  createBuffers 6in+6out S_OK
+PASS  6ch double-buffers allocated non-null
+PASS  start (6ch) S_OK
+PASS  6ch pump active: 22 switches (expected ~22)
+PASS  engine channels.count==6 (driver authoritative)
+PASS  6ch CopyLastOutputBlock S_OK & copiedSamples==256
+PASS  stop (6ch) S_OK
+PASS  disposeBuffers (6ch) S_OK
+PASS  IASIO object released cleanly (ref=0)
+PASS  ClassFactory released cleanly (ref=0)
+NOTE not admin: skip system-wide regsvr32 round-trip
+
+asio_driver: all checks passed
+PASS  detect 返回非空 (n=7)
+PASS  start rc==0 (driver=FL Studio ASIO)
+PASS  running==true (True)
+PASS  switches 增长 (switches=255)
+PASS  sr/nbs 有效 (sr=44100.0 nbs=512)
+PASS  engineOk
+PASS  inCh/outCh>=2 (in=2 out=2)
+PASS  status 含 resetPending/latenciesChanged/dropouts
+PASS  resetPending==0（无待处理重置） (resetPending=0)
+PASS  dropouts==0（3s 稳态无欠载） (dropouts=0)
+PASS  set_param rc==0 (rc=0)
+PASS  set_param_str ok (rc=0)
+PASS  liveprog enable (rc=0)
+PASS  liveprog status==1 (rc=0 st=1)
+PASS  liveprog code roundtrip (n=101 match=True)
+PASS  liveprog disable (downstream restore) (rc=0)
+PASS  viz_read ok (n=4)
+PASS  test_start tone (rc=0)
+PASS  testKind==1 (testKind=1)
+PASS  bypass 前 test 过链有声 (peakOut=0.299999)
+PASS  bypass on (rc=0)
+PASS  status bypass==1 (bypass=1)
+PASS  bypass 直通峰值≈注入幅度(0.3±0.06) (peakOut=0.299999)
+PASS  bypass 中 switches 仍增长
+PASS  bypass off (rc=0)
+PASS  status bypass==0 (bypass=0)
+PASS  恢复过链后仍有声 (peakOut=0.299998)
+PASS  test_stop (rc=0)
+PASS  testKind==0 (testKind=0)
+PASS  缓冲数学自洽(≈5.5s±35%) (audio=6.47s)
+PASS  stop (rc=0)
+PASS  running==false
+PASS  stop 幂等 (rc=0)
+asio_bridge: all checks passed
+PASS  detect 返回非空 (n=7)
+PASS  6ch start rc==0 (driver=Voicemeeter Virtual ASIO)
+PASS  running==true (True)
+PASS  status ioCh==6 (ioCh=6)
+PASS  inCh/outCh>=6 (in=8 out=8)
+PASS  engineOk
+PASS  switches 增长 (switches=45)
+PASS  引擎 channels.count==6 (rc=0 cc=6)
+PASS  test_start 6ch file (rc=0)
+PASS  testKind==3 (testKind=3)
+PASS  6ch 过链有声 peakOut>0.005 (peakOut=0.540353)
+PASS  bypass on (rc=0)
+PASS  bypass 6ch 直通峰值≈0.25±0.06 (peakOut=0.25)
+PASS  bypass off (rc=0)
+PASS  恢复过链后仍有声 (peakOut=0.540353)
+PASS  testKind==0
+PASS  降级启动 rc==0 (rc=0)
+PASS  降级后 ioCh==2 (ioCh=2)
+PASS  降级上报 note (note=ioCh 4->2 (driver caps))
+PASS  降级后引擎 channels.count==2 (rc=0 cc=2)
+PASS  running==false
+PASS  stop 幂等 rc==0
+asio_multichannel: all checks passed
+[SMOKE_VAIO] Using bridge: D:\temp_desktop\Proj\JamesDSP\test\auravaio_bridge.dll
+PASS  detect 返回有效字典
+PASS  detect 包含 endpoints 数组
+[SMOKE_VAIO] Driver found: False, endpoints count: 11
+PASS  未启动状态 running==false
+[SMOKE_VAIO] AuraVaioDriver 未安装（非虚拟驱动环境），测试冷启动失败处理契约...
+PASS  未装驱动时 start 优雅返回负值 (rc=-1)
+PASS  未装驱动 start 后 running 仍为 false
+PASS  未装驱动 note 包含错误原因 (open-control-dev-failed: 2)
+
+[SMOKE_VAIO] Host 冷启动与检测契约测试完成（无驱动分支全通）
+[SMOKE_VAIO_CHANNEL_MODE] Using bridge: D:\temp_desktop\Proj\JamesDSP\core\desktop\windows-drivers\out\Release\auravaio_bridge.dll
+PASS  reset to auto mode
+PASS  countMode readback == 0 (rc=0 mode=0)
+PASS  default channels.count is a valid tier (ch=2)
+PASS  set countMode=1
+PASS  set channels.count=6 (rc=0)
+PASS  manual channels.count readback == 6 (got=6)
+PASS  set channels.count=4 (rc=0)
+PASS  manual channels.count readback == 4 (got=4)
+PASS  set channels.count=8 (rc=0)
+PASS  manual channels.count readback == 8 (got=8)
+PASS  set channels.count=2 (rc=0)
+PASS  manual channels.count readback == 2 (got=2)
+PASS  reject channels.count=5 (rc=-1)
+PASS  invalid write leaves effective tier intact (got=2)
+PASS  set channels.count=6 via float
+PASS  float channels.count readback == 6 (got=6.0)
+PASS  set countMode=0
+PASS  auto channels.count is a valid tier (got=2)
+PASS  auto mode accepts channels.count (rc=0)
+PASS  auto mode effective tier unchanged by manual write (before=2 after=2)
+
+ALL VAIO CHANNEL MODE CHECKS PASSED
+PASS  initial enable=0
+PASS  initial mode=0
+PASS  initial fcut=700
+PASS  initial feed=4.5
+PASS  set mode=1 (Chu Moy)
+PASS  get mode=1
+PASS  set mode=2 (Jan Meier)
+PASS  get mode=2
+PASS  set mode=3 (Custom)
+PASS  get mode=3
+PASS  set fcut=850
+PASS  get fcut=850
+PASS  set feed=6.5
+PASS  get feed=6.5
+PASS  enable crossfeed
+PASS  get enable=1
+PASS  crossfeed feeds L into R
+PASS  crossfeed off isolates R
+
+All tests completed. Failures: 0
+PASS  harmonics set/get
+PASS  blend set/get
+PASS  harmonics clamp 1
+PASS  subfreq clamp 10
+PASS  cutoff clamp 300
+PASS  amount=0 passthrough
+PASS  50Hz gains harmonic energy (>3%)
+PASS  1kHz untouched (<5%)
+PASS  narrower band -> less lift
+PASS  bass off: no coloration
+
+basspsycho: all checks passed
+PASS  enable set/get
+PASS  type clamp 2
+PASS  freq set/get
+PASS  q set/get
+PASS  disabled passthrough
+PASS  HP kills 30Hz (>-10dB)
+PASS  HP passes 1kHz (+-3%)
+PASS  LP kills 2kHz (>-10dB)
+PASS  LP passes 50Hz (+-3%)
+PASS  BP passes center (>-3dB)
+PASS  BP kills 100Hz
+PASS  BP kills 10kHz
+
+filter: all checks passed
+PASS  enable set/get
+PASS  amount set/get
+PASS  amount clamp 1
+PASS  disabled passthrough
+PASS  quiet LF lifted (>20%)
+PASS  loud LF transparent (+-5%)
+PASS  quiet mid transparent (+-10%)
+
+loudness: all checks passed
+PASS  enable set/get
+PASS  gain set/get
+PASS  disabled linear (<0.5% residual)
+PASS  12dB harmonics present (>2%)
+PASS  soft saturation (peak < linear)
+PASS  style set/get
+PASS  mix set/get
+PASS  comp set/get
+PASS  style clamp 9->2
+PASS  mix clamp 2->1
+PASS  comp clamp -20->-12
+  style harm-ratio: tri=0.00068 pen=0.00232 tape=0.00018
+  style fund-rms: tri=0.10012 pen=0.10010 tape=0.10346
+PASS  pentode hotter than triode
+PASS  triode hotter than tape
+PASS  level-neutral pen/tri (rms ratio <1.122)
+PASS  level-neutral tape/tri (rms ratio <1.122)
+PASS  mix=0 passthrough (<0.5%)
+PASS  comp +6dB ~= x2 (5%)
+  tube 20k passband: 44.1k=-0.94 dB  48k=-0.96 dB
+PASS  tube 44.1k 20k passband (>-1.5dB)
+PASS  tube 48k 20k passband (>-1.5dB)
+PASS  tube 20k 44.1k/48k match (<0.3dB)
+
+tube: all checks passed
+PASS  mix set/get
+PASS  enable set/get (was E_PARAM)
+PASS  bandUsed set/get
+PASS  band1 set/get
+PASS  band2 set/get
+PASS  band3 set/get
+PASS  band4 set/get
+PASS  band5 set/get
+PASS  mix=0 passthrough
+PASS  mix=1.0 widens (side/mid rises >5%)
+PASS  enable=0 passthrough despite mix=1
+PASS  band path finite
+
+stereo: all checks passed
+PASS  enable set/get
+PASS  freq set/get
+PASS  freq low clamp 40
+PASS  disabled passthrough
+PASS  25Hz substantially lifted (>1.8x)
+PASS  +12dB is exactly 2x of +6dB (+-2%)
+PASS  1kHz untouched (+-3%)
+
+shelf: all checks passed
+PASS  gain set/get
+PASS  gain high clamp 15
+PASS  balance set/get
+PASS  balance high clamp 2
+PASS  +6dB doubles both (+-3%)
+PASS  -6dB halves (+-3%)
+PASS  balance.1 halves L only
+PASS  balance.2 doubles R only
+PASS  balance.3 set/get
+PASS  balance.4 set/get
+PASS  balance.5 set/get
+PASS  balance.6 set/get
+PASS  balance.7 set/get
+PASS  balance.8 set/get
+PASS  NaN/Inf input block finite
+PASS  filter state survives NaN input
+
+input: all checks passed
+PASS  enable set/get
+PASS  gain set/get
+PASS  disabled passthrough
+PASS  +10dB lifts 60Hz ~3.16x (+-10%)
+PASS  2kHz untouched (+-5%)
+
+bass: all checks passed
+PASS  enable set/get
+PASS  timeconstant set/get
+PASS  granularity set/get+clamp
+PASS  tfresolution set/get+clamp
+PASS  outgain set/get+clamp
+PASS  autogain set/get
+PASS  disabled passthrough
+PASS  hot peak squashed (<1.5)
+PASS  hot still audible (>0.5)
+PASS  quiet passes (+-15%)
+PASS  outgain +6dB doubles (+-5%)
+PASS  all granularity/tfresolution combos finite
+
+comp: all checks passed
+========================================
+  Running AuraDSP Engine Smoke Tests   
+========================================
+
+---> Running smoke_convolver_spectrum.py...
+[PASS] smoke_convolver_spectrum.py
+
+---> Running smoke_chain_meter.py...
+[PASS] smoke_chain_meter.py
+
+---> Running smoke_convolver.py...
+[PASS] smoke_convolver.py
+
+---> Running smoke_guard_flow.py...
+[PASS] smoke_guard_flow.py
+
+---> Running smoke_liveprog.py...
+[PASS] smoke_liveprog.py
+
+---> Running smoke_liveprog_gmem.py...
+[PASS] smoke_liveprog_gmem.py
+
+---> Running smoke_viz_lowfreq.py...
+[PASS] smoke_viz_lowfreq.py
+
+---> Running smoke_latency_probe.py...
+[PASS] smoke_latency_probe.py
+
+---> Running smoke_block1056.py...
+[PASS] smoke_block1056.py
+
+---> Running smoke_plugin_host.py...
+[PASS] smoke_plugin_host.py
+
+---> Running smoke_plugin_host_process.py...
+[PASS] smoke_plugin_host_process.py
+
+---> Running smoke_plugin_host_editor.py...
+[PASS] smoke_plugin_host_editor.py
+
+---> Running smoke_plugin_izotope_setproc.py...
+[PASS] smoke_plugin_izotope_setproc.py
+
+---> Running smoke_three_key_plugins.py...
+[PASS] smoke_three_key_plugins.py
+
+---> Running smoke_plugin_pdc.py...
+[PASS] smoke_plugin_pdc.py
+
+---> Running smoke_plugin_bus.py...
+[PASS] smoke_plugin_bus.py
+
+---> Running smoke_plugin_chain.py...
+[PASS] smoke_plugin_chain.py
+
+---> Running smoke_plugin_chain_stages.py...
+[PASS] smoke_plugin_chain_stages.py
+
+---> Running smoke_plugin_channels.py...
+[PASS] smoke_plugin_channels.py
+
+---> Running smoke_plugin_metadata.py...
+[PASS] smoke_plugin_metadata.py
+
+---> Running smoke_plugin_arch_detect.py...
+[PASS] smoke_plugin_arch_detect.py
+
+---> Running smoke_plugin_vst2.py...
+[PASS] smoke_plugin_vst2.py
+
+---> Running smoke_plugin_vst2_process.py...
+[PASS] smoke_plugin_vst2_process.py
+
+---> Running smoke_win32_plugin_host.py...
+[PASS] smoke_win32_plugin_host.py
+
+---> Running smoke_multislot_and_stages.py...
+[PASS] smoke_multislot_and_stages.py
+
+---> Running smoke_cross_mode_consistency.py...
+[PASS] smoke_cross_mode_consistency.py
+
+---> Running smoke_plugin_prime_no_double_send.py...
+[PASS] smoke_plugin_prime_no_double_send.py
+
+---> Running smoke_plugin_chain_enable.py...
+[PASS] smoke_plugin_chain_enable.py
+
+---> Running smoke_plugin_bypass_lifecycle.py...
+[PASS] smoke_plugin_bypass_lifecycle.py
+
+---> Running smoke_vm_plugin_load_fast.py...
+[PASS] smoke_vm_plugin_load_fast.py
+
+---> Running smoke_plugin_host_priority.py...
+[PASS] smoke_plugin_host_priority.py
+
+---> Running smoke_plugin_quarantine.py...
+[PASS] smoke_plugin_quarantine.py
+
+---> Running smoke_config_and_matrix.py...
+[PASS] smoke_config_and_matrix.py
+
+---> Running smoke_mc_channel_levels.py...
+[PASS] smoke_mc_channel_levels.py
+
+---> Running smoke_rt_vendor_flags.py...
+[PASS] smoke_rt_vendor_flags.py
+
+---> Running smoke_dll_dirs.py...
+[PASS] smoke_dll_dirs.py
+
+---> Running smoke_d2_rt_drain.py...
+[PASS] smoke_d2_rt_drain.py
+
+---> Running smoke_d3_vaio_pump_wait.py...
+[PASS] smoke_d3_vaio_pump_wait.py
+
+---> Running smoke_b1d_comp_startup.py...
+[PASS] smoke_b1d_comp_startup.py
+
+---> Running smoke_d1_latency_sr.py...
+[PASS] smoke_d1_latency_sr.py
+
+---> Running smoke_d7_asrc_consistency.py...
+[PASS] smoke_d7_asrc_consistency.py
+
+---> Running smoke_d5_slot_timeout.py...
+[PASS] smoke_d5_slot_timeout.py
+
+---> Running smoke_d4b_swallow.py...
+[PASS] smoke_d4b_swallow.py
+
+---> Running smoke_eel_manual.py...
+[PASS] smoke_eel_manual.py
+
+---> Running smoke_liveprog_mc.py...
+[PASS] smoke_liveprog_mc.py
+
+---> Running smoke_liveprog_mc_stress.py...
+[PASS] smoke_liveprog_mc_stress.py
+
+---> Running smoke_liveprog_mc_examples.py...
+[PASS] smoke_liveprog_mc_examples.py
+
+---> Running smoke_d6_patch_ids.py...
+[PASS] smoke_d6_patch_ids.py
+
+---> Running smoke_sr_rate_alignment.py...
+[PASS] smoke_sr_rate_alignment.py
+
+---> Running smoke_eq_response.py...
+[PASS] smoke_eq_response.py
+
+---> Running smoke_latency_real_resource.py...
+[PASS] smoke_latency_real_resource.py
+
+---> Running smoke_g7_1_viz_mirror.py...
+[PASS] smoke_g7_1_viz_mirror.py
+
+---> Running smoke_g7_2_bridge_abi.py...
+[PASS] smoke_g7_2_bridge_abi.py
+
+---> Running smoke_g7_5_bridge_exports.py...
+[PASS] smoke_g7_5_bridge_exports.py
+
+---> Running smoke_e4_stage16_crossmode.py...
+[PASS] smoke_e4_stage16_crossmode.py
+
+---> Running smoke_abi_consistency.py...
+[PASS] smoke_abi_consistency.py
+
+---> Running smoke_bridge_unified_abi.py...
+[PASS] smoke_bridge_unified_abi.py
+
+---> Running smoke_release_strings.py...
+[PASS] smoke_release_strings.py
+
+---> Running smoke_platform_isolation.py...
+[PASS] smoke_platform_isolation.py
+
+---> Running smoke_dart_platform_quarantine.py...
+[PASS] smoke_dart_platform_quarantine.py
+
+---> Running smoke_linux_source_table.py...
+[PASS] smoke_linux_source_table.py
+
+---> Running smoke_linux_engine_process.py...
+[PASS] smoke_linux_engine_process.py
+[SKIP] smoke_linux_engine_exports.py (requires linux, current windows)
+[SKIP] smoke_linux_pulse_output.py (requires linux, current windows)
+[SKIP] smoke_linux_bundle_layout.py (requires linux, current windows)
+[SKIP] smoke_linux_virtual_sink.py (requires linux, current windows)
+[SKIP] smoke_linux_driver_loopback.py (requires linux, current windows)
+[SKIP] smoke_linux_alsa_backend.py (requires linux, current windows)
+[SKIP] smoke_linux_plugin_host.py (requires linux, current windows)
+
+---> Running smoke_sync_artifacts_tool.py...
+[PASS] smoke_sync_artifacts_tool.py
+
+---> Running smoke_ci_workflow.py...
+[PASS] smoke_ci_workflow.py
+
+---> Running smoke_xdg_paths.py...
+[PASS] smoke_xdg_paths.py
+
+---> Running smoke_ir_block_jitter.py...
+[PASS] smoke_ir_block_jitter.py
+
+---> Running smoke_eq_viz_tap.py...
+[PASS] smoke_eq_viz_tap.py
+
+---> Running smoke_bassmono.py...
+[PASS] smoke_bassmono.py
+
+---> Running smoke_haas.py...
+[PASS] smoke_haas.py
+
+---> Running smoke_spatial.py...
+[PASS] smoke_spatial.py
+
+---> Running smoke_spatial_binaural.py...
+[PASS] smoke_spatial_binaural.py
+
+---> Running smoke_exciter.py...
+[PASS] smoke_exciter.py
+
+---> Running smoke_fx_gain.py...
+[PASS] smoke_fx_gain.py
+
+---> Running smoke_arbmag.py...
+[PASS] smoke_arbmag.py
+
+---> Running smoke_string_readback.py...
+[PASS] smoke_string_readback.py
+
+---> Running smoke_gate_deesser.py...
+[PASS] smoke_gate_deesser.py
+
+---> Running smoke_dyneq.py...
+[PASS] smoke_dyneq.py
+
+---> Running smoke_mp3.py...
+[PASS] smoke_mp3.py
+
+---> Running smoke_vm_detect.py...
+[PASS] smoke_vm_detect.py
+
+---> Running smoke_vm_pump.py...
+[PASS] smoke_vm_pump.py
+
+---> Running smoke_vm_bridge.py...
+[PASS] smoke_vm_bridge.py
+
+---> Running smoke_vm_protect.py...
+[PASS] smoke_vm_protect.py
+
+---> Running smoke_vm_parallel.py...
+[PASS] smoke_vm_parallel.py
+
+---> Running smoke_apo_inspect.py...
+[PASS] smoke_apo_inspect.py
+
+---> Running smoke_apo_register.py...
+[PASS] smoke_apo_register.py
+
+---> Running smoke_apo_selftest.py...
+[PASS] smoke_apo_selftest.py
+
+---> Running smoke_asio_probe.py...
+[PASS] smoke_asio_probe.py
+
+---> Running smoke_asio_tone.py...
+[PASS] smoke_asio_tone.py
+
+---> Running smoke_asio_driver.py...
+[PASS] smoke_asio_driver.py
+
+---> Running smoke_asio_bridge.py...
+[PASS] smoke_asio_bridge.py
+
+---> Running smoke_asio_multichannel.py...
+[PASS] smoke_asio_multichannel.py
+
+---> Running smoke_vaio_bridge.py...
+[PASS] smoke_vaio_bridge.py
+
+---> Running smoke_vaio_channel_mode.py...
+[PASS] smoke_vaio_channel_mode.py
+
+---> Running smoke_crossfeed.py...
+[PASS] smoke_crossfeed.py
+
+---> Running smoke_basspsycho.py...
+[PASS] smoke_basspsycho.py
+
+---> Running smoke_filter.py...
+[PASS] smoke_filter.py
+
+---> Running smoke_loudness.py...
+[PASS] smoke_loudness.py
+
+---> Running smoke_tube.py...
+[PASS] smoke_tube.py
+
+---> Running smoke_stereo.py...
+[PASS] smoke_stereo.py
+
+---> Running smoke_shelf.py...
+[PASS] smoke_shelf.py
+
+---> Running smoke_input.py...
+[PASS] smoke_input.py
+
+---> Running smoke_bass.py...
+[PASS] smoke_bass.py
+
+---> Running smoke_comp.py...
+[PASS] smoke_comp.py
+
+---> Running smoke_comp_band_order.py...PASS  comp.enable 开启
+PASS  交叉序 写参成功
+PASS  交叉序 输出有限且不爆
+PASS  交叉序 回读保持
+PASS  等值 1000Hz 写参成功
+PASS  等值 1000Hz 输出有限且不爆
+PASS  等值 1000Hz 回读保持
+PASS  全 20000Hz 写参成功
+PASS  全 20000Hz 输出有限且不爆
+PASS  全 20000Hz 回读保持
+PASS  子进程交叉序列执行成功
+PASS  子进程完成标记
+PASS  pchip 无 Abscissas 报警
+PASS  pchip 无数据点数量报警
+
+comp_band_order: all checks passed
+PASS  ui thread A finished (no deadlock/hang)
+PASS  ui thread B finished (no deadlock/hang)
+PASS  rt thread finished (no deadlock/hang)
+PASS  ui set_param all rc==0
+PASS  rt no hard fault (access violation)
+PASS  rt output always finite
+PASS  rt produced audio (blocks>1000)
+PASS  ui A hammered gains (sweeps>50)
+PASS  ui B hammered struct params (iters>50)
+PASS  rt throughput not collapsed (blocks/s>=800)
+PASS  rt max block no lock-wait spike (<10ms)
+  [info] uiA sweeps=60, uiB iters=491, rt blocks=33460, rt blocks/s=5549, rt max block=1.38ms
+PASS  engine still healthy after race
+
+comp race: all checks passed
+PASS  warmup ddc.ready == 1
+PASS  load thread finished (no deadlock/hang)
+PASS  enable thread finished (no deadlock/hang)
+PASS  rt thread finished (no deadlock/hang)
+PASS  ddc.load all rc==0 (loads never fail)
+PASS  ddc.enable zero false-reject during concurrent load (race closed)
+PASS  rt no hard fault (access violation)
+PASS  rt output always finite
+PASS  rt produced audio (blocks>200)
+PASS  load thread hammered (iters>50)
+PASS  enable thread hammered (iters>50)
+  [info] loads=2736, enables=2283, rt blocks=2559, rejects=0
+PASS  ddc engaged: out_on == 0.5*out_off (sample-wise)
+PASS  ddc engagement measurable (mean ratio ~0.5)
+PASS  engine still healthy after race
+PASS  big VDC (~316KB, above old stack-overflow threshold) loads rc==0
+PASS  big VDC ready == 1
+PASS  big load thread finished (no deadlock/hang)
+PASS  rt thread B finished (no deadlock/hang)
+PASS  rt B no hard fault
+PASS  big loads all rc==0
+PASS  rt kept producing DURING big parses (>=30 blocks/window, shadow view)
+PASS  rt B max block 0.32ms < 6ms (no parse-induced stall)
+  [info] big-file: loads=497, rt blocks=94350, max block=0.32ms, blocks/window=189.8, size=0.3MB
+PASS  old view alive DURING big parse (output stays at old gain)
+PASS  new view engaged AFTER swap (gain 0.5 -> 0.25)
+  [info] big3 parse wall=7.7ms, 3 blocks during, 33 after (during@old=3, after@new=33)
+PASS  stalled-audio rapid loads all succeed (ddcInFlight==0 guard)
+PASS  stalled-audio rapid loads bounded (<1500ms each)
+  [info] rapid ddc loads rcs=[0, 0, 0, 0, 0] max_wall=8ms
+PASS  engine still healthy after B1-b section
+
+ddc race: all checks passed
+  [info] baseline max block = 0.152 ms
+  [info] script A peak = 0.2000 (expect ~0.2)
+PASS  script A active (peak ~0.2)
+PASS  ui thread finished (no deadlock/hang)
+PASS  rt thread finished (no deadlock/hang)
+PASS  rt no hard fault (access violation)
+PASS  rt output always finite
+PASS  ui: heavy/bad script results as expected
+PASS  rt produced audio during race (blocks>5000)
+PASS  rt kept producing DURING compiles (>=5 blocks/window, shadow VM no lock wait)
+PASS  rt max block 1.4ms < 5.0ms (baseline 0.152ms x4, no compile-induced stall)
+PASS  script B took effect after race (peak ~0.1)
+PASS  bad scripts did not kill active script (status==1)
+PASS  old snapshot alive DURING compile (output tracks pre-compile gain)
+  [info] heavy compile wall time = 25.1 ms, 193 blocks during
+PASS  stalled-audio rapid loads all succeed (inFlight==0 guard)
+PASS  stalled-audio rapid loads bounded (<1500ms each)
+  [info] rapid rcs=[0, 0, 0, 0, 0] max_wall=1ms
+PASS  slot released after blocks flow again (rc==0)
+PASS  engine still healthy after race
+PASS  disabled liveprog = passthrough (peak ~0.4)
+
+  [info] rt blocks=129596, max block=1.37ms (baseline 0.152ms), blocks during 256 compiles=129168
+liveprog race (B1 shadow VM): all checks passed
+factory-default peak=0.9886
+PASS  factory default clamps (~1.0)
+PASS  explicit enable clamps (~1.0)
+disabled peak=2.0000
+PASS  disabled passes through (>1.5)
+PASS  set/get roundtrip
+PASS  postgain set/get
+PASS  +6dB exact x2 (+-2%)
+
+limiter: all checks passed
+=== [1] 阈值门限控制 (Threshold = -3dBFS, -6dBFS) ===
+PASS  threshold set/get
+PASS  clamp to -3dBFS (~0.708)
+PASS  GR metering active (>=2.5dB)
+
+=== [2] 4x ISP 真峰检测 ===
+PASS  4x ISP detects and pulls down samples (<0.82)
+PASS  4x ISP registers GR (>0.8dB)
+
+=== [3] 立体声增益联动 (limiter.link = 1 vs 0) ===
+PASS  Stereo Link: L & R identical gain scale (diff < 1e-3)
+
+=== [4] 释放时间常数 (Release Time) ===
+PASS  release set/get
+
+lookahead limiter: all checks passed!
+=== ADR-010 不变量：post gain 在限幅器之前，限幅器是链尾最后一道门 ===
+参数：输入 0.200 恒定直流, post.gain=+12.0 dB, limiter.threshold=-6.0 dBFS
+门限 = 0.501187 ；限幅关闭时理论输出 = 0.796214
+
+--- 立体声（ch=2, mode=0, binaural=False） ---
+PASS  立体声: 限幅器 ON 时输出峰值 ≤ 门限 (0.4938 ≤ 0.5012)
+PASS  立体声: 限幅器 ON 时输出确实被压到门限附近 (≥ 门限×0.85)
+PASS  立体声: 限幅器 OFF 时输出显著超过门限 (0.7962 > 0.5012)
+PASS  立体声: 限幅器 OFF 时 post gain 精确生效 (-1.9794 dB ≈ -1.9794 dB)
+PASS  立体声: 限幅器 ON 时 gr.limiter > 0 (限幅器确实动手)
+    实测：peak_on=0.493789  peak_off=0.796214  gr=4.164 dB  (ceiling=0.501187)
+
+--- 离散多声道 8ch（ch=8, mode=1, binaural=False） ---
+PASS  离散多声道 8ch: 限幅器 ON 时输出峰值 ≤ 门限 (0.5012 ≤ 0.5012)
+PASS  离散多声道 8ch: 限幅器 ON 时输出确实被压到门限附近 (≥ 门限×0.85)
+PASS  离散多声道 8ch: 限幅器 OFF 时输出显著超过门限 (0.7962 > 0.5012)
+PASS  离散多声道 8ch: 限幅器 OFF 时 post gain 精确生效 (-1.9794 dB ≈ -1.9794 dB)
+PASS  离散多声道 8ch: 限幅器 ON 时 gr.limiter > 0 (限幅器确实动手)
+    实测：peak_on=0.501187  peak_off=0.796214  gr=4.021 dB  (ceiling=0.501187)
+
+--- 矩阵混音 6ch（ch=6, mode=0, binaural=False） ---
+PASS  矩阵混音 6ch: 限幅器 ON 时输出峰值 ≤ 门限 (0.5000 ≤ 0.5012)
+PASS  矩阵混音 6ch: 限幅器 ON 时输出确实被压到门限附近 (≥ 门限×0.85)
+PASS  矩阵混音 6ch: 限幅器 OFF 时输出显著超过门限 (4.8056 > 0.5012)
+    实测：peak_on=0.500000  peak_off=4.805579  gr=19.779 dB  (ceiling=0.501187)
+
+--- 双耳空间 6ch（ch=6, mode=0, binaural=True） ---
+PASS  双耳空间 6ch: 限幅器 ON 时输出峰值 ≤ 门限 (0.5012 ≤ 0.5012)
+PASS  双耳空间 6ch: 限幅器 ON 时输出确实被压到门限附近 (≥ 门限×0.85)
+PASS  双耳空间 6ch: 限幅器 OFF 时输出显著超过门限 (6.8882 > 0.5012)
+    实测：peak_on=0.501187  peak_off=6.888174  gr=22.762 dB  (ceiling=0.501187)
+
+=== [5] 逐声道 trim 同样排在限幅器之前（多声道路径） ===
+PASS  LFE trim(+6dB) 后仍被限幅门限兜住 (0.5012 ≤ 0.5012)
+
+=== [6] 限幅门限本身生效（无 post gain 时输出不得超过门限） ===
+PASS  输入超门限时输出被压到门限 (0.4938 ≤ 0.5012)
+
+limiter_final_gate: all checks passed
+=== [1] L-01 eq 逐声道池：控制线程高频重载 + RT 连续 process（8ch 离散） ===
+PASS  [eq-pool] control thread finished (no deadlock/hang)
+PASS  [eq-pool] rt thread finished (no deadlock/hang)
+PASS  [eq-pool] rt no hard fault (access violation)
+PASS  [eq-pool] rt output always finite
+PASS  [eq-pool] rt produced audio (blocks>500)
+PASS  [eq-pool] control set_param all rc==0
+PASS  [eq-pool] rt throughput not collapsed (blocks/s>=400)
+PASS  [eq-pool] rt max block no wait spike (<25ms)
+  [info] eq-pool ui_calls=2234 rt_blocks=48224 blocks/s=9642 max_block=1.06ms
+
+=== [2] L-03 arbmag 逐声道池：控制线程高频重载 + RT 连续 process（8ch 离散） ===
+PASS  [arbmag-pool] control thread finished (no deadlock/hang)
+PASS  [arbmag-pool] rt thread finished (no deadlock/hang)
+PASS  [arbmag-pool] rt no hard fault (access violation)
+PASS  [arbmag-pool] rt output always finite
+PASS  [arbmag-pool] rt produced audio (blocks>500)
+PASS  [arbmag-pool] control set_param all rc==0
+PASS  [arbmag-pool] rt throughput not collapsed (blocks/s>=400)
+PASS  [arbmag-pool] rt max block no wait spike (<25ms)
+  [info] arbmag-pool ui_calls=2245 rt_blocks=30445 blocks/s=6084 max_block=1.81ms
+
+=== [3] L-03 主卷积：arbMag.conv 原位刷新 vs RT 的 vendor stage（立体声） ===
+PASS  [arbmag-main] control thread finished (no deadlock/hang)
+PASS  [arbmag-main] rt no hard fault (access violation)
+PASS  [arbmag-main] control set_param all rc==0
+PASS  [arbmag-main] rt produced audio (blocks>500)
+PASS  [arbmag-main] main conv never torn (block-to-block dev < 700%)
+PASS  [arbmag-main] output magnitude bounded (|out| <= 16x DC input)
+  [info] arbmag-main curves=1937 blocks=51598 max_dev=341.5% max_abs=1.3245 (4.42x)
+
+=== [4] L-02 拓扑重置：channels.mode / count / spatial 切换 vs RT 连续 process ===
+PASS  [topo-reset] control thread finished (no deadlock/hang)
+PASS  [topo-reset] rt thread finished (no deadlock/hang)
+PASS  [topo-reset] rt no hard fault (access violation)
+PASS  [topo-reset] rt output always finite
+PASS  [topo-reset] rt produced audio (blocks>500)
+PASS  [topo-reset] control set_param all rc==0
+PASS  [topo-reset] rt throughput not collapsed (blocks/s>=400)
+PASS  [topo-reset] rt max block no wait spike (<25ms)
+  [info] topo-reset ui_calls=1071 rt_blocks=57368 blocks/s=11472 max_block=1.11ms
+
+=== [5] 收尾：竞态后引擎功能完好（eq 池仍按曲线生效，8ch 逐声道） ===
+PASS  eq pool still functional after race (gain ~= +12dB, got 11.94dB)
+PASS  eq pool output finite after race
+
+pool race: all checks passed
+--- 1. Gate Hysteresis, Range & Hold Parameters ---
+PASS  gate.hysteresis default/set/get
+PASS  gate.hysteresis clamp low
+PASS  gate.hysteresis clamp high
+PASS  gate.range set/get
+PASS  gate.range clamp low
+PASS  gate.range clamp high
+PASS  gate.hold_ms set/get
+PASS  gate.hold alias set/get
+PASS  gate.hold clamp low
+PASS  gate.hold clamp high
+
+--- 2. Dyneq Independent Band Attack/Release & Broadcast ---
+PASS  dyneq.b1.attack set/get
+PASS  dyneq.b1.release set/get
+PASS  dyneq.low.attack alias
+PASS  dyneq.band1.release alias
+PASS  dyneq.b2.attack set/get
+PASS  dyneq.b2.release set/get
+PASS  dyneq.b3.attack set/get
+PASS  dyneq.b3.release set/get
+PASS  dyneq.attack broadcast to b1/b2/b3
+PASS  dyneq.release broadcast to b1/b2/b3
+
+--- 3. Gate Hysteresis Anti-Chatter Behavior ---
+PASS  gate stays closed in hysteresis zone from silence
+PASS  gate opens above threshold
+PASS  gate stays OPEN in hysteresis zone when falling from above
+
+--- 4. Gate Range (Floor) Behavior ---
+PASS  gate GR clamped to Range floor (-15dB)
+
+--- 5. Dynamic EQ Independent Band GR Metering ---
+PASS  dyneq.mid GR triggered for 1kHz tone
+PASS  dyneq total GR tracks active band
+PASS  dyneq.low GR remains ~0dB (frequency selectivity)
+PASS  dyneq.high GR remains ~0dB (frequency selectivity)
+
+--- 6. Limiter & Compressor GR Metering ---
+PASS  limiter GR detects +6dBFS->-6dBFS overload (~12dB attenuation)
+PASS  compressor GR reporting active (>0dB)
+
+--- 7. SPSC VizFrame GR Slots 24..29 Verification ---
+PASS  viz frames emitted and readable
+PASS  viz stage_levels[24] carries limiter GR
+
+==================================================
+ALL DYNAMIC GR & GATE TESTS PASSED 100%!
+
+=== [1] Category A 独立单声道效果器掩码选择与隔离验证 ===
+  PASS  Shelf: Center 声道获得低架增益 (diff=0.1716)
+  PASS  Shelf: 非 Center 声道 (FL/FR/LFE/SL/SR) 100% 直通 (max dev=0.00e+00)
+  PASS  Tube: 环绕声 SL/SR 产生非线性电子管谐波 (sl=0.5488, sr=0.5488)
+  PASS  Tube: 前置与低音 (FL/FR/C/LFE) 100% 直通 (dev=0.00e+00)
+  PASS  Exciter: FL/FR 激发高次谐波 (fl=0.0182, fr=0.0182)
+  PASS  Exciter: 其余声道 (C/LFE/SL/SR) 100% 直通 (dev=0.00e+00)
+  PASS  Loudness: C/LFE 获得等响度曲线补偿 (c=0.0941, lfe=0.0941)
+  PASS  Loudness: 未命中声道 (FL/FR/SL/SR) 100% 直通 (dev=0.00e+00)
+  PASS  Limiter: LFE 峰值受到平滑压制限幅到 0dBFS (max=0.9886 <= 1.01)
+  PASS  Limiter: 未选中的声道 (FL/FR/C/SL/SR) 100% 保真直通 (dev=0.00e+00)
+
+=== [2] Category B 跨声道/声场效果器验证（WP1 语义） ===
+  PASS  Category B: Haas 差分延迟作用前置声道 (fr=0.1924)
+  PASS  Category B: 混响声场作用前置 FL (fl=0.0089)
+  PASS  Category B：MC FDN 处理环绕/中置（WP1 语义）(dev=8.89e-03)
+  PASS  Category B：中置有 MC FDN 尾音（对照组）(rms=3.15e-03)
+  PASS  Category B：LFE 无混响尾音（reverb.lfe=0 不进 FDN）(rms=0.00e+00)
+
+ALL DISCRETE MULTICHANNEL TESTS PASSED!
+
+=== [1] 全参数扫描（roundtrip / clamp / NaN / 默认回读） ===
+PASS  tube.gain 默认回读 == 4.5（实读 4.5）
+PASS  tube.gain 中点 4.5 往返（实读 4.5）
+PASS  tube.gain 越界（clamp 到 -3.0/12.0 或拒收）
+PASS  tube.gain NaN/Inf 被拒
+PASS  tube.style 默认回读 == 0.0（实读 0）
+PASS  tube.style 中点 1 往返（实读 1）
+PASS  tube.style 越界（clamp 到 0/2 或拒收）
+PASS  tube.mix 默认回读 == 1.0（实读 1.0）
+PASS  tube.mix 中点 0.5 往返（实读 0.5）
+PASS  tube.mix 越界（clamp 到 0.0/1.0 或拒收）
+PASS  tube.mix NaN/Inf 被拒
+PASS  tube.compensation 默认回读 == 0.0（实读 0.0）
+PASS  tube.compensation 中点 0.0 往返（实读 0.0）
+PASS  tube.compensation 越界（clamp 到 -12.0/12.0 或拒收）
+PASS  tube.compensation NaN/Inf 被拒
+PASS  tube.outgain 默认回读 == 0.0（实读 0.0）
+PASS  tube.outgain 中点 -3.0 往返（实读 -3.0）
+PASS  tube.outgain 越界（clamp 到 -12.0/6.0 或拒收）
+PASS  tube.outgain NaN/Inf 被拒
+PASS  tube.channels 默认回读在界内（255）
+PASS  tube.channels 中点 128 往返（实读 128）
+PASS  tube.channels 越界（clamp 到 0/255 或拒收）
+PASS  tube.channel_mask 默认回读在界内（255）
+PASS  tube.channel_mask 中点 128 往返（实读 128）
+PASS  tube.channel_mask 越界（clamp 到 0/255 或拒收）
+PASS  comp.timeconstant 默认回读 == 0.14（实读 0.14000000059604645）
+PASS  comp.timeconstant 中点 0.26 往返（实读 0.25999999046325684）
+PASS  comp.timeconstant 越界（clamp 到 0.02/0.5 或拒收）
+PASS  comp.timeconstant NaN/Inf 被拒
+PASS  comp.granularity 默认回读 == 1.0（实读 1）
+PASS  comp.granularity 中点 2 往返（实读 2）
+PASS  comp.granularity 越界（clamp 到 0/4 或拒收）
+PASS  comp.tfresolution 默认回读 == 1.0（实读 1）
+PASS  comp.tfresolution 中点 2 往返（实读 2）
+PASS  comp.tfresolution 越界（clamp 到 0/3 或拒收）
+PASS  comp.outgain 默认回读 == 0.0（实读 0.0）
+PASS  comp.outgain 中点 -3.0 往返（实读 -3.0）
+PASS  comp.outgain 越界（clamp 到 -12.0/6.0 或拒收）
+PASS  comp.outgain NaN/Inf 被拒
+PASS  comp.channels 默认回读在界内（255）
+PASS  comp.channels 中点 128 往返（实读 128）
+PASS  comp.channels 越界（clamp 到 0/255 或拒收）
+PASS  comp.channel_mask 默认回读在界内（255）
+PASS  comp.channel_mask 中点 128 往返（实读 128）
+PASS  comp.channel_mask 越界（clamp 到 0/255 或拒收）
+PASS  arbmag.outgain 默认回读 == 0.0（实读 0.0）
+PASS  arbmag.outgain 中点 -3.0 往返（实读 -3.0）
+PASS  arbmag.outgain 越界（clamp 到 -12.0/6.0 或拒收）
+PASS  arbmag.outgain NaN/Inf 被拒
+PASS  arbmag.channels 默认回读在界内（255）
+PASS  arbmag.channels 中点 128 往返（实读 128）
+PASS  arbmag.channels 越界（clamp 到 0/255 或拒收）
+PASS  arbmag.channel_mask 默认回读在界内（255）
+PASS  arbmag.channel_mask 中点 128 往返（实读 128）
+PASS  arbmag.channel_mask 越界（clamp 到 0/255 或拒收）
+PASS  bass.gain 默认回读 == 0.0（实读 0.0）
+PASS  bass.gain 中点 7.5 往返（实读 7.5）
+PASS  bass.gain 越界（clamp 到 0.0/15.0 或拒收）
+PASS  bass.gain NaN/Inf 被拒
+PASS  bass.outgain 默认回读 == 0.0（实读 0.0）
+PASS  bass.outgain 中点 -3.0 往返（实读 -3.0）
+PASS  bass.outgain 越界（clamp 到 -12.0/6.0 或拒收）
+PASS  bass.outgain NaN/Inf 被拒
+PASS  bass.harmonics 默认回读 == 0.45（实读 0.44999998807907104）
+PASS  bass.harmonics 中点 0.5 往返（实读 0.5）
+PASS  bass.harmonics 越界（clamp 到 0.0/1.0 或拒收）
+PASS  bass.harmonics NaN/Inf 被拒
+PASS  bass.harmonicblend 默认回读 == 0.5（实读 0.5）
+PASS  bass.harmonicblend 中点 0.5 往返（实读 0.5）
+PASS  bass.harmonicblend 越界（clamp 到 0.0/1.0 或拒收）
+PASS  bass.harmonicblend NaN/Inf 被拒
+PASS  bass.mode 默认回读 == 0.0（实读 0）
+PASS  bass.mode 中点 1 往返（实读 1）
+PASS  bass.mode 越界（clamp 到 0/2 或拒收）
+PASS  bass.subfreq 默认回读 == 25.0（实读 25.0）
+PASS  bass.subfreq 中点 25.0 往返（实读 25.0）
+PASS  bass.subfreq 越界（clamp 到 10.0/40.0 或拒收）
+PASS  bass.subfreq NaN/Inf 被拒
+PASS  bass.cutoff 默认回读 == 120.0（实读 120.0）
+PASS  bass.cutoff 中点 165.0 往返（实读 165.0）
+PASS  bass.cutoff 越界（clamp 到 30.0/300.0 或拒收）
+PASS  bass.cutoff NaN/Inf 被拒
+PASS  eq.outgain 默认回读 == 0.0（实读 0.0）
+PASS  eq.outgain 中点 -3.0 往返（实读 -3.0）
+PASS  eq.outgain 越界（clamp 到 -12.0/6.0 或拒收）
+PASS  eq.outgain NaN/Inf 被拒
+PASS  eq.channels 默认回读在界内（255）
+PASS  eq.channels 中点 128 往返（实读 128）
+PASS  eq.channels 越界（clamp 到 0/255 或拒收）
+PASS  eq.channel_mask 默认回读在界内（255）
+PASS  eq.channel_mask 中点 128 往返（实读 128）
+PASS  eq.channel_mask 越界（clamp 到 0/255 或拒收）
+PASS  reverb.predelay 默认回读 == 0.0（实读 0.0）
+PASS  reverb.predelay 中点 50.0 往返（实读 50.0）
+PASS  reverb.predelay 越界（clamp 到 0.0/100.0 或拒收）
+PASS  reverb.predelay NaN/Inf 被拒
+PASS  reverb.outgain 默认回读 == 0.0（实读 0.0）
+PASS  reverb.outgain 中点 -3.0 往返（实读 -3.0）
+PASS  reverb.outgain 越界（clamp 到 -12.0/6.0 或拒收）
+PASS  reverb.outgain NaN/Inf 被拒
+PASS  freeverb.decay 默认回读 == 0.5（实读 0.5）
+PASS  freeverb.decay 中点 0.5 往返（实读 0.5）
+PASS  freeverb.decay 越界（clamp 到 0.0/1.0 或拒收）
+PASS  freeverb.decay NaN/Inf 被拒
+PASS  freeverb.damp 默认回读 == 0.5（实读 0.5）
+PASS  freeverb.damp 中点 0.5 往返（实读 0.5）
+PASS  freeverb.damp 越界（clamp 到 0.0/1.0 或拒收）
+PASS  freeverb.damp NaN/Inf 被拒
+PASS  freeverb.wet 默认回读 == 0.35（实读 0.3499999940395355）
+PASS  freeverb.wet 中点 0.5 往返（实读 0.5）
+PASS  freeverb.wet 越界（clamp 到 0.0/1.0 或拒收）
+PASS  freeverb.wet NaN/Inf 被拒
+PASS  freeverb.dry 默认回读 == 1.0（实读 1.0）
+PASS  freeverb.dry 中点 0.5 往返（实读 0.5）
+PASS  freeverb.dry 越界（clamp 到 0.0/1.0 或拒收）
+PASS  freeverb.dry NaN/Inf 被拒
+PASS  freeverb.roomsize 默认回读 == 1.2（实读 1.2000000476837158）
+PASS  freeverb.roomsize 中点 1.5 往返（实读 1.5）
+PASS  freeverb.roomsize 越界（clamp 到 0.5/2.5 或拒收）
+PASS  freeverb.roomsize NaN/Inf 被拒
+PASS  freeverb.width 默认回读 == 1.0（实读 1.0）
+PASS  freeverb.width 中点 1.1 往返（实读 1.100000023841858）
+PASS  freeverb.width 越界（clamp 到 0.2/2.0 或拒收）
+PASS  freeverb.width NaN/Inf 被拒
+PASS  dyneq.attack 默认回读 == 2.0（实读 2.0）
+PASS  dyneq.attack 中点 50.05 往返（实读 50.04999923706055）
+PASS  dyneq.attack 越界（clamp 到 0.1/100.0 或拒收）
+PASS  dyneq.attack NaN/Inf 被拒
+PASS  dyneq.release 默认回读 == 120.0（实读 120.0）
+PASS  dyneq.release 中点 505.0 往返（实读 505.0）
+PASS  dyneq.release 越界（clamp 到 10.0/1000.0 或拒收）
+PASS  dyneq.release NaN/Inf 被拒
+PASS  dyneq.b1.attack 默认回读 == 20.0（实读 20.0）
+PASS  dyneq.b1.attack 中点 50.05 往返（实读 50.04999923706055）
+PASS  dyneq.b1.attack 越界（clamp 到 0.1/100.0 或拒收）
+PASS  dyneq.b1.attack NaN/Inf 被拒
+PASS  dyneq.b1.release 默认回读 == 120.0（实读 120.0）
+PASS  dyneq.b1.release 中点 505.0 往返（实读 505.0）
+PASS  dyneq.b1.release 越界（clamp 到 10.0/1000.0 或拒收）
+PASS  dyneq.b1.release NaN/Inf 被拒
+PASS  dyneq.b2.attack 默认回读 == 10.0（实读 10.0）
+PASS  dyneq.b2.attack 中点 50.05 往返（实读 50.04999923706055）
+PASS  dyneq.b2.attack 越界（clamp 到 0.1/100.0 或拒收）
+PASS  dyneq.b2.attack NaN/Inf 被拒
+PASS  dyneq.b2.release 默认回读 == 100.0（实读 100.0）
+PASS  dyneq.b2.release 中点 505.0 往返（实读 505.0）
+PASS  dyneq.b2.release 越界（clamp 到 10.0/1000.0 或拒收）
+PASS  dyneq.b2.release NaN/Inf 被拒
+PASS  dyneq.b3.attack 默认回读 == 2.0（实读 2.0）
+PASS  dyneq.b3.attack 中点 50.05 往返（实读 50.04999923706055）
+PASS  dyneq.b3.attack 越界（clamp 到 0.1/100.0 或拒收）
+PASS  dyneq.b3.attack NaN/Inf 被拒
+PASS  dyneq.b3.release 默认回读 == 120.0（实读 120.0）
+PASS  dyneq.b3.release 中点 505.0 往返（实读 505.0）
+PASS  dyneq.b3.release 越界（clamp 到 10.0/1000.0 或拒收）
+PASS  dyneq.b3.release NaN/Inf 被拒
+PASS  dyneq.low.attack 默认回读 == 20.0（实读 20.0）
+PASS  dyneq.low.attack 中点 50.05 往返（实读 50.04999923706055）
+PASS  dyneq.low.attack 越界（clamp 到 0.1/100.0 或拒收）
+PASS  dyneq.low.attack NaN/Inf 被拒
+PASS  dyneq.low.release 默认回读 == 120.0（实读 120.0）
+PASS  dyneq.low.release 中点 505.0 往返（实读 505.0）
+PASS  dyneq.low.release 越界（clamp 到 10.0/1000.0 或拒收）
+PASS  dyneq.low.release NaN/Inf 被拒
+PASS  dyneq.mid.attack 默认回读 == 10.0（实读 10.0）
+PASS  dyneq.mid.attack 中点 50.05 往返（实读 50.04999923706055）
+PASS  dyneq.mid.attack 越界（clamp 到 0.1/100.0 或拒收）
+PASS  dyneq.mid.attack NaN/Inf 被拒
+PASS  dyneq.mid.release 默认回读 == 100.0（实读 100.0）
+PASS  dyneq.mid.release 中点 505.0 往返（实读 505.0）
+PASS  dyneq.mid.release 越界（clamp 到 10.0/1000.0 或拒收）
+PASS  dyneq.mid.release NaN/Inf 被拒
+PASS  dyneq.high.attack 默认回读 == 2.0（实读 2.0）
+PASS  dyneq.high.attack 中点 50.05 往返（实读 50.04999923706055）
+PASS  dyneq.high.attack 越界（clamp 到 0.1/100.0 或拒收）
+PASS  dyneq.high.attack NaN/Inf 被拒
+PASS  dyneq.high.release 默认回读 == 120.0（实读 120.0）
+PASS  dyneq.high.release 中点 505.0 往返（实读 505.0）
+PASS  dyneq.high.release 越界（clamp 到 10.0/1000.0 或拒收）
+PASS  dyneq.high.release NaN/Inf 被拒
+PASS  dyneq.band1.attack 默认回读 == 20.0（实读 20.0）
+PASS  dyneq.band1.attack 中点 50.05 往返（实读 50.04999923706055）
+PASS  dyneq.band1.attack 越界（clamp 到 0.1/100.0 或拒收）
+PASS  dyneq.band1.attack NaN/Inf 被拒
+PASS  dyneq.band1.release 默认回读 == 120.0（实读 120.0）
+PASS  dyneq.band1.release 中点 505.0 往返（实读 505.0）
+PASS  dyneq.band1.release 越界（clamp 到 10.0/1000.0 或拒收）
+PASS  dyneq.band1.release NaN/Inf 被拒
+PASS  dyneq.band2.attack 默认回读 == 10.0（实读 10.0）
+PASS  dyneq.band2.attack 中点 50.05 往返（实读 50.04999923706055）
+PASS  dyneq.band2.attack 越界（clamp 到 0.1/100.0 或拒收）
+PASS  dyneq.band2.attack NaN/Inf 被拒
+PASS  dyneq.band2.release 默认回读 == 100.0（实读 100.0）
+PASS  dyneq.band2.release 中点 505.0 往返（实读 505.0）
+PASS  dyneq.band2.release 越界（clamp 到 10.0/1000.0 或拒收）
+PASS  dyneq.band2.release NaN/Inf 被拒
+PASS  dyneq.band3.attack 默认回读 == 2.0（实读 2.0）
+PASS  dyneq.band3.attack 中点 50.05 往返（实读 50.04999923706055）
+PASS  dyneq.band3.attack 越界（clamp 到 0.1/100.0 或拒收）
+PASS  dyneq.band3.attack NaN/Inf 被拒
+PASS  dyneq.band3.release 默认回读 == 120.0（实读 120.0）
+PASS  dyneq.band3.release 中点 505.0 往返（实读 505.0）
+PASS  dyneq.band3.release 越界（clamp 到 10.0/1000.0 或拒收）
+PASS  dyneq.band3.release NaN/Inf 被拒
+PASS  dyneq.low.freq 默认回读 == 120.0（实读 120.0）
+PASS  dyneq.low.freq 中点 260.0 往返（实读 260.0）
+PASS  dyneq.low.freq 越界（clamp 到 20.0/500.0 或拒收）
+PASS  dyneq.low.freq NaN/Inf 被拒
+PASS  dyneq.low.q 默认回读 == 0.707（实读 0.7070000171661377）
+PASS  dyneq.low.q 中点 1.25 往返（实读 1.25）
+PASS  dyneq.low.q 越界（clamp 到 0.5/2.0 或拒收）
+PASS  dyneq.low.q NaN/Inf 被拒
+PASS  dyneq.low.gain 默认回读 == 0.0（实读 0.0）
+PASS  dyneq.low.gain 中点 0.0 往返（实读 0.0）
+PASS  dyneq.low.gain 越界（clamp 到 -12.0/12.0 或拒收）
+PASS  dyneq.low.gain NaN/Inf 被拒
+PASS  dyneq.low.range 默认回读 == 6.0（实读 6.0）
+PASS  dyneq.low.range 中点 12.0 往返（实读 12.0）
+PASS  dyneq.low.range 越界（clamp 到 0.0/24.0 或拒收）
+PASS  dyneq.low.range NaN/Inf 被拒
+PASS  dyneq.low.threshold 默认回读 == -30.0（实读 -30.0）
+PASS  dyneq.low.threshold 中点 -30.0 往返（实读 -30.0）
+PASS  dyneq.low.threshold 越界（clamp 到 -60.0/0.0 或拒收）
+PASS  dyneq.low.threshold NaN/Inf 被拒
+PASS  dyneq.mid.freq 默认回读 == 1000.0（实读 1000.0）
+PASS  dyneq.mid.freq 中点 4100.0 往返（实读 4100.0）
+PASS  dyneq.mid.freq 越界（clamp 到 200.0/8000.0 或拒收）
+PASS  dyneq.mid.freq NaN/Inf 被拒
+PASS  dyneq.mid.q 默认回读 == 1.0（实读 1.0）
+PASS  dyneq.mid.q 中点 5.15 往返（实读 5.150000095367432）
+PASS  dyneq.mid.q 越界（clamp 到 0.3/10.0 或拒收）
+PASS  dyneq.mid.q NaN/Inf 被拒
+PASS  dyneq.mid.gain 默认回读 == 0.0（实读 0.0）
+PASS  dyneq.mid.gain 中点 0.0 往返（实读 0.0）
+PASS  dyneq.mid.gain 越界（clamp 到 -12.0/12.0 或拒收）
+PASS  dyneq.mid.gain NaN/Inf 被拒
+PASS  dyneq.mid.range 默认回读 == 6.0（实读 6.0）
+PASS  dyneq.mid.range 中点 12.0 往返（实读 12.0）
+PASS  dyneq.mid.range 越界（clamp 到 0.0/24.0 或拒收）
+PASS  dyneq.mid.range NaN/Inf 被拒
+PASS  dyneq.mid.threshold 默认回读 == -30.0（实读 -30.0）
+PASS  dyneq.mid.threshold 中点 -30.0 往返（实读 -30.0）
+PASS  dyneq.mid.threshold 越界（clamp 到 -60.0/0.0 或拒收）
+PASS  dyneq.mid.threshold NaN/Inf 被拒
+PASS  dyneq.high.freq 默认回读 == 6000.0（实读 6000.0）
+PASS  dyneq.high.freq 中点 11000.0 往返（实读 11000.0）
+PASS  dyneq.high.freq 越界（clamp 到 2000.0/20000.0 或拒收）
+PASS  dyneq.high.freq NaN/Inf 被拒
+PASS  dyneq.high.q 默认回读 == 0.707（实读 0.7070000171661377）
+PASS  dyneq.high.q 中点 1.25 往返（实读 1.25）
+PASS  dyneq.high.q 越界（clamp 到 0.5/2.0 或拒收）
+PASS  dyneq.high.q NaN/Inf 被拒
+PASS  dyneq.high.gain 默认回读 == 0.0（实读 0.0）
+PASS  dyneq.high.gain 中点 0.0 往返（实读 0.0）
+PASS  dyneq.high.gain 越界（clamp 到 -12.0/12.0 或拒收）
+PASS  dyneq.high.gain NaN/Inf 被拒
+PASS  dyneq.high.range 默认回读 == 6.0（实读 6.0）
+PASS  dyneq.high.range 中点 12.0 往返（实读 12.0）
+PASS  dyneq.high.range 越界（clamp 到 0.0/24.0 或拒收）
+PASS  dyneq.high.range NaN/Inf 被拒
+PASS  dyneq.high.threshold 默认回读 == -30.0（实读 -30.0）
+PASS  dyneq.high.threshold 中点 -30.0 往返（实读 -30.0）
+PASS  dyneq.high.threshold 越界（clamp 到 -60.0/0.0 或拒收）
+PASS  dyneq.high.threshold NaN/Inf 被拒
+PASS  dyneq.channels 默认回读在界内（247）
+PASS  dyneq.channels 中点 128 往返（实读 128）
+PASS  dyneq.channels 越界（clamp 到 0/255 或拒收）
+PASS  dyneq.channel_mask 默认回读在界内（247）
+PASS  dyneq.channel_mask 中点 128 往返（实读 128）
+PASS  dyneq.channel_mask 越界（clamp 到 0/255 或拒收）
+PASS  stereo.mix 默认回读 == 0.5（实读 0.5）
+PASS  stereo.mix 中点 0.5 往返（实读 0.5）
+PASS  stereo.mix 越界（clamp 到 0.0/1.0 或拒收）
+PASS  stereo.mix NaN/Inf 被拒
+PASS  haas.delay 默认回读 == 12.0（实读 12.0）
+PASS  haas.delay 中点 12.5 往返（实读 12.5）
+PASS  haas.delay 越界（clamp 到 0.0/25.0 或拒收）
+PASS  haas.delay NaN/Inf 被拒
+PASS  haas.mix 默认回读 == 1.0（实读 1.0）
+PASS  haas.mix 中点 0.5 往返（实读 0.5）
+PASS  haas.mix 越界（clamp 到 0.0/1.0 或拒收）
+PASS  haas.mix NaN/Inf 被拒
+PASS  haas.side 默认回读 == 0.0（实读 0）
+PASS  haas.side 中点 0 往返（实读 0）
+PASS  haas.side 越界（clamp 到 0/1 或拒收）
+PASS  crossfeed.mode 默认回读 == 0.0（实读 0）
+PASS  crossfeed.mode 中点 2 往返（实读 2）
+PASS  crossfeed.mode 越界（clamp 到 0/3 或拒收）
+PASS  crossfeed.fcut 默认回读 == 700.0（实读 700.0）
+PASS  crossfeed.fcut 中点 1150.0 往返（实读 1150.0）
+PASS  crossfeed.fcut 越界（clamp 到 300.0/2000.0 或拒收）
+PASS  crossfeed.fcut NaN/Inf 被拒
+PASS  crossfeed.feed 默认回读 == 4.5（实读 4.5）
+PASS  crossfeed.feed 中点 8.0 往返（实读 8.0）
+PASS  crossfeed.feed 越界（clamp 到 1.0/15.0 或拒收）
+PASS  crossfeed.feed NaN/Inf 被拒
+PASS  spatial.style 默认回读 == 0.0（实读 0）
+PASS  spatial.style 中点 2 往返（实读 2）
+PASS  spatial.style 越界（clamp 到 0/3 或拒收）
+PASS  spatial.room 默认回读 == 0.7（实读 0.699999988079071）
+PASS  spatial.room 中点 0.5 往返（实读 0.5）
+PASS  spatial.room 越界（clamp 到 0.0/1.0 或拒收）
+PASS  spatial.room NaN/Inf 被拒
+PASS  spatial.width 默认回读 == 1.0（实读 1.0）
+PASS  spatial.width 中点 1.0 往返（实读 1.0）
+PASS  spatial.width 越界（clamp 到 0.5/1.5 或拒收）
+PASS  spatial.width NaN/Inf 被拒
+PASS  spatial.center 默认回读 == 0.8（实读 0.800000011920929）
+PASS  spatial.center 中点 0.5 往返（实读 0.5）
+PASS  spatial.center 越界（clamp 到 0.0/1.0 或拒收）
+PASS  spatial.center NaN/Inf 被拒
+PASS  spatial.outgain 默认回读 == 0.0（实读 0.0）
+PASS  spatial.outgain 中点 -3.0 往返（实读 -3.0）
+PASS  spatial.outgain 越界（clamp 到 -12.0/6.0 或拒收）
+PASS  spatial.outgain NaN/Inf 被拒
+PASS  spatial.mix 默认回读 == 1.0（实读 1.0）
+PASS  spatial.mix 中点 0.5 往返（实读 0.5）
+PASS  spatial.mix 越界（clamp 到 0.0/1.0 或拒收）
+PASS  spatial.mix NaN/Inf 被拒
+PASS  spatial.elevation 默认回读 == 0.0（实读 0.0）
+PASS  spatial.elevation 中点 0.0 往返（实读 0.0）
+PASS  spatial.elevation 越界（clamp 到 -30.0/30.0 或拒收）
+PASS  spatial.elevation NaN/Inf 被拒
+PASS  spatial.headazim 默认回读 == 0.0（实读 0.0）
+PASS  spatial.headazim 中点 0.0 往返（实读 0.0）
+PASS  spatial.headazim 越界（clamp 到 -180.0/180.0 或拒收）
+PASS  spatial.headazim NaN/Inf 被拒
+PASS  bassmono.freq 默认回读 == 120.0（实读 120.0）
+PASS  bassmono.freq 中点 160.0 往返（实读 160.0）
+PASS  bassmono.freq 越界（clamp 到 20.0/300.0 或拒收）
+PASS  bassmono.freq NaN/Inf 被拒
+PASS  shelf.freq 默认回读 == 100.0（实读 100.0）
+PASS  shelf.freq 中点 220.0 往返（实读 220.0）
+PASS  shelf.freq 越界（clamp 到 40.0/400.0 或拒收）
+PASS  shelf.freq NaN/Inf 被拒
+PASS  shelf.gain 默认回读 == 0.0（实读 0.0）
+PASS  shelf.gain 中点 0.0 往返（实读 0.0）
+PASS  shelf.gain 越界（clamp 到 -15.0/15.0 或拒收）
+PASS  shelf.gain NaN/Inf 被拒
+PASS  shelf.channels 默认回读在界内（255）
+PASS  shelf.channels 中点 128 往返（实读 128）
+PASS  shelf.channels 越界（clamp 到 0/255 或拒收）
+PASS  shelf.channel_mask 默认回读在界内（255）
+PASS  shelf.channel_mask 中点 128 往返（实读 128）
+PASS  shelf.channel_mask 越界（clamp 到 0/255 或拒收）
+PASS  filter.type 默认回读 == 0.0（实读 0）
+PASS  filter.type 中点 1 往返（实读 1）
+PASS  filter.type 越界（clamp 到 0/2 或拒收）
+PASS  filter.freq 默认回读 == 80.0（实读 80.0）
+PASS  filter.freq 中点 10010.0 往返（实读 10010.0）
+PASS  filter.freq 越界（clamp 到 20.0/20000.0 或拒收）
+PASS  filter.freq NaN/Inf 被拒
+PASS  filter.q 默认回读 == 0.707（实读 0.7070000171661377）
+PASS  filter.q 中点 5.15 往返（实读 5.150000095367432）
+PASS  filter.q 越界（clamp 到 0.3/10.0 或拒收）
+PASS  filter.q NaN/Inf 被拒
+PASS  filter.channels 默认回读在界内（255）
+PASS  filter.channels 中点 128 往返（实读 128）
+PASS  filter.channels 越界（clamp 到 0/255 或拒收）
+PASS  filter.channel_mask 默认回读在界内（255）
+PASS  filter.channel_mask 中点 128 往返（实读 128）
+PASS  filter.channel_mask 越界（clamp 到 0/255 或拒收）
+PASS  exciter.amount 默认回读 == 0.3（实读 0.30000001192092896）
+PASS  exciter.amount 中点 0.5 往返（实读 0.5）
+PASS  exciter.amount 越界（clamp 到 0.0/1.0 或拒收）
+PASS  exciter.amount NaN/Inf 被拒
+PASS  exciter.hifreq 默认回读 == 5000.0（实读 5000.0）
+PASS  exciter.hifreq 中点 6500.0 往返（实读 6500.0）
+PASS  exciter.hifreq 越界（clamp 到 3000.0/10000.0 或拒收）
+PASS  exciter.hifreq NaN/Inf 被拒
+PASS  exciter.channels 默认回读在界内（247）
+PASS  exciter.channels 中点 128 往返（实读 128）
+PASS  exciter.channels 越界（clamp 到 0/255 或拒收）
+PASS  exciter.channel_mask 默认回读在界内（247）
+PASS  exciter.channel_mask 中点 128 往返（实读 128）
+PASS  exciter.channel_mask 越界（clamp 到 0/255 或拒收）
+PASS  gate.threshold 默认回读 == -40.0（实读 -40.0）
+PASS  gate.threshold 中点 -30.0 往返（实读 -30.0）
+PASS  gate.threshold 越界（clamp 到 -60.0/0.0 或拒收）
+PASS  gate.threshold NaN/Inf 被拒
+PASS  gate.attack 默认回读 == 10.0（实读 10.0）
+PASS  gate.attack 中点 50.5 往返（实读 50.5）
+PASS  gate.attack 越界（clamp 到 1.0/100.0 或拒收）
+PASS  gate.attack NaN/Inf 被拒
+PASS  gate.release 默认回读 == 100.0（实读 100.0）
+PASS  gate.release 中点 255.0 往返（实读 255.0）
+PASS  gate.release 越界（clamp 到 10.0/500.0 或拒收）
+PASS  gate.release NaN/Inf 被拒
+PASS  gate.hysteresis 默认回读 == 3.0（实读 3.0）
+PASS  gate.hysteresis 中点 6.0 往返（实读 6.0）
+PASS  gate.hysteresis 越界（clamp 到 0.0/12.0 或拒收）
+PASS  gate.hysteresis NaN/Inf 被拒
+PASS  gate.range 默认回读 == -60.0（实读 -60.0）
+PASS  gate.range 中点 -40.0 往返（实读 -40.0）
+PASS  gate.range 越界（clamp 到 -80.0/0.0 或拒收）
+PASS  gate.range NaN/Inf 被拒
+PASS  gate.hold 默认回读 == 10.0（实读 10.0）
+PASS  gate.hold 中点 250.0 往返（实读 250.0）
+PASS  gate.hold 越界（clamp 到 0.0/500.0 或拒收）
+PASS  gate.hold NaN/Inf 被拒
+PASS  gate.hold_ms 默认回读 == 10.0（实读 10.0）
+PASS  gate.hold_ms 中点 250.0 往返（实读 250.0）
+PASS  gate.hold_ms 越界（clamp 到 0.0/500.0 或拒收）
+PASS  gate.hold_ms NaN/Inf 被拒
+PASS  gate.channels 默认回读在界内（255）
+PASS  gate.channels 中点 128 往返（实读 128）
+PASS  gate.channels 越界（clamp 到 0/255 或拒收）
+PASS  gate.channel_mask 默认回读在界内（255）
+PASS  gate.channel_mask 中点 128 往返（实读 128）
+PASS  gate.channel_mask 越界（clamp 到 0/255 或拒收）
+PASS  deesser.freq 默认回读 == 6000.0（实读 6000.0）
+PASS  deesser.freq 中点 6000.0 往返（实读 6000.0）
+PASS  deesser.freq 越界（clamp 到 2000.0/10000.0 或拒收）
+PASS  deesser.freq NaN/Inf 被拒
+PASS  deesser.amount 默认回读 == 0.5（实读 0.5）
+PASS  deesser.amount 中点 0.5 往返（实读 0.5）
+PASS  deesser.amount 越界（clamp 到 0.0/1.0 或拒收）
+PASS  deesser.amount NaN/Inf 被拒
+PASS  loudness.amount 默认回读 == 0.5（实读 0.5）
+PASS  loudness.amount 中点 0.5 往返（实读 0.5）
+PASS  loudness.amount 越界（clamp 到 0.0/1.0 或拒收）
+PASS  loudness.amount NaN/Inf 被拒
+PASS  loudness.channels 默认回读在界内（255）
+PASS  loudness.channels 中点 128 往返（实读 128）
+PASS  loudness.channels 越界（clamp 到 0/255 或拒收）
+PASS  loudness.channel_mask 默认回读在界内（255）
+PASS  loudness.channel_mask 中点 128 往返（实读 128）
+PASS  loudness.channel_mask 越界（clamp 到 0/255 或拒收）
+PASS  input.gain 默认回读 == 0.0（实读 0.0）
+PASS  input.gain 中点 0.0 往返（实读 0.0）
+PASS  input.gain 越界（clamp 到 -15.0/15.0 或拒收）
+PASS  input.gain NaN/Inf 被拒
+PASS  post.gain 默认回读 == 0.0（实读 0.0）
+PASS  post.gain 中点 0.0 往返（实读 0.0）
+PASS  post.gain 越界（clamp 到 -15.0/15.0 或拒收）
+PASS  post.gain NaN/Inf 被拒
+PASS  post.gain.c0 默认回读在界内（0.0）
+PASS  post.gain.c0 中点 0.0 往返（实读 0.0）
+PASS  post.gain.c0 越界（clamp 到 -15.0/15.0 或拒收）
+PASS  post.gain.c0 NaN/Inf 被拒
+PASS  post.gain.c1 默认回读在界内（0.0）
+PASS  post.gain.c1 中点 0.0 往返（实读 0.0）
+PASS  post.gain.c1 越界（clamp 到 -15.0/15.0 或拒收）
+PASS  post.gain.c1 NaN/Inf 被拒
+PASS  post.gain.c2 默认回读在界内（0.0）
+PASS  post.gain.c2 中点 0.0 往返（实读 0.0）
+PASS  post.gain.c2 越界（clamp 到 -15.0/15.0 或拒收）
+PASS  post.gain.c2 NaN/Inf 被拒
+PASS  post.gain.c3 默认回读在界内（0.0）
+PASS  post.gain.c3 中点 0.0 往返（实读 0.0）
+PASS  post.gain.c3 越界（clamp 到 -15.0/15.0 或拒收）
+PASS  post.gain.c3 NaN/Inf 被拒
+PASS  post.gain.c4 默认回读在界内（0.0）
+PASS  post.gain.c4 中点 0.0 往返（实读 0.0）
+PASS  post.gain.c4 越界（clamp 到 -15.0/15.0 或拒收）
+PASS  post.gain.c4 NaN/Inf 被拒
+PASS  post.gain.c5 默认回读在界内（0.0）
+PASS  post.gain.c5 中点 0.0 往返（实读 0.0）
+PASS  post.gain.c5 越界（clamp 到 -15.0/15.0 或拒收）
+PASS  post.gain.c5 NaN/Inf 被拒
+PASS  post.gain.c6 默认回读在界内（0.0）
+PASS  post.gain.c6 中点 0.0 往返（实读 0.0）
+PASS  post.gain.c6 越界（clamp 到 -15.0/15.0 或拒收）
+PASS  post.gain.c6 NaN/Inf 被拒
+PASS  post.gain.c7 默认回读在界内（0.0）
+PASS  post.gain.c7 中点 0.0 往返（实读 0.0）
+PASS  post.gain.c7 越界（clamp 到 -15.0/15.0 或拒收）
+PASS  post.gain.c7 NaN/Inf 被拒
+PASS  limiter.channels 默认回读在界内（255）
+PASS  limiter.channels 中点 128 往返（实读 128）
+PASS  limiter.channels 越界（clamp 到 0/255 或拒收）
+PASS  limiter.channel_mask 默认回读在界内（255）
+PASS  limiter.channel_mask 中点 128 往返（实读 128）
+PASS  limiter.channel_mask 越界（clamp 到 0/255 或拒收）
+PASS  limiter.release 默认回读 == 100.0（实读 100.0）
+PASS  limiter.release 中点 255.0 往返（实读 255.0）
+PASS  limiter.release 越界（clamp 到 10.0/500.0 或拒收）
+PASS  limiter.release NaN/Inf 被拒
+PASS  limiter.release_ms 默认回读 == 100.0（实读 100.0）
+PASS  limiter.release_ms 中点 255.0 往返（实读 255.0）
+PASS  limiter.release_ms 越界（clamp 到 10.0/500.0 或拒收）
+PASS  limiter.release_ms NaN/Inf 被拒
+PASS  limiter.threshold 默认回读 == -0.1（实读 -0.10000000149011612）
+PASS  limiter.threshold 中点 -12.0 往返（实读 -12.0）
+PASS  limiter.threshold 越界（clamp 到 -24.0/0.0 或拒收）
+PASS  limiter.threshold NaN/Inf 被拒
+PASS  channels.countMode 默认回读 == 0.0（实读 0）
+PASS  channels.countMode 中点 0 往返（实读 0）
+PASS  channels.countMode 越界（clamp 到 0/1 或拒收）
+PASS  tube.enable 默认回读 == 0.0（实读 0）
+PASS  tube.enable BOOL 非零→1/零→0
+PASS  tube.autogain 默认回读 == 0.0（实读 0）
+PASS  tube.autogain BOOL 非零→1/零→0
+PASS  tube.oversample 默认回读 == 1.0（实读 1）
+PASS  tube.oversample BOOL 非零→1/零→0
+PASS  comp.enable 默认回读 == 0.0（实读 0）
+PASS  comp.enable BOOL 非零→1/零→0
+PASS  comp.autogain 默认回读 == 0.0（实读 0）
+PASS  comp.autogain BOOL 非零→1/零→0
+PASS  arbmag.autogain 默认回读 == 0.0（实读 0）
+PASS  arbmag.autogain BOOL 非零→1/零→0
+PASS  bass.enable 默认回读 == 0.0（实读 0）
+PASS  bass.enable BOOL 非零→1/零→0
+PASS  bass.autogain 默认回读 == 0.0（实读 0）
+PASS  bass.autogain BOOL 非零→1/零→0
+PASS  bass.oversample 默认回读 == 1.0（实读 1）
+PASS  bass.oversample BOOL 非零→1/零→0
+PASS  eq.enable 默认回读 == 0.0（实读 0）
+PASS  eq.enable BOOL 非零→1/零→0
+PASS  eq.autogain 默认回读 == 0.0（实读 0）
+PASS  eq.autogain BOOL 非零→1/零→0
+PASS  reverb.lfe 默认回读 == 0.0（实读 0）
+PASS  reverb.lfe BOOL 非零→1/零→0
+PASS  reverb.autogain 默认回读 == 0.0（实读 0）
+PASS  reverb.autogain BOOL 非零→1/零→0
+PASS  dyneq.enable 默认回读 == 0.0（实读 0）
+PASS  dyneq.enable BOOL 非零→1/零→0
+PASS  dyneq.low.enable 默认回读 == 0.0（实读 0）
+PASS  dyneq.low.enable BOOL 非零→1/零→0
+PASS  dyneq.mid.enable 默认回读 == 0.0（实读 0）
+PASS  dyneq.mid.enable BOOL 非零→1/零→0
+PASS  dyneq.high.enable 默认回读 == 0.0（实读 0）
+PASS  dyneq.high.enable BOOL 非零→1/零→0
+PASS  stereo.enable 默认回读 == 0.0（实读 0）
+PASS  stereo.enable BOOL 非零→1/零→0
+PASS  stereo.bandUsed 默认回读 == 0.0（实读 0）
+PASS  stereo.bandUsed BOOL 非零→1/零→0
+PASS  haas.enable 默认回读 == 0.0（实读 0）
+PASS  haas.enable BOOL 非零→1/零→0
+PASS  crossfeed.enable 默认回读 == 0.0（实读 0）
+PASS  crossfeed.enable BOOL 非零→1/零→0
+PASS  spatial.enable 默认回读 == 0.0（实读 0）
+PASS  spatial.enable BOOL 非零→1/零→0
+PASS  spatial.autogain 默认回读 == 0.0（实读 0）
+PASS  spatial.autogain BOOL 非零→1/零→0
+PASS  spatial.binaural 默认回读 == 0.0（实读 0）
+PASS  spatial.binaural BOOL 非零→1/零→0
+PASS  spatial.headtrack 默认回读 == 0.0（实读 0）
+PASS  spatial.headtrack BOOL 非零→1/零→0
+PASS  bassmono.enable 默认回读 == 0.0（实读 0）
+PASS  bassmono.enable BOOL 非零→1/零→0
+PASS  shelf.enable 默认回读 == 0.0（实读 0）
+PASS  shelf.enable BOOL 非零→1/零→0
+PASS  filter.enable 默认回读 == 0.0（实读 0）
+PASS  filter.enable BOOL 非零→1/零→0
+PASS  exciter.enable 默认回读 == 0.0（实读 0）
+PASS  exciter.enable BOOL 非零→1/零→0
+PASS  exciter.oversample 默认回读 == 1.0（实读 1）
+PASS  exciter.oversample BOOL 非零→1/零→0
+PASS  gate.enable 默认回读 == 0.0（实读 0）
+PASS  gate.enable BOOL 非零→1/零→0
+PASS  gate.autogain 默认回读 == 0.0（实读 0）
+PASS  gate.autogain BOOL 非零→1/零→0
+PASS  deesser.enable 默认回读 == 0.0（实读 0）
+PASS  deesser.enable BOOL 非零→1/零→0
+PASS  loudness.enable 默认回读 == 0.0（实读 0）
+PASS  loudness.enable BOOL 非零→1/零→0
+PASS  liveprog.enable 默认回读 == 0.0（实读 0）
+PASS  liveprog.enable BOOL 非零→1/零→0
+PASS  liveprogmc.enable 默认回读 == 0.0（实读 0）
+PASS  liveprogmc.enable BOOL 非零→1/零→0
+PASS  limiter.enable 默认回读 == 1.0（实读 1）
+PASS  limiter.enable BOOL 非零→1/零→0
+PASS  limiter.link 默认回读 == 1.0（实读 1）
+PASS  limiter.link BOOL 非零→1/零→0
+PASS  limiter.lookahead 默认回读 == 0.0（实读 0）
+PASS  limiter.lookahead BOOL 非零→1/零→0
+PASS  channels.upmix_fill 默认回读 == 0.0（实读 0）
+PASS  channels.upmix_fill BOOL 非零→1/零→0
+扫描完成：170 条参数（clamp 命中 260 次 / 拒收 0 次）
+
+=== [2] 多声道掩码补充（11 效果器逐声道 + comp mode=1 对语义 + mask=0 不变式） ===
+PASS  arbmag mask=0x01 声道0 处理 diff=0.2518
+PASS  arbmag mask=0x01 声道1 应直通 dev=0.00e+00
+PASS  arbmag mask=0x01 声道2 应直通 dev=0.00e+00
+PASS  arbmag mask=0x01 声道3 应直通 dev=0.00e+00
+PASS  arbmag mask=0x01 声道4 应直通 dev=0.00e+00
+PASS  arbmag mask=0x01 声道5 应直通 dev=0.00e+00
+PASS  arbmag mask=0x02 声道1 处理 diff=0.2518
+PASS  arbmag mask=0x02 声道0 应直通 dev=0.00e+00
+PASS  arbmag mask=0x02 声道2 应直通 dev=0.00e+00
+PASS  arbmag mask=0x02 声道3 应直通 dev=0.00e+00
+PASS  arbmag mask=0x02 声道4 应直通 dev=0.00e+00
+PASS  arbmag mask=0x02 声道5 应直通 dev=0.00e+00
+PASS  arbmag mask=0x04 声道2 处理 diff=0.2518
+PASS  arbmag mask=0x04 声道0 应直通 dev=0.00e+00
+PASS  arbmag mask=0x04 声道1 应直通 dev=0.00e+00
+PASS  arbmag mask=0x04 声道3 应直通 dev=0.00e+00
+PASS  arbmag mask=0x04 声道4 应直通 dev=0.00e+00
+PASS  arbmag mask=0x04 声道5 应直通 dev=0.00e+00
+PASS  arbmag mask=0x0C 声道2 处理 diff=0.2518
+PASS  arbmag mask=0x0C 声道3 处理 diff=0.2518
+PASS  arbmag mask=0x0C 声道0 应直通 dev=0.00e+00
+PASS  arbmag mask=0x0C 声道1 应直通 dev=0.00e+00
+PASS  arbmag mask=0x0C 声道4 应直通 dev=0.00e+00
+PASS  arbmag mask=0x0C 声道5 应直通 dev=0.00e+00
+PASS  arbmag mask=0x30 声道4 处理 diff=0.2518
+PASS  arbmag mask=0x30 声道5 处理 diff=0.2518
+PASS  arbmag mask=0x30 声道0 应直通 dev=0.00e+00
+PASS  arbmag mask=0x30 声道1 应直通 dev=0.00e+00
+PASS  arbmag mask=0x30 声道2 应直通 dev=0.00e+00
+PASS  arbmag mask=0x30 声道3 应直通 dev=0.00e+00
+PASS  arbmag mask=0xFF 声道0 处理 diff=0.2518
+PASS  arbmag mask=0xFF 声道1 处理 diff=0.2518
+PASS  arbmag mask=0xFF 声道2 处理 diff=0.2518
+PASS  arbmag mask=0xFF 声道3 处理 diff=0.2518
+PASS  arbmag mask=0xFF 声道4 处理 diff=0.2518
+PASS  arbmag mask=0xFF 声道5 处理 diff=0.2518
+PASS  arbmag mask=0x00 声道0 应直通 dev=0.00e+00
+PASS  arbmag mask=0x00 声道1 应直通 dev=0.00e+00
+PASS  arbmag mask=0x00 声道2 应直通 dev=0.00e+00
+PASS  arbmag mask=0x00 声道3 应直通 dev=0.00e+00
+PASS  arbmag mask=0x00 声道4 应直通 dev=0.00e+00
+PASS  arbmag mask=0x00 声道5 应直通 dev=0.00e+00
+PASS  comp mask=0x01 声道0 处理 diff=0.2530
+PASS  comp mask=0x01 声道1 应直通 dev=0.00e+00
+PASS  comp mask=0x01 声道2 应直通 dev=0.00e+00
+PASS  comp mask=0x01 声道3 应直通 dev=0.00e+00
+PASS  comp mask=0x01 声道4 应直通 dev=0.00e+00
+PASS  comp mask=0x01 声道5 应直通 dev=0.00e+00
+PASS  comp mask=0x02 声道1 处理 diff=0.2530
+PASS  comp mask=0x02 声道0 应直通 dev=0.00e+00
+PASS  comp mask=0x02 声道2 应直通 dev=0.00e+00
+PASS  comp mask=0x02 声道3 应直通 dev=0.00e+00
+PASS  comp mask=0x02 声道4 应直通 dev=0.00e+00
+PASS  comp mask=0x02 声道5 应直通 dev=0.00e+00
+PASS  comp mask=0x04 声道2 处理 diff=0.2530
+PASS  comp mask=0x04 声道0 应直通 dev=0.00e+00
+PASS  comp mask=0x04 声道1 应直通 dev=0.00e+00
+PASS  comp mask=0x04 声道3 应直通 dev=0.00e+00
+PASS  comp mask=0x04 声道4 应直通 dev=0.00e+00
+PASS  comp mask=0x04 声道5 应直通 dev=0.00e+00
+PASS  comp mask=0x0C 声道2 处理 diff=0.2530
+PASS  comp mask=0x0C 声道3 处理 diff=0.2530
+PASS  comp mask=0x0C 声道0 应直通 dev=0.00e+00
+PASS  comp mask=0x0C 声道1 应直通 dev=0.00e+00
+PASS  comp mask=0x0C 声道4 应直通 dev=0.00e+00
+PASS  comp mask=0x0C 声道5 应直通 dev=0.00e+00
+PASS  comp mask=0x30 声道4 处理 diff=0.2530
+PASS  comp mask=0x30 声道5 处理 diff=0.2530
+PASS  comp mask=0x30 声道0 应直通 dev=0.00e+00
+PASS  comp mask=0x30 声道1 应直通 dev=0.00e+00
+PASS  comp mask=0x30 声道2 应直通 dev=0.00e+00
+PASS  comp mask=0x30 声道3 应直通 dev=0.00e+00
+PASS  comp mask=0xFF 声道0 处理 diff=0.2530
+PASS  comp mask=0xFF 声道1 处理 diff=0.2530
+PASS  comp mask=0xFF 声道2 处理 diff=0.2530
+PASS  comp mask=0xFF 声道3 处理 diff=0.2530
+PASS  comp mask=0xFF 声道4 处理 diff=0.2530
+PASS  comp mask=0xFF 声道5 处理 diff=0.2530
+PASS  comp mask=0x00 声道0 应直通 dev=0.00e+00
+PASS  comp mask=0x00 声道1 应直通 dev=0.00e+00
+PASS  comp mask=0x00 声道2 应直通 dev=0.00e+00
+PASS  comp mask=0x00 声道3 应直通 dev=0.00e+00
+PASS  comp mask=0x00 声道4 应直通 dev=0.00e+00
+PASS  comp mask=0x00 声道5 应直通 dev=0.00e+00
+PASS  eq mask=0x01 声道0 处理 diff=0.2518
+PASS  eq mask=0x01 声道1 应直通 dev=0.00e+00
+PASS  eq mask=0x01 声道2 应直通 dev=0.00e+00
+PASS  eq mask=0x01 声道3 应直通 dev=0.00e+00
+PASS  eq mask=0x01 声道4 应直通 dev=0.00e+00
+PASS  eq mask=0x01 声道5 应直通 dev=0.00e+00
+PASS  eq mask=0x02 声道1 处理 diff=0.2518
+PASS  eq mask=0x02 声道0 应直通 dev=0.00e+00
+PASS  eq mask=0x02 声道2 应直通 dev=0.00e+00
+PASS  eq mask=0x02 声道3 应直通 dev=0.00e+00
+PASS  eq mask=0x02 声道4 应直通 dev=0.00e+00
+PASS  eq mask=0x02 声道5 应直通 dev=0.00e+00
+PASS  eq mask=0x04 声道2 处理 diff=0.2518
+PASS  eq mask=0x04 声道0 应直通 dev=0.00e+00
+PASS  eq mask=0x04 声道1 应直通 dev=0.00e+00
+PASS  eq mask=0x04 声道3 应直通 dev=0.00e+00
+PASS  eq mask=0x04 声道4 应直通 dev=0.00e+00
+PASS  eq mask=0x04 声道5 应直通 dev=0.00e+00
+PASS  eq mask=0x0C 声道2 处理 diff=0.2518
+PASS  eq mask=0x0C 声道3 处理 diff=0.2518
+PASS  eq mask=0x0C 声道0 应直通 dev=0.00e+00
+PASS  eq mask=0x0C 声道1 应直通 dev=0.00e+00
+PASS  eq mask=0x0C 声道4 应直通 dev=0.00e+00
+PASS  eq mask=0x0C 声道5 应直通 dev=0.00e+00
+PASS  eq mask=0x30 声道4 处理 diff=0.2518
+PASS  eq mask=0x30 声道5 处理 diff=0.2518
+PASS  eq mask=0x30 声道0 应直通 dev=0.00e+00
+PASS  eq mask=0x30 声道1 应直通 dev=0.00e+00
+PASS  eq mask=0x30 声道2 应直通 dev=0.00e+00
+PASS  eq mask=0x30 声道3 应直通 dev=0.00e+00
+PASS  eq mask=0xFF 声道0 处理 diff=0.2518
+PASS  eq mask=0xFF 声道1 处理 diff=0.2518
+PASS  eq mask=0xFF 声道2 处理 diff=0.2518
+PASS  eq mask=0xFF 声道3 处理 diff=0.2518
+PASS  eq mask=0xFF 声道4 处理 diff=0.2518
+PASS  eq mask=0xFF 声道5 处理 diff=0.2518
+PASS  eq mask=0x00 声道0 应直通 dev=0.00e+00
+PASS  eq mask=0x00 声道1 应直通 dev=0.00e+00
+PASS  eq mask=0x00 声道2 应直通 dev=0.00e+00
+PASS  eq mask=0x00 声道3 应直通 dev=0.00e+00
+PASS  eq mask=0x00 声道4 应直通 dev=0.00e+00
+PASS  eq mask=0x00 声道5 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x03 对(0,1) 处理 diff=0.2530
+PASS  comp (mode=1) mask=0x03 声道2 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x03 声道3 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x03 声道4 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x03 声道5 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x0C 对(2,3) 处理 diff=0.2530
+PASS  comp (mode=1) mask=0x0C 声道0 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x0C 声道1 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x0C 声道4 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x0C 声道5 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x30 对(4,5) 处理 diff=0.2530
+PASS  comp (mode=1) mask=0x30 声道0 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x30 声道1 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x30 声道2 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x30 声道3 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x33 对(0,1) 处理 diff=0.2530
+PASS  comp (mode=1) mask=0x33 对(4,5) 处理 diff=0.2530
+PASS  comp (mode=1) mask=0x33 声道2 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x33 声道3 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x04 声道0 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x04 声道1 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x04 声道2 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x04 声道3 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x04 声道4 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x04 声道5 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x00 声道0 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x00 声道1 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x00 声道2 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x00 声道3 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x00 声道4 应直通 dev=0.00e+00
+PASS  comp (mode=1) mask=0x00 声道5 应直通 dev=0.00e+00
+PASS  dyneq 掩码 0：全声道 100% 直通（dev=0.00e+00）
+PASS  exciter 掩码 0：全声道 100% 直通（dev=0.00e+00）
+PASS  filter 掩码 0：全声道 100% 直通（dev=0.00e+00）
+PASS  gate 掩码 0：全声道 100% 直通（dev=0.00e+00）
+PASS  limiter 掩码 0：全声道 100% 直通（dev=0.00e+00）
+PASS  loudness 掩码 0：全声道 100% 直通（dev=0.00e+00）
+PASS  shelf 掩码 0：全声道 100% 直通（dev=0.00e+00）
+PASS  tube 掩码 0：全声道 100% 直通（dev=0.00e+00）
+PASS  arbmag 掩码 0：全声道 100% 直通（dev=0.00e+00）
+PASS  comp 掩码 0：全声道 100% 直通（dev=0.00e+00）
+PASS  eq 掩码 0：全声道 100% 直通（dev=0.00e+00）
+
+ALL PASS
+=== 调试体系门禁 ===
+PASS  DebugTrace 存在
+PASS  Debug HUD 存在
+PASS  命令行启动器存在
+checked app lib: app\auradsp_app\lib
+PASS: no direct print/debugPrint; debug trace + CLI launcher present
+PASS  无直接 print/debugPrint
+
+debug_policy: all checks passed
+PASS  exciter.oversample default is 1
+PASS  set exciter.oversample 0
+PASS  set exciter.oversample 1
+PASS  tube.oversample default is 1
+PASS  set tube.oversample 0
+PASS  bass.oversample default is 1
+PASS  set bass.oversample 0
+[INFO] 1x Aliasing Mag at 6kHz: 46.4374, 2x Mag: 0.017680, Suppression: 68.39 dB
+PASS  1x has audible 6kHz aliasing foldback
+PASS  2x polyphase halfband suppresses aliasing > 60dB
+
+oversample_aliasing: all checks passed
+=== [0] 基础参数 ===
+PASS  default preset=-1 -> engine -1
+PASS  default vendor latency 0ms (limiter off)
+PASS  freeverb.decay roundtrip
+PASS  freeverb.damp roundtrip
+PASS  freeverb.wet roundtrip
+PASS  freeverb.dry roundtrip
+PASS  freeverb.roomsize clamp 0.5..2.5
+PASS  freeverb.width clamp 0.2..2.0
+PASS  reverb.predelay roundtrip/clamp
+PASS  reverb.lfe roundtrip
+PASS  disabled: impulse at sample 0
+PASS  disabled: no tail
+PASS  disabled: peak equals dry input
+=== [1] vendor 预设 ===
+PASS  preset 0: engine 0
+PASS  preset 0: +30ms vendor latency
+PASS  preset 0: readable tail
+PASS  preset 0: finite output
+PASS  preset 18: engine 0
+PASS  preset 18: +30ms vendor latency
+PASS  preset 18: readable tail
+PASS  preset 18: finite output
+=== [2] 自定义 -2（vendor 兜底） ===
+PASS  preset -2 accepted and readback -2
+PASS  preset -2 uses vendor engine 0
+PASS  preset -2 has +30ms vendor latency
+PASS  preset -2 still produces tail (vendor preset 0)
+=== [3] freeverb.enable 写别名 ===
+PASS  alias on: -1 -> preset 0
+PASS  alias on: engine 0 / +30ms
+PASS  alias off: -> preset -1
+PASS  alias off: engine -1 / 0ms
+PASS  alias on keeps existing preset 3
+PASS  alias on keeps custom -2
+=== [4] preset 边界 ===
+PASS  preset -2 accepted
+PASS  preset 18 accepted
+PASS  preset 19 rejected (E_PARAM)
+PASS  preset 100 rejected (E_PARAM)
+PASS  preset -2147483648 rejected (E_PARAM)
+PASS  preset -3 rejected (E_PARAM)
+PASS  preset 0 ok after rejects
+PASS  engine alive after preset rejects (no NaN/blowup)
+=== [5] 运行中切换 ===
+PASS  mid-stream switching finite (no NaN/Inf)
+PASS  mid-stream switching no explosion
+
+reverb: all checks passed
+PASS  default reverb.predelay = 0
+PASS  default reverb.lfe = 0
+PASS  default reverb.engine = -1
+PASS  default bassmono.pairs = 0x01
+PASS  default bassmono.merge = 0
+PASS  default comp.mode = 0
+PASS  default channels.countMode = 0
+PASS  default post.gain.c0 = 0 dB
+PASS  default post.gain.c1 = 0 dB
+PASS  default post.gain.c2 = 0 dB
+PASS  default post.gain.c3 = 0 dB
+PASS  default post.gain.c4 = 0 dB
+PASS  default post.gain.c5 = 0 dB
+PASS  default post.gain.c6 = 0 dB
+PASS  default post.gain.c7 = 0 dB
+PASS  roundtrip reverb.predelay
+PASS  reverb.predelay high clamp 100
+PASS  reverb.predelay low clamp 0
+PASS  roundtrip reverb.lfe
+PASS  roundtrip bassmono.pairs = 15
+PASS  roundtrip bassmono.merge
+PASS  roundtrip comp.mode
+PASS  roundtrip channels.countMode
+PASS  roundtrip post.gain.c3
+PASS  roundtrip post.gain.c7
+PASS  post.gain.c0 high clamp 15
+PASS  post.gain.c1 low clamp -15
+PASS  reverb.predelay NaN rejected
+PASS  reverb.predelay Inf rejected
+PASS  reverb.predelay unchanged after NaN/Inf
+PASS  channels.countMode high clamp 1
+PASS  channels.countMode low clamp 0
+PASS  bassmono.pairs=-1 rejected
+PASS  bassmono.pairs=16 rejected
+PASS  bassmono.pairs error text
+PASS  bassmono.merge=2 rejected
+PASS  bassmono.merge=-1 rejected
+PASS  comp.mode=2 rejected
+PASS  comp.mode=-1 rejected
+PASS  reverb.engine write rejected
+PASS  reverb.engine error says read-only
+PASS  reverb.engine still readable
+PASS  path: preset=-1 -> -1 (off)
+PASS  path: matrix (mode=0) -> vendor stereo 0
+PASS  path: mode=1 + count=2 -> MC FDN 1
+PASS  path: discrete + binaural 4ch -> vendor 0
+PASS  path: binaural flag without enable -> MC FDN 1
+PASS  path: spatial enable without binaural -> MC FDN 1
+PASS  path: discrete + binaural 6ch -> vendor 0
+PASS  path: mode=0 wins over binaural -> vendor 0
+PASS  path: preset=-1 wins over topology -> -1
+PASS  path: preset=-2 custom in matrix -> vendor 0
+PASS  path: preset=-2 custom + mode=1 2ch -> MC 1
+PASS  preset=-1: stereo output bit-identical
+PASS  preset=-1: block-wise bit-identical
+PASS  preset=-1: output non-silent & finite
+PASS  preset=0: output non-silent & finite
+
+wp0_scaffold: all checks passed
+=== [1] 路径判定 & 30ms 互斥证明 ===
+PASS  matrix 2ch preset=5 -> vendor +30ms
+PASS  discrete 2ch preset=5 -> FDN +0ms
+PASS  discrete 8ch preset=5 -> FDN +0ms
+PASS  discrete 8ch + binaural -> vendor +30ms
+PASS  discrete 4ch + binaural -> vendor +30ms
+PASS  discrete 2ch + binaural flags -> FDN +0ms
+PASS  binaural flag without spatial.enable -> FDN
+PASS  spatial.enable without binaural -> FDN
+PASS  matrix wins over binaural flags -> vendor
+PASS  matrix preset=-2 -> vendor +30ms
+PASS  discrete 8ch preset=-2 -> FDN +0ms
+PASS  preset=-1 wins over binaural topology -> -1
+PASS  handoff: MC -> matrix re-enables vendor (+30ms)
+PASS  handoff: matrix -> MC disables vendor (+0ms)
+=== [2] freeverb.enable 写别名（唯一开关仍是 reverb.preset） ===
+PASS  alias on: -1 -> preset 0
+PASS  alias on: vendor actually enabled (+30ms)
+PASS  alias off: -> preset -1
+PASS  alias off: vendor disabled (latency back to base)
+PASS  alias on keeps existing preset 3
+PASS  alias off turns preset 3 off
+PASS  alias on keeps custom -2
+=== [3] reverb.preset 边界 ===
+PASS  preset -2 accepted
+PASS  preset 18 accepted
+PASS  preset 19 rejected (E_PARAM)
+PASS  preset 100 rejected (E_PARAM)
+PASS  preset -2147483648 rejected (E_PARAM)
+PASS  preset -3 rejected (E_PARAM)
+PASS  preset 0 ok after rejects
+PASS  engine alive after preset rejects (finite output)
+=== [4] 源码不变式 ===
+PASS  dsp_freeverb.cpp removed
+PASS  dsp_mc_reverb.cpp exists
+PASS  engine_chain has no freeverb_process call
+PASS  engine_chain calls mc_reverb_process_mc
+PASS  CMake no dsp_freeverb.cpp
+PASS  CMake includes dsp_mc_reverb.cpp
+
+reverb_boundary: all checks passed
+=== [1] 8ch N 进 N 出 / 尾音去相关 ===
+PASS  8ch custom MC path reports engine 1
+PASS  FL/FR impulse produces FDN tail (wet-only)
+PASS  ch0 has FDN tail
+PASS  ch1 has FDN tail
+PASS  ch2 has FDN tail
+PASS  ch4 has FDN tail
+PASS  ch5 has FDN tail
+PASS  ch6 has FDN tail
+PASS  ch7 has FDN tail
+PASS  LFE stays dry when reverb.lfe=0
+      corr FL-FR=0.809 FL-SL=0.111 FL-BL=-0.005 SL-SR=0.783
+PASS  FL/FR correlated (same input, same near modes)
+PASS  FL/SL decorrelated (FDN, not copy)
+PASS  FL/BL decorrelated (FDN, not copy)
+PASS  SL/SR correlated (same side pair)
+=== [2] LFE 默认直通 / 不漏入 FDN ===
+PASS  LFE dry impulse passes at original time
+PASS  LFE dry impulse is the peak (no wet pre-echo)
+PASS  LFE tail is silent
+PASS  no LFE leakage into other channels
+=== [3] reverb.lfe=1 湿声与 120Hz 低通 ===
+PASS  LFE dry impulse still passes
+PASS  LFE wet tail appears with reverb.lfe=1
+PASS  LFE input also feeds other FDN outputs
+PASS  LFE tone 80Hz output finite/non-silent
+PASS  LFE tone 1000Hz output finite/non-silent
+PASS  LFE wet is low-passed (80Hz >> 1kHz)
+=== [4] 运行中切换预设/参数 ===
+PASS  preset/lfe/predelay switching finite (no NaN/Inf)
+PASS  preset switching does not explode
+PASS  preset switching still produces audio
+=== [5] reverb.outgain ===
+PASS  outgain +6dB ≈ 2x on MC FDN
+=== [6] 4ch Quad ===
+PASS  4ch ch0 has FDN tail
+PASS  4ch ch1 has FDN tail
+PASS  4ch ch2 has FDN tail
+PASS  4ch ch3 has FDN tail
+PASS  4ch output finite
+
+mc_reverb: all checks passed
+=== [1] 立体声自定义混响引擎判定 ===
+PASS  stereo path custom preset -2 reports engine 0
+PASS  stereo path custom preset -2 reports +30ms vendor latency
+=== [2] 原生参数映射与音效有效性 ===
+PASS  dry=1, wet=0 preserves input impulse at sample 0
+PASS  dry=1, wet=0 has no 1-sample delayed dry (no 1+z^-1 comb)
+PASS  dry=1, wet=0 produces negligible tail
+PASS  dry=0 suppresses direct impulse at sample 0
+PASS  wet=1 produces strong reverberation tail
+PASS  decay=0.95 late tail is significantly stronger than decay=0.05
+PASS  predelay=60ms delays the late reverberation onset (quiet predelay gap at ~40ms)
+=== [3] 双影子槽 RT 非阻塞与参数密集扫描 ===
+PASS  high-frequency parameter sweep produces all finite samples (no NaN/Inf)
+PASS  high-frequency parameter sweep does not blow up
+=== [4] 预设 A/B 切换与自定义态切入 ===
+PASS  seamless switching between vendor presets and custom -2
+=== [5] reverb.outgain / autogain 验证 ===
+PASS  reverb.outgain +6dB increases output energy in vendor path
+
+smoke_reverb_native_params: all checks passed
+=== [1] spatial.fdn 写别名 ===
+PASS  discrete 8ch preset=-1 -> engine -1
+PASS  spatial.fdn default readback 0
+PASS  fdn=1 accepted (deprecated alias)
+PASS  fdn=1 while reverb off migrates to preset 5
+PASS  fdn=1 opens MC FDN on discrete path
+PASS  fdn=0 does not turn reverb off
+PASS  fdn=1 keeps existing preset 3
+PASS  fdn=1 on matrix path migrates to vendor preset 5
+PASS  fdn=1 on matrix path enables vendor (+30ms)
+=== [2] spatial.late 写别名 ===
+PASS  freeverb.wet default 0.35
+PASS  late=0.7 accepted
+PASS  late migrates into freeverb.wet when wet is default
+PASS  late readback still works for old configs
+PASS  late does not overwrite user-adjusted wet
+PASS  late migrates again after wet reset to default
+PASS  late NaN rejected
+PASS  late NaN does not pollute wet
+PASS  late 9.0 clamps to 1.0
+=== [3] UI/ARB 源码不变式 ===
+PASS  Dart UI has no spatialFdn/spatialLate identifiers
+PASS  zh/en/ja ARB no spatialFdn/spatialLate keys
+PASS  reverb card uses curated preset table
+PASS  reverb card shows engine badge
+PASS  reverb card no longer claims FL/FR-only
+PASS  audio isolate no longer reads back spatial fdn/late
+PASS  engine still registers spatial.fdn
+PASS  engine still registers spatial.late
+PASS  engine still accepts spatial.fdn write
+PASS  engine still accepts spatial.late write
+
+spatial_fdn_removed: all checks passed
+=== [1] 8ch 离散模式下 Mode 0 (逐声道独立压缩) 基础 ===
+PASS  set channels.count=8
+PASS  set channels.mode=1 (离散模式)
+PASS  默认 comp.mode == 0
+
+=== [2] 单声道掩码隔离与 C/LFE 解绑 (Mode 0) ===
+PASS  mask=0x04: C 声道 (ch2) 压缩处理生效 (diff > 0.05)
+PASS  mask=0x04: ch0 未选声道 100% 直通
+PASS  mask=0x04: ch1 未选声道 100% 直通
+PASS  mask=0x04: ch3 未选声道 100% 直通
+PASS  mask=0x04: ch4 未选声道 100% 直通
+PASS  mask=0x04: ch5 未选声道 100% 直通
+PASS  mask=0x04: ch6 未选声道 100% 直通
+PASS  mask=0x04: ch7 未选声道 100% 直通
+PASS  mask=0x08: LFE 声道 (ch3) 压缩生效 (diff > 0.05)
+PASS  mask=0x08: C 声道 (ch2) 100% 直通 (C/LFE 彻底解绑)
+PASS  mask=0x01: FL (ch0) 压缩生效
+PASS  mask=0x01: FR (ch1) 100% 直通 (FL/FR 彻底解绑)
+
+=== [3] 无跨声道状态串扰 (Mode 0) ===
+PASS  ch0 强信号与静音时 ch1 输出逐位一致 (max_dev < 1e-6，零跨声道状态串扰)
+
+=== [4] Mode 1 (逐对性能模式回退) 语义 ===
+PASS  切换 comp.mode=1
+PASS  Mode 1 半选对 (mask=0x04): ch0 100% 直通
+PASS  Mode 1 半选对 (mask=0x04): ch1 100% 直通
+PASS  Mode 1 半选对 (mask=0x04): ch2 100% 直通
+PASS  Mode 1 半选对 (mask=0x04): ch3 100% 直通
+PASS  Mode 1 半选对 (mask=0x04): ch4 100% 直通
+PASS  Mode 1 半选对 (mask=0x04): ch5 100% 直通
+PASS  Mode 1 半选对 (mask=0x04): ch6 100% 直通
+PASS  Mode 1 半选对 (mask=0x04): ch7 100% 直通
+PASS  Mode 1 全选对 (mask=0x0C): ch2 压缩生效
+PASS  Mode 1 全选对 (mask=0x0C): ch3 压缩生效
+PASS  Mode 1 全选对 (mask=0x0C): ch0 直通
+PASS  Mode 1 全选对 (mask=0x0C): ch1 直通
+PASS  Mode 1 全选对 (mask=0x0C): ch4 直通
+PASS  Mode 1 全选对 (mask=0x0C): ch5 直通
+PASS  Mode 1 全选对 (mask=0x0C): ch6 直通
+PASS  Mode 1 全选对 (mask=0x0C): ch7 直通
+
+=== [5] mask=0 不变式与动态切换安全 ===
+PASS  mask=0 稳态下 8ch 逐样本 bit-exact (dev < 1e-6)
+PASS  连续动态切换 comp.mode 输出无 NaN/Inf
+
+ALL PASS: WP3 Compressor 逐声道门禁全部通过
+=== [1] 8ch 离散模式下 EQ 逐声道独立处理与单声道掩码 ===
+PASS  set channels.count=8
+PASS  set channels.mode=1 (离散模式)
+PASS  set eq.enable=1
+PASS  set eq.curve
+PASS  mask=0x04: C 声道 (ch2) 获得 ~12dB 提升 (peak 在 0.7..0.9)
+PASS  mask=0x04: ch0 未选声道 100% 直通
+PASS  mask=0x04: ch1 未选声道 100% 直通
+PASS  mask=0x04: ch3 未选声道 100% 直通
+PASS  mask=0x04: ch4 未选声道 100% 直通
+PASS  mask=0x04: ch5 未选声道 100% 直通
+PASS  mask=0x04: ch6 未选声道 100% 直通
+PASS  mask=0x04: ch7 未选声道 100% 直通
+PASS  mask=0x08: LFE 声道 (ch3) 获得提升
+PASS  mask=0x08: C 声道 (ch2) 100% 直通 (C/LFE 解绑)
+PASS  mask=0x01: FL (ch0) 获得提升
+PASS  mask=0x01: FR (ch1) 100% 直通 (FL/FR 解绑)
+
+=== [2] 8 个独立 FFTConvolver1x1 卷积 FIFO 零串扰 ===
+PASS  8ch 各声道不同频点并发卷积，ch2 与单声道隔离卷积一致 (diff < 1e-6，零 FIFO 串扰)
+
+=== [3] 96kHz 设备采样率下 IR 频点不产生八度偏移 (S-6) ===
+PASS  96k sr: set channels.count=8
+PASS  96k sr: set channels.mode=1
+PASS  96k sr: 1000Hz 处保持 ~12dB 目标提升 (peak 在 0.7..0.9)
+PASS  96k sr: 2000Hz 处未落在提升峰值 (peak 明显低于 1kHz 峰值)
+
+=== [4] mask=0 不变式 ===
+PASS  eq.channels=0 稳态下全 8 声道 100% bit-exact 直通 (dev < 1e-6)
+
+ALL PASS: WP3 EQ 逐声道门禁全部通过
+=== [1] 参数范围校验与越界拒绝 ===
+PASS  pairs=16 拒绝
+PASS  pairs=-1 拒绝
+PASS  merge=2 拒绝
+PASS  merge=-1 拒绝
+PASS  pairs=0 接受
+PASS  pairs=15 接受
+PASS  merge=0 接受
+PASS  merge=1 接受
+
+=== [2] 8ch 独立按对处理 (merge=0) 与未选对 bit-exact 直通 ===
+PASS  set bassmono.pairs=0x05
+PASS  未选对 Pair 1 (C/LFE) bit-exact 直通
+PASS  未选对 Pair 3 (BL/BR) bit-exact 直通
+PASS  Pair 2 (SL/SR 反相) 输出收敛到零 (< 0.02)
+PASS  Pair 0 (FL/FR) 低频收敛到单声道 (差值 < 0.02)
+PASS  Pair 0 (FL/FR) 和信号能量精确守恒 (差值 < 1e-5)
+
+=== [3] 8ch 全局合并 (merge=1) ===
+PASS  merge=1 时所有选中声道 (FL/FR/BL/BR) 低频收敛到同一信号 (差值 < 0.02)
+PASS  merge=1 时未选声道 bit-exact 直通
+
+=== [4] pairs=0 全声道 bit-exact 直通 ===
+PASS  pairs=0 时全声道 bit-exact 直通
+
+=== [5] 4ch Quad 布局：忽略不存在的对，正确映射 BL/BR (物理声道 2/3) ===
+PASS  4ch 下勾选不存在的对 (C/LFE, SL/SR) 时全通道直通
+PASS  4ch 仅选 bit 3 时 FL/FR bit-exact 直通
+PASS  4ch bit 3 (BL/BR) 落在物理声道 2/3 且反相被消除 (< 0.02)
+
+=== [6] 2ch 仅 bit 0 有效 ===
+PASS  2ch bit 0 未选时 bit-exact 直通
+PASS  2ch bit 0 选中时反相低频被抵消 (< 0.02)
+
+=== [7] 动态切换瞬态平滑 (bm_reinit) 与声道切换清零 ===
+PASS  动态切换 pairs 时首块无大跳变 (< 1.5)
+PASS  8->2->8 切换后首块无残留历史尾音 (< 1e-6)
+
+ALL PASS
+=== [1] 8ch 离散模式下全声道 trim 与 LFE 衰减 (M-4) ===
+PASS  set channels.count=8
+PASS  set channels.mode=1 (离散模式)
+PASS  set post.gain.c0=-3.0dB
+PASS  set post.gain.c1=2.0dB
+PASS  set post.gain.c2=-6.0dB
+PASS  set post.gain.c3=-10.0dB
+PASS  set post.gain.c4=1.5dB
+PASS  set post.gain.c5=-4.0dB
+PASS  set post.gain.c6=3.0dB
+PASS  set post.gain.c7=-1.0dB
+PASS  ch0 幅值匹配理论值 (-3.0dB)
+PASS  ch1 幅值匹配理论值 (2.0dB)
+PASS  ch2 幅值匹配理论值 (-6.0dB)
+PASS  ch3 幅值匹配理论值 (-10.0dB)
+PASS  ch4 幅值匹配理论值 (1.5dB)
+PASS  ch5 幅值匹配理论值 (-4.0dB)
+PASS  ch6 幅值匹配理论值 (3.0dB)
+PASS  ch7 幅值匹配理论值 (-1.0dB)
+PASS  LFE (ch3) 成功受控衰减 -10dB (M-4 不再遗漏 LFE)
+=== [2] 主增益与逐声道 trim 级联叠加 ===
+PASS  ch0 主增益(-6dB)+trim(-3.0dB)=-9.0dB 匹配
+PASS  ch1 主增益(-6dB)+trim(2.0dB)=-4.0dB 匹配
+PASS  ch2 主增益(-6dB)+trim(-6.0dB)=-12.0dB 匹配
+PASS  ch3 主增益(-6dB)+trim(-10.0dB)=-16.0dB 匹配
+PASS  ch4 主增益(-6dB)+trim(1.5dB)=-4.5dB 匹配
+PASS  ch5 主增益(-6dB)+trim(-4.0dB)=-10.0dB 匹配
+PASS  ch6 主增益(-6dB)+trim(3.0dB)=-3.0dB 匹配
+PASS  ch7 主增益(-6dB)+trim(-1.0dB)=-7.0dB 匹配
+=== [3] 全 0dB 时逐样本 bit-exact 直通 ===
+PASS  全 0dB 稳态下 8ch 逐样本 bit-exact (dev < 1e-6)
+=== [4] stereo 模式下 c0/c1 作用于 vendor stage_output (P-037) ===
+PASS  stereo 默认 channels.count=2, mode=0
+PASS  stereo 左声道 (-5dB) 匹配
+PASS  stereo 右声道 (0dB) 匹配
+
+postgain_persch: all checks passed
+=== [1] 8→2→8 拓扑切换无旧布局残留 ===
+PASS  channels.count 8->2
+PASS  channels.count 2->8
+PASS  8->2->8 切回后喂静音无残留拖尾 (max < 1e-4)
+=== [2] 拓扑切换后延迟实时重算 (M-7) ===
+PASS  离散多声道下混响延迟为 0ms
+PASS  切到矩阵模式延迟重算增加 30ms
+PASS  切回离散模式延迟重算回落 0ms
+PASS  开启双耳路径延迟重算增加 30ms (走 vendor reverb)
+PASS  关闭双耳延迟重算回落 (仅留 spatial 1ms)
+PASS  混响与空间关闭时矩阵模式延迟亦为 0ms
+=== [3] 拓扑热切换瞬态平稳（无爆炸数值） ===
+PASS  热切换模式首块全部样本有限
+PASS  热切换模式首块无爆炸尖峰 (< 2.0)
+PASS  热切回首块全部样本有限
+PASS  热切回首块无爆炸尖峰 (< 2.0)
+
+channel_switch_reset: all checks passed
+=== [1] fresh engine 初始默认契约 ===
+PASS  channels.count 默认 2
+PASS  dyneq.channels 默认 0xF7
+PASS  exciter.channels 默认 0xF7
+PASS  dyneq.channel_mask 别名共享 0xF7
+
+=== [2] 默认掩码随 channels.count 按布局平移 ===
+PASS  set channels.count=4
+PASS  dyneq.channels -> 0x0F (4ch)
+PASS  exciter.channels -> 0x0F (4ch)
+PASS  set channels.count=6
+PASS  dyneq.channels -> 0x37 (6ch)
+PASS  exciter.channels -> 0x37 (6ch)
+PASS  set channels.count=8
+PASS  dyneq.channels -> 0xF7 (8ch)
+PASS  exciter.channels -> 0xF7 (8ch)
+PASS  set channels.count=2
+PASS  dyneq.channels -> 0xF7 (2ch)
+PASS  exciter.channels -> 0xF7 (2ch)
+PASS  set channels.count=4
+PASS  dyneq.channels -> 0x0F (4ch)
+PASS  exciter.channels -> 0x0F (4ch)
+
+=== [3] 用户自定义掩码不被平移 ===
+PASS  dyneq.channels=0x03
+PASS  exciter.channels=0x30
+PASS  set channels.count=4
+PASS  dyneq.channels 保持 0x03 (4ch)
+PASS  exciter.channels 保持 0x30 (4ch)
+PASS  set channels.count=6
+PASS  dyneq.channels 保持 0x03 (6ch)
+PASS  exciter.channels 保持 0x30 (6ch)
+PASS  set channels.count=8
+PASS  dyneq.channels 保持 0x03 (8ch)
+PASS  exciter.channels 保持 0x30 (8ch)
+PASS  set channels.count=2
+PASS  dyneq.channels 保持 0x03 (2ch)
+PASS  exciter.channels 保持 0x30 (2ch)
+PASS  set channels.count=4
+PASS  dyneq.channels 保持 0x03 (4ch)
+PASS  exciter.channels 保持 0x30 (4ch)
+PASS  4ch 显式 dyneq.channels=0xF7
+PASS  set channels.count=2
+PASS  4ch 自定义 0xF7 切 2ch 保留
+
+=== [4] 4ch dyneq 默认掩码处理 BR（Mid 静态 +6dB）===
+PASS  默认掩码 dyneq 处理 FL（基频 ≈0.4）
+PASS  默认掩码 dyneq 处理 FR（基频 ≈0.4）
+PASS  默认掩码 dyneq 处理 BL（基频 ≈0.4）
+PASS  默认掩码 dyneq 处理 BR（基频 ≈0.4）
+PASS  显式 0xF7: FL/FR/BL 仍被处理
+PASS  显式 0xF7: BR 直通（旧位语义保留）
+
+=== [5] 4ch exciter 默认掩码处理 BR ===
+PASS  默认掩码 exciter 四声道均有处理
+PASS  显式 0xF7: FL/FR/BL 仍有处理
+PASS  显式 0xF7: BR bit-exact 直通
+
+channel mask default follow: all checks passed
+=== [1] style 0/1/2 预设映射与防递归 ===
+PASS  set style=0
+PASS  style 仍为 0（无递归改写）
+PASS  style=0 room==0.7
+PASS  style=0 width==1.0
+PASS  style=0 center==0.8
+PASS  set style=1
+PASS  style 仍为 1
+PASS  style=1 room==0.25
+PASS  style=1 width==1.1
+PASS  style=1 center==0.5
+PASS  set style=2
+PASS  style 仍为 2
+PASS  style=2 room==0.0
+PASS  style=2 width==1.0
+PASS  style=2 center==0.5
+=== [2] 手动改动参数自动切入自定义 (style=3) ===
+PASS  手动改 room 后 style 自动变 3
+PASS  room 保留为 0.55
+PASS  手动改 width 后 style 自动变 3
+PASS  width 保留为 1.35
+PASS  手动改 center 后 style 自动变 3
+PASS  center 保留为 0.75
+=== [3] style=3 自定义档显式写入不覆写当前值 ===
+PASS  显式 set style=3 成功
+PASS  style 为 3
+PASS  room 依然是 0.42
+PASS  width 依然是 1.28
+PASS  center 依然是 0.64
+=== [4] 越界钳制到合法区间 [0, 3] ===
+PASS  style=4 写入返回 OK
+PASS  style=4 钳制为 3
+PASS  style=-1 写入返回 OK
+PASS  style=-1 钳制为 0
+
+spatial_style_custom: all checks passed
+=== [1] 96k 设备率下 30kHz 频点钳制与音频处理 ===
+PASS  启用 EQ
+PASS  设置含 30kHz (超 48k 工作 Nyquist) 曲线成功
+PASS  96k 下 EQ 输出无 NaN/Inf
+PASS  96k 下输出振幅有限且稳定 (max < 10.0)
+=== [2] 192k 设备率下 80kHz 频点钳制与音频处理 ===
+PASS  启用 EQ (192k)
+PASS  设置含 80kHz (超 48k 工作 Nyquist) 曲线成功
+PASS  192k 下 EQ 输出无 NaN/Inf
+PASS  192k 下输出振幅有限且稳定 (max < 10.0)
+
+eq_freq_clamp: all checks passed
+=== [1] 创建 8 个 8ch 离散 Handle 与 RSS 增量预算 ===
+PASS  8 handle 活跃处理峰值 RSS 增量 < 150MB
+
+=== [2] 单 Handle 全量效果栈 CPU 预算 (<40% 单核@48k) ===
+PASS  单 handle 8ch 全效果栈 CPU < 40% 单核@48k
+
+=== [3] comp 8ch 独立耗时预算 (<25% 单核@48k) 与非空转验证 ===
+PASS  comp 8ch (mono 优化) 独立 CPU < 25% 单核@48k
+PASS  反向验证：comp 开启耗时显著高于直通绕过 (> 2x，证明非空转)
+
+=== [4] 句柄销毁与内存释放 ===
+PASS  全部 8+1 个引擎 handle 安全销毁
+
+ALL PASS: VB 8×8 预算门禁全部通过
+PASS  default-enabled
+PASS  default-hold-2000ms
+PASS  default-threshold--90dBFS
+PASS  default-not-gated
+PASS  enter-not-before-hold
+PASS  enter-at-hold
+PASS  enter-blocked-by-residual
+PASS  enter-after-residual-decayed
+PASS  gated-before-exit
+PASS  exit-same-block
+PASS  exit-resets-counters
+PASS  idle-ms-tracks-gated-time
+PASS  env-gate-0-disables
+PASS  env-gate-0-never-gated
+PASS  env-gate-db-overrides
+PASS  scan-interleaved
+PASS  scan-planes
+PASS  silent-viz-emits-one
+PASS  silent-viz-only-index
+PASS  silent-viz-seq-tagged
+PASS  silent-viz-channels
+PASS  silent-viz-levels--120
+PASS  silent-viz-stage-levels-gr-zero
+PASS  silent-viz-spectrum-zero
+PASS  silent-viz-channel-levels--120
+PASS  silent-viz-seq-monotonic
+PASS  silent-viz-clamps-channels
+PASS  total_failures=0
+PASS  bridge_state_machine_all_pass
+PASS  engine_created
+PASS  active_output_nonzero
+PASS  probe_before_hold_processed
+PASS  gated_output_bitwise_zero
+PASS  onset_same_block
+PASS  viz_emits_while_gated
+PASS  timing_gated_confirmed
+       timing: gated=85.0us/block active=516.8us/block ratio=16.5%
+PASS  gated_cpu_near_zero_with_effects
+PASS  env_gate_0_still_processes
+PASS  env_gate_db_override_processes
+
+ALL PASS
+PASS  reject missing id
+PASS  tolerate duplicate id (dedup)
+PASS  tolerate unknown id (dropped)
+PASS  reject empty
+PASS  liveprog saturator loaded
+PASS  default order accepted
+default peak=1.00000
+PASS  default: eq->tanh saturates to ~1.0
+PASS  swapped order accepted
+default peak=1.00000 swapped peak=3.19794
+PASS  swapped: tanh first then boosted (~3.1)
+PASS  reorder changes peak (>2x)
+PASS  restore default order
+PASS  restored: eq->tanh saturates again
+PASS  app 19-id payload accepted
+PASS  liveprog saturator reloaded
+PASS  app payload: eq->tanh saturates (~1.0)
+PASS  app payload swapped accepted
+app default peak=1.00000 app swapped peak=3.19794
+PASS  app payload: reorder changes peak (>2x)
+
+graph_order: all checks passed
+PASS  enable w/o file accepted
+PASS  enable readback == 1
+PASS  unloaded enable passes through
+PASS  load real vdc
+PASS  ready=1
+PASS  enabled changes output (>1%)
+
+ddc: all checks passed
+
+=== KV-Element-FX.clap（白框投诉主角，CLAP） ===
+  load rc=1
+  [PASS] KV-Element-FX.clap（白框投诉主角，CLAP）: slot_load 返回 1
+  showEditor rc=1
+  [PASS] KV-Element-FX.clap（白框投诉主角，CLAP）: show_editor 返回 1
+  容器 hwnd=0x230350 tid=7788 class=AuraDSP_CLAP_Host_Window
+  子孙窗口 1 个:
+    hwnd=0xa0388 tid=7788 class='JUCE_1a1bf5c389e' ★同线程
+  [PASS] KV-Element-FX.clap（白框投诉主角，CLAP）: 容器下有子孙窗口（插件 GUI 已挂载）
+  [PASS] KV-Element-FX.clap（白框投诉主角，CLAP）: 全部子孙窗口线程 ID == 容器线程 ID 7788（不符 0 个）
+  [INFO] caller 线程 tid=11796；容器 tid=7788
+
+=== Auto-Tune EFX+.vst3（B3 点名插件，VST3） ===
+  load rc=1
+  [PASS] Auto-Tune EFX+.vst3（B3 点名插件，VST3）: slot_load 返回 1
+  showEditor rc=1
+  [PASS] Auto-Tune EFX+.vst3（B3 点名插件，VST3）: show_editor 返回 1
+  容器 hwnd=0xb03bc tid=23448 class=AuraDSP_VST3_Host_Window
+  子孙窗口 3 个:
+    hwnd=0xa03de tid=23448 class='JUCE_1a1bf5c4098' ★同线程
+      hwnd=0x1506d6 tid=23448 class='JUCE_1a1bf5c4098' ★同线程
+    hwnd=0x1506d6 tid=23448 class='JUCE_1a1bf5c4098' ★同线程
+  [PASS] Auto-Tune EFX+.vst3（B3 点名插件，VST3）: 容器下有子孙窗口（插件 GUI 已挂载）
+  [PASS] Auto-Tune EFX+.vst3（B3 点名插件，VST3）: 全部子孙窗口线程 ID == 容器线程 ID 23448（不符 0 个）
+  [INFO] caller 线程 tid=11796；容器 tid=23448
+
+=== FabFilter Pro-Q 3.vst3（对照组，VST3） ===
+  load rc=1
+  [PASS] FabFilter Pro-Q 3.vst3（对照组，VST3）: slot_load 返回 1
+  showEditor rc=1
+  [PASS] FabFilter Pro-Q 3.vst3（对照组，VST3）: show_editor 返回 1
+  容器 hwnd=0x3b02a6 tid=26196 class=AuraDSP_VST3_Host_Window
+  子孙窗口 1 个:
+    hwnd=0x250350 tid=26196 class='FF_UIWindow' ★同线程
+  [PASS] FabFilter Pro-Q 3.vst3（对照组，VST3）: 容器下有子孙窗口（插件 GUI 已挂载）
+  [PASS] FabFilter Pro-Q 3.vst3（对照组，VST3）: 全部子孙窗口线程 ID == 容器线程 ID 26196（不符 0 个）
+  [INFO] caller 线程 tid=11796；容器 tid=26196
+
+TOPOLOGY TEST PASSED（0 项跳过）
+=== [1] 契约：未知/需外部资源的组件不得编造数字 ===
+  PASS  'bogus_component' 返回 -1 不支持 (rc=-1)
+  PASS  'convolver' 返回 -1 不支持 (rc=-1)
+  PASS  'ddc' 返回 -1 不支持 (rc=-1)
+  PASS  'liveprog' 返回 -1 不支持 (rc=-1)
+  PASS  '' 返回 -1 不支持 (rc=-1)
+
+=== [2] 可测组件返回有效延迟，且 bass 非零 ===
+  PASS  bass 探测成功 (rc=0)
+  PASS  bass 测出**非零**延迟 192 样本 (4.00 ms) —— 证明是真测而非恒 0
+  PASS  bass 延迟在工程合理区间 (<50ms)
+  PASS  reverb 返回可解释的状态 (rc=0, 0 samples)
+  PASS  eq 返回可解释的状态 (rc=0, 0 samples)
+  PASS  tube 返回可解释的状态 (rc=0, 1 samples)
+  PASS  crossfeed 返回可解释的状态 (rc=0, 0 samples)
+  PASS  limiter 返回可解释的状态 (rc=0, 0 samples)
+  PASS  post 返回可解释的状态 (rc=0, 0 samples)
+  PASS  shelf 返回可解释的状态 (rc=0, 0 samples)
+
+=== [3] 探测不干扰调用方正在使用的 handle ===
+  PASS  探测后 live handle 输出仍然有限（无 NaN/Inf 污染）
+  PASS  探测后 live handle 输出量级正常 (rms=0.3461)
+  PASS  探测未在进程里留下全局残留（探测前后新建 handle 输出一致）
+
+=== [4] 探测耗时可接受（用户显式点击才触发）===
+  5 次探测耗时: ['50ms', '50ms', '49ms', '48ms', '50ms']  中位数 50ms
+  PASS  单次探测中位数 50ms < 400ms（不是秒级）
+
+ALL TESTS PASSED: component latency impulse-response probe 100% OK!
+Loading engine from: D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\auradsp_engine.dll
+
+--- [Cross Test 1] 改 X (采样率与块大小) -> 测 Y (插件宿主格式联动与延迟) ---
+PASS: Cross-sample-rate recreation and plugin lifecycle OK!
+
+--- [Cross Test 2] 改 X (切换 Bypass) -> 测 Y (处理后信号 vs 直通信号电平对比) ---
+RMS in: 0.3536, RMS bypass: 0.3536, RMS processed: 0.1403
+PASS: Cross-bypass divergence and input preservation OK!
+
+--- [Cross Test 3] 改 X (注入 NaN / Inf / 爆音大样本) -> 测 Y (防线清洗与 [-10, +10] 钳位) ---
+PASS: NaN/Inf sanitized and audio safely clamped without crash!
+
+--- [Cross Test 4] 改 X (50 轮连续加载/卸载) -> 测 Y (句柄与资源泄露检测) ---
+50 iterations of load/unload completed in 3.373s (67.45ms per cycle)
+PASS: 50 consecutive load/unload cycles completed cleanly!
+
+--- [Cross Test 5] 改 X (越界 index 与边界参数) -> 测 Y (安全返回错误码，不死锁不崩溃) ---
+PASS: Boundary and out-of-bounds guards all validated successfully!
+
+=======================================================
+  ALL CROSS-SYSTEM TESTS (改X测Y) 100% PASS!          
+=======================================================
+
+engine: D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\auradsp_engine.dll
+
+--- 结果 ---
+一次性快扫（冷）      :  155 个      90.3 ms
+一次性快扫（热/缓存） :  155 个      16.8 ms
+分块深扫（每步 1 个） :  161 个    5346.9 ms  候选 155
+  深扫单步 p50/max    :   16.1 / 1105.7 ms（共 155 步）
+分块深扫（热/缓存）   :  161 个     373.8 ms
+分块快扫（热/深扫缓存）:  161 个      34.0 ms  候选 155
+
+RESULT: PASS
+plugin                                     sync_ms  async_submit_ms  async_total_ms
+BC PatchWork VST3                             69.4            0.042            39.1  state=2
+BC PatchWork Synth VST3                       46.8            0.009            40.0  state=2
+
+RESULT: PASS
+DLL: D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\auradsp_engine.dll  (2192896 bytes)
+
+=== iZotope RX 12 De-hum（VST3，C4 主角：异步布局 + 裁剪） ===
+  load rc=1
+  showEditor rc=1 (528.2 ms)
+  容器 client=(560x540)
+  [PASS] iZotope RX 12 De-hum（VST3，C4 主角：异步布局 + 裁剪）: 容器客户区 >= 100x80（插件自报尺寸已同步到容器，而非停在创建时的默认尺寸）——实际 560x540
+  子窗口 client=(560x540)  class='iZ_RX12DHUM_v120000_f11_Window.7FFE3B4E93F0'
+  [PASS] iZotope RX 12 De-hum（VST3，C4 主角：异步布局 + 裁剪）: 初始尺寸 容器(560x540) ≈ 子窗口(560x540)（±2px）
+  [INFO] 请求外框 1152x936；实测 容器 client=(1136x897)（原 560x540）
+  改变后 子窗口 client=(1136x897)
+  [PASS] iZotope RX 12 De-hum（VST3，C4 主角：异步布局 + 裁剪）: 容器尺寸已改变（560x540 -> 1136x897）
+  [PASS] iZotope RX 12 De-hum（VST3，C4 主角：异步布局 + 裁剪）: 改变后 容器(1136x897) ≈ 子窗口(1136x897)（±2px）—— 子窗口跟随容器，不再留空白或仍被裁剪
+
+=== iZotope RX 12 De-ess（VST3，RX 系列第二个样本） ===
+  load rc=1
+  showEditor rc=1 (179.8 ms)
+  容器 client=(452x350)
+  [PASS] iZotope RX 12 De-ess（VST3，RX 系列第二个样本）: 容器客户区 >= 100x80（插件自报尺寸已同步到容器，而非停在创建时的默认尺寸）——实际 452x350
+  子窗口 client=(452x350)  class='iZ_RX12DESS_v120000_f11_Window.7FFE3B4E93F0'
+  [PASS] iZotope RX 12 De-ess（VST3，RX 系列第二个样本）: 初始尺寸 容器(452x350) ≈ 子窗口(452x350)（±2px）
+  [INFO] 请求外框 936x778；实测 容器 client=(920x739)（原 452x350）
+  改变后 子窗口 client=(920x739)
+  [PASS] iZotope RX 12 De-ess（VST3，RX 系列第二个样本）: 容器尺寸已改变（452x350 -> 920x739）
+  [PASS] iZotope RX 12 De-ess（VST3，RX 系列第二个样本）: 改变后 容器(920x739) ≈ 子窗口(920x739)（±2px）—— 子窗口跟随容器，不再留空白或仍被裁剪
+
+=== KV-Element-FX（CLAP，对照组：另一条子窗口 resize 路径） ===
+  load rc=1
+  showEditor rc=1 (314.2 ms)
+  容器 client=(1230x730)
+  [PASS] KV-Element-FX（CLAP，对照组：另一条子窗口 resize 路径）: 容器客户区 >= 100x80（插件自报尺寸已同步到容器，而非停在创建时的默认尺寸）——实际 1230x730
+  子窗口 client=(1230x730)  class='JUCE_1a1bf5c9617'
+  [PASS] KV-Element-FX（CLAP，对照组：另一条子窗口 resize 路径）: 初始尺寸 容器(1230x730) ≈ 子窗口(1230x730)（±2px）
+  [INFO] 请求外框 1683x936；实测 容器 client=(1667x897)（原 1230x730）
+  改变后 子窗口 client=(1667x897)
+  [PASS] KV-Element-FX（CLAP，对照组：另一条子窗口 resize 路径）: 容器尺寸已改变（1230x730 -> 1667x897）
+  [PASS] KV-Element-FX（CLAP，对照组：另一条子窗口 resize 路径）: 改变后 容器(1667x897) ≈ 子窗口(1667x897)（±2px）—— 子窗口跟随容器，不再留空白或仍被裁剪
+
+EDITOR SIZE TEST PASSED（0 项跳过）
+
+[PASS] smoke_comp_band_order.py
+
+---> Running smoke_comp_race.py...
+[PASS] smoke_comp_race.py
+
+---> Running smoke_ddc_race.py...
+[PASS] smoke_ddc_race.py
+
+---> Running smoke_liveprog_race.py...
+[PASS] smoke_liveprog_race.py
+
+---> Running smoke_limiter.py...
+[PASS] smoke_limiter.py
+
+---> Running smoke_lookahead_limiter.py...
+[PASS] smoke_lookahead_limiter.py
+
+---> Running smoke_limiter_final_gate.py...
+[PASS] smoke_limiter_final_gate.py
+
+---> Running smoke_pool_race.py...
+[PASS] smoke_pool_race.py
+
+---> Running smoke_dynamic_gr_and_gate.py...
+[PASS] smoke_dynamic_gr_and_gate.py
+
+---> Running smoke_multichannel_discrete.py...
+[PASS] smoke_multichannel_discrete.py
+
+---> Running smoke_effects_allparams.py...
+[PASS] smoke_effects_allparams.py
+
+---> Running smoke_debug_policy.py...
+[PASS] smoke_debug_policy.py
+
+---> Running smoke_oversample_aliasing.py...
+[PASS] smoke_oversample_aliasing.py
+
+---> Running smoke_reverb.py...
+[PASS] smoke_reverb.py
+
+---> Running smoke_wp0_scaffold.py...
+[PASS] smoke_wp0_scaffold.py
+
+---> Running smoke_reverb_boundary.py...
+[PASS] smoke_reverb_boundary.py
+
+---> Running smoke_mc_reverb.py...
+[PASS] smoke_mc_reverb.py
+
+---> Running smoke_reverb_native_params.py...
+[PASS] smoke_reverb_native_params.py
+
+---> Running smoke_spatial_fdn_removed.py...
+[PASS] smoke_spatial_fdn_removed.py
+
+---> Running smoke_mc_comp_persch.py...
+[PASS] smoke_mc_comp_persch.py
+
+---> Running smoke_mc_eq_persch.py...
+[PASS] smoke_mc_eq_persch.py
+
+---> Running smoke_bassmono_pairs.py...
+[PASS] smoke_bassmono_pairs.py
+
+---> Running smoke_postgain_persch.py...
+[PASS] smoke_postgain_persch.py
+
+---> Running smoke_channel_switch_reset.py...
+[PASS] smoke_channel_switch_reset.py
+
+---> Running smoke_channel_mask_default_follow.py...
+[PASS] smoke_channel_mask_default_follow.py
+
+---> Running smoke_spatial_style_custom.py...
+[PASS] smoke_spatial_style_custom.py
+
+---> Running smoke_eq_freq_clamp.py...
+[PASS] smoke_eq_freq_clamp.py
+
+---> Running smoke_vb_8x8_budget.py...
+[PASS] smoke_vb_8x8_budget.py
+
+---> Running smoke_silence_gate.py...
+[PASS] smoke_silence_gate.py
+
+---> Running smoke_graph_order.py...
+[PASS] smoke_graph_order.py
+
+---> Running smoke_ddc.py...
+[PASS] smoke_ddc.py
+
+---> Running test_editor_topology.py...
+[PASS] test_editor_topology.py
+
+---> Running probe_component.py...
+[PASS] probe_component.py
+
+---> Running test_cross_system_verify.py...
+[PASS] test_cross_system_verify.py
+
+---> Running bench_scan_c2.py...
+[PASS] bench_scan_c2.py
+
+---> Running bench_load_async_c3.py...
+[PASS] bench_load_async_c3.py
+
+---> Running test_editor_size_c4.py...
+[PASS] test_editor_size_c4.py
+
+========================================
+  ALL SMOKE TESTS PASSED [100%]        
+  PASS 140 | SKIP 7 | FAIL 0   
+  SKIPPED: smoke_linux_engine_exports.py, smoke_linux_pulse_output.py, smoke_linux_bundle_layout.py, smoke_linux_virtual_sink.py, smoke_linux_driver_loopback.py, smoke_linux_alsa_backend.py, smoke_linux_plugin_host.py
+========================================
