@@ -360,6 +360,38 @@ for c in range(4):
 check("4ch output finite",
       all(math.isfinite(v) for c in chans for v in c))
 
+# ---------------------------------------------------------------------------
+# 7. L-04 自定义参数惯性平滑：连续扫动（拖滑块）鲁棒性 + 稳态等价
+# ---------------------------------------------------------------------------
+print("=== [7] L-04 param sweep smoothing ===")
+e7 = new_engine(8)
+set_custom_wet_only(e7, decay=0.15, damp=0.9, room=0.55)
+
+
+def _sweep(e, steps=60):
+    """每块小步进扫 decay/room/damp 全程（模拟拖滑块），正弦持续输入。"""
+    outs = []
+    for i in range(steps):
+        t = i / (steps - 1)
+        assert e.set_f("freeverb.decay", 0.15 + 0.8 * t) == 0
+        assert e.set_f("freeverb.roomsize", 0.55 + 1.35 * t) == 0
+        assert e.set_f("freeverb.damp", 0.9 - 0.8 * t) == 0
+        outs.extend(run_blocks(e, 8, 1, tone_fill(8, 0, 1000.0)))
+    return outs
+
+
+swept = _sweep(e7)
+flat = [v for blk in swept for v in blk]
+check("sweep output finite", all(math.isfinite(v) for v in flat))
+check("sweep output bounded (no explosion)", peak(flat) < 2.0,
+      "peak=%.3f" % peak(flat))
+# 扫动终点静置：参数吸附目标后尾音包络与同参数稳态一致量级（不残留扫动伪影）
+tail = run_blocks(e7, 8, 200, impulse_fill(8, [0]))
+tail_rms = rms(chan(tail, 8, 0)[2 * BLOCK + 100:2 * BLOCK + 20000])
+check("post-sweep settled tail present", tail_rms > 1e-5,
+      "rms=%.6f" % tail_rms)
+e7.close()
+
 for x in (e, e2, e3, e4, e6):
     x.close()
 

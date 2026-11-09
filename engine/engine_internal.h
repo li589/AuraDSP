@@ -369,6 +369,15 @@ struct McReverbState {
     float rt60 = 2.5f;
     float room_scale = 1.0f;
 
+    /* L-04 自定义参数惯性平滑（一阶惯性，τ≈50ms）：拖滑块时 rt60/
+     * room/damp 不再整块跳变砸进正在衰减的尾音（爆音核心）。reset
+     * 清状态后 sm_init 为假、首块直接吸附目标——预设切换另有 5ms
+     * 淡出+清状态，不经平滑扫过。 */
+    float rt60_sm = 0.0f;
+    float room_sm = 0.0f;
+    float damp_sm = 0.0f;         /* Hz */
+    bool  sm_init = false;
+
     /* 每声道预延迟（同一长度；读指针共享，写指针每声道独立）。 */
     float pre_buf[kLines][kPreMax] = {};
     int   pre_pos = 0;

@@ -99,6 +99,10 @@ void mc_clear_state(McReverbState& s) {
     s.damp = 0.0f;
     s.rt60 = 0.0f;
     s.room_scale = 0.0f;
+    s.rt60_sm = 0.0f;
+    s.room_sm = 0.0f;
+    s.damp_sm = 0.0f;
+    s.sm_init = false;
     s.fade = 1.0f;
     s.fading_out = false;
 }
@@ -152,21 +156,42 @@ void mc_reverb_process_mc(auradsp_handle h, float* io, int frames, int ch) {
     pre_ms += h->p.reverb_predelay.load(std::memory_order_relaxed);
     pre_ms = mc_clampf(pre_ms, 0.0f, 100.0f);
 
+    /* ---- L-04：一阶惯性平滑（τ≈50ms，按块时长换算系数） ----
+     * 自定义参数（及任何连续参数变化）先过平滑状态再落到 len/fb/
+     * damp：整块跳变会把新反馈增益与新延迟长度一步砸进尾音，形成
+     * 可闻的爆音/拉链噪声；平滑后每块只挪一小步，变化摊到 ~150ms。
+     * 首块（create/reset 后）直接吸附，不从 0 扫过去。 */
+    if (!s.sm_init) {
+        s.rt60_sm = rt60;
+        s.room_sm = room;
+        s.damp_sm = damp_hz;
+        s.sm_init = true;
+    } else {
+        const float alpha = 1.0f - expf(-((float)frames / fs) / 0.05f);
+        s.rt60_sm += (rt60 - s.rt60_sm) * alpha;
+        s.room_sm += (room - s.room_sm) * alpha;
+        s.damp_sm += (damp_hz - s.damp_sm) * alpha;
+        /* 残差小于可闻阈值时吸附到目标，停止逐块重算 len/fb。 */
+        if (fabsf(s.rt60_sm - rt60) < 1e-3f) s.rt60_sm = rt60;
+        if (fabsf(s.room_sm - room) < 1e-4f) s.room_sm = room;
+        if (fabsf(s.damp_sm - damp_hz) < 1.0f) s.damp_sm = damp_hz;
+    }
+
     /* ---- 每块参数更新（不重分配；只改有效长度/反馈/阻尼） ---- */
-    if (rt60 != s.rt60 || room != s.room_scale) {
-        s.rt60 = rt60;
-        s.room_scale = room;
+    if (s.rt60_sm != s.rt60 || s.room_sm != s.room_scale) {
+        s.rt60 = s.rt60_sm;
+        s.room_scale = s.room_sm;
         for (int i = 0; i < McReverbState::kLines; ++i) {
-            int len = (int)(kMs[i] * 0.001f * fs * room + 0.5f);
+            int len = (int)(kMs[i] * 0.001f * fs * s.room_scale + 0.5f);
             if (len < 2) len = 2;
             if (len > McReverbState::kMax - 1) len = McReverbState::kMax - 1;
             s.len[i] = len;
-            float g = powf(10.0f, -3.0f * (float)len / (rt60 * fs));
+            float g = powf(10.0f, -3.0f * (float)len / (s.rt60 * fs));
             if (g > 0.995f) g = 0.995f;
             s.fb[i] = g;
         }
     }
-    s.damp = 1.0f - expf(-2.0f * kPiF * damp_hz / fs);
+    s.damp = 1.0f - expf(-2.0f * kPiF * s.damp_sm / fs);
 
     /* ---- 输入/输出矩阵（Hadamard 前 N 行；对称矩阵，输入输出同表） ---- */
     float m[8][8];
