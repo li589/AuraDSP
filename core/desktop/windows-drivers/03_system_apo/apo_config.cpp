@@ -1396,12 +1396,32 @@ RestoreResult RestoreEndpoint(const std::wstring& shortId) {
 // 命令实现（对齐 Python cmd_* 与 main 的参数/退出码/JSON 形状）
 // ---------------------------------------------------------------------------
 
+// --result-file 目标（wmain 填充）：提权子进程的 stdout
+// 跨不过 UAC 边界（Start-Process 无法重定向提权进程的
+// 输出），结果 JSON 另写一份到此文件，供 App 读取工具
+// 自报的真实成败与原因，而不是猜测失败层。
+std::wstring g_resultFile;
+
 void Out(const std::string& utf8) { fwrite(utf8.data(), 1, utf8.size(), stdout); }
 void OutLine(const std::string& utf8) {
     Out(utf8);
     Out("\n");
 }
-void OutJson(const Json& j) { OutLine(JsonString(j)); }
+void OutJson(const Json& j) {
+    const std::string text = JsonString(j);
+    OutLine(text);
+    if (!g_resultFile.empty()) {
+        if (HANDLE h = CreateFileW(g_resultFile.c_str(), GENERIC_WRITE, 0,
+                                   nullptr, CREATE_ALWAYS,
+                                   FILE_ATTRIBUTE_NORMAL, nullptr);
+            h != INVALID_HANDLE_VALUE) {
+            DWORD written = 0;
+            WriteFile(h, text.data(), static_cast<DWORD>(text.size()),
+                      &written, nullptr);
+            CloseHandle(h);
+        }
+    }
+}
 
 int CmdStatus(bool asJson, const std::optional<double>& timeout) {
     const bool admin = IsAdmin();
@@ -1811,8 +1831,8 @@ void PrintHelp() {
     OutLine("用法:");
     OutLine("  apo_config status [--timeout <秒>] [--json]");
     OutLine("  apo_config verify-heartbeat [--timeout <秒>] [--json]");
-    OutLine("  apo_config install <端点名子串> --yes [--force] [--mode sfx-efx|composite|sfx-only|win7-sapo] [--json] [--elevate]");
-    OutLine("  apo_config uninstall [目标] --yes [--json] [--elevate]");
+    OutLine("  apo_config install <端点名子串> --yes [--force] [--mode sfx-efx|composite|sfx-only|win7-sapo] [--json] [--elevate] [--result-file <文件>]");
+    OutLine("  apo_config uninstall [目标] --yes [--json] [--elevate] [--result-file <文件>]");
     OutLine("  apo_config testenv-on | testenv-off [--json] [--elevate]");
 }
 
@@ -1828,6 +1848,16 @@ int wmain(int argc, wchar_t* argv[]) {
     for (const auto& a : args) {
         if (a == L"--elevate") hasElevate = true;
         if (a == L"--json") asJson = true;
+    }
+    for (size_t i = 0; i + 1 < args.size(); ++i) {
+        if (args[i] == L"--result-file") g_resultFile = args[i + 1];
+    }
+    // 带结果文件时强制 JSON 发射：install/uninstall 的成败
+    // 结果都经 OutJson/OutErr 唯一出口，文件里留下的即
+    // 最终裁定（含 error/message），App 据此呈现真实原因。
+    if (!g_resultFile.empty() && !args.empty() &&
+        (args[0] == L"install" || args[0] == L"uninstall")) {
+        asJson = true;
     }
     if (hasElevate && !IsAdmin()) {
         return RelaunchElevated(args);

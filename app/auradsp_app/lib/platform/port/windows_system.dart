@@ -45,7 +45,7 @@ abstract interface class WindowsSystemPort {
   Future<ProcessResult> apoStatus(String exePath, double timeout);
 
   /// apo_config.exe install（可选 UAC 提权 / 复合插槽）。
-  Future<ProcessResult> apoInstall(
+  Future<ApoRunResult> apoInstall(
     String exePath, {
     required String target,
     required bool composite,
@@ -53,9 +53,33 @@ abstract interface class WindowsSystemPort {
   });
 
   /// apo_config.exe uninstall（可选 UAC 提权）。
-  Future<ProcessResult> apoUninstall(
+  Future<ApoRunResult> apoUninstall(
     String exePath, {
     required String target,
     required bool elevated,
   });
+}
+
+/// apo_config.exe install/uninstall 的运行结果。
+///
+/// 提权运行时子进程 stdout 跨不过 UAC 边界（Start-Process
+/// 无法重定向提权进程输出）：工具经 --result-file 把最终
+/// JSON 裁定写回文件，[toolOk] / [toolError] / [toolMessage]
+/// 即工具自报的成败与原因；非提权运行则解析其 stdout JSON。
+/// 拿不到工具信息时 [toolOk] 为 null，调用方回退旧判定。
+class ApoRunResult {
+  const ApoRunResult({
+    required this.exitCode,
+    this.toolOk,
+    this.toolError,
+    this.toolMessage,
+  });
+
+  /// 承载进程退出码（提权时为 PowerShell 的，不代表工具成败）。
+  final int exitCode;
+
+  /// 工具自报成败；null = 未取得工具裁定。
+  final bool? toolOk;
+  final String? toolError;
+  final String? toolMessage;
 }

@@ -146,20 +146,24 @@ final class WindowsSystemTools implements WindowsSystemPort {
   }
 
   @override
-  Future<ProcessResult> apoInstall(
+  Future<ApoRunResult> apoInstall(
     String exePath, {
     required String target,
     required bool composite,
     required bool elevated,
-  }) {
+  }) async {
     if (elevated) {
+      final resultFile = _apoResultFile();
+      _deleteQuietly(resultFile);
       final modeArg = composite ? ", '--composite'" : '';
       final cmd =
           "Start-Process \"$exePath\" -Verb RunAs -Wait -ArgumentList "
-          "'install', '\"$target\"', '--yes', '--force'$modeArg";
-      return Process.run('powershell', ['-Command', cmd]);
+          "'install', '\"$target\"', '--yes', '--force', "
+          "'--result-file', '\"${resultFile.path}\"'$modeArg";
+      final res = await Process.run('powershell', ['-Command', cmd]);
+      return _apoResultFromFile(res.exitCode, resultFile);
     }
-    return Process.run(exePath, [
+    final res = await Process.run(exePath, [
       'install',
       target,
       '--yes',
@@ -167,26 +171,91 @@ final class WindowsSystemTools implements WindowsSystemPort {
       if (composite) '--composite',
       '--json',
     ]);
+    return _apoResultFromStdout(res);
   }
 
   @override
-  Future<ProcessResult> apoUninstall(
+  Future<ApoRunResult> apoUninstall(
     String exePath, {
     required String target,
     required bool elevated,
-  }) {
+  }) async {
     if (elevated) {
+      final resultFile = _apoResultFile();
+      _deleteQuietly(resultFile);
       final targetArg = target.isNotEmpty ? ", '\"$target\"'" : '';
       final cmd =
           "Start-Process \"$exePath\" -Verb RunAs -Wait -ArgumentList "
-          "'uninstall'$targetArg, '--yes'";
-      return Process.run('powershell', ['-Command', cmd]);
+          "'uninstall'$targetArg, '--yes', "
+          "'--result-file', '\"${resultFile.path}\"'";
+      final res = await Process.run('powershell', ['-Command', cmd]);
+      return _apoResultFromFile(res.exitCode, resultFile);
     }
-    return Process.run(exePath, [
+    final res = await Process.run(exePath, [
       'uninstall',
       if (target.isNotEmpty) target,
       '--yes',
       '--json',
     ]);
+    return _apoResultFromStdout(res);
+  }
+
+  // ---- APO 结果通道（--result-file）----
+
+  File _apoResultFile() =>
+      File('${Directory.systemTemp.path}\\auradsp_apo_result.json');
+
+  void _deleteQuietly(File f) {
+    try {
+      if (f.existsSync()) f.deleteSync();
+    } catch (e, st) {
+      swallow(e, st);
+    }
+  }
+
+  ApoRunResult _apoResultFromFile(int exitCode, File resultFile) {
+    try {
+      if (resultFile.existsSync()) {
+        final parsed = _parseApoJson(resultFile.readAsStringSync());
+        if (parsed != null) {
+          return ApoRunResult(
+            exitCode: exitCode,
+            toolOk: parsed['ok'] as bool?,
+            toolError: parsed['error']?.toString(),
+            toolMessage: parsed['message']?.toString(),
+          );
+        }
+      }
+    } catch (e, st) {
+      swallow(e, st);
+    }
+    return ApoRunResult(exitCode: exitCode);
+  }
+
+  ApoRunResult _apoResultFromStdout(ProcessResult res) {
+    final parsed = _parseApoJson(res.stdout.toString());
+    if (parsed == null) return ApoRunResult(exitCode: res.exitCode);
+    return ApoRunResult(
+      exitCode: res.exitCode,
+      toolOk: parsed['ok'] as bool?,
+      toolError: parsed['error']?.toString(),
+      toolMessage: parsed['message']?.toString(),
+    );
+  }
+
+  /// 从工具输出中取最后一行 JSON 对象（结果 JSON 恒为单行）。
+  Map<String, dynamic>? _parseApoJson(String text) {
+    final lines = text
+        .split(RegExp(r'\r?\n'))
+        .where((l) => l.trim().startsWith('{'))
+        .toList();
+    if (lines.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(lines.last);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (e, st) {
+      swallow(e, st);
+      return null;
+    }
   }
 }

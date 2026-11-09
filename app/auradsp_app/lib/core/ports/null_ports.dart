@@ -127,21 +127,21 @@ final class NullWindowsSystem implements WindowsSystemPort {
       _fail();
 
   @override
-  Future<ProcessResult> apoInstall(
+  Future<ApoRunResult> apoInstall(
     String exePath, {
     required String target,
     required bool composite,
     required bool elevated,
   }) async =>
-      _fail();
+      const ApoRunResult(exitCode: 1);
 
   @override
-  Future<ProcessResult> apoUninstall(
+  Future<ApoRunResult> apoUninstall(
     String exePath, {
     required String target,
     required bool elevated,
   }) async =>
-      _fail();
+      const ApoRunResult(exitCode: 1);
 }
 
 final class NullWindowPort implements WindowPort {

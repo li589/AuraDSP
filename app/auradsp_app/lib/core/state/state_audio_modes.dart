@@ -710,10 +710,22 @@ extension AudioModesState on AppModel {
         elevated: elevated,
       );
 
+      // 工具自报失败（如端点匹配歧义/注册表写入失败）：原因
+      // 就在结果通道里，直接呈现，不再走退出码猜层。工具经
+      // --result-file 跨 UAC 边界回传 JSON 裁定（真机实证：
+      // 手动运行工具全程正常，App 路径失败却只报 UAC）。
+      if (res.toolOk == false) {
+        lastApoError =
+            'System APO 附加失败：${res.toolMessage ?? res.toolError ?? '工具未报告原因'}';
+        isApoOperating = false;
+        _notifyUi();
+        return false;
+      }
+
       await Future.delayed(const Duration(milliseconds: 600));
       await checkApoStatus(timeout: 0.6);
 
-      final ok = (res.exitCode == 0) && apoAttached;
+      final ok = res.toolOk == true || ((res.exitCode == 0) && apoAttached);
       if (!ok && lastApoError == null) {
         // 失败文案按层区分（旧版一律归咎 UAC，对真机实证的
         // 「提权已执行但工具侧失败」毫无诊断价值）：
@@ -766,7 +778,11 @@ extension AudioModesState on AppModel {
       await Future.delayed(const Duration(milliseconds: 600));
       await checkApoStatus(timeout: 0.6);
 
-      final ok = (res.exitCode == 0);
+      if (res.toolOk == false && lastApoError == null) {
+        lastApoError =
+            'System APO 卸载失败：${res.toolMessage ?? res.toolError ?? '工具未报告原因'}';
+      }
+      final ok = res.toolOk == true || (res.exitCode == 0 && res.toolOk == null);
       if (!ok && lastApoError == null) {
         lastApoError = 'System APO 卸载未完成，请确认在 UAC 提权弹窗中选择“是”';
       }
