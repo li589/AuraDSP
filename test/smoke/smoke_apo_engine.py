@@ -9,6 +9,13 @@ import os
 import subprocess
 import sys
 
+# Windows 控制台多为 cp1252：中文标签 print 会 UnicodeEncodeError
+# 让门自杀（2026-11-10 J5 实测）；放宽为 replace 只损字形不损裁定。
+try:
+    sys.stdout.reconfigure(errors='replace')
+except Exception:
+    pass
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, 'core', 'desktop', 'windows-drivers', 'out', 'Release')
 EXE = os.path.join(OUT, 'apo_engine_test.exe')

@@ -295,13 +295,13 @@ jobs:
           done
           [ -S /tmp/.X11-unix/X99 ]
           fc-cache -f >/dev/null 2>&1 || true
-          rm -f /tmp/auradsp_debug.log
+          rm -f /tmp/auradsp_debug.log /tmp/auradsp_debug_iso.log
           cd app/auradsp_app/build/linux/x64/release/bundle
           ./auradsp_app >/tmp/j8_app_stdout.log 2>&1 &
           APP_PID=$!
           ok=0
           for i in $(seq 1 60); do
-            if grep -q "AudioOut started (PulseAudioOut)" /tmp/auradsp_debug.log 2>/dev/null; then ok=1; break; fi
+            if grep -q "AudioOut started (PulseAudioOut)" /tmp/auradsp_debug.log /tmp/auradsp_debug_iso.log 2>/dev/null; then ok=1; break; fi
             if ! kill -0 $APP_PID 2>/dev/null; then echo "app exited before audio start"; break; fi
             sleep 2
           done
@@ -311,6 +311,8 @@ jobs:
             cat /tmp/j8_app_stdout.log || true
             echo "=== auradsp_debug.log ==="
             cat /tmp/auradsp_debug.log || true
+            echo "=== auradsp_debug_iso.log ==="
+            cat /tmp/auradsp_debug_iso.log || true
           fi
-          grep -q "PULSE init: stream open" /tmp/auradsp_debug.log
+          grep -q "PULSE init: stream open" /tmp/auradsp_debug.log /tmp/auradsp_debug_iso.log
           test $ok -eq 1
