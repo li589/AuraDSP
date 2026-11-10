@@ -207,6 +207,12 @@ struct VaioBridgeCtl {
     double fxPeakShift = -1, fxMeanAbsShift = -1; // 错位统计（仅 PCM16）
     volatile LONG fxDone = 0;  // 0 未采集 1 已采集（泵写、status 读）
 
+    // 驱动版本缓存（start 时经同一控制句柄查一次）：detect 在桥
+    // 运行期不得再开控制设备（第六轮项 1 定罪，见 vaio_detect），
+    // 其版本/状态输出改由本缓存与环几何合成。
+    ULONG drvVerMajor = 0, drvVerMinor = 0, drvVerBuild = 0;
+    ULONG drvKmdfMajor = 0, drvKmdfMinor = 0, drvTrack = 0;
+
     // 引擎 (auradsp_engine.dll)
     HMODULE hEngineMod = nullptr;
     FnEngCreate fnCreate = nullptr;
@@ -1070,26 +1076,48 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
 int vaio_detect(char* out, int cap) {
     if (!out || cap <= 0) return -1;
 
-    // 1. 尝试打开驱动控制设备
-    HANDLE hDev = CreateFileW(
-        AURA_VAIO_USER_DEVICE_PATH,
-        GENERIC_READ | GENERIC_WRITE,
-        FILE_SHARE_READ | FILE_SHARE_WRITE,
-        nullptr,
-        OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL,
-        nullptr
-    );
-
-    bool driverFound = (hDev != INVALID_HANDLE_VALUE);
+    // 1. 驱动在场判定与版本/状态。
+    // 第六轮项 1 定罪（WinDbg 实证）：桥运行期【禁止】打开/关闭
+    // 控制设备——旧版驱动的 IRP_MJ_CLEANUP 只按进程判定便解映
+    // 射，本函数的 CloseHandle 会拆掉泵线程正在读的环映射，泵
+    // 下一次读共享头 Channels 即访问违例（auravaio_bridge
+    // +0x6d51），整进程死亡；历轮「刷新设备闪退/开机闪退」同
+    // 源。桥运行即驱动在场的活证：版本用 start 缓存、状态用
+    // 环几何合成，不碰控制设备。驱动侧已按 FILE_OBJECT 归属
+    // 修正 CLEANUP（ControlDevice.cpp），本口径为存量驱动的
+    // 兜底防线，两侧任一生效即断链。
     AURA_VAIO_VERSION_INFO ver = {0};
     AURA_VAIO_STATUS_INFO st = {0};
+    bool driverFound = false;
+    if (InterlockedCompareExchange(&g_vaio.running, 0, 0) == 1) {
+        driverFound = true;
+        ver.DriverVersionMajor = g_vaio.drvVerMajor;
+        ver.DriverVersionMinor = g_vaio.drvVerMinor;
+        ver.DriverBuildNumber = g_vaio.drvVerBuild;
+        ver.KmdfMajor = g_vaio.drvKmdfMajor;
+        ver.KmdfMinor = g_vaio.drvKmdfMinor;
+        ver.Track = (DWORD)g_vaio.drvTrack;
+        st.SampleRate = g_vaio.ringSampleRate;
+        st.Channels = g_vaio.ringChannels;
+        st.BitsPerSample = g_vaio.ringBits;
+    } else {
+        HANDLE hDev = CreateFileW(
+            AURA_VAIO_USER_DEVICE_PATH,
+            GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            nullptr,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            nullptr
+        );
 
-    if (driverFound) {
-        DWORD bytesRet = 0;
-        DeviceIoControl(hDev, IOCTL_AURAVAIO_GET_VERSION, nullptr, 0, &ver, sizeof(ver), &bytesRet, nullptr);
-        DeviceIoControl(hDev, IOCTL_AURAVAIO_GET_STATUS, nullptr, 0, &st, sizeof(st), &bytesRet, nullptr);
-        CloseHandle(hDev);
+        driverFound = (hDev != INVALID_HANDLE_VALUE);
+        if (driverFound) {
+            DWORD bytesRet = 0;
+            DeviceIoControl(hDev, IOCTL_AURAVAIO_GET_VERSION, nullptr, 0, &ver, sizeof(ver), &bytesRet, nullptr);
+            DeviceIoControl(hDev, IOCTL_AURAVAIO_GET_STATUS, nullptr, 0, &st, sizeof(st), &bytesRet, nullptr);
+            CloseHandle(hDev);
+        }
     }
 
     // 2. 枚举 WASAPI 物理渲染端点
@@ -1220,6 +1248,22 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
         snprintf(g_vaio.note, sizeof(g_vaio.note), "open-control-dev-failed: %lu", GetLastError());
         g_vaio.startRc = -1;
         return -1;
+    }
+
+    // 1b. 驱动版本在 start 的同一句柄上查一次并缓存（detect
+    // 运行期免开控制设备的配套，第六轮项 1）。
+    {
+        AURA_VAIO_VERSION_INFO ver = {0};
+        DWORD vret = 0;
+        if (DeviceIoControl(g_vaio.hControlDev, IOCTL_AURAVAIO_GET_VERSION,
+                             nullptr, 0, &ver, sizeof(ver), &vret, nullptr)) {
+            g_vaio.drvVerMajor = ver.DriverVersionMajor;
+            g_vaio.drvVerMinor = ver.DriverVersionMinor;
+            g_vaio.drvVerBuild = ver.DriverBuildNumber;
+            g_vaio.drvKmdfMajor = ver.KmdfMajor;
+            g_vaio.drvKmdfMinor = ver.KmdfMinor;
+            g_vaio.drvTrack = ver.Track;
+        }
     }
 
     // 2. 映射共享环形缓冲区
@@ -1640,7 +1684,16 @@ int vaio_stop() {
 
     InterlockedExchange(&g_vaio.stopEvent, 1);
     if (g_vaio.hPumpThread) {
-        WaitForSingleObject(g_vaio.hPumpThread, 2000);
+        const DWORD waitRc = WaitForSingleObject(g_vaio.hPumpThread, 2000);
+        if (waitRc == WAIT_TIMEOUT) {
+            // 泵 2s 内未退出（卡在 WASAPI 等待等）：禁止继续拆解
+            // ——在活泵脚下解映射/毁引擎正是第六轮项 1 的死亡形
+            // 态。中止本次 stop（stopEvent 已置位，泵迟早自退；
+            // 句柄与映射原样保留），由后续 stop 调用收尾。
+            snprintf(g_vaio.note, sizeof(g_vaio.note),
+                     "pump-stop-timeout: teardown deferred");
+            return -6;
+        }
         CloseHandle(g_vaio.hPumpThread);
         g_vaio.hPumpThread = nullptr;
     }
