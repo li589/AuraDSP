@@ -20,6 +20,14 @@
      重生、链路恢复。Windows 进程内的 process 级闩锁实证在
      Q4 的 J5b 端到端（SEH 形态）；POSIX 进程内按 Q0-2 裁定
      不做信号级恢复，故本节只验外墙形态。
+  4. 活体·异常闩锁（进程内）：probe_throw.cpp（process 抛 C++
+     异常）→ POSIX 守卫 try/catch 捕获、闩锁 fault/process/
+     process_crash 且有效旁路；后续处理直通不死；unload 清
+     闩锁、重挂清闩锁（Q0-2 的异常可恢复面）。
+  5. 子进程·远端加载失败：远程模式下不存在路径与 activate
+     崩溃（probe_init_crash.c，宿主死于激活）两种加载失败，
+     都应在 App 侧状态留 fault/load 闩锁（Q1 远端分支），而非
+     静默无痕。
 
 引擎产物缺失时活体节自 SKIP（CI 的 J3 下载 J2 产物实跑）。
 """
@@ -153,6 +161,15 @@ def build_probe(cc, src_name, out_path):
     return r.returncode == 0
 
 
+def build_probe_cpp(cxx, src_name, out_path):
+    src = os.path.join(SMOKE_DIR, src_name)
+    inc = os.path.join(ROOT, "vendor", "plugin-api")
+    r = subprocess.run([cxx, "-shared", "-fPIC", "-O2", "-I", inc,
+                        src, "-o", out_path],
+                       capture_output=True, text=True)
+    return r.returncode == 0
+
+
 def live_load_latch(lib_path):
     cc = "cc"
     tmp = tempfile.mkdtemp(prefix="auradsp_fault_")
@@ -227,6 +244,145 @@ def live_load_latch(lib_path):
         check(abs(peak - 0.4) < 1e-3,
               f"[load] 恢复后 process 峰值 {peak:.4f} == 0.8×0.5")
     lib.auradsp_destroy(H)
+
+
+def live_process_throw(lib_path):
+    """进程内异常闩锁：process() 抛 C++ 异常 → POSIX 守卫捕获
+    并闩锁（Q0-2 的可恢复面）。与硬件 AV 的区别只在触发方式。"""
+    tmp = tempfile.mkdtemp(prefix="auradsp_throw_")
+    plug_dir = os.path.join(tmp, "plugs")
+    os.makedirs(plug_dir)
+    if not build_probe_cpp("c++", "probe_throw.cpp",
+                           os.path.join(plug_dir, "ProbeThrow.clap")):
+        check(False, "[throw] probe_throw.cpp 现场编译失败")
+        return
+    lib = ctypes.CDLL(lib_path)
+    bind(lib)
+    h = lib.auradsp_create(48000.0, 4096)
+    check(bool(h), "[throw] auradsp_create 成功")
+    if not h:
+        return
+    H = ctypes.c_void_p(h)
+    items = scan_items(lib, H, plug_dir)
+    throw = next((it for it in items
+                  if it.get("path", "").endswith("ProbeThrow.clap")), None)
+    check(throw is not None, "[throw] 扫描找到 Probe Throw")
+    if not throw:
+        lib.auradsp_destroy(H)
+        return
+    rc = lib.auradsp_plugin_slot_load(
+        H, 1, throw["path"].encode(),
+        (throw.get("id") or "com.auradsp.probe.throw").encode())
+    check(rc == 1, f"[throw] 抛出型插件加载成功（rc={rc}）")
+    st = status(lib, H, 1)
+    check(st.get("fault") is False and st.get("hasActive") is True,
+          "[throw] 加载后无故障且激活（雷只在 process）")
+    lib.auradsp_plugin_slot_set_bypass(H, 1, 0)
+    # 触发异常：轮询状态直到闩锁出现（处理在引擎线程异步进行）。
+    latched = False
+    end = time.monotonic() + 10.0
+    while time.monotonic() < end:
+        process_peak(lib, H, deadline_s=0.2)
+        st = status(lib, H, 1)
+        if st.get("fault") is True:
+            latched = True
+            break
+        time.sleep(0.05)
+    check(latched and st.get("faultStage") == "process"
+          and st.get("faultCategory") == "process_crash",
+          f"[throw] 异常闩锁 fault/process/process_crash"
+          f"（fault={st.get('fault')} stage={st.get('faultStage')} "
+          f"cat={st.get('faultCategory')}）")
+    check(st.get("bypassed") is True,
+          "[throw] 闩锁后有效旁路成立")
+    # 闩锁后继续处理：直通不死（峰值 = 输入 0.8）。
+    peak = process_peak(lib, H, expect=0.8, deadline_s=2.0)
+    check(abs(peak - 0.8) < 1e-3,
+          f"[throw] 闩锁后处理直通峰值 {peak:.4f} == 0.8（引擎存活）")
+    # unload 清闩锁；重挂（不处理）加载成功亦清闩锁。
+    lib.auradsp_plugin_slot_unload(H, 1)
+    st = status(lib, H, 1)
+    check(st.get("fault") is False, "[throw] unload 后闩锁清除")
+    lib.auradsp_destroy(H)
+
+
+def child_remote_loadfail():
+    """子进程体：远程模式下两类加载失败的 App 侧闩锁留痕。
+    输出 CHILD-OK 表示断言通过。"""
+    lib_path = engine_artifact.find_engine_lib()
+    if not lib_path or not os.path.isfile(lib_path):
+        print("CHILD-SKIP no engine")
+        return 0
+    tmp = tempfile.mkdtemp(prefix="auradsp_loadfail_")
+    plug_dir = os.path.join(tmp, "plugs")
+    os.makedirs(plug_dir)
+    if not build_probe("cc", "probe_init_crash.c",
+                       os.path.join(plug_dir, "ProbeInitCrash.clap")):
+        print("CHILD-FAIL initcrash build")
+        return 1
+    lib = ctypes.CDLL(lib_path)
+    bind(lib)
+    h = lib.auradsp_create(48000.0, 4096)
+    if not h:
+        print("CHILD-FAIL create")
+        return 1
+    H = ctypes.c_void_p(h)
+    # (a) 不存在路径 → 加载失败 + fault/load 闩锁。
+    missing = os.path.join(plug_dir, "NoSuch.clap")
+    rc = lib.auradsp_plugin_slot_load(H, 0, missing.encode(), b"")
+    st = status(lib, H, 0)
+    print("LOADFAIL-MISSING rc=%s status=%s" % (rc, json.dumps(st)))
+    # 类别口径：远端加载失败的分类在宿主侧发生、App 侧拿不到
+    # 模块端口错误，统一归 load_failed（本地进程内才是
+    # not_found）——2026-11-10 本地实测钉死。
+    if rc == 1 or st.get("fault") is not True or st.get("faultStage") != "load" or st.get("faultCategory") != "load_failed":
+        print("CHILD-FAIL missing-path latch absent")
+        return 1
+    lib.auradsp_plugin_slot_unload(H, 0)
+    # (b) activate 崩溃（宿主死于激活）→ 加载失败 + fault/load。
+    items = scan_items(lib, H, plug_dir)
+    ic = next((it for it in items
+               if it.get("path", "").endswith("ProbeInitCrash.clap")),
+              None)
+    if not ic:
+        print("CHILD-FAIL scan initcrash")
+        return 1
+    rc = lib.auradsp_plugin_slot_load(
+        H, 1, ic["path"].encode(),
+        (ic.get("id") or "com.auradsp.probe.initcrash").encode())
+    st = status(lib, H, 1)
+    print("LOADFAIL-INITCRASH rc=%s status=%s" % (rc, json.dumps(st)))
+    if st.get("remoteMode") is not True:
+        print("CHILD-SKIP not remote mode")
+        return 0
+    if rc == 1 or st.get("fault") is not True or st.get("faultStage") != "load" or st.get("faultCategory") != "load_failed":
+        print("CHILD-FAIL initcrash latch absent")
+        return 1
+    lib.auradsp_destroy(H)
+    print("CHILD-OK")
+    return 0
+
+
+def live_remote_loadfail():
+    env = dict(os.environ)
+    env["AURA_PLUGIN_HOST_MODE"] = "process"
+    try:
+        r = subprocess.run(
+            [sys.executable, os.path.abspath(__file__),
+             "--child-remote-loadfail"],
+            capture_output=True, text=True, timeout=120, env=env)
+    except subprocess.TimeoutExpired:
+        check(False, "[remote-load] 子进程超时")
+        return
+    out = (r.stdout or "") + (r.stderr or "")
+    if "CHILD-SKIP" in out:
+        print("  SKIP [remote-load] 子进程跳过（远程模式不可用）")
+        return
+    check("CHILD-OK" in out and r.returncode == 0,
+          f"[remote-load] 远端加载失败在 App 侧留 fault/load 闩锁"
+          f"（rc={r.returncode}）")
+    if "CHILD-OK" not in out:
+        print(out[-2000:])
 
 
 def child_remote_crash():
@@ -339,13 +495,17 @@ def live_remote_crash():
 def main():
     if "--child-remote-crash" in sys.argv:
         return child_remote_crash()
+    if "--child-remote-loadfail" in sys.argv:
+        return child_remote_loadfail()
     print("== smoke_plugin_fault_latch ==")
     source_invariants()
     lib_path = engine_artifact.find_engine_lib()
     if lib_path and os.path.isfile(lib_path):
         live_load_latch(lib_path)
+        live_process_throw(lib_path)
         if sys.platform.startswith("linux"):
             live_remote_crash()
+            live_remote_loadfail()
     else:
         print("  SKIP 活体节（引擎产物缺失，CI J3 实跑）")
     if FAILS:
