@@ -1092,6 +1092,11 @@ class AuraChip extends StatefulWidget {
   /// 切换在途：文字替换为受控尺寸的小 spinner（高度锁 chipH，不跳版），
   /// 用于旁路等异步切换的过渡反馈。onTap 应同时置 null 禁点。
   final bool busy;
+
+  /// 呼吸闪动（Part I 故障呈现裁定）：文案与常态完全一致，仅
+  /// 以底色/描边的周期明暗示「异常」——当前唯一消费者是故障
+  /// 闩锁中的插件旁路 chip。
+  final bool pulse;
   const AuraChip(
     this.label, {
     super.key,
@@ -1101,14 +1106,49 @@ class AuraChip extends StatefulWidget {
     this.danger = false,
     this.busy = false,
     this.warning = false,
+    this.pulse = false,
   });
 
   @override
   State<AuraChip> createState() => _AuraChipState();
 }
 
-class _AuraChipState extends State<AuraChip> {
+class _AuraChipState extends State<AuraChip>
+    with SingleTickerProviderStateMixin {
   bool _hover = false;
+  AnimationController? _pulseCtl;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.pulse) _ensurePulse();
+  }
+
+  void _ensurePulse() {
+    _pulseCtl ??= AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..addListener(() {
+        if (mounted) setState(() {});
+      });
+    if (!_pulseCtl!.isAnimating) _pulseCtl!.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(AuraChip old) {
+    super.didUpdateWidget(old);
+    if (widget.pulse) {
+      _ensurePulse();
+    } else {
+      _pulseCtl?.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseCtl?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1119,12 +1159,20 @@ class _AuraChipState extends State<AuraChip> {
             ? p.warning
             : (widget.selected ? p.accent : p.text));
     final active = widget.selected || widget.warning;
-    final bg = active
-        ? tint.withValues(alpha: 0.14)
-        : (_hover ? hoverOn(p) : Colors.transparent);
-    final border = active
-        ? tint.withValues(alpha: 0.55)
-        : (_hover ? p.textDim.withValues(alpha: 0.45) : p.hairline);
+    // 呼吸系数 0.55..1.0：只调底色/描边明暗，文案与色相不变。
+    final pulseK = (widget.pulse && _pulseCtl != null)
+        ? 0.55 + 0.45 * _pulseCtl!.value
+        : 1.0;
+    final bg = widget.pulse
+        ? tint.withValues(alpha: 0.16 * pulseK)
+        : (active
+            ? tint.withValues(alpha: 0.14)
+            : (_hover ? hoverOn(p) : Colors.transparent));
+    final border = widget.pulse
+        ? tint.withValues(alpha: 0.35 + 0.35 * pulseK)
+        : (active
+            ? tint.withValues(alpha: 0.55)
+            : (_hover ? p.textDim.withValues(alpha: 0.45) : p.hairline));
 
     return MouseRegion(
       cursor: widget.onTap == null

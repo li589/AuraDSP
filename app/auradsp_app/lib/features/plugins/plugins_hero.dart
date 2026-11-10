@@ -632,6 +632,10 @@ class _ActivePluginHero extends StatelessWidget {
             selected: !isBypassed && !partialBypass,
             danger: isBypassed,
             warning: partialBypass,
+            // 故障呈现（业主裁定）：文案恒与普通旁路一致（上方
+            // isBypassed 已含故障有效旁路），仅呼吸闪动示异常；
+            // 点击由 toggleBypass 分流为重试加载（Q3b）。
+            pulse: status.fault,
             busy: manager.isSlotBypassPending(slot),
             onTap: (isBusy || manager.isSlotBypassPending(slot))
                 ? null
