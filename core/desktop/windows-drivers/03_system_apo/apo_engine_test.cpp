@@ -417,6 +417,183 @@ int main() {
         }
     }
 
+    // ---- Part I Q4 崩溃隔离段：崩溃插件闩锁 + 邻槽续处理 ----
+    // 槽 0 重挂 probe_gain、槽 1 装 probe_crash（process 内空写
+    // AV）：引擎逐槽 SEH 应把故障闩锁在槽 1（telemetry fault=1、
+    // 类别 7=process_crash、有效旁路），槽 0 继续处理，整机不
+    // 进透传闩锁（tele->fault 保持 0、座位仍在）。决定性比率：
+    // input.gain -12dB × 增益插件 0.5 ≈ 0.126——透传会是 1.0、
+    // 邻槽同死会是 0.251，三者可分。
+    {
+        wchar_t gainPath[MAX_PATH], crashPath[MAX_PATH];
+        wcscpy(gainPath, self);
+        wchar_t* gs = wcsrchr(gainPath, L'\\');
+        wcscpy(gs ? gs + 1 : gainPath, L"probe_gain.clap");
+        wcscpy(crashPath, self);
+        wchar_t* cs = wcsrchr(crashPath, L'\\');
+        wcscpy(cs ? cs + 1 : crashPath, L"probe_crash.clap");
+        const bool haveCrash =
+            GetFileAttributesW(crashPath) != INVALID_FILE_ATTRIBUTES &&
+            GetFileAttributesW(gainPath) != INVALID_FILE_ATTRIBUTES;
+        // 本段自测单位基线（增益已在 Q2 段恢复 0dB、两槽皆空）。
+        double q4Unity = 0;
+        runBlocks(2 * kBlocks, q4Unity);
+        if (!haveCrash) {
+            printf("[SKIP] crash section (probe_crash.clap absent)\n");
+        } else {
+            HANDLE hPlug = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE,
+                                            AuraApoPluginsName());
+            uint8_t* pb = hPlug ? (uint8_t*)MapViewOfFile(
+                                      hPlug, FILE_MAP_ALL_ACCESS, 0, 0,
+                                      APO_PLUGIN_BLOCK_BYTES)
+                                : nullptr;
+            check("crash section: plugin view", pb != nullptr);
+            if (pb) {
+                auto* phdr = (ApoPluginBlockHeader*)pb;
+                auto plugWrite = [&](auto&& body) {
+                    uint32_t seq = phdr->writeSeq;
+                    phdr->writeSeq = seq + 1;
+                    body();
+                    MemoryBarrier();
+                    phdr->writeSeq = seq + 2;
+                };
+                auto setSlot = [&](int slot, const wchar_t* wp,
+                                   const char* id, uint32_t gen) {
+                    uint8_t* base = pb + APO_PLUGIN_BLOCK_HEADER_BYTES +
+                                    (size_t)slot * APO_PLUGIN_SLOT_STRIDE;
+                    auto* sh = (ApoPluginSlotHeader*)base;
+                    uint8_t* pathReg = base + APO_PLUGIN_SLOT_HEADER_BYTES;
+                    uint8_t* idReg = pathReg + APO_PLUGIN_PATH_BYTES;
+                    char u8[MAX_PATH * 3];
+                    int pn = WideCharToMultiByte(CP_UTF8, 0, wp, -1, u8,
+                                                 sizeof(u8), nullptr,
+                                                 nullptr);
+                    memset(pathReg, 0, APO_PLUGIN_PATH_BYTES);
+                    memcpy(pathReg, u8, (size_t)pn - 1);
+                    memset(idReg, 0, APO_PLUGIN_ID_BYTES);
+                    memcpy(idReg, id, strlen(id));
+                    sh->format = 2;
+                    sh->insertStage = 0;
+                    sh->channelMask = 0xFF;
+                    sh->bypass = 0;
+                    sh->loadGen = gen;
+                    sh->stateGen = 0;
+                    sh->pathBytes = (uint32_t)pn - 1;
+                    sh->stateBytes = 0;
+                };
+                plugWrite([&] {
+                    setSlot(0, gainPath, "com.auradsp.probe.gain", 3);
+                    setSlot(1, crashPath, "com.auradsp.probe.crash", 1);
+                });
+                Sleep(900);
+                if (tele) {
+                    check("crash section: both slots loaded",
+                          tele->plugins[0].loaded == 1 &&
+                              tele->plugins[0].appliedLoadGen == 3 &&
+                              tele->plugins[1].loaded == 1 &&
+                              tele->plugins[1].appliedLoadGen == 1 &&
+                              tele->plugins[1].fault == 0);
+                }
+                const uint32_t calls0 =
+                    tele ? tele->plugins[0].processCalls : 0;
+                // 崩溃发生在这几块内（槽 1 首块即 AV，被引擎 SEH
+                // 闩锁）；测试进程与 APO 对象必须存活到这里。
+                double crashRms = 0;
+                runBlocks(3 * kBlocks, crashRms);
+                Sleep(300);
+                if (tele) {
+                    char td[128];
+                    snprintf(td, sizeof(td),
+                             "fault=%u cat=%u byp=%u calls0=%lu->%lu "
+                             "engineFault=%lu seat=%ld",
+                             tele->plugins[1].fault,
+                             tele->plugins[1].faultCategory,
+                             tele->plugins[1].bypass,
+                             (unsigned long)calls0,
+                             (unsigned long)tele->plugins[0].processCalls,
+                             (unsigned long)tele->fault,
+                             (long)tele->seatState);
+                    check("crash latched to slot 1 (process_crash)",
+                          tele->plugins[1].fault == 1 &&
+                              tele->plugins[1].faultCategory == 7 &&
+                              tele->plugins[1].bypass == 1,
+                          td);
+                    check("neighbour slot keeps processing",
+                          tele->plugins[0].processCalls > calls0, td);
+                    check("engine NOT in passthrough fallback",
+                          tele->fault == 0 && tele->seatState == 1, td);
+                }
+                // 参数通道仍活：input.gain 拉到 -12dB，期望比率
+                // ≈ 0.5（槽 0 增益插件）× 0.2512 ≈ 0.126。
+                HANDLE hPar3 = OpenFileMappingW(
+                    FILE_MAP_ALL_ACCESS, FALSE, AuraApoParamsName());
+                if (hPar3 && gainIdx >= 0) {
+                    auto* blk = (uint8_t*)MapViewOfFile(
+                        hPar3, FILE_MAP_ALL_ACCESS, 0, 0,
+                        APO_BLOCK_MAPPING_BYTES);
+                    if (blk) {
+                        auto* hdr = (ApoParamBlockHeader*)blk;
+                        uint32_t seq = hdr->writeSeq;
+                        hdr->writeSeq = seq + 1;
+                        float g = -12.0f;
+                        memcpy(blk + APO_BLOCK_VALUES_OFFSET +
+                                   4 * gainIdx,
+                               &g, 4);
+                        MemoryBarrier();
+                        hdr->writeSeq = seq + 2;
+                        UnmapViewOfFile(blk);
+                    }
+                    CloseHandle(hPar3);
+                }
+                Sleep(400);
+                double mixRms = 0;
+                runBlocks(3 * kBlocks, mixRms);
+                char d[96];
+                snprintf(d, sizeof(d), "mix=%.4f unity=%.4f ratio=%.3f",
+                         mixRms, q4Unity, mixRms / q4Unity);
+                check("DECISIVE: gain param + neighbour plugin still "
+                      "processing (0.5 x -12dB)",
+                      mixRms / q4Unity > 0.09 && mixRms / q4Unity < 0.17,
+                      d);
+                // 收尾：恢复 0dB + 清空两槽（代次推进）。
+                HANDLE hPar4 = OpenFileMappingW(
+                    FILE_MAP_ALL_ACCESS, FALSE, AuraApoParamsName());
+                if (hPar4 && gainIdx >= 0) {
+                    auto* blk = (uint8_t*)MapViewOfFile(
+                        hPar4, FILE_MAP_ALL_ACCESS, 0, 0,
+                        APO_BLOCK_MAPPING_BYTES);
+                    if (blk) {
+                        auto* hdr = (ApoParamBlockHeader*)blk;
+                        uint32_t seq = hdr->writeSeq;
+                        hdr->writeSeq = seq + 1;
+                        float g = 0.0f;
+                        memcpy(blk + APO_BLOCK_VALUES_OFFSET +
+                                   4 * gainIdx,
+                               &g, 4);
+                        MemoryBarrier();
+                        hdr->writeSeq = seq + 2;
+                        UnmapViewOfFile(blk);
+                    }
+                    CloseHandle(hPar4);
+                }
+                plugWrite([&] {
+                    for (int slot = 0; slot < 2; slot++) {
+                        uint8_t* base = pb +
+                            APO_PLUGIN_BLOCK_HEADER_BYTES +
+                            (size_t)slot * APO_PLUGIN_SLOT_STRIDE;
+                        auto* sh = (ApoPluginSlotHeader*)base;
+                        sh->format = 0;
+                        sh->pathBytes = 0;
+                        sh->loadGen += 1;
+                    }
+                });
+                Sleep(400);
+                UnmapViewOfFile(pb);
+            }
+            if (hPlug) CloseHandle(hPlug);
+        }
+    }
+
     // INPLACE 变体：同址缓冲处理结果一致（增益已恢复 0dB）。
     {
         static float inplaceBuf[kFrames * 2];

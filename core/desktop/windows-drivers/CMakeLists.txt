@@ -200,6 +200,18 @@ set_target_properties(apo_probe_gain PROPERTIES
     OUTPUT_NAME "probe_gain" SUFFIX ".clap" PREFIX ""
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
+# Part I Q4：崩溃探针（process 内空写 AV）——与 probe_gain 同
+# 供货方式，验逐槽 SEH 闩锁 + 邻槽续处理 + 整机不透传。
+add_library(apo_probe_crash MODULE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/smoke/probe_crash.c"
+)
+target_include_directories(apo_probe_crash PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/plugin-api")
+target_compile_options(apo_probe_crash PRIVATE /std:c11)
+set_target_properties(apo_probe_crash PROPERTIES
+    OUTPUT_NAME "probe_crash" SUFFIX ".clap" PREFIX ""
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
 target_link_libraries(apo_engine_test PRIVATE ole32 audiomediatypecrt)
 target_compile_options(apo_engine_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET apo_engine_test PROPERTY CXX_STANDARD 20)
