@@ -38,6 +38,8 @@ namespace {
 // 常量（与 apo_config.py 对齐）
 // ---------------------------------------------------------------------------
 
+#include "apo_install_plan.h"
+
 const wchar_t* kOurClsid = L"{415AD8ED-7A45-4F4F-AC69-043830EBC174}";
 const std::string kOurClsidUtf8 = "{415AD8ED-7A45-4F4F-AC69-043830EBC174}";
 const wchar_t* kFxBase = L"{d04e05a6-594b-4fb6-a80d-01af5eed7d1d}";
@@ -1266,6 +1268,42 @@ Json BackupEndpoint(const Endpoint& ep, const std::wstring& mode) {
 // 快照还原（对齐 Python restore_endpoint）
 // ---------------------------------------------------------------------------
 
+// 按 RegValue 原类型写回单个值（RestoreEndpoint 与 CmdInstall 的
+// 跨模式清理共用；语义与旧 RestoreEndpoint 内部 lambda 逐项一致）。
+bool SetRegValueRaw(HKEY k, const std::wstring& name, const RegValue& v) {
+    switch (v.type) {
+        case REG_SZ:
+        case REG_EXPAND_SZ:
+            return RegSetValueExW(
+                       k, name.c_str(), 0, v.type,
+                       reinterpret_cast<const BYTE*>(v.sz.c_str()),
+                       static_cast<DWORD>((v.sz.size() + 1) *
+                                          sizeof(wchar_t))) ==
+                   ERROR_SUCCESS;
+        case REG_MULTI_SZ: {
+            std::vector<wchar_t> buf;
+            for (const auto& str : v.multi) {
+                buf.insert(buf.end(), str.begin(), str.end());
+                buf.push_back(L'\0');
+            }
+            buf.push_back(L'\0');
+            return RegSetValueExW(
+                       k, name.c_str(), 0, REG_MULTI_SZ,
+                       reinterpret_cast<const BYTE*>(buf.data()),
+                       static_cast<DWORD>(buf.size() * sizeof(wchar_t))) ==
+                   ERROR_SUCCESS;
+        }
+        case REG_DWORD:
+            return RegSetValueExW(k, name.c_str(), 0, REG_DWORD,
+                                  reinterpret_cast<const BYTE*>(&v.dword),
+                                  sizeof(DWORD)) == ERROR_SUCCESS;
+        default:
+            return RegSetValueExW(k, name.c_str(), 0, v.type, v.raw.data(),
+                                  static_cast<DWORD>(v.raw.size())) ==
+                   ERROR_SUCCESS;
+    }
+}
+
 struct RestoreResult {
     bool ok;
     std::wstring message;
@@ -1360,40 +1398,7 @@ RestoreResult RestoreEndpoint(const std::wstring& shortId) {
             return {false, L"写入 FxProperties 失败: 无法打开键"};
         }
         auto setValue = [&](const std::wstring& name, const RegValue& v) {
-            switch (v.type) {
-                case REG_SZ:
-                case REG_EXPAND_SZ:
-                    return RegSetValueExW(
-                               k, name.c_str(), 0, v.type,
-                               reinterpret_cast<const BYTE*>(v.sz.c_str()),
-                               static_cast<DWORD>((v.sz.size() + 1) *
-                                                  sizeof(wchar_t))) ==
-                           ERROR_SUCCESS;
-                case REG_MULTI_SZ: {
-                    std::vector<wchar_t> buf;
-                    for (const auto& s : v.multi) {
-                        buf.insert(buf.end(), s.begin(), s.end());
-                        buf.push_back(L'\0');
-                    }
-                    buf.push_back(L'\0');
-                    return RegSetValueExW(
-                               k, name.c_str(), 0, REG_MULTI_SZ,
-                               reinterpret_cast<const BYTE*>(buf.data()),
-                               static_cast<DWORD>(buf.size() *
-                                                  sizeof(wchar_t))) ==
-                           ERROR_SUCCESS;
-                }
-                case REG_DWORD:
-                    return RegSetValueExW(
-                               k, name.c_str(), 0, REG_DWORD,
-                               reinterpret_cast<const BYTE*>(&v.dword),
-                               sizeof(DWORD)) == ERROR_SUCCESS;
-                default:
-                    return RegSetValueExW(k, name.c_str(), 0, v.type,
-                                          v.raw.data(),
-                                          static_cast<DWORD>(v.raw.size())) ==
-                           ERROR_SUCCESS;
-            }
+            return SetRegValueRaw(k, name, v);
         };
         bool writeOk = true;
         auto restoreSlot = [&](const std::wstring& kn) {
@@ -1547,7 +1552,7 @@ int CmdStatus(bool asJson, const std::optional<double>& timeout) {
 }
 
 int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
-               bool asJson) {
+               bool asJson, apoplan::Only onlyReq) {
     if (!IsAdmin()) {
         if (asJson) {
             OutJson(Json::Obj({
@@ -1627,7 +1632,26 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
     }
 
     const bool win7 = IsWin7OrEarlier();
-    if (win7 && mode == L"sfx-efx") mode = L"win7-sapo";
+    // 安装计划（计划书 Part II W1）：模式/前后混限定/端点方向/OS
+    // 代际 → 写集合与跨模式清理集合，纯逻辑在 apo_install_plan.h。
+    const bool isCapture = ToLowerA(ep.direction) == "capture";
+    const apoplan::InstallPlan plan =
+        apoplan::ResolveInstallPlan(mode, onlyReq, isCapture, win7);
+    if (!plan.valid) {
+        const std::string msg =
+            "--only post 与 --mode sfx-only 不能组合（sfx-only 只有流侧位置）";
+        if (asJson) {
+            OutJson(Json::Obj({
+                {"ok", Json::Bool(false)},
+                {"error", Json::Str("invalid_only")},
+                {"message", Json::Str(msg)},
+            }));
+        } else {
+            OutLine("FATAL: " + msg);
+        }
+        return 2;
+    }
+    mode = plan.mode;
 
     if (!EnsureComRegistered()) {
         const std::string msg = "AuraApo.dll 未注册且自动注册失败";
@@ -1667,6 +1691,9 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
 
     const std::wstring shortGuid = ShortGuid(Utf8ToWide(ep.id));
     const std::wstring fxSub = ep.FxSub();
+    const std::wstring childSub =
+        std::wstring(kChildApoRoot) + L"\\" + shortGuid;
+    const std::vector<std::wstring> slotKeys = SlotKeys();
     // 写成败必查（细审 R-C M-2）：旧实现 RegCreateKeyEx 失败
     // 整段静默跳过、RegSetValueExW 返回值全弃，末尾仍报
     // ok:true——ACL 异常/DLL 缺失时全链假成功。
@@ -1685,48 +1712,92 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
             }
         };
         setSz(std::wstring(kFxBase) + L",0", kNullGuid);
-        if (win7 || mode == L"win7-sapo") {
-            setSz(std::wstring(kFxBase) + L",1", kOurClsid);
-            setSz(std::wstring(kFxBase) + L",2", kOurClsid);
-        } else if (mode == L"composite") {
-            for (const std::wstring slot :
-                 {std::wstring(kFxBase) + L",13",
-                  std::wstring(kFxBase) + L",14"}) {
-                std::vector<std::wstring> list;
-                const auto existing =
-                    RegRead(HKEY_LOCAL_MACHINE, fxSub, slot);
-                if (existing && existing->type == REG_MULTI_SZ) {
-                    list = existing->multi;
+        // 跨模式清理（计划书 Part II W1，借 EqualizerAPO）：本次
+        // 不写的其他代际/模式槽位恢复到首份快照原始值，消除换
+        // 模式残留双注册。快照条目缺失时退化为按现值剥离我方
+        // CLSID。删除失败忽略（值不存在即 no-op，与 restore
+        // 同）；写回失败计入 fxOk 诚实上报。
+        for (const int idx : plan.foreignIdx) {
+            const std::wstring& slot = slotKeys[idx];
+            const auto stored =
+                RegRead(HKEY_LOCAL_MACHINE, childSub, slot);
+            if (stored && stored->IsSentinel()) {
+                RegDeleteValueW(k, slot.c_str());
+            } else if (stored) {
+                RegValue v = *stored;
+                if (v.type == REG_MULTI_SZ) {
+                    std::vector<std::wstring> clean;
+                    for (const auto& x : v.multi) {
+                        if (ToLowerW(x) !=
+                            ToLowerW(std::wstring(kOurClsid)))
+                            clean.push_back(x);
+                    }
+                    v.multi = clean;
                 }
-                bool present = false;
-                for (const auto& x : list) {
-                    if (x == kOurClsid) present = true;
-                }
-                if (!present) list.emplace_back(kOurClsid);
-                std::vector<wchar_t> buf;
-                for (const auto& s : list) {
-                    buf.insert(buf.end(), s.begin(), s.end());
-                    buf.push_back(L'\0');
-                }
-                buf.push_back(L'\0');
-                if (RegSetValueExW(
-                        k, slot.c_str(), 0, REG_MULTI_SZ,
-                        reinterpret_cast<const BYTE*>(buf.data()),
-                        static_cast<DWORD>(buf.size() * sizeof(wchar_t))) !=
-                    ERROR_SUCCESS) {
+                if (v.type == REG_MULTI_SZ && v.multi.empty()) {
+                    RegDeleteValueW(k, slot.c_str());
+                } else if (!SetRegValueRaw(k, slot, v)) {
                     fxOk = false;
                 }
+            } else {
+                const auto cur =
+                    RegRead(HKEY_LOCAL_MACHINE, fxSub, slot);
+                if (cur && cur->type == REG_SZ &&
+                    ToLowerW(cur->sz) ==
+                        ToLowerW(std::wstring(kOurClsid))) {
+                    RegDeleteValueW(k, slot.c_str());
+                } else if (cur && cur->type == REG_MULTI_SZ) {
+                    std::vector<std::wstring> clean;
+                    for (const auto& x : cur->multi) {
+                        if (ToLowerW(x) !=
+                            ToLowerW(std::wstring(kOurClsid)))
+                            clean.push_back(x);
+                    }
+                    if (clean.size() != cur->multi.size()) {
+                        if (clean.empty()) {
+                            RegDeleteValueW(k, slot.c_str());
+                        } else if (!SetRegValueRaw(
+                                       k, slot, RegMulti(clean))) {
+                            fxOk = false;
+                        }
+                    }
+                }
             }
-        } else if (mode == L"sfx-only") {
-            setSz(std::wstring(kFxBase) + L",5", kOurClsid);
-        } else {
-            setSz(std::wstring(kFxBase) + L",5", kOurClsid);
-            setSz(std::wstring(kFxBase) + L",6", kOurClsid);
-            setSz(std::wstring(kFxBase) + L",7", kOurClsid);
+        }
+        for (const int idx : plan.singleIdx) {
+            setSz(slotKeys[idx], kOurClsid);
+        }
+        for (const int idx : plan.multiIdx) {
+            const std::wstring& slot = slotKeys[idx];
+            std::vector<std::wstring> list;
+            const auto existing =
+                RegRead(HKEY_LOCAL_MACHINE, fxSub, slot);
+            if (existing && existing->type == REG_MULTI_SZ) {
+                list = existing->multi;
+            }
+            bool present = false;
+            for (const auto& x : list) {
+                if (x == kOurClsid) present = true;
+            }
+            if (!present) list.emplace_back(kOurClsid);
+            std::vector<wchar_t> buf;
+            for (const auto& str : list) {
+                buf.insert(buf.end(), str.begin(), str.end());
+                buf.push_back(L'\0');
+            }
+            buf.push_back(L'\0');
+            if (RegSetValueExW(
+                    k, slot.c_str(), 0, REG_MULTI_SZ,
+                    reinterpret_cast<const BYTE*>(buf.data()),
+                    static_cast<DWORD>(buf.size() * sizeof(wchar_t))) !=
+                ERROR_SUCCESS) {
+                fxOk = false;
+            }
         }
         if (!win7) {
-            for (const wchar_t* slot : {L"5", L"6", L"7"}) {
-                const std::wstring pmKey = std::wstring(kProcModes) + L"," + slot;
+            for (const int pos : plan.procModePos) {
+                const std::wstring pmKey =
+                    std::wstring(kProcModes) + L"," + std::to_wstring(pos);
                 const auto cur = RegRead(HKEY_LOCAL_MACHINE, fxSub, pmKey);
                 bool needSet = !cur.has_value();
                 if (cur && cur->type == REG_MULTI_SZ) {
@@ -1785,6 +1856,12 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
             {"short_guid", Json::Str(WideToUtf8(shortGuid))},
             {"name", Json::Str(WideToUtf8(name))},
             {"mode", Json::Str(WideToUtf8(mode))},
+            {"only", plan.only == apoplan::Only::Pre
+                         ? Json::Str("pre")
+                         : plan.only == apoplan::Only::Post
+                               ? Json::Str("post")
+                               : Json{}},
+            {"capture_pre_only", Json::Bool(plan.capturePreOnly)},
             {"backup", std::move(meta)},
             {"audio_restarted", Json::Bool(restarted)},
         }));
@@ -1792,6 +1869,14 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
         OutLine("成功将 AuraAPO 挂载到 '" + WideToUtf8(name) + "' (" +
                 WideToUtf8(shortGuid) + ")");
         OutLine("挂载模式: " + WideToUtf8(mode) +
+                (plan.only == apoplan::Only::Pre
+                     ? ", 位置限定: pre" +
+                           std::string(plan.capturePreOnly
+                                           ? "（捕获端点默认）"
+                                           : "")
+                     : plan.only == apoplan::Only::Post
+                           ? ", 位置限定: post"
+                           : "") +
                 ", 音频服务重启: " + (restarted ? "成功" : "重试中"));
     }
     return 0;
@@ -1959,7 +2044,7 @@ void PrintHelp() {
     OutLine("用法:");
     OutLine("  apo_config status [--timeout <秒>] [--json]");
     OutLine("  apo_config verify-heartbeat [--timeout <秒>] [--json]");
-    OutLine("  apo_config install <端点名子串> --yes [--force] [--mode sfx-efx|composite|sfx-only|win7-sapo] [--json] [--elevate] [--result-file <文件>]");
+    OutLine("  apo_config install <端点名子串> --yes [--force] [--mode sfx-efx|composite|sfx-only|win7-sapo] [--only pre|post] [--json] [--elevate] [--result-file <文件>]");
     OutLine("  apo_config uninstall [目标] --yes [--json] [--elevate] [--result-file <文件>]");
     OutLine("  apo_config testenv-on | testenv-off [--json] [--elevate]");
 }
@@ -2086,10 +2171,10 @@ int wmain(int argc, wchar_t* argv[]) {
                 OutJson(Json::Obj({
                     {"ok", Json::Bool(false)},
                     {"error", Json::Str("missing_endpoint")},
-                    {"message", Json::Str("用法: apo_config install <端点名子串> [--mode sfx-efx|composite|sfx-only] [--yes] [--force] [--json]")},
+                    {"message", Json::Str("用法: apo_config install <端点名子串> [--mode sfx-efx|composite|sfx-only] [--only pre|post] [--yes] [--force] [--json]")},
                 }));
             } else {
-                OutLine("用法: apo_config install <端点名子串> [--mode sfx-efx|composite|sfx-only] [--yes] [--force] [--json]");
+                OutLine("用法: apo_config install <端点名子串> [--mode sfx-efx|composite|sfx-only] [--only pre|post] [--yes] [--force] [--json]");
             }
             return 2;
         }
@@ -2111,7 +2196,27 @@ int wmain(int argc, wchar_t* argv[]) {
         } else if (hasFlag(L"--composite")) {
             mode = L"composite";
         }
-        return CmdInstall(args[1], mode, hasFlag(L"--force"), asJson);
+        apoplan::Only onlyReq = apoplan::Only::None;
+        if (const auto v = optValue(L"--only")) {
+            if (*v == L"pre") {
+                onlyReq = apoplan::Only::Pre;
+            } else if (*v == L"post") {
+                onlyReq = apoplan::Only::Post;
+            } else {
+                if (asJson) {
+                    OutJson(Json::Obj({
+                        {"ok", Json::Bool(false)},
+                        {"error", Json::Str("invalid_only")},
+                        {"message", Json::Str("--only 只接受 pre 或 post")},
+                    }));
+                } else {
+                    OutLine("FATAL: --only 只接受 pre 或 post");
+                }
+                return 2;
+            }
+        }
+        return CmdInstall(args[1], mode, hasFlag(L"--force"), asJson,
+                          onlyReq);
     }
     if (verb == L"uninstall") {
         if (!hasFlag(L"--yes")) {

@@ -165,6 +165,15 @@ target_compile_options(apo_config PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET apo_config PROPERTY CXX_STANDARD 20)
 set_property(TARGET apo_config PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
+# 安装计划矩阵单测（计划书 Part II W1）：apo_install_plan.h 纯
+# 逻辑（模式 × --only × 方向 × OS → 写/清理集合），无 Win32 链接。
+add_executable(apo_plan_test
+    "${APO}/apo_plan_test.cpp"
+)
+target_compile_options(apo_plan_test PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET apo_plan_test PROPERTY CXX_STANDARD 20)
+set_property(TARGET apo_plan_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
 add_executable(apo_selftest
     "${APO}/apo_selftest.cpp"
 )

@@ -179,8 +179,11 @@ jobs:
         run: cmake -S core/desktop/windows-drivers -B build/windows/apo-only -G "Visual Studio 18 2026" -A x64 -DAURADSP_DRIVERS_APO_ONLY=ON
       - name: Build
         run: cmake --build build/windows/apo-only --config Release
+      # 安装计划矩阵单测（Part II W1）：纯逻辑 exe，退出码即裁定。
+      - name: APO install plan matrix test
+        run: core/desktop/windows-drivers/out/Release/apo_plan_test.exe
       # 真处理端到端冒烟：COM 直驱 APOProcess，断言参数通道
-      # 发布 input.gain=0.25 后输出 RMS 相对基线跌至 ~0.25、
+      # 发布 input.gain=-12dB 后输出 RMS 相对基线跌至 ~0.2512、
       # telemetry 座位/应用计数/频谱在动、INPLACE 变体一致、
       # 解锁后座位释放。退出码即裁定。
       - name: APO engine end-to-end smoke
