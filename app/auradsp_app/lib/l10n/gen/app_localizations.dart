@@ -460,11 +460,23 @@ abstract class AppLocalizations {
   /// **'模式切换仅选择附加目标；实际附加 / 卸载由下方「一键附加」「一键卸载」执行。'**
   String get apoModeHint;
 
-  /// No description provided for @apoPassthroughNote.
+  /// No description provided for @apoEngineNoteActive.
   ///
   /// In zh, this message translates to:
-  /// **'注意：当前 System APO 为透传版——声音经 APO 直通，帧数仅表示 APO 在运行，AuraDSP 音效不作用于此模式；需要实时音效请使用 VAIO / ASIO 模式。'**
-  String get apoPassthroughNote;
+  /// **'APO 引擎处理中：经过此端点的声音由 AuraDSP 引擎实时处理（插件链在 APO 模式下不生效）。'**
+  String get apoEngineNoteActive;
+
+  /// No description provided for @apoEngineNoteWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'APO 已附加，等待引擎就绪；就绪前声音直通。'**
+  String get apoEngineNoteWaiting;
+
+  /// No description provided for @apoEngineNoteFault.
+  ///
+  /// In zh, this message translates to:
+  /// **'APO 引擎发生故障，已自动退回直通（系统音频不受影响）；重新附加 APO 或重启应用后重试。'**
+  String get apoEngineNoteFault;
 
   /// No description provided for @setDriverOffline.
   ///

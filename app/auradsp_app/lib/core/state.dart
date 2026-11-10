@@ -476,6 +476,14 @@ class AppModel extends ChangeNotifier {
   bool asioDriverInstalled = false;
   // System APO 挂载状态与运行时遥测
   bool apoAttached = false;
+  // APO 真处理 telemetry（立项 P3）：isolate 读者经 apotelemetry
+  // 事件回填——座位引擎是否在位 / 是否故障闩锁 / 引擎率与声道 /
+  // 已应用参数项次。仅 sysapo 模式下有更新，其余模式保持复位值。
+  bool apoEngineActive = false;
+  bool apoEngineFault = false;
+  int apoEngineRate = 0;
+  int apoEngineChannels = 0;
+  int apoParamsApplied = 0;
   bool apoHeartbeatAlive = false;
   int apoHeartbeatSeq = 0;
   int apoHeartbeatSr = 0;

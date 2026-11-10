@@ -108,6 +108,13 @@ extension AudioModesState on AppModel {
     _toIso?.send({'cmd': 'apotelemetry', 'on': valid == 'sysapo'});
     if (valid == 'sysapo') {
       _toIso?.send({'cmd': 'apopublish'});
+    } else if (apoEngineActive || apoEngineFault) {
+      // 离开 sysapo：引擎状态面复位（读者已停，不再有事件回填）。
+      apoEngineActive = false;
+      apoEngineFault = false;
+      apoEngineRate = 0;
+      apoEngineChannels = 0;
+      apoParamsApplied = 0;
     }
     applyPipelineChain();
     _notifyUi();

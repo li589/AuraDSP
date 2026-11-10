@@ -275,6 +275,8 @@ class ApoTelemetryReader {
   void Function(Map<String, dynamic>)? _send;
   int _lastSeq = -1;
   int _lastSeat = -1;
+  int _lastFault = -1;
+  int _tickCount = 0;
   bool _gaveUp = false;
 
   void start(void Function(Map<String, dynamic>) send) {
@@ -300,6 +302,8 @@ class ApoTelemetryReader {
     _mapping = null;
     _lastSeq = -1;
     _lastSeat = -1;
+    _lastFault = -1;
+    _tickCount = 0;
   }
 
   bool _open() {
@@ -349,10 +353,26 @@ class ApoTelemetryReader {
     // 5 channels 6 paramsApplied 7 fault 8 seatTaken 9 updateSeq
     // 10..13 peakIn/Out L/R（float）14/15 levelL/R dB 16..47 spectrum
     final seat = u32[2];
-    if (seat != _lastSeat) {
+    final faultNow = u32[7];
+    _tickCount++;
+    // 状态事件（P3）：座位/故障跳变即发，另每 2s 心跳刷新一次
+    // 已应用数等缓变字段；状态层据此驱动 APO 面板的引擎状态行。
+    if (seat != _lastSeat || faultNow != _lastFault || _tickCount % 20 == 0) {
+      if (seat != _lastSeat) {
+        dbgLog('apo telemetry: seat=${seat == 1 ? 'claimed' : 'free'} '
+            'fault=$faultNow applied=${u32[6]}');
+      }
+      _send?.call({
+        'evt': 'apotelemetry',
+        'seat': seat == 1,
+        'fault': faultNow != 0,
+        'rate': u32[4],
+        'channels': u32[5],
+        'applied': u32[6],
+        'taken': u32[8],
+      });
       _lastSeat = seat;
-      dbgLog('apo telemetry: seat=${seat == 1 ? 'claimed' : 'free'} '
-          'fault=${u32[7]} applied=${u32[6]}');
+      _lastFault = faultNow;
     }
     if (seat != 1) return;
     final seq = u32[9];

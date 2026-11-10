@@ -87,6 +87,12 @@ extension StateEvents on AppModel {
             'outputEndpoint': config.vaioOutputEndpoint,
           });
         }
+        // 持久化的是 System APO 模式：就绪后开 telemetry 回传
+        // 并全量重发参数块（立项 P1/P3；非 Windows 侧静默）。
+        if (audioMode == 'sysapo') {
+          _toIso?.send({'cmd': 'apotelemetry', 'on': true});
+          _toIso?.send({'cmd': 'apopublish'});
+        }
         // 模式恢复取证（2026-11-09）：与 isolate 侧
         // 'vaiomode: start requested' 的时间戳对齐，可判「桥是
         // 就绪时起的还是用户点出来的」这一分支。
@@ -787,6 +793,23 @@ extension StateEvents on AppModel {
         } else if (id == ParamId.convIrPath) {
           // IR 加载成功 → 回读 meta（frames/channels/srcRate/peak）
           _toIso?.send({'cmd': 'getParams'});
+        }
+        break;
+      case 'apotelemetry':
+        // APO 真处理回传（立项 P3）：座位在位/故障闩锁/引擎率与
+        // 声道/已应用参数数——变化才刷新 UI（读者侧已节流）。
+        final seatOn = raw['seat'] == true;
+        final faultOn = raw['fault'] == true;
+        final appliedN = (raw['applied'] as num?)?.toInt() ?? 0;
+        if (apoEngineActive != seatOn ||
+            apoEngineFault != faultOn ||
+            apoParamsApplied != appliedN) {
+          apoEngineActive = seatOn;
+          apoEngineFault = faultOn;
+          apoEngineRate = (raw['rate'] as num?)?.toInt() ?? 0;
+          apoEngineChannels = (raw['channels'] as num?)?.toInt() ?? 0;
+          apoParamsApplied = appliedN;
+          _notifyUi();
         }
         break;
       case 'viz':

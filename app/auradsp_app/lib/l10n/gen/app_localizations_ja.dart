@@ -204,8 +204,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get apoModeHint => 'モード切替は附加先の選択のみです。実際の附加 / 解除は下の「一括附加」「一括解除」で実行します。';
 
   @override
-  String get apoPassthroughNote =>
-      '注意：現在の System APO はパススルー版です。音声は未処理で通過し、フレーム数は APO の稼働を示すのみで、AuraDSP のエフェクトはこのモードでは適用されません。リアルタイム処理には VAIO / ASIO モードを使用してください。';
+  String get apoEngineNoteActive =>
+      'APO エンジン処理中：このエンドポイントを通る音声は AuraDSP エンジンでリアルタイム処理されます（プラグインチェーンは APO モードでは動作しません）。';
+
+  @override
+  String get apoEngineNoteWaiting => 'APO は装着済みです。エンジンの準備ができるまで音声はスルーされます。';
+
+  @override
+  String get apoEngineNoteFault =>
+      'APO エンジンで障害が発生し、自動的にスルーへ戻りました（システム音声への影響はありません）。APO の再装着かアプリの再起動で再試行してください。';
 
   @override
   String setDriverOffline(String name) {
