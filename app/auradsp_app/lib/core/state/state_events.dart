@@ -90,6 +90,7 @@ extension StateEvents on AppModel {
         // 持久化的是 System APO 模式：就绪后开 telemetry 回传
         // 并全量重发参数块（立项 P1/P3；非 Windows 侧静默）。
         if (audioMode == 'sysapo') {
+          applyApoFileEffectPolicy();
           _toIso?.send({'cmd': 'apotelemetry', 'on': true});
           _toIso?.send({'cmd': 'apopublish'});
         }

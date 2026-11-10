@@ -244,7 +244,12 @@ void CAuraApo::OpenHeartbeat() {
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
             L"D:(A;;GA;;;LS)(A;;GA;;;WD)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)", SDDL_REVISION_1,
-            &sd, nullptr))
+            &sd, nullptr) &&
+        // Win7 退路：AppContainer ACE 在 Win7 的解析成败微软文档
+        // 未载；失败时退回不含 LPAC 的口径（语义完整，见
+        // ApoShared.h 的 AURA_APO_SHARED_SDDL_FALLBACK 注）。
+        !ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            L"D:(A;;GA;;;LS)(A;;GA;;;WD)", SDDL_REVISION_1, &sd, nullptr))
         return;
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof(sa);

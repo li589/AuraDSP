@@ -23,6 +23,12 @@
 // 包 SID 全 GA）：audiodg 的 LPAC 沙箱只能穿透显式授权的对象。
 #define AURA_APO_SHARED_SDDL L"D:(A;;GA;;;LS)(A;;GA;;;WD)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)"
 
+// Win7 退路口径：AppContainer 机构（S-1-15-2-*）为 Win8+ 概念
+// （微软 WELL_KNOWN_SID_TYPE 文档标 Win7 不可用；含该 ACE 的
+// SDDL 在 Win7 上的解析成败文档未载）。转换失败时退回本口径
+// ——LS/WD 两条在 Win7 语义完整，功能不受影响。
+#define AURA_APO_SHARED_SDDL_FALLBACK L"D:(A;;GA;;;LS)(A;;GA;;;WD)"
+
 // ---- 参数块（App → APO） ----
 // 写协议（seqlock）：写者先令 writeSeq 为奇数（写入中），写完全部
 // 内容后令其为偶数（稳定）；读者读前读后各取一次 writeSeq，两次
@@ -73,7 +79,9 @@ inline const wchar_t* AuraApoTelemetryName() {
 // 释放；同端点 SFX/MFX/EFX 三实例与多端点实例中只有一个跑引擎，
 // 其余透传并累加 seatTaken（供面板/诊断区分「没抢到」与「没附加」）。
 #define APO_TELEMETRY_MAGIC 0x4154454Cu  // 'ATEL'
-#define APO_TELEMETRY_VERSION 1u
+// v2（2026-11-10）：尾部追加 eqIn/stage 分级回传（处理流显示
+// 用）；既有字段偏移一律不变，读者按 version 分级取用。
+#define APO_TELEMETRY_VERSION 2u
 #define APO_TELEMETRY_BYTES 4096u
 
 struct ApoTelemetryBlock {
@@ -90,6 +98,10 @@ struct ApoTelemetryBlock {
     float peakInL, peakInR, peakOutL, peakOutR;  // 线性峰值
     float levelLDb, levelRDb;                    // 输出电平 dBFS
     float spectrum[32];                          // 输出频谱（引擎 viz 口径，[0,1]）
+    // ---- v2 追加（offset 192 起；v1 读者止步于此）----
+    float eqInSpectrum[32];                      // EQ 前频谱（引擎 viz 口径）
+    float stageLevelsL[32];                      // 分级电平 L（dBFS，引擎 stage 序）
+    float stageLevelsR[32];                      // 分级电平 R（dBFS）
     uint32_t reserved[8];
 };
 static_assert(sizeof(ApoTelemetryBlock) == 224, "telemetry block layout");

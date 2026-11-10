@@ -5,6 +5,11 @@ part of '../state.dart';
 ///
 /// 方法体逐字保留自 AppModel 类体；extension 成员与类内成员同库作用域，
 /// 原有调用点（实例调用、tear-off、跨 part 互调）解析不变。
+/// APO 文件型效果的参数 id（卷积 IR / DDC 文件）：sysapo 下
+/// APO 侧引擎读不到用户目录文件，这两节恒不可用（2026-11-10
+/// 用户裁定：进模式自动关闭 + 尝试开启时拦截并通知）。
+const kApoFileEffectEnables = {'convolver.enable', 'ddc.enable'};
+
 extension StateCore on AppModel {
   void send(Map<String, dynamic> m) {
     // [PATCHED-AuraDSP P-032] testing 模式记录已下发的 setParam 载荷。
@@ -109,6 +114,14 @@ extension StateCore on AppModel {
 
   /// 强类型通用参数设值
   void setParam<T>(ParamSpec<T> spec, T value, {bool notify = true}) {
+    if (audioMode == 'sysapo' &&
+        kApoFileEffectEnables.contains(spec.id) &&
+        (value == true || (value is num && value != 0))) {
+      postNotice('该效果依赖外部文件（卷积 IR / DDC 文件），在 System APO '
+          '模式下不可用', level: NoticeLevel.warning);
+      if (notify) _notifyUi();
+      return;
+    }
     final clamped = spec.clamp(value);
     _paramValues[spec.id] = clamped;
     spec.write(this, clamped);

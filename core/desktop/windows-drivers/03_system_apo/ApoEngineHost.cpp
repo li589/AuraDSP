@@ -37,7 +37,11 @@ std::wstring ParentDir(const std::wstring& dir) {
 HANDLE CreateSharedMapping(const wchar_t* name, DWORD bytes) {
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            AURA_APO_SHARED_SDDL, SDDL_REVISION_1, &sd, nullptr))
+            AURA_APO_SHARED_SDDL, SDDL_REVISION_1, &sd, nullptr) &&
+        // Win7 退路（见 ApoShared.h 的 FALLBACK 注）：含
+        // AppContainer ACE 的 SDDL 若解析失败，退回 LS/WD 口径。
+        !ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            AURA_APO_SHARED_SDDL_FALLBACK, SDDL_REVISION_1, &sd, nullptr))
         return nullptr;
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof(sa);
@@ -369,6 +373,12 @@ void ApoEngineHost::WorkerLoop() {
                 tele_->peakInL = tele_->peakOutL;
                 tele_->peakInR = tele_->peakOutR;
                 memcpy(tele_->spectrum, f.spectrum, sizeof(tele_->spectrum));
+                memcpy(tele_->eqInSpectrum, f.eq_in_spectrum,
+                       sizeof(tele_->eqInSpectrum));
+                memcpy(tele_->stageLevelsL, f.stage_levels_l,
+                       sizeof(tele_->stageLevelsL));
+                memcpy(tele_->stageLevelsR, f.stage_levels_r,
+                       sizeof(tele_->stageLevelsR));
                 tele_->updateSeq++;
             }
         }

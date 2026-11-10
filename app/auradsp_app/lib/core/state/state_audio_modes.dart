@@ -10,6 +10,25 @@ extension AudioModesState on AppModel {
 
   // ---- 模式与管线 ----
 
+  /// 进入 sysapo 时的文件型效果策略（2026-11-10 用户裁定）：
+  /// 卷积/DDC 若开着则自动关闭（经正常 setParamById 路径，全链
+  /// 同步）并通知一次；离开 sysapo 不自动恢复，由用户自行重开。
+  /// setParam 侧另有开启拦截（见 state_core.setParam）。
+  void applyApoFileEffectPolicy() {
+    var turnedOff = false;
+    for (final id in kApoFileEffectEnables) {
+      final v = getParamById(id);
+      if (v == true || (v is num && v != 0)) {
+        setParamById(id, false);
+        turnedOff = true;
+      }
+    }
+    if (turnedOff) {
+      postNotice('已进入 System APO 模式：卷积混响与 DDC 依赖外部文件、'
+          '此模式下无法加载，已自动关闭', level: NoticeLevel.info);
+    }
+  }
+
   /// 音频处理模式切换：非法 id 直接忽略；合法即落盘 + 通知。
   /// vbcallback/asio 切入/切出时联动 isolate 启停对应桥（WASAPI 路径随之
   /// 暂停/恢复）；其余模式当前仅持久化选择（引擎接线待后续版本，重启生效）。
@@ -107,6 +126,7 @@ extension AudioModesState on AppModel {
     // 离开 sysapo 即停读。isolate 侧非 Windows 永久静默，无副作用。
     _toIso?.send({'cmd': 'apotelemetry', 'on': valid == 'sysapo'});
     if (valid == 'sysapo') {
+      applyApoFileEffectPolicy();
       _toIso?.send({'cmd': 'apopublish'});
     } else if (apoEngineActive || apoEngineFault) {
       // 离开 sysapo：引擎状态面复位（读者已停，不再有事件回填）。

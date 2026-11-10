@@ -392,6 +392,7 @@ class ApoTelemetryReader {
     // 0 magic 1 version 2 seatState 3 ownerPid 4 sampleRate
     // 5 channels 6 paramsApplied 7 fault 8 seatTaken 9 updateSeq
     // 10..13 peakIn/Out L/R（float）14/15 levelL/R dB 16..47 spectrum
+    // v2 追加：48..79 eqInSpectrum 80..111 stageL 112..143 stageR
     final seat = u32[2];
     final faultNow = u32[7];
     _tickCount++;
@@ -423,15 +424,24 @@ class ApoTelemetryReader {
     final levelL = f32[14];
     final levelR = f32[15];
     final spectrum = List<double>.generate(32, (i) => f32[16 + i]);
+    // telemetry v2 起带真实分级回传（处理流显示）；v1 块保持静默
+    // 占位（旧 APO DLL 与新 App 混跑的过渡形态）。
+    final hasStage = u32[1] >= 2;
     _send?.call({
       'evt': 'viz',
       'backend': 'sysapo',
       'spectrum': spectrum,
-      'eqIn': List<double>.filled(32, 0.0),
+      'eqIn': hasStage
+          ? List<double>.generate(32, (i) => f32[48 + i])
+          : List<double>.filled(32, 0.0),
       'l': levelL,
       'r': levelR,
-      'stageL': List<double>.filled(32, -90.0),
-      'stageR': List<double>.filled(32, -90.0),
+      'stageL': hasStage
+          ? List<double>.generate(32, (i) => f32[80 + i])
+          : List<double>.filled(32, -90.0),
+      'stageR': hasStage
+          ? List<double>.generate(32, (i) => f32[112 + i])
+          : List<double>.filled(32, -90.0),
       'chCount': chCount,
       'chLevels': List<double>.generate(
           chCount, (i) => i == 0 ? levelL : (i == 1 ? levelR : -90.0)),

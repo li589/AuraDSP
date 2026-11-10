@@ -37,7 +37,7 @@
 
 - 单引擎座位：同一时刻只有一个端点真处理；同端点 SFX/MFX/EFX 三实例只有一个跑引擎（其余透传），第二端点同理。
 - 插件链在 APO 模式下不生效（引擎变体无插件子系统，面板文案已明示）。
-- convolver IR / DDC 文件不进 APO（audiodg 的 LPAC 身份读不到用户目录），这两项在 APO 模式下惰性。
+- convolver IR / DDC 文件不进 APO（audiodg 的 LPAC 身份读不到用户目录）。**处置口径（用户裁定 2026-11-10 午后）**：不再静默惰性——进 sysapo（含重启直进的 ready 恢复）时若这两节开着则自动关闭并通知；sysapo 期间尝试开启被 setParam 拦截并通知（`AppModel.kApoFileEffectEnables` + `applyApoFileEffectPolicy`）；离开 sysapo 不自动恢复。同日补：telemetry 升 v2，追加 eqIn/stage 分级回传，sysapo 下处理流的分级电平表可动（读者按 version 分级取用）。
 - 多声道：{2,4,6,8} 直通；mono 复制处理；3/5/7 与 >8 只处理前两声道、其余直通。
 - 参数应用延迟 ≤ ~100ms（worker 50ms 轮询 + App 侧写入）。
 
@@ -49,3 +49,14 @@
 4. 旁路开关：开启时声音应变直通；关闭恢复处理。
 5. 多端点/复合插槽不回归：附加/卸载往返（按端点 ID）与第四轮清单合并验收。
 6. 长时播放稳定性：audiodg 不崩（事件查看器无 audiodg/AuraApo 相关错误）；若崩，回传事件查看器的故障模块与偏移。
+
+## 6. Win7/8 适配（2026-11-10 午后，微软官方文档调研后处置）
+
+调研范围：Microsoft Learn 现行文档（驱动/Win32），逐条带出处；以下「未载」即官方现行文档查无此项，不作推断填充。
+
+- **注册模型分版本**：Win7 时代为 LFX（流）/GFX（设备）两槽；Win8.1 起改称 SFX/MFX 并新增 EFX 槽，现行 PKEY_FX_* 槽位口径明文标注「Windows 8.1 and later」。本产品的 apo_config 既有 `win7-sapo` 模式即旧槽位分支——注册层已分版本，无需新增工作。
+- **隔离与密钥**：audiodg 受保护进程自 Vista 起；`DisableProtectedAudioDG` 在现行 Learn 中**未载**定义与分版本行为（仅一处称其为 test key，定义页已下线）。本产品各版本统一依赖该值 + 测试签名，文档层无更多可核。audiodg 的 LPAC 引入时点同样未载（AppContainer 本身为 Win8 概念）。
+- **API 可用性**：本项目用到的 Global\ 映射创建（服务令牌默认含 SeCreateGlobalPrivilege）、GetModuleHandleEx、IAudioProcessingObject/LockForProcess/APOProcess 均为 Vista/Win7 可用；APO 只实现 IAudioSystemEffects v1，不要求 8.1 的 v2 / Win11 的 v3，版本形状正确。
+- **唯一实坑 + 已处理**：含 AppContainer SID（S-1-15-2-*）的 SDDL——该机构 Win7 不存在，其在 Win7 上的解析成败文档未载。已给全部三处共享映射（v1 心跳、参数块、telemetry 块）加退路：主 SDDL 转换失败即退回不含 LPAC ACE 的 `LS+WD` 口径（Win7 语义完整）。Win8+ 主口径一次成功，退路不触发。
+- **签名**：Win7 64 位即要求签名（标准 CI 根、嵌入或目录签名）；Win10 1607+ 收紧为微软根；证明签名仅 Win10+。与既有「驱动正式签名是最大外部风险」口径一致，无新增动作。
+- **形态底线**：App 本体（Flutter）官方支持面为 Win10+，Win7/8 上只有驱动/APO 组件包可独立安装运行；组件侧按 Win7 基线（_WIN32_WINNT 0x0601）构建。Win7/8 的验收只能是组件级（apo_config 附加 + APO 加载出声），App 级验收不适用于该两版本。
