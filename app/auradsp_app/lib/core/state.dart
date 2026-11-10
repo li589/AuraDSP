@@ -50,6 +50,7 @@ import 'param_schema.dart';
 import 'ports/null_ports.dart';
 import 'presets.dart';
 import 'session_memory.dart';
+import 'vaio_boot_guard.dart';
 import 'theme.dart';
 import 'visualizer_types.dart';
 
@@ -271,6 +272,13 @@ class AppModel extends ChangeNotifier {
   String asioDriversNote = ''; // 桥缺失/无驱动时的原因（设置页展示）
   // AuraVAIO 桥状态（01 桥；isolate 回推，与 VB/ASIO 互斥）。
   bool vaioActive = false;
+  // VAIO 崩溃断路器（第六轮用户裁定）：构造期消费到「上一会
+  // 话带着在跑的桥非正常结束」标记时为 true，本次跳过 VAIO
+  // 自动起桥（一次性）；用户手动选 VAIO 即解除（见
+  // vaio_boot_guard.dart 与 setAudioMode）。
+  bool vaioBootGuardTripped = false;
+  // 断路器跳过通知只发一轮（isolate 重启会重复进 ready 处理）。
+  bool _vaioGuardNoticeShown = false;
   // 管线本地捕获链状态（全接线，isolate capturestatus 回推；
   // 与三桥互斥，是管线类别内子状态而非第四种 audioMode）。
   bool captureActive = false;
@@ -1168,6 +1176,15 @@ class AppModel extends ChangeNotifier {
     if (!testing) {
       checkAsioDriverStatus();
       checkApoStatus(silent: true);
+      // VAIO 崩溃断路器消费点：必须早于 isolate ready 的自动
+      // 起桥（ready 处理在 state_events）。消费即删，本次跳过
+      // 只生效一轮。
+      if (PlatformProfile.supportsBridges &&
+          VaioBootGuard.consume(ConfigManager.dataDir)) {
+        vaioBootGuardTripped = true;
+        dbgLog('vaio-guard: previous session ended uncleanly with the '
+            'VAIO bridge running; autostart will be skipped once');
+      }
     }
     // VB 总线掩码：0 现在是合法状态（用户显式全关），不再回填全开；
     // 键缺失时 fromJson 已给出厂默认 0x03（A1/A2）。
@@ -1457,7 +1474,12 @@ class AppModel extends ChangeNotifier {
     }
     _compThresholdThrottleTimer?.cancel();
     // 测试隔离：testing 构造不落盘（且 _iso/_fromIso 本来就是 null，?. 本就安全）。
-    if (!_testing) SessionMemory.save(this);
+    if (!_testing) {
+      SessionMemory.save(this);
+      // 正常退出 = 干净收尾：解除 VAIO 断路器布防（桥还在跑
+      // 也不算未净退出——进程是被正常关闭的）。
+      VaioBootGuard.disarm(ConfigManager.dataDir);
+    }
     _toIso?.send({'cmd': 'shutdown'});
     _iso?.kill(priority: Isolate.beforeNextEvent);
     _fromIso?.close();

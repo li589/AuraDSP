@@ -116,6 +116,14 @@ extension AudioModesState on AppModel {
           'on': isVaio,
           'outputEndpoint': config.vaioOutputEndpoint,
         });
+        // 崩溃断路器联动：手动进入 VAIO = 知情接管，解除跳过
+        // 并重新布防；离开 VAIO（桥干净停）= 解除布防。
+        if (isVaio) {
+          vaioBootGuardTripped = false;
+          _armVaioGuard();
+        } else {
+          _disarmVaioGuard();
+        }
       }
       if (!isVaio) {
         vaioActive = false;
@@ -319,6 +327,19 @@ extension AudioModesState on AppModel {
   /// 就绪恢复都经此收口，杜绝「选择只落盘、链路不动」的
   /// 漂移。桥链起停与 isolate 侧互斥（stopOtherBridges +
   /// start* 拆捕获链）叠加，本函数只按状态位做增量对账。
+
+  // VAIO 崩溃断路器布防/解除（testing 构造不落盘，与会话存盘
+  // 同口径；守卫语义见 vaio_boot_guard.dart）。
+  void _armVaioGuard() {
+    if (_testing) return;
+    VaioBootGuard.arm(ConfigManager.dataDir);
+  }
+
+  void _disarmVaioGuard() {
+    if (_testing) return;
+    VaioBootGuard.disarm(ConfigManager.dataDir);
+  }
+
   void applyPipelineChain() {
     if (!PlatformProfile.supportsBridges) return;
     final chain = pipelineChain;
@@ -347,12 +368,19 @@ extension AudioModesState on AppModel {
       dbgLog('pipeline.chain: capturemode off');
     }
     if (chain == PipelineChain.vaio && !vaioActive) {
+      // 断路器跳过期内对账不得把桥偷偷补起来（用户手动选
+      // VAIO 清除 tripped 后本门自然放行）。
+      if (vaioBootGuardTripped) {
+        dbgLog('pipeline.reconcile: vaiomode resend suppressed (breaker)');
+        return;
+      }
       dbgLog('pipeline.reconcile: resend vaiomode (vaioActive=false)');
       _toIso?.send({
         'cmd': 'vaiomode',
         'on': true,
         'outputEndpoint': config.vaioOutputEndpoint,
       });
+      _armVaioGuard();
     } else if (chain == PipelineChain.asio && !asioActive) {
       dbgLog('pipeline.reconcile: resend asiomode (asioActive=false)');
       _toIso?.send({

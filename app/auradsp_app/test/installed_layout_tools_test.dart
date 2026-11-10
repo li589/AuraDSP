@@ -274,6 +274,27 @@ void main() {
     });
   });
 
+  group('第六轮补装：VAIO 崩溃断路器接线', () {
+    test('构造消费标记、干净退出解除、ready 跳过自启并通知', () {
+      final core = _read('app/auradsp_app/lib/core/state.dart');
+      final events =
+          _read('app/auradsp_app/lib/core/state/state_events.dart');
+      expect(core, contains('VaioBootGuard.consume(ConfigManager.dataDir)'));
+      expect(core, contains('VaioBootGuard.disarm(ConfigManager.dataDir)'));
+      expect(core, contains('bool vaioBootGuardTripped = false'));
+      expect(events, contains('vaio-guard: skip VAIO autostart once'));
+      expect(events, contains('_vaioGuardNoticeShown'));
+    });
+
+    test('对账补发受断路器门控，手动进 VAIO 解除并布防', () {
+      // state 变量即 state_audio_modes.dart（本文件既有口径）。
+      expect(state, contains('vaiomode resend suppressed (breaker)'));
+      expect(state, contains('vaioBootGuardTripped = false'));
+      expect(state, contains('void _armVaioGuard()'));
+      expect(state, contains('void _disarmVaioGuard()'));
+    });
+  });
+
   group('V-02 刷新链守卫（F0）', () {
     test('refreshAudioDevices 有埋点且工具缺失显式置错', () {
       expect(state, contains("dbgLog('devices.refresh: start', sync: true)"));

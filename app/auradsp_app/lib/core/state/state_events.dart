@@ -78,14 +78,30 @@ extension StateEvents on AppModel {
         // 持久化的是 AuraVAIO 模式：就绪后自动进桥。
         // 全接线门控：合成链为捕获链/ASIO 输入链时不起 VAIO
         // 桥（链路对账在下方统一补发正确命令）。
+        // 崩溃断路器（第六轮用户裁定）：上一会话带着在跑的桥
+        // 非正常结束时，本次跳过自动起桥一次并通知，防崩溃
+        // 循环把软件锁死；用户手动选 VAIO 即解除（setAudioMode）。
         if (audioMode == 'vaio' &&
             pipelineChain != PipelineChain.capture &&
             pipelineChain != PipelineChain.asio) {
-          _toIso?.send({
-            'cmd': 'vaiomode',
-            'on': true,
-            'outputEndpoint': config.vaioOutputEndpoint,
-          });
+          if (vaioBootGuardTripped) {
+            dbgLog('vaio-guard: skip VAIO autostart once (breaker)');
+            if (!_vaioGuardNoticeShown) {
+              _vaioGuardNoticeShown = true;
+              postNotice(
+                  '上次会话在 VAIO 桥运行期间异常结束，本次已跳过 VAIO '
+                  '桥自动启动以防崩溃循环；如需使用，请手动重新选择 '
+                  'VAIO 模式。',
+                  level: NoticeLevel.warning);
+            }
+          } else {
+            _toIso?.send({
+              'cmd': 'vaiomode',
+              'on': true,
+              'outputEndpoint': config.vaioOutputEndpoint,
+            });
+            _armVaioGuard();
+          }
         }
         // 持久化的是 System APO 模式：就绪后开 telemetry 回传
         // 并全量重发参数块（立项 P1/P3；非 Windows 侧静默）。
