@@ -7,7 +7,9 @@
 //   协议）→ 输出 RMS 相对基线跌到 ~0.25（决定性断言：参数通
 //   道 + worker 应用 + 引擎真处理三段同时成立才可能）→
 //   telemetry 的 paramsApplied/updateSeq/spectrum 均在动 →
-//   INPLACE 同址处理同样成立 → 解锁后座位释放。
+//   增益恢复 0dB 后经插件块装 probe_gain.clap（Part I Q2）：
+//   telemetry v3 loaded=1、处理比率 ~0.5、块内旁路回 ~1.0、
+//   身份清空卸载 → INPLACE 同址处理同样成立 → 解锁后座位释放。
 // Global\ 需 SeCreateGlobalPrivilege：无特权时自动切
 // AURAAPO_CHANNELS_LOCAL=1 走 Local\ 名（与心跳 LOCAL 旋钮同
 // 先例；名字不同、协议相同）。退出码即裁定（0=全过）。
@@ -268,7 +270,154 @@ int main() {
               d);
     }
 
-    // INPLACE 变体：同址缓冲处理结果一致（增益仍 -12dB）。
+    // ---- Part I Q2 插件段：经插件块装真 CLAP 插件 ----
+    // 先把 input.gain 恢复 0dB 取干净基线，再扮演发布者把
+    // probe_gain.clap 的身份写进插件块：worker 应加载它
+    // （telemetry v3 loaded=1）、处理比率 ~0.5、块内旁路后
+    // 回 ~1.0、身份清空后卸载。探针文件缺席时整段跳过（本机
+    // 无构建产物时不误判；CI J5b 由 apo_probe_gain 目标供货）。
+    {
+        HANDLE hPar2 = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE,
+                                        AuraApoParamsName());
+        if (hPar2 && gainIdx >= 0) {
+            auto* blk = (uint8_t*)MapViewOfFile(
+                hPar2, FILE_MAP_ALL_ACCESS, 0, 0, APO_BLOCK_MAPPING_BYTES);
+            if (blk) {
+                auto* hdr = (ApoParamBlockHeader*)blk;
+                uint32_t seq = hdr->writeSeq;
+                hdr->writeSeq = seq + 1;
+                float g = 0.0f;
+                memcpy(blk + APO_BLOCK_VALUES_OFFSET + 4 * gainIdx, &g, 4);
+                MemoryBarrier();
+                hdr->writeSeq = seq + 2;
+                UnmapViewOfFile(blk);
+            }
+            CloseHandle(hPar2);
+        }
+        Sleep(400);
+        double unityRms = 0;
+        runBlocks(2 * kBlocks, unityRms);
+        char d[96];
+        snprintf(d, sizeof(d), "unity=%.4f base=%.4f ratio=%.3f", unityRms,
+                 baseRms, unityRms / baseRms);
+        check("gain restored to unity", unityRms / baseRms > 0.85 &&
+                                            unityRms / baseRms < 1.18,
+              d);
+
+        wchar_t plugPath[MAX_PATH];
+        wcscpy(plugPath, self);
+        wchar_t* pslash = wcsrchr(plugPath, L'\\');
+        wcscpy(pslash ? pslash + 1 : plugPath, L"probe_gain.clap");
+        const bool haveProbe =
+            GetFileAttributesW(plugPath) != INVALID_FILE_ATTRIBUTES;
+        if (!haveProbe) {
+            printf("[SKIP] plugin section (probe_gain.clap absent)\n");
+        } else {
+            HANDLE hPlug = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE,
+                                            AuraApoPluginsName());
+            check("plugin mapping exists (created by APO host)",
+                  hPlug != nullptr);
+            uint8_t* pb = hPlug ? (uint8_t*)MapViewOfFile(
+                                      hPlug, FILE_MAP_ALL_ACCESS, 0, 0,
+                                      APO_PLUGIN_BLOCK_BYTES)
+                                : nullptr;
+            check("plugin view", pb != nullptr);
+            if (pb) {
+                auto* phdr = (ApoPluginBlockHeader*)pb;
+                if (phdr->magic != APO_PLUGINS_MAGIC) {
+                    phdr->magic = APO_PLUGINS_MAGIC;
+                    phdr->version = APO_PLUGINS_VERSION;
+                    phdr->blockBytes = APO_PLUGIN_BLOCK_BYTES;
+                    phdr->chainEnabled = 1;
+                    phdr->pdcEnabled = 0;
+                    phdr->writeSeq = 0;
+                }
+                auto* slotHdr = (ApoPluginSlotHeader*)(pb +
+                    APO_PLUGIN_BLOCK_HEADER_BYTES);
+                uint8_t* pathReg = pb + APO_PLUGIN_BLOCK_HEADER_BYTES +
+                                   APO_PLUGIN_SLOT_HEADER_BYTES;
+                uint8_t* idReg = pathReg + APO_PLUGIN_PATH_BYTES;
+                char pathU8[MAX_PATH * 3];
+                int pn = WideCharToMultiByte(CP_UTF8, 0, plugPath, -1,
+                                             pathU8, sizeof(pathU8),
+                                             nullptr, nullptr);
+                auto plugWrite = [&](auto&& body) {
+                    uint32_t seq = phdr->writeSeq;
+                    phdr->writeSeq = seq + 1;  // 奇：写入中
+                    body();
+                    MemoryBarrier();
+                    phdr->writeSeq = seq + 2;  // 偶：稳定
+                };
+                // 身份发布：CLAP / stage 0 / 全声道 / 不旁路 / gen 1。
+                plugWrite([&] {
+                    memset(pathReg, 0, APO_PLUGIN_PATH_BYTES);
+                    memcpy(pathReg, pathU8, (size_t)pn - 1);
+                    memset(idReg, 0, APO_PLUGIN_ID_BYTES);
+                    memcpy(idReg, "com.auradsp.probe.gain", 22);
+                    slotHdr->format = 2;
+                    slotHdr->insertStage = 0;
+                    slotHdr->channelMask = 0xFF;
+                    slotHdr->bypass = 0;
+                    slotHdr->loadGen = 1;
+                    slotHdr->stateGen = 0;
+                    slotHdr->pathBytes = (uint32_t)pn - 1;
+                    slotHdr->stateBytes = 0;
+                });
+                Sleep(800);  // worker 50ms 轮询 + 插件加载
+                if (tele) {
+                    char td[128];
+                    snprintf(td, sizeof(td),
+                             "ver=%lu loaded=%u gen=%lu calls=%lu",
+                             (unsigned long)tele->version,
+                             tele->plugins[0].loaded,
+                             (unsigned long)tele->plugins[0].appliedLoadGen,
+                             (unsigned long)tele->plugins[0].processCalls);
+                    check("telemetry v3: plugin loaded via block",
+                          tele->version >= 3 && tele->plugins[0].loaded == 1 &&
+                              tele->plugins[0].appliedLoadGen == 1 &&
+                              tele->plugins[0].fault == 0,
+                          td);
+                }
+                double plugRms = 0;
+                runBlocks(3 * kBlocks, plugRms);
+                snprintf(d, sizeof(d), "plug=%.4f unity=%.4f ratio=%.3f",
+                         plugRms, unityRms, plugRms / unityRms);
+                check("DECISIVE: probe gain 0.5 via APO plugin hosting",
+                      plugRms / unityRms > 0.4 && plugRms / unityRms < 0.6,
+                      d);
+                // 块内旁路（loadGen 不变）→ 回到 ~1.0。
+                plugWrite([&] { slotHdr->bypass = 1; });
+                Sleep(400);
+                double bypRms = 0;
+                runBlocks(4 * kBlocks, bypRms);
+                snprintf(d, sizeof(d), "bypassed=%.4f ratio=%.3f", bypRms,
+                         bypRms / unityRms);
+                check("block bypass restores unity",
+                      bypRms / unityRms > 0.85 && bypRms / unityRms < 1.18,
+                      d);
+                if (tele) {
+                    check("telemetry: bypass effective",
+                          tele->plugins[0].bypass == 1);
+                }
+                // 身份清空（gen 2）→ 卸载、telemetry loaded=0。
+                plugWrite([&] {
+                    slotHdr->format = 0;
+                    slotHdr->pathBytes = 0;
+                    slotHdr->loadGen = 2;
+                });
+                Sleep(500);
+                if (tele) {
+                    check("telemetry: plugin unloaded",
+                          tele->plugins[0].loaded == 0 &&
+                              tele->plugins[0].appliedLoadGen == 2);
+                }
+                UnmapViewOfFile(pb);
+            }
+            if (hPlug) CloseHandle(hPlug);
+        }
+    }
+
+    // INPLACE 变体：同址缓冲处理结果一致（增益已恢复 0dB）。
     {
         static float inplaceBuf[kFrames * 2];
         FillSine(inplaceBuf, kFrames, 0);
@@ -286,8 +435,8 @@ int main() {
         rt->APOProcess(1, props, 1, props);
         double r = Rms(inplaceBuf, kFrames * 2) / rmsIn;
         char d[96];
-        snprintf(d, sizeof(d), "inplace ratio=%.3f (expect ~0.2512)", r);
-        check("in-place processing", r > 0.17 && r < 0.34, d);
+        snprintf(d, sizeof(d), "inplace ratio=%.3f (expect ~1.0)", r);
+        check("in-place processing", r > 0.85 && r < 1.18, d);
     }
 
     check("UnlockForProcess", cfg->UnlockForProcess() == S_OK);

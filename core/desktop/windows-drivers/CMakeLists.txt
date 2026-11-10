@@ -185,6 +185,21 @@ add_executable(apo_selftest
 add_executable(apo_engine_test
     "${APO}/apo_engine_test.cpp"
 )
+
+# Part I Q2 冒烟资产：最小 CLAP 增益插件（与 Linux 门禁共用
+# test/smoke/probe_gain.c），供 apo_engine_test 插件段经插件块
+# 加载；产物须带 .clap 后缀（CLAP 驱动按扩展名识别）、与
+# apo_engine_test 同目录（out/<Config>）。
+add_library(apo_probe_gain MODULE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/smoke/probe_gain.c"
+)
+target_include_directories(apo_probe_gain PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/plugin-api/include")
+target_compile_options(apo_probe_gain PRIVATE /std:c11)
+set_target_properties(apo_probe_gain PROPERTIES
+    OUTPUT_NAME "probe_gain" SUFFIX ".clap" PREFIX ""
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
 target_link_libraries(apo_engine_test PRIVATE ole32 audiomediatypecrt)
 target_compile_options(apo_engine_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET apo_engine_test PROPERTY CXX_STANDARD 20)
