@@ -319,6 +319,7 @@ class ApoTelemetryReader {
   int _lastLoadStage = -1;
   String _lastPluginSig = '';
   int _tickCount = 0;
+  int _absentTicks = 0;
   bool _gaveUp = false;
 
   void start(void Function(Map<String, dynamic>) send) {
@@ -346,6 +347,7 @@ class ApoTelemetryReader {
     _lastSeat = -1;
     _lastFault = -1;
     _lastLoadStage = -1;
+    _absentTicks = 0;
     _lastPluginSig = '';
     _tickCount = 0;
   }
@@ -389,7 +391,21 @@ class ApoTelemetryReader {
   }
 
   void _tick(Timer _) {
-    if (_view == null && !_open()) return;
+    if (_view == null && !_open()) {
+      // 第五轮 S6：块长期缺席一次性落盘——回传块由 audiodg 内的
+      // APO 在流启动时创建；sysapo 已附加且有流经过仍缺席，基本
+      // 可断定装机的 AuraApo.dll 是真处理之前的旧版（只有心跳、
+      // 无 telemetry/参数块），与「引擎加载失败」（块在、seat 空）
+      // 一行分清（第五轮项 7 复盘：r2 日志里读者全程静默、seat
+      // 首 tick 日志缺失，反推块根本不存在）。
+      _absentTicks++;
+      if (_absentTicks == 50) {
+        dbgLog('apo telemetry: block absent for 5s '
+            '(APO not creating it — pre-engine APO build?)');
+      }
+      return;
+    }
+    _absentTicks = 0;
     final u32 = _u32!;
     final f32 = _f32!;
     // 字段序与 ApoShared.h 的 ApoTelemetryBlock 严格对应：
