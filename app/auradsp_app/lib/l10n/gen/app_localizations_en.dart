@@ -1378,6 +1378,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get apoAttached => 'Attached';
 
   @override
+  String apoAttachedOn(String name) {
+    return 'Attached on $name';
+  }
+
+  @override
   String get apoNotAttached => 'Not Attached';
 
   @override

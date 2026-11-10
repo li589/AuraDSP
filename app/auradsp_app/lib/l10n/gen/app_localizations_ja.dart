@@ -1293,6 +1293,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get apoAttached => 'アタッチ済み';
 
   @override
+  String apoAttachedOn(String name) {
+    return '$name に接続済み';
+  }
+
+  @override
   String get apoNotAttached => '未アタッチ';
 
   @override

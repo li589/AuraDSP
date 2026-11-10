@@ -837,9 +837,22 @@ extension AudioModesState on AppModel {
   /// [silent] = 后台探测（模型初始化时）：脚本缺失/查询失败不置错误，
   /// 避免用户未做任何操作就先攒下一条陈旧报错；UI 按钮与附加/卸载
   /// 后的复查走默认（非静默），失败必须有可见反馈（V-03 静默点）。
+  /// 已安装端点记录与目标（id / 完整名称）的精确匹配（细审
+  /// R-C M-3 口径）：旧口径双向子串在多端点机器上可误命中他
+  /// 端点、误报已附加；全等对现行 id 存值与旧版名称存值都兼容。
+  bool _apoEndpointMatches(Map<String, dynamic> e, String target) {
+    final short = e['short_guid']?.toString().toLowerCase() ?? '';
+    final name = e['DeviceName']?.toString().toLowerCase() ?? '';
+    final id = e['EndpointId']?.toString().toLowerCase() ?? '';
+    final t = target.toLowerCase();
+    return t.isNotEmpty && (t == short || t == name || t == id);
+  }
+
   Future<void> checkApoStatus({double timeout = 0.4, bool silent = false}) async {
     if (!PlatformProfile.supportsBridges) {
       apoAttached = false;
+      apoAnyAttached = false;
+      apoAttachedName = '';
       apoHeartbeatAlive = false;
       _notifyUi();
       return;
@@ -872,24 +885,21 @@ extension AudioModesState on AppModel {
                       .toList()
                 : <Map<String, dynamic>>[];
             apoInstalledEndpoints = installed;
+            // 任意端点附加真值（第六轮项 3）：与所选目标无关，
+            // 状态行与卸载目标据此，不让切目标把附加「藏丢」。
+            apoAnyAttached = installed.isNotEmpty;
+            apoAttachedName = installed.isEmpty
+                ? ''
+                : (installed.first['DeviceName']?.toString() ??
+                    installed.first['short_guid']?.toString() ??
+                    '');
 
             final target = config.apoTargetEndpoint;
             if (target.isEmpty) {
               apoAttached = installed.isNotEmpty;
             } else {
-              apoAttached = installed.any((e) {
-                final short = e['short_guid']?.toString().toLowerCase() ?? '';
-                final name = e['DeviceName']?.toString().toLowerCase() ?? '';
-                final id = e['EndpointId']?.toString().toLowerCase() ?? '';
-                final t = target.toLowerCase();
-                // 精确匹配（细审 R-C M-3）：旧口径双向子串，
-                // 存量配置里的端点「名称」在多端点机器上可误
-                // 命中他端点、误报已附加。新口径只认全等——
-                // 存值来源是下拉的完整 id（现行）或完整名称
-                // （旧版），全等对两者都兼容。
-                return t.isNotEmpty &&
-                    (t == short || t == name || t == id);
-              });
+              apoAttached =
+                  installed.any((e) => _apoEndpointMatches(e, target));
             }
 
             final hb = data['heartbeat'] as Map<String, dynamic>?;
@@ -1014,9 +1024,22 @@ extension AudioModesState on AppModel {
         return false;
       }
 
-      final target = (endpointNameOrId != null && endpointNameOrId.isNotEmpty)
+      // 卸载对象 = 实际已附加的端点，不是下拉的当前选择（第六
+      // 轮项 3 定罪）：装在 A、切到 B 点卸载，旧实现对未装的
+      // B 执行、工具报「未找到匹配的已安装端点」，且状态行按
+      // B 推导把 A 的附加显示成「未附加」。先静默刷新附加清
+      // 单，清单非空时以其首个端点为准；显式参数仍最高优先。
+      await checkApoStatus(silent: true);
+      var target = (endpointNameOrId != null && endpointNameOrId.isNotEmpty)
           ? endpointNameOrId
           : config.apoTargetEndpoint;
+      if ((endpointNameOrId == null || endpointNameOrId.isEmpty) &&
+          apoInstalledEndpoints.isNotEmpty) {
+        final first = apoInstalledEndpoints.first;
+        target = first['EndpointId']?.toString() ??
+            first['short_guid']?.toString() ??
+            target;
+      }
       final res = await windowsSystem.apoUninstall(
         script,
         target: target,
@@ -1033,10 +1056,13 @@ extension AudioModesState on AppModel {
       // 裁定与 attach 对称（细审 R-C M-1 的 App 侧一半）：
       // 此前 detach 完全不看复查结果，端点级还原失败时假
       // 报成功。现口径：工具自报（或退出码）成功且复查确
-      // 认已摘除，才算卸载完成。
-      final ok = (res.toolOk ?? (res.exitCode == 0)) && !apoAttached;
+      // 认【被卸端点】已摘除，才算卸载完成（不用所选目标的
+      // apoAttached——选择与被卸端点可能不是同一个）。
+      final stillThere =
+          apoInstalledEndpoints.any((e) => _apoEndpointMatches(e, target));
+      final ok = (res.toolOk ?? (res.exitCode == 0)) && !stillThere;
       if (!ok && lastApoError == null) {
-        lastApoError = apoAttached
+        lastApoError = stillThere
             ? 'System APO 卸载后复查仍显示已附加，请重试或检查工具返回明细'
             : 'System APO 卸载未完成，请确认在 UAC 提权弹窗中选择“是”';
       }

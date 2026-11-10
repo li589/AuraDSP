@@ -476,7 +476,13 @@ class AppModel extends ChangeNotifier {
   // ASIO 驱动注册状态 (AuraDSP Virtual ASIO Driver)
   bool asioDriverInstalled = false;
   // System APO 挂载状态与运行时遥测
+  // apoAttached = 当前所选目标端点的附加态（附加裁定/引擎注记用）；
+  // apoAnyAttached/apoAttachedName = 是否有任意端点已附加及其名
+  // 称（状态行真值，第六轮项 3：装在 A 切到 B 时 A 的附加不得被
+  // 「未附加」藏起，卸载亦应对实际附加端点执行）。
   bool apoAttached = false;
+  bool apoAnyAttached = false;
+  String apoAttachedName = '';
   // APO 真处理 telemetry（立项 P3）：isolate 读者经 apotelemetry
   // 事件回填——座位引擎是否在位 / 是否故障闩锁 / 引擎率与声道 /
   // 已应用参数项次。仅 sysapo 模式下有更新，其余模式保持复位值。

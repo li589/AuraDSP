@@ -1275,6 +1275,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get apoAttached => '已附加';
 
   @override
+  String apoAttachedOn(String name) {
+    return '已附加（$name）';
+  }
+
+  @override
   String get apoNotAttached => '未附加';
 
   @override

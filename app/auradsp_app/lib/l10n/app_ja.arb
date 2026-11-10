@@ -470,6 +470,14 @@
   "apoTargetEndpointHint": "AuraDSP システム APO エフェクトをアタッチする Windows オーディオエンドポイントを選択",
   "apoStatus": "APO 状態",
   "apoAttached": "アタッチ済み",
+  "apoAttachedOn": "{name} に接続済み",
+  "@apoAttachedOn": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "apoNotAttached": "未アタッチ",
   "apoActionAttach": "APO をアタッチ",
   "apoActionDetach": "APO を解除",

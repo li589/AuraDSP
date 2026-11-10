@@ -603,6 +603,14 @@
   "apoTargetEndpointHint": "选择要挂载 AuraDSP 系统级 APO 处理的音频端点",
   "apoStatus": "APO 挂载状态",
   "apoAttached": "已附加",
+  "apoAttachedOn": "已附加（{name}）",
+  "@apoAttachedOn": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "apoNotAttached": "未附加",
   "apoActionAttach": "一键附加",
   "apoActionDetach": "一键卸载",

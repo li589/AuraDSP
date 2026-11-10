@@ -246,6 +246,28 @@ void main() {
     });
   });
 
+  group('第六轮项 3：APO 附加真值与卸载对象', () {
+    test('状态含任意端点附加真值，卸载对实际附加端点执行', () {
+      // checkApoStatus 维护与所选目标无关的真值字段
+      expect(state, contains('apoAnyAttached = installed.isNotEmpty'));
+      expect(state, contains('bool _apoEndpointMatches('));
+      // detach 先刷新清单、非空时以首个已附加端点为卸载对象，
+      // 裁定按被卸端点复核（不用所选目标的 apoAttached）
+      final d = state.indexOf('Future<bool> detachSystemApo');
+      final seg = state.substring(d, d + 4200);
+      expect(seg, contains('apoInstalledEndpoints.isNotEmpty'));
+      expect(seg, contains('stillThere'));
+      expect(seg, isNot(contains('&& !apoAttached')));
+    });
+
+    test('面板状态行三态：目标附加 / 他端点具名 / 未附加', () {
+      final s = sections.indexOf('class _SystemApoPanel');
+      final seg = sections.substring(s, s + 9000);
+      expect(seg, contains('l.apoAttachedOn(model.apoAttachedName)'));
+      expect(seg, contains('model.apoAnyAttached'));
+    });
+  });
+
   group('V-02 刷新链守卫（F0）', () {
     test('refreshAudioDevices 有埋点且工具缺失显式置错', () {
       expect(state, contains("dbgLog('devices.refresh: start', sync: true)"));

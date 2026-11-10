@@ -2446,6 +2446,12 @@ abstract class AppLocalizations {
   /// **'已附加'**
   String get apoAttached;
 
+  /// No description provided for @apoAttachedOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'已附加（{name}）'**
+  String apoAttachedOn(String name);
+
   /// No description provided for @apoNotAttached.
   ///
   /// In zh, this message translates to:

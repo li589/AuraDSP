@@ -495,7 +495,7 @@ class _SystemApoPanel extends StatelessWidget {
         // sysapo 模式且已附加时按 telemetry 回传呈现真实状态——
         // 处理中（accent）/ 故障已退回直通（warning）/ 等待就绪
         // （dim）。状态来自 audiodg 内座位实例的回传块，非推测。
-        if (model.audioMode == 'sysapo' && model.apoAttached)
+        if (model.audioMode == 'sysapo' && model.apoAnyAttached)
           Padding(
             padding: const EdgeInsets.only(top: 2, bottom: 2),
             child: Text(apoNoteText,
@@ -619,11 +619,18 @@ class _SystemApoPanel extends StatelessWidget {
                 runSpacing: 4,
                 children: [
                   Text(
-                    model.apoAttached ? l.apoAttached : l.apoNotAttached,
+                    // 状态行报真值（第六轮项 3）：目标已附加 /
+                    // 已附加在他端点（具名，不被当前选择藏起）/
+                    // 未附加。
+                    model.apoAttached
+                        ? l.apoAttached
+                        : (model.apoAnyAttached
+                            ? l.apoAttachedOn(model.apoAttachedName)
+                            : l.apoNotAttached),
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: model.apoAttached ? p.accent : p.textDim,
+                      color: model.apoAnyAttached ? p.accent : p.textDim,
                     ),
                   ),
                   if (model.apoHeartbeatAlive)
@@ -647,7 +654,7 @@ class _SystemApoPanel extends StatelessWidget {
                         ],
                       ),
                     )
-                  else if (model.apoAttached)
+                  else if (model.apoAnyAttached)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(

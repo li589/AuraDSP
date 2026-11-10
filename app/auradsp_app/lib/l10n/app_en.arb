@@ -470,6 +470,14 @@
   "apoTargetEndpointHint": "Select the Windows audio endpoint to attach AuraDSP System APO effects",
   "apoStatus": "APO Status",
   "apoAttached": "Attached",
+  "apoAttachedOn": "Attached on {name}",
+  "@apoAttachedOn": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "apoNotAttached": "Not Attached",
   "apoActionAttach": "Attach APO",
   "apoActionDetach": "Detach APO",
