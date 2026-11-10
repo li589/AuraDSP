@@ -1180,6 +1180,8 @@ class AppModel extends ChangeNotifier {
     // F-3：启动即同步 VB 多总线标志（配置里已是 vbcallback 时，-1 路
     // 从一开始就不是合法路——不能等首次模式切换才生效）。
     pluginManager.setVbMultiBus(audioMode == 'vbcallback');
+    pluginManager
+        .setApoShadow(modeCaps.pluginProcessing == PluginProcessing.apo);
     pluginManager.addListener(notifyListeners);
     // 2026-10-28：扫描目录单源在 config.pluginScanDirs；该方法同时
     // 补内置条目、首次播种平台目录并同步参与扫描的目录集。

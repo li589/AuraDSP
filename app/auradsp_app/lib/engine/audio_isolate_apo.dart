@@ -720,6 +720,25 @@ class ApoPluginPublisher {
     if (wrote) dbgLog('apo plugin publisher: synced');
   }
 
+  /// 故障重试（Q3）：身份不变也推进 loadGen 并重写身份区，
+  /// APO worker 见代次变化即重载该槽（成功清闩锁、失败维持）。
+  void forceReload(int slot) {
+    if (!active || slot < 0 || slot >= kApoPluginSlots) return;
+    if (!_ensure()) return;
+    final p = _pub[slot];
+    if (!p.occupied) return;
+    _beginWrite();
+    p.loadGen += 1;
+    final base = apoPluginSlotOffset(slot);
+    _writeUtf8Region(
+        base + kApoPluginSlotPathOffset, kApoPluginPathBytes, p.path);
+    _writeUtf8Region(
+        base + kApoPluginSlotIdOffset, kApoPluginIdBytes, p.id);
+    _writeSlotHeader(slot);
+    _endWrite();
+    dbgLog('apo plugin publisher: force reload slot=$slot gen=${p.loadGen}');
+  }
+
   /// 状态发布（D3 影子链收获点，Q3 接入）：字节写入状态区并
   /// 推进 stateGen。超限（>512KiB）拒绝并返回 false——该槽在
   /// APO 侧保持旧状态，UI 侧由 Q3 按「状态过大」提示。

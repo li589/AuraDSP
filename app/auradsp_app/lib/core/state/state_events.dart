@@ -1131,11 +1131,16 @@ extension StateEvents on AppModel {
         _notifyUi();
         break;
       case 'pluginSlotStatus':
-        pluginManager.onPluginSlotStatus(
-          raw['slot'] as int,
-          raw['status'],
-          (raw['stage'] as num).toInt(),
-        );
+        // sysapo 下本地句柄只是影子：其处理状态不作数（APO
+        // telemetry 才是真相，见 apoPluginStatus）；编辑器打开
+        // 态是影子的真实状态，仍照常同步（P1-1 路由锁定）。
+        if (modeCaps.pluginProcessing != PluginProcessing.apo) {
+          pluginManager.onPluginSlotStatus(
+            raw['slot'] as int,
+            raw['status'],
+            (raw['stage'] as num).toInt(),
+          );
+        }
         // P1-1 路由锁定轮询兜底：编辑器打开态随 status 回执同步。
         final eoSlot = (raw['slot'] as num?)?.toInt() ?? 0;
         if (raw['editorOpen'] is bool) {
@@ -1145,6 +1150,31 @@ extension StateEvents on AppModel {
           );
         }
         _notifyUi();
+        break;
+      case 'apoPluginStatus':
+        {
+          // Part I Q2/Q3（D5）：APO 侧槽状态（telemetry 合成）——
+          // 合并进槽状态并对新故障边沿发一次性通知（文案口径与
+          // 故障呈现裁定一致：已自动旁路、点击旁路重试）。
+          final edges = pluginManager.onApoPluginStatuses(
+              (raw['slots'] as List?) ?? const []);
+          for (final e in edges) {
+            postNotice(
+                '插件故障（槽 ${e.slot + 1}：'
+                '${pluginFaultCategoryZh(e.category)}），已自动旁路；'
+                '点击该槽的旁路可重试加载',
+                level: NoticeLevel.warning);
+          }
+          _notifyUi();
+        }
+        break;
+      case 'apoPluginStateResult':
+        // 影子状态收获结果：仅超限值得打扰用户（其余失败已在
+        // isolate 日志留痕，状态保持 APO 侧旧值不致命）。
+        if (raw['tooLarge'] == true) {
+          postNotice('插件状态超过 512KB 上限，未能同步到 System APO',
+              level: NoticeLevel.warning);
+        }
         break;
       case 'pluginSlotInsertStage':
         pluginManager.onPluginSlotInsertStage(

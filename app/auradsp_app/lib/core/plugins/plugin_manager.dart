@@ -59,6 +59,15 @@ class PluginManager extends ChangeNotifier {
   bool get vbMultiBus => _vbMultiBus;
   void setVbMultiBus(bool on) => _vbMultiBus = on;
 
+  /// sysapo 影子链模式（ModeCaps.pluginProcessing == apo 时为
+  /// 真）：本地句柄只作编辑器影子（不发声），槽状态以 APO
+  /// telemetry 为准（onApoPluginStatuses 合并），编辑器关闭
+  /// 时收获影子状态发布到 APO。由 AppModel 随模式同步（与
+  /// setVbMultiBus 同点位）。
+  bool _apoShadow = false;
+  bool get apoShadow => _apoShadow;
+  void setApoShadow(bool on) => _apoShadow = on;
+
   List<PluginMetadata> _plugins = [];
   final List<PluginHostStatus> _slotStatuses = List.filled(
     kMaxSlots,

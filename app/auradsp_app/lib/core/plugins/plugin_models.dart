@@ -279,6 +279,27 @@ class PluginHostStatus {
   };
 }
 
+/// 故障类别 token → 用户文案（引擎 PluginFaultCategory 的
+/// name 串；未知 token 回退「加载失败」不空白）。
+String pluginFaultCategoryZh(String category) {
+  switch (category) {
+    case 'not_found':
+      return '找不到插件文件';
+    case 'unreadable':
+      return '插件文件不可读';
+    case 'arch_mismatch':
+      return '插件架构不匹配';
+    case 'init_crash':
+      return '插件初始化崩溃';
+    case 'process_crash':
+      return '插件处理崩溃';
+    case 'entry_missing':
+      return '插件入口缺失';
+    default:
+      return '插件加载失败';
+  }
+}
+
 /// 插入阶段定义与友好描述
 abstract final class PluginInsertStage {
   static const preDsp = 0;

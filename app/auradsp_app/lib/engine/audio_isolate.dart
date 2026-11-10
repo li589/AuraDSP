@@ -1450,19 +1450,47 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             apoPluginPublisher.active = false;
           }
           break;
-        case 'apoPluginState':
+        case 'apoPluginReload':
           {
-            // Part I Q2/D3：影子链状态收获（Q3 发起）→ 插件块状态区。
+            // Part I Q3：故障槽点击重试——发布器推进 loadGen，
+            // APO worker 据此重载该槽（结果经 telemetry 回传）。
             final slot = (m['slot'] as num?)?.toInt() ?? 0;
-            final b64 = (m['state'] as String?) ?? '';
-            try {
-              final bytes = base64Decode(b64);
-              final ok = apoPluginPublisher.publishSlotState(slot, bytes);
-              send({'evt': 'apoPluginStateResult', 'slot': slot, 'ok': ok});
-            } catch (e) {
-              dbgLog('apo plugin state publish failed: $e');
-              send({'evt': 'apoPluginStateResult', 'slot': slot, 'ok': false});
+            apoPluginPublisher.forceReload(slot);
+            break;
+          }
+        case 'apoHarvestState':
+          {
+            // Part I Q3/D3：影子链状态收获——影子 savePreset 到
+            // 本进程临时文件，读回字节经发布器进插件块状态区
+            // （取代 Q2 的 base64 命令口径：全程不出 isolate）。
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final l = lib;
+            final h = handle;
+            var ok = false;
+            var tooLarge = false;
+            if (l != null && h != null && apoPluginPublisher.active) {
+              try {
+                final tmp = File('${Directory.systemTemp.path}'
+                    '/auradsp_apo_harvest_$slot.bin');
+                final rc = AuraDspLib.pluginSlotSavePresetWrap(
+                    l, h, slot, tmp.path);
+                if (rc == 1 && tmp.existsSync()) {
+                  final bytes = tmp.readAsBytesSync();
+                  tooLarge = bytes.length > kApoPluginStateBytes;
+                  if (!tooLarge) {
+                    ok = apoPluginPublisher.publishSlotState(slot, bytes);
+                  }
+                }
+              } catch (e) {
+                dbgLog('apo harvest failed slot=$slot: $e');
+              }
             }
+            send({
+              'evt': 'apoPluginStateResult',
+              'slot': slot,
+              'ok': ok,
+              'tooLarge': tooLarge,
+            });
             break;
           }
         case 'source51':

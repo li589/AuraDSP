@@ -71,6 +71,8 @@ extension AudioModesState on AppModel {
     // （用旧语义落盘）之后、重挂恢复（异步事件）之前——恢复路径据此
     // 决定 -1 路是否合法。
     pluginManager.setVbMultiBus(isVb);
+    pluginManager.setApoShadow(
+        AudioModes.capsFor(valid).pluginProcessing == PluginProcessing.apo);
     ConfigManager.save(config);
     if (wasVb != isVb) {
       // 进桥先推掩码（isolate 记 session 变量，start 时同步进桥；桥未起时仅记录）。
