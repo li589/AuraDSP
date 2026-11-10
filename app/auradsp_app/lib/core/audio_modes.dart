@@ -196,6 +196,90 @@ abstract final class AudioModes {
     }
     return outputWasapi;
   }
+
+  /// 模式能力查表（Q0-7 定版）：sysapo 的 fileEffects/mcScript
+  /// 为 false 是已上线口径（文件型效果自动关闭、MC 脚本不入
+  /// 参数块）的能力化重述，非新限制。未知 id 回退本地链缺省。
+  static ModeCaps capsFor(String mode) {
+    switch (mode) {
+      case 'sysapo':
+        return const ModeCaps(
+          pluginProcessing: PluginProcessing.apo,
+          pluginEditors: PluginEditors.shadowInstance,
+          pluginLiveMeters: false,
+          routeSelector: false,
+          fileEffects: false,
+          mcScript: false,
+          chainVizLive: true,
+        );
+      case 'vbcallback':
+      case 'voicemeeter_api':
+        return const ModeCaps(
+          pluginProcessing: PluginProcessing.local,
+          pluginEditors: PluginEditors.liveInstance,
+          pluginLiveMeters: true,
+          routeSelector: true,
+          fileEffects: true,
+          mcScript: true,
+          chainVizLive: true,
+        );
+      default:
+        return ModeCaps.localDefault;
+    }
+  }
+}
+
+/// 插件处理位置（ModeCaps.pluginProcessing）。
+enum PluginProcessing { local, apo, none }
+
+/// 插件编辑器形态（ModeCaps.pluginEditors）：liveInstance =
+/// 编辑器开在发声实例上；shadowInstance = 编辑器开在 App 侧
+/// 影子实例上（发声在 APO 内），状态经收获/发布同步。
+enum PluginEditors { liveInstance, shadowInstance, none }
+
+/// 模式能力模型（Part I Q0-7 定版，2026-11-10）：功能层只问
+/// 能力、不再写模式字符串判断。随模式变化的能力才进本表；
+/// 故障旁路的呈现与恢复语义与模式无关、不进本表（计划书
+/// I.4——那是槽状态 fault 字段在插件栈一处的决定）。
+class ModeCaps {
+  final PluginProcessing pluginProcessing;
+  final PluginEditors pluginEditors;
+
+  /// 插件槽实时表头（inRms/outRms）是否有实时来源。
+  final bool pluginLiveMeters;
+
+  /// VB 路线选择类 UI（插件页路线下拉、频谱仪总线行）。
+  final bool routeSelector;
+
+  /// 依赖外部文件的效果（卷积 IR / DDC）是否可用。
+  final bool fileEffects;
+
+  /// 多声道 EEL 脚本级是否可用。
+  final bool mcScript;
+
+  /// 处理链可视化是否有实时来源。
+  final bool chainVizLive;
+
+  const ModeCaps({
+    required this.pluginProcessing,
+    required this.pluginEditors,
+    required this.pluginLiveMeters,
+    required this.routeSelector,
+    required this.fileEffects,
+    required this.mcScript,
+    required this.chainVizLive,
+  });
+
+  /// 本地链缺省能力（未知/新模式的回退：与历史行为一致）。
+  static const ModeCaps localDefault = ModeCaps(
+    pluginProcessing: PluginProcessing.local,
+    pluginEditors: PluginEditors.liveInstance,
+    pluginLiveMeters: true,
+    routeSelector: false,
+    fileEffects: true,
+    mcScript: true,
+    chainVizLive: true,
+  );
 }
 
 /// 管线链路种类（composeChain 的产出）：vaio/asio 为桥链，

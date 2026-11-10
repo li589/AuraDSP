@@ -112,9 +112,12 @@ extension StateCore on AppModel {
     return current;
   }
 
+  /// 当前模式能力（Part I ModeCaps）：功能层只问能力。
+  ModeCaps get modeCaps => AudioModes.capsFor(audioMode);
+
   /// 强类型通用参数设值
   void setParam<T>(ParamSpec<T> spec, T value, {bool notify = true}) {
-    if (audioMode == 'sysapo' &&
+    if (!modeCaps.fileEffects &&
         kApoFileEffectEnables.contains(spec.id) &&
         (value == true || (value is num && value != 0))) {
       postNotice('该效果依赖外部文件（卷积 IR / DDC 文件），在 System APO '

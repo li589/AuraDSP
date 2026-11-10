@@ -452,7 +452,9 @@ class _ActivePluginHero extends StatelessWidget {
     // v3.3 按路插件 + A/B 预设：下拉选路 = 打开该路引擎的编辑器 + 该路的
     // A/B 预设视图。选项源 = vbEffectiveRouteMask（通道开且插件勾）。
     // 「全部」选项已撤除（统一调音用「预设继承」表达）。
-    final isVb = model.audioMode == 'vbcallback';
+    // 路线类 UI 与 VB 路由语义统一挂 ModeCaps.routeSelector
+    // （Part I Q3；sysapo 下恒不出现——测试钉死）。
+    final isVb = model.modeCaps.routeSelector;
     final routeMask = model.vbEffectiveRouteMask;
     final editorGroup = model.vbPluginEditorGroup;
     final routeNames = vbBusNames(

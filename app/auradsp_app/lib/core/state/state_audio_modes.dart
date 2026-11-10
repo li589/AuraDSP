@@ -15,6 +15,10 @@ extension AudioModesState on AppModel {
   /// 同步）并通知一次；离开 sysapo 不自动恢复，由用户自行重开。
   /// setParam 侧另有开启拦截（见 state_core.setParam）。
   void applyApoFileEffectPolicy() {
+    // ModeCaps 口径：仅在 fileEffects 不可用的模式下执行本策略
+    // （当前只有 sysapo）；能力可用时整段为空操作，调用方无需
+    // 再写模式判断。
+    if (modeCaps.fileEffects) return;
     var turnedOff = false;
     for (final id in kApoFileEffectEnables) {
       final v = getParamById(id);

@@ -212,4 +212,52 @@ void main() {
           virtualSinkPresent: true), 'virtual-ready');
     });
   });
+  group('ModeCaps（Part I Q0-7 定版）', () {
+    test('sysapo: apo processing + shadow editors + no file/mc', () {
+      final c = AudioModes.capsFor('sysapo');
+      expect(c.pluginProcessing, PluginProcessing.apo);
+      expect(c.pluginEditors, PluginEditors.shadowInstance);
+      expect(c.pluginLiveMeters, isFalse);
+      expect(c.routeSelector, isFalse);
+      expect(c.fileEffects, isFalse);
+      expect(c.mcScript, isFalse);
+      expect(c.chainVizLive, isTrue);
+    });
+
+    test('vbcallback: local + route selector on（VB 下拉唯一来源）', () {
+      final c = AudioModes.capsFor('vbcallback');
+      expect(c.pluginProcessing, PluginProcessing.local);
+      expect(c.pluginEditors, PluginEditors.liveInstance);
+      expect(c.routeSelector, isTrue);
+      expect(c.fileEffects, isTrue);
+      expect(c.mcScript, isTrue);
+      // 存量别名与归一化 id 同表。
+      expect(AudioModes.capsFor('voicemeeter_api').routeSelector, isTrue);
+    });
+
+    test('vaio/asio/linux trio: local default, no route selector', () {
+      for (final m in ['vaio', 'asio', 'system', 'virtual', 'driver']) {
+        final c = AudioModes.capsFor(m);
+        expect(c.pluginProcessing, PluginProcessing.local, reason: m);
+        expect(c.pluginEditors, PluginEditors.liveInstance, reason: m);
+        expect(c.pluginLiveMeters, isTrue, reason: m);
+        expect(c.routeSelector, isFalse, reason: m);
+        expect(c.fileEffects, isTrue, reason: m);
+        expect(c.mcScript, isTrue, reason: m);
+        expect(c.chainVizLive, isTrue, reason: m);
+      }
+    });
+
+    test('sysapo 下路线选择器恒关（VB 下拉不出现——钉死）', () {
+      // plugins_hero 与频谱仪的 VB 区块都只看 routeSelector；
+      // sysapo 为 false 即结构性不渲染，与模式字符串无关。
+      expect(AudioModes.capsFor('sysapo').routeSelector, isFalse);
+    });
+
+    test('unknown mode falls back to local default', () {
+      final c = AudioModes.capsFor('nope');
+      expect(c.pluginProcessing, PluginProcessing.local);
+      expect(c.fileEffects, isTrue);
+    });
+  });
 }
