@@ -1039,7 +1039,7 @@ extension StateEvents on AppModel {
         // 有而 settled 缺失 = 死在随后的重建帧；两点全有 = 死因
         // 与本次 detect 往返无关（另查并行原生面）。
         dbgLog('vaiodetect: ui handled', sync: true);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
           dbgLog('vaiodetect: frame settled', sync: true);
         });
         break;

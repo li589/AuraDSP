@@ -16,6 +16,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color, Locale;
+import 'package:flutter/scheduler.dart';
 
 import '../engine/audio_isolate.dart';
 import '../engine/audio_out/alsa_ffi.dart' as alsa_ffi;
