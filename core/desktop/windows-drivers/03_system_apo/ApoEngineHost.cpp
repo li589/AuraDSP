@@ -675,8 +675,10 @@ void ApoEngineHost::ApplyPlugins() {
         // telemetry v3 插件段：以引擎槽状态 JSON 为真相回填。
         if (tele_ && fnSlotStatus_) {
             statusBuf[0] = '\0';
+            // 注意：slot_get_status 返回 JSON 长度（>0 为成功），
+            // 不是其余 slot ABI 的 1/0 口径。
             if (fnSlotStatus_(engine_, (int)slot, statusBuf,
-                              sizeof(statusBuf)) == 1) {
+                              sizeof(statusBuf)) > 0) {
                 auto& t = tele_->plugins[slot];
                 char cat[32];
                 JsonStr(statusBuf, "faultCategory", cat, sizeof(cat));
