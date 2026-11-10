@@ -149,6 +149,22 @@ jobs:
           AURADSP_DLL: core/desktop/windows/out/Release/plugin_host_x64.exe
         run: python test/smoke/smoke_release_strings.py
 
+  # J5b APO 家族构建 --------------------------------------------------
+  build-apo-windows:
+    name: J5b build-apo-windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      # 驱动套件全量构建需要 Steinberg ASIO SDK（stock runner 没有）；
+      # APO 家族（AuraApo + 引擎宿主 / apo_config / apo_selftest 等）
+      # 以 AURADSP_DRIVERS_APO_ONLY 独立配置构建，给这部分此前只在
+      # 用户本机编译的 C++ 以真实 MSVC 覆盖。引擎纪律版 DLL 本体
+      # 由 J5 构建并过 PE 纪律门（smoke_apo_engine_binary）。
+      - name: Configure (APO only)
+        run: cmake -S core/desktop/windows-drivers -B build/windows/apo-only -G "Visual Studio 18 2026" -A x64 -DAURADSP_DRIVERS_APO_ONLY=ON
+      - name: Build
+        run: cmake --build build/windows/apo-only --config Release
+
   # J6 Dart 测试 --------------------------------------------------------
   dart-tests:
     name: J6 dart-tests

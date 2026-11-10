@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 project(auravm_drivers LANGUAGES C CXX)
 
+# APO-only 构建（2026-11-10 立项 P2）：只建 03_system_apo 家族，
+# 跳过需要 Steinberg ASIO SDK 的 04/桥/VAIO 段——供无 SDK 的 CI
+# 给 AuraApo/apo_config 与 APO 冒烟宿主做编译（及运行）覆盖；
+# 本机全量构建默认 OFF，行为不变。
+option(AURADSP_DRIVERS_APO_ONLY "Build only the System APO family (no ASIO SDK needed)" OFF)
+
 # M3（2026-10-29）：产物路径保持 out/<Config>/（verify_dll_copies.py、Flutter runner
 # 同步与桥 smoke 依赖它）；构建中间文件由根工程统一到 build/<platform>/<arch>/。
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
@@ -18,6 +24,7 @@ set(VMBRIDGE "${BRIDGEDIR}/vm_bridge")
 set(ASIOBRIDGE "${BRIDGEDIR}/asio_bridge")
 set(VAIOBRIDGE "${BRIDGEDIR}/vaio_bridge")
 
+if(NOT AURADSP_DRIVERS_APO_ONLY)
 # ---- 04 ASIO 宿主（Steinberg ASIO SDK 2.3.4，GPLv3 路线）----
 # SDK 为外部工具链（同 NDK/Flutter SDK 铁律）：不 vendor、按路径引用。
 # 本机默认路径见 04_asio_client/README.md；换机/升级改这个 cache 变量即可。
@@ -128,6 +135,8 @@ target_compile_options(silence_gate_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET silence_gate_test PROPERTY CXX_STANDARD 20)
 set_property(TARGET silence_gate_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
+endif()  # AURADSP_DRIVERS_APO_ONLY（04/VM 段）
+
 add_library(auraapo_inspect STATIC
     "${APO}/ApoInspector.cpp"
 )
@@ -184,11 +193,15 @@ set_property(TARGET set_default_endpoint PROPERTY MSVC_RUNTIME_LIBRARY "MultiThr
 # RegisterAPO 在 audioeng.lib；ConvertStringSecurityDescriptor 在 advapi32）。
 add_library(AuraApo SHARED
     "${APO}/AuraApo.cpp"
+    "${APO}/ApoEngineHost.cpp"
     "${APO}/ApoClassFactory.cpp"
     "${APO}/AuraApoMain.cpp"
     "${APO}/AuraApo.def"
 )
-target_include_directories(AuraApo PRIVATE "${APO}")
+target_include_directories(AuraApo PRIVATE "${APO}"
+    # ApoEngineHost 仅借 auradsp_engine.h 的 ABI 类型/签名（符号
+    # 运行期解析，不静态链接引擎——解耦铁律不变）。
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
 # /guard:cf 必需：audiodg 全 CFG instrumented，无 CFG 位图的 APO 会在首个
 # 被保护的虚调用点 fail-fast（0xC0000409/0xA，2026-10-14 dump 定罪）。
 target_compile_options(AuraApo PRIVATE /utf-8 /W1 /EHsc /guard:cf)
@@ -244,6 +257,7 @@ set_property(TARGET ases_probe PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
 # 常驻 VB 桥（app isolate 经 FFI 调用；VmRemoteLoader 编进本 DLL，
 # 复用 02 自省逻辑；泵回调核心走 VmPumpCore.h，与 vm_pump_test 同源）。
+if(NOT AURADSP_DRIVERS_APO_ONLY)
 add_library(auravm_bridge SHARED
     "${VMBRIDGE}/VmBridge.cpp"
     "${VMCLIENT}/VmRemoteLoader.cpp"
@@ -318,5 +332,4 @@ target_link_libraries(auraasio_driver PRIVATE ole32 advapi32 winmm avrt version)
 # build_windows.ps1 一次构建（cmake --build --preset ... --target auradsp_bridges）。
 add_custom_target(auradsp_bridges
     DEPENDS auravm_bridge auravaio_bridge auraasio_bridge)
-
-
+endif()  # AURADSP_DRIVERS_APO_ONLY（桥/驱动段）
