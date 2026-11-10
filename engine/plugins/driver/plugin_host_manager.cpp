@@ -14,9 +14,11 @@
 #include <excpt.h>
 #endif
 
+#include "platform/port/module.h"
 #include "platform/port/time.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <sstream>
@@ -116,7 +118,7 @@ int processSlotGuarded(PluginHostManager::PluginSlot& s,
  *
  * 交错传输路径（remote 代理分支）此前直接调用 processInterleaved 且无任何
  * 崩溃隔离：一次插件抛出即直杀音频线程。此处补齐与 processSlot 同构的
- * 崩溃恢复：bypassed.store(true) + resetTelemetryGateSlot。 */
+ * 崩溃恢复（Q1 起为故障闩锁 latchSlotFault，闩锁内置遥测门复位）。 */
 int processInterleavedGuarded(PluginHostManager::PluginSlot& s,
                                float* interleaved, uint32_t numFrames,
                                uint32_t channels, uint32_t mask) {
@@ -134,6 +136,63 @@ int processInterleavedGuarded(PluginHostManager::PluginSlot& s,
     } catch (...) {
         return 1;
     }
+#endif
+}
+
+/* Q1（Part I D4）：加载/激活的异常隔离，镜像 processSlotGuarded。
+ * 参数全为指针/POD（MSVC C2712：本函数不得有需展开的局部对象，
+ * std::string 由调用方构造后以指针传入）。返回 0=成功，
+ * 1=load 返回 false，2=activate 返回 false，3=捕获到异常。 */
+int loadActivateGuarded(IPluginInstance* inst, const std::string* path,
+                        const std::string* pluginId,
+                        const PluginMetadata* seed, double sampleRate,
+                        uint32_t maxBlockSize) {
+#if defined(_MSC_VER)
+    __try {
+        if (!inst->load(*path, *pluginId, seed)) return 1;
+        if (!inst->activate(sampleRate, maxBlockSize)) return 2;
+        return 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 3;
+    }
+#else
+    try {
+        if (!inst->load(*path, *pluginId, seed)) return 1;
+        if (!inst->activate(sampleRate, maxBlockSize)) return 2;
+        return 0;
+    } catch (...) {
+        return 3;
+    }
+#endif
+}
+
+/* Q0-1 加载分类：实例 load 返回 false 后，在同一控制线程就地读
+ * 平台模块端口的最近错误并映射到 PluginFaultCategory。Windows
+ * 用数值码；POSIX 的 dlopen errno 不可靠，按 port 头契约改读
+ * dlerror 快照文本判读。判不出的一律 LoadFailed，不臆测；
+ * 本映射是尽力而为（load 内部若在模块打开后又做过其他系统
+ * 调用，错误码可能已被覆盖），类别缺失不影响闩锁本身成立。 */
+int classifyLoadFailure() {
+#if defined(_WIN32)
+    switch (auradsp::platform::module_last_error()) {
+        case 193: return static_cast<int>(PluginFaultCategory::ArchMismatch); // ERROR_BAD_EXE_FORMAT
+        case 5:   return static_cast<int>(PluginFaultCategory::Unreadable);   // ERROR_ACCESS_DENIED
+        case 2:   // ERROR_FILE_NOT_FOUND
+        case 3:   // ERROR_PATH_NOT_FOUND
+            return static_cast<int>(PluginFaultCategory::NotFound);
+        default:  return static_cast<int>(PluginFaultCategory::LoadFailed);
+    }
+#else
+    const char* text = auradsp::platform::module_last_error_text();
+    std::string t = text ? text : "";
+    for (char& c : t) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (t.find("wrong elf class") != std::string::npos)
+        return static_cast<int>(PluginFaultCategory::ArchMismatch);
+    if (t.find("permission denied") != std::string::npos)
+        return static_cast<int>(PluginFaultCategory::Unreadable);
+    if (t.find("no such file") != std::string::npos)
+        return static_cast<int>(PluginFaultCategory::NotFound);
+    return static_cast<int>(PluginFaultCategory::LoadFailed);
 #endif
 }
 
@@ -166,9 +225,30 @@ static bool waitQuiesce(std::atomic<uint32_t>& inFlight) {
     }
 }
 
+void PluginHostManager::latchSlotFault(size_t slot, int stage, int category) {
+    if (slot >= kMaxPluginSlots) return;
+    PluginSlot& s = m_slots[slot];
+    s.faultStage.store(stage, std::memory_order_relaxed);
+    s.faultCategory.store(category, std::memory_order_relaxed);
+    s.fault.store(true, std::memory_order_release);
+    // 与旁路切换同口径：状态翻转后首个音频块必然刷新遥测，
+    // 不让 UI/回传读到故障前的陈旧值。
+    resetTelemetryGateSlot(slot);
+}
+
+void PluginHostManager::clearSlotFault(size_t slot) {
+    if (slot >= kMaxPluginSlots) return;
+    PluginSlot& s = m_slots[slot];
+    s.fault.store(false, std::memory_order_release);
+    s.faultStage.store(0, std::memory_order_relaxed);
+    s.faultCategory.store(0, std::memory_order_relaxed);
+    s.lastLoadCategory.store(0, std::memory_order_relaxed);
+}
+
 void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
     if (slot >= kMaxPluginSlots) return;
     PluginSlot& s = m_slots[slot];
+    clearSlotFault(slot);
     s.hasActive.store(false, std::memory_order_release);
     s.destroyPending.store(true, std::memory_order_release);
     std::atomic_thread_fence(std::memory_order_acquire);
@@ -249,7 +329,16 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
             static_cast<uint32_t>(m_channelHint.load(std::memory_order_relaxed)));
         auto instance = std::make_unique<ProcessPluginProxy>(
             client, slot, sampleRate, maxBlockSize);
-        if (!instance->load(path, pluginId)) return false;
+        if (!instance->load(path, pluginId)) {
+            // Q1：远端加载失败同样闩锁（类别粒度到 load_failed：
+            // 宿主内的细分类在其自身状态里，本侧只表「加载失败」）。
+            m_slots[slot].lastLoadCategory.store(
+                static_cast<int>(PluginFaultCategory::LoadFailed),
+                std::memory_order_relaxed);
+            latchSlotFault(slot, static_cast<int>(PluginFaultStage::Load),
+                           static_cast<int>(PluginFaultCategory::LoadFailed));
+            return false;
+        }
 
         /* R-1：宿主进程懒启动于本分支的首个请求（setChannelHint/load），
          * 而 create 期 updateFormat 的转发被 alive() 守卫跳过、此后不再补发，
@@ -276,11 +365,23 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
         ensureChannelScratch(maxBlockSize);
 
         auto* driver = PluginDriverRegistry::instance().findForPath(path);
-        if (!driver) return false;
-        if (driver->resolveBinary(path).empty()) return false;
+        if (!driver) {
+            latchSlotFault(slot, static_cast<int>(PluginFaultStage::Load),
+                           static_cast<int>(PluginFaultCategory::NotFound));
+            return false;
+        }
+        if (driver->resolveBinary(path).empty()) {
+            latchSlotFault(slot, static_cast<int>(PluginFaultStage::Load),
+                           static_cast<int>(PluginFaultCategory::NotFound));
+            return false;
+        }
 
         auto instance = driver->createInstance();
-        if (!instance) return false;
+        if (!instance) {
+            latchSlotFault(slot, static_cast<int>(PluginFaultStage::Load),
+                           static_cast<int>(PluginFaultCategory::LoadFailed));
+            return false;
+        }
 
         // 扫描期命中项作为种子传入：加载路以扫描值为基准，descriptor 只补空不覆盖，
         // 于是「扫描值 == 加载值」对扫描期已有的字段恒成立（B1 的结构性保证）。
@@ -294,26 +395,38 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
             break;
         }
 
-        bool lRet = instance->load(path, pluginId, seed);
-        AURADSP_DBG_S("[DBG PluginHost] instance->load returned: " << lRet);
-        if (!lRet) {
-            if (instance->abandoned()) {
-                // load 阶段线程挂死 → 隔离区（同 unloadPluginSlotLocked）。
-                quarantineAbandonedInstance(std::move(instance));
-                AURADSP_WARN("[DBG PluginHost] instance quarantined (abandoned during load)");
-            }
-            return false;
-        }
-
+        // Q1：load/activate 经守卫执行（loadActivateGuarded）；
+        // 通道提示提前到加载前置位（原在 load/activate 之间，
+        // 提示只是实例侧存储的整数，前置无语义差）。
         instance->setChannelHint(m_channelHint.load());
-        bool aRet = instance->activate(sampleRate, maxBlockSize);
-        AURADSP_DBG_S("[DBG PluginHost] instance->activate returned: " << aRet);
-        if (!aRet) {
-            instance->unload();
-            if (instance->abandoned()) {
+        const int lr = loadActivateGuarded(instance.get(), &path, &pluginId,
+                                           seed, sampleRate, maxBlockSize);
+        AURADSP_DBG_S("[DBG PluginHost] loadActivateGuarded returned: " << lr);
+        if (lr != 0) {
+            int category;
+            if (lr == 3) {
+                // 加载期崩溃：实例状态未知，unload/析构都可能
+                // 再触雷——整体隔离，绝不再调用它的任何方法。
+                category = static_cast<int>(PluginFaultCategory::InitCrash);
                 quarantineAbandonedInstance(std::move(instance));
-                AURADSP_WARN("[DBG PluginHost] instance quarantined (abandoned during activate-unload)");
+                AURADSP_WARN("[DBG PluginHost] instance quarantined (crash during load/activate)");
+            } else if (lr == 1) {
+                category = classifyLoadFailure();
+                if (instance->abandoned()) {
+                    // load 阶段线程挂死 → 隔离区（同 unloadPluginSlotLocked）。
+                    quarantineAbandonedInstance(std::move(instance));
+                    AURADSP_WARN("[DBG PluginHost] instance quarantined (abandoned during load)");
+                }
+            } else {
+                category = static_cast<int>(PluginFaultCategory::LoadFailed);
+                instance->unload();
+                if (instance->abandoned()) {
+                    quarantineAbandonedInstance(std::move(instance));
+                    AURADSP_WARN("[DBG PluginHost] instance quarantined (abandoned during activate-unload)");
+                }
             }
+            m_slots[slot].lastLoadCategory.store(category, std::memory_order_relaxed);
+            latchSlotFault(slot, static_cast<int>(PluginFaultStage::Load), category);
             return false;
         }
 
@@ -321,9 +434,13 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
         return true;
     } catch (const std::exception& e) {
         unloadPluginSlotLocked(slot);
+        latchSlotFault(slot, static_cast<int>(PluginFaultStage::Load),
+                       static_cast<int>(PluginFaultCategory::LoadFailed));
         return false;
     } catch (...) {
         unloadPluginSlotLocked(slot);
+        latchSlotFault(slot, static_cast<int>(PluginFaultStage::Load),
+                       static_cast<int>(PluginFaultCategory::LoadFailed));
         return false;
     }
 }
@@ -340,6 +457,10 @@ void PluginHostManager::setBypassSlot(size_t slot, bool bypass) {
 
 bool PluginHostManager::isBypassedSlot(size_t slot) const {
     if (slot >= kMaxPluginSlots) return true;
+    // 有效旁路 = 手动旁路 || 故障闩锁（Q1）|| 传输层失联（既有）。
+    // 状态 JSON 与链组件都只问本函数，故故障槽在所有消费者眼里
+    // 与手动旁路同形（文案恒「旁路」），成因只经 fault 字段区分。
+    if (m_slots[slot].fault.load(std::memory_order_acquire)) return true;
     if (m_slots[slot].bypassed.load(std::memory_order_acquire)) return true;
     return m_slots[slot].instance && m_slots[slot].instance->hostTransportFailed();
 }
@@ -371,6 +492,9 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
        << "\"slot\":" << slot << ","
        << "\"hasActive\":" << (m_slots[slot].hasActive.load() ? "true" : "false") << ","
        << "\"bypassed\":" << (isBypassedSlot(slot) ? "true" : "false") << ","
+       << "\"fault\":" << (m_slots[slot].fault.load(std::memory_order_acquire) ? "true" : "false") << ","
+       << "\"faultStage\":\"" << pluginFaultStageName(m_slots[slot].faultStage.load(std::memory_order_relaxed)) << "\","
+       << "\"faultCategory\":\"" << pluginFaultCategoryName(m_slots[slot].faultCategory.load(std::memory_order_relaxed)) << "\","
        << "\"latency\":" << getLatencySlot(slot) << ","
        << "\"insertStage\":" << m_slots[slot].insertStage.load() << ","
        << "\"channels\":" << m_slots[slot].channelMask.load() << ","
@@ -549,7 +673,8 @@ void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float
     InFlightGuard guard(s.inFlight, s.destroyPending);
 
     const int chHint = (std::max)(1, (std::min)(64, m_channelHint.load(std::memory_order_relaxed)));
-    if (!s.hasActive.load(std::memory_order_acquire) || s.bypassed.load(std::memory_order_acquire)) {
+    if (!s.hasActive.load(std::memory_order_acquire) || s.bypassed.load(std::memory_order_acquire) ||
+        s.fault.load(std::memory_order_acquire)) {
         if (inChannels != outChannels && inChannels && outChannels) {
             for (int ch = 0; ch < chHint; ++ch) {
                 if (inChannels[ch] && outChannels[ch]) {
@@ -563,12 +688,13 @@ void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float
     /* SEH/异常段已隔离到 processSlotGuarded（MSVC C2712：无析构函数才能用 __try） */
     s.processCalls.fetch_add(1, std::memory_order_relaxed);
     if (processSlotGuarded(s, inChannels, outChannels, numFrames) != 0) {
-        s.bypassed.store(true, std::memory_order_release);
-        // F-8a：崩溃导致旁路，直写 bypass 绕过 setBypassSlot，故在此补齐
-        // resetTelemetryGateSlot —— 保证后续首个音频块刷新遥测，不读到崩溃
-        // 前的陈旧/脏值。与 setBypassSlot/unloadPluginSlotLocked/
-        // setInsertStageSlot/commitInstanceLocked 的重置行为统一。
-        resetTelemetryGateSlot(slot);
+        // Q1（Part I D4）：故障闩锁取代 F-8a 的静默自动旁路。置
+        // fault（处理级 / process_crash）后有效旁路经 isBypassedSlot
+        // 成立，手动 bypass 标志保持不动——用户解除旁路不会误启
+        // 肇事插件，恢复的唯一路径是重新加载（unload/commit 清
+        // 闩锁）。闩锁内置遥测门复位（与 F-8a 既有口径一致）。
+        latchSlotFault(slot, static_cast<int>(PluginFaultStage::Process),
+                       static_cast<int>(PluginFaultCategory::ProcessCrash));
         if (inChannels != outChannels && inChannels && outChannels) {
             for (int ch = 0; ch < chHint; ++ch) {
                 if (inChannels[ch] && outChannels[ch]) {
@@ -614,7 +740,8 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
 
     PluginSlot& s = m_slots[slot];
     if (!s.hasActive.load(std::memory_order_acquire) ||
-        s.bypassed.load(std::memory_order_acquire)) {
+        s.bypassed.load(std::memory_order_acquire) ||
+        s.fault.load(std::memory_order_acquire)) {
         return;
     }
 
@@ -656,12 +783,13 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
          * 仅在此分支递增：else 分支由其内部 processSlot 计数，避免双计。 */
         s.processCalls.fetch_add(1, std::memory_order_relaxed);
         if (s.hasActive.load(std::memory_order_acquire) &&
-            !s.bypassed.load(std::memory_order_acquire)) {
-            /* F-8a（续）：processInterleaved 崩溃 → 旁观 + 重置遥测门控，
-             * 镜像 processSlot 的 processSlotGuarded 崩溃恢复路径。 */
+            !s.bypassed.load(std::memory_order_acquire) &&
+            !s.fault.load(std::memory_order_acquire)) {
+            /* F-8a（续）+ Q1：processInterleaved 崩溃 → 故障闩锁，
+             * 镜像 processSlot 的崩溃恢复路径（闩锁内置遥测门复位）。 */
             if (processInterleavedGuarded(s, interleaved, numFrames, channels, mask) != 0) {
-                s.bypassed.store(true, std::memory_order_release);
-                resetTelemetryGateSlot(slot);
+                latchSlotFault(slot, static_cast<int>(PluginFaultStage::Process),
+                               static_cast<int>(PluginFaultCategory::ProcessCrash));
             }
         }
         if (sampleTelemetry) {
@@ -907,7 +1035,12 @@ std::unique_ptr<IPluginInstance> PluginHostManager::prepareInstance(size_t slot,
 
         auto instance = std::make_unique<ProcessPluginProxy>(
             client, slot, m_sampleRate, m_maxBlockSize);
-        if (!instance->load(path, pluginId)) return nullptr;
+        if (!instance->load(path, pluginId)) {
+            m_slots[slot].lastLoadCategory.store(
+                static_cast<int>(PluginFaultCategory::LoadFailed),
+                std::memory_order_relaxed);
+            return nullptr;
+        }
         client->updateFormat(m_sampleRate, m_maxBlockSize);
         return instance;
     }
@@ -916,11 +1049,26 @@ std::unique_ptr<IPluginInstance> PluginHostManager::prepareInstance(size_t slot,
 #endif
 
     auto* driver = PluginDriverRegistry::instance().findForPath(path);
-    if (!driver) return nullptr;
-    if (driver->resolveBinary(path).empty()) return nullptr;
+    if (!driver) {
+        m_slots[slot].lastLoadCategory.store(
+            static_cast<int>(PluginFaultCategory::NotFound),
+            std::memory_order_relaxed);
+        return nullptr;
+    }
+    if (driver->resolveBinary(path).empty()) {
+        m_slots[slot].lastLoadCategory.store(
+            static_cast<int>(PluginFaultCategory::NotFound),
+            std::memory_order_relaxed);
+        return nullptr;
+    }
 
     auto instance = driver->createInstance();
-    if (!instance) return nullptr;
+    if (!instance) {
+        m_slots[slot].lastLoadCategory.store(
+            static_cast<int>(PluginFaultCategory::LoadFailed),
+            std::memory_order_relaxed);
+        return nullptr;
+    }
 
     // 查找扫描期种子（匹配 path + pluginId）——值拷贝到局部变量，避免持有裸指针跨越锁外耗时 I/O 导致 UAF
     PluginMetadata seedCopy;
@@ -936,20 +1084,29 @@ std::unique_ptr<IPluginInstance> PluginHostManager::prepareInstance(size_t slot,
         }
     }
 
-    bool lRet = instance->load(path, pluginId, hasSeed ? &seedCopy : nullptr);
-    if (!lRet) {
-        if (instance->abandoned()) {
+    // Q1：与同步路径同一守卫与分类（类别写入 lastLoadCategory，
+    // 闩锁由 runControlTask 在任务失败点统一落）。
+    const int lr = loadActivateGuarded(instance.get(), &path, &pluginId,
+                                       hasSeed ? &seedCopy : nullptr,
+                                       m_sampleRate, m_maxBlockSize);
+    if (lr != 0) {
+        int category;
+        if (lr == 3) {
+            category = static_cast<int>(PluginFaultCategory::InitCrash);
             quarantineAbandonedInstance(std::move(instance));
+        } else if (lr == 1) {
+            category = classifyLoadFailure();
+            if (instance->abandoned()) {
+                quarantineAbandonedInstance(std::move(instance));
+            }
+        } else {
+            category = static_cast<int>(PluginFaultCategory::LoadFailed);
+            instance->unload();
+            if (instance->abandoned()) {
+                quarantineAbandonedInstance(std::move(instance));
+            }
         }
-        return nullptr;
-    }
-
-    bool aRet = instance->activate(m_sampleRate, m_maxBlockSize);
-    if (!aRet) {
-        instance->unload();
-        if (instance->abandoned()) {
-            quarantineAbandonedInstance(std::move(instance));
-        }
+        m_slots[slot].lastLoadCategory.store(category, std::memory_order_relaxed);
         return nullptr;
     }
 
@@ -971,6 +1128,9 @@ void PluginHostManager::commitInstanceLocked(size_t slot, std::unique_ptr<IPlugi
                                                     : (bus.mainInChannels > 0 ? bus.mainInChannels : 2),
                             std::memory_order_relaxed);
     s.hasActive.store(true, std::memory_order_release);
+    // Q1：加载成功 = 故障恢复点，闩锁在此清除（与 unload 并列
+    // 为仅有的两个清除点；旁路开关永不清故障）。
+    clearSlotFault(slot);
     /* P-041 挂载即旁路（2026-10-28）：新实例落座时槽强制进入旁路态。
      * 旧实现 store(false)（出厂激活）与 UI 的「挂载即旁路」策略脱节：
      * VB 多总线下后台补挂组在 SlotLoad 回写镜像时会把用户已下发的
@@ -1005,6 +1165,7 @@ std::unique_ptr<IPluginInstance> PluginHostManager::detachInstanceLocked(size_t 
     // 注意：调用方已持有 m_hostMutex
     if (slot >= kMaxPluginSlots) return nullptr;
     PluginSlot& s = m_slots[slot];
+    clearSlotFault(slot);
     s.hasActive.store(false, std::memory_order_release);
     s.destroyPending.store(true, std::memory_order_release);
     std::atomic_thread_fence(std::memory_order_acquire);
@@ -1109,6 +1270,14 @@ void PluginHostManager::runControlTask(const ControlTask& t) {
                     m_slots[t.slot].taskState.store(2, std::memory_order_release); // 成功
                 } else {
                     m_slots[t.slot].taskState.store(3, std::memory_order_release); // 失败
+                    // Q1：异步加载失败在此统一闩锁（类别由 prepare
+                    // 写入 lastLoadCategory；缺失时归 load_failed）。
+                    const int cat = m_slots[t.slot].lastLoadCategory.load(
+                        std::memory_order_relaxed);
+                    latchSlotFault(t.slot,
+                                   static_cast<int>(PluginFaultStage::Load),
+                                   cat != 0 ? cat
+                                            : static_cast<int>(PluginFaultCategory::LoadFailed));
                 }
             }
             if (oldInstance) {
@@ -1127,6 +1296,8 @@ void PluginHostManager::runControlTask(const ControlTask& t) {
     } catch (...) {
         // 防止异常抛出导致控制线程 std::terminate 终止并永久死锁
         m_slots[t.slot].taskState.store(3, std::memory_order_release);
+        latchSlotFault(t.slot, static_cast<int>(PluginFaultStage::Load),
+                       static_cast<int>(PluginFaultCategory::LoadFailed));
     }
 }
 

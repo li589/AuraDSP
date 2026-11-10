@@ -78,6 +78,8 @@ PLATFORM_LINUX = {
     "smoke_linux_alsa_backend.py",
     # 二期插件阶段四（2026-11-02）：插件宿主源码不变量 + CLAP 全链活体。
     "smoke_linux_plugin_host.py",
+    # Part I Q1（2026-11-10）：逐槽故障闩锁——加载闩锁活体 + 隔离宿主崩溃外墙。
+    "smoke_plugin_fault_latch.py",
 }
 
 PLATFORM_WINDOWS = {
@@ -438,6 +440,9 @@ def run_smoke_tests():
         # 二期插件阶段四（2026-11-02）：插件宿主——posix 平台层/App 接线
         # 源码不变量 + 现场编译 CLAP 资产经 C ABI 全链活体断言。
         "smoke_linux_plugin_host.py",
+        # Part I Q1（2026-11-10）：逐槽故障闩锁（加载闩锁/恢复闭环/
+        # 隔离宿主崩溃外墙）。
+        "smoke_plugin_fault_latch.py",
         "smoke_sync_artifacts_tool.py",
         "smoke_ci_workflow.py",
         # S5b：XDG 配置/数据目录拆分守护（XDG 变量、HOME 回退、迁移清单）。

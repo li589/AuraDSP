@@ -202,6 +202,41 @@ public:
     static bool archBridgeAvailable();
 };
 
+/* 逐槽故障闩锁的阶段与类别（Part I D4 / Q0-1 定版，全平台、
+ * 全宿主形态通用）。数值只在引擎内流转；线上口径是名字函数
+ * 给出的字符串（状态 JSON）与 telemetry 的类别字节，三者与
+ * 本枚举一一对应、改一处须同步 Q0 附记的类别表。 */
+enum class PluginFaultStage : int { None = 0, Load = 1, Process = 2 };
+enum class PluginFaultCategory : int {
+    None = 0,
+    NotFound = 1,     // 无驱动认领 / 二进制解析为空 / 文件不存在
+    Unreadable = 2,   // 文件在位但加载器拒绝（权限 / OS 加载错误）
+    LoadFailed = 3,   // 实例创建失败或 load/activate 泛化失败
+    EntryMissing = 4, // 格式入口缺失（驱动可判时给值，判不出归 LoadFailed）
+    ArchMismatch = 5, // 加载器映像格式错误（位数/架构不符）
+    InitCrash = 6,    // 加载期守卫捕获到异常
+    ProcessCrash = 7, // 处理期守卫捕获到异常
+};
+inline const char* pluginFaultStageName(int stage) {
+    switch (stage) {
+        case 1: return "load";
+        case 2: return "process";
+        default: return "none";
+    }
+}
+inline const char* pluginFaultCategoryName(int category) {
+    switch (category) {
+        case 1: return "not_found";
+        case 2: return "unreadable";
+        case 3: return "load_failed";
+        case 4: return "entry_missing";
+        case 5: return "arch_mismatch";
+        case 6: return "init_crash";
+        case 7: return "process_crash";
+        default: return "none";
+    }
+}
+
 class PluginHostManager {
 public:
     static constexpr size_t kMaxPluginSlots = auradsp::limits::kMaxSlots;
@@ -238,6 +273,18 @@ public:
          * 是无人观看时的纯 CPU 浪费。控制侧在挂载/卸载/阶段/旁通切换时归零，
          * 保证状态切换后首个音频块遥测必然刷新（冒烟 3 块短窗不读陈旧值）。 */
         std::atomic<uint32_t> telemetryCountdown{0};
+        /* Part I Q1 故障闩锁（D4 通用机制）：守卫捕获（process/
+         * load）或加载分类失败时置位。有效旁路 = bypassed ||
+         * fault，单点收敛于 isBypassedSlot；仅 unload 与加载
+         * 成功（commit）清除，旁路开关不清除——故障槽恢复的
+         * 唯一路径是重新加载。faultStage/faultCategory 取
+         * PluginFaultStage / PluginFaultCategory 的 int 值。 */
+        std::atomic<bool> fault{false};
+        std::atomic<int> faultStage{0};
+        std::atomic<int> faultCategory{0};
+        /* 最近一次加载失败的类别（PluginFaultCategory）：异步
+         * prepare 在锁外算出、runControlTask 据此闩锁。 */
+        std::atomic<int> lastLoadCategory{0};
     };
 
     PluginHostManager();
@@ -345,6 +392,11 @@ public:
     std::unique_ptr<IPluginInstance> detachInstanceLocked(size_t slot);
     static void destroyInstance(std::unique_ptr<IPluginInstance> instance);
     void unloadPluginSlotLocked(size_t slot);
+
+    /* Q1 故障闩锁的置位/清除（控制线程或 RT 崩溃点调用；
+     * 置位同时复位遥测门控，语义与旁路切换一致）。 */
+    void latchSlotFault(size_t slot, int stage, int category);
+    void clearSlotFault(size_t slot);
 
     // F-8a：控制侧重置遥测门控计数器（挂载/卸载/阶段/旁通切换时调用）。
     // 调用方须持 m_hostMutex 或位于控制线程（与 setInsertStageSlot 等同线程）。

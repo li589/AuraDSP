@@ -181,6 +181,16 @@ class PluginHostStatus {
   final PluginMetadata? plugin;
   final bool remoteMode;
   final bool remoteFailed;
+
+  /// 逐槽故障闩锁（Part I Q1，引擎状态 JSON 的 fault 三字段；
+  /// 旧引擎无此字段时缺省无故障）。fault 为真时 bypassed 已是
+  /// 有效旁路（引擎单点合成），本字段只表成因：faultStage 为
+  /// load/process，faultCategory 为 not_found/unreadable/
+  /// load_failed/entry_missing/arch_mismatch/init_crash/
+  /// process_crash 之一。呈现与恢复交互在 Q3 落位。
+  final bool fault;
+  final String faultStage;
+  final String faultCategory;
   final int transportLatency;
   final int inputOverflows;
   final int outputOverflows;
@@ -200,6 +210,9 @@ class PluginHostStatus {
     this.plugin,
     this.remoteMode = false,
     this.remoteFailed = false,
+    this.fault = false,
+    this.faultStage = 'none',
+    this.faultCategory = 'none',
     this.transportLatency = 0,
     this.inputOverflows = 0,
     this.outputOverflows = 0,
@@ -230,6 +243,9 @@ class PluginHostStatus {
       plugin: meta,
       remoteMode: json['remoteMode'] as bool? ?? false,
       remoteFailed: json['remoteFailed'] as bool? ?? false,
+      fault: json['fault'] as bool? ?? false,
+      faultStage: json['faultStage'] as String? ?? 'none',
+      faultCategory: json['faultCategory'] as String? ?? 'none',
       transportLatency: (json['transportLatency'] as num?)?.toInt() ?? 0,
       inputOverflows: (json['inputOverflows'] as num?)?.toInt() ?? 0,
       outputOverflows: (json['outputOverflows'] as num?)?.toInt() ?? 0,
@@ -251,6 +267,9 @@ class PluginHostStatus {
     'plugin': plugin?.toJson(),
     'remoteMode': remoteMode,
     'remoteFailed': remoteFailed,
+    'fault': fault,
+    'faultStage': faultStage,
+    'faultCategory': faultCategory,
     'transportLatency': transportLatency,
     'inputOverflows': inputOverflows,
     'outputOverflows': outputOverflows,
