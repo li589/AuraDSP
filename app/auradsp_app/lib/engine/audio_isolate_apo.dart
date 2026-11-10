@@ -316,6 +316,7 @@ class ApoTelemetryReader {
   int _lastSeq = -1;
   int _lastSeat = -1;
   int _lastFault = -1;
+  int _lastLoadStage = -1;
   String _lastPluginSig = '';
   int _tickCount = 0;
   bool _gaveUp = false;
@@ -344,6 +345,7 @@ class ApoTelemetryReader {
     _lastSeq = -1;
     _lastSeat = -1;
     _lastFault = -1;
+    _lastLoadStage = -1;
     _lastPluginSig = '';
     _tickCount = 0;
   }
@@ -397,13 +399,22 @@ class ApoTelemetryReader {
     // v2 追加：48..79 eqInSpectrum 80..111 stageL 112..143 stageR
     final seat = u32[2];
     final faultNow = u32[7];
+    // telemetry v4 加载诊断（第五轮 S3）：v4 前恒 0（未试）。
+    final loadStage = u32[1] >= 4 ? u32[kApoTelemetryLoadDiagU32] : 0;
+    final loadErr = u32[1] >= 4 ? u32[kApoTelemetryLoadDiagU32 + 1] : 0;
     _tickCount++;
     // 状态事件（P3）：座位/故障跳变即发，另每 2s 心跳刷新一次
     // 已应用数等缓变字段；状态层据此驱动 APO 面板的引擎状态行。
-    if (seat != _lastSeat || faultNow != _lastFault || _tickCount % 20 == 0) {
+    if (seat != _lastSeat ||
+        faultNow != _lastFault ||
+        loadStage != _lastLoadStage ||
+        _tickCount % 20 == 0) {
       if (seat != _lastSeat) {
         dbgLog('apo telemetry: seat=${seat == 1 ? 'claimed' : 'free'} '
             'fault=$faultNow applied=${u32[6]}');
+      }
+      if (loadStage != _lastLoadStage) {
+        dbgLog('apo telemetry: loadStage=$loadStage err=$loadErr');
       }
       _send?.call({
         'evt': 'apotelemetry',
@@ -413,9 +424,12 @@ class ApoTelemetryReader {
         'channels': u32[5],
         'applied': u32[6],
         'taken': u32[8],
+        'loadStage': loadStage,
+        'loadErr': loadErr,
       });
       _lastSeat = seat;
       _lastFault = faultNow;
+      _lastLoadStage = loadStage;
     }
     if (seat != 1) return;
     // telemetry v3 插件段（Part I Q2/D5）：合成 apoPluginStatus

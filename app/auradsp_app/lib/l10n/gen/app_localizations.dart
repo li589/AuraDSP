@@ -478,6 +478,18 @@ abstract class AppLocalizations {
   /// **'APO 引擎发生故障，已自动退回直通（系统音频不受影响）；重新附加 APO 或重启应用后重试。'**
   String get apoEngineNoteFault;
 
+  /// No description provided for @apoEngineNoteLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'APO 已附加，但引擎加载失败，声音直通；请确认安装完整后重新附加或重装应用。'**
+  String get apoEngineNoteLoadFailed;
+
+  /// No description provided for @setApoHeartbeat.
+  ///
+  /// In zh, this message translates to:
+  /// **'心跳活跃 ({sr}Hz · {frames} 帧)'**
+  String setApoHeartbeat(int sr, int frames);
+
   /// No description provided for @setDriverOffline.
   ///
   /// In zh, this message translates to:

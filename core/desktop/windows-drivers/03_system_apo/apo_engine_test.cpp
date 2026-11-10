@@ -172,6 +172,18 @@ int main() {
                   tele->sampleRate == 48000 && tele->channels == 2 &&
                   tele->fault == 0,
               d);
+        // 第五轮 S3：telemetry v4 加载诊断——起链成功后必须报
+        // version>=4 且 loadStage=READY（失败口径见 ApoShared.h）。
+        char d4[96];
+        snprintf(d4, sizeof(d4), "version=%lu stage=%lu err=%lu",
+                 (unsigned long)tele->version,
+                 (unsigned long)tele->loadStage,
+                 (unsigned long)tele->loadErr);
+        check("telemetry v4 load diag ready",
+              tele->version >= 4 &&
+                  tele->loadStage == APO_LOAD_STAGE_READY &&
+                  tele->loadErr == 0,
+              d4);
     }
 
     // 音频脚手架：16 块 × 512 帧正弦，RMS 取后 8 块（避链路瞬态）。

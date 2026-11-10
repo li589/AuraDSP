@@ -213,6 +213,15 @@ class AppLocalizationsZh extends AppLocalizations {
       'APO 引擎发生故障，已自动退回直通（系统音频不受影响）；重新附加 APO 或重启应用后重试。';
 
   @override
+  String get apoEngineNoteLoadFailed =>
+      'APO 已附加，但引擎加载失败，声音直通；请确认安装完整后重新附加或重装应用。';
+
+  @override
+  String setApoHeartbeat(int sr, int frames) {
+    return '心跳活跃 (${sr}Hz · $frames 帧)';
+  }
+
+  @override
   String setDriverOffline(String name) {
     return '$name [未检测到/离线]';
   }

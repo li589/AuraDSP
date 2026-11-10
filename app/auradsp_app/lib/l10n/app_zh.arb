@@ -104,6 +104,18 @@
   "apoEngineNoteActive": "APO 引擎处理中：经过此端点的声音由 AuraDSP 引擎实时处理（插件链在 APO 模式下不生效）。",
   "apoEngineNoteWaiting": "APO 已附加，等待引擎就绪；就绪前声音直通。",
   "apoEngineNoteFault": "APO 引擎发生故障，已自动退回直通（系统音频不受影响）；重新附加 APO 或重启应用后重试。",
+  "apoEngineNoteLoadFailed": "APO 已附加，但引擎加载失败，声音直通；请确认安装完整后重新附加或重装应用。",
+  "setApoHeartbeat": "心跳活跃 ({sr}Hz · {frames} 帧)",
+  "@setApoHeartbeat": {
+    "placeholders": {
+      "sr": {
+        "type": "int"
+      },
+      "frames": {
+        "type": "int"
+      }
+    }
+  },
   "setDriverOffline": "{name} [未检测到/离线]",
   "@setDriverOffline": {
     "placeholders": {

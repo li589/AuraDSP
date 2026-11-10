@@ -141,6 +141,8 @@ extension AudioModesState on AppModel {
       apoEngineRate = 0;
       apoEngineChannels = 0;
       apoParamsApplied = 0;
+      apoLoadStage = 0;
+      apoLoadErr = 0;
     }
     applyPipelineChain();
     _notifyUi();

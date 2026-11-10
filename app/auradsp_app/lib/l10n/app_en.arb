@@ -80,6 +80,18 @@
   "apoEngineNoteActive": "APO engine active: audio through this endpoint is processed by the AuraDSP engine in real time (the plugin chain does not run in APO mode).",
   "apoEngineNoteWaiting": "APO attached, waiting for the engine to become ready; audio passes through until then.",
   "apoEngineNoteFault": "The APO engine faulted and fell back to pass-through automatically (system audio is unaffected). Re-attach the APO or restart the app to retry.",
+  "apoEngineNoteLoadFailed": "APO is attached, but the engine failed to load; audio passes through. Verify the installation is complete, then re-attach or reinstall the app.",
+  "setApoHeartbeat": "Heartbeat active ({sr} Hz · {frames} frames)",
+  "@setApoHeartbeat": {
+    "placeholders": {
+      "sr": {
+        "type": "int"
+      },
+      "frames": {
+        "type": "int"
+      }
+    }
+  },
   "setDriverOffline": "{name} [not detected/offline]",
   "setVaioReady": "AuraVAIO KMDF driver ready (Sysvad virtual sound card)",
   "setVaioMissing": "AuraVAIO virtual sound card driver not detected",

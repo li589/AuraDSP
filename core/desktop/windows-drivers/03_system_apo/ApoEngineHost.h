@@ -102,6 +102,14 @@ class ApoEngineHost {
     FnPluginFlag fnChainEnabled_ = nullptr;
     bool pluginsOk_ = false;
 
+    // 加载诊断（第五轮 S3，telemetry v4）：LoadEngine/TryStart 把
+    // 结局记在这里，TryStart 失败/成功出口统一 PublishLoadDiag
+    // 写入 telemetry 块——App 面板据此区分「心跳活跃」与「引擎
+    // 未就绪（加载失败）」，不再单凭心跳报处理中。
+    uint32_t loadStage_ = APO_LOAD_STAGE_NONE;
+    uint32_t loadErr_ = 0;
+    void PublishLoadDiag();
+
     UINT32 rate_ = 48000;
     UINT32 streamCh_ = 2;
     UINT32 engCh_ = 2;

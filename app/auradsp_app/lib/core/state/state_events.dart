@@ -807,14 +807,20 @@ extension StateEvents on AppModel {
         final seatOn = raw['seat'] == true;
         final faultOn = raw['fault'] == true;
         final appliedN = (raw['applied'] as num?)?.toInt() ?? 0;
+        final loadStageN = (raw['loadStage'] as num?)?.toInt() ?? 0;
+        final loadErrN = (raw['loadErr'] as num?)?.toInt() ?? 0;
         if (apoEngineActive != seatOn ||
             apoEngineFault != faultOn ||
-            apoParamsApplied != appliedN) {
+            apoParamsApplied != appliedN ||
+            apoLoadStage != loadStageN ||
+            apoLoadErr != loadErrN) {
           apoEngineActive = seatOn;
           apoEngineFault = faultOn;
           apoEngineRate = (raw['rate'] as num?)?.toInt() ?? 0;
           apoEngineChannels = (raw['channels'] as num?)?.toInt() ?? 0;
           apoParamsApplied = appliedN;
+          apoLoadStage = loadStageN;
+          apoLoadErr = loadErrN;
           _notifyUi();
         }
         break;

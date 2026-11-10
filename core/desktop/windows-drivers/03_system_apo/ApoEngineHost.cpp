@@ -126,18 +126,35 @@ void ApoEngineHost::ReleaseSeat() {
 // ---------------------------------------------------------------------------
 // 引擎加载（D1 搜索序：纪律版同目录 → 主引擎同目录 → 主引擎上一级）
 // ---------------------------------------------------------------------------
+void ApoEngineHost::PublishLoadDiag() {
+    if (!tele_) return;
+    tele_->loadStage = loadStage_;
+    tele_->loadErr = loadErr_;
+}
+
 bool ApoEngineHost::LoadEngine() {
     std::wstring dir;
-    if (!SelfModuleDir(dir)) return false;
+    if (!SelfModuleDir(dir)) {
+        loadStage_ = APO_LOAD_STAGE_NO_DIR;
+        loadErr_ = GetLastError();
+        return false;
+    }
     const std::wstring parent = ParentDir(dir);
     const std::wstring candidates[3] = {
         dir + L"auradsp_engine_apo.dll",
         dir + L"auradsp_engine.dll",
         parent + L"auradsp_engine.dll",
     };
-    for (const auto& path : candidates) {
+    bool anyLoaded = false;
+    DWORD firstErr = 0;
+    for (size_t ci = 0; ci < 3; ci++) {
+        const auto& path = candidates[ci];
         HMODULE h = LoadLibraryW(path.c_str());
-        if (!h) continue;
+        if (!h) {
+            if (ci == 0) firstErr = GetLastError();
+            continue;
+        }
+        anyLoaded = true;
         auto fnAbi = (FnAbi)GetProcAddress(h, "auradsp_abi");
         fnCreate_ = (FnCreate)GetProcAddress(h, "auradsp_create");
         fnDestroy_ = (FnDestroy)GetProcAddress(h, "auradsp_destroy");
@@ -171,6 +188,8 @@ bool ApoEngineHost::LoadEngine() {
             pluginsOk_ = pSlotLoad && pSlotUnload && pSlotBypass && pSlotStage &&
                          pSlotChannels && pSlotLoadPreset && pSlotStatus &&
                          pSetPdc && pChainEnabled;
+            loadStage_ = APO_LOAD_STAGE_READY;
+            loadErr_ = 0;
             return true;
         }
         fnCreate_ = nullptr;
@@ -180,6 +199,15 @@ bool ApoEngineHost::LoadEngine() {
         fnLatency_ = nullptr;
         fnVizRead_ = nullptr;
         FreeLibrary(h);
+    }
+    // 全候选落空：分得清「根本没加载上」（含 DLL 缺失/依赖缺失，
+    // err 记首候选——纪律版所在）与「加载上了但 ABI/符号不符」。
+    if (anyLoaded) {
+        loadStage_ = APO_LOAD_STAGE_ABI;
+        loadErr_ = 0;
+    } else {
+        loadStage_ = APO_LOAD_STAGE_LOAD_FAILED;
+        loadErr_ = firstErr;
     }
     return false;
 }
@@ -201,11 +229,15 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels) {
     }
     if (!ClaimSeat()) return false;
     if (!LoadEngine()) {
+        PublishLoadDiag();  // 失败结局先落 telemetry 再放座（S3）
         ReleaseSeat();
         return false;
     }
     engine_ = fnCreate_((float)rate_, kMaxBlock);
     if (!engine_) {
+        loadStage_ = APO_LOAD_STAGE_CREATE;
+        loadErr_ = 0;
+        PublishLoadDiag();
         FreeLibrary(hEngineDll_);
         hEngineDll_ = nullptr;
         ReleaseSeat();
@@ -262,6 +294,8 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels) {
     tele_->channels = streamCh_;
     tele_->paramsApplied = 0;
     tele_->fault = 0;
+    tele_->loadStage = APO_LOAD_STAGE_READY;
+    tele_->loadErr = 0;
     for (auto& p : tele_->plugins) p = ApoTelemetryBlock::PluginSlot{};
     appliedTotal_ = 0;
     snapshotValid_ = false;

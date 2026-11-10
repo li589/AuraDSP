@@ -89,7 +89,7 @@ inline const wchar_t* AuraApoPluginsName() {
 // 用）；既有字段偏移一律不变，读者按 version 分级取用。
 // v3（2026-11-10，Part I Q2）：尾部再追加插件段（每槽 32B×4）；
 // v1/v2 字段偏移仍不变，读者按 version>=3 取插件段。
-#define APO_TELEMETRY_VERSION 3u
+#define APO_TELEMETRY_VERSION 4u
 #define APO_TELEMETRY_BYTES 4096u
 
 struct ApoTelemetryBlock {
@@ -128,15 +128,31 @@ struct ApoTelemetryBlock {
         uint32_t reserved;
     };
     PluginSlot plugins[4];
+    // ---- v4 追加（offset 736 起；v3 读者止步于此）----
+    // 引擎加载诊断（第五轮 S3）：最近一次 TryStart 的加载结局。
+    // loadStage 取 APO_LOAD_STAGE_*；loadErr 为关键步的 Win32
+    // 错误码（stage=LOAD_FAILED 时为首候选的 GetLastError）。
+    uint32_t loadStage;
+    uint32_t loadErr;
 };
+
+// loadStage 取值（ApoTelemetryBlock.loadStage）。
+#define APO_LOAD_STAGE_NONE 0u        // 尚未尝试（块初建）
+#define APO_LOAD_STAGE_NO_DIR 1u      // 取 APO 自身目录失败
+#define APO_LOAD_STAGE_LOAD_FAILED 2u // 三候选 DLL 均加载失败
+#define APO_LOAD_STAGE_ABI 3u         // 有 DLL 加载成功但符号/ABI 不符
+#define APO_LOAD_STAGE_CREATE 4u      // auradsp_create 返回空
+#define APO_LOAD_STAGE_READY 5u       // 引擎就绪（座位实例处理中/曾就绪）
 // v2 布局钉死：既有字段偏移与 v1 完全一致，追加段自 192 起。
 // v3：插件段自 608 起，块总 736B（映射仍 4096B 整页口径）。
-static_assert(sizeof(ApoTelemetryBlock) == 736, "telemetry block layout");
+// v4：加载诊断自 736 起，块总 744B。
+static_assert(sizeof(ApoTelemetryBlock) == 744, "telemetry block layout");
 static_assert(offsetof(ApoTelemetryBlock, spectrum) == 64, "telemetry v1 offsets");
 static_assert(offsetof(ApoTelemetryBlock, eqInSpectrum) == 192, "telemetry v2 offsets");
 static_assert(offsetof(ApoTelemetryBlock, stageLevelsL) == 320, "telemetry v2 offsets");
 static_assert(offsetof(ApoTelemetryBlock, stageLevelsR) == 448, "telemetry v2 offsets");
 static_assert(offsetof(ApoTelemetryBlock, plugins) == 608, "telemetry v3 offsets");
+static_assert(offsetof(ApoTelemetryBlock, loadStage) == 736, "telemetry v4 offsets");
 static_assert(sizeof(ApoTelemetryBlock::PluginSlot) == 32, "telemetry plugin slot");
 
 // ---- 插件块（App → APO，Part I Q2 / 计划书 D2/D3、Q0-3） ----

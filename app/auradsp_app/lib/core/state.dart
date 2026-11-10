@@ -484,6 +484,11 @@ class AppModel extends ChangeNotifier {
   int apoEngineRate = 0;
   int apoEngineChannels = 0;
   int apoParamsApplied = 0;
+  // 加载诊断（第五轮 S3，telemetry v4）：audiodg 内最近一次引擎
+  // 加载结局——loadStage 0 未试 / 1 自目录失败 / 2 DLL 加载失败 /
+  // 3 ABI 不符 / 4 create 失败 / 5 就绪；loadErr 为 Win32 错误码。
+  int apoLoadStage = 0;
+  int apoLoadErr = 0;
   bool apoHeartbeatAlive = false;
   int apoHeartbeatSeq = 0;
   int apoHeartbeatSr = 0;

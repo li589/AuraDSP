@@ -79,13 +79,18 @@ def main():
           f"块已用字节 Dart == {used}")
     check(used <= 2105344, "used <= mapping")
 
-    # telemetry v3：版本与插件段偏移/槽尺寸在 C 侧以 static_assert 钉死
-    check((c_define(h, "APO_TELEMETRY_VERSION") or "").rstrip("uU") == "3",
-          "APO_TELEMETRY_VERSION == 3")
+    # telemetry v4（v3 插件段不变 + v4 加载诊断尾段）：版本与
+    # 插件段偏移/槽尺寸在 C 侧以 static_assert 钉死
+    check((c_define(h, "APO_TELEMETRY_VERSION") or "").rstrip("uU") == "4",
+          "APO_TELEMETRY_VERSION == 4")
     check("offsetof(ApoTelemetryBlock, plugins) == 608" in h,
           "C 侧钉死 plugins offset 608")
-    check("sizeof(ApoTelemetryBlock) == 736" in h,
-          "C 侧钉死 telemetry 总长 736")
+    check("sizeof(ApoTelemetryBlock) == 744" in h,
+          "C 侧钉死 telemetry 总长 744（v4 尾段 +8）")
+    check("offsetof(ApoTelemetryBlock, loadStage) == 736" in h,
+          "C 侧钉死 loadStage offset 736")
+    check(dart_const(d, "kApoTelemetryLoadDiagU32") == "184",
+          "Dart loadStage/loadErr 位于 u32[184]/[185]（736/4）")
     check("sizeof(ApoTelemetryBlock::PluginSlot) == 32" in h,
           "C 侧钉死插件槽 32B")
     check(dart_const(d, "kApoTelemetryPluginsOffset") == "608",

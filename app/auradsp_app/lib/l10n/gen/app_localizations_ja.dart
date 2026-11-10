@@ -215,6 +215,15 @@ class AppLocalizationsJa extends AppLocalizations {
       'APO エンジンで障害が発生し、自動的にスルーへ戻りました（システム音声への影響はありません）。APO の再装着かアプリの再起動で再試行してください。';
 
   @override
+  String get apoEngineNoteLoadFailed =>
+      'APO は装着済みですが、エンジンの読み込みに失敗し、音声はスルーされます。インストールが完全か確認し、再装着または再インストールしてください。';
+
+  @override
+  String setApoHeartbeat(int sr, int frames) {
+    return 'ハートビート応答中（$sr Hz · $frames フレーム）';
+  }
+
+  @override
   String setDriverOffline(String name) {
     return '$name [未検出/オフライン]';
   }

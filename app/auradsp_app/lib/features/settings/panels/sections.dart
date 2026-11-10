@@ -447,6 +447,25 @@ class _SystemApoPanel extends StatelessWidget {
         ? matched.id
         : (selEndpoint.isEmpty ? '' : selEndpoint);
 
+    // APO 引擎状态行口径（第五轮 S3）：故障 > 加载失败（telemetry
+    // v4 诊断）> 处理中 > 等待。加载失败附 stage/err 原始码便于
+    // 排障（文案本体走 l10n）；心跳活跃不再等同于处理中（心跳
+    // 芯片已改述其真实含义，见下方 setApoHeartbeat）。
+    final apoLoadFailed = model.apoLoadStage >= 1 && model.apoLoadStage <= 4;
+    final apoNoteText = model.apoEngineFault
+        ? l.apoEngineNoteFault
+        : apoLoadFailed
+            ? '${l.apoEngineNoteLoadFailed} '
+                '[stage=${model.apoLoadStage} err=${model.apoLoadErr}]'
+            : model.apoEngineActive
+                ? l.apoEngineNoteActive
+                : l.apoEngineNoteWaiting;
+    final apoNoteColor = model.apoEngineFault || apoLoadFailed
+        ? p.warning
+        : model.apoEngineActive
+            ? p.accent
+            : p.textDim;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -465,18 +484,8 @@ class _SystemApoPanel extends StatelessWidget {
         if (model.audioMode == 'sysapo' && model.apoAttached)
           Padding(
             padding: const EdgeInsets.only(top: 2, bottom: 2),
-            child: Text(
-                model.apoEngineFault
-                    ? l.apoEngineNoteFault
-                    : model.apoEngineActive
-                        ? l.apoEngineNoteActive
-                        : l.apoEngineNoteWaiting,
-                style: captionOf(p,
-                        color: model.apoEngineFault
-                            ? p.warning
-                            : model.apoEngineActive
-                                ? p.accent
-                                : p.textDim)
+            child: Text(apoNoteText,
+                style: captionOf(p, color: apoNoteColor)
                     .copyWith(fontSize: 11)),
           ),
         const SizedBox(height: AuraSpace.xs),
@@ -617,7 +626,7 @@ class _SystemApoPanel extends StatelessWidget {
                           const Icon(Icons.graphic_eq_rounded, size: 12, color: Colors.green),
                           const SizedBox(width: 4),
                           Text(
-                            l.setApoActive(model.apoHeartbeatSr,
+                            l.setApoHeartbeat(model.apoHeartbeatSr,
                                 model.apoHeartbeatFrames),
                             style: const TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold),
                           ),

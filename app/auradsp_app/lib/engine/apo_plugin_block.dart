@@ -56,3 +56,8 @@ const int kApoPluginSlotStateOffset = 64 + 1024 + 256;
 /// processCalls/appliedLoadGen/appliedStateGen/reserved。
 const int kApoTelemetryPluginsOffset = 608;
 const int kApoTelemetryPluginSlotU32 = 8;
+
+/// telemetry v4 加载诊断（offset 736 起，第五轮 S3）：u32[184] =
+/// loadStage（0 未试 / 1 自目录失败 / 2 三候选加载失败 / 3 ABI
+/// 不符 / 4 create 失败 / 5 就绪），u32[185] = loadErr（Win32 码）。
+const int kApoTelemetryLoadDiagU32 = 184;

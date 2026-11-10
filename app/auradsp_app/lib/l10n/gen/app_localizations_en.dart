@@ -220,6 +220,15 @@ class AppLocalizationsEn extends AppLocalizations {
       'The APO engine faulted and fell back to pass-through automatically (system audio is unaffected). Re-attach the APO or restart the app to retry.';
 
   @override
+  String get apoEngineNoteLoadFailed =>
+      'APO is attached, but the engine failed to load; audio passes through. Verify the installation is complete, then re-attach or reinstall the app.';
+
+  @override
+  String setApoHeartbeat(int sr, int frames) {
+    return 'Heartbeat active ($sr Hz · $frames frames)';
+  }
+
+  @override
   String setDriverOffline(String name) {
     return '$name [not detected/offline]';
   }
