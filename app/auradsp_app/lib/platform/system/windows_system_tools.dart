@@ -267,6 +267,12 @@ final class WindowsSystemTools implements WindowsSystemPort {
 
   /// 从工具输出中取最后一行 JSON 对象（结果 JSON 恒为单行）。
   Map<String, dynamic>? _parseApoJson(String text) {
+    // UTF-8 BOM 必须先剥（第六轮项 2 实证）：随包 ps1 以 PS 5.1
+    // `Set-Content -Encoding UTF8` 写结果文件必带 BOM，Dart 的
+    // trim 不去 U+FEFF，首行 '{' 过滤恒落空 ⇒ 脚本真实成败与
+    // 原因（regsvr32 退出码等）被吞、UI 只剩 UAC 兜底文案。
+    // apo_config.exe 写无 BOM 文件，此前未暴露。
+    if (text.startsWith('\uFEFF')) text = text.substring(1);
     final lines = text
         .split(RegExp(r'\r?\n'))
         .where((l) => l.trim().startsWith('{'))

@@ -139,6 +139,10 @@ def main() -> int:
         check("驱动包含签名教程",
               b"Win7" in read_zip(dz)[1]["README.txt"]
               and b"testsigning" in read_zip(dz)[1]["README.txt"])
+        # 第六轮项 2：regsvr32 的 DLL 路径必须带引号（Start-Process
+        # -ArgumentList 空格拼接，Program Files 路径无引号必败）。
+        check("register_asio.ps1 的 regsvr32 路径带引号",
+              b'`"$dll`"' in read_zip(dz)[1]["register_asio.ps1"])
 
         print("== driver 新鲜度闸门（c968a42） ==")
         stale = base / "driver-stale"

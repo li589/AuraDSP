@@ -464,7 +464,10 @@ try {
   }
   if (-not (Test-Path $dll)) { throw "auraasio_driver.dll 不在脚本目录或其上级目录" }
   $regsvr = "$env:SystemRoot\System32\regsvr32.exe"
-  $args = if ($Unregister) { @("/s", "/u", $dll) } else { @("/s", $dll) }
+  # DLL 路径必须带引号（第六轮项 2 实证）：Start-Process 的
+  # -ArgumentList 数组以空格拼接、不自动加引号，安装路径含
+  # 空格（默认 Program Files）时路径被拆断、regsvr32 必败。
+  $args = if ($Unregister) { @("/s", "/u", "`"$dll`"") } else { @("/s", "`"$dll`"") }
   $p = Start-Process $regsvr -ArgumentList $args -Wait -PassThru
   if ($p.ExitCode -ne 0) { throw "regsvr32 退出码 $($p.ExitCode)" }
   $done = "AuraASIO $(if ($Unregister) { '反注册' } else { '注册' })完成: $dll"

@@ -238,6 +238,14 @@ void main() {
     });
   });
 
+  group('第六轮项 2：工具结果通道 BOM 容忍', () {
+    test('_parseApoJson 先剥 UTF-8 BOM 再过滤 JSON 行', () {
+      // 随包 ps1（PS 5.1 Set-Content -Encoding UTF8）写的结果
+      // 文件带 BOM；不剥则首行 '{' 过滤恒落空、真实成败被吞。
+      expect(tools, contains("text.startsWith('\\uFEFF')"));
+    });
+  });
+
   group('V-02 刷新链守卫（F0）', () {
     test('refreshAudioDevices 有埋点且工具缺失显式置错', () {
       expect(state, contains("dbgLog('devices.refresh: start', sync: true)"));
