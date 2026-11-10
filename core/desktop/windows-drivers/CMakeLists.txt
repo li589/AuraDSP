@@ -194,7 +194,7 @@ add_library(apo_probe_gain MODULE
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/smoke/probe_gain.c"
 )
 target_include_directories(apo_probe_gain PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/plugin-api/include")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/plugin-api")
 target_compile_options(apo_probe_gain PRIVATE /std:c11)
 set_target_properties(apo_probe_gain PROPERTIES
     OUTPUT_NAME "probe_gain" SUFFIX ".clap" PREFIX ""
