@@ -3,7 +3,7 @@
 // 不进 audiodg：进程内 COM 直驱 CAuraApo（DllGetClassObject 路
 // 径，同 apo_selftest），但验证的是 v2 真处理全链：
 //   锁定 → 座位被本进程抢到（telemetry）→ 基线块（默认参数）
-//   → 经参数块发布 input.gain=0.25（扮演 App 发布者，seqlock
+//   → 经参数块发布 input.gain=-12dB（扮演 App 发布者，seqlock
 //   协议）→ 输出 RMS 相对基线跌到 ~0.25（决定性断言：参数通
 //   道 + worker 应用 + 引擎真处理三段同时成立才可能）→
 //   telemetry 的 paramsApplied/updateSeq/spectrum 均在动 →
@@ -207,7 +207,9 @@ int main() {
               baseRms / rmsIn > 0.7 && baseRms / rmsIn < 1.35, d);
     }
 
-    // 扮演 App 发布者：input.gain=0.25（seqlock 协议 + 有效位）。
+    // 扮演 App 发布者：input.gain=-12dB ≈ ×0.2512（该参数单位
+    // 是 dB、量程 ±15——首跑实测 +0.25dB 得比率 1.030 与理论
+    // 10^(0.25/20)=1.029 吻合，通道无恙、探针语义曾错）。
     int gainIdx = -1;
     for (uint32_t i = 0; i < APO_NUM_PARAM_COUNT; i++) {
         if (strcmp(kApoNumParamIds[i], "input.gain") == 0) {
@@ -233,7 +235,7 @@ int main() {
             hdr->writeSeq = seq + 1;  // 奇：写入中
             blk[APO_BLOCK_MASK_OFFSET + gainIdx / 8] |=
                 (uint8_t)(1u << (gainIdx % 8));
-            float g = 0.25f;
+            float g = -12.0f;
             memcpy(blk + APO_BLOCK_VALUES_OFFSET + 4 * gainIdx, &g, 4);
             MemoryBarrier();
             hdr->writeSeq = seq + 2;  // 偶：稳定
@@ -249,7 +251,7 @@ int main() {
         char d[96];
         snprintf(d, sizeof(d), "gained=%.4f base=%.4f ratio=%.3f", gainRms,
                  baseRms, gainRms / baseRms);
-        check("DECISIVE: input.gain 0.25 applied via param channel",
+        check("DECISIVE: input.gain -12dB applied via param channel",
               gainRms / baseRms > 0.19 && gainRms / baseRms < 0.31, d);
     }
     if (tele) {
@@ -266,7 +268,7 @@ int main() {
               d);
     }
 
-    // INPLACE 变体：同址缓冲处理结果一致（增益仍 0.25）。
+    // INPLACE 变体：同址缓冲处理结果一致（增益仍 -12dB）。
     {
         static float inplaceBuf[kFrames * 2];
         FillSine(inplaceBuf, kFrames, 0);
@@ -284,7 +286,7 @@ int main() {
         rt->APOProcess(1, props, 1, props);
         double r = Rms(inplaceBuf, kFrames * 2) / rmsIn;
         char d[96];
-        snprintf(d, sizeof(d), "inplace ratio=%.3f (expect ~0.25)", r);
+        snprintf(d, sizeof(d), "inplace ratio=%.3f (expect ~0.2512)", r);
         check("in-place processing", r > 0.17 && r < 0.34, d);
     }
 
