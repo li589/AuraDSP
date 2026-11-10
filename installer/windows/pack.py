@@ -482,6 +482,23 @@ DRIVER_TEMPLATE_DIR = ROOT / "installer" / "windows" / "custom_installer" / "dri
 DRIVER_TEMPLATE_FILES = ("install_vaio.ps1", "README.txt")
 
 
+def _copy2_overwrite(src: Path, dst: Path) -> None:
+    """覆盖拷贝到可能已存在的 staging 目标。
+
+    build_windows.ps1 Step 5 会先用本模块补齐 dist 的 driver/；随后
+    portable/setup 复制 staging 再组装时，目标里的 devcon.exe 带着
+    ReadOnly（copy2 保留源属性），裸 open(dst,'wb') 会 PermissionError。
+    这里先清只读再删除，保证重复补齐幂等。
+    """
+    if dst.exists():
+        try:
+            dst.chmod(0o666)
+        except OSError:
+            pass
+        dst.unlink()
+    shutil.copy2(src, dst)
+
+
 def stage_driver_files(
     dest: Path,
     driver_dir: Path,
@@ -510,21 +527,21 @@ def stage_driver_files(
         is_payload = f.suffix.lower() in (".sys", ".inf", ".cat", ".cer")
         is_devcon = f.name.lower() == "devcon.exe"
         if is_payload or is_devcon:
-            shutil.copy2(f, dest / f.name)
+            _copy2_overwrite(f, dest / f.name)
             copied += 1
     if copied == 0:
         raise die(f"驱动目录没有任何 .sys/.inf/.cat/.cer: {driver_dir}")
-    shutil.copy2(install_ps1, dest / install_ps1.name)
+    _copy2_overwrite(install_ps1, dest / install_ps1.name)
     # APO 运维资产：app 侧附加/状态工具 apo_config.exe（原生版，
     # 已替代 python 脚本）+ APO 本体 AuraApo.dll + 设备端点刷新
     # （apo_inspect.exe），与手动安装资产同组进 driver/。
-    shutil.copy2(apo.config_exe, dest / apo.config_exe.name)
-    shutil.copy2(apo.apo_dll, dest / apo.apo_dll.name)
-    shutil.copy2(apo.inspect, dest / apo.inspect.name)
+    _copy2_overwrite(apo.config_exe, dest / apo.config_exe.name)
+    _copy2_overwrite(apo.apo_dll, dest / apo.apo_dll.name)
+    _copy2_overwrite(apo.inspect, dest / apo.inspect.name)
     # 真处理引擎与 AuraApo.dll 同级落位（APO 的 D1 搜索首选）。
-    shutil.copy2(apo.engine_dll, dest / apo.engine_dll.name)
+    _copy2_overwrite(apo.engine_dll, dest / apo.engine_dll.name)
     if include_asio_dll:
-        shutil.copy2(asio, dest / ASIO_DLL_NAME)
+        _copy2_overwrite(asio, dest / ASIO_DLL_NAME)
     (dest / "register_asio.ps1").write_text(REGISTER_ASIO_PS1, encoding="utf-8")
     for name in DRIVER_TEMPLATE_FILES:
         src = DRIVER_TEMPLATE_DIR / name
@@ -534,7 +551,7 @@ def stage_driver_files(
             (dest / name).write_text(
                 src.read_text(encoding="utf-8"), encoding="utf-8-sig")
         else:
-            shutil.copy2(src, dest / name)
+            _copy2_overwrite(src, dest / name)
     return copied
 
 
@@ -591,7 +608,7 @@ def complete_payload_tree(work: Path, args) -> None:
     if driver_dir is None:
         raise die("找不到 VAIO 驱动产物目录（含 .sys 的目录）；"
                   "先在 Windows 构建驱动，或用 --driver-dir 指定")
-    shutil.copy2(asio, work / ASIO_DLL_NAME)
+    _copy2_overwrite(asio, work / ASIO_DLL_NAME)
     stage_driver_files(work / "driver", driver_dir, asio, install_ps1,
                        apo, include_asio_dll=True)
 

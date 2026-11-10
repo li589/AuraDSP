@@ -89,6 +89,11 @@ def main() -> int:
         for name in ("AuraVaioDriver.sys", "AuraVaioDriver.inf",
                      "auravaiodriver.cat"):
             (drv / name).write_bytes(b"drv")
+        # devcon.exe 在真实产物里带 ReadOnly；copy2 会保留属性，staging
+        # 重复补齐时曾因裸 open(dst,'wb') 覆盖只读文件而 PermissionError。
+        devcon = drv / "devcon.exe"
+        devcon.write_bytes(b"MZ-devcon")
+        os.chmod(devcon, 0o444)
         asio = base / "auraasio_driver.dll"
         asio.write_bytes(b"MZ-asio")
         apo_inspect = base / "apo_inspect.exe"
@@ -122,6 +127,7 @@ def main() -> int:
         names = read_zip(dz)[0] if dz.exists() else []
         for want in ("AuraVaioDriver.sys", "AuraVaioDriver.inf",
                      "auravaiodriver.cat",
+                     "devcon.exe",
                      "install_driver.ps1", "auraasio_driver.dll",
                      "register_asio.ps1", "install_vaio.ps1", "README.txt",
                      # APO 运维资产随包（2026-11-09 V-03/F4 起；
@@ -163,6 +169,13 @@ def main() -> int:
                      "driver/apo_inspect.exe",
                      "driver/auradsp_engine_apo.dll"):
             check(f"staging 含 {want}", (staging / want).is_file())
+
+        print("== staging 幂等重跑（只读 devcon 覆盖回归） ==")
+        ro_devcon = staging / "driver" / "devcon.exe"
+        check("staging 含 devcon.exe", ro_devcon.is_file())
+        os.chmod(ro_devcon, 0o444)  # 模拟 copy2 保留的 ReadOnly
+        r = run_pack("--mode", "staging", *common)
+        check("重复补齐 exit 0", r.returncode == 0, r.stderr.strip()[-200:])
 
         print("== portable core ==")
         r = run_pack("--mode", "portable", "--resources", "core", *common)
