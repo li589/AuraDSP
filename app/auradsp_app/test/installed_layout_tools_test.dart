@@ -296,7 +296,10 @@ void main() {
       final offenders = <String>[];
       for (final entity in libDir().listSync(recursive: true)) {
         if (entity is! File || !entity.path.endsWith('.dart')) continue;
-        if (entity.path.endsWith('features/notice_host.dart')) continue;
+        // Windows 路径分隔符是反斜杠，先归一再比对白名单，
+        // 否则 NoticeHost 自身会被误判为违规（Windows 专属误报）。
+        final path = entity.path.replaceAll('\\', '/');
+        if (path.endsWith('features/notice_host.dart')) continue;
         if (entity.readAsStringSync().contains('showSnackBar(')) {
           offenders.add(entity.path);
         }
