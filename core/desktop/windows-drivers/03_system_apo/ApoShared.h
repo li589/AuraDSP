@@ -14,6 +14,7 @@
 #pragma once
 
 #include <cstdint>
+#include <windows.h>
 
 // ---- 共享对象名与安全描述符 ----
 #define AURA_APO_PARAMS_NAME L"Global\\AuraDSP_ApoParams"
@@ -38,9 +39,33 @@ struct ApoParamBlockHeader {
     uint32_t strUsed[4];   // 各字符串槽已用字节（不含 NUL）
     uint32_t reserved[7];  // 凑满 64B 头
 };
-// 头之后：values[numCount]（u32/槽）→ 字符串槽区（定长，偏移与
-// 容量见 ApoParamIndex.h 的 kApoStrSlotOffsets/Caps）。
+// 头之后：valid 位图区（64B，bit i ↔ 数值槽 i、bit 325+s ↔
+// 字符串槽 s；只有置位槽会被 worker 应用——未被 App 写过的
+// 参数必须保留引擎默认值，见生成器头注）→ values[numCount]
+// （u32/槽）→ 字符串槽区（定长，偏移与容量见 ApoParamIndex.h）。
 static_assert(sizeof(ApoParamBlockHeader) == 64, "param block header must be 64B");
+
+// 测试通道名选择（与心跳 AURAAPO_HEARTBEAT_LOCAL 同先例）：
+// 进程内宿主冒烟在无 SeCreateGlobalPrivilege 的普通 shell 中
+// 运行时置 AURAAPO_CHANNELS_LOCAL=1，两块改走 Local\ 名；
+// 生产进程（audiodg / App）从不设置，恒用 Global\ 名。
+inline int AuraApoChannelsLocal() {
+    static int v = -1;
+    if (v < 0) {
+        char b[2] = {0};
+        DWORD n = GetEnvironmentVariableA("AURAAPO_CHANNELS_LOCAL", b, 2);
+        v = (n == 1 && b[0] == '1') ? 1 : 0;
+    }
+    return v;
+}
+inline const wchar_t* AuraApoParamsName() {
+    return AuraApoChannelsLocal() ? L"Local\\AuraDSP_ApoParams"
+                                  : AURA_APO_PARAMS_NAME;
+}
+inline const wchar_t* AuraApoTelemetryName() {
+    return AuraApoChannelsLocal() ? L"Local\\AuraDSP_ApoTelemetry"
+                                  : AURA_APO_TELEMETRY_NAME;
+}
 
 // ---- 回传块（APO → App） ----
 // seatState 是全系统唯一的「引擎座位」（设计 D3）：LockForProcess

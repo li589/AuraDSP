@@ -346,12 +346,13 @@ static const char* const kApoStrSlotIds[APO_STR_SLOT_COUNT] = {
     "graph.order"
 };
 static const unsigned int kApoStrSlotCaps[APO_STR_SLOT_COUNT] = { 4096, 4096, 16384, 1024 };
-static const unsigned int kApoStrSlotOffsets[APO_STR_SLOT_COUNT] = { 1364, 5460, 9556, 25940 };
+static const unsigned int kApoStrSlotOffsets[APO_STR_SLOT_COUNT] = { 1428, 5524, 9620, 26004 };
 
 // 块布局常量（与 ApoShared.h / Dart apo_param_index.dart 三方一致，
 // smoke_apo_param_layout 交叉断言）。
 #define APO_BLOCK_HEADER_BYTES 64
-#define APO_BLOCK_VALUES_OFFSET 64
-#define APO_BLOCK_STRINGS_OFFSET 1364
-#define APO_BLOCK_USED_BYTES 26964
+#define APO_BLOCK_MASK_OFFSET 64
+#define APO_BLOCK_VALUES_OFFSET 128
+#define APO_BLOCK_STRINGS_OFFSET 1428
+#define APO_BLOCK_USED_BYTES 27028
 #define APO_BLOCK_MAPPING_BYTES 32768

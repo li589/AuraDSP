@@ -84,6 +84,12 @@ const String _apoSharedSddl =
     'D:(A;;GA;;;LS)(A;;GA;;;WD)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)';
 
 /// 参数块发布者：镜像 → 共享块（seqlock 单写者）。
+///
+/// 创建权口径：Global\\ 对象只有服务/管理员令牌能创建——生产
+/// 路径由 APO（LocalService）在 audiodg 内创建本块，本发布者
+/// 以「先 Open、不存在再尝试 Create」接入；两者都不成时不永久
+/// 放弃，后续每次参数变更都会重试（APO 首次锁定后块即出现）。
+/// 只有 Win32 本身不可用（非 Windows）才永久静默。
 class ApoParamPublisher {
   Map<String, ({bool isFloat, double value})>? _mirror;
   Map<String, String>? _strMirror;
@@ -94,7 +100,8 @@ class ApoParamPublisher {
   Pointer<Uint32>? _u32;
   Pointer<Int32>? _i32;
   Pointer<Float>? _f32;
-  bool _gaveUp = false;
+  bool _permFail = false;
+  bool _loggedAbsent = false;
   int _seq = 0;
 
   void bind({
@@ -107,65 +114,85 @@ class ApoParamPublisher {
     _bypassOf = bypassOf;
   }
 
+  Pointer<Void> _createMapping(_ApoWin32 w, Pointer<Utf16> name) {
+    // 穿透安全描述符（audiodg 的 LPAC 身份必须能打开本块）。
+    final sddl = _apoSharedSddl.toNativeUtf16();
+    final pSd = calloc<Pointer<Void>>();
+    final pSize = calloc<Uint32>();
+    Pointer<Void>? sd;
+    try {
+      if (w.convertSddl(sddl, 1, pSd, pSize) == 0) return nullptr;
+      sd = pSd.value;
+      final sa = calloc<_ApoSecurityAttributes>();
+      sa.ref.nLength = sizeOf<_ApoSecurityAttributes>();
+      sa.ref.lpSecurityDescriptor = sd;
+      sa.ref.bInheritHandle = 0;
+      try {
+        return w.createFileMappingW(nullptr, sa.cast(), _apoPageReadWrite,
+            0, kApoBlockMappingBytes, name);
+      } finally {
+        calloc.free(sa);
+      }
+    } finally {
+      calloc.free(sddl);
+      calloc.free(pSd);
+      calloc.free(pSize);
+      if (sd != null) w.localFree(sd);
+    }
+  }
+
   bool _ensure() {
     if (_view != null) return true;
-    if (_gaveUp) return false;
+    if (_permFail) return false;
     try {
       final w = _apoWin32();
-      // 穿透安全描述符（audiodg 的 LPAC 身份必须能打开本块）。
-      final sddl = _apoSharedSddl.toNativeUtf16();
-      final pSd = calloc<Pointer<Void>>();
-      final pSize = calloc<Uint32>();
-      Pointer<Void>? sd;
+      final name = _apoParamsName.toNativeUtf16();
+      Pointer<Void> handle;
       try {
-        if (w.convertSddl(sddl, 1, pSd, pSize) == 0) return _fail();
-        sd = pSd.value;
-        final sa = calloc<_ApoSecurityAttributes>();
-        sa.ref.nLength = sizeOf<_ApoSecurityAttributes>();
-        sa.ref.lpSecurityDescriptor = sd;
-        sa.ref.bInheritHandle = 0;
-        final name = _apoParamsName.toNativeUtf16();
-        try {
-          _mapping = w.createFileMappingW(nullptr.cast(), sa.cast(),
-              _apoPageReadWrite, 0, kApoBlockMappingBytes, name);
-        } finally {
-          calloc.free(name);
-          calloc.free(sa);
-        }
+        handle = w.openFileMappingW(_apoFileMapAllAccess, 0, name);
+        if (handle.address == 0) handle = _createMapping(w, name);
       } finally {
-        calloc.free(sddl);
-        calloc.free(pSd);
-        calloc.free(pSize);
-        if (sd != null) w.localFree(sd);
+        calloc.free(name);
       }
-      if (_mapping == null || _mapping!.address == 0) return _fail();
+      if (handle.address == 0) {
+        // 块尚不存在（APO 未首锁且本令牌无创建权）：下次再试。
+        if (!_loggedAbsent) {
+          _loggedAbsent = true;
+          dbgLog('apo publisher: param block absent, will retry');
+        }
+        return false;
+      }
       final view = w.mapViewOfFile(
-          _mapping!, _apoFileMapAllAccess, 0, 0, kApoBlockMappingBytes);
-      if (view.address == 0) return _fail();
+          handle, _apoFileMapAllAccess, 0, 0, kApoBlockMappingBytes);
+      if (view.address == 0) {
+        _permFail = true;
+        dbgLog('apo publisher: map view failed');
+        return false;
+      }
+      _mapping = handle;
       _view = view.cast();
       _u32 = view.cast();
       _i32 = view.cast();
       _f32 = view.cast();
-      // 头初始化（若映射是上一 App 会话遗留的，序号接着用现有值，
-      // 随后 flushAll 整体重写保证一致）。
-      _seq = _u32![2];
-      _u32![0] = 0x41504152; // 'APAR'
-      _u32![1] = 1;
-      _u32![4] = kApoNumParamCount;
-      dbgLog('apo publisher: param block mapped (seq=$_seq)');
+      if (_u32![0] != 0x41504152) {
+        // 全新块（系统零填充）：写头；序号从 0 起。
+        _u32![0] = 0x41504152; // 'APAR'
+        _u32![1] = 1;
+        _u32![4] = kApoNumParamCount;
+        _seq = 0;
+        _u32![2] = 0;
+      } else {
+        _seq = _u32![2];
+      }
+      dbgLog('apo publisher: param block mapped '
+          '(seq=$_seq, handle=0x${_mapping!.address.toRadixString(16)})');
       flushAll();
       return true;
     } catch (e) {
-      _gaveUp = true;
+      _permFail = true;
       dbgLog('apo publisher unavailable: $e');
       return false;
     }
-  }
-
-  bool _fail() {
-    _gaveUp = true;
-    dbgLog('apo publisher: create mapping failed');
-    return false;
   }
 
   void _beginWrite() {
@@ -178,22 +205,30 @@ class ApoParamPublisher {
     _u32![2] = _seq;
   }
 
+  void _setMaskBit(int bit) {
+    final byteIdx = kApoBlockMaskOffset + bit ~/ 8;
+    _view![byteIdx] = _view![byteIdx] | (1 << (bit % 8));
+  }
+
   void _writeNumeric(String id, double value) {
     final idx = kApoNumParamIndex[id];
     if (idx == null) return;
+    _setMaskBit(idx);
     final t = kApoNumParamTypes[idx];
+    final slot = kApoBlockValuesOffset ~/ 4 + idx;
     if (t == 0) {
-      _f32![16 + idx] = value;
+      _f32![slot] = value;
     } else if (t == 1) {
-      _i32![16 + idx] = value.toInt();
+      _i32![slot] = value.toInt();
     } else {
-      _i32![16 + idx] = value != 0 ? 1 : 0;
+      _i32![slot] = value != 0 ? 1 : 0;
     }
   }
 
   void _writeString(String id, String text) {
     final slot = kApoStrSlotIndex[id];
     if (slot == null) return;
+    _setMaskBit(kApoNumParamCount + slot);
     final cap = kApoStrSlotCaps[slot];
     final off = kApoStrSlotOffsets[slot];
     var bytes = utf8.encode(text);
@@ -239,7 +274,9 @@ class ApoParamPublisher {
   }
 
   /// 全量重写（映射新建后与 'apopublish' 命令时）：在一个 seqlock
-  /// 跨度内把当前镜像整体落块；镜像里没有的字符串槽清零用长。
+  /// 跨度内把当前镜像整体落块；有效位图按镜像重建（未在镜像中
+  /// 的参数不置位，APO 侧保持引擎默认值）；镜像里没有的字符
+  /// 串槽清零用长。
   void flushAll() {
     if (_view == null) {
       _ensure();
@@ -250,6 +287,9 @@ class ApoParamPublisher {
     if (mirror == null || strMirror == null) return;
     _beginWrite();
     _u32![3] = (_bypassOf?.call() ?? false) ? 1 : 0;
+    for (var i = 0; i < 64; i++) {
+      _view![kApoBlockMaskOffset + i] = 0;
+    }
     for (final e in mirror.entries) {
       _writeNumeric(e.key, e.value.value);
     }

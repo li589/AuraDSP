@@ -54,6 +54,9 @@ def main():
           and 'strUsed[4]' in m.group(1), 'ApoShared 参数头含 seqlock/bypass/strUsed[4]')
     check('sizeof(ApoParamBlockHeader) == 64' in shared, '参数头 64B 静态断言在位')
     check('APO_BLOCK_HEADER_BYTES 64' in c_h, '生成布局头 64B 与手写头一致')
+    check('APO_BLOCK_MASK_OFFSET 64' in c_h and
+          'const int kApoBlockValuesOffset = 128;' in dart,
+          '有效位图区在位（mask@64，values@128）')
     check('AURA_APO_PARAMS_NAME' in shared and 'AURA_APO_TELEMETRY_NAME' in shared,
           '两块共享对象名已登记')
     check('seatState' in shared and 'spectrum[32]' in shared,

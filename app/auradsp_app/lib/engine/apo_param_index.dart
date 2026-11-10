@@ -344,12 +344,13 @@ const Map<String, int> kApoStrSlotIndex = {
   'graph.order': 3
 };
 const List<int> kApoStrSlotCaps = [4096, 4096, 16384, 1024];
-const List<int> kApoStrSlotOffsets = [1364, 5460, 9556, 25940];
+const List<int> kApoStrSlotOffsets = [1428, 5524, 9620, 26004];
 
 /// 块布局常量（与 ApoShared.h / ApoParamIndex.h 三方一致，
 /// smoke_apo_param_layout 交叉断言）。
 const int kApoBlockHeaderBytes = 64;
-const int kApoBlockValuesOffset = 64;
-const int kApoBlockStringsOffset = 1364;
-const int kApoBlockUsedBytes = 26964;
+const int kApoBlockMaskOffset = 64;
+const int kApoBlockValuesOffset = 128;
+const int kApoBlockStringsOffset = 1428;
+const int kApoBlockUsedBytes = 27028;
 const int kApoBlockMappingBytes = 32768;

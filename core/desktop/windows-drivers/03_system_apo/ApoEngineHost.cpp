@@ -67,7 +67,7 @@ ApoEngineHost::~ApoEngineHost() { Stop(); }
 // ---------------------------------------------------------------------------
 bool ApoEngineHost::OpenTelemetry() {
     if (tele_) return true;
-    hTeleMap_ = CreateSharedMapping(AURA_APO_TELEMETRY_NAME, APO_TELEMETRY_BYTES);
+    hTeleMap_ = CreateSharedMapping(AuraApoTelemetryName(), APO_TELEMETRY_BYTES);
     if (!hTeleMap_) return false;
     void* v = MapViewOfFile(hTeleMap_, FILE_MAP_ALL_ACCESS, 0, 0, APO_TELEMETRY_BYTES);
     if (!v) {
@@ -182,6 +182,22 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels) {
     // 在 worker diff 中跳过，见 ApplySnapshot）。
     int32_t cnt = (int32_t)engCh_;
     fnSetParam_(engine_, "channels.count", &cnt, sizeof(cnt));
+
+    // 参数块由本进程（LocalService，有 Global 创建权）创建并
+    // 持句柄保活：标准用户的 App 进程无 SeCreateGlobalPrivilege
+    // 建不了 Global 对象，只能 Open 既有块（发布者口径）。块建
+    // 不出时引擎照常跑（参数保持默认，applied 恒 0 可见）。
+    hParamMap_ = CreateSharedMapping(AuraApoParamsName(), APO_BLOCK_MAPPING_BYTES);
+    if (hParamMap_) {
+        const void* v = MapViewOfFile(hParamMap_, FILE_MAP_READ, 0, 0,
+                                      APO_BLOCK_MAPPING_BYTES);
+        if (v) {
+            paramView_ = (const uint8_t*)v;
+        } else {
+            CloseHandle(hParamMap_);
+            hParamMap_ = nullptr;
+        }
+    }
 
     inBuf_ = new float[(size_t)kMaxBlock * engCh_];
     outBuf_ = new float[(size_t)kMaxBlock * engCh_];
@@ -322,20 +338,8 @@ DWORD WINAPI ApoEngineHost::WorkerMain(LPVOID ctx) {
 void ApoEngineHost::WorkerLoop() {
     std::vector<uint8_t> snap(APO_BLOCK_MAPPING_BYTES);
     while (WaitForSingleObject(hStop_, 50) == WAIT_TIMEOUT) {
-        // 参数块：App 未发布时保持现状，下轮重试打开。
-        if (!paramView_) {
-            hParamMap_ = OpenFileMappingW(FILE_MAP_READ, FALSE, AURA_APO_PARAMS_NAME);
-            if (hParamMap_) {
-                const void* v = MapViewOfFile(hParamMap_, FILE_MAP_READ, 0, 0,
-                                              APO_BLOCK_MAPPING_BYTES);
-                if (v) {
-                    paramView_ = (const uint8_t*)v;
-                } else {
-                    CloseHandle(hParamMap_);
-                    hParamMap_ = nullptr;
-                }
-            }
-        }
+        // 参数块视图在 TryStart 已建（本进程创建并保活）；App 侧
+        // 写入经 seqlock 校验后才采信，撕裂帧下轮重试。
         if (paramView_) {
             const auto* hdr = (const ApoParamBlockHeader*)paramView_;
             uint32_t s1 = hdr->writeSeq;
@@ -373,9 +377,14 @@ void ApoEngineHost::WorkerLoop() {
 
 void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
     const uint32_t* values = (const uint32_t*)(snap + APO_BLOCK_VALUES_OFFSET);
+    const uint8_t* mask = snap + APO_BLOCK_MASK_OFFSET;
+    auto bitSet = [&](uint32_t bit) { return (mask[bit / 8] >> (bit % 8)) & 1u; };
     bypass_.store(hdr[3] != 0);
     uint32_t applied = 0;
     for (uint32_t i = 0; i < APO_NUM_PARAM_COUNT; i++) {
+        // 有效位未置：App 从未写过此参数——保持引擎默认值，
+        // 严禁用块内零值覆盖（位图语义见 ApoShared.h）。
+        if (!bitSet(i)) continue;
         if (snapshotValid_ && appliedNum_[i] == values[i]) continue;
         const char* id = kApoNumParamIds[i];
         // channels.count 由流几何决议（TryStart 已设），块侧跳过。
@@ -388,6 +397,7 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
         appliedNum_[i] = values[i];
     }
     for (uint32_t s = 0; s < APO_STR_SLOT_COUNT; s++) {
+        if (!bitSet(APO_NUM_PARAM_COUNT + s)) continue;  // 同上，有效位门
         uint32_t used = hdr[5 + s];
         const char* base = (const char*)(snap + kApoStrSlotOffsets[s]);
         if (used > kApoStrSlotCaps[s]) used = kApoStrSlotCaps[s];

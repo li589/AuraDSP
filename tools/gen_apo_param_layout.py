@@ -27,6 +27,10 @@ id，C 侧（AuraApo worker）与 Dart 侧（isolate publisher）必须共用
 块布局（u32 对齐，两侧共用，改布局必须同步 ApoShared.h 并由
 smoke_apo_param_layout 交叉断言）：
   header 64B（magic/version/writeSeq/bypass/numCount/strUsed[4]+预留）
+  valid 区：64B 有效位图——bit i 对应数值槽 i，bit 325+s 对应
+    字符串槽 s；只有置位的槽会被 APO worker 应用（未置位 = 该
+    参数从未被 App 写过，引擎保持其默认值，严禁以块内零值覆
+    盖——首帧全量应用若不设此门会把未触碰参数清零）
   values 区：325 * 4B
   strings 区：各槽按上表顺序紧密排列
   映射大小：32768B（向上取整）。
@@ -64,6 +68,7 @@ STRING_SLOTS = (
 )
 
 HEADER_BYTES = 64
+MASK_BYTES = 64
 MAPPING_BYTES = 32768
 
 
@@ -87,7 +92,7 @@ def parse_numeric_params():
 
 
 def layout(params):
-    values_off = HEADER_BYTES
+    values_off = HEADER_BYTES + MASK_BYTES
     strings_off = values_off + 4 * len(params)
     slot_offs = []
     p = strings_off
@@ -131,6 +136,7 @@ static const unsigned int kApoStrSlotOffsets[APO_STR_SLOT_COUNT] = {{ {str_offs}
 // 块布局常量（与 ApoShared.h / Dart apo_param_index.dart 三方一致，
 // smoke_apo_param_layout 交叉断言）。
 #define APO_BLOCK_HEADER_BYTES {HEADER_BYTES}
+#define APO_BLOCK_MASK_OFFSET {HEADER_BYTES}
 #define APO_BLOCK_VALUES_OFFSET {values_off}
 #define APO_BLOCK_STRINGS_OFFSET {strings_off}
 #define APO_BLOCK_USED_BYTES {total}
@@ -169,6 +175,7 @@ const List<int> kApoStrSlotOffsets = [{str_offs}];
 /// 块布局常量（与 ApoShared.h / ApoParamIndex.h 三方一致，
 /// smoke_apo_param_layout 交叉断言）。
 const int kApoBlockHeaderBytes = {HEADER_BYTES};
+const int kApoBlockMaskOffset = {HEADER_BYTES};
 const int kApoBlockValuesOffset = {values_off};
 const int kApoBlockStringsOffset = {strings_off};
 const int kApoBlockUsedBytes = {total};
