@@ -185,6 +185,12 @@ struct VaioBridgeCtl {
     ULONG ringSampleRate = 48000;
     ULONG ringBlockAlign = 8;
     ULONG ringBits = 32;
+    // 共享头几何旁观值（第四轮项 3 取证）：工作几何改以 MAP 应答
+    // 的内核真值为准（DRV-03 口径），头字段仅留档对照——status
+    // 同时输出两份，噪声复现时一招分辨几何来源分歧。
+    ULONG hdrChannels = 0;
+    ULONG hdrSampleRate = 0;
+    ULONG hdrBits = 0;
 
     // 引擎 (auradsp_engine.dll)
     HMODULE hEngineMod = nullptr;
@@ -1169,11 +1175,28 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.pMappedRing = mapResp.UserAddress;
     g_vaio.pRingHeader = reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(mapResp.UserAddress);
     g_vaio.pRingPayload = (BYTE*)mapResp.UserAddress + g_vaio.pRingHeader->DataOffsetBytes;
-    g_vaio.ringDataSize = g_vaio.pRingHeader->DataSizeBytes;
-    g_vaio.ringChannels = g_vaio.pRingHeader->Channels ? g_vaio.pRingHeader->Channels : 2;
-    g_vaio.ringSampleRate = g_vaio.pRingHeader->SampleRate ? g_vaio.pRingHeader->SampleRate : 48000;
-    g_vaio.ringBits = g_vaio.pRingHeader->BitsPerSample ? g_vaio.pRingHeader->BitsPerSample : 32;
-    g_vaio.ringBlockAlign = g_vaio.pRingHeader->BlockAlign ? g_vaio.pRingHeader->BlockAlign : (g_vaio.ringChannels * (g_vaio.ringBits == 16 ? sizeof(int16_t) : sizeof(float)));
+    // 工作几何以 MAP 应答的内核真值为准（第四轮项 3 / DRV-03 口径）：
+    // 此前读共享头副本——头由内核在格式变更时同锁同写、实践中不
+    // 分歧，但应答是 IOCTL 当场从内核全局读出的权威值；头字段留
+    // 档进 hdr* 供 status 对照，应答缺字段时仍回落头值/常数。
+    g_vaio.hdrChannels = g_vaio.pRingHeader->Channels;
+    g_vaio.hdrSampleRate = g_vaio.pRingHeader->SampleRate;
+    g_vaio.hdrBits = g_vaio.pRingHeader->BitsPerSample;
+    g_vaio.ringDataSize = mapResp.DataSizeBytes ? mapResp.DataSizeBytes
+                                                 : g_vaio.pRingHeader->DataSizeBytes;
+    g_vaio.ringChannels = mapResp.Channels ? mapResp.Channels
+                                           : (g_vaio.hdrChannels ? g_vaio.hdrChannels : 2);
+    g_vaio.ringSampleRate = mapResp.SampleRate
+                                ? mapResp.SampleRate
+                                : (g_vaio.hdrSampleRate ? g_vaio.hdrSampleRate : 48000);
+    g_vaio.ringBits = mapResp.BitsPerSample
+                          ? mapResp.BitsPerSample
+                          : (g_vaio.hdrBits ? g_vaio.hdrBits : 32);
+    g_vaio.ringBlockAlign = mapResp.BlockAlign
+                                ? mapResp.BlockAlign
+                                : (g_vaio.pRingHeader->BlockAlign
+                                       ? g_vaio.pRingHeader->BlockAlign
+                                       : (g_vaio.ringChannels * (g_vaio.ringBits == 16 ? sizeof(int16_t) : sizeof(float))));
 
     // 3. 动态加载 auradsp_engine.dll
     std::wstring used;
@@ -1491,9 +1514,8 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     memset(g_vaio.scratchRing, 0, scratchBytes);
     memset(g_vaio.scratchRaw, 0, scratchBytes);
 
-    // 7. 应用初始参数并回放镜像
+    // 7. 应用初始参数
     ApplyParamsString(params_json);
-    ReplayMirroredParams();
 
     // 7.1 声道模式决议与同步：根据 countMode 决定实际生效的工作声道数
     if (g_vaio.countMode == 1) {
@@ -1504,6 +1526,13 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
         const int32_t ringCh = (g_vaio.ringChannels > 0 ? (int32_t)g_vaio.ringChannels : 2);
         SetEngineChannels(ringCh);
     }
+
+    // 7.2 镜像回放（第四轮项 3 取证修正）：原先紧跟 §7、在声道决议
+    // 之前回放——多声道相关参数落在一个尚未定型的引擎上，与 Dart
+    // 侧随后按会话顺序的有序重放叠加成「重启独有的三段式应用」，
+    // 首次启动（镜像空）则没有这段。移到决议之后：声道先定型，
+    // 镜像再应用；回放顺序与首启的差异面收敛到最窄。
+    ReplayMirroredParams();
 
     // 8. 启动 RT 音频泵线程
     // P3：采样率已定稿，配置静音门控（AURADSP_GATE=0 时禁用）。
@@ -1528,7 +1557,16 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
 }
 
 int vaio_stop() {
-    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 0;  // 幂等退出
+    // 幂等退出仅当确无待拆对象（第四轮项 3 取证）：泵自判死时是
+    // 它自己清的 running——此时 hPumpThread/pEngine/pAudioClient/
+    // 环映射都还活着，旧逻辑在此早退会跳过全部拆解，下一次
+    // vaio_start 在未释放的 WASAPI client 与引擎之上带病重建。
+    // 线程已自退出时 WaitForSingleObject 立即返回，拆解安全。
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0) &&
+        !g_vaio.hPumpThread && !g_vaio.pEngine && !g_vaio.pAudioClient &&
+        !g_vaio.pMappedRing) {
+        return 0;
+    }
 
     InterlockedExchange(&g_vaio.stopEvent, 1);
     if (g_vaio.hPumpThread) {
@@ -1563,7 +1601,7 @@ int vaio_status(char* out, int cap) {
 
     const int n = _snprintf_s(
         out, (size_t)cap, _TRUNCATE,
-        "{\"running\":%s,\"frames\":%llu,\"sr\":%lu,\"channels\":%lu,\"bits\":%lu,\"ringSr\":%lu,\"ringCh\":%lu,\"outCh\":%lu,\"outBits\":%lu,"
+        "{\"running\":%s,\"frames\":%llu,\"sr\":%lu,\"channels\":%lu,\"bits\":%lu,\"ringSr\":%lu,\"ringCh\":%lu,\"hdrSr\":%lu,\"hdrCh\":%lu,\"hdrBits\":%lu,\"outCh\":%lu,\"outBits\":%lu,"
         "\"peakIn\":%.4f,\"peakOut\":%.4f,\"maxPumpUs\":%.2f,\"startRc\":%d,\"note\":\"%s\","
         "\"outputEndpoint\":\"%s\",\"engineOk\":%s,\"enginePath\":\"%s\","
         "\"paramsApplied\":%d,\"paramsFailed\":%d,\"bypass\":%ld,\"testKind\":%ld,"
@@ -1575,6 +1613,9 @@ int vaio_status(char* out, int cap) {
         g_vaio.ringBits,
         g_vaio.ringSampleRate,
         g_vaio.ringChannels,
+        g_vaio.hdrSampleRate,
+        g_vaio.hdrChannels,
+        g_vaio.hdrBits,
         g_vaio.wasapiChannels,
         g_vaio.wasapiBits,
         g_vaio.peakIn,
