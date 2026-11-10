@@ -73,7 +73,7 @@ extension AudioModesState on AppModel {
     pluginManager.setVbMultiBus(isVb);
     pluginManager.setApoShadow(
         AudioModes.capsFor(valid).pluginProcessing == PluginProcessing.apo);
-    ConfigManager.save(config);
+    persistRoutingChange();
     if (wasVb != isVb) {
       // 进桥先推掩码（isolate 记 session 变量，start 时同步进桥；桥未起时仅记录）。
       if (isVb) {
@@ -161,7 +161,7 @@ extension AudioModesState on AppModel {
     final v = backend == 'alsa' ? 'alsa' : 'pulse';
     if (config.linuxAudioBackend == v) return;
     config.linuxAudioBackend = v;
-    ConfigManager.save(config);
+    persistRoutingChange();
     _restartIsolate();
     _notifyUi();
   }
@@ -179,7 +179,7 @@ extension AudioModesState on AppModel {
     final v = device.trim();
     if (config.alsaOutputDevice == v) return;
     config.alsaOutputDevice = v;
-    ConfigManager.save(config);
+    persistRoutingChange();
     if (config.linuxAudioBackend == 'alsa') _restartIsolate();
     _notifyUi();
   }
@@ -193,7 +193,7 @@ extension AudioModesState on AppModel {
     final v = device.trim();
     if (config.alsaCaptureDevice == v) return;
     config.alsaCaptureDevice = v;
-    ConfigManager.save(config);
+    persistRoutingChange();
     if (config.linuxAudioBackend == 'alsa') _restartIsolate();
     _notifyUi();
   }
@@ -213,7 +213,7 @@ extension AudioModesState on AppModel {
     if (composed != audioMode) {
       setAudioMode(composed);
     } else {
-      ConfigManager.save(config);
+      persistRoutingChange();
       _notifyUi();
     }
   }
@@ -236,11 +236,11 @@ extension AudioModesState on AppModel {
         // setPipelineInput/Output/setAudioMode/ready 各路统
         // 一承担，此处顺手收口捕获链状态。
         applyPipelineChain();
-        ConfigManager.save(config);
+        persistRoutingChange();
         _notifyUi();
       }
     } else {
-      ConfigManager.save(config);
+      persistRoutingChange();
       _notifyUi();
     }
   }
@@ -391,7 +391,7 @@ extension AudioModesState on AppModel {
     // 全接线：输入第一次真实驱动链路（此前只落盘——真机项
     // 4「切输入无反应、链路靠输出点击带起来」的根源）。
     applyPipelineChain();
-    ConfigManager.save(config);
+    persistRoutingChange();
     _notifyUi();
   }
 
@@ -409,11 +409,11 @@ extension AudioModesState on AppModel {
         // 模式未变也要对账链路（输入侧合成可能已变、桥可能
         // 已漂移）：applyPipelineChain 统一承担。
         applyPipelineChain();
-        ConfigManager.save(config);
+        persistRoutingChange();
         _notifyUi();
       }
     } else {
-      ConfigManager.save(config);
+      persistRoutingChange();
       _notifyUi();
     }
   }
@@ -437,26 +437,26 @@ extension AudioModesState on AppModel {
       }
     }
     _pipelineDeviceChanged();
-    ConfigManager.save(config);
+    persistRoutingChange();
     _notifyUi();
   }
 
   void setPipelineOutputDevice(String device) {
     config.pipelineOutputDevice = device;
     _pipelineDeviceChanged();
-    ConfigManager.save(config);
+    persistRoutingChange();
     _notifyUi();
   }
 
   void setPipelineInputEnabled(bool enabled) {
     config.pipelineInputEnabled = enabled;
-    ConfigManager.save(config);
+    persistRoutingChange();
     _notifyUi();
   }
 
   void setPipelineOutputEnabled(bool enabled) {
     config.pipelineOutputEnabled = enabled;
-    ConfigManager.save(config);
+    persistRoutingChange();
     _notifyUi();
   }
 
@@ -680,13 +680,13 @@ extension AudioModesState on AppModel {
 
   void setApoTargetEndpoint(String endpoint) {
     config.apoTargetEndpoint = endpoint;
-    ConfigManager.save(config);
+    persistRoutingChange();
     _notifyUi();
   }
 
   void setMonitorMirroring(bool enabled) {
     config.monitorMirroring = enabled;
-    ConfigManager.save(config);
+    persistRoutingChange();
     _notifyUi();
   }
 

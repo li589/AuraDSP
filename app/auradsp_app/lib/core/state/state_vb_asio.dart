@@ -47,7 +47,7 @@ extension VbAsioState on AppModel {
     if (next == vbBusMask) return;
     vbBusMask = next & 0xFF;
     config.vbBusMask = vbBusMask;
-    ConfigManager.save(config);
+    persistRoutingChange();
     vbRoutePending[group] = on;
     vbRoutePendingAt[group] = DateTime.now().millisecondsSinceEpoch;
     _toIso?.send({'cmd': 'setBusMask', 'mask': vbBusMask});
@@ -121,7 +121,7 @@ extension VbAsioState on AppModel {
     if (next == vbPluginGroupMask) return;
     vbPluginGroupMask = next & 0xFF;
     config.vbPluginGroupMask = vbPluginGroupMask;
-    ConfigManager.save(config);
+    persistRoutingChange();
     _toIso?.send({'cmd': 'setPluginGroupMask', 'mask': vbPluginGroupMask});
     _fallbackVbPluginEditorGroup();
     _notifyUi();
@@ -134,7 +134,7 @@ extension VbAsioState on AppModel {
   void setVbAutoProtect(bool on) {
     if (config.vbAutoProtect == on) return;
     config.vbAutoProtect = on;
-    ConfigManager.save(config);
+    persistRoutingChange();
     _toIso?.send({'cmd': 'setPluginAutoProtect', 'on': on});
     _notifyUi();
   }
@@ -147,7 +147,7 @@ extension VbAsioState on AppModel {
     // 生死（实例由路开关 mask 决定）。全关仍是合法显式选择，原值落盘。
     vbPluginGroupMask = next;
     config.vbPluginGroupMask = next;
-    ConfigManager.save(config);
+    persistRoutingChange();
     _toIso?.send({'cmd': 'setPluginGroupMask', 'mask': vbPluginGroupMask});
     _fallbackVbPluginEditorGroup();
     _notifyUi();
@@ -186,7 +186,7 @@ extension VbAsioState on AppModel {
   void setAsioDriver(String name) {
     if (config.asioDriver == name) return;
     config.asioDriver = name;
-    ConfigManager.save(config);
+    persistRoutingChange();
     if (asioActive) _sendAsioRestart();
     _notifyUi();
   }
@@ -195,7 +195,7 @@ extension VbAsioState on AppModel {
   void setAsioBufSize(int frames) {
     if (config.asioBufSize == frames) return;
     config.asioBufSize = frames;
-    ConfigManager.save(config);
+    persistRoutingChange();
     if (asioActive) _sendAsioRestart();
     _notifyUi();
   }
@@ -204,7 +204,7 @@ extension VbAsioState on AppModel {
   void setAsioOutPair(int ch) {
     if (config.asioOutPair == ch) return;
     config.asioOutPair = ch;
-    ConfigManager.save(config);
+    persistRoutingChange();
     if (asioActive) _sendAsioRestart();
     _notifyUi();
   }
@@ -219,7 +219,7 @@ extension VbAsioState on AppModel {
   void setVaioOutputEndpoint(String endpoint) {
     if (config.vaioOutputEndpoint == endpoint) return;
     config.vaioOutputEndpoint = endpoint;
-    ConfigManager.save(config);
+    persistRoutingChange();
     if (vaioActive) {
       _toIso?.send({
         'cmd': 'vaiorestart',

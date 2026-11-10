@@ -1200,6 +1200,10 @@ class AppModel extends ChangeNotifier {
         } finally {
           _isReplayingSession = false;
         }
+        // 第五轮 S1 对齐：恢复中的规范化/派生（audioMode normalize、
+        // 管线输出推导等）只落在内存，磁盘仍是旧快照——立即对齐
+        // 一次，防旧快照里的过期路由字段在后续启动继续回滚派生值。
+        SessionMemory.save(this);
       } else {
         SessionMemory.save(this);
       }
