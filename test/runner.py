@@ -50,6 +50,9 @@ PLATFORM_ANY = {
     # Linux CI J3 只 SKIP 不实跑，覆盖是假的（图集 R3 违规漏网实证）。
     "smoke_d4b_swallow.py",
     "smoke_debug_policy.py",
+    # APO 参数块布局漂移门（2026-11-10，APO 立项 P1）：生成器
+    # --check + ApoShared.h 手写布局交叉断言，纯源码/脚本，两平台可跑。
+    "smoke_apo_param_layout.py",
     # EEL 手册防漂移（2026-11-08）：手册条目 ↔ VM fnTable1 存在性 +
     # 定长签名个数 + 宿主环境条目齐备，纯源码扫描，两平台可跑。
     "smoke_eel_manual.py",
@@ -336,6 +339,7 @@ def run_smoke_tests():
         # 平台分类在 PLATFORM_ANY（2026-11-08 自 WINDOWS 集移入：
         # 纯源码扫描，Linux CI 必须实跑）。
         "smoke_d4b_swallow.py",
+        "smoke_apo_param_layout.py",
         # EEL 手册防漂移门禁（2026-11-08）：手册 92 条 ↔ VM fnTable1
         # 200 函数的存在性与定长签名比对（freembuf 幽灵条目、mldivide /
         # quadprog 等签名个数错误、num_ch 等宿主条目缺失的全量比对收口）。
