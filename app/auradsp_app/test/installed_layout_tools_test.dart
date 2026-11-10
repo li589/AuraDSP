@@ -254,7 +254,10 @@ void main() {
       // detach 先刷新清单、非空时以首个已附加端点为卸载对象，
       // 裁定按被卸端点复核（不用所选目标的 apoAttached）
       final d = state.indexOf('Future<bool> detachSystemApo');
-      final seg = state.substring(d, d + 4200);
+      // detach 是文件尾函数，窗口必须夹紧到文件长（余 2274 字，
+      // 三针均已实测在内；不夹紧会 RangeError——S6 同型教训）。
+      final end = d + 4200 > state.length ? state.length : d + 4200;
+      final seg = state.substring(d, end);
       expect(seg, contains('apoInstalledEndpoints.isNotEmpty'));
       expect(seg, contains('stillThere'));
       expect(seg, isNot(contains('&& !apoAttached')));
