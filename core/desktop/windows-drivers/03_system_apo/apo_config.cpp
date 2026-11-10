@@ -1728,7 +1728,9 @@ bool EnableTokenPrivilege(const wchar_t* name) {
 // 予 Administrators/SYSTEM 完全控制。仅 doctor --fix 在探针失败
 // 时调用；任何一步失败即返回 false（doctor 如实报告未修复）。
 bool TakeOwnershipRepair(const std::wstring& fxSub) {
-    if (!EnableTokenPrivilege(SE_TAKE_OWNERSHIP_NAME)) return false;
+    // SE_TAKE_OWNERSHIP_NAME 在 winnt.h 里是窄字符串常量，
+    // 与本函数的宽字符串形参不合，直接用字面量。
+    if (!EnableTokenPrivilege(L"SeTakeOwnershipPrivilege")) return false;
     SID_IDENTIFIER_AUTHORITY ntAuth = SECURITY_NT_AUTHORITY;
     PSID admins = nullptr;
     PSID systemSid = nullptr;
