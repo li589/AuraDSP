@@ -202,6 +202,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get apoModeHint => '模式切换仅选择附加目标；实际附加 / 卸载由下方「一键附加」「一键卸载」执行。';
 
   @override
+  String get apoPassthroughNote =>
+      '注意：当前 System APO 为透传版——声音经 APO 直通，帧数仅表示 APO 在运行，AuraDSP 音效不作用于此模式；需要实时音效请使用 VAIO / ASIO 模式。';
+
+  @override
   String setDriverOffline(String name) {
     return '$name [未检测到/离线]';
   }

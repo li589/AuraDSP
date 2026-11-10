@@ -208,6 +208,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Switching modes only selects the attach target; use Attach / Detach below to actually apply or remove the APO.';
 
   @override
+  String get apoPassthroughNote =>
+      'Note: the System APO is currently a pass-through build — audio flows through unprocessed and the frame counter only shows the APO is running. AuraDSP effects do not apply in this mode; use VAIO / ASIO mode for live processing.';
+
+  @override
   String setDriverOffline(String name) {
     return '$name [not detected/offline]';
   }

@@ -77,6 +77,7 @@
   "setRefreshStatus": "状態を更新",
   "setApoSafetyNote": "レジストリ保護：すべての変更は HKLM\\SOFTWARE\\AuraDSP\\Child APOs とディスク二層スナップショットで原子的に保護され、アンインストール時に元のドライバー構成を 100% 復元します。",
   "apoModeHint": "モード切替は附加先の選択のみです。実際の附加 / 解除は下の「一括附加」「一括解除」で実行します。",
+  "apoPassthroughNote": "注意：現在の System APO はパススルー版です。音声は未処理で通過し、フレーム数は APO の稼働を示すのみで、AuraDSP のエフェクトはこのモードでは適用されません。リアルタイム処理には VAIO / ASIO モードを使用してください。",
   "setDriverOffline": "{name} [未検出/オフライン]",
   "setVaioReady": "AuraVAIO KMDF ドライバー準備完了（Sysvad 仮想サウンドカード）",
   "setVaioMissing": "AuraVAIO 仮想サウンドカードドライバーが見つかりません",

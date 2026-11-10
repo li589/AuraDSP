@@ -77,6 +77,7 @@
   "setRefreshStatus": "Refresh status",
   "setApoSafetyNote": "Registry safety: all changes are atomically protected via HKLM\\SOFTWARE\\AuraDSP\\Child APOs plus a dual-layer disk snapshot; the original driver config is 100% restored on uninstall.",
   "apoModeHint": "Switching modes only selects the attach target; use Attach / Detach below to actually apply or remove the APO.",
+  "apoPassthroughNote": "Note: the System APO is currently a pass-through build — audio flows through unprocessed and the frame counter only shows the APO is running. AuraDSP effects do not apply in this mode; use VAIO / ASIO mode for live processing.",
   "setDriverOffline": "{name} [not detected/offline]",
   "setVaioReady": "AuraVAIO KMDF driver ready (Sysvad virtual sound card)",
   "setVaioMissing": "AuraVAIO virtual sound card driver not detected",

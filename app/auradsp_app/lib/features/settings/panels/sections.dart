@@ -458,6 +458,16 @@ class _SystemApoPanel extends StatelessWidget {
           child: Text(l.apoModeHint,
               style: captionOf(p, color: p.textDim).copyWith(fontSize: 11)),
         ),
+        // 透传如实标注（第四轮项 1 取证）：当前 AuraApo v1 是透传
+        // 实现（APOProcess 仅拷贝 + 心跳，无引擎、无参数通道），
+        // 帧数跳动只证明它在运行。此前 UI 只字未提、用户误以为
+        // 音效应生效——在此明示，止损于呈现层；引擎嵌入 APO 是
+        // 独立立项（方向待定），落地后本行随之撤下。
+        Padding(
+          padding: const EdgeInsets.only(top: 2, bottom: 2),
+          child: Text(l.apoPassthroughNote,
+              style: captionOf(p, color: p.warning).copyWith(fontSize: 11)),
+        ),
         const SizedBox(height: AuraSpace.xs),
         Row(
           children: [
