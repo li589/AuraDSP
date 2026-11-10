@@ -149,27 +149,25 @@ class _LinuxDevicePanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 版式与 Windows 驱动层统一（2026-11-10 用户裁定）：层标题 +
+        // _DriverBlock 块组（文字左、按钮同行右）+ 操作系统行收尾。
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(alsa ? 'ALSA (Linux)' : 'PulseAudio (Linux)',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: p.text,
-                      )),
-                  if (info != null) ...[
-                    const SizedBox(height: 2),
-                    Text('ABI v${info.abi} · ${info.version}',
-                        style: monoOf(p, size: 10, color: p.textDim)),
-                  ],
-                ],
-              ),
-            ),
+            Icon(Icons.developer_board_rounded, size: 15, color: p.accent),
+            const SizedBox(width: AuraSpace.xs),
+            Text(l.driverLayerTitle, style: sectionOf(p, color: p.text)),
+          ],
+        ),
+        const SizedBox(height: AuraSpace.sm),
+        _DriverBlock(
+          title: alsa ? 'ALSA (Linux)' : 'PulseAudio (Linux)',
+          lines: [
+            if (info != null) _DriverDetail('ABI v${info.abi} · ${info.version}'),
+            if (info != null)
+              _DriverDetail('${info.deviceRate} Hz · ${info.deviceCh} ch · '
+                  '${info.bufferFrames} frames'),
+          ],
+          actions: [
             AuraChip(
               l.setRefreshStatus,
               icon: Icons.refresh_rounded,
@@ -177,7 +175,7 @@ class _LinuxDevicePanel extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: AuraSpace.xs),
+        const SizedBox(height: AuraSpace.sm),
         Row(children: [
           SizedBox(
               width: 104,
@@ -233,24 +231,40 @@ class _LinuxDevicePanel extends StatelessWidget {
               onTap: () => _editAlsaCaptureDevice(context),
             ),
           ]),
-        if (info != null)
-          _InfoRow(
-            l.linuxOutputFormat,
-            '${info.deviceRate} Hz · ${info.deviceCh} ch · '
-                '${info.bufferFrames} frames',
-          ),
         _InfoRow(
             l.linuxCaptureSource,
             captureOn
                 ? (capSource.isEmpty ? '—' : capSource)
                 : l.linuxCaptureNone),
-        _InfoRow(l.linuxVirtualDevice,
-            model.linuxVirtualSink ? l.linuxVirtualPresent : l.linuxVirtualAbsent),
-        _InfoRow(l.linuxModeDriver,
-            model.linuxDriverLoaded ? l.linuxDriverPresent : l.linuxDriverAbsent),
+        const SizedBox(height: AuraSpace.xs),
+        _DriverBlock(
+          title: l.linuxVirtualDevice,
+          lines: [
+            _DriverStatus(
+              model.linuxVirtualSink
+                  ? l.linuxVirtualPresent
+                  : l.linuxVirtualAbsent,
+              model.linuxVirtualSink ? p.success : p.textDim,
+            ),
+          ],
+        ),
+        const SizedBox(height: AuraSpace.sm),
+        _DriverBlock(
+          title: l.linuxModeDriver,
+          lines: [
+            _DriverStatus(
+              model.linuxDriverLoaded
+                  ? l.linuxDriverPresent
+                  : l.linuxDriverAbsent,
+              model.linuxDriverLoaded ? p.success : p.textDim,
+            ),
+          ],
+        ),
         const SizedBox(height: AuraSpace.xs),
         Text(alsa ? l.linuxAlsaExpertHint : l.linuxDeviceHint,
             style: captionOf(p, color: p.textDim).copyWith(fontSize: 11)),
+        const SizedBox(height: AuraSpace.xs),
+        _InfoRow(l.osVersionLabel, PlatformProfile.osVersion),
       ],
     );
   }

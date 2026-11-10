@@ -2470,6 +2470,18 @@ abstract class AppLocalizations {
   /// **'AuraDSP 虚拟 ASIO 驱动'**
   String get asioDriverCardTitle;
 
+  /// No description provided for @vaioDriverCardTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 虚拟声卡驱动'**
+  String get vaioDriverCardTitle;
+
+  /// No description provided for @wasapiDriverCardTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'WASAPI 音频引擎'**
+  String get wasapiDriverCardTitle;
+
   /// No description provided for @asioDriverStatus.
   ///
   /// In zh, this message translates to:

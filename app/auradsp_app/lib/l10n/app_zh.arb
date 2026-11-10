@@ -607,6 +607,8 @@
   "apoActionAttach": "一键附加",
   "apoActionDetach": "一键卸载",
   "asioDriverCardTitle": "AuraDSP 虚拟 ASIO 驱动",
+  "vaioDriverCardTitle": "AuraVAIO 虚拟声卡驱动",
+  "wasapiDriverCardTitle": "WASAPI 音频引擎",
   "asioDriverStatus": "驱动状态",
   "asioDriverRegistered": "已在系统注册",
   "asioDriverNotRegistered": "未注册",

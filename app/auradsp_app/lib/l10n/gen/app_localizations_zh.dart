@@ -1287,6 +1287,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get asioDriverCardTitle => 'AuraDSP 虚拟 ASIO 驱动';
 
   @override
+  String get vaioDriverCardTitle => 'AuraVAIO 虚拟声卡驱动';
+
+  @override
+  String get wasapiDriverCardTitle => 'WASAPI 音频引擎';
+
+  @override
   String get asioDriverStatus => '驱动状态';
 
   @override

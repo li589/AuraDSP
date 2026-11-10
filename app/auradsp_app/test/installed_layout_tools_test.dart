@@ -197,6 +197,39 @@ void main() {
     test('注册按钮同行右对齐（R1）', () {
       expect(hw, contains('WrapAlignment.end'));
     });
+
+    test('驱动块版式统一（2026-11-10 用户裁定）：三块与 Linux 面共用 _DriverBlock', () {
+      // Windows 三块一律 _DriverBlock（文字左、按钮同行右）
+      for (final cls in [
+        'class _VaioDriverRow',
+        'class _VirtualAsioDriverCard',
+        'class _WasapiDriverRow',
+      ]) {
+        final s = hw.indexOf(cls);
+        final e = hw.indexOf('\nclass ', s + 1);
+        expect(s, greaterThanOrEqualTo(0), reason: cls);
+        expect(hw.substring(s, e < 0 ? hw.length : e),
+            contains('return _DriverBlock('),
+            reason: cls);
+      }
+      // ASIO 检测/注销不再有卡底独占行：卡内除 _DriverBlock 的
+      // WrapAlignment.end 外不得再出现对齐 Wrap
+      final as = hw.indexOf('class _VirtualAsioDriverCard');
+      final ae = hw.indexOf('\nclass ', as + 1);
+      final card = hw.substring(as, ae < 0 ? hw.length : ae);
+      expect(card, isNot(contains('Wrap(')));
+      // 统一组件本体在位
+      expect(hw, contains('class _DriverBlock extends StatelessWidget'));
+      // Linux 设备面同口径：层标题 + 引擎块 + OS 行收尾
+      final lp = sections.indexOf('class _LinuxDevicePanel');
+      final le = sections.indexOf('Future<void> _editAlsaDevice', lp);
+      final linux = sections.substring(lp, le);
+      expect(linux, contains('l.driverLayerTitle'));
+      expect(linux, contains('_DriverBlock('));
+      expect(linux, contains('_InfoRow(l.osVersionLabel'));
+      expect(linux.lastIndexOf('_InfoRow(l.osVersionLabel'),
+          greaterThan(linux.lastIndexOf('_DriverBlock(')));
+    });
   });
 
   group('V-02 刷新链守卫（F0）', () {

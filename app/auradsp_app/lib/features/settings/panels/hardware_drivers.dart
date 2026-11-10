@@ -13,7 +13,12 @@ part of '../../settings_page.dart';
  *   下沉输出层（_AsioClientOutputSubpanel）；本层动作只有安装/
  *   卸载/注册/检查一类；
  * - 本层在管线与附加两种处理范式下都显示（_DynamicAudioPanel
- *   组合），可见性不再被范式选择裁剪。 */
+ *   组合），可见性不再被范式选择裁剪。
+ *
+ * 版式统一（2026-11-10 晚，用户裁定）：每个驱动一律走 _DriverBlock
+ * ——左侧文字栏（驱动名 12/600 + 状态行 + 明细行，左对齐）、动作
+ * 按钮同行右侧右对齐；整层最后一行恒为操作系统信息。Linux 设备
+ * 面（sections.dart 的 _LinuxDevicePanel）同口径。 */
 
 class _DriverLayer extends StatelessWidget {
   final AppModel model;
@@ -43,6 +48,110 @@ class _DriverLayer extends StatelessWidget {
         _WasapiDriverRow(model: model),
         const SizedBox(height: AuraSpace.xs),
         _InfoRow(l.osVersionLabel, PlatformProfile.osVersion),
+      ],
+    );
+  }
+}
+
+/* ---- 驱动块统一版式（2026-11-10 用户裁定） ----
+ * 一块 = 一行：左 = 文字栏（标题 + 若干状态/明细行），右 = 动作
+ * 按钮组（右对齐、与文字同行）；below 承错误条等整宽尾随件。
+ * 字号口径全层唯一：标题 12/600、状态行 11.5/500、明细 mono 10、
+ * 键值行标签 11（宽 76）+ 值 mono 11。Windows 三块与 Linux 设备
+ * 面的引擎/虚拟设备/内核驱动块共用本组件。 */
+class _DriverBlock extends StatelessWidget {
+  final String title;
+  final List<Widget> lines;
+  final List<Widget> actions;
+  final Widget? below;
+  const _DriverBlock({
+    required this.title,
+    this.lines = const [],
+    this.actions = const [],
+    this.below,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: p.text)),
+                  for (final line in lines) ...[
+                    const SizedBox(height: 2),
+                    line,
+                  ],
+                ],
+              ),
+            ),
+            if (actions.isNotEmpty) ...[
+              const SizedBox(width: AuraSpace.sm),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: AuraSpace.sm,
+                runSpacing: AuraSpace.xs,
+                children: actions,
+              ),
+            ],
+          ],
+        ),
+        ?below,
+      ],
+    );
+  }
+}
+
+/// 驱动块状态行（单行小字，颜色表状态）。
+class _DriverStatus extends StatelessWidget {
+  final String text;
+  final Color color;
+  const _DriverStatus(this.text, this.color);
+
+  @override
+  Widget build(BuildContext context) => Text(text,
+      style:
+          TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500, color: color));
+}
+
+/// 驱动块明细行（mono 小字，恒 dim）。
+class _DriverDetail extends StatelessWidget {
+  final String text;
+  const _DriverDetail(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return Text(text, style: monoOf(p, size: 10, color: p.textDim));
+  }
+}
+
+/// 驱动块键值行（标签左、值右接，同 _InfoRow 的紧凑版）。
+class _DriverKv extends StatelessWidget {
+  final String k, v;
+  const _DriverKv(this.k, this.v);
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+            width: 76,
+            child: Text(k, style: labelOf(p, size: 11, color: p.textDim))),
+        Expanded(child: Text(v, style: monoOf(p, size: 11))),
       ],
     );
   }
@@ -256,90 +365,65 @@ class _VaioDriverRow extends StatelessWidget {
     final detected = det.isNotEmpty;
     final found = det['found'] == true;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    !detected
-                        ? l.setVaioUnknown
-                        : (found ? l.setVaioReady : l.setVaioMissing),
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: !detected
-                          ? p.textDim
-                          : (found ? p.success : p.warning),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    l.setVaioDesc,
-                    style: monoOf(p, size: 10, color: p.textDim),
-                  ),
-                ],
-              ),
-            ),
-            Wrap(
-              spacing: AuraSpace.sm,
-              children: [
-                if (detected && !found)
-                  AuraChip(
-                    l.setInstallDriverUac,
-                    icon: Icons.admin_panel_settings,
-                    selected: true,
-                    onTap: () async {
-                      model.postNotice(l.setInstallDriverUacPrompt);
-                      final ok = await model.installVaioDriver(elevated: true);
-                      model.postNotice(
-                        ok
-                            ? l.setVaioInstallOk
-                            : (model.vaioActionUnverified
-                                ? l.setVaioInstallUnverified
-                                : (model.lastVaioError ??
-                                    l.setDriverInstallFailed)),
-                        level: ok ? NoticeLevel.info : NoticeLevel.error,
-                      );
-                    },
-                  )
-                else if (found)
-                  AuraChip(
-                    l.setUninstallDriver,
-                    icon: Icons.delete_outline,
-                    danger: true,
-                    onTap: () async {
-                      final ok = await model.uninstallVaioDriver(elevated: true);
-                      model.postNotice(
-                        ok
-                            ? l.setVaioUninstallOk
-                            : (model.vaioActionUnverified
-                                ? l.setVaioUninstallUnverified
-                                : l.setDriverUninstallFailed),
-                        level: ok ? NoticeLevel.info : NoticeLevel.error,
-                      );
-                    },
-                  ),
-                AuraChip(
-                  l.setRedetect,
-                  icon: Icons.refresh_rounded,
-                  onTap: () => model.refreshVaioDetect(),
-                ),
-              ],
-            ),
-          ],
+    return _DriverBlock(
+      title: l.vaioDriverCardTitle,
+      lines: [
+        _DriverStatus(
+          !detected
+              ? l.setVaioUnknown
+              : (found ? l.setVaioReady : l.setVaioMissing),
+          !detected ? p.textDim : (found ? p.success : p.warning),
         ),
-        if (model.lastVaioError != null)
-          _ErrorBanner(
-            message: model.lastVaioError!,
-            onDismiss: () => model.clearVaioError(),
-          ),
+        _DriverDetail(l.setVaioDesc),
       ],
+      actions: [
+        if (detected && !found)
+          AuraChip(
+            l.setInstallDriverUac,
+            icon: Icons.admin_panel_settings,
+            selected: true,
+            onTap: () async {
+              model.postNotice(l.setInstallDriverUacPrompt);
+              final ok = await model.installVaioDriver(elevated: true);
+              model.postNotice(
+                ok
+                    ? l.setVaioInstallOk
+                    : (model.vaioActionUnverified
+                        ? l.setVaioInstallUnverified
+                        : (model.lastVaioError ?? l.setDriverInstallFailed)),
+                level: ok ? NoticeLevel.info : NoticeLevel.error,
+              );
+            },
+          )
+        else if (found)
+          AuraChip(
+            l.setUninstallDriver,
+            icon: Icons.delete_outline,
+            danger: true,
+            onTap: () async {
+              final ok = await model.uninstallVaioDriver(elevated: true);
+              model.postNotice(
+                ok
+                    ? l.setVaioUninstallOk
+                    : (model.vaioActionUnverified
+                        ? l.setVaioUninstallUnverified
+                        : l.setDriverUninstallFailed),
+                level: ok ? NoticeLevel.info : NoticeLevel.error,
+              );
+            },
+          ),
+        AuraChip(
+          l.setRedetect,
+          icon: Icons.refresh_rounded,
+          onTap: () => model.refreshVaioDetect(),
+        ),
+      ],
+      below: model.lastVaioError == null
+          ? null
+          : _ErrorBanner(
+              message: model.lastVaioError!,
+              onDismiss: () => model.clearVaioError(),
+            ),
     );
   }
 }
@@ -350,51 +434,29 @@ class _WasapiDriverRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = paletteOf(context);
     final l = l10nOf(context);
     final info = model.info;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Windows CoreAudio WASAPI Engine',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: p.text,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    info != null
-                        ? 'ABI v${info.abi} · ${info.version} · ${info.deviceRate}Hz'
-                        : l.setWasapiDesc,
-                    style: monoOf(p, size: 10, color: p.textDim),
-                  ),
-                ],
-              ),
-            ),
-            AuraChip(
-              l.setRefreshDevice,
-              icon: Icons.refresh_rounded,
-              onTap: () => model.refreshAudioDevices(),
-            ),
-          ],
-        ),
-        if (model.lastAudioError != null)
-          _ErrorBanner(
-            message: model.lastAudioError!,
-            onDismiss: () => model.clearAudioError(),
-          ),
+    return _DriverBlock(
+      title: l.wasapiDriverCardTitle,
+      lines: [
+        _DriverDetail(info != null
+            ? 'ABI v${info.abi} · ${info.version} · ${info.deviceRate}Hz'
+            : l.setWasapiDesc),
       ],
+      actions: [
+        AuraChip(
+          l.setRefreshDevice,
+          icon: Icons.refresh_rounded,
+          onTap: () => model.refreshAudioDevices(),
+        ),
+      ],
+      below: model.lastAudioError == null
+          ? null
+          : _ErrorBanner(
+              message: model.lastAudioError!,
+              onDismiss: () => model.clearAudioError(),
+            ),
     );
   }
 }
@@ -406,81 +468,68 @@ class _VirtualAsioDriverCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
-    final p = paletteOf(context);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(l.asioDriverCardTitle,
-                style: sectionOf(p, color: p.text)),
-          ],
-        ),
-        const SizedBox(height: AuraSpace.xs),
-        _InfoRow(
+    // 版式统一（2026-11-10 用户裁定）：检测/注册/注销与状态文字同行，
+    // 按钮在文字栏右侧右对齐（此前为卡底独占一行）。文字两行
+    // （驱动状态 / DAW 状态）走 _DriverKv 紧凑键值行。
+    return _DriverBlock(
+      title: l.asioDriverCardTitle,
+      lines: [
+        _DriverKv(
           l.asioDriverStatus,
           model.asioDriverInstalled
               ? l.asioDriverRegistered
               : l.asioDriverNotRegistered,
         ),
-        _InfoRow(
+        _DriverKv(
           l.asioDawStatus,
           model.asioActive ? l.asioDawConnected : l.asioDawIdle,
         ),
-        const SizedBox(height: AuraSpace.sm),
-        // R1：注册/反注册动作同行右对齐（旧实现卡底左对齐独占一行）。
-        // 真机报告 2026-11-09：「检测」与注销/注册同行并排右对齐
-        // （旧实现检测钮在卡头、与注销分行）。
-        Wrap(
-          alignment: WrapAlignment.end,
-          spacing: AuraSpace.sm,
-          children: [
-            AuraChip(
-              l.asioStatusCheck,
-              icon: Icons.refresh_rounded,
-              onTap: () => model.checkAsioDriverStatus(),
-            ),
-            if (!model.asioDriverInstalled)
-              AuraChip(
-                l.setAsioRegisterUac,
-                icon: Icons.admin_panel_settings,
-                selected: true,
-                onTap: () async {
-                  model.postNotice(l.setAsioRegisterPrompt);
-                  final ok = await model.registerAsioDriver(elevated: true);
-                  model.postNotice(
-                    ok
-                        ? l.setAsioRegisterOk
-                        : (model.lastAsioError ?? l.setAsioRegisterFailed),
-                    level: ok ? NoticeLevel.info : NoticeLevel.error,
-                  );
-                },
-              )
-            else
-              AuraChip(
-                l.asioDriverActionUnregister,
-                icon: Icons.remove_circle_outline,
-                danger: true,
-                onTap: () async {
-                  final ok = await model.unregisterAsioDriver(elevated: true);
-                  model.postNotice(
-                    ok
-                        ? l.setAsioUnregisterOk
-                        : (model.lastAsioError ?? l.setAsioUnregisterFailed),
-                    level: ok ? NoticeLevel.info : NoticeLevel.error,
-                  );
-                },
-              ),
-          ],
+      ],
+      actions: [
+        AuraChip(
+          l.asioStatusCheck,
+          icon: Icons.refresh_rounded,
+          onTap: () => model.checkAsioDriverStatus(),
         ),
-        if (model.lastAsioError != null)
-          _ErrorBanner(
-            message: model.lastAsioError!,
-            onDismiss: () => model.clearAsioError(),
+        if (!model.asioDriverInstalled)
+          AuraChip(
+            l.setAsioRegisterUac,
+            icon: Icons.admin_panel_settings,
+            selected: true,
+            onTap: () async {
+              model.postNotice(l.setAsioRegisterPrompt);
+              final ok = await model.registerAsioDriver(elevated: true);
+              model.postNotice(
+                ok
+                    ? l.setAsioRegisterOk
+                    : (model.lastAsioError ?? l.setAsioRegisterFailed),
+                level: ok ? NoticeLevel.info : NoticeLevel.error,
+              );
+            },
+          )
+        else
+          AuraChip(
+            l.asioDriverActionUnregister,
+            icon: Icons.remove_circle_outline,
+            danger: true,
+            onTap: () async {
+              final ok = await model.unregisterAsioDriver(elevated: true);
+              model.postNotice(
+                ok
+                    ? l.setAsioUnregisterOk
+                    : (model.lastAsioError ?? l.setAsioUnregisterFailed),
+                level: ok ? NoticeLevel.info : NoticeLevel.error,
+              );
+            },
           ),
       ],
+      below: model.lastAsioError == null
+          ? null
+          : _ErrorBanner(
+              message: model.lastAsioError!,
+              onDismiss: () => model.clearAsioError(),
+            ),
     );
   }
 }

@@ -474,6 +474,8 @@
   "apoActionAttach": "APO をアタッチ",
   "apoActionDetach": "APO を解除",
   "asioDriverCardTitle": "AuraDSP 仮想 ASIO ドライバー",
+  "vaioDriverCardTitle": "AuraVAIO 仮想オーディオドライバ",
+  "wasapiDriverCardTitle": "WASAPI オーディオエンジン",
   "asioDriverStatus": "ドライバー状態",
   "asioDriverRegistered": "システムに登録済み",
   "asioDriverNotRegistered": "未登録",

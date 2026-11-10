@@ -1390,6 +1390,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get asioDriverCardTitle => 'AuraDSP Virtual ASIO Driver';
 
   @override
+  String get vaioDriverCardTitle => 'AuraVAIO Virtual Audio Driver';
+
+  @override
+  String get wasapiDriverCardTitle => 'WASAPI Audio Engine';
+
+  @override
   String get asioDriverStatus => 'Driver Status';
 
   @override

@@ -474,6 +474,8 @@
   "apoActionAttach": "Attach APO",
   "apoActionDetach": "Detach APO",
   "asioDriverCardTitle": "AuraDSP Virtual ASIO Driver",
+  "vaioDriverCardTitle": "AuraVAIO Virtual Audio Driver",
+  "wasapiDriverCardTitle": "WASAPI Audio Engine",
   "asioDriverStatus": "Driver Status",
   "asioDriverRegistered": "Registered in System",
   "asioDriverNotRegistered": "Not Registered",
