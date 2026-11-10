@@ -73,7 +73,12 @@ MAPPING_BYTES = 32768
 
 
 def sha16(path):
-    return hashlib.sha256(open(path, 'rb').read()).hexdigest()[:16]
+    # 摘要必须与检出行尾无关（第六轮 CI 实证）：Windows 检出
+    # （autocrlf）把 LF 变 CRLF 时原始字节摘要随之而变，生成
+    # 物在 Win 生成、CI（LF）核验必漂移。先归一化 CRLF→LF
+    # 再摘要，任何检出口径下摘要恒定。
+    data = open(path, 'rb').read().replace(b'\r\n', b'\n')
+    return hashlib.sha256(data).hexdigest()[:16]
 
 
 def parse_numeric_params():
