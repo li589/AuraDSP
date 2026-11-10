@@ -386,7 +386,10 @@ void main() {
       for (final sig in setters) {
         final i = lib.indexOf(sig);
         expect(i, greaterThan(-1), reason: '找不到 setter: $sig');
-        final window = lib.substring(i, i + 3000);
+        // 窗口末端夹紧：state_vb_asio 位于聚合源码尾部，setter
+        // 距文件尾不足 3000 字符时 substring 会越界（S6 自审发现）。
+        final end = i + 3000 > lib.length ? lib.length : i + 3000;
+        final window = lib.substring(i, end);
         expect(window.contains('persistRoutingChange()'), isTrue,
             reason: '$sig 必须经 persistRoutingChange 落盘（第五轮 S1）');
       }

@@ -65,7 +65,10 @@ class AuraVaioBridge implements AudioBridgeCommon {
   int stop() => core.stop();
 
   @override
-  Map<String, dynamic>? status() => core.statusJson(4096);
+  // 8192（第五轮 S6）：status 含 enginePath/端点名两个长字符串，
+  // S4 又加了 forensics 对象（~230B）——4096 在长路径布局下可能
+  // 顶格让原生侧返回 -1、整份 status 丢失，放宽一倍留足余量。
+  Map<String, dynamic>? status() => core.statusJson(8192);
 
   @override
   int setParam(String id, {required bool isFloat, required double value}) =>
