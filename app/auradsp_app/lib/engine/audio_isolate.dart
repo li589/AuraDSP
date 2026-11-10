@@ -8,6 +8,7 @@
  * COM vtable 索引按 x64 ABI 手写（IUnknown 0-2 起）。
  */
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
@@ -30,6 +31,7 @@ import 'audio_vaio_bridge.dart';
 import 'backend_switch.dart';
 import 'bridge_manager.dart';
 import 'bridge_plugin_ffi.dart';
+import 'apo_param_index.dart';
 import 'debug_log.dart';
 import 'local_channel_policy.dart';
 
@@ -40,6 +42,7 @@ part 'audio_sources.dart';
 part 'audio_slots.dart';
 part 'audio_isolate_linux.dart';
 part 'audio_isolate_windows.dart';
+part 'audio_isolate_apo.dart';
 
 
 
@@ -149,6 +152,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // 字符串参数镜像（liveprog.code / arbmag.string）：成功才记；进 VB 时全量
   // 回放，桥内另有镜像应对 CHANGE 重建（与 paramMirror 同口径）。
   final Map<String, String> paramStrMirror = {};
+
+  // APO 真处理通道（P1）：参数块发布者 + telemetry 读者。两平台
+  // 无条件构造、惰性激活（非 Windows 首次激活失败即永久静默）。
+  final apoPublisher = ApoParamPublisher()
+    ..bind(mirror: paramMirror, strMirror: paramStrMirror, bypassOf: () => bypass);
+  final apoTelemetry = ApoTelemetryReader();
   // VB 总线掩码（session 级；进桥/重建后下发，CHANGE 重建不丢——掩码活在 ctx）。
   // 出厂只开 A1/A2：其余路按需开路再建句柄。
   int vbBusMask = 0x03;
@@ -746,6 +755,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             isFloat: m['isFloat'] as bool,
             value: (m['value'] as num).toDouble()
           );
+          apoPublisher.onNumeric(
+              m['id'] as String, (m['value'] as num).toDouble());
           final brcBridge = bridgeManager.active;
           if (brcBridge != null) {
             final bridgeId = bridgeManager.activeId ?? '?';
@@ -1142,6 +1153,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             // 字符串镜像 + VB 桥同路由（成功才记；桥内镜像应对 CHANGE 重建）。
             if (rc == Status.ok) {
               paramStrMirror[m['id'] as String] = m['text'] as String;
+              apoPublisher.onString(m['id'] as String, m['text'] as String);
             }
             final activeBridge = bridgeManager.active;
             if (activeBridge != null) {
@@ -1397,6 +1409,19 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         case 'bypass':
           bypass = m['value'] as bool;
           bridgeManager.active?.setBypass(bypass);
+          apoPublisher.onBypass(bypass);
+          break;
+        case 'apopublish':
+          // 进 sysapo / 附加后全量重发参数块（镜像即全量真相）。
+          apoPublisher.flushAll();
+          break;
+        case 'apotelemetry':
+          // sysapo 生效期间读 APO 回传块并合成 viz 事件。
+          if (m['on'] == true) {
+            apoTelemetry.start(send);
+          } else {
+            apoTelemetry.stop();
+          }
           break;
         case 'source51':
           // 0=混缩（默认） 1=直通；桥注入（试音）恒走 fold stereo，本旗只管本地渲染。

@@ -102,6 +102,13 @@ extension AudioModesState on AppModel {
       // 虚拟 sink + monitor 采集；driver 接 snd-aloop 源；system 拆除）。
       _toIso?.send({'cmd': 'linuxmode', 'mode': valid});
     }
+    // APO 真处理通道（P1）：sysapo 生效期间让 isolate 轮询 APO
+    // 回传块（电平/频谱合成 viz），并在进入时全量重发参数块；
+    // 离开 sysapo 即停读。isolate 侧非 Windows 永久静默，无副作用。
+    _toIso?.send({'cmd': 'apotelemetry', 'on': valid == 'sysapo'});
+    if (valid == 'sysapo') {
+      _toIso?.send({'cmd': 'apopublish'});
+    }
     applyPipelineChain();
     _notifyUi();
   }
