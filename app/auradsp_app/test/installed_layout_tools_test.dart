@@ -261,6 +261,9 @@ void main() {
     });
 
     test('面板状态行三态：目标附加 / 他端点具名 / 未附加', () {
+      // sections 变量只在 F5 组闭包内，本组自读。
+      final sections =
+          _read('app/auradsp_app/lib/features/settings/panels/sections.dart');
       final s = sections.indexOf('class _SystemApoPanel');
       final seg = sections.substring(s, s + 9000);
       expect(seg, contains('l.apoAttachedOn(model.apoAttachedName)'));
