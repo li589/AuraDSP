@@ -204,6 +204,89 @@ set_property(TARGET auradsp_engine PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedD
 set_property(TARGET auradsp_engine PROPERTY WINDOWS_EXPORT_ALL_SYMBOLS OFF)
 target_link_libraries(auradsp_engine PRIVATE version)
 
+# ---- APO 专用引擎变体（2026-11-10 立项 P2，设计 D2/R1）----
+# System APO 把引擎拉进 audiodg 宿主：该进程的两条定罪纪律——
+# 静态 CRT（/MT，绝不首次拉入 System32 版 VCRUNTIME）与 CFG
+# （/guard:cf，无位图在被保护虚调用点 fail-fast）——主引擎的
+# /MD 口径不满足，故同源另建纪律版 auradsp_engine_apo.dll：
+# 源码清单与主引擎完全一致（core_sources.cmake 同一份变量），
+# 差异仅三点：MSVC_RUNTIME_LIBRARY=MultiThreaded、/guard:cf
+# 编译+链接、AURADSP_NO_PLUGINS=1（插件子系统不进 audiodg，
+# 设计 §1 非目标；插件 C ABI 由 CP-02 stub 提供，导出面不变）。
+# 主引擎与其全部消费者（App/桥）零改动。产物纪律由
+# smoke_apo_engine_binary.py 解析 PE 断言（导入表无动态
+# VCRUNTIME/MSVCP + CFG 函数表在位），J5 在默认构建后实跑。
+option(AURADSP_BUILD_APO_ENGINE "Build auradsp_engine_apo (audiodg-hosted engine variant)" ON)
+if(AURADSP_BUILD_APO_ENGINE)
+    add_library(auradsp_core_apo STATIC
+        ${AURADSP_CORE_LEGACY_C}
+        ${AURADSP_CORE_CXX_SOURCES}
+    )
+    target_include_directories(auradsp_core_apo PUBLIC
+        "${API}"
+        "${API}/chain"
+        "${API}/plugins/api"
+        "${API}/plugins/driver"
+        "${LEGACY}"
+        "${LEGACY}/jdsp"
+        "${PLUGIN_API}"
+    )
+    target_compile_definitions(auradsp_core_apo PRIVATE
+        NDEBUG
+        _CRT_SECURE_NO_WARNINGS
+        _WIN32_WINNT=0x0601
+        WINVER=0x0601
+        NTDDI_VERSION=0x06010000
+        AURADSP_NO_PLUGINS=1
+    )
+    target_compile_options(auradsp_core_apo PRIVATE /utf-8 /W1 /EHa /guard:cf)
+    target_compile_options(auradsp_core_apo PRIVATE /FI"${API}/auradsp_msvc_shim.h")
+    set_property(TARGET auradsp_core_apo PROPERTY C_STANDARD 11)
+    set_property(TARGET auradsp_core_apo PROPERTY CXX_STANDARD 20)
+    set_property(TARGET auradsp_core_apo PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+
+    add_library(auradsp_wincompat_apo OBJECT
+        "${API}/platform/windows/win_compat.cpp"
+    )
+    target_compile_options(auradsp_wincompat_apo PRIVATE /guard:cf)
+    set_property(TARGET auradsp_wincompat_apo PROPERTY CXX_STANDARD 20)
+    set_property(TARGET auradsp_wincompat_apo PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+
+    add_library(auradsp_engine_apo SHARED
+        "${API}/platform/windows/fs_win.cpp"
+        "${API}/platform/windows/env_win.cpp"
+        "${API}/platform/windows/log_win.cpp"
+        "${API}/auradsp_engine.def"
+    )
+    target_link_libraries(auradsp_engine_apo PRIVATE auradsp_core_apo auradsp_wincompat_apo)
+    target_include_directories(auradsp_engine_apo PRIVATE
+        "${API}"
+        "${API}/chain"
+        "${API}/plugins/api"
+        "${API}/plugins/driver"
+        "${API}/plugins/platform/win32/host"
+        "${API}/plugins/platform/win32"
+        "${LEGACY}"
+        "${LEGACY}/jdsp"
+        "${PLUGIN_API}"
+    )
+    target_compile_definitions(auradsp_engine_apo PRIVATE
+        NDEBUG
+        _CRT_SECURE_NO_WARNINGS
+        _WIN32_WINNT=0x0601
+        WINVER=0x0601
+        NTDDI_VERSION=0x06010000
+        AURADSP_NO_PLUGINS=1
+    )
+    target_compile_options(auradsp_engine_apo PRIVATE /utf-8 /W1 /EHa /guard:cf)
+    target_compile_options(auradsp_engine_apo PRIVATE /FI"${API}/auradsp_msvc_shim.h")
+    target_link_options(auradsp_engine_apo PRIVATE /guard:cf)
+    set_property(TARGET auradsp_engine_apo PROPERTY CXX_STANDARD 20)
+    set_property(TARGET auradsp_engine_apo PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+    set_property(TARGET auradsp_engine_apo PROPERTY WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+    target_link_libraries(auradsp_engine_apo PRIVATE version)
+endif()
+
 if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
     if(CMAKE_SIZEOF_VOID_P EQUAL 4)
         set(HOST_EXE_TARGET_NAME "plugin_host_x86")

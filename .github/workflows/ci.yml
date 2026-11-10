@@ -130,6 +130,11 @@ jobs:
       # 子工程 out/Release，后步会覆盖前步 DLL，故必须顺序执行。
       - name: Release-strings gate (default OFF build)
         run: python test/smoke/smoke_release_strings.py
+      # APO 引擎变体纪律门（2026-11-10 立项 P2）：PE 本体断言
+      # /MT（无动态 CRT 导入）+ CFG 函数表 + 导出面。必须在
+      # DBG-ON 变体覆盖 out/Release 之前跑（同 release-strings）。
+      - name: APO engine binary gate (default build)
+        run: python test/smoke/smoke_apo_engine_binary.py
       - name: Configure ON variant (AURADSP_DBG_LOG)
         run: cmake -S . -B build/windows/dbg-on -G "Visual Studio 18 2026" -A x64 -DAURADSP_BUILD_BRIDGES=OFF -DAURADSP_DBG_LOG=ON
       - name: Build ON variant

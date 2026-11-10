@@ -138,6 +138,7 @@ PLATFORM_WINDOWS = {
     "smoke_abi_consistency.py",
     "smoke_bridge_unified_abi.py",
     "smoke_release_strings.py",
+    "smoke_apo_engine_binary.py",
     "smoke_ir_block_jitter.py",
     "smoke_eq_viz_tap.py",
     "smoke_bassmono.py",
@@ -399,6 +400,7 @@ def run_smoke_tests():
         "smoke_bridge_unified_abi.py",
         # B-1 调试串门禁：源码零 cout [DBG + Release DLL 无 [DBG（计划 D1 §3.3）
         "smoke_release_strings.py",
+        "smoke_apo_engine_binary.py",
         # M1 平台隔离门禁（2026-10-29）：引擎可移植核心零 OS 头/Win32 符号；
         # 端口头纯声明 + Windows 实现存在 + 扫描器反向自检。
         "smoke_platform_isolation.py",
