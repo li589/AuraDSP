@@ -192,6 +192,16 @@ jobs:
       # 解锁后座位释放。退出码即裁定。
       - name: APO engine end-to-end smoke
         run: core/desktop/windows-drivers/out/Release/apo_engine_test.exe
+      # 桥编译检查（第五轮 S4）：runner 无 ASIO SDK、全量配置 FATAL，
+      # 桥家族此前 CI 零覆盖；ci_check 工程以真实 MSVC 编译 VAIO 桥
+      # TU 并跑其等待原语测试（ASIO 桥依赖 SDK 仍只能本机验，缺口
+      # 登记在第五轮收口文档）。
+      - name: Configure (bridge check, no ASIO SDK)
+        run: cmake -S core/desktop/windows-drivers/ci_check -B build/windows/bridge-check -G "Visual Studio 18 2026" -A x64
+      - name: Build bridge check
+        run: cmake --build build/windows/bridge-check --config Release
+      - name: VAIO pump wait test
+        run: build/windows/bridge-check/Release/vaio_pump_wait_test.exe
 
   # J6 Dart 测试 --------------------------------------------------------
   dart-tests:

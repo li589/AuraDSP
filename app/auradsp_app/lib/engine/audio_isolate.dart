@@ -149,6 +149,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // P4 静音门控：桥上报 gated=1 时泵降到 50ms；gated=0 下一轮即回落 10ms。
   bool bridgeGated = false;
     String lastVaioGeo = '';
+    String lastVaioFx = ''; // S4 取证对象的上次落盘内容（每 start 一次）
   // 参数镜像：每次 setParam 记录，vb_start 后全量回放，保证两边一致。
   final Map<String, ({bool isFloat, double value})> paramMirror = {};
   // 字符串参数镜像（liveprog.code / arbmag.string）：成功才记；进 VB 时全量
@@ -660,6 +661,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     final rc = vaio!.start(AuraDspLib.loadedPath ?? '', '', outputEndpointSubstr: outputEndpointSubstr);
     dbgLog('vaiomode: start rc=$rc');
     lastVaioGeo = ''; // 每次桥启动必落一条几何快照（噪声态取证）
+    lastVaioFx = ''; // S4：取证对象同口径，每 start 必落一次
     if (rc != 0) {
       final st = vaio!.status();
       send({
@@ -2367,6 +2369,22 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 if (geo != lastVaioGeo) {
                   lastVaioGeo = geo;
                   dbgLog('vaio-geometry: bits/ringSr/ringCh/sr/outCh/outBits = $geo');
+                }
+                // S4 白噪取证（第五轮）：桥侧每 start 采集一次的
+                // 首块证据（起始游标/原始字节/正位与错位统计），
+                // 首见即落盘——复现时从日志直接读判定材料。
+                final fx = st['forensics'];
+                if (fx is Map) {
+                  final fxs = 'tw0=${fx['tw0']} cur0=${fx['cur0']} '
+                      'size=${fx['dataSize']} align=${fx['align']} '
+                      'bits=${fx['bits']} raw=${fx['raw']} '
+                      'peak=${fx['peak']} meanAbs=${fx['meanAbs']} '
+                      'peakShift=${fx['peakShift']} '
+                      'meanAbsShift=${fx['meanAbsShift']}';
+                  if (fxs != lastVaioFx) {
+                    lastVaioFx = fxs;
+                    dbgLog('vaio-forensics: $fxs');
+                  }
                 }
               }
             }

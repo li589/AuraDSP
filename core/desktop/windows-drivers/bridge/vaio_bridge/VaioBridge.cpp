@@ -192,6 +192,21 @@ struct VaioBridgeCtl {
     ULONG hdrSampleRate = 0;
     ULONG hdrBits = 0;
 
+    // 第五轮 S4 白噪取证：每次 start 采集一次——起始写计数/消费
+    // 指针/环几何 + 首个真实数据块的原始字节与双口径统计（正位
+    // 转换 vs 错位一字节重释）。status 以 forensics 对象输出，
+    // isolate 首见即落日志：正位统计干净而错位统计呈音乐形态 =
+    // 读游标错位定罪；两口径皆噪 = 环内容本身已噪（源侧）。
+    ULONGLONG fxTw0 = 0;       // start 时 TotalBytesWritten
+    ULONGLONG fxCur0 = 0;      // 泵初始消费指针
+    ULONG fxDataSize = 0;
+    ULONG fxBlockAlign = 0;
+    ULONG fxBits = 0, fxRate = 0, fxCh = 0;  // 首块采样到的几何
+    char fxRawHex[33] = {0};   // 首块前 16 原始字节（hex）
+    double fxPeak = 0, fxMeanAbs = 0;             // 正位转换统计
+    double fxPeakShift = -1, fxMeanAbsShift = -1; // 错位统计（仅 PCM16）
+    volatile LONG fxDone = 0;  // 0 未采集 1 已采集（泵写、status 读）
+
     // 引擎 (auradsp_engine.dll)
     HMODULE hEngineMod = nullptr;
     FnEngCreate fnCreate = nullptr;
@@ -675,6 +690,12 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
     // 初始消费指针与内核当前写入位置对齐（避免刚开机把陈旧噪底播出来）
     ULONGLONG userBytesRead = pHeader ? pHeader->TotalBytesWritten : 0;
 
+    // S4 取证锚点（首块统计在真实数据分支内补齐后置 fxDone）。
+    g_vaio.fxTw0 = userBytesRead;
+    g_vaio.fxCur0 = userBytesRead;
+    g_vaio.fxDataSize = dataSize;
+    g_vaio.fxBlockAlign = blockAlign;
+
     // 启动 WASAPI 播放：HRESULT 必须查——失败时泵会在
     // GetCurrentPadding 上永久空转而 status 仍报 running，
     // 呈「无声无 viz」假象（取证 2026-11-09 候选 5）；把失败
@@ -851,6 +872,48 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             if (ringBits == 16 || ringBits == 32) {
                 ConvertRingToFloat(g_vaio.scratchRaw, g_vaio.scratchRing,
                                    (int)readInFrames, (int)ringChannels, ringBits);
+                // S4 取证：首个真实数据块采集一次（每 start 一次，
+                // 不在持续热路径上）。错位统计把同一批字节按 +1
+                // 字节重释为 int16——若错位口径反而呈低峰/结构化，
+                // 即读游标错位一字节的定罪证据。
+                if (InterlockedCompareExchange(&g_vaio.fxDone, 0, 0) == 0) {
+                    static const char kHex[] = "0123456789abcdef";
+                    g_vaio.fxBits = ringBits;
+                    g_vaio.fxRate = ringRate;
+                    g_vaio.fxCh = ringChannels;
+                    const ULONG hn = rawBytes < 16 ? rawBytes : 16;
+                    for (ULONG i = 0; i < hn; i++) {
+                        g_vaio.fxRawHex[i * 2] =
+                            kHex[(g_vaio.scratchRaw[i] >> 4) & 0xF];
+                        g_vaio.fxRawHex[i * 2 + 1] =
+                            kHex[g_vaio.scratchRaw[i] & 0xF];
+                    }
+                    g_vaio.fxRawHex[hn * 2] = 0;
+                    const int sn = (int)readInFrames * (int)ringChannels;
+                    double pk = 0, sum = 0;
+                    for (int i = 0; i < sn; i++) {
+                        const double a = fabs((double)g_vaio.scratchRing[i]);
+                        if (a > pk) pk = a;
+                        sum += a;
+                    }
+                    g_vaio.fxPeak = pk;
+                    g_vaio.fxMeanAbs = sn > 0 ? sum / sn : 0;
+                    if (ringBits == 16 && rawBytes >= 4) {
+                        const ULONG cnt = (rawBytes - 1) / 2;
+                        double pk2 = 0, sum2 = 0;
+                        for (ULONG i = 0; i < cnt; i++) {
+                            const int16_t v = (int16_t)(
+                                (uint16_t)g_vaio.scratchRaw[1 + i * 2] |
+                                ((uint16_t)g_vaio.scratchRaw[2 + i * 2] << 8));
+                            const double a = fabs((double)v / 32768.0);
+                            if (a > pk2) pk2 = a;
+                            sum2 += a;
+                        }
+                        g_vaio.fxPeakShift = pk2;
+                        g_vaio.fxMeanAbsShift = cnt > 0 ? sum2 / (double)cnt : 0;
+                    }
+                    InterlockedExchange(&g_vaio.fxDone, 1);
+                }
                 if (inRatio == 1.0) {
                     memcpy(g_vaio.scratchIn, g_vaio.scratchRing,
                            (size_t)framesToProcess * ringChannels * sizeof(float));
@@ -1133,6 +1196,13 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.countMode = 0;
     g_vaio.manualChannels = 2;
     g_vaio.engineChannels = 2;
+    // S4 取证复位（泵线程启动后重新采集本会话的首块证据）。
+    InterlockedExchange(&g_vaio.fxDone, 0);
+    g_vaio.fxPeak = 0;
+    g_vaio.fxMeanAbs = 0;
+    g_vaio.fxPeakShift = -1;
+    g_vaio.fxMeanAbsShift = -1;
+    g_vaio.fxRawHex[0] = 0;
     g_pluginMirror.Reset();  // 新会话：等 App 侧 start 后按当前会话重放
 
     // 1. 打开内核驱动控制设备
@@ -1605,7 +1675,7 @@ int vaio_status(char* out, int cap) {
         "\"peakIn\":%.4f,\"peakOut\":%.4f,\"maxPumpUs\":%.2f,\"startRc\":%d,\"note\":\"%s\","
         "\"outputEndpoint\":\"%s\",\"engineOk\":%s,\"enginePath\":\"%s\","
         "\"paramsApplied\":%d,\"paramsFailed\":%d,\"bypass\":%ld,\"testKind\":%ld,"
-        "\"gated\":%d,\"idleMs\":%lld}",
+        "\"gated\":%d,\"idleMs\":%lld",
         isRunning ? "true" : "false",
         (unsigned long long)g_vaio.totalPumpedFrames,
         g_vaio.wasapiSampleRate ? g_vaio.wasapiSampleRate : g_vaio.ringSampleRate,
@@ -1635,7 +1705,29 @@ int vaio_status(char* out, int cap) {
     );
 
     if (n < 0 || n >= cap) return -1;
-    return n;
+    int total = n;
+    // S4 取证对象（采集完成后才出现；键缺席即未采集，消费者勿猜）。
+    if (InterlockedCompareExchange(&g_vaio.fxDone, 0, 0) == 1) {
+        const int m = _snprintf_s(
+            out + total, (size_t)(cap - total), _TRUNCATE,
+            ",\"forensics\":{\"tw0\":%llu,\"cur0\":%llu,\"dataSize\":%lu,"
+            "\"align\":%lu,\"bits\":%lu,\"rate\":%lu,\"ch\":%lu,"
+            "\"raw\":\"%s\",\"peak\":%.4f,\"meanAbs\":%.4f,"
+            "\"peakShift\":%.4f,\"meanAbsShift\":%.4f}",
+            (unsigned long long)g_vaio.fxTw0,
+            (unsigned long long)g_vaio.fxCur0,
+            g_vaio.fxDataSize, g_vaio.fxBlockAlign,
+            g_vaio.fxBits, g_vaio.fxRate, g_vaio.fxCh,
+            g_vaio.fxRawHex,
+            g_vaio.fxPeak, g_vaio.fxMeanAbs,
+            g_vaio.fxPeakShift, g_vaio.fxMeanAbsShift);
+        if (m < 0) return -1;
+        total += m;
+    }
+    if (total + 1 >= cap) return -1;
+    out[total++] = '}';
+    out[total] = 0;
+    return total;
 }
 
 int vaio_set_param(const char* id, int isFloat, const void* v4) {
