@@ -722,7 +722,12 @@ extension StateEvents on AppModel {
       case 'wasapiLost':
         // 运行中端点被独占（旧 client 在对端释放前永好不了）：只有还在进程内
         // 模式才重起；用户若已切走（桥模式），忽略（桥侧自有重建/状态）。
-        if (audioMode != 'vbcallback' && audioMode != 'asio') {
+        // 第五轮 S2：sysapo 同样忽略——附加模式下本地输出无职责，
+        // APO 通道（发布器/telemetry）不随本地输出生死；为它重启
+        // isolate 反而把 APO 链路一起陪葬（真机第五轮项 6 实测）。
+        if (audioMode != 'vbcallback' &&
+            audioMode != 'asio' &&
+            audioMode != 'sysapo') {
           _fatalRetries = 0;
           _restartIsolate();
           _notifyUi();

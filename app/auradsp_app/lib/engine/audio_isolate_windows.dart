@@ -221,6 +221,23 @@ class WindowsCaptureController {
         '${back == null || back.isEmpty ? "(default)" : back}');
   }
 
+  /// 输出端点失效后的原地重建（第五轮 S2）：当前 WasapiOut 客户
+  /// 端被端点栈重启打死（0x88890004）时，泵调用本方法——以当前
+  /// 实例的端点 id 为目标走 _rebuildOutput 的回滚链（目标端点 →
+  /// 组建前锚点 → 默认端点）。恢复判据 = 新实例已 started（落到
+  /// 回滚端点也算恢复：原端点多半已消失）。捕获链在场时同样适
+  /// 用：换入经 _setAudioOut 缝，捕获源不受影响。
+  bool reinitOutput() {
+    final cur = _getAudioOut();
+    final id = cur is WasapiOut ? cur.endpointId : '';
+    _rebuildOutput(id, _engineRate(), rollbackTo: _preAttachOutputId);
+    final now = _getAudioOut();
+    final ok = now != null && now.started;
+    dbgLog('wasapi: out reinit ${ok ? 'recovered' : 'still down'} '
+        '(target=${id.isEmpty ? '(default)' : id})');
+    return ok;
+  }
+
   /// 组建捕获链：输出端点对齐（必要时重建 WasapiOut 并校验
   /// 协商率 == 引擎率）→ 捕获设备 init/start → 装源。
   /// 任一步失败都回推 capturestatus(active:false, note)，

@@ -24,6 +24,7 @@ import 'audio_out/audio_in_wasapi.dart';
 import 'audio_out/alsa_ffi.dart';
 import 'audio_out/audio_in_alsa.dart';
 import 'audio_out/audio_in_linux.dart';
+import 'audio_out/out_recovery.dart';
 import 'audio_out/pulse_context.dart';
 import 'audio_vbridge.dart';
 import 'audio_abridge.dart';
@@ -2250,6 +2251,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // 必须等对端释放后重建链路）。
   // 连续 ~2s（400 轮）即上报一次（latch，不反复刷）；model 侧重启 isolate。
   var audioOutErrRounds = 0;
+  // 第五轮 S2：端点失效（0x88890004）恢复状态——失效时刻、已试
+  // 次数、下次可试时刻。窗口内（kOutReinitWindowMs）泵错误被
+  // 原地重建路径吸收；超窗回落上方通用死亡计数。成功轮清零。
+  var outInvalidSince = 0;
+  var outReinitAttempts = 0;
+  var outReinitNextAt = 0;
   var pumpRounds = 0;
   var procRounds = 0;
   // 桥 viz 断流守卫（三桥共用：同一时刻只有一个后端出声）：桥引擎停产（VB
@@ -2525,7 +2532,42 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         }
         audioOutErrRounds = 0; // 成功轮清零（死亡计数只许成功清零，细审 R-B 2）
+        outInvalidSince = 0;
+        outReinitAttempts = 0;
       } catch (e, st) {
+        // 第五轮 S2：端点失效分流——WasapiOut 客户端被端点栈重启
+        // 打死（0x88890004）时客户端永不自愈，旧口径只能陪跑
+        // 400 轮后整 isolate 重启。现口径：恢复窗口内按退避表原
+        // 地重建输出（经捕获控制器的回滚链换入），错误被吸收
+        // （不落 PUMP ERROR、不发 error 事件、不计死亡计数）；
+        // 超窗则回落下方通用口径。仅 WASAPI 实例适用（Linux
+        // 后端错误文案不含 HRESULT，分类天然不命中）。
+        if (audioOut is WasapiOut && isDeviceInvalidatedError(e)) {
+          final nowMs = DateTime.now().millisecondsSinceEpoch;
+          if (outInvalidSince == 0) {
+            outInvalidSince = nowMs;
+            outReinitAttempts = 0;
+            outReinitNextAt = nowMs; // 首试立即（端点多半已回来）
+            dbgLog('wasapi: output invalidated, entering reinit');
+          }
+          if (nowMs - outInvalidSince < kOutReinitWindowMs) {
+            if (nowMs >= outReinitNextAt) {
+              outReinitAttempts++;
+              if (windowsCapture.reinitOutput()) {
+                dbgLog('wasapi: out reinit ok '
+                    '(attempt $outReinitAttempts)');
+                outInvalidSince = 0;
+                outReinitAttempts = 0;
+                audioOutErrRounds = 0;
+              } else {
+                outReinitNextAt =
+                    nowMs + outReinitBackoffMs(outReinitAttempts);
+              }
+            }
+            continue;
+          }
+          // 超窗：保持 outInvalidSince 非零，本轮起走通用计数。
+        }
         // 错误节流：同一消息 3s 内只上报一次，防 UI 事件洪泛（5ms 一轮的循环）。
         // 日志文件同口径节流（细审 R-B 2 改全局窗）：旧口径按
         // 消息分别节流，端点死亡若在相邻轮次交替抛两种错误，
