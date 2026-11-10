@@ -20,6 +20,7 @@
 // ---- 共享对象名与安全描述符 ----
 #define AURA_APO_PARAMS_NAME L"Global\\AuraDSP_ApoParams"
 #define AURA_APO_TELEMETRY_NAME L"Global\\AuraDSP_ApoTelemetry"
+#define AURA_APO_PLUGINS_NAME L"Global\\AuraDSP_ApoPlugins"
 // 与心跳映射同一 SDDL（LS=LocalService / WD=Everyone / 两个 LPAC
 // 包 SID 全 GA）：audiodg 的 LPAC 沙箱只能穿透显式授权的对象。
 #define AURA_APO_SHARED_SDDL L"D:(A;;GA;;;LS)(A;;GA;;;WD)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)"
@@ -73,6 +74,10 @@ inline const wchar_t* AuraApoTelemetryName() {
     return AuraApoChannelsLocal() ? L"Local\\AuraDSP_ApoTelemetry"
                                   : AURA_APO_TELEMETRY_NAME;
 }
+inline const wchar_t* AuraApoPluginsName() {
+    return AuraApoChannelsLocal() ? L"Local\\AuraDSP_ApoPlugins"
+                                  : AURA_APO_PLUGINS_NAME;
+}
 
 // ---- 回传块（APO → App） ----
 // seatState 是全系统唯一的「引擎座位」（设计 D3）：LockForProcess
@@ -82,7 +87,9 @@ inline const wchar_t* AuraApoTelemetryName() {
 #define APO_TELEMETRY_MAGIC 0x4154454Cu  // 'ATEL'
 // v2（2026-11-10）：尾部追加 eqIn/stage 分级回传（处理流显示
 // 用）；既有字段偏移一律不变，读者按 version 分级取用。
-#define APO_TELEMETRY_VERSION 2u
+// v3（2026-11-10，Part I Q2）：尾部再追加插件段（每槽 32B×4）；
+// v1/v2 字段偏移仍不变，读者按 version>=3 取插件段。
+#define APO_TELEMETRY_VERSION 3u
 #define APO_TELEMETRY_BYTES 4096u
 
 struct ApoTelemetryBlock {
@@ -104,10 +111,80 @@ struct ApoTelemetryBlock {
     float stageLevelsL[32];                      // 分级电平 L（dBFS，引擎 stage 序）
     float stageLevelsR[32];                      // 分级电平 R（dBFS）
     uint32_t reserved[8];
+    // ---- v3 追加（offset 608 起；v2 读者止步于此）----
+    // 每槽 32B：loaded/bypass 为有效值（bypass 已含故障旁路），
+    // faultCategory 取引擎 PluginFaultCategory 数值（0=none）。
+    struct PluginSlot {
+        uint8_t loaded;
+        uint8_t bypass;
+        uint8_t fault;
+        uint8_t faultCategory;
+        uint32_t latencySamples;
+        float inRms;
+        float outRms;
+        uint32_t processCalls;
+        uint32_t appliedLoadGen;
+        uint32_t appliedStateGen;
+        uint32_t reserved;
+    };
+    PluginSlot plugins[4];
 };
 // v2 布局钉死：既有字段偏移与 v1 完全一致，追加段自 192 起。
-static_assert(sizeof(ApoTelemetryBlock) == 608, "telemetry block layout");
+// v3：插件段自 608 起，块总 736B（映射仍 4096B 整页口径）。
+static_assert(sizeof(ApoTelemetryBlock) == 736, "telemetry block layout");
 static_assert(offsetof(ApoTelemetryBlock, spectrum) == 64, "telemetry v1 offsets");
 static_assert(offsetof(ApoTelemetryBlock, eqInSpectrum) == 192, "telemetry v2 offsets");
 static_assert(offsetof(ApoTelemetryBlock, stageLevelsL) == 320, "telemetry v2 offsets");
 static_assert(offsetof(ApoTelemetryBlock, stageLevelsR) == 448, "telemetry v2 offsets");
+static_assert(offsetof(ApoTelemetryBlock, plugins) == 608, "telemetry v3 offsets");
+static_assert(sizeof(ApoTelemetryBlock::PluginSlot) == 32, "telemetry plugin slot");
+
+// ---- 插件块（App → APO，Part I Q2 / 计划书 D2/D3、Q0-3） ----
+// 独立第三映射（AuraDSP_ApoPlugins），不并入参数块：参数块布局
+// 由生成器钉死且余量放不下状态 blob。写协议同参数块 seqlock。
+// 每槽身份 {格式， 路径， 插件 id， 插入级， 声道掩码， 旁路} +
+// 状态字节（savePreset 产物，上限 APO_PLUGIN_STATE_BYTES）；
+// loadGen/stateGen 由发布者单调递增，worker 按代次应用（身份
+// 变→重载；状态代次单独变→仅 loadPreset 应用状态）。
+// 格式码仅作发布侧自述（引擎按路径找驱动）：0 无 / 1 VST3 /
+// 2 CLAP / 3 VST2。
+#define APO_PLUGINS_MAGIC 0x47505541u  // 'AUPG'
+#define APO_PLUGINS_VERSION 1u
+#define APO_PLUGIN_SLOTS 4u
+#define APO_PLUGIN_PATH_BYTES 1024u
+#define APO_PLUGIN_ID_BYTES 256u
+#define APO_PLUGIN_STATE_BYTES 524288u  // 512KiB（D3 取舍点 1）
+#define APO_PLUGIN_BLOCK_HEADER_BYTES 64u
+#define APO_PLUGIN_SLOT_HEADER_BYTES 64u
+#define APO_PLUGIN_SLOT_STRIDE \
+    (APO_PLUGIN_SLOT_HEADER_BYTES + APO_PLUGIN_PATH_BYTES + \
+     APO_PLUGIN_ID_BYTES + APO_PLUGIN_STATE_BYTES)
+#define APO_PLUGIN_BLOCK_USED_BYTES \
+    (APO_PLUGIN_BLOCK_HEADER_BYTES + APO_PLUGIN_SLOTS * APO_PLUGIN_SLOT_STRIDE)
+#define APO_PLUGIN_BLOCK_BYTES 2105344u  // 514 页（used 向上取整）
+
+struct ApoPluginBlockHeader {
+    uint32_t magic;         // APO_PLUGINS_MAGIC
+    uint32_t version;       // APO_PLUGINS_VERSION
+    uint32_t writeSeq;      // seqlock（奇=写入中）
+    uint32_t blockBytes;    // == APO_PLUGIN_BLOCK_BYTES
+    uint32_t chainEnabled;  // 插件链总开关
+    uint32_t pdcEnabled;    // PDC 开关
+    uint32_t reserved[10];  // 凑满 64B 头
+};
+static_assert(sizeof(ApoPluginBlockHeader) == 64, "plugin block header");
+
+struct ApoPluginSlotHeader {
+    uint32_t format;      // 0 无 / 1 VST3 / 2 CLAP / 3 VST2
+    uint32_t insertStage; // 0..4
+    uint32_t channelMask;
+    uint32_t bypass;      // 期望旁路（挂载即旁路口径由发布侧给出）
+    uint32_t loadGen;     // 身份代次（变→worker 重载该槽）
+    uint32_t stateGen;    // 状态代次（变→worker 应用状态）
+    uint32_t pathBytes;   // 路径 UTF-8 已用字节（不含 NUL）
+    uint32_t stateBytes;  // 状态已用字节（<= APO_PLUGIN_STATE_BYTES）
+    uint32_t reserved[8];
+};
+static_assert(sizeof(ApoPluginSlotHeader) == 64, "plugin slot header");
+// 槽内布局：[ApoPluginSlotHeader 64][路径 1024][id 256][状态 512K]，
+// 槽 s 起始 = APO_PLUGIN_BLOCK_HEADER_BYTES + s * APO_PLUGIN_SLOT_STRIDE。

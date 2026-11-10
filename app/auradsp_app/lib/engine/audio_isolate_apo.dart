@@ -316,6 +316,7 @@ class ApoTelemetryReader {
   int _lastSeq = -1;
   int _lastSeat = -1;
   int _lastFault = -1;
+  String _lastPluginSig = '';
   int _tickCount = 0;
   bool _gaveUp = false;
 
@@ -343,6 +344,7 @@ class ApoTelemetryReader {
     _lastSeq = -1;
     _lastSeat = -1;
     _lastFault = -1;
+    _lastPluginSig = '';
     _tickCount = 0;
   }
 
@@ -416,6 +418,56 @@ class ApoTelemetryReader {
       _lastFault = faultNow;
     }
     if (seat != 1) return;
+    // telemetry v3 插件段（Part I Q2/D5）：合成 apoPluginStatus
+    // 事件（Q3 状态层消费并与本地同形状的槽状态合并）。签名变
+    // 化即发，另随 2s 心跳刷新。faultStage 由类别推导（类别码
+    // 只带类别：process_crash 归处理级、其余故障归加载级）。
+    if (u32[1] >= 3) {
+      const catNames = [
+        'none',
+        'not_found',
+        'unreadable',
+        'load_failed',
+        'entry_missing',
+        'arch_mismatch',
+        'init_crash',
+        'process_crash',
+      ];
+      final slots = <Map<String, dynamic>>[];
+      var sig = '';
+      for (var i = 0; i < kApoPluginSlots; i++) {
+        final b = kApoTelemetryPluginsOffset ~/ 4 +
+            i * kApoTelemetryPluginSlotU32;
+        final flags = u32[b];
+        final loaded = (flags & 0xFF) != 0;
+        final bypassed = ((flags >> 8) & 0xFF) != 0;
+        final fault = ((flags >> 16) & 0xFF) != 0;
+        final catCode = (flags >> 24) & 0xFF;
+        final cat =
+            catCode < catNames.length ? catNames[catCode] : 'load_failed';
+        slots.add({
+          'slot': i,
+          'hasActive': loaded,
+          'bypassed': bypassed,
+          'fault': fault,
+          'faultStage':
+              !fault ? 'none' : (cat == 'process_crash' ? 'process' : 'load'),
+          'faultCategory': fault ? cat : 'none',
+          'latency': u32[b + 1],
+          'inRms': f32[b + 2],
+          'outRms': f32[b + 3],
+          'processCalls': u32[b + 4],
+          'appliedLoadGen': u32[b + 5],
+          'appliedStateGen': u32[b + 6],
+        });
+        sig = '$sig|$loaded,$bypassed,$fault,$catCode,'
+            '${u32[b + 1]},${u32[b + 4]},${u32[b + 5]},${u32[b + 6]}';
+      }
+      if (sig != _lastPluginSig || _tickCount % 20 == 0) {
+        _lastPluginSig = sig;
+        _send?.call({'evt': 'apoPluginStatus', 'slots': slots});
+      }
+    }
     final seq = u32[9];
     if (seq == _lastSeq) return;
     _lastSeq = seq;
@@ -449,4 +501,262 @@ class ApoTelemetryReader {
       'ts': DateTime.now().millisecondsSinceEpoch,
     });
   }
+}
+
+const String _apoPluginsName = 'Global\\AuraDSP_ApoPlugins';
+
+/// 插件块发布者（Part I Q2，计划书 D2/D3）：pluginMirror →
+/// 共享块（seqlock 单写者，与参数发布者同口径）。创建权同参数
+/// 块：APO 在 audiodg 内创建、本发布者 Open 优先。仅在 sysapo
+/// 会话激活时工作（active 由 'apopublish'/'apotelemetry' 命令
+/// 点置位），其余模式完全静默、零 FFI 尝试。
+class ApoPluginPublisher {
+  bool active = false;
+
+  Pointer<Void>? _mapping;
+  Pointer<Uint8>? _view;
+  Pointer<Uint32>? _u32;
+  bool _permFail = false;
+  bool _loggedAbsent = false;
+  int _seq = 0;
+
+  final List<_ApoPluginSlotPub> _pub =
+      List.generate(kApoPluginSlots, (_) => _ApoPluginSlotPub());
+  bool _hdrSeen = false;
+  bool _pubChain = true;
+  bool _pubPdc = false;
+
+  Pointer<Void> _createMapping(_ApoWin32 w, Pointer<Utf16> name) {
+    final sddl = _apoSharedSddl.toNativeUtf16();
+    final pSd = calloc<Pointer<Void>>();
+    final pSize = calloc<Uint32>();
+    Pointer<Void>? sd;
+    try {
+      if (w.convertSddl(sddl, 1, pSd, pSize) == 0) return nullptr;
+      sd = pSd.value;
+      final sa = calloc<_ApoSecurityAttributes>();
+      sa.ref.nLength = sizeOf<_ApoSecurityAttributes>();
+      sa.ref.lpSecurityDescriptor = sd;
+      sa.ref.bInheritHandle = 0;
+      try {
+        return w.createFileMappingW(nullptr, sa.cast(), _apoPageReadWrite,
+            0, kApoPluginBlockBytes, name);
+      } finally {
+        calloc.free(sa);
+      }
+    } finally {
+      calloc.free(sddl);
+      calloc.free(pSd);
+      calloc.free(pSize);
+      if (sd != null) w.localFree(sd);
+    }
+  }
+
+  bool _ensure() {
+    if (_view != null) return true;
+    if (_permFail) return false;
+    try {
+      final w = _apoWin32();
+      final name = _apoPluginsName.toNativeUtf16();
+      Pointer<Void> handle;
+      try {
+        handle = w.openFileMappingW(_apoFileMapAllAccess, 0, name);
+        if (handle.address == 0) handle = _createMapping(w, name);
+      } finally {
+        calloc.free(name);
+      }
+      if (handle.address == 0) {
+        if (!_loggedAbsent) {
+          _loggedAbsent = true;
+          dbgLog('apo plugin publisher: block absent, will retry');
+        }
+        return false;
+      }
+      final view = w.mapViewOfFile(
+          handle, _apoFileMapAllAccess, 0, 0, kApoPluginBlockBytes);
+      if (view.address == 0) {
+        _permFail = true;
+        dbgLog('apo plugin publisher: map view failed');
+        return false;
+      }
+      _mapping = handle;
+      _view = view.cast();
+      _u32 = view.cast();
+      if (_u32![0] != kApoPluginsMagic) {
+        // 全新块：写头（链开关默认开、PDC 默认关，与引擎默认一致）。
+        _u32![0] = kApoPluginsMagic;
+        _u32![1] = kApoPluginsVersion;
+        _u32![3] = kApoPluginBlockBytes;
+        _u32![4] = 1;
+        _u32![5] = 0;
+        _seq = 0;
+        _u32![2] = 0;
+        // 发布模型作废重来：首个 sync 全量落块（含 loadGen 推进）。
+        for (final p in _pub) {
+          p.occupied = false;
+          p.path = '';
+          p.id = '';
+        }
+        _hdrSeen = false;
+      } else {
+        _seq = _u32![2];
+      }
+      dbgLog('apo plugin publisher: block mapped '
+          '(seq=$_seq, handle=0x${_mapping!.address.toRadixString(16)})');
+      return true;
+    } catch (e) {
+      _permFail = true;
+      dbgLog('apo plugin publisher unavailable: $e');
+      return false;
+    }
+  }
+
+  void _beginWrite() {
+    _seq += 1;
+    _u32![2] = _seq;
+  }
+
+  void _endWrite() {
+    _seq += 1;
+    _u32![2] = _seq;
+  }
+
+  void _writeSlotHeader(int slot) {
+    final p = _pub[slot];
+    final base = apoPluginSlotOffset(slot) ~/ 4;
+    _u32![base + 0] = p.format;
+    _u32![base + 1] = p.stage;
+    _u32![base + 2] = p.mask;
+    _u32![base + 3] = p.bypass;
+    _u32![base + 4] = p.loadGen;
+    _u32![base + 5] = p.stateGen;
+    _u32![base + 6] = p.pathBytes;
+    _u32![base + 7] = p.stateBytes;
+  }
+
+  void _writeUtf8Region(int offset, int cap, String text) {
+    var bytes = utf8.encode(text);
+    if (bytes.length > cap - 1) {
+      var end = cap - 1;
+      while (end > 0 && (bytes[end] & 0xC0) == 0x80) {
+        end--;
+      }
+      bytes = bytes.sublist(0, end);
+    }
+    for (var i = 0; i < bytes.length; i++) {
+      _view![offset + i] = bytes[i];
+    }
+    _view![offset + bytes.length] = 0;
+  }
+
+  static int _formatOf(String path) {
+    final p = path.toLowerCase();
+    if (p.endsWith('.clap')) return kApoPluginFormatClap;
+    if (p.contains('.vst3')) return kApoPluginFormatVst3;
+    return kApoPluginFormatVst2;
+  }
+
+  /// 镜像同步（状态轮询/'apopublish' 调用）：仅 diff 落块；
+  /// 身份（占用/路径/id/格式）变化推进 loadGen，其余字段变化
+  /// 只改槽头。
+  void syncFromMirror(List<PluginSlotCfg> mirror,
+      {required bool chainEnabled, required bool pdcEnabled}) {
+    if (!active) return;
+    if (!_ensure()) return;
+    var wrote = false;
+    _beginWrite();
+    if (!_hdrSeen || chainEnabled != _pubChain) {
+      _u32![4] = chainEnabled ? 1 : 0;
+      _pubChain = chainEnabled;
+      wrote = true;
+    }
+    if (!_hdrSeen || pdcEnabled != _pubPdc) {
+      _u32![5] = pdcEnabled ? 1 : 0;
+      _pubPdc = pdcEnabled;
+      wrote = true;
+    }
+    _hdrSeen = true;
+    for (var slot = 0; slot < kApoPluginSlots; slot++) {
+      final cfg = slot < mirror.length ? mirror[slot] : null;
+      final p = _pub[slot];
+      final occupied = cfg != null && cfg.loaded && cfg.path.isNotEmpty;
+      final path = occupied ? cfg.path : '';
+      final id = occupied ? cfg.id : '';
+      final format = occupied ? _formatOf(path) : 0;
+      final identityChanged =
+          occupied != p.occupied || path != p.path || id != p.id ||
+              format != p.format;
+      if (identityChanged) {
+        p.occupied = occupied;
+        p.path = path;
+        p.id = id;
+        p.format = format;
+        p.loadGen += 1;
+        p.stateBytes = 0;
+        final base = apoPluginSlotOffset(slot);
+        _writeUtf8Region(base + kApoPluginSlotPathOffset,
+            kApoPluginPathBytes, path);
+        p.pathBytes = utf8.encode(path).length;
+        if (p.pathBytes > kApoPluginPathBytes - 1) {
+          p.pathBytes = kApoPluginPathBytes - 1;
+        }
+        _writeUtf8Region(
+            base + kApoPluginSlotIdOffset, kApoPluginIdBytes, id);
+        _writeSlotHeader(slot);
+        wrote = true;
+      }
+      final stage = occupied ? cfg.stage : p.stage;
+      final mask = occupied ? cfg.channels : p.mask;
+      final bypass = occupied ? (cfg.bypass ? 1 : 0) : p.bypass;
+      if (stage != p.stage || mask != p.mask || bypass != p.bypass) {
+        p.stage = stage;
+        p.mask = mask;
+        p.bypass = bypass;
+        _writeSlotHeader(slot);
+        wrote = true;
+      }
+    }
+    _endWrite();
+    if (wrote) dbgLog('apo plugin publisher: synced');
+  }
+
+  /// 状态发布（D3 影子链收获点，Q3 接入）：字节写入状态区并
+  /// 推进 stateGen。超限（>512KiB）拒绝并返回 false——该槽在
+  /// APO 侧保持旧状态，UI 侧由 Q3 按「状态过大」提示。
+  bool publishSlotState(int slot, List<int> bytes) {
+    if (!active || slot < 0 || slot >= kApoPluginSlots) return false;
+    if (bytes.length > kApoPluginStateBytes) {
+      dbgLog('apo plugin publisher: state too large '
+          '(${bytes.length} > $kApoPluginStateBytes) slot=$slot');
+      return false;
+    }
+    if (!_ensure()) return false;
+    final base = apoPluginSlotOffset(slot) + kApoPluginSlotStateOffset;
+    _beginWrite();
+    for (var i = 0; i < bytes.length; i++) {
+      _view![base + i] = bytes[i];
+    }
+    final p = _pub[slot];
+    p.stateBytes = bytes.length;
+    p.stateGen += 1;
+    _writeSlotHeader(slot);
+    _endWrite();
+    dbgLog('apo plugin publisher: state slot=$slot '
+        'bytes=${bytes.length} gen=${p.stateGen}');
+    return true;
+  }
+}
+
+class _ApoPluginSlotPub {
+  bool occupied = false;
+  String path = '';
+  String id = '';
+  int format = 0;
+  int stage = 3;
+  int mask = 0xFF;
+  int bypass = 0;
+  int loadGen = 0;
+  int stateGen = 0;
+  int pathBytes = 0;
+  int stateBytes = 0;
 }

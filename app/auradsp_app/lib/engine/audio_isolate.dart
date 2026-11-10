@@ -32,6 +32,7 @@ import 'backend_switch.dart';
 import 'bridge_manager.dart';
 import 'bridge_plugin_ffi.dart';
 import 'apo_param_index.dart';
+import 'apo_plugin_block.dart';
 import 'debug_log.dart';
 import 'local_channel_policy.dart';
 
@@ -157,6 +158,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // 无条件构造、惰性激活（非 Windows 首次激活失败即永久静默）。
   final apoPublisher = ApoParamPublisher()
     ..bind(mirror: paramMirror, strMirror: paramStrMirror, bypassOf: () => bypass);
+  // Part I Q2：插件块发布者（sysapo 激活时把 pluginMirror 同步进
+  // AuraDSP_ApoPlugins；未激活时全部方法为空操作）。
+  final apoPluginPublisher = ApoPluginPublisher();
   final apoTelemetry = ApoTelemetryReader();
   // VB 总线掩码（session 级；进桥/重建后下发，CHANGE 重建不丢——掩码活在 ctx）。
   // 出厂只开 A1/A2：其余路按需开路再建句柄。
@@ -169,6 +173,23 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // 插件槽会话镜像：无论当前走本地还是桥，插件命令都先落到这里。
   final List<PluginSlotCfg> pluginMirror =
       List<PluginSlotCfg>.generate(_kPluginSlots, (_) => PluginSlotCfg());
+
+  // Part I Q2：把插件镜像同步进 APO 插件块（发布者内部 diff，
+  // 未激活/块不存在时静默）。链开关与 PDC 读本地引擎真值。
+  void syncApoPlugins() {
+    if (!apoPluginPublisher.active) return;
+    final l = lib;
+    final h = handle;
+    apoPluginPublisher.syncFromMirror(
+      pluginMirror,
+      chainEnabled: (l != null && h != null)
+          ? AuraDspLib.pluginChainGetEnabledWrap(l, h)
+          : true,
+      pdcEnabled: (l != null && h != null)
+          ? AuraDspLib.pluginGetPdcWrap(l, h)
+          : false,
+    );
+  }
 
   // P1 桥治理：注册表 + 惰性加载 + 当前后端（vm/asio/vaio）。
   // 未选中的桥全程不 load；同一时刻只有一个后端出声（互斥见 stopOtherBridges）。
@@ -1414,15 +1435,36 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         case 'apopublish':
           // 进 sysapo / 附加后全量重发参数块（镜像即全量真相）。
           apoPublisher.flushAll();
+          // Part I Q2：插件发布者同点激活并同步镜像（身份+开关）。
+          apoPluginPublisher.active = true;
+          syncApoPlugins();
           break;
         case 'apotelemetry':
           // sysapo 生效期间读 APO 回传块并合成 viz 事件。
           if (m['on'] == true) {
             apoTelemetry.start(send);
+            apoPluginPublisher.active = true;
+            syncApoPlugins();
           } else {
             apoTelemetry.stop();
+            apoPluginPublisher.active = false;
           }
           break;
+        case 'apoPluginState':
+          {
+            // Part I Q2/D3：影子链状态收获（Q3 发起）→ 插件块状态区。
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final b64 = (m['state'] as String?) ?? '';
+            try {
+              final bytes = base64Decode(b64);
+              final ok = apoPluginPublisher.publishSlotState(slot, bytes);
+              send({'evt': 'apoPluginStateResult', 'slot': slot, 'ok': ok});
+            } catch (e) {
+              dbgLog('apo plugin state publish failed: $e');
+              send({'evt': 'apoPluginStateResult', 'slot': slot, 'ok': false});
+            }
+            break;
+          }
         case 'source51':
           // 0=混缩（默认） 1=直通；桥注入（试音）恒走 fold stereo，本旗只管本地渲染。
           passthrough51 = (m['value'] as int) != 0;
@@ -1744,6 +1786,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'pluginSlotGetStatus':
           {
+            // Part I Q2：sysapo 激活时状态轮询顺带把插件镜像
+            // diff 同步进插件块（发布者未激活时为空操作）。
+            syncApoPlugins();
             final slot = (m['slot'] as num?)?.toInt() ?? 0;
             final pb = activePluginBridge();
             if (pb != null) {

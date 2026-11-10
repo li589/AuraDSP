@@ -54,6 +54,14 @@ class ApoEngineHost {
     using FnSetParam = auradsp_status (*)(auradsp_handle, const char*, const void*, uint32_t);
     using FnGetLatencyMs = double (*)(auradsp_handle);
     using FnVizRead = uint32_t (*)(auradsp_handle, auradsp_viz_frame*, uint32_t);
+    // Part I Q2 插件通道（可选解析：旧/stub 引擎缺符号时整通道
+    // 静默禁用，引擎本体不受影响）。
+    using FnPluginSlotLoad = int (*)(auradsp_handle, int, const char*, const char*);
+    using FnPluginSlot = int (*)(auradsp_handle, int);
+    using FnPluginSlotInt = int (*)(auradsp_handle, int, int);
+    using FnPluginSlotPreset = int (*)(auradsp_handle, int, const char*);
+    using FnPluginSlotStatus = int (*)(auradsp_handle, int, char*, int);
+    using FnPluginFlag = int (*)(auradsp_handle, int);
 
     bool LoadEngine();
     bool ClaimSeat();
@@ -62,6 +70,10 @@ class ApoEngineHost {
     static DWORD WINAPI WorkerMain(LPVOID ctx);
     void WorkerLoop();
     void ApplySnapshot(const uint8_t* snap, const uint32_t* hdr);
+    // Part I Q2：插件块 diff 应用 + telemetry v3 插件段回填
+    // （worker 线程内调用；通道不可用时自跳过）。
+    void ApplyPlugins();
+    bool ApplyPluginState(int slot, const uint8_t* state, uint32_t bytes);
     bool ProcessGuarded(const float* src, float* dst, UINT32 frames);
     void ProcessDirect(const float* src, float* dst, UINT32 frames);
 
@@ -79,6 +91,16 @@ class ApoEngineHost {
     FnSetParam fnSetParam_ = nullptr;
     FnGetLatencyMs fnLatency_ = nullptr;
     FnVizRead fnVizRead_ = nullptr;
+    FnPluginSlotLoad fnSlotLoad_ = nullptr;
+    FnPluginSlot fnSlotUnload_ = nullptr;
+    FnPluginSlotInt fnSlotBypass_ = nullptr;
+    FnPluginSlotInt fnSlotStage_ = nullptr;
+    FnPluginSlotInt fnSlotChannels_ = nullptr;
+    FnPluginSlotPreset fnSlotLoadPreset_ = nullptr;
+    FnPluginSlotStatus fnSlotStatus_ = nullptr;
+    FnPluginFlag fnSetPdc_ = nullptr;
+    FnPluginFlag fnChainEnabled_ = nullptr;
+    bool pluginsOk_ = false;
 
     UINT32 rate_ = 48000;
     UINT32 streamCh_ = 2;
@@ -95,6 +117,20 @@ class ApoEngineHost {
     // 参数块（worker 打开）
     HANDLE hParamMap_ = nullptr;
     const uint8_t* paramView_ = nullptr;
+
+    // 插件块（Part I Q2；本进程创建保活，口径同参数块）
+    HANDLE hPluginMap_ = nullptr;
+    const uint8_t* pluginView_ = nullptr;
+    struct AppliedPlugin {
+        uint32_t loadGen = 0, stateGen = 0;
+        uint32_t stage = 0, mask = 0, bypass = 0;
+        bool loaded = false;
+        bool seen = false;
+    };
+    AppliedPlugin appliedPlugins_[APO_PLUGIN_SLOTS];
+    uint32_t appliedChainEnabled_ = 1, appliedPdc_ = 0;
+    bool pluginHdrSeen_ = false;
+    std::wstring pluginTempDir_;
 
     // worker
     HANDLE hThread_ = nullptr;

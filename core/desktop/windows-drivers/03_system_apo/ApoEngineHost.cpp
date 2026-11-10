@@ -80,6 +80,11 @@ bool ApoEngineHost::OpenTelemetry() {
         return false;
     }
     tele_ = (ApoTelemetryBlock*)v;
+    if (tele_->magic == APO_TELEMETRY_MAGIC &&
+        tele_->version < APO_TELEMETRY_VERSION) {
+        // 旧版块复用：追加段在建块时整页零初始化，升版即可用。
+        tele_->version = APO_TELEMETRY_VERSION;
+    }
     if (tele_->magic != APO_TELEMETRY_MAGIC) {
         // 首建（或旧块）：整块初始化。并发首建写同值，无害。
         memset(tele_, 0, sizeof(*tele_));
@@ -140,9 +145,32 @@ bool ApoEngineHost::LoadEngine() {
         fnSetParam_ = (FnSetParam)GetProcAddress(h, "auradsp_set_param");
         fnLatency_ = (FnGetLatencyMs)GetProcAddress(h, "auradsp_get_latency_ms");
         fnVizRead_ = (FnVizRead)GetProcAddress(h, "auradsp_viz_read");
+        auto pSlotLoad = (FnPluginSlotLoad)GetProcAddress(h, "auradsp_plugin_slot_load");
+        auto pSlotUnload = (FnPluginSlot)GetProcAddress(h, "auradsp_plugin_slot_unload");
+        auto pSlotBypass = (FnPluginSlotInt)GetProcAddress(h, "auradsp_plugin_slot_set_bypass");
+        auto pSlotStage = (FnPluginSlotInt)GetProcAddress(h, "auradsp_plugin_slot_set_insert_stage");
+        auto pSlotChannels = (FnPluginSlotInt)GetProcAddress(h, "auradsp_plugin_slot_set_channels");
+        auto pSlotLoadPreset = (FnPluginSlotPreset)GetProcAddress(h, "auradsp_plugin_slot_load_preset");
+        auto pSlotStatus = (FnPluginSlotStatus)GetProcAddress(h, "auradsp_plugin_slot_get_status");
+        auto pSetPdc = (FnPluginFlag)GetProcAddress(h, "auradsp_plugin_set_pdc");
+        auto pChainEnabled = (FnPluginFlag)GetProcAddress(h, "auradsp_plugin_chain_set_enabled");
         if (fnAbi && fnAbi() == 2 && fnCreate_ && fnDestroy_ && fnProcess_ &&
             fnSetParam_ && fnLatency_ && fnVizRead_) {
             hEngineDll_ = h;
+            // 插件通道是可选能力：符号全齐才启用（Q1 起 APO 风味
+            // 恒齐；回退候选若为 stub 风味则整通道静默禁用）。
+            fnSlotLoad_ = pSlotLoad;
+            fnSlotUnload_ = pSlotUnload;
+            fnSlotBypass_ = pSlotBypass;
+            fnSlotStage_ = pSlotStage;
+            fnSlotChannels_ = pSlotChannels;
+            fnSlotLoadPreset_ = pSlotLoadPreset;
+            fnSlotStatus_ = pSlotStatus;
+            fnSetPdc_ = pSetPdc;
+            fnChainEnabled_ = pChainEnabled;
+            pluginsOk_ = pSlotLoad && pSlotUnload && pSlotBypass && pSlotStage &&
+                         pSlotChannels && pSlotLoadPreset && pSlotStatus &&
+                         pSetPdc && pChainEnabled;
             return true;
         }
         fnCreate_ = nullptr;
@@ -204,6 +232,27 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels) {
         }
     }
 
+    // 插件块（Part I Q2）：与参数块同一创建口径（本进程创建、
+    // 持句柄保活）；建不出时通道禁用，引擎照常跑。
+    hPluginMap_ = CreateSharedMapping(AuraApoPluginsName(), APO_PLUGIN_BLOCK_BYTES);
+    if (hPluginMap_) {
+        const void* v = MapViewOfFile(hPluginMap_, FILE_MAP_READ, 0, 0,
+                                      APO_PLUGIN_BLOCK_BYTES);
+        if (v) {
+            pluginView_ = (const uint8_t*)v;
+        } else {
+            CloseHandle(hPluginMap_);
+            hPluginMap_ = nullptr;
+        }
+    }
+    for (auto& ap : appliedPlugins_) ap = AppliedPlugin{};
+    pluginHdrSeen_ = false;
+    {
+        wchar_t tmp[MAX_PATH];
+        DWORD n = GetTempPathW(MAX_PATH, tmp);
+        pluginTempDir_ = (n > 0 && n < MAX_PATH) ? tmp : L"";
+    }
+
     inBuf_ = new float[(size_t)kMaxBlock * engCh_];
     outBuf_ = new float[(size_t)kMaxBlock * engCh_];
 
@@ -213,6 +262,7 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels) {
     tele_->channels = streamCh_;
     tele_->paramsApplied = 0;
     tele_->fault = 0;
+    for (auto& p : tele_->plugins) p = ApoTelemetryBlock::PluginSlot{};
     appliedTotal_ = 0;
     snapshotValid_ = false;
     fault_.store(false);
@@ -247,6 +297,14 @@ void ApoEngineHost::Stop() {
     if (hParamMap_) {
         CloseHandle(hParamMap_);
         hParamMap_ = nullptr;
+    }
+    if (pluginView_) {
+        UnmapViewOfFile(pluginView_);
+        pluginView_ = nullptr;
+    }
+    if (hPluginMap_) {
+        CloseHandle(hPluginMap_);
+        hPluginMap_ = nullptr;
     }
     if (engine_) {
         if (fnDestroy_) fnDestroy_(engine_);
@@ -354,6 +412,8 @@ void ApoEngineHost::WorkerLoop() {
                 if (hdr->writeSeq == s1) ApplySnapshot(snap.data(), (const uint32_t*)snap.data());
             }
         }
+        // 插件块应用（Part I Q2）：与参数同周期；通道不可用自跳过。
+        ApplyPlugins();
         // viz 泵：抽干积压帧，只报最后一帧（telemetry 是状态面非流）。
         if (engine_ && fnVizRead_) {
             uint32_t n = fnVizRead_(engine_, vizFrames_, 4);
@@ -425,5 +485,214 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
     if (applied > 0) {
         appliedTotal_ += applied;
         if (tele_) tele_->paramsApplied = appliedTotal_;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Part I Q2：插件块应用（worker 线程）
+// ---------------------------------------------------------------------------
+namespace {
+
+// 槽状态 JSON 的宽容提取（telemetry 是状态面：解析失败按缺省，
+// 不让格式漂移波及 worker）。键以 "key": 形态精确定位。
+const char* JsonFind(const char* json, const char* key) {
+    char pat[64];
+    snprintf(pat, sizeof(pat), "\"%s\":", key);
+    const char* p = strstr(json, pat);
+    return p ? p + strlen(pat) : nullptr;
+}
+bool JsonBool(const char* json, const char* key) {
+    const char* p = JsonFind(json, key);
+    return p && strncmp(p, "true", 4) == 0;
+}
+double JsonNum(const char* json, const char* key) {
+    const char* p = JsonFind(json, key);
+    return p ? strtod(p, nullptr) : 0.0;
+}
+void JsonStr(const char* json, const char* key, char* out, size_t cap) {
+    out[0] = '\0';
+    const char* p = JsonFind(json, key);
+    if (!p || *p != '"') return;
+    p++;
+    size_t n = 0;
+    while (*p && *p != '"' && n + 1 < cap) out[n++] = *p++;
+    out[n] = '\0';
+}
+uint8_t FaultCategoryCode(const char* name) {
+    // 与引擎 PluginFaultCategory 数值一一对应（plugin_host.h）。
+    if (strcmp(name, "not_found") == 0) return 1;
+    if (strcmp(name, "unreadable") == 0) return 2;
+    if (strcmp(name, "load_failed") == 0) return 3;
+    if (strcmp(name, "entry_missing") == 0) return 4;
+    if (strcmp(name, "arch_mismatch") == 0) return 5;
+    if (strcmp(name, "init_crash") == 0) return 6;
+    if (strcmp(name, "process_crash") == 0) return 7;
+    return 0;
+}
+
+}  // namespace
+
+bool ApoEngineHost::ApplyPluginState(int slot, const uint8_t* state,
+                                     uint32_t bytes) {
+    if (pluginTempDir_.empty() || !fnSlotLoadPreset_) return false;
+    wchar_t path[MAX_PATH];
+    swprintf(path, MAX_PATH, L"%sauradsp_apo_state_%d.bin",
+             pluginTempDir_.c_str(), slot);
+    HANDLE h = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                           FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    bool ok = WriteFile(h, state, bytes, &written, nullptr) &&
+              written == bytes;
+    CloseHandle(h);
+    if (!ok) return false;
+    char u8[MAX_PATH * 3];
+    if (WideCharToMultiByte(CP_UTF8, 0, path, -1, u8, sizeof(u8), nullptr,
+                            nullptr) <= 0)
+        return false;
+    return fnSlotLoadPreset_(engine_, slot, u8) == 1;
+}
+
+void ApoEngineHost::ApplyPlugins() {
+    if (!pluginView_ || !pluginsOk_ || !engine_) return;
+    const auto* hdr = (const ApoPluginBlockHeader*)pluginView_;
+    uint32_t s1 = hdr->writeSeq;
+    if ((s1 & 1u) != 0 || hdr->magic != APO_PLUGINS_MAGIC ||
+        hdr->version != APO_PLUGINS_VERSION)
+        return;
+    ApoPluginBlockHeader h{};
+    ApoPluginSlotHeader sh[APO_PLUGIN_SLOTS];
+    memcpy(&h, pluginView_, sizeof(h));
+    for (uint32_t i = 0; i < APO_PLUGIN_SLOTS; i++) {
+        memcpy(&sh[i],
+               pluginView_ + APO_PLUGIN_BLOCK_HEADER_BYTES +
+                   i * APO_PLUGIN_SLOT_STRIDE,
+               sizeof(ApoPluginSlotHeader));
+    }
+    if (hdr->writeSeq != s1) return;  // 撕裂帧：下轮重试
+
+    if (!pluginHdrSeen_ || h.chainEnabled != appliedChainEnabled_) {
+        fnChainEnabled_(engine_, (int)h.chainEnabled);
+        appliedChainEnabled_ = h.chainEnabled;
+    }
+    if (!pluginHdrSeen_ || h.pdcEnabled != appliedPdc_) {
+        fnSetPdc_(engine_, (int)h.pdcEnabled);
+        appliedPdc_ = h.pdcEnabled;
+    }
+    pluginHdrSeen_ = true;
+
+    char statusBuf[8192];
+    for (uint32_t slot = 0; slot < APO_PLUGIN_SLOTS; slot++) {
+        AppliedPlugin& ap = appliedPlugins_[slot];
+        const ApoPluginSlotHeader& want = sh[slot];
+        const uint8_t* base = pluginView_ + APO_PLUGIN_BLOCK_HEADER_BYTES +
+                              slot * APO_PLUGIN_SLOT_STRIDE;
+        if (!ap.seen || want.loadGen != ap.loadGen) {
+            // 身份代次变化（含首见）：按块内身份重载该槽。
+            if (want.format == 0 || want.pathBytes == 0) {
+                if (ap.loaded) fnSlotUnload_(engine_, (int)slot);
+                ap.loaded = false;
+                ap.loadGen = want.loadGen;
+                ap.stateGen = want.stateGen;
+            } else {
+                char path[APO_PLUGIN_PATH_BYTES + 1];
+                uint32_t pn = (uint32_t)strnlen(
+                    (const char*)(base + APO_PLUGIN_SLOT_HEADER_BYTES),
+                    want.pathBytes < APO_PLUGIN_PATH_BYTES
+                        ? want.pathBytes
+                        : APO_PLUGIN_PATH_BYTES);
+                memcpy(path, base + APO_PLUGIN_SLOT_HEADER_BYTES, pn);
+                path[pn] = '\0';
+                char id[APO_PLUGIN_ID_BYTES + 1];
+                uint32_t in = (uint32_t)strnlen(
+                    (const char*)(base + APO_PLUGIN_SLOT_HEADER_BYTES +
+                                  APO_PLUGIN_PATH_BYTES),
+                    APO_PLUGIN_ID_BYTES);
+                memcpy(id, base + APO_PLUGIN_SLOT_HEADER_BYTES +
+                               APO_PLUGIN_PATH_BYTES,
+                       in);
+                id[in] = '\0';
+                int rc = fnSlotLoad_(engine_, (int)slot, path, id);
+                ap.loadGen = want.loadGen;
+                if (rc == 1) {
+                    ap.loaded = true;
+                    fnSlotStage_(engine_, (int)slot, (int)want.insertStage);
+                    fnSlotChannels_(engine_, (int)slot, (int)want.channelMask);
+                    fnSlotBypass_(engine_, (int)slot, (int)want.bypass);
+                    ap.stage = want.insertStage;
+                    ap.mask = want.channelMask;
+                    ap.bypass = want.bypass;
+                    if (want.stateBytes > 0 &&
+                        want.stateBytes <= APO_PLUGIN_STATE_BYTES &&
+                        ApplyPluginState(
+                            (int)slot,
+                            base + APO_PLUGIN_SLOT_HEADER_BYTES +
+                                APO_PLUGIN_PATH_BYTES + APO_PLUGIN_ID_BYTES,
+                            want.stateBytes)) {
+                        ap.stateGen = want.stateGen;
+                    } else if (want.stateBytes == 0) {
+                        ap.stateGen = want.stateGen;
+                    }
+                    // 状态应用失败时 stateGen 不前进：下轮重试
+                    // （身份已就位，重试只是再 loadPreset 一次）。
+                } else {
+                    // 加载失败：引擎已闩锁故障（Q1），telemetry 会
+                    // 如实回传；本代次不再重试（发布侧重试点击会
+                    // 再 bump loadGen）。stateGen 不前进，待加载
+                    // 成功后补应用。
+                    ap.loaded = false;
+                }
+            }
+            ap.seen = true;
+        } else if (ap.loaded) {
+            // 身份未变：旁路/级/掩码的独立 diff + 状态代次应用。
+            if (want.bypass != ap.bypass) {
+                fnSlotBypass_(engine_, (int)slot, (int)want.bypass);
+                ap.bypass = want.bypass;
+            }
+            if (want.insertStage != ap.stage) {
+                fnSlotStage_(engine_, (int)slot, (int)want.insertStage);
+                ap.stage = want.insertStage;
+            }
+            if (want.channelMask != ap.mask) {
+                fnSlotChannels_(engine_, (int)slot, (int)want.channelMask);
+                ap.mask = want.channelMask;
+            }
+            if (want.stateGen != ap.stateGen && want.stateBytes > 0 &&
+                want.stateBytes <= APO_PLUGIN_STATE_BYTES &&
+                ApplyPluginState(
+                    (int)slot,
+                    base + APO_PLUGIN_SLOT_HEADER_BYTES +
+                        APO_PLUGIN_PATH_BYTES + APO_PLUGIN_ID_BYTES,
+                    want.stateBytes)) {
+                ap.stateGen = want.stateGen;
+            } else if (want.stateGen != ap.stateGen &&
+                       want.stateBytes == 0) {
+                ap.stateGen = want.stateGen;
+            }
+        }
+
+        // telemetry v3 插件段：以引擎槽状态 JSON 为真相回填。
+        if (tele_ && fnSlotStatus_) {
+            statusBuf[0] = '\0';
+            if (fnSlotStatus_(engine_, (int)slot, statusBuf,
+                              sizeof(statusBuf)) == 1) {
+                auto& t = tele_->plugins[slot];
+                char cat[32];
+                JsonStr(statusBuf, "faultCategory", cat, sizeof(cat));
+                t.loaded = JsonBool(statusBuf, "hasActive") ? 1 : 0;
+                t.bypass = JsonBool(statusBuf, "bypassed") ? 1 : 0;
+                t.fault = JsonBool(statusBuf, "fault") ? 1 : 0;
+                t.faultCategory = FaultCategoryCode(cat);
+                t.latencySamples =
+                    (uint32_t)JsonNum(statusBuf, "latency");
+                t.inRms = (float)JsonNum(statusBuf, "inRms");
+                t.outRms = (float)JsonNum(statusBuf, "outRms");
+                t.processCalls =
+                    (uint32_t)JsonNum(statusBuf, "processCalls");
+                t.appliedLoadGen = ap.loadGen;
+                t.appliedStateGen = ap.stateGen;
+            }
+        }
     }
 }
