@@ -1033,6 +1033,15 @@ extension StateEvents on AppModel {
         if (waiter != null && !waiter.isCompleted) waiter.complete();
         vaioDetectWaiter = null;
         _notifyUi();
+        // 第五轮 S5 分层钉点：第五轮实测四点（send/begin/done/
+        // received）全齐进程仍死——再钉 handler 出口与重建帧两
+        // 点。下次闪退：handled 缺失 = 死在 handler 内；handled
+        // 有而 settled 缺失 = 死在随后的重建帧；两点全有 = 死因
+        // 与本次 detect 往返无关（另查并行原生面）。
+        dbgLog('vaiodetect: ui handled', sync: true);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          dbgLog('vaiodetect: frame settled', sync: true);
+        });
         break;
       case 'asiodrivers':
         // 驱动清单（isolate 内 asio_detect 的结果；桥缺失/无驱动时 note 有原因）。
