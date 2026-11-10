@@ -256,6 +256,11 @@ if(AURADSP_BUILD_APO_ENGINE)
         "${API}/platform/windows/fs_win.cpp"
         "${API}/platform/windows/env_win.cpp"
         "${API}/platform/windows/log_win.cpp"
+        # CP-02 的两个 stub 是 NO_PLUGINS 形态下 plugin_* C ABI
+        # 导出的唯一提供者（.def 全量导出面靠它们成立）；本变体
+        # 恒 NO_PLUGINS，故恒编 stub，与全局插件开关无关。
+        "${API}/plugins/integration/plugin_chain_adapter_stub.cpp"
+        "${API}/plugins/integration/plugin_abi_stub.cpp"
         "${API}/auradsp_engine.def"
     )
     target_link_libraries(auradsp_engine_apo PRIVATE auradsp_core_apo auradsp_wincompat_apo)

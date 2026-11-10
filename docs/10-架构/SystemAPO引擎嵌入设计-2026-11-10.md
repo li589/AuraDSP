@@ -72,3 +72,10 @@ App 进程                                  audiodg 进程
 - **R3 参数钩子副作用**：custom_set 含 EEL 编译等重活，全在 worker 线程；`liveprog.code` 在 audiodg 内编译 EEL 的稳定性以冒烟 + 真机为据，异常由引擎自身错误口 + SEH 闩锁兜底。
 - **R4 座位与多实例竞态**：抢/放座位用 Interlocked CAS + 实例析构兜底释放（Unlock 未达成的异常路径靠 pid 存活校验回收——telemetry 座位记录 owner pid，App 侧发现 pid 已死可提示，APO 侧新实例抢占时校验旧 owner 进程句柄存活）。
 - **R5 格式协商回归**：APO 现「只认 float32」口径不动；引擎处理失败（create 失败/ABI 不符）一律落回 v1 透传行为，保证任何情况下不比现状差。
+
+## 7. 实施附记（2026-11-10 落地后补记，不改上文决策原文）
+
+- D2 的产物校验实施为纯 Python PE 解析（smoke_apo_engine_binary），非 dumpbin：零工具链依赖，断言面含导出面。
+- D4 布局在实施中增补**有效位图区**（header 后 64B，values 偏移随之 64→128）：只有被 App 写过（置位）的参数槽会被 worker 应用，未置位槽保持引擎默认值——否则首帧全量应用会把未触碰参数的非零默认值清零（P2d 定罪）。
+- D4/D7 的创建权归属修正：两块共享对象均由 **APO 侧（LocalService）创建**（参数块原设计为 App 创建，但标准用户令牌无 SeCreateGlobalPrivilege，建 Global\ 对象必败）；App 发布者改「先 Open、后备 Create、缺失重试」。
+- 其余决策（D1 搜索序、D3 单座位含死亡回收、D5 worker 模型、D6 SEH 闩锁、D8 声道适配、D9 延迟、D10 冒烟）均按原文落地。收口全记录见 `docs/30-审查/SystemAPO真处理立项收口-2026-11-10.md`。
