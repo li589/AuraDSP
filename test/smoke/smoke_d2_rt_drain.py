@@ -55,24 +55,29 @@ def read(p):
 
 
 def strip_comments(src):
-    """去掉 // 与 /* */ 注释（保留字符串内的内容不动，够用即可）。"""
+    """去掉 // 与 /* */ 注释（字符串/字符字面量内的内容不参与裁剪）。
+
+    必须同时跟踪 '...' 字符字面量：源码里的 '"' 若不识别，会把后续
+    整个文件误判为“在字符串内”，注释剥不掉，进而把注释里的 Sleep(50)
+    当成真实调用（2026-11-10 Windows 全量 smoke 实测）。
+    """
     out = []
     i, n = 0, len(src)
-    in_str = False
+    quote = ""
     while i < n:
         c = src[i]
-        if in_str:
+        if quote:
             out.append(c)
             if c == "\\" and i + 1 < n:
                 out.append(src[i + 1])
                 i += 2
                 continue
-            if c == '"':
-                in_str = False
+            if c == quote:
+                quote = ""
             i += 1
             continue
-        if c == '"':
-            in_str = True
+        if c == '"' or c == "'":
+            quote = c
             out.append(c)
             i += 1
             continue

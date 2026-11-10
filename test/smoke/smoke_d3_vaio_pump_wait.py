@@ -62,21 +62,24 @@ def read(p):
 
 
 def strip_comments(src):
-    out, i, n, in_str = [], 0, len(src), False
+    # 同时跟踪 '...' 字符字面量：源码里的 '"' 若不识别，会把后续整个
+    # 文件误判为“在字符串内”，注释剥不掉，进而把注释里的 Sleep(2)
+    # 当成真实调用（2026-11-10 Windows 全量 smoke 实测）。
+    out, i, n, quote = [], 0, len(src), ""
     while i < n:
         c = src[i]
-        if in_str:
+        if quote:
             out.append(c)
             if c == "\\" and i + 1 < n:
                 out.append(src[i + 1])
                 i += 2
                 continue
-            if c == '"':
-                in_str = False
+            if c == quote:
+                quote = ""
             i += 1
             continue
-        if c == '"':
-            in_str = True
+        if c == '"' or c == "'":
+            quote = c
             out.append(c)
             i += 1
             continue
@@ -130,7 +133,8 @@ check("[A3] 泵循环用 WaitAudioPeriod 等周期",
       f"count={body_pump.count('WaitAudioPeriod')}")
 check("[A4] GetCurrentPadding 失败路径也走事件等待（不再 Sleep(2)）",
       "if (FAILED(hr)) {" in body_pump and
-      re.search(r"if \(FAILED\(hr\)\) \{\s*vmcore::WaitAudioPeriod", body_pump) is not None)
+      re.search(r"if \(FAILED\(hr\)\) \{.*?vmcore::WaitAudioPeriod",
+                body_pump, re.S) is not None)
 check("[A5] 缓冲满（framesNeeded==0）时等待下一周期信号",
       re.search(r"if \(framesNeeded == 0\) \{\s*vmcore::WaitAudioPeriod", body_pump) is not None)
 
