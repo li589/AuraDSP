@@ -233,6 +233,8 @@
   "ioAsioGuide": "在 DAW (FL Studio / Cubase / Reaper / Ableton) 的 Audio Device 中选择 \"AuraDSP Virtual ASIO\" 即可将工程音频路由至此。",
   "ioWasapiRenderDesc": "WASAPI 物理渲染 (扬声器/耳机)",
   "ioNoOutputDevices": "无可用输出设备",
+  "ioNoAvailableSoundCard": "无可用声卡",
+  "ioInputOverriddenByVaio": "当前由 VAIO 桥链驱动，输入选择不生效；请将播放器输出指向 AuraVAIO 端点",
   "ioPhysicalOutput": "物理输出",
   "ioAutoSelect": "自动选择（非VAIO扬声器）",
   "ioNoPhysicalOutputs": "无可用物理输出设备",

@@ -90,10 +90,19 @@ class _WasapiInputSubpanel extends StatelessWidget {
     final selectedValue = matched != null
         ? (matched.id.isNotEmpty ? matched.id : matched.name)
         : (curDev.isEmpty ? '' : curDev);
+    // 项 4 一致性（呈现层）：合成链为 VAIO 桥时输入被桥吸收
+    // （桥只吃 VAIO 端点），本子面板的选择不生效——加说明行并
+    // 置灰下拉，避免挂着「离线未连接」的设备行误导用户以为
+    // 输入已断链。不改状态、不改合成矩阵。
+    final overriddenByVaio = model.pipelineChain == PipelineChain.vaio;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (overriddenByVaio) ...[
+          _InfoRow(l.inputDeviceLabel, l.ioInputOverriddenByVaio),
+          const SizedBox(height: AuraSpace.xs),
+        ],
         Row(
           children: [
             SizedBox(
@@ -218,9 +227,11 @@ class _WasapiInputSubpanel extends StatelessWidget {
                     ),
                 ],
                 hint: inputs.isEmpty ? l.ioNoInputDevices : null,
-                onChanged: (v) {
-                  if (v != null) model.setPipelineInputDevice(v);
-                },
+                onChanged: overriddenByVaio
+                    ? null
+                    : (v) {
+                        if (v != null) model.setPipelineInputDevice(v);
+                      },
               ),
             ),
             const SizedBox(width: AuraSpace.xs),

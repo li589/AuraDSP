@@ -168,6 +168,8 @@
   "ioAsioGuide": "DAW（FL Studio / Cubase / Reaper / Ableton）の Audio Device で「AuraDSP Virtual ASIO」を選択すると、プロジェクトの音声がここにルーティングされます。",
   "ioWasapiRenderDesc": "WASAPI 物理レンダリング（スピーカー/ヘッドホン）",
   "ioNoOutputDevices": "利用可能な出力デバイスがありません",
+  "ioNoAvailableSoundCard": "利用可能なサウンドカードなし",
+  "ioInputOverriddenByVaio": "VAIOブリッジチェーンで駆動中です。この入力の選択は無効です。プレーヤーの出力を AuraVAIO エンドポイントに向けてください",
   "ioPhysicalOutput": "物理出力",
   "ioAutoSelect": "自動選択（非 VAIO スピーカー）",
   "ioNoPhysicalOutputs": "利用可能な物理出力デバイスがありません",

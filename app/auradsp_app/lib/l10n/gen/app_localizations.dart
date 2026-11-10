@@ -1006,6 +1006,18 @@ abstract class AppLocalizations {
   /// **'无可用输出设备'**
   String get ioNoOutputDevices;
 
+  /// No description provided for @ioNoAvailableSoundCard.
+  ///
+  /// In zh, this message translates to:
+  /// **'无可用声卡'**
+  String get ioNoAvailableSoundCard;
+
+  /// No description provided for @ioInputOverriddenByVaio.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前由 VAIO 桥链驱动，输入选择不生效；请将播放器输出指向 AuraVAIO 端点'**
+  String get ioInputOverriddenByVaio;
+
   /// No description provided for @ioPhysicalOutput.
   ///
   /// In zh, this message translates to:

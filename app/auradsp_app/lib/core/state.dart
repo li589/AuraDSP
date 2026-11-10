@@ -376,6 +376,36 @@ class AppModel extends ChangeNotifier {
     return list;
   }
 
+  /// 输入是否占据一个渲染槽（第四轮项 2 互斥规格）：输入类型为
+  /// WASAPI 且（设备为 '' 默认回录——其身份就是系统默认渲染端点，
+  /// 或选中的是渲染端点）时为真。此时输出下拉的 '' 默认项与该
+  /// 端点具名项都必须撤下（'' 正是它的别名）。
+  bool get inputOccupiesRenderSlot {
+    if (config.pipelineInput != AudioModes.inputWasapi) return false;
+    if (config.pipelineInputDevice.isEmpty) return true;
+    final item = _resolveWasapiDevice(config.pipelineInputDevice);
+    return item?.isRender ?? false;
+  }
+
+  /// 输出候选（互斥规格）：filteredWasapiOutputs 剔除输入已选的
+  /// 渲染端点。输入为录音端点时不剔除——同名不同端点、id 不同，
+  /// 天然不误伤；解析不到（离线存值）时不剔除，起链守卫兜底。
+  List<AudioDeviceItem> get wasapiOutputsExcludingInput {
+    final outs = filteredWasapiOutputs;
+    if (config.pipelineInput != AudioModes.inputWasapi) return outs;
+    final capItem = _resolveWasapiDevice(config.pipelineInputDevice);
+    if (capItem == null || !capItem.isRender) return outs;
+    if (capItem.id.isNotEmpty) {
+      return outs.where((d) => d.id != capItem.id).toList();
+    }
+    return outs.where((d) => d.name != capItem.name).toList();
+  }
+
+  /// 当前持久化的输入/输出设备值是否构成自激对（下拉呈现层用：
+  /// 区分「当前输出值是被互斥规则撤下的」与「设备离线」）。
+  bool get pipelinePairConflicts =>
+      _isFeedbackPair(config.pipelineInputDevice, config.pipelineOutputDevice);
+
   /// 解析后的 VAIO 物理输出端点列表（过滤掉虚拟驱动自身，供 UI 选择真实物理扬声器/耳机）
   List<AudioDeviceItem> get vaioPhysicalEndpoints {
     final list = <AudioDeviceItem>[];

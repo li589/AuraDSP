@@ -81,7 +81,8 @@ class _WasapiOutputSubpanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     final p = paletteOf(context);
-    final outputs = model.filteredWasapiOutputs;
+    // 互斥规格（第四轮项 2）：候选已在状态层剔除输入已选端点。
+    final outputs = model.wasapiOutputsExcludingInput;
     final curDev = model.pipelineOutputDevice;
     final matched = outputs.cast<AudioDeviceItem?>().firstWhere(
         (d) => d?.id == curDev || d?.name == curDev,
@@ -90,6 +91,15 @@ class _WasapiOutputSubpanel extends StatelessWidget {
         ? (matched.id.isNotEmpty ? matched.id : matched.name)
         : (curDev.isEmpty ? '' : curDev);
     final info = model.info;
+    // '' 默认项是系统默认渲染端点的别名：输入占据渲染槽时它与
+    // 输入是同一端点，必须撤下（单声卡机撤完即无任何可选）。
+    final inputBlocksDefault = model.inputOccupiesRenderSlot;
+    // 当前输出值不在候选里且与输入构成自激对 = 被互斥规则撤下，
+    // 不是离线——不许离线兜底项把它再塞回来。
+    final curExcluded =
+        curDev.isNotEmpty && matched == null && model.pipelinePairConflicts;
+    final offlineShown = curDev.isNotEmpty && matched == null && !curExcluded;
+    final noItems = inputBlocksDefault && outputs.isEmpty && !offlineShown;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,6 +117,7 @@ class _WasapiOutputSubpanel extends StatelessWidget {
               child: AuraDropdown<String>(
                 value: selectedValue,
                 items: [
+                  if (!inputBlocksDefault)
                   DropdownMenuItem<String>(
                     value: '',
                     child: Row(
@@ -128,7 +139,7 @@ class _WasapiOutputSubpanel extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (curDev.isNotEmpty && matched == null)
+                  if (offlineShown)
                     DropdownMenuItem<String>(
                       value: curDev,
                       child: Row(
@@ -179,7 +190,16 @@ class _WasapiOutputSubpanel extends StatelessWidget {
                       ),
                     ),
                 ],
-                hint: outputs.isEmpty ? l.ioNoOutputDevices : null,
+                // 无任何可选时控件按空 items 呈置灰态，文案按成因
+                // 二选一：枚举本身为空是「无输出设备」，被互斥撤空
+                // 是用户规格的「无可用声卡」。
+                hint: noItems
+                    ? (model.filteredWasapiOutputs.isEmpty
+                        ? l.ioNoOutputDevices
+                        : l.ioNoAvailableSoundCard)
+                    : (outputs.isEmpty && !inputBlocksDefault
+                        ? l.ioNoOutputDevices
+                        : null),
                 onChanged: (v) {
                   if (v != null) model.setPipelineOutputDevice(v);
                 },

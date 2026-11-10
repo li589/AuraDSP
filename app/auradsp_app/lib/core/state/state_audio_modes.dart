@@ -231,6 +231,23 @@ extension AudioModesState on AppModel {
     return (item != null && item.id.isNotEmpty) ? item.id : v;
   }
 
+  /// 规范 id 层面的自激判定：双默认（细审 R-A H1——空值在
+  /// isolate 侧都解为系统默认渲染端点，捕获它又写回它必反馈，
+  /// 恰是零配置路径）或两 id 相等。
+  bool _idsConflict(String capId, String outId) =>
+      (capId.isEmpty && outId.isEmpty) ||
+      (capId.isNotEmpty && outId.isNotEmpty && capId == outId);
+
+  /// 输入/输出设备存值是否构成自激对（下拉互斥规格与起链守卫
+  /// 共用同一口径，避免两处判定漂移）。
+  bool _isFeedbackPair(String inputDevice, String outputDevice) {
+    final capItem = _resolveWasapiDevice(inputDevice);
+    final capId = (capItem != null && capItem.id.isNotEmpty)
+        ? capItem.id
+        : inputDevice;
+    return _idsConflict(capId, _deviceIdOf(outputDevice));
+  }
+
   /// 构造捕获链命令（含反馈守卫）：回录端点与输出端点是
   /// 同一设备时，我们的渲染会被自己抓回形成自激——拒绝
   /// 起链并返回 null（调用方负责提示/停链）。
@@ -240,15 +257,10 @@ extension AudioModesState on AppModel {
         ? capItem.id
         : config.pipelineInputDevice;
     final outId = _deviceIdOf(config.pipelineOutputDevice);
-    if (capId.isEmpty && outId.isEmpty) {
-      // 双默认组合（细审 R-A H1）：空值在 isolate 侧都解为
-      // 「系统默认渲染端点」——捕获它又写回它，必反馈；这
-      // 恰是零配置路径，显式 ID 相等分支覆盖不到。
-      dbgLog('pipeline.capture: feedback pair blocked (both default)');
-      return null;
-    }
-    if (capId.isNotEmpty && outId.isNotEmpty && capId == outId) {
-      dbgLog('pipeline.capture: feedback pair blocked (cap==out)');
+    if (_idsConflict(capId, outId)) {
+      dbgLog(capId.isEmpty && outId.isEmpty
+          ? 'pipeline.capture: feedback pair blocked (both default)'
+          : 'pipeline.capture: feedback pair blocked (cap==out)');
       return null;
     }
     return {
@@ -368,6 +380,22 @@ extension AudioModesState on AppModel {
 
   void setPipelineInputDevice(String device) {
     config.pipelineInputDevice = device;
+    // 互斥规格（第四轮项 2）：新输入与已选输出撞成自激对时，
+    // 输出自动让位到第一个不冲突的渲染设备（下拉层已撤下该
+    // 项，这里收口存量冲突）；无候选则保留原值——输出下拉呈
+    // 置灰「无可用声卡」、起链守卫继续兜底。不清成 ''：'' 本
+    // 身即默认端点别名，清值等于换一种撞法。
+    if (config.pipelineOutput == AudioModes.outputWasapi &&
+        _isFeedbackPair(device, config.pipelineOutputDevice)) {
+      for (final d in filteredWasapiOutputs) {
+        final v = d.id.isNotEmpty ? d.id : d.name;
+        if (!_isFeedbackPair(device, v)) {
+          config.pipelineOutputDevice = v;
+          dbgLog('pipeline.devices: output auto-moved off input device');
+          break;
+        }
+      }
+    }
     _pipelineDeviceChanged();
     ConfigManager.save(config);
     _notifyUi();

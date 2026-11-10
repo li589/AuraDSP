@@ -506,6 +506,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get ioNoOutputDevices => '利用可能な出力デバイスがありません';
 
   @override
+  String get ioNoAvailableSoundCard => '利用可能なサウンドカードなし';
+
+  @override
+  String get ioInputOverriddenByVaio =>
+      'VAIOブリッジチェーンで駆動中です。この入力の選択は無効です。プレーヤーの出力を AuraVAIO エンドポイントに向けてください';
+
+  @override
   String get ioPhysicalOutput => '物理出力';
 
   @override

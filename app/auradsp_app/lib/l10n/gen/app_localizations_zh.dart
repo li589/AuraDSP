@@ -496,6 +496,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ioNoOutputDevices => '无可用输出设备';
 
   @override
+  String get ioNoAvailableSoundCard => '无可用声卡';
+
+  @override
+  String get ioInputOverriddenByVaio =>
+      '当前由 VAIO 桥链驱动，输入选择不生效；请将播放器输出指向 AuraVAIO 端点';
+
+  @override
   String get ioPhysicalOutput => '物理输出';
 
   @override

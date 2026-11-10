@@ -537,6 +537,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ioNoOutputDevices => 'No output devices available';
 
   @override
+  String get ioNoAvailableSoundCard => 'No sound card available';
+
+  @override
+  String get ioInputOverriddenByVaio =>
+      'Driven by the VAIO bridge chain — this input selection has no effect. Point the player\'s output at the AuraVAIO endpoint';
+
+  @override
   String get ioPhysicalOutput => 'Physical output';
 
   @override
