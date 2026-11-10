@@ -27,11 +27,12 @@
 ## 3. 验证面
 
 - **J5**：纪律版引擎编译 + PE 纪律门（导入表无动态 CRT、CFG 函数表在位、导出面完整）。
-- **J5b**：APO 家族 MSVC 编译（此前只有用户本机覆盖）+ apo_engine_test 实跑：锁定后座位归属宿主进程；基线近单位增益；经参数块发布 input.gain=0.25 后输出 RMS 相对基线落入 [0.19, 0.31]（决定性断言）；telemetry 应用计数/更新序号/频谱在动；INPLACE 变体一致；解锁后座位释放。
+- **J5b**：APO 家族 MSVC 编译（此前只有用户本机覆盖）+ apo_engine_test 实跑：锁定后座位归属宿主进程；基线近单位增益；经参数块发布 input.gain=-12dB（≈×0.2512）后输出 RMS 相对基线落入 [0.19, 0.31]（决定性断言）；telemetry 应用计数/更新序号/频谱在动；INPLACE 变体一致；解锁后座位释放。
 - **J6 / analyze**：P1/P3 的 Dart 侧（惰性静默路径、状态事件、面板状态行）。
 - **本地门**：smoke_apo_param_layout、D4-b、pack fixture 均 PASS。
 
-<!-- CI-FINAL -->
+**最终 CI 裁定（2026-11-10 回填）**：run 42761722961 @`7f64f44e` **九作业全绿**（J1 gate-static / J2 build-engine-linux / J3 smoke-linux / J4 abi-linux / J5 build-engine-windows / J5b build-apo-windows / J6 dart-tests / J7 asset-guard / J8 build-app-linux）；windows-installer @`f71b4a48` success。J5b 冒烟实测（19 项全 PASS）：座位归属宿主进程（pid 8572、48 kHz、2ch、fault 0）、基线比率 1.000、决定性比率 **0.251**（理论 0.2512）、INPLACE 比率 0.255、applied=1、频谱和 1.36、解锁后座位释放。
+> 收口前 CI 逐层定罪四轮（均为新面首次进 CI 的存量/环境问题，非设计缺陷）：①变体漏 CP-02 stub 导出（`b6da789d` 补）；②新 Python 门在 Windows 控制台 cp1252 自崩 + J8 冒烟仍按旧单日志名 grep（`f5e65218` 修；后者的破损曾被 J8 取消的 run 掩盖多轮）；③J5b 首次编译两处（telemetry v2 后 static_assert 未同步 608、函数指针链式赋值 C2440，`193a3b7c` 修）；④冒烟探针把 dB 参数当线性增益（首跑比率 1.030 与 +0.25dB 理论值 1.029 吻合，通道无恙；改发 −12dB，`7f64f44e`）。
 
 ## 4. 已知边界（v1 口径，设计 §1/§6）
 
