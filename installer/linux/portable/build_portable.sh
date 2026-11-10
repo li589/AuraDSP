@@ -11,6 +11,9 @@ OUT="${3:?out dir required}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 [ -x "$BUNDLE/auradsp_app" ] || { echo "error: bundle 缺 auradsp_app: $BUNDLE" >&2; exit 1; }
+[ -f "$BUNDLE/lib/libauradsp_engine.so" ] || { echo "error: bundle 缺 lib/libauradsp_engine.so" >&2; exit 1; }
+[ -f "$BUNDLE/lib/plugin_host_x64" ] || { echo "error: bundle 缺 lib/plugin_host_x64" >&2; exit 1; }
+[ -f "$BUNDLE/lib/plugin_host_x86" ] || { echo "error: bundle 缺 lib/plugin_host_x86（32 位桥）" >&2; exit 1; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

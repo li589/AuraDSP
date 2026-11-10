@@ -19,6 +19,9 @@ CACHE="${4:-${AURADSP_TOOLS_CACHE:-$HOME/.cache/auradsp-pack-tools}}"
 PINS="$HERE/tools.pins"
 
 [ -x "$BUNDLE/auradsp_app" ] || { echo "error: bundle 缺 auradsp_app: $BUNDLE" >&2; exit 1; }
+[ -f "$BUNDLE/lib/libauradsp_engine.so" ] || { echo "error: bundle 缺 lib/libauradsp_engine.so" >&2; exit 1; }
+[ -f "$BUNDLE/lib/plugin_host_x64" ] || { echo "error: bundle 缺 lib/plugin_host_x64" >&2; exit 1; }
+[ -f "$BUNDLE/lib/plugin_host_x86" ] || { echo "error: bundle 缺 lib/plugin_host_x86（32 位桥）" >&2; exit 1; }
 command -v file >/dev/null || { echo "error: appimagetool 需要 file 命令" >&2; exit 1; }
 
 fetch_pinned() {

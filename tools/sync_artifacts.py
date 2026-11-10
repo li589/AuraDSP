@@ -19,7 +19,8 @@ wrapper 转发到本脚本）。语义与 PS1 版严格一致：
     Linux 消费端：
       test/、app/auradsp_app/build/linux/x64/release/bundle/lib、
       dist/AuraDSP-Linux-x64
-      （Linux 一期无桥与 plugin_host 产物，清单只有引擎 .so。）
+      （dist 目录为 bundle 布局时，二进制同步进其 lib/ 子目录，
+      与 app 的引擎/宿主搜索路径一致；平铺目录则仍落根目录。）
 
   行为（与 PS1 一致）：
     - 任一目标目录缺失或单文件拷贝失败 => 警告并跳过，不中断其余
@@ -140,15 +141,22 @@ def main() -> int:
             skipped += 1
             warn(f"  copy failed (skip this file): {label} -> {e}")
 
+    dist_dir = ROOT / "dist" / dist_name
     for tgt in targets:
-        print(f"\n--- Target: {tgt}")
+        eff = tgt
+        # Linux 的 dist 分发目录是 bundle 布局（auradsp_app + lib/）：
+        # 引擎/宿主必须进 lib/ 才是 app 的实际搜索路径，落根目录
+        # 只会留下一份永远不被加载的陈旧副本。
+        if tgt == dist_dir and (tgt / "lib").is_dir():
+            eff = tgt / "lib"
+        print(f"\n--- Target: {eff}")
         if not tgt.is_dir():
             planned += len(sources)
             skipped += len(sources)
             warn(f"Target dir missing, skip whole target: {tgt}")
             continue
         for src_dir, name in sources:
-            copy_one(src_dir / name, tgt / name, name)
+            copy_one(src_dir / name, eff / name, name)
 
     # 专用拷贝（Windows：engine -> drivers out；PS1 原注：2026-10-24 VM
     # 测试抓到这条拷贝静默停留在 ABI-1 旧版，真源已到 ABI 2）

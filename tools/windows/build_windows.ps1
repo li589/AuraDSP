@@ -227,6 +227,14 @@ if (-not $SkipEngine) {
     }
     $EngineTargets = @("auradsp_engine")
     if ($HostRemote) { $EngineTargets += "plugin_host_x64" }
+    # APO 纪律版引擎（System APO 真处理载荷，pack.py 必备资产）：
+    # 同样按 CMake 缓存决定 target 是否存在（AURADSP_BUILD_APO_ENGINE 默认 ON）。
+    $ApoEngine = $true
+    if (Test-Path $CMakeCache) {
+        $ApoCacheLine = Select-String -Path $CMakeCache -Pattern '^AURADSP_BUILD_APO_ENGINE:BOOL=(ON|OFF)' | Select-Object -First 1
+        if ($ApoCacheLine -and $ApoCacheLine.Matches[0].Groups[1].Value -eq 'OFF') { $ApoEngine = $false }
+    }
+    if ($ApoEngine) { $EngineTargets += "auradsp_engine_apo" }
 
     Write-Host "  编译 $BuildType 引擎动态库$(if ($HostRemote) { '与进程外插件宿主' })..."
     Invoke-Clean (@("cmake", "--build", "--preset", $BuildPreset, "--target") + $EngineTargets + "--", "-m:$BuildJobs") `
@@ -236,6 +244,12 @@ if (-not $SkipEngine) {
     $EngineItem = Assert-Fresh -Path $EngineDll -Label "核心引擎 "
     $EngineSize = $EngineItem.Length
     Write-Host "  -> 核心引擎就绪: auradsp_engine.dll ($([math]::Round($EngineSize / 1MB, 2)) MB)" -ForegroundColor Green
+
+    if ($ApoEngine) {
+        $ApoEngineDll = Join-Path $EngineOutDir "$BuildType\auradsp_engine_apo.dll"
+        $null = Assert-Fresh -Path $ApoEngineDll -Label "APO 引擎 "
+        Write-Host "  -> APO 纪律版引擎就绪: auradsp_engine_apo.dll" -ForegroundColor Green
+    }
 
     if ($HostRemote) {
         $PluginHostExe = Join-Path $EngineOutDir "$BuildType\plugin_host_x64.exe"
@@ -329,7 +343,7 @@ if (-not $SkipDrivers) {
         "test_plugin_chain", "test_host_quarantine", "test_dll_dirs",
         "rt_drain_test", "vaio_pump_wait_test", "vm_detect",
         "vm_pump_test", "vm_parallel_test", "apo_inspect",
-        "silence_gate_test", "AuraApo"
+        "silence_gate_test", "AuraApo", "apo_config"
     )
     Invoke-Clean (@("cmake", "--build", "--preset", $BuildPreset, "--target") + $TestTargets + "--", "-m:$BuildJobs") `
         -Log (Join-Path $ProjectRoot "build\reports\build_test_targets.log")
@@ -422,6 +436,23 @@ $LiveprogCount = (Get-ChildItem -Path "$DistResources\liveprog" -Recurse -File -
 $ConvCount = (Get-ChildItem -Path "$DistResources\convolver" -Recurse -File -ErrorAction SilentlyContinue).Count
 
 Write-Host "  -> 随包内置资源验证: DDC 耳机校准 ($DdcCount 文件), Liveprog 脚本 ($LiveprogCount 文件), 核心卷积 ($ConvCount 文件)" -ForegroundColor Green
+
+# 绿色目录自包含化：把 driver/ 驱动资产与根 ASIO 本体补进分发
+# 目录，使其与便携 zip / 安装载荷同布局——直接打开目录里的应用
+# 即可测全部驱动面板，不必再解压便携包（pack.py 的 staging
+# 模式与打包共用同一组装函数）。资产缺失（如 -SkipDrivers 未
+# 构建驱动）或驱动陈旧时仅警告不中断：目录仍可测非驱动功能。
+$PackPy = Join-Path $ProjectRoot "installer\windows\pack.py"
+if (Get-Command python -ErrorAction SilentlyContinue) {
+    Write-Host "  补齐 dist 目录驱动资产 (pack.py --mode staging)..."
+    python $PackPy --mode staging --staging $DistPortable
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  -> 警告: driver 资产补齐未完成，dist 目录可能缺 driver/（详见上方 pack 输出）" -ForegroundColor DarkYellow
+    }
+}
+else {
+    Write-Host "  -> 警告: 未找到 python，跳过 driver 资产补齐（dist 目录缺 driver/）" -ForegroundColor DarkYellow
+}
 
 # 产物的规范化（2026-11-05）：写 build-info.txt（版本 / 提交 / 分支 /
 # 工作区状态 / 顶层二进制 SHA256），使绿色包可追溯。

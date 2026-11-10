@@ -19,7 +19,7 @@ Windows 平台支持两种平行的分发模式：
 
 ## 2. 目录结构
 
-- `pack.py`：**打包总入口**（全量可传参：`--mode driver,portable,setup`、`--resources core|full|addons|none`、`--build-staging`、`--build-installer`、`--sign` 钩子、`--verify` 自检）；逻辑自测在 `tests/test_pack_fixture.py`。
+- `pack.py`：**打包总入口**（全量可传参：`--mode driver,portable,setup,staging`（staging 就地补齐 dist 绿色目录的 driver 资产；portable/setup 后亦自动补齐）、`--resources core|full|addons|none`、`--build-staging`、`--build-installer`、`--sign` 钩子、`--verify` 自检）；逻辑自测在 `tests/test_pack_fixture.py`。
 - `portable/`：便携版说明（归档逻辑在 pack.py 的 portable 模式内）。
 - `custom_installer/`：自研安装程序子项目——`bootstrapper/`（C++ 引导壳）+ `wizard/`（Flutter 向导 auradsp_setup）。
 

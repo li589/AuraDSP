@@ -151,6 +151,19 @@ def main() -> int:
         check("产物缺失时拒绝打包", r.returncode != 0
               and "产物缺失" in (r.stderr or r.stdout))
 
+        print("== staging 模式（dist 文件夹本体自包含） ==")
+        check("staging 初始无 driver/", not (staging / "driver").exists())
+        check("staging 初始无根 ASIO",
+              not (staging / "auraasio_driver.dll").exists())
+        r = run_pack("--mode", "staging", *common)
+        check("exit 0", r.returncode == 0, r.stderr.strip()[-200:])
+        for want in ("auraasio_driver.dll", "driver/AuraVaioDriver.sys",
+                     "driver/install_vaio.ps1", "driver/register_asio.ps1",
+                     "driver/apo_config.exe", "driver/AuraApo.dll",
+                     "driver/apo_inspect.exe",
+                     "driver/auradsp_engine_apo.dll"):
+            check(f"staging 含 {want}", (staging / want).is_file())
+
         print("== portable core ==")
         r = run_pack("--mode", "portable", "--resources", "core", *common)
         check("exit 0", r.returncode == 0, r.stderr.strip()[-200:])

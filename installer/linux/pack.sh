@@ -55,7 +55,9 @@ echo "out:    $OUT"
 [ -x "$BUNDLE/auradsp_app" ] || { echo "error: bundle 不完整（缺 auradsp_app）" >&2; exit 1; }
 [ -f "$BUNDLE/lib/libauradsp_engine.so" ] || { echo "error: bundle 缺引擎 libauradsp_engine.so（先跑 sync_artifacts）" >&2; exit 1; }
 [ -f "$BUNDLE/lib/plugin_host_x64" ] || { echo "error: bundle 缺 plugin_host_x64" >&2; exit 1; }
-[ -f "$BUNDLE/lib/plugin_host_x86" ] || echo "warning: bundle 缺 plugin_host_x86（32 位桥将不随包）"
+# 完整性口径（2026-11-10）：dist 的每个产出都必须完整，32 位桥
+# 缺失不再是警告——拒打包，避免发出去的包静默少一件。
+[ -f "$BUNDLE/lib/plugin_host_x86" ] || { echo "error: bundle 缺 plugin_host_x86（32 位桥）；构建引擎时需 AURADSP_BUILD_HOST_X86=ON" >&2; exit 1; }
 
 want() { [ -z "$ONLY" ] || [[ ",$ONLY," == *",$1,"* ]]; }
 

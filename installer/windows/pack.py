@@ -12,6 +12,11 @@
   setup    AuraDSP-Setup-x64-v<ver>.exe
            引导壳 PE + ZIP-W（向导运行时）+ ZIP-P（产品载荷）
            + 80B 尾块（magic/偏移/SHA256@载荷），--verify 可自检
+  staging  就地补齐 staging 文件夹（dist/AuraDSP-Windows-x64）：
+           根 ASIO + driver/ 与便携/安装载荷同布局，使 dist 的
+           文件夹产出本身即可直接打开运行测试（不必解压便携
+           包）；portable/setup 完成后亦自动对 staging 本体
+           执行同一补齐——dist 的每个产出都完整（用户口径）。
 
 资源策略（--resources）：
   core   staging 自带资源原样
@@ -565,6 +570,58 @@ def mode_driver(args, ver: dict[str, str], out: Path) -> Path:
     return dest
 
 
+
+def complete_payload_tree(work: Path, args) -> None:
+    """把完整载荷布局落到 work：ASIO 本体进根 + driver/ 恒保留。
+
+    portable / setup 的临时副本与 staging 文件夹本体共用同一
+    组装，保证三处布局逐字一致；资产缺失即 die（三模式既有
+    口径）。
+    """
+    install_ps1 = (ROOT / "core" / "desktop" / "windows-drivers" /
+                   "01_vaio_driver" / "install_driver.ps1")
+    if not install_ps1.is_file():
+        raise die(f"缺 install_driver.ps1: {install_ps1}")
+    apo = resolve_apo_assets(args)
+    asio = find_asio_driver(args.asio_driver)
+    driver_dir = find_driver_dir(args.driver_dir)
+    if asio is None:
+        raise die("找不到 auraasio_driver.dll；先跑 build_windows.ps1 全量构建"
+                  "（含 auraasio_driver 目标），或用 --asio-driver 指定")
+    if driver_dir is None:
+        raise die("找不到 VAIO 驱动产物目录（含 .sys 的目录）；"
+                  "先在 Windows 构建驱动，或用 --driver-dir 指定")
+    shutil.copy2(asio, work / ASIO_DLL_NAME)
+    stage_driver_files(work / "driver", driver_dir, asio, install_ps1,
+                       apo, include_asio_dll=True)
+
+
+def refresh_dist_manifest(staging: Path) -> None:
+    """补齐后刷新 build-info.txt（与 sync_artifacts 同口径，尽力而为）。"""
+    script = ROOT / "tools" / "bin" / "dist_manifest.py"
+    if not script.is_file():
+        return
+    rc = subprocess.run([sys.executable, str(script),
+                         "--dist-dir", str(staging)]).returncode
+    if rc != 0:
+        log(f"警告: build-info.txt 刷新失败（rc={rc}），清单可能过期")
+
+
+def mode_staging(args, ver: dict[str, str], out: Path) -> Path:
+    """就地补齐 staging 文件夹本体（dist 绿色目录）。
+
+    该文件夹既是打包输入、也是日常测试入口：此前 driver/ 只
+    进 zip/安装载荷的临时副本，文件夹本体恒缺，测驱动面板
+    必须先解压便携包（用户 2026-11-10 报告）。build_windows
+    .ps1 Step 5 亦调用本模式，绿色目录与绿色 zip 同样完整。
+    """
+    complete_payload_tree(args.staging, args)
+    refresh_dist_manifest(args.staging)
+    log(f"staging: {args.staging} 已补齐（根 ASIO + driver/），"
+        "可直接打开文件夹运行测试")
+    return args.staging
+
+
 # ---------------------------------------------------------------------------
 # 模式：portable
 # ---------------------------------------------------------------------------
@@ -600,17 +657,7 @@ def mode_portable(args, ver: dict[str, str], out: Path) -> Path:
         # 便携与安装跑同一个 app，缺 driver/ 时 VAIO/ASIO/APO
         # 面板找不到任何随包工具（真机报告 2026-11-09：便携包
         # 无 apo_config.exe），故便携包同组装驱动资产。
-        asio = find_asio_driver(args.asio_driver)
-        driver_dir = find_driver_dir(args.driver_dir)
-        if asio is None:
-            raise die("找不到 auraasio_driver.dll；先跑 build_windows.ps1 全量构建"
-                      "（含 auraasio_driver 目标），或用 --asio-driver 指定")
-        if driver_dir is None:
-            raise die("找不到 VAIO 驱动产物目录（含 .sys 的目录）；"
-                      "先在 Windows 构建驱动，或用 --driver-dir 指定")
-        shutil.copy2(asio, work / ASIO_DLL_NAME)
-        stage_driver_files(work / "driver", driver_dir, asio, install_ps1,
-                           apo, include_asio_dll=True)
+        complete_payload_tree(work, args)
         n = zip_dir(work, dest, args.zip_level)
     log(f"portable: {dest.name}（{n} 条目，{dest.stat().st_size / 1e6:.1f} MB）")
     return dest
@@ -695,10 +742,7 @@ def mode_setup(args, ver: dict[str, str], out: Path) -> Path:
     with td:
         # 载荷增补：ASIO 驱动本体（安装目录根，供 FFI 注册）
         # + driver/ 子目录（恒保留，含手动安装脚本、驱动与签名说明）
-        shutil.copy2(asio, work / ASIO_DLL_NAME)
-        stage_driver_files(work / "driver", driver_dir, asio, install_ps1,
-                           apo,
-                           include_asio_dll=True)
+        complete_payload_tree(work, args)
 
         payload_zip = Path(td.name) / "payload.zip"
         zip_dir(work, payload_zip, args.zip_level, arc_prefix="payload/")
@@ -834,7 +878,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     ap = argparse.ArgumentParser(
         description="AuraDSP Windows 发行打包（driver/portable/setup）")
     ap.add_argument("--mode", default="all",
-                    help="driver,portable,setup 或 all（逗号分隔）")
+                    help="driver,portable,setup,staging 或 all（逗号分隔）")
     ap.add_argument("--resources", default="core",
                     choices=("core", "full", "addons", "none"))
     ap.add_argument("--rebuild-resource-packs", action="store_true")
@@ -894,6 +938,13 @@ def main(argv: list[str]) -> int:
     # 驱动不进 build_windows.ps1 的目标集，所以「谁上次编的就是什么」；
     # 不加这道校验，打出来的包可能装着比源码旧的驱动（实测踩过：源码含
     # 11-08 的调试日志权限加固，包里仍是 11-05 的构建）。
+    if modes == ["staging"]:
+        # staging 是开发测试向的就地补齐：驱动陈旧只警告不拦截
+        # （发行模式 driver/setup 的硬闸门不变，仍拒绝发旧驱动）。
+        ddir = find_driver_dir(args.driver_dir)
+        if ddir is not None:
+            for problem in check_driver_freshness(ddir):
+                log(f"警告: {problem}（staging 不拦截；发行打包仍会拒绝）")
     if "driver" in modes or "setup" in modes:
         if args.build_driver and not args.what_if:
             build_driver()
@@ -913,17 +964,28 @@ def main(argv: list[str]) -> int:
     if not args.what_if:
         out.mkdir(parents=True, exist_ok=True)
     produced: list[Path] = []
+    staging_completed = False
     for mode in modes:
-        dest_name = {"driver": f"AuraDSP-Driver-x64-{ver['AURADSP_TAG']}.zip",
-                     "portable": f"AuraDSP-Windows-x64-{ver['AURADSP_TAG']}.zip",
-                     "setup": f"AuraDSP-Setup-x64-{ver['AURADSP_TAG']}.exe"}[mode]
-        if args.clean and (out / dest_name).exists() and not args.what_if:
-            (out / dest_name).unlink()
+        if mode != "staging":
+            dest_name = {"driver": f"AuraDSP-Driver-x64-{ver['AURADSP_TAG']}.zip",
+                         "portable": f"AuraDSP-Windows-x64-{ver['AURADSP_TAG']}.zip",
+                         "setup": f"AuraDSP-Setup-x64-{ver['AURADSP_TAG']}.exe"}[mode]
+            if args.clean and (out / dest_name).exists() and not args.what_if:
+                (out / dest_name).unlink()
         fn = {"driver": mode_driver, "portable": mode_portable,
-              "setup": mode_setup}[mode]
+              "setup": mode_setup, "staging": mode_staging}[mode]
         produced.append(fn(args, ver, out))
-        if not args.what_if:
+        if not args.what_if and produced[-1].is_file():
             sign_file(args, produced[-1])
+        if (not args.what_if and not staging_completed
+                and mode in ("portable", "setup")):
+            # dist 文件夹本体同步补齐：打包完直接开文件夹即可
+            # 测试，不必再解压刚产出的便携包（dist 每个产出都
+            # 完整的用户口径，2026-11-10）。
+            complete_payload_tree(args.staging, args)
+            refresh_dist_manifest(args.staging)
+            staging_completed = True
+            log(f"staging 文件夹已同步补齐: {args.staging}")
 
     if args.sha256sums and not args.what_if and produced:
         sums = out / "SHA256SUMS.txt"
