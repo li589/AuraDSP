@@ -151,6 +151,103 @@ int main() {
         Expect("capture composite multi", p.multiIdx, {6});
     }
 
+    // ---- W2 状态推断 ----
+    const std::wstring OURS = L"{415AD8ED-7A45-4F4F-AC69-043830EBC174}";
+    const std::wstring OURS_LO = L"{415ad8ed-7a45-4f4f-ac69-043830ebc174}";
+    const std::wstring VENDOR = L"{11111111-2222-3333-4444-555555555555}";
+    const std::wstring VENDOR2 = L"{66666666-7777-8888-9999-000000000000}";
+    using apoplan::InferInstallState;
+    using apoplan::RecommendMode;
+    using apoplan::SlotOccupancy;
+    {
+        SlotOccupancy o;
+        auto inf = InferInstallState(o, OURS);
+        ExpectBool("infer empty mode", inf.mode.empty(), true);
+        ExpectBool("infer empty ours", inf.oursAnywhere, false);
+    }
+    {
+        SlotOccupancy o;
+        o.sfx = OURS; o.mfx = OURS; o.efx = OURS;
+        auto inf = InferInstallState(o, OURS);
+        ExpectBool("infer sfx-efx", inf.mode == L"sfx-efx", true);
+        ExpectBool("infer sfx-efx pre", inf.oursPre, true);
+        ExpectBool("infer sfx-efx post", inf.oursPost, true);
+    }
+    {
+        SlotOccupancy o;
+        o.lfx = OURS_LO; o.gfx = OURS_LO;  // 大小写不敏感
+        auto inf = InferInstallState(o, OURS);
+        ExpectBool("infer win7-sapo ci", inf.mode == L"win7-sapo", true);
+    }
+    {
+        SlotOccupancy o;
+        o.compSfx = {VENDOR, OURS};
+        auto inf = InferInstallState(o, OURS);
+        ExpectBool("infer composite", inf.mode == L"composite", true);
+        ExpectBool("infer composite origPre",
+                   inf.originalPre == VENDOR, true);
+    }
+    {
+        SlotOccupancy o;
+        o.sfx = OURS;
+        auto inf = InferInstallState(o, OURS);
+        ExpectBool("infer sfx-only", inf.mode == L"sfx-only", true);
+    }
+    {
+        SlotOccupancy o;
+        o.mfx = OURS; o.efx = OURS;
+        auto inf = InferInstallState(o, OURS);
+        ExpectBool("infer partial", inf.mode == L"partial", true);
+        ExpectBool("infer partial post only",
+                   inf.oursPost && !inf.oursPre, true);
+    }
+    {
+        // 跨代原厂：流侧 SFX 被我方占、原厂在 LFX；设备侧同代
+        // MFX 优先于跨代 GFX。
+        SlotOccupancy o;
+        o.sfx = OURS; o.lfx = VENDOR;
+        o.mfx = VENDOR; o.gfx = VENDOR2;
+        auto inf = InferInstallState(o, OURS);
+        ExpectBool("infer xgen pre", inf.originalPre == VENDOR, true);
+        ExpectBool("infer xgen post priority",
+                   inf.originalPost == VENDOR, true);
+    }
+
+    // ---- W2 推荐档 ----
+    {
+        SlotOccupancy o;
+        ExpectBool("rec win7 os",
+                   RecommendMode(o, false, OURS) == L"win7-sapo", true);
+        ExpectBool("rec empty",
+                   RecommendMode(o, true, OURS) == L"sfx-efx", true);
+    }
+    {
+        SlotOccupancy o;
+        o.compMfx = {VENDOR};
+        ExpectBool("rec composite",
+                   RecommendMode(o, true, OURS) == L"composite", true);
+    }
+    {
+        SlotOccupancy o;
+        o.efx = VENDOR;
+        ExpectBool("rec sfx gen",
+                   RecommendMode(o, true, OURS) == L"sfx-efx", true);
+    }
+    {
+        SlotOccupancy o;
+        o.lfx = VENDOR;
+        ExpectBool("rec legacy only",
+                   RecommendMode(o, true, OURS) == L"win7-sapo", true);
+    }
+
+    // ---- W2 快照版本 ----
+    using apoplan::SnapshotVersionSupported;
+    ExpectBool("ver empty ok", SnapshotVersionSupported(L""), true);
+    ExpectBool("ver 1 ok", SnapshotVersionSupported(L"1"), true);
+    ExpectBool("ver 2 ok", SnapshotVersionSupported(L"2"), true);
+    ExpectBool("ver 3 rejected", SnapshotVersionSupported(L"3"), false);
+    ExpectBool("ver junk ok", SnapshotVersionSupported(L"abc"), true);
+
     printf("apo_plan_test: %s (%d failures)\n",
            g_fail == 0 ? "PASS" : "FAIL", g_fail);
     return g_fail == 0 ? 0 : 1;

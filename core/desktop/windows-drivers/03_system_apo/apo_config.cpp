@@ -826,6 +826,22 @@ bool RegKeyExists(HKEY root, const std::wstring& sub) {
 // 子进程（sc.exe / reg.exe / regsvr32；对齐 Python sh()）
 // ---------------------------------------------------------------------------
 
+// OS 内部版本号（注册表真值，避 GetVersionEx 的清单谎报）：
+// Win7=7601 / Win8=9200 / Win8.1=9600 / Win10>=10240 / Win11>=22000。
+int OsBuildNumber() {
+    const auto v = RegRead(HKEY_LOCAL_MACHINE,
+                           L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                           L"CurrentBuildNumber");
+    if (v && v->type == REG_SZ) {
+        try {
+            return std::stoi(v->sz);
+        } catch (...) {
+            return 0;
+        }
+    }
+    return 0;
+}
+
 struct ProcResult {
     int exitCode = -1;
     std::string stdOut;  // UTF-8（子进程输出按本地代码页解码后转码）
@@ -1206,7 +1222,7 @@ Json BackupEndpoint(const Endpoint& ep, const std::wstring& mode) {
     const bool snapExists = RegKeyExists(HKEY_LOCAL_MACHINE, childSub);
     bool snapOk = true;
     if (!snapExists) {
-        snapOk &= RegWrite(HKEY_LOCAL_MACHINE, childSub, L"Version", RegSz(L"1"));
+        snapOk &= RegWrite(HKEY_LOCAL_MACHINE, childSub, L"Version", RegSz(L"2"));
         snapOk &= RegWrite(HKEY_LOCAL_MACHINE, childSub, L"EndpointId",
                            RegSz(Utf8ToWide(ep.id)));
         snapOk &= RegWrite(HKEY_LOCAL_MACHINE, childSub, L"DeviceName",
@@ -1253,6 +1269,7 @@ Json BackupEndpoint(const Endpoint& ep, const std::wstring& mode) {
          regExported ? Json::Str(WideToUtf8(regFile)) : Json{}},
         {"backup_at", Json::Str(WideToUtf8(stamp))},
         {"install_mode", Json::Str(WideToUtf8(mode))},
+        {"schema", Json::Num(2)},
         {"backup_preserved", Json::Bool(snapExists)},
         {"slots", Json::Obj(std::move(slotObj))},
     });
@@ -1318,6 +1335,16 @@ RestoreResult RestoreEndpoint(const std::wstring& shortId) {
         stored[n] = std::move(v);
     }
 
+    // 快照版本先验（W2 书签版本化）：高于本工具支持的版本拒绝
+    // 还原，防旧工具按旧语义毁新状态（EAPO 同口径）。
+    int snapSchema = 1;
+    if (!stored.empty()) {
+        const auto it = stored.find(L"Version");
+        if (it != stored.end() && it->second.type == REG_SZ) {
+            snapSchema = apoplan::SnapshotVersionOf(it->second.sz);
+        }
+    }
+
     // 注册表快照缺失 → 回退磁盘 JSON（文件名正序，首个匹配：
     // 最早一份才是未被后续重复 install 污染的原始基线，细审 R-C H-1）。
     if (stored.empty()) {
@@ -1345,6 +1372,18 @@ RestoreResult RestoreEndpoint(const std::wstring& shortId) {
                 (epId && epId->type == Json::Type::Str) ? epId->str : "";
             if (sgUtf8 == WideToUtf8(shortId) ||
                 epUtf8.find(WideToUtf8(shortId)) != std::string::npos) {
+                const Json* sc = d.Find("schema");
+                const int fileSchema =
+                    (sc && sc->type == Json::Type::Num)
+                        ? static_cast<int>(sc->num)
+                        : 1;
+                if (fileSchema > 2) {
+                    // 过新文件不采信，继续找更旧的兼容文件；若无，
+                    // snapSchema 保留过新值，由下方守卫报错。
+                    snapSchema = fileSchema;
+                    continue;
+                }
+                snapSchema = fileSchema;
                 const Json* dirJ = d.Find("direction");
                 stored[L"Direction"] = RegSz(
                     dirJ && dirJ->type == Json::Type::Str
@@ -1366,6 +1405,11 @@ RestoreResult RestoreEndpoint(const std::wstring& shortId) {
                 break;
             }
         }
+    }
+
+    if (snapSchema > 2) {
+        return {false, L"备份数据版本 " + std::to_wstring(snapSchema) +
+                            L" 高于本工具支持的 2，已中止还原（请使用新版 apo_config）"};
     }
 
     if (stored.empty()) {
@@ -1493,6 +1537,56 @@ int CmdStatus(bool asJson, const std::optional<double>& timeout) {
     const Heartbeat hb = ReadHeartbeat(hbTimeout);
     const auto installed = GetInstalledChildApos();
 
+    // 实时端点推断（W2）：不依赖书签，直接读各端点 FxProperties
+    // 现值反推挂载形态、原厂跨代归属与推荐档（纯逻辑在
+    // apo_install_plan.h）。书签可能缺失/过期，现值才是真相。
+    struct LiveEp {
+        Endpoint ep;
+        apoplan::InferredState inf;
+        std::wstring rec;
+        bool bookkept = false;
+    };
+    std::vector<LiveEp> live;
+    {
+        const bool win81Plus = OsBuildNumber() >= 9600;
+        std::vector<std::wstring> keptGuids;
+        for (const auto& b : installed) keptGuids.push_back(b.shortGuid);
+        for (const auto& ep : FindEndpoints(L"")) {
+            auto rd = [&](const wchar_t* suffix) {
+                return RegRead(HKEY_LOCAL_MACHINE, ep.FxSub(),
+                               std::wstring(kFxBase) + suffix);
+            };
+            auto szOf = [&](const wchar_t* suffix) {
+                const auto v = rd(suffix);
+                return (v && v->type == REG_SZ) ? v->sz : std::wstring();
+            };
+            auto multiOf = [&](const wchar_t* suffix) {
+                const auto v = rd(suffix);
+                if (v && v->type == REG_MULTI_SZ) return v->multi;
+                if (v && v->type == REG_SZ && !v->sz.empty())
+                    return std::vector<std::wstring>{v->sz};
+                return std::vector<std::wstring>{};
+            };
+            apoplan::SlotOccupancy occ;
+            occ.lfx = szOf(L",1");
+            occ.gfx = szOf(L",2");
+            occ.sfx = szOf(L",5");
+            occ.mfx = szOf(L",6");
+            occ.efx = szOf(L",7");
+            occ.compSfx = multiOf(L",13");
+            occ.compMfx = multiOf(L",14");
+            occ.compEfx = multiOf(L",15");
+            LiveEp le;
+            le.ep = ep;
+            le.inf = apoplan::InferInstallState(occ, kOurClsid);
+            le.rec = apoplan::RecommendMode(occ, win81Plus, kOurClsid);
+            const std::wstring sg = ShortGuid(Utf8ToWide(ep.id));
+            le.bookkept = std::find(keptGuids.begin(), keptGuids.end(),
+                                    sg) != keptGuids.end();
+            live.push_back(std::move(le));
+        }
+    }
+
     const bool comRegistered =
         RegRead(HKEY_CLASSES_ROOT,
                 std::wstring(L"AudioEngine\\AudioProcessingObjects\\") +
@@ -1520,6 +1614,34 @@ int CmdStatus(bool asJson, const std::optional<double>& timeout) {
             {"heartbeat", HeartbeatJson(hb, true)},
             {"com_registered", Json::Bool(comRegistered)},
             {"installed_endpoints", Json::Arr(std::move(eps))},
+            {"endpoints", Json::Arr([&] {
+                 std::vector<Json> arr;
+                 for (const auto& le : live) {
+                     arr.push_back(Json::Obj({
+                         {"id", Json::Str(le.ep.id)},
+                         {"name", Json::Str(WideToUtf8(le.ep.name))},
+                         {"direction", Json::Str(le.ep.direction)},
+                         {"bookkept", Json::Bool(le.bookkept)},
+                         {"inferred_mode",
+                          le.inf.mode.empty()
+                              ? Json{}
+                              : Json::Str(WideToUtf8(le.inf.mode))},
+                         {"ours_pre", Json::Bool(le.inf.oursPre)},
+                         {"ours_post", Json::Bool(le.inf.oursPost)},
+                         {"original_pre",
+                          le.inf.originalPre.empty()
+                              ? Json{}
+                              : Json::Str(WideToUtf8(le.inf.originalPre))},
+                         {"original_post",
+                          le.inf.originalPost.empty()
+                              ? Json{}
+                              : Json::Str(WideToUtf8(le.inf.originalPost))},
+                         {"recommended_mode",
+                          Json::Str(WideToUtf8(le.rec))},
+                     }));
+                 }
+                 return arr;
+             }())},
         }));
         return 0;
     }
@@ -1547,6 +1669,19 @@ int CmdStatus(bool asJson, const std::optional<double>& timeout) {
                 WideToUtf8(ep.GetSz(L"DeviceName")) + " (" +
                 WideToUtf8(ep.shortGuid) +
                 ") 模式:" + WideToUtf8(ep.GetSz(L"InstallMode")));
+    }
+    OutLine("实时端点推断（按注册表现值）:");
+    for (const auto& le : live) {
+        std::string line =
+            "  - " + WideToUtf8(le.ep.name) + " 推断:" +
+            (le.inf.mode.empty() ? std::string("未挂载")
+                                 : WideToUtf8(le.inf.mode)) +
+            " 推荐:" + WideToUtf8(le.rec);
+        if (!le.inf.originalPre.empty())
+            line += " 原厂流侧:" + WideToUtf8(le.inf.originalPre);
+        if (!le.inf.originalPost.empty())
+            line += " 原厂设备侧:" + WideToUtf8(le.inf.originalPost);
+        OutLine(line);
     }
     return 0;
 }
