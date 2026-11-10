@@ -985,6 +985,14 @@ extension StateEvents on AppModel {
         if (wasV != vaioActive) _notifyUi();
         break;
       case 'vaiodetect':
+        // 回程面包屑（第四轮项 5）：detect 的 send/begin/done 三点
+        // 已钉，补 UI 收到事件这一点，往返链才闭合——下次闪退若
+        // 四点齐全而进程仍死，即可把嫌疑移出 detect 全链路。
+        final epsRecv = raw['endpoints'];
+        dbgLog(
+          'vaiodetect: ui received endpoints=${epsRecv is List ? epsRecv.length : '?'}',
+          sync: true,
+        );
         vaioDetectInfo = Map<String, dynamic>.from(raw);
         final waiter = vaioDetectWaiter;
         if (waiter != null && !waiter.isCompleted) waiter.complete();

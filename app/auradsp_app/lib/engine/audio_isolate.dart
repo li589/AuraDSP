@@ -79,6 +79,10 @@ String _cfgStr(Map<String, dynamic> cfg, String key, String fallback) {
 const int _kPluginSlots = 4;
 
 void audioIsolateMain(Map<String, dynamic> cfg) {
+  // 日志按 isolate 分文件（debug_log.dart 文件头 2026-11-10 更正）：
+  // 本 isolate 的 dbgLog 写 auradsp_debug_iso.log，与 UI isolate
+  // 的 auradsp_debug.log 互不覆写。必须先于一切 dbgLog 调用。
+  debugLogUseRole('iso');
   final toMain = cfg['toMain'] as SendPort;
   final fromMain = ReceivePort();
 

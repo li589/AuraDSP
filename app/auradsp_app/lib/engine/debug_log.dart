@@ -11,17 +11,36 @@
  *      上百次/秒的同步落盘，直接抬升音频泵抖动、诱发 underrun。
  * 故：写全部走缓冲，flush 按固定间隔节流；高频点用 dbgLogThrottled。
  *
- * 跨 isolate 行完整性（2026-11-08 审计·调试低5）：每行恰经一次
- * writeStringSync 且文件以 append 模式打开——POSIX 的 O_APPEND
- * 语义下单次 write 原子追加，两 isolate 交错时最坏是整行交错、
- * 不会半行拼接；单条消息以 _kMaxLineChars 截断，保证不跨多次写。
- * 会话头带 pid 供归因。文件大小由 rotateLogFileIfOversized 钳住
- * （审计·调试低4：此前只追加无轮转，长期运行无界增长）。
+ * 跨 isolate 行完整性（2026-11-08 审计·调试低5 的结论已被
+ * 2026-11-10 第四轮取证【推翻】）：原以为 Dart 的 FileMode.append
+ * 是 O_APPEND 原子追加——实测不是：它打开时定位 EOF 一次、之后
+ * 按本句柄自维护偏移做定位写，两 isolate 各持句柄写同一文件时
+ * 后落盘者按陈旧偏移整行覆写先者（复现：3000 行仅存活 111 行；
+ * 真机日志中 'detect done' 行尾被覆写、文件字节序 ≠ 时间序均
+ * 为此）。改为按 isolate 角色分文件（见 debugLogUseRole）：UI
+ * isolate 写 auradsp_debug.log、音频 isolate 写
+ * auradsp_debug_iso.log——单写者文件内每行恰经一次
+ * writeStringSync、_kMaxLineChars 截断保证整行单写，完整性由
+ * 「单写者」而非「追加原子性」保证。会话头带 pid+role 供归因。
+ * 文件大小由 rotateLogFileIfOversized 钳住（审计·调试低4）。
  */
 import 'dart:io';
 
 RandomAccessFile? _dbgF;
 String? _dbgPath;
+
+/// 本 isolate 的日志角色（'' = 默认/UI，写 auradsp_debug.log；
+/// 'iso' = 音频 isolate，写 auradsp_debug_iso.log）。两 isolate
+/// 同 pid 无法靠 pid 分名，必须由音频 isolate 入口在首次写日志
+/// 前显式声明（见 audio_isolate.dart 的 audioIsolateMain）。
+/// 文件打开后改角色无效（句柄已定），故只在 _dbgF == null 时接受。
+String _dbgRole = '';
+
+/// 声明本 isolate 的日志角色。必须在该 isolate 第一次 dbgLog
+/// 之前调用；文件已打开时调用是空操作（角色已随文件名定型）。
+void debugLogUseRole(String role) {
+  if (_dbgF == null) _dbgRole = role;
+}
 int _sessionBytes = 0;
 DateTime _lastFlush = DateTime.fromMillisecondsSinceEpoch(0);
 
@@ -59,9 +78,11 @@ bool _openDbgFile() {
   // 路径分隔符必须走平台值：硬编码 '\\' 在 Windows 正确，但在
   // Linux 会拼出文件名带反斜杠的怪路径（S3 遗留，S4 由
   // error_sink_test 的端到端用例在 Linux 上抓到并在此修复）。
+  final fileName =
+      _dbgRole.isEmpty ? 'auradsp_debug.log' : 'auradsp_debug_$_dbgRole.log';
   var path =
       '${Platform.environment['TEMP'] ?? Directory.systemTemp.path}'
-      '${Platform.pathSeparator}auradsp_debug.log';
+      '${Platform.pathSeparator}$fileName';
   // 符号链接防护（安全审查 2026-11-02）：路径落在共享临时目录
   // 且文件名可预测，同机其他用户可预置 symlink 指向属主文件，
   // 追加打开会顺着链接把日志写进目标文件。发现目标本身是链接
@@ -76,7 +97,9 @@ bool _openDbgFile() {
   _dbgPath = path;
   _dbgF = f.openSync(mode: FileMode.append);
   _sessionBytes = 0;
-  _writeDbgLine('==== session ${DateTime.now()} pid=$pid ====');
+  _writeDbgLine(
+    '==== session ${DateTime.now()} pid=$pid role=${_dbgRole.isEmpty ? 'ui' : _dbgRole} ====',
+  );
   _dbgF!.flushSync();
   _lastFlush = DateTime.now();
   return true;
