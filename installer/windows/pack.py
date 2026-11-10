@@ -222,6 +222,25 @@ def _find_built(name: str, explicit: str | None) -> Path | None:
     return None
 
 
+def _find_engine_apo(explicit: str | None) -> Path | None:
+    """在 windows 引擎构建产物（core/desktop/windows/out/<Config>）
+    中定位 auradsp_engine_apo.dll（APO 纪律版引擎，P2a 目标）。"""
+    name = "auradsp_engine_apo.dll"
+    if explicit:
+        p = Path(explicit)
+        return p if p.is_file() else None
+    base = ROOT / "core" / "desktop" / "windows" / "out"
+    for cfg in ("Release", "Debug"):
+        p = base / cfg / name
+        if p.is_file():
+            return p
+    if base.is_dir():
+        hits = [p for p in base.rglob(name)]
+        if hits:
+            return max(hits, key=lambda p: p.stat().st_mtime)
+    return None
+
+
 def find_apo_inspect(explicit: str | None) -> Path | None:
     """端点探测工具 apo_inspect.exe（windows-drivers CMake 目标产物）。
 
@@ -232,10 +251,13 @@ def find_apo_inspect(explicit: str | None) -> Path | None:
 
 
 class ApoAssets(NamedTuple):
-    """APO 运维资产三件（同组进 driver/）。"""
+    """APO 运维资产四件（同组进 driver/）。"""
     config_exe: Path   # apo_config.exe：原生移植版（§2.3 方案 A）
     apo_dll: Path      # AuraApo.dll：APO 本体（此前从未随包，附加必败）
     inspect: Path      # apo_inspect.exe：端点枚举
+    engine_dll: Path   # auradsp_engine_apo.dll：真处理引擎纪律版
+                       # （2026-11-10 立项 P2；APO 按同目录优先
+                       # 搜索它，缺失则 APO 恒透传——故列为必备）
 
 
 def resolve_apo_assets(args) -> ApoAssets:
@@ -259,7 +281,12 @@ def resolve_apo_assets(args) -> ApoAssets:
     if apo_dll is None:
         raise die("找不到 AuraApo.dll；先构建 windows-drivers 目标"
                   "（含 AuraApo 目标），或用 --apo-dll 指定")
-    return ApoAssets(config_exe, apo_dll, apo_inspect)
+    engine_dll = _find_engine_apo(args.apo_engine)
+    if engine_dll is None:
+        raise die("找不到 auradsp_engine_apo.dll；先构建 windows 引擎"
+                  "目标（含 auradsp_engine_apo 目标，J5 同款），"
+                  "或用 --apo-engine 指定")
+    return ApoAssets(config_exe, apo_dll, apo_inspect, engine_dll)
 
 
 def check_staging(staging: Path) -> None:
@@ -489,6 +516,8 @@ def stage_driver_files(
     shutil.copy2(apo.config_exe, dest / apo.config_exe.name)
     shutil.copy2(apo.apo_dll, dest / apo.apo_dll.name)
     shutil.copy2(apo.inspect, dest / apo.inspect.name)
+    # 真处理引擎与 AuraApo.dll 同级落位（APO 的 D1 搜索首选）。
+    shutil.copy2(apo.engine_dll, dest / apo.engine_dll.name)
     if include_asio_dll:
         shutil.copy2(asio, dest / ASIO_DLL_NAME)
     (dest / "register_asio.ps1").write_text(REGISTER_ASIO_PS1, encoding="utf-8")
@@ -823,6 +852,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     ap.add_argument("--apo-inspect")
     ap.add_argument("--apo-config")
     ap.add_argument("--apo-dll")
+    ap.add_argument("--apo-engine")
     ap.add_argument("--installer-build-dir")
     ap.add_argument("--build-installer", action="store_true")
     ap.add_argument("--version")

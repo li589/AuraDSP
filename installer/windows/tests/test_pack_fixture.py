@@ -97,6 +97,8 @@ def main() -> int:
         apo_config_exe.write_bytes(b"MZ-apo-config")
         apo_dll = base / "AuraApo.dll"
         apo_dll.write_bytes(b"MZ-apo-dll")
+        apo_engine = base / "auradsp_engine_apo.dll"
+        apo_engine.write_bytes(b"MZ-apo-engine")
 
         inst = base / "installer"
         (inst / "wizard" / "data").mkdir(parents=True)
@@ -109,6 +111,7 @@ def main() -> int:
         common = ["--staging", str(staging), "--driver-dir", str(drv),
                   "--asio-driver", str(asio), "--apo-inspect", str(apo_inspect),
                   "--apo-config", str(apo_config_exe), "--apo-dll", str(apo_dll),
+                  "--apo-engine", str(apo_engine),
                   "--installer-build-dir", str(inst),
                   "--packs-dir", str(packs), "--out", str(out)]
 
@@ -124,7 +127,8 @@ def main() -> int:
                      # APO 运维资产随包（2026-11-09 V-03/F4 起；
                      # §2.3 方案 A 改原生 apo_config.exe + AuraApo.dll，
                      # python 脚本已下线）
-                     "apo_inspect.exe", "apo_config.exe", "AuraApo.dll"):
+                     "apo_inspect.exe", "apo_config.exe", "AuraApo.dll",
+                     "auradsp_engine_apo.dll"):
             check(f"含 {want}", want in names)
         check("驱动包含签名教程",
               b"Win7" in read_zip(dz)[1]["README.txt"]
@@ -156,7 +160,8 @@ def main() -> int:
         # 便携与安装同布局：driver/ 驱动资产恒随包（2026-11-09 真机报告）
         for want in ("auraasio_driver.dll", "driver/install_vaio.ps1",
                      "driver/apo_config.exe", "driver/AuraApo.dll",
-                     "driver/apo_inspect.exe"):
+                     "driver/apo_inspect.exe",
+                     "driver/auradsp_engine_apo.dll"):
             check(f"便携含 {want}", want in names)
         check("build-info 有 pack 记录",
               b"pack.resources: core" in contents["build-info.txt"])
@@ -235,7 +240,8 @@ def main() -> int:
         # 取消勾选驱动也不能过滤 driver/：手动脚本与驱动必须随包保留。
         for rel in ("install_vaio.ps1", "README.txt", "register_asio.ps1",
                     "auraasio_driver.dll", "AuraVaioDriver.inf",
-                    "apo_inspect.exe", "apo_config.exe", "AuraApo.dll"):
+                    "apo_inspect.exe", "apo_config.exe", "AuraApo.dll",
+                    "auradsp_engine_apo.dll"):
             check(f"ZIP-P 恒保留 driver/{rel}",
                   f"payload/driver/{rel}" in payload_names)
 
