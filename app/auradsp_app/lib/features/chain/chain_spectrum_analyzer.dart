@@ -13,6 +13,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
+import '../../core/audio_modes.dart';
 import '../../core/design.dart';
 import '../../core/error_sink.dart';
 import '../../core/io/resource_gate.dart';
@@ -271,8 +272,12 @@ class FullChainTransferCalculator {
     final sampleRate = model.engineRate > 0 ? model.engineRate : 48000;
 
     // 1. Voicemeeter 总线路由判定
-    // VB 总线行挂 ModeCaps.routeSelector（Part I Q3）。
-    final isVbMode = model.modeCaps.routeSelector;
+    // VB 总线掩码语义：合成模式为 VB（routeSelector）或附加
+    // 端已选 Voicemeeter 时都生效——后者是计算器既有契约
+    // （范式未切附加时掩码已先行，chain_spectrum_analyzer_test
+    // 钉死）；总线下拉等 UI 显现仍只看 routeSelector。
+    final isVbMode = model.modeCaps.routeSelector ||
+        model.attachmentMode == AudioModes.attachVoicemeeterApi;
     bool isBypassed = false;
     if (isVbMode && vbBusIndex != null) {
       final busMask = model.vbBusMask;
