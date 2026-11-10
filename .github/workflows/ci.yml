@@ -122,6 +122,15 @@ jobs:
         run: cmake --preset windows-x64 -DAURADSP_BUILD_BRIDGES=OFF
       - name: Build
         run: cmake --build --preset windows-x64-release
+      # APO 纪律版引擎供 J5b 的进程内冒烟宿主（D1 同目录搜索）；
+      # 必须在 DBG-ON 变体覆盖 out/Release 之前上传默认构建产物。
+      - name: Upload APO engine artifact (for J5b)
+        uses: actions/upload-artifact@v4
+        with:
+          name: auradsp-engine-apo-windows
+          path: core/desktop/windows/out/Release/auradsp_engine_apo.dll
+          if-no-files-found: error
+          retention-days: 7
       # B-1 门禁进 CI（2026-11-08 审计·调试中3）：smoke_release_strings
       # 此前只登记在 runner.py 的 PLATFORM_WINDOWS 集，CI 从未执行，
       # 「防宏没接线」的反向断言长期空转。先对默认（OFF）产物跑正向
@@ -153,8 +162,14 @@ jobs:
   build-apo-windows:
     name: J5b build-apo-windows
     runs-on: windows-latest
+    needs: build-engine-windows
     steps:
       - uses: actions/checkout@v4
+      - name: Download APO engine artifact (from J5)
+        uses: actions/download-artifact@v4
+        with:
+          name: auradsp-engine-apo-windows
+          path: core/desktop/windows-drivers/out/Release
       # 驱动套件全量构建需要 Steinberg ASIO SDK（stock runner 没有）；
       # APO 家族（AuraApo + 引擎宿主 / apo_config / apo_selftest 等）
       # 以 AURADSP_DRIVERS_APO_ONLY 独立配置构建，给这部分此前只在
@@ -164,6 +179,12 @@ jobs:
         run: cmake -S core/desktop/windows-drivers -B build/windows/apo-only -G "Visual Studio 18 2026" -A x64 -DAURADSP_DRIVERS_APO_ONLY=ON
       - name: Build
         run: cmake --build build/windows/apo-only --config Release
+      # 真处理端到端冒烟：COM 直驱 APOProcess，断言参数通道
+      # 发布 input.gain=0.25 后输出 RMS 相对基线跌至 ~0.25、
+      # telemetry 座位/应用计数/频谱在动、INPLACE 变体一致、
+      # 解锁后座位释放。退出码即裁定。
+      - name: APO engine end-to-end smoke
+        run: core/desktop/windows-drivers/out/Release/apo_engine_test.exe
 
   # J6 Dart 测试 --------------------------------------------------------
   dart-tests:

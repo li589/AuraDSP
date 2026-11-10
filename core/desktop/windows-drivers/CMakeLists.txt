@@ -168,6 +168,18 @@ set_property(TARGET apo_config PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 add_executable(apo_selftest
     "${APO}/apo_selftest.cpp"
 )
+
+# APO 真处理端到端冒烟宿主（2026-11-10 立项 P4）：进程内 COM
+# 直驱 CAuraApo，断言参数通道→worker→引擎真处理全链（见源头
+# 注）。需要 auradsp_engine_apo.dll 与 AuraApo.dll 同目录
+# （CI J5b 经 J5 artifact 注入；本机由 sync/手动放置）。
+add_executable(apo_engine_test
+    "${APO}/apo_engine_test.cpp"
+)
+target_link_libraries(apo_engine_test PRIVATE ole32 audiomediatypecrt)
+target_compile_options(apo_engine_test PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET apo_engine_test PROPERTY CXX_STANDARD 20)
+set_property(TARGET apo_engine_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(apo_selftest PRIVATE ole32 audiomediatypecrt)
 target_compile_options(apo_selftest PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET apo_selftest PROPERTY CXX_STANDARD 20)
