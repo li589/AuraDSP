@@ -218,6 +218,12 @@ void main() {
       final ae = hw.indexOf('\nclass ', as + 1);
       final card = hw.substring(as, ae < 0 ? hw.length : ae);
       expect(card, isNot(contains('Wrap(')));
+      // 按钮顺序（2026-11-10 用户裁定）：注册/注销在左、检测在右；
+      // 源码中检测项必须出现在两类动作文案之后。
+      final checkIdx = card.indexOf('l.asioStatusCheck');
+      expect(checkIdx, greaterThan(card.indexOf('l.setAsioRegisterUac')));
+      expect(checkIdx,
+          greaterThan(card.indexOf('l.asioDriverActionUnregister')));
       // 统一组件本体在位
       expect(hw, contains('class _DriverBlock extends StatelessWidget'));
       // Linux 设备面同口径：层标题 + 引擎块 + OS 行收尾

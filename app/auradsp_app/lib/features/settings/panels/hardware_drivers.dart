@@ -487,11 +487,6 @@ class _VirtualAsioDriverCard extends StatelessWidget {
         ),
       ],
       actions: [
-        AuraChip(
-          l.asioStatusCheck,
-          icon: Icons.refresh_rounded,
-          onTap: () => model.checkAsioDriverStatus(),
-        ),
         if (!model.asioDriverInstalled)
           AuraChip(
             l.setAsioRegisterUac,
@@ -523,6 +518,13 @@ class _VirtualAsioDriverCard extends StatelessWidget {
               );
             },
           ),
+        // 按钮顺序（2026-11-10 用户裁定）：注册/注销在左、检测在右，
+        // 与 VAIO 行一致——检测恒为按钮组最右，整组右对齐。
+        AuraChip(
+          l.asioStatusCheck,
+          icon: Icons.refresh_rounded,
+          onTap: () => model.checkAsioDriverStatus(),
+        ),
       ],
       below: model.lastAsioError == null
           ? null
