@@ -38,6 +38,8 @@ namespace {
 // 常量（与 apo_config.py 对齐）
 // ---------------------------------------------------------------------------
 
+#include <aclapi.h>
+
 #include "apo_install_plan.h"
 
 const wchar_t* kOurClsid = L"{415AD8ED-7A45-4F4F-AC69-043830EBC174}";
@@ -1686,6 +1688,295 @@ int CmdStatus(bool asJson, const std::optional<double>& timeout) {
     return 0;
 }
 
+
+// ---------------------------------------------------------------------------
+// doctor（计划书 Part II W3）：APO 环境自检/自修。默认只读六项
+// 检查；--fix 逐项修复（需管理员），修复与裁定走既有 JSON/
+// result-file 通道。借 EqualizerAPO 的 checkXxx(fix) 与权限自修。
+// ---------------------------------------------------------------------------
+
+bool FxKeyWritable(const std::wstring& fxSub) {
+    HKEY k = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, fxSub.c_str(), 0, KEY_SET_VALUE,
+                      &k) != ERROR_SUCCESS) {
+        return false;
+    }
+    RegCloseKey(k);
+    return true;
+}
+
+bool EnableTokenPrivilege(const wchar_t* name) {
+    HANDLE tok = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(),
+                          TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &tok)) {
+        return false;
+    }
+    TOKEN_PRIVILEGES tp{};
+    tp.PrivilegeCount = 1;
+    bool ok = false;
+    if (LookupPrivilegeValueW(nullptr, name, &tp.Privileges[0].Luid)) {
+        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+        ok = AdjustTokenPrivileges(tok, FALSE, &tp, sizeof(tp), nullptr,
+                                   nullptr) &&
+             GetLastError() == ERROR_SUCCESS;
+    }
+    CloseHandle(tok);
+    return ok;
+}
+
+// FxProperties 不可写时的退路：接管所有权为 Administrators，再授
+// 予 Administrators/SYSTEM 完全控制。仅 doctor --fix 在探针失败
+// 时调用；任何一步失败即返回 false（doctor 如实报告未修复）。
+bool TakeOwnershipRepair(const std::wstring& fxSub) {
+    if (!EnableTokenPrivilege(SE_TAKE_OWNERSHIP_NAME)) return false;
+    SID_IDENTIFIER_AUTHORITY ntAuth = SECURITY_NT_AUTHORITY;
+    PSID admins = nullptr;
+    PSID systemSid = nullptr;
+    if (!AllocateAndInitializeSid(&ntAuth, 2, SECURITY_BUILTIN_DOMAIN_RID,
+                                  DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0,
+                                  0, &admins)) {
+        return false;
+    }
+    AllocateAndInitializeSid(&ntAuth, 1, SECURITY_LOCAL_SYSTEM_RID, 0, 0,
+                             0, 0, 0, 0, 0, &systemSid);
+    bool ok = false;
+    HKEY k = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, fxSub.c_str(), 0, WRITE_OWNER,
+                      &k) == ERROR_SUCCESS) {
+        SECURITY_DESCRIPTOR sd{};
+        if (InitializeSecurityDescriptor(&sd,
+                                         SECURITY_DESCRIPTOR_REVISION) &&
+            SetSecurityDescriptorOwner(&sd, admins, FALSE)) {
+            ok = RegSetKeySecurity(k, OWNER_SECURITY_INFORMATION, &sd) ==
+                 ERROR_SUCCESS;
+        }
+        RegCloseKey(k);
+    }
+    if (ok && systemSid) {
+        ok = false;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, fxSub.c_str(), 0, WRITE_DAC,
+                          &k) == ERROR_SUCCESS) {
+            EXPLICIT_ACCESSW ea[2]{};
+            for (int i = 0; i < 2; ++i) {
+                ea[i].grfAccessPermissions = KEY_ALL_ACCESS;
+                ea[i].grfAccessMode = SET_ACCESS;
+                ea[i].grfInheritance =
+                    SUB_CONTAINERS_AND_OBJECTS_INHERIT;
+                ea[i].Trustee.TrusteeForm = TRUSTEE_IS_SID;
+                ea[i].Trustee.TrusteeType = TRUSTEE_IS_GROUP;
+            }
+            ea[0].Trustee.ptstrName = reinterpret_cast<LPWSTR>(admins);
+            ea[1].Trustee.ptstrName =
+                reinterpret_cast<LPWSTR>(systemSid);
+            PACL dacl = nullptr;
+            if (SetEntriesInAclW(2, ea, nullptr, &dacl) ==
+                ERROR_SUCCESS) {
+                SECURITY_DESCRIPTOR sd{};
+                if (InitializeSecurityDescriptor(
+                        &sd, SECURITY_DESCRIPTOR_REVISION) &&
+                    SetSecurityDescriptorDacl(&sd, TRUE, dacl, FALSE)) {
+                    ok = RegSetKeySecurity(k, DACL_SECURITY_INFORMATION,
+                                           &sd) == ERROR_SUCCESS;
+                }
+                LocalFree(dacl);
+            }
+            RegCloseKey(k);
+        }
+    }
+    FreeSid(admins);
+    if (systemSid) FreeSid(systemSid);
+    return ok;
+}
+
+struct DoctorCheck {
+    std::string name;
+    bool ok = false;
+    std::string detail;
+    bool fixed = false;  // 本次 --fix 已修复
+};
+
+int CmdDoctor(bool fix, bool asJson) {
+    if (fix && !IsAdmin()) {
+        if (asJson) {
+            OutJson(Json::Obj({
+                {"ok", Json::Bool(false)},
+                {"error", Json::Str("admin_required")},
+                {"message", Json::Str("doctor --fix 需要管理员权限")},
+            }));
+        } else {
+            OutLine("FATAL: doctor --fix 需要管理员权限。请使用管理员身份运行或加 --elevate 参数。");
+        }
+        return 1;
+    }
+    std::vector<DoctorCheck> checks;
+    const auto installed = GetInstalledChildApos();
+
+    // 1. testenv（DisableProtectedAudioDG）
+    {
+        DoctorCheck c;
+        c.name = "testenv";
+        auto good = [](const std::optional<RegValue>& v) {
+            return v && v->type == REG_DWORD && v->dword == 1;
+        };
+        c.ok = good(RegRead(HKEY_LOCAL_MACHINE, kTestEnvKey, kTestEnvVal));
+        c.detail = c.ok ? "DisableProtectedAudioDG=1"
+                        : "DisableProtectedAudioDG 未启用（测试签名 APO 链装不上）";
+        if (!c.ok && fix) {
+            RegWrite(HKEY_LOCAL_MACHINE, kTestEnvKey, kTestEnvVal,
+                     RegDword(1));
+            if (good(RegRead(HKEY_LOCAL_MACHINE, kTestEnvKey,
+                             kTestEnvVal))) {
+                c.ok = true;
+                c.fixed = true;
+            }
+        }
+        checks.push_back(c);
+    }
+    // 2. COM 注册（注册项齐全 + 注册路径 DLL 存在）
+    {
+        DoctorCheck c;
+        c.name = "com_registration";
+        auto probe = [&] {
+            const auto a = RegRead(
+                HKEY_CLASSES_ROOT,
+                std::wstring(L"AudioEngine\\AudioProcessingObjects\\") +
+                    kOurClsid,
+                L"FriendlyName");
+            const auto p = RegRead(
+                HKEY_CLASSES_ROOT,
+                std::wstring(L"CLSID\\") + kOurClsid + L"\\InprocServer32",
+                L"");
+            return a.has_value() && p.has_value() &&
+                   p->type == REG_SZ && FileExists(p->sz);
+        };
+        c.ok = probe();
+        c.detail = c.ok ? "APO 注册项齐全且注册路径 DLL 存在"
+                        : "APO 未注册或注册路径 DLL 缺失";
+        if (!c.ok && fix) {
+            const std::wstring dll = FindDll();
+            if (FileExists(dll)) RunCmd({L"regsvr32", L"/s", dll});
+            EnsureComRegistered();
+            if (probe()) {
+                c.ok = true;
+                c.fixed = true;
+            }
+        }
+        checks.push_back(c);
+    }
+    // 3. AuraApo.dll 在位
+    {
+        DoctorCheck c;
+        c.name = "apo_dll";
+        const std::wstring dll = FindDll();
+        c.ok = FileExists(dll);
+        c.detail = c.ok ? WideToUtf8(dll)
+                        : "AuraApo.dll 不在工具同级候选路径";
+        checks.push_back(c);
+    }
+    // 4. 引擎 DLL 在位（APO 目录锚定：apo 变体优先、普通版可达）
+    {
+        DoctorCheck c;
+        c.name = "engine_dll";
+        const std::wstring dir = ModuleDir();
+        const std::wstring apoDll = dir + L"\\auradsp_engine_apo.dll";
+        const std::wstring plainDll = dir + L"\\auradsp_engine.dll";
+        if (FileExists(apoDll)) {
+            c.ok = true;
+            c.detail = WideToUtf8(apoDll);
+        } else if (FileExists(plainDll)) {
+            c.ok = true;
+            c.detail = WideToUtf8(plainDll) + "（普通版）";
+        } else {
+            c.detail = "auradsp_engine_apo.dll / auradsp_engine.dll 均缺失";
+        }
+        checks.push_back(c);
+    }
+    // 5. 已挂载端点 FxProperties 可写探针
+    {
+        DoctorCheck c;
+        c.name = "fx_writable";
+        std::vector<std::pair<std::wstring, std::wstring>> bad;
+        for (const auto& ep : installed) {
+            const std::wstring fxSub =
+                std::wstring(kMmBase) + L"\\" +
+                ep.GetSz(L"Direction") + L"\\" + ep.shortGuid +
+                L"\\FxProperties";
+            if (!FxKeyWritable(fxSub)) bad.emplace_back(ep.shortGuid, fxSub);
+        }
+        c.ok = bad.empty();
+        if (c.ok) {
+            c.detail = "已挂载端点 FxProperties 全部可写（" +
+                       std::to_string(installed.size()) + " 个）";
+        } else {
+            std::string list;
+            for (const auto& [g, f] : bad) {
+                if (!list.empty()) list += ",";
+                list += WideToUtf8(g);
+            }
+            c.detail = "不可写端点: " + list;
+        }
+        if (!c.ok && fix) {
+            bool allFixed = true;
+            for (const auto& [g, f] : bad) {
+                if (!TakeOwnershipRepair(f) || !FxKeyWritable(f))
+                    allFixed = false;
+            }
+            if (allFixed) {
+                c.ok = true;
+                c.fixed = true;
+                c.detail += "（接管所有权后已可写）";
+            }
+        }
+        checks.push_back(c);
+    }
+    // 6. 快照版本（过新只报告，不自动修）
+    {
+        DoctorCheck c;
+        c.name = "snapshot_versions";
+        std::string tooNew;
+        for (const auto& ep : installed) {
+            const RegValue* v = ep.Get(L"Version");
+            if (v && v->type == REG_SZ &&
+                !apoplan::SnapshotVersionSupported(v->sz)) {
+                if (!tooNew.empty()) tooNew += ",";
+                tooNew += WideToUtf8(ep.shortGuid);
+            }
+        }
+        c.ok = tooNew.empty();
+        c.detail = c.ok ? "已挂载端点快照版本均受支持"
+                        : "过新快照端点: " + tooNew + "（需新版工具）";
+        checks.push_back(c);
+    }
+
+    bool allOk = true;
+    for (const auto& c : checks) allOk = allOk && c.ok;
+    if (asJson) {
+        std::vector<Json> arr;
+        for (const auto& c : checks) {
+            arr.push_back(Json::Obj({
+                {"name", Json::Str(c.name)},
+                {"ok", Json::Bool(c.ok)},
+                {"detail", Json::Str(c.detail)},
+                {"fixed", Json::Bool(c.fixed)},
+            }));
+        }
+        OutJson(Json::Obj({
+            {"ok", Json::Bool(allOk)},
+            {"fix", Json::Bool(fix)},
+            {"checks", Json::Arr(std::move(arr))},
+        }));
+    } else {
+        OutLine("=== AuraDSP APO 环境自检 (doctor) ===");
+        for (const auto& c : checks) {
+            OutLine(std::string(c.ok ? "[OK] " : "[FAIL] ") + c.name +
+                    ": " + c.detail + (c.fixed ? "（已修复）" : ""));
+        }
+        OutLine(allOk ? "结论: 全部通过"
+                      : "结论: 有未通过项（可修项用 --fix 处理）");
+    }
+    return allOk ? 0 : 1;
+}
+
 int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
                bool asJson, apoplan::Only onlyReq) {
     if (!IsAdmin()) {
@@ -2182,6 +2473,7 @@ void PrintHelp() {
     OutLine("  apo_config install <端点名子串> --yes [--force] [--mode sfx-efx|composite|sfx-only|win7-sapo] [--only pre|post] [--json] [--elevate] [--result-file <文件>]");
     OutLine("  apo_config uninstall [目标] --yes [--json] [--elevate] [--result-file <文件>]");
     OutLine("  apo_config testenv-on | testenv-off [--json] [--elevate]");
+    OutLine("  apo_config doctor [--fix] [--json] [--elevate] [--result-file <文件>]");
 }
 
 }  // namespace
@@ -2204,7 +2496,8 @@ int wmain(int argc, wchar_t* argv[]) {
     // 结果都经 OutJson 唯一出口，文件里留下的即
     // 最终裁定（含 error/message），App 据此呈现真实原因。
     if (!g_resultFile.empty() && !args.empty() &&
-        (args[0] == L"install" || args[0] == L"uninstall")) {
+        (args[0] == L"install" || args[0] == L"uninstall" ||
+         args[0] == L"doctor")) {
         asJson = true;
     }
     if (hasElevate && !IsAdmin()) {
@@ -2295,6 +2588,9 @@ int wmain(int argc, wchar_t* argv[]) {
                        : "已恢复签名驱动保护策略");
         }
         return 0;
+    }
+    if (verb == L"doctor") {
+        return CmdDoctor(hasFlag(L"--fix"), asJson);
     }
     if (verb == L"install") {
         if (args.size() < 2 || args[1].rfind(L"--", 0) == 0) {

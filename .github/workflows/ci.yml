@@ -182,6 +182,10 @@ jobs:
       # 安装计划矩阵单测（Part II W1）：纯逻辑 exe，退出码即裁定。
       - name: APO install plan matrix test
         run: core/desktop/windows-drivers/out/Release/apo_plan_test.exe
+      # doctor 只读契约冒烟（Part II W3）：验 JSON 结构与六项
+      # 检查齐名；检查结论随裸机环境变、不作门禁（包装内说明）。
+      - name: APO doctor contract smoke
+        run: python test/smoke/smoke_apo_doctor.py
       # 真处理端到端冒烟：COM 直驱 APOProcess，断言参数通道
       # 发布 input.gain=-12dB 后输出 RMS 相对基线跌至 ~0.2512、
       # telemetry 座位/应用计数/频谱在动、INPLACE 变体一致、

@@ -141,6 +141,7 @@ PLATFORM_WINDOWS = {
     "smoke_apo_engine_binary.py",
     "smoke_apo_engine.py",
     "smoke_apo_plan.py",
+    "smoke_apo_doctor.py",
     "smoke_ir_block_jitter.py",
     "smoke_eq_viz_tap.py",
     "smoke_bassmono.py",
@@ -405,6 +406,7 @@ def run_smoke_tests():
         "smoke_apo_engine_binary.py",
         "smoke_apo_engine.py",
         "smoke_apo_plan.py",
+        "smoke_apo_doctor.py",
         # M1 平台隔离门禁（2026-10-29）：引擎可移植核心零 OS 头/Win32 符号；
         # 端口头纯声明 + Windows 实现存在 + 扫描器反向自检。
         "smoke_platform_isolation.py",
