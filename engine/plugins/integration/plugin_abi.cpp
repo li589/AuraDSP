@@ -15,37 +15,65 @@ auradsp::PluginHostManager* plugin_host(auradsp_handle h) {
 extern "C" {
 
 int auradsp_plugin_scan(auradsp_handle h, const char* extra_dirs_json, int deep_scan) {
+#ifdef AURADSP_NO_PLUGIN_EDITOR
+    // APO 风味（Part I D1/Q0-5）：扫描与编辑器永留 App 侧，
+    // 本风味在 ABI 边界返回与 stub 一致的不支持口径。
+    (void)h; (void)extra_dirs_json; (void)deep_scan;
+    return 0;
+#else
     auto* host = plugin_host(h);
     if (!host) return 0;
     std::string extra = extra_dirs_json ? extra_dirs_json : "";
     return host->scanPlugins(extra, deep_scan != 0);
+#endif
 }
 
 int auradsp_plugin_scan_begin(auradsp_handle h, const char* extra_dirs_json, int deep_scan) {
+#ifdef AURADSP_NO_PLUGIN_EDITOR
+    (void)h; (void)extra_dirs_json; (void)deep_scan;
+    return 0;
+#else
     auto* host = plugin_host(h);
     if (!host) return 0;
     std::string extra = extra_dirs_json ? extra_dirs_json : "";
     return host->scanBegin(extra, deep_scan != 0);
+#endif
 }
 
 int auradsp_plugin_scan_step(auradsp_handle h, int max_items) {
+#ifdef AURADSP_NO_PLUGIN_EDITOR
+    (void)h; (void)max_items;
+    return 0;
+#else
     auto* host = plugin_host(h);
     if (!host) return 0;
     return host->scanStep(max_items);
+#endif
 }
 
 int auradsp_plugin_scan_progress(auradsp_handle h, int* out_total) {
+#ifdef AURADSP_NO_PLUGIN_EDITOR
+    (void)h;
+    if (out_total) *out_total = 0;
+    return -1;
+#else
     auto* host = plugin_host(h);
     if (!host) return -1;
     int processed = host->scanProcessed();
     if (out_total) *out_total = host->scanTotal();
     return processed;
+#endif
 }
 
 int auradsp_plugin_scan_end(auradsp_handle h) {
+#ifdef AURADSP_NO_PLUGIN_EDITOR
+    (void)h;
+    return 0;
+#else
     auto* host = plugin_host(h);
     if (!host) return 0;
     return host->scanEnd();
+#endif
 }
 
 int auradsp_plugin_get_count(auradsp_handle h) {
@@ -177,25 +205,40 @@ int auradsp_plugin_slot_get_status(auradsp_handle h, int slot, char* out_json, i
 }
 
 int auradsp_plugin_slot_show_editor(auradsp_handle h, int slot, const char* title) {
+#ifdef AURADSP_NO_PLUGIN_EDITOR
+    (void)h; (void)slot; (void)title;
+    return 0;
+#else
     auto* host = plugin_host(h);
     if (!host || slot < 0 ||
         slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
     return host->showEditorSlot((size_t)slot, title ? title : "") ? 1 : 0;
+#endif
 }
 
 int auradsp_plugin_slot_close_editor(auradsp_handle h, int slot) {
+#ifdef AURADSP_NO_PLUGIN_EDITOR
+    (void)h; (void)slot;
+    return 0;
+#else
     auto* host = plugin_host(h);
     if (!host || slot < 0 ||
         slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
     host->closeEditorSlot((size_t)slot);
     return 1;
+#endif
 }
 
 int auradsp_plugin_slot_is_editor_open(auradsp_handle h, int slot) {
+#ifdef AURADSP_NO_PLUGIN_EDITOR
+    (void)h; (void)slot;
+    return 0;
+#else
     auto* host = plugin_host(h);
     if (!host || slot < 0 ||
         slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
     return host->isEditorOpenSlot((size_t)slot) ? 1 : 0;
+#endif
 }
 
 int auradsp_plugin_slot_save_preset(auradsp_handle h, int slot, const char* path) {
