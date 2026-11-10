@@ -29,10 +29,13 @@ def main():
     if not os.path.exists(EXE):
         print('smoke_apo_doctor: SKIP (missing apo_config.exe)')
         return 0
+    # doctor 的 JSON detail 含中文（UTF-8 直出）；text=True 会按
+    # 控制台 cp1252 解码子进程输出而自爆（J5b 首跑实测），故按
+    # 字节捕获、显式 UTF-8 解码。
     r = subprocess.run([EXE, 'doctor', '--json'], capture_output=True,
-                       text=True, timeout=120)
+                       timeout=120)
     try:
-        doc = json.loads(r.stdout)
+        doc = json.loads(r.stdout.decode('utf-8', errors='replace'))
     except Exception as e:
         print('smoke_apo_doctor: FAIL (unparseable output: %s)' % e)
         return 1
