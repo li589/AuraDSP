@@ -145,7 +145,8 @@ bool ApoEngineHost::LoadEngine() {
             hEngineDll_ = h;
             return true;
         }
-        fnCreate_ = fnDestroy_ = nullptr;
+        fnCreate_ = nullptr;
+        fnDestroy_ = nullptr;
         fnProcess_ = nullptr;
         fnSetParam_ = nullptr;
         fnLatency_ = nullptr;

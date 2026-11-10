@@ -13,6 +13,7 @@
 // 必须与生成器一致（同一 smoke 交叉断言）。
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <windows.h>
 
@@ -104,4 +105,9 @@ struct ApoTelemetryBlock {
     float stageLevelsR[32];                      // 分级电平 R（dBFS）
     uint32_t reserved[8];
 };
-static_assert(sizeof(ApoTelemetryBlock) == 224, "telemetry block layout");
+// v2 布局钉死：既有字段偏移与 v1 完全一致，追加段自 192 起。
+static_assert(sizeof(ApoTelemetryBlock) == 608, "telemetry block layout");
+static_assert(offsetof(ApoTelemetryBlock, spectrum) == 64, "telemetry v1 offsets");
+static_assert(offsetof(ApoTelemetryBlock, eqInSpectrum) == 192, "telemetry v2 offsets");
+static_assert(offsetof(ApoTelemetryBlock, stageLevelsL) == 320, "telemetry v2 offsets");
+static_assert(offsetof(ApoTelemetryBlock, stageLevelsR) == 448, "telemetry v2 offsets");
