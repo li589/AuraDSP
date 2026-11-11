@@ -158,8 +158,15 @@ class AppModel extends ChangeNotifier {
   // Linux 的 virtual/driver 模式没有「播放音源」，音频来自 PA 采集
   // （linuxCaptureActive，由 linuxstatus 事件回推）；漏掉这一路会让频谱卡
   // 与可视化舞台误判空闲，而电平表/峰值仍在跳动（2026-11-02 实测）。
-  bool get liveSpectrum =>
-      playing || vbActive || asioActive || vaioActive || linuxCaptureActive;
+  // sysapo 同理：音频在 audiodg 内流经、本地管线不跑，活体信号是
+  // telemetry 座位（apoEngineActive）；漏掉这一路主页频谱与可视化舞台
+  // 在 APO 真处理时恒判空闲（2026-11-11 真机验收实报，与 11-02 同型）。
+  bool get liveSpectrum => playing ||
+      vbActive ||
+      asioActive ||
+      vaioActive ||
+      linuxCaptureActive ||
+      apoEngineActive;
   // 四态显示口径（右上徽标/主页 hero 共用）：engineState==0 混了"用户旁路"与
   // "无源空闲"，以前一刀切标"旁路"，导致开关 OFF 却处处显示旁路。拆开：
   // 开关开→旁路；开关没开但引擎报 0→空闲；引擎 1→看有没有活数据。

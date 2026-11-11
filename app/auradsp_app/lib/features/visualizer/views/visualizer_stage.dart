@@ -330,9 +330,11 @@ class _VisualizerStageState extends State<VisualizerStage> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               // 浅色底上视效色彩更亮，遮罩需要更实，否则歌词（尤其非当前行）对比不足
+              // 2026-11-11：浅色再加实（0.74/0.9 → 0.84/0.94），与歌词行
+              // 对比度提升配套（真机反馈浅色歌词偏淡）。
               colors: [
-                p.bg.withValues(alpha: p.isDark ? 0.58 : 0.74),
-                p.bg.withValues(alpha: p.isDark ? 0.8 : 0.9),
+                p.bg.withValues(alpha: p.isDark ? 0.58 : 0.84),
+                p.bg.withValues(alpha: p.isDark ? 0.8 : 0.94),
               ],
             ),
           ),
@@ -479,7 +481,10 @@ class _VisualizerStageState extends State<VisualizerStage> {
                   peakEngine: _peakEngine,
                   waveformSynth: _waveformSynth,
                 )
-              else
+              // 歌词层开启时空闲占位让位：歌词层自带曲目/状态呈现，
+              // 两层空态同屏会让占位图标与文案透过半透明歌词层与歌词
+              // 行重叠互扰（2026-11-11 真机实报）。
+              else if (!widget.config.showLyrics)
                 VisualizerIdlePlaceholder(emptyText: widget.emptyText),
 
               // 歌词层：开启后始终渲染；即使无歌词也显示曲目、检索状态与重试入口

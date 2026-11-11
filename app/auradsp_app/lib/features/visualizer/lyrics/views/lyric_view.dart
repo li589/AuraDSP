@@ -358,12 +358,15 @@ class _LyricLineTileState extends State<_LyricLineTile> {
     // 对比度（2026-10-31）：浅色主题下 textDim(#6E6A60) 再叠低透明度会
     // 与米色底融成一片。改为深色主题用低透明度、浅色主题用深色正文的
     // 高不透明度，保证“主次分明但清楚可读”。
+    // 2026-11-11 真机反馈：浅色下 0.72 仍偏淡（歌词层下有视效色彩透
+    // 过遮罩），非当前行提到 0.88、译文行改走正文色 0.70，不再用
+    // textDim 裸色。
     final inactiveTextColor = p.isDark
         ? p.textDim.withValues(alpha: 0.45)
-        : p.text.withValues(alpha: 0.72);
+        : p.text.withValues(alpha: 0.88);
     final inactiveTranslationColor = p.isDark
         ? p.textDim.withValues(alpha: 0.30)
-        : p.textDim;
+        : p.text.withValues(alpha: 0.70);
 
     return MouseRegion(
       onEnter: (_) {
