@@ -22,6 +22,7 @@ EXE = os.path.join(OUT, 'apo_config.exe')
 EXPECTED = {
     'testenv', 'com_registration', 'apo_dll', 'engine_dll',
     'fx_writable', 'snapshot_versions', 'dll_audiodg_readable',
+    'transit_dir',
 }
 
 

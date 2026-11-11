@@ -3,6 +3,7 @@
 
 #include <sddl.h>
 #include <cmath>
+#include <cwctype>
 #include <cstdlib>  // pluginSnap_ 的 malloc/free（S4 / APO-10）
 #include <cstring>
 #include <vector>
@@ -33,6 +34,43 @@ std::wstring ParentDir(const std::wstring& dir) {
     size_t slash = d.find_last_of(L"\\/");
     if (slash == std::wstring::npos) return dir;
     return d.substr(0, slash + 1);
+}
+
+// ---- 文件中转围栏（资源计划 P4）--------------------------------
+// 参数块里的文件型路径（convolver.ir.path / ddc.load）只接受
+// 中转根 %ProgramData%\AuraDSP\apo-assets 下的路径：App 发布者
+// 写块前已换成中转副本（ApoTransit），此处是第二道围栏——参数
+// 块写方异常/被劫持时，受保护进程也不得被指去打开任意文件。
+// 比较口径：UTF-8→宽字符、斜杠归一、大小写不敏感、前缀 + 路径
+// 分隔符边界（防 C:\...\apo-assets-evil 前缀冒充）。
+std::wstring NormalizeForCompare(const std::wstring& w) {
+    std::wstring out = w;
+    for (auto& c : out) {
+        if (c == L'/') c = L'\\';
+        c = towlower(c);
+    }
+    return out;
+}
+
+bool IsUnderTransitRoot(const std::string& utf8Path) {
+    static const std::wstring rootNorm = [] {
+        wchar_t buf[MAX_PATH] = {};
+        DWORD n = GetEnvironmentVariableW(L"ProgramData", buf, MAX_PATH);
+        std::wstring root = (n > 0 && n < MAX_PATH) ? buf : L"C:\\ProgramData";
+        root += L"\\AuraDSP\\apo-assets";
+        std::wstring norm = NormalizeForCompare(root);
+        if (norm.empty() || norm.back() != L'\\') norm += L'\\';
+        return norm;
+    }();
+    int len = MultiByteToWideChar(CP_UTF8, 0, utf8Path.c_str(),
+                                  (int)utf8Path.size(), nullptr, 0);
+    if (len <= 0) return false;
+    std::wstring w((size_t)len, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, utf8Path.c_str(), (int)utf8Path.size(),
+                        w.data(), len);
+    const std::wstring p = NormalizeForCompare(w);
+    return p.size() > rootNorm.size() &&
+           p.compare(0, rootNorm.size(), rootNorm) == 0;
 }
 
 HANDLE CreateSharedMapping(const wchar_t* name, DWORD bytes) {
@@ -524,6 +562,15 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
         std::string cur;
         if (used > 0) cur.assign(base, strnlen(base, used));
         if (!snapshotValid_ || appliedStr_[s] != cur) {
+            // 中转围栏（P4）：文件型路径非空且不在中转根下 → 拒写
+            // 引擎（记已处理避免逐快照重试；不计 applied）。
+            const char* sid = kApoStrSlotIds[s];
+            if ((strcmp(sid, "convolver.ir.path") == 0 ||
+                 strcmp(sid, "ddc.load") == 0) &&
+                !cur.empty() && !IsUnderTransitRoot(cur)) {
+                appliedStr_[s] = cur;
+                continue;
+            }
             if (fnSetParam_(engine_, kApoStrSlotIds[s], cur.c_str(),
                             (uint32_t)cur.size() + 1) == 0)
                 applied++;

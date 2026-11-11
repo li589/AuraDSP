@@ -2366,6 +2366,40 @@ int CmdDoctor(bool fix, bool asJson) {
         checks.push_back(c);
     }
 
+    // 8. 文件中转根（资源计划 P4）：%ProgramData%\AuraDSP\
+    // apo-assets 存在且 LocalService 可读——APO 模式卷积/DDC
+    // 的文件副本落点；App 运行时也会自建 + icacls，此处为安
+    // 装期/巡检口径的同一检查。--fix 创建并授权。
+    {
+        DoctorCheck c;
+        c.name = "transit_dir";
+        wchar_t pd[MAX_PATH] = {};
+        DWORD n = GetEnvironmentVariableW(L"ProgramData", pd, MAX_PATH);
+        std::wstring root = (n > 0 && n < MAX_PATH) ? pd : L"C:\\ProgramData";
+        root += L"\\AuraDSP\\apo-assets";
+        auto probe = [&] {
+            DWORD attr = GetFileAttributesW(root.c_str());
+            return attr != INVALID_FILE_ATTRIBUTES &&
+                   (attr & FILE_ATTRIBUTE_DIRECTORY) &&
+                   FileReadableByAudiodg(root);
+        };
+        c.ok = probe();
+        c.detail = c.ok ? "中转根存在且对 LocalService 可读"
+                        : "中转根缺失或 LocalService 不可读"
+                          "（APO 模式卷积/DDC 文件副本无处落）";
+        if (!c.ok && fix) {
+            std::wstring parent = root.substr(0, root.find_last_of(L'\\'));
+            CreateDirectoryW(parent.c_str(), nullptr);
+            CreateDirectoryW(root.c_str(), nullptr);
+            GrantAudiodgRead(root, true);
+            if (probe()) {
+                c.ok = true;
+                c.fixed = true;
+            }
+        }
+        checks.push_back(c);
+    }
+
     bool allOk = true;
     for (const auto& c : checks) allOk = allOk && c.ok;
     if (asJson) {
