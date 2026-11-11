@@ -175,7 +175,7 @@
   "ioNoOutputDevices": "No output devices available",
   "ioNoAvailableSoundCard": "No sound card available",
   "ioInputOverriddenByVaio": "Driven by the VAIO bridge chain — this input selection has no effect. Point the player's output at the AuraVAIO endpoint",
-  "ioOutputOverriddenByVaio": "Driven by the VAIO bridge chain — this output device selection has no effect. Switch the output type to VAIO to set the physical landing point",
+  "ioOutputOverriddenByVaio": "Driven by the VAIO bridge chain — this output device selection has no effect. Set the bridge's physical landing point in the panel below",
   "ioOutputOverriddenByAsio": "Driven by the ASIO bridge chain — this output selection has no effect; the ASIO driver decides the output",
   "ioOnlyVirtualOutputs": "Only virtual output endpoints (no physical sound card)",
   "ioPhysicalOutput": "Physical output",

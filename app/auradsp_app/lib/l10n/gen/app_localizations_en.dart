@@ -506,7 +506,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ioOutputOverriddenByVaio =>
-      'Driven by the VAIO bridge chain — this output device selection has no effect. Switch the output type to VAIO to set the physical landing point';
+      'Driven by the VAIO bridge chain — this output device selection has no effect. Set the bridge\'s physical landing point in the panel below';
 
   @override
   String get ioOutputOverriddenByAsio =>

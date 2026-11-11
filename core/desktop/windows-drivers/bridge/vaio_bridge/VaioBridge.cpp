@@ -212,6 +212,14 @@ struct VaioBridgeCtl {
     // 切歌白噪声复现时凭它判「重同步是否发生过」）。
     volatile LONG fmtResyncs = 0;
 
+    // 第八轮项 3：相位锚校正计数与最近观测相位偏差（字节）。泵
+    // 读环的物理偏移改以驱动自报 WriteOffset 为锚（见泵内注）；
+    // 每当一致对算出的 skew 变化且非零，phaseResyncs++ 并更新
+    // phaseSkew——开关随缘白噪声复现时凭它判「相位偏差是否存在
+    // 且已被锚定校正」。
+    volatile LONG phaseResyncs = 0;
+    volatile LONG phaseSkew = 0;
+
     // 驱动版本缓存（start 时经同一控制句柄查一次）：detect 在桥
     // 运行期不得再开控制设备（第六轮项 1 定罪，见 vaio_detect），
     // 其版本/状态输出改由本缓存与环几何合成。
@@ -707,6 +715,44 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
     g_vaio.fxDataSize = dataSize;
     g_vaio.fxBlockAlign = blockAlign;
 
+    // 相位锚（第八轮项 3 定罪）：逻辑字节 T 的物理环偏移不得再
+    // 假设 WriteOffset ≡ TotalBytesWritten (mod dataSize)——
+    // vm-win10 实证：某些 start 后两者恒差 1 字节，泵按
+    // T % dataSize 读环即帧内错位一字节，PCM16 被整体错位
+    // 重释、呈持续满幅白噪声且永不自愈（S4 取证 shifted 口径
+    // 反呈结构化低峰，为本定罪的判读依据）；开关「随缘」即
+    // 偏差是否出现的随机性。改以驱动自报的一致对
+    // (TotalBytesWritten, WriteOffset) 为锚：物理偏移 =
+    // (anchorWo + (T - anchorTw)) mod dataSize，锚每轮以
+    // 「TW/WO 各连读两遍不变」的一致对刷新（写入中途读到的
+    // 混合对直接弃用、下轮再试；残余的纳秒级竞窗至多令一
+    // 周期读偏，下轮锚刷新即自愈，与旧实现的永久错位有本质
+    // 区别）。偏差观测经 status 的 phaseSkew/phaseResyncs
+    // 输出：恒等成立时 skew 恒 0、行为与旧实现逐字节一致。
+    ULONGLONG anchorTw = userBytesRead;
+    ULONG anchorWo =
+        dataSize ? (ULONG)(userBytesRead % dataSize) : 0;
+    auto refreshAnchor = [&]() {
+        if (!pHeader || dataSize == 0) return;
+        const ULONGLONG tw1 = pHeader->TotalBytesWritten;
+        const ULONG wo1 = pHeader->WriteOffset;
+        const ULONGLONG tw2 = pHeader->TotalBytesWritten;
+        const ULONG wo2 = pHeader->WriteOffset;
+        if (tw1 != tw2 || wo1 != wo2) return;
+        if (tw1 == anchorTw && wo1 == anchorWo) return;
+        anchorTw = tw1;
+        anchorWo = wo1;
+        const ULONG expect = (ULONG)(tw1 % dataSize);
+        const ULONG skew = (wo1 + dataSize - expect) % dataSize;
+        if ((LONG)skew !=
+            InterlockedCompareExchange(&g_vaio.phaseSkew, 0, 0)) {
+            InterlockedExchange(&g_vaio.phaseSkew, (LONG)skew);
+            if (skew != 0)
+                InterlockedIncrement(&g_vaio.phaseResyncs);
+        }
+    };
+    refreshAnchor();
+
     // 启动 WASAPI 播放：HRESULT 必须查——失败时泵会在
     // GetCurrentPadding 上永久空转而 status 仍报 running，
     // 呈「无声无 viz」假象（取证 2026-11-09 候选 5）；把失败
@@ -865,6 +911,9 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         // 猜毫秒数）。作用域到本轮 while 体末尾——本段内无 continue/break。
         vmcore::RtInBlockGuard inBlock(&g_vaio.tc.rtInBlock);
 
+        // 相位锚刷新（第八轮项 3）：一致对才采纳，见泵首注。
+        refreshAnchor();
+
         // 检查共享环是否有有效数据
         ULONGLONG totalWritten = pHeader ? pHeader->TotalBytesWritten : 0;
         ULONGLONG availBytes = 0;
@@ -898,7 +947,13 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             ULONG readInFrames = wholeInFrames + 1;
             if (readInFrames > availFrames) readInFrames = availFrames;
             const ULONG rawBytes = readInFrames * blockAlign;
-            ULONG readOffset = (ULONG)(userBytesRead % dataSize);
+            // 物理偏移经相位锚换算（第八轮项 3），不再裸用
+            // userBytesRead % dataSize（恒等假设被实证推翻）。
+            LONGLONG phys = (LONGLONG)anchorWo +
+                ((LONGLONG)userBytesRead - (LONGLONG)anchorTw);
+            phys %= (LONGLONG)dataSize;
+            if (phys < 0) phys += dataSize;
+            ULONG readOffset = (ULONG)phys;
             ULONG chunk1 = dataSize - readOffset;
             if (chunk1 >= rawBytes) {
                 memcpy(g_vaio.scratchRaw, pPayload + readOffset, rawBytes);
@@ -1276,6 +1331,8 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     // S4 取证复位（泵线程启动后重新采集本会话的首块证据）。
     InterlockedExchange(&g_vaio.fxDone, 0);
     InterlockedExchange(&g_vaio.fmtResyncs, 0);
+    InterlockedExchange(&g_vaio.phaseResyncs, 0);
+    InterlockedExchange(&g_vaio.phaseSkew, 0);
     g_vaio.fxPeak = 0;
     g_vaio.fxMeanAbs = 0;
     g_vaio.fxPeakShift = -1;
@@ -1835,6 +1892,17 @@ int vaio_status(char* out, int cap) {
             out + total, (size_t)(cap - total), _TRUNCATE,
             ",\"fmtResyncs\":%ld",
             InterlockedCompareExchange(&g_vaio.fmtResyncs, 0, 0));
+        if (m < 0) return -1;
+        total += m;
+    }
+    // 第八轮项 3：相位锚校正计数与当前偏差（恒输出；skew 恒 0
+    // 且计数不涨 = 恒等成立、锚未介入）。
+    {
+        const int m = _snprintf_s(
+            out + total, (size_t)(cap - total), _TRUNCATE,
+            ",\"phaseResyncs\":%ld,\"phaseSkew\":%ld",
+            InterlockedCompareExchange(&g_vaio.phaseResyncs, 0, 0),
+            InterlockedCompareExchange(&g_vaio.phaseSkew, 0, 0));
         if (m < 0) return -1;
         total += m;
     }

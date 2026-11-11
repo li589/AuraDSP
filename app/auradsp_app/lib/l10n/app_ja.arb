@@ -175,7 +175,7 @@
   "ioNoOutputDevices": "利用可能な出力デバイスがありません",
   "ioNoAvailableSoundCard": "利用可能なサウンドカードなし",
   "ioInputOverriddenByVaio": "VAIOブリッジチェーンで駆動中です。この入力の選択は無効です。プレーヤーの出力を AuraVAIO エンドポイントに向けてください",
-  "ioOutputOverriddenByVaio": "VAIOブリッジチェーンで駆動中です。この出力デバイスの選択は無効です。物理的な出力先は出力タイプを VAIO に切り替えて設定してください",
+  "ioOutputOverriddenByVaio": "VAIOブリッジチェーンで駆動中です。この出力デバイスの選択は無効です。ブリッジの物理的な出力先は下のパネルで設定してください",
   "ioOutputOverriddenByAsio": "ASIOブリッジチェーンで駆動中です。この出力の選択は無効です。出力は ASIO ドライバーが決定します",
   "ioOnlyVirtualOutputs": "仮想出力エンドポイントのみ（物理サウンドカードなし）",
   "ioPhysicalOutput": "物理出力",

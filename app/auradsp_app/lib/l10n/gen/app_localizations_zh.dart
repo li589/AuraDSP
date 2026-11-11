@@ -467,7 +467,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ioOutputOverriddenByVaio =>
-      '当前由 VAIO 桥链驱动，此输出设备选择不生效；物理落点请将输出类型切换为 VAIO 后设置';
+      '当前由 VAIO 桥链驱动，此输出设备选择不生效；桥的物理落点在下方落点面板设置';
 
   @override
   String get ioOutputOverriddenByAsio => '当前由 ASIO 桥链驱动，此输出选择不生效；输出由 ASIO 驱动决定';

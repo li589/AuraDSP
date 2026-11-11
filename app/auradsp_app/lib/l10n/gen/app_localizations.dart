@@ -949,7 +949,7 @@ abstract class AppLocalizations {
   /// No description provided for @ioOutputOverriddenByVaio.
   ///
   /// In zh, this message translates to:
-  /// **'当前由 VAIO 桥链驱动，此输出设备选择不生效；物理落点请将输出类型切换为 VAIO 后设置'**
+  /// **'当前由 VAIO 桥链驱动，此输出设备选择不生效；桥的物理落点在下方落点面板设置'**
   String get ioOutputOverriddenByVaio;
 
   /// No description provided for @ioOutputOverriddenByAsio.

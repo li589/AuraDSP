@@ -476,7 +476,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get ioOutputOverriddenByVaio =>
-      'VAIOブリッジチェーンで駆動中です。この出力デバイスの選択は無効です。物理的な出力先は出力タイプを VAIO に切り替えて設定してください';
+      'VAIOブリッジチェーンで駆動中です。この出力デバイスの選択は無効です。ブリッジの物理的な出力先は下のパネルで設定してください';
 
   @override
   String get ioOutputOverriddenByAsio =>

@@ -60,9 +60,22 @@ class _OutputLayer extends StatelessWidget {
             ),
           )
         else ...[
-          if (model.pipelineOutput == AudioModes.outputWasapi)
-            _WasapiOutputSubpanel(model: model)
-          else if (model.pipelineOutput == AudioModes.outputVaio)
+          if (model.pipelineOutput == AudioModes.outputWasapi) ...[
+            _WasapiOutputSubpanel(model: model),
+            // 第八轮项 3（下拉半）：VAIO 桥链下 WASAPI 子面板的
+            // 设备字段不被消费（已置灰明示），但桥的物理落点
+            // （vaioOutputEndpoint）此前只有把输出类型切成 VAIO
+            // 才够得着——用户实测呈「下拉锁定系统默认、无处可
+            // 改」。桥链激活时在下方直接续上落点面板，呈现层
+            // 补齐入口，不动任何链路语义。
+            if (model.pipelineChain == PipelineChain.vaio) ...[
+              const SizedBox(height: AuraSpace.md),
+              HbBuilder(
+                  tick: model.hbTick,
+                  builder: (_) => _VaioOutputSubpanel(
+                      model: model, asBridgeLanding: true)),
+            ],
+          ] else if (model.pipelineOutput == AudioModes.outputVaio)
             HbBuilder(tick: model.hbTick,
                 builder: (_) => _VaioOutputSubpanel(model: model))
           else
@@ -261,7 +274,13 @@ class _WasapiOutputSubpanel extends StatelessWidget {
 
 class _VaioOutputSubpanel extends StatelessWidget {
   final AppModel model;
-  const _VaioOutputSubpanel({required this.model});
+
+  /// 以「桥物理落点」形态呈现（第八轮项 3）：桥链激活时从
+  /// WASAPI 输出层续接，此时隐藏虚拟声卡输出提示与监听镜像块
+  /// （那是「渲染进 VAIO 供 OBS 采集」形态的说明），只留落点
+  /// 下拉与桥状态行。
+  final bool asBridgeLanding;
+  const _VaioOutputSubpanel({required this.model, this.asBridgeLanding = false});
 
   @override
   Widget build(BuildContext context) {
@@ -285,6 +304,7 @@ class _VaioOutputSubpanel extends StatelessWidget {
       builder: (_, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (!asBridgeLanding) ...[
           Container(
             padding: const EdgeInsets.all(AuraSpace.sm),
             decoration: BoxDecoration(
@@ -323,6 +343,7 @@ class _VaioOutputSubpanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AuraSpace.sm),
+          ],
           if (overriddenByAsio) ...[
             _InfoRow(l.ioPhysicalOutput, l.ioOutputOverriddenByAsio),
             const SizedBox(height: AuraSpace.sm),
@@ -429,6 +450,15 @@ class _VaioOutputSubpanel extends StatelessWidget {
             if ((info['fmtResyncs'] as num?)?.toInt() != null &&
                 (info['fmtResyncs'] as num).toInt() > 0)
               _InfoRow('fmtResyncs', '${(info['fmtResyncs'] as num).toInt()}'),
+            // 第八轮项 3：相位锚校正计数（开关随缘白噪声定罪的
+            // 观测面：>0 即本次运行出现过 WriteOffset 与
+            // TotalBytesWritten 的相位偏差且已被锚定校正）。
+            if ((info['phaseResyncs'] as num?)?.toInt() != null &&
+                (info['phaseResyncs'] as num).toInt() > 0)
+              _InfoRow(
+                  'phaseResyncs',
+                  '${(info['phaseResyncs'] as num).toInt()}'
+                  ' (skew ${(info['phaseSkew'] as num?)?.toInt() ?? 0} B)'),
             if ((info['paramsFailed'] as num?)?.toInt() != null &&
                 (info['paramsFailed'] as num).toInt() > 0)
               _InfoRow('paramsFailed', '${(info['paramsFailed'] as num).toInt()}'),
