@@ -61,24 +61,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get routingChBr => '右后';
 
   @override
-  String get routingAllChannels => '全声道 (8/8)';
-
-  @override
-  String get routingStereo => '立体声 (FL/FR)';
-
-  @override
-  String get routingNoSub => '无超低 (7/8)';
-
-  @override
-  String get routingAllBypassed => '全旁路 (0/8)';
-
-  @override
-  String get routingSurroundOnly => '仅环绕 (4/8)';
-
-  @override
-  String get routingPairHint => '按立体声对生效：FL/FR、C/LFE、SL/SR、BL/BR 成对勾选，单选无效';
-
-  @override
   String routingSelectedCount(int count, int total) {
     return '$count/$total 声道已选';
   }
@@ -94,9 +76,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get channelRouting => '高级声道路由';
-
-  @override
-  String get routingPresets => '快速选择:';
 
   @override
   String get routingPresetAll => '全选';
@@ -164,11 +143,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get setNoEndpoint => '无可用音频端点';
-
-  @override
-  String setApoActive(int sr, int frames) {
-    return '活跃处理中 (${sr}Hz · $frames 帧)';
-  }
 
   @override
   String get setApoAttached => '已挂接 (等待播放流触发)';
@@ -430,45 +404,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get eelEmptySample => '@sample 段为空（将输出静音），确认不是漏写？';
 
   @override
-  String eelSliderRange(int n) {
-    return 'slider$n 越界（仅 slider1..8 会联动滑块）';
-  }
-
-  @override
   String eelReadonlyAssign(String name) {
     return '$name 是只读变量，赋值不会生效';
   }
-
-  @override
-  String get lpDocIntro =>
-      'EEL2 是针对实时音频处理的高性能表达式语言。在 AuraDSP 中，所有脚本在音频泵线程中即时执行。';
-
-  @override
-  String get lpDocSectionsTitle => '核心代码段（Sections）';
-
-  @override
-  String get lpDocSampleCode =>
-      '@init\n// 采样率变化或初次加载时执行，用于初始化变量与系数\n\n@sample\n// 每个采样点执行。输入输出变量为 spl0 (左声道) 和 spl1 (右声道)\nspl0 = spl0 * 0.5;\nspl1 = spl1 * 0.5;';
-
-  @override
-  String get lpDocSlidersTitle => '滑块控制语法（Sliders）';
-
-  @override
-  String get lpDocSampleSlider =>
-      'slider1: 0< -12, 12, 0.5 > 增益 (dB)\n// sliderN: 初始值< 最小值, 最大值, 步进 > 描述标签\n// 宿主将自动生成对应的实时调节滑块！';
-
-  @override
-  String get lpDocBuiltinsTitle => '常用内置常量与函数';
-
-  @override
-  String get lpDocBuiltinConsts => '• 常量：srate (当前采样率), \$pi (圆周率)\n';
-
-  @override
-  String get lpDocBuiltinFns =>
-      '• 函数：sin, cos, tan, sqrt, exp, log, abs, min, max, rand, floor, ceil\n';
-
-  @override
-  String get lpDocBuiltinChannels => '• 声道：spl0 (左输入/输出), spl1 (右输入/输出)';
 
   @override
   String get ioNoInputDevices => '无可用输入设备';
@@ -624,9 +562,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bassHintFrequency => '低音增强作用的最高频率。低于该频率的声音将被加厚，一般建议 60~120Hz。';
-
-  @override
-  String get bassShelfRouting => '低频搁架声道路由';
 
   @override
   String get irEnvelope => '脉冲响应包络';
@@ -849,13 +784,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '音频处理时限由驱动缓冲区决定（如 128 帧 @ 48kHz = 2.7ms 截止预算）。当效果器/插件的处理耗时（EMA）持续超过预算的 85% 时，系统自动将重负载插件收窄至当前监听总线，其余总线直通，以杜绝爆音与掉字卡顿；负载回落安全阈值后将自动恢复。';
 
   @override
-  String get vbProtectActive => '已激活：插件仅作用于监听总线，其余直通（回调超预算）';
-
-  @override
   String get vbProtectActiveTag => '保护已激活';
-
-  @override
-  String get shelfTitle => '低频搁架';
 
   @override
   String get shelfHint => '分频点以下整体托起/压低，补录音偏瘦的低频或收油腻的轰头';
@@ -867,16 +796,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shelfGain => '增益';
 
   @override
-  String get shelfFreqInfo => '低于该频率整体增减，40~400Hz，一般放 80~120Hz。';
-
-  @override
-  String get shelfGainInfo => '托起为正、压低为负；和低音增强是两条路，可叠加但别 double。';
-
-  @override
   String get bassShapingTitle => '低音塑形';
-
-  @override
-  String get bassShapingHint => '融合低频搁架滤波与低音单声道化，塑造紧致干净的低频响应';
 
   @override
   String get shelfFreqTooltip => '设定低频搁架滤波器的分频截止频率点（40~400Hz），该频率以下的低音整体增减';
@@ -1031,9 +951,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reverbPreset => '预设';
 
   @override
-  String get reverbOff => '关闭';
-
-  @override
   String get stereoWiden => '立体声扩展';
 
   @override
@@ -1049,9 +966,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get postResetAllTrim => '全部归零';
 
   @override
-  String get equalizer => '均衡器';
-
-  @override
   String get limiter => '限制器';
 
   @override
@@ -1059,11 +973,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get engineForm => 'Desktop（进程内）';
-
-  @override
-  String engineAbi(int a, String v) {
-    return 'ABI v$a · $v';
-  }
 
   @override
   String get theme => '配色方案';
@@ -1116,9 +1025,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reverbPreset7 => '板式混响';
-
-  @override
-  String get sourceCard => '音频源';
 
   @override
   String get srcTone => '测试音 440Hz';
@@ -1180,9 +1086,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audioMode => '音频模式';
-
-  @override
-  String get audioModeHint => '模式切换即时生效；WASAPI 最终只收敛于 AuraVAIO 模式';
 
   @override
   String get audioParadigm => '处理范式';
@@ -1292,9 +1195,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get apoTargetEndpoint => '附加目标端点';
 
   @override
-  String get apoTargetEndpointHint => '选择要挂载 AuraDSP 系统级 APO 处理的音频端点';
-
-  @override
   String get apoStatus => 'APO 挂载状态';
 
   @override
@@ -1345,9 +1245,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get asioDriverNotRegistered => '未注册';
 
   @override
-  String get asioDriverActionRegister => '一键注册驱动';
-
-  @override
   String get asioDriverActionUnregister => '一键注销驱动';
 
   @override
@@ -1377,19 +1274,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioDevice => '设备';
 
   @override
-  String get modeAuto => '自动';
-
-  @override
   String get sampleRate => '采样率';
 
   @override
   String get buffer => '缓冲区';
-
-  @override
-  String get modeVaio => 'AuraVAIO';
-
-  @override
-  String get modeVb => 'Voicemeeter';
 
   @override
   String get modeSysApo => 'System APO';
@@ -1453,9 +1341,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get linuxOutputSinkDefault => 'PulseAudio 默认输出';
 
   @override
-  String get linuxOutputFormat => '输出格式';
-
-  @override
   String get linuxCaptureSource => '采集源';
 
   @override
@@ -1506,9 +1391,6 @@ class AppLocalizationsZh extends AppLocalizations {
       '专家模式经 ALSA 直连设备（period 256 帧），延迟低于 PulseAudio；切换后端或设备后音频引擎会自动重启生效。PipeWire 系统上 hw: 设备可能被会话管理器占用而打开失败，失败原因会显示在状态中。';
 
   @override
-  String get modeAsio => 'ASIO';
-
-  @override
   String get asioDriver => 'ASIO 驱动';
 
   @override
@@ -1547,21 +1429,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get asioDropouts => '欠载';
-
-  @override
-  String get modeRoot => 'Root';
-
-  @override
-  String get modeRootless => 'Rootless';
-
-  @override
-  String get modeSystem => '系统';
-
-  @override
-  String get modeVirtual => '虚拟';
-
-  @override
-  String get modeDriver => '驱动';
 
   @override
   String get catAppearance => '外观';
@@ -1618,9 +1485,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pageVisualizerTitle => '实时频谱';
 
   @override
-  String get pageSettingsEyebrow => '偏好';
-
-  @override
   String get pageSettingsTitle => '设置';
 
   @override
@@ -1628,9 +1492,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get levelsTitle => '电平';
-
-  @override
-  String get deviceLabel => '输出设备';
 
   @override
   String get peakLabel => '峰值';
@@ -1895,32 +1756,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get navLiveprog => '脚本';
 
   @override
-  String get pageLiveprogEyebrow => '实时编程';
-
-  @override
-  String get pageLiveprogTitle => '可编程 DSP';
-
-  @override
-  String get lpEditor => 'EEL2 编辑器';
-
-  @override
-  String get lpEditorHint =>
-      '寄存器 spl0/spl1（左右样本）、srate、slider1..8；@init 段需至少一条语句';
-
-  @override
-  String get lpApply => '应用并编译';
-
-  @override
   String get lpUnload => '卸载';
-
-  @override
-  String get lpNew => '新建模板';
-
-  @override
-  String get lpCompileOk => '编译成功，脚本运行中';
-
-  @override
-  String get lpNoCode => '尚未加载脚本（使能时直通）';
 
   @override
   String get lpStatusOk => '运行中';
@@ -1966,15 +1802,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get lpOverwriteTitle => '覆盖确认';
-
-  @override
-  String get lpOverwriteBody => '已存在同名脚本，覆盖吗？';
-
-  @override
-  String get lpOverwriteAction => '覆盖';
-
-  @override
   String get lpDeleteTitle => '删除脚本';
 
   @override
@@ -1987,19 +1814,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpRenameTitle => '重命名脚本';
 
   @override
-  String get lpOpFailed => '操作失败，请重试';
-
-  @override
   String get lpCompiledIdle => '已编译 · 点击顶栏应用生效';
-
-  @override
-  String get lpSliders => '脚本滑块（slider1..8）';
-
-  @override
-  String get lpSliderHint => '有声明按声明，无声明默认 0..1；改动实时生效';
-
-  @override
-  String get lpLibrary => '脚本库';
 
   @override
   String get lpLibraryEmpty => '库为空 — 用下方名称框保存当前代码';
@@ -2117,16 +1932,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get convResampled => '源采样率与设备不同，已自动重采样';
 
   @override
-  String get fvTitle => '参数化混响';
-
-  @override
   String get fvDecayLabel => '衰减';
 
   @override
   String get fvDampLabel => '阻尼';
-
-  @override
-  String get fvWetLabel => '湿声';
 
   @override
   String get fvDryLabel => '干声';
@@ -2139,16 +1948,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '保存/载入引擎全量参数快照（配置目录下 presets/）；T2 效果在音乐档下会被守卫拒绝（诚实提示）';
 
   @override
-  String get presetLoadHint => '点击载入：';
-
-  @override
-  String get presetEmpty => '库为空 — 调好参数后用下方名称框保存';
-
-  @override
   String get presetSave => '保存当前';
-
-  @override
-  String get presetDelete => '删除';
 
   @override
   String get presetSaved => '预设已保存';
@@ -2166,12 +1966,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get presetDeleteFail => '删除失败（文件可能被占用或已不存在）';
 
   @override
-  String get presetLoaded => '预设已载入';
-
-  @override
-  String get presetLoadFail => '预设读取失败';
-
-  @override
   String get navPlugins => '插件';
 
   @override
@@ -2179,9 +1973,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get convMix => '混合比例';
-
-  @override
-  String get convMixHint => '干湿比：0% = 纯原始信号，100% = 纯卷积结果（默认 100%，等同经典 IR 加载）';
 
   @override
   String get ddcTitle => 'VDC 空间校正';
@@ -2196,22 +1987,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ddcLoaded => '已加载';
 
   @override
-  String get ddcClear => '清除';
-
-  @override
-  String get lpFormat => '格式化';
-
-  @override
-  String get convSpectrumTitle => '脉冲频响包络';
-
-  @override
-  String get fv3DTitle => '3D 声场渲染';
-
-  @override
   String get advanced => '高级';
-
-  @override
-  String get stageTube => '电子管';
 
   @override
   String get tubeTitle => '电子管模拟器';
@@ -2242,9 +2018,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String eqBands(int n) {
     return '$n段';
   }
-
-  @override
-  String get eqPresets => '预设风格';
 
   @override
   String get eqFlat => '平直复位';
@@ -2315,9 +2088,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dlgCancel => '取消';
-
-  @override
-  String get dlgAdd => '添加';
 
   @override
   String get dlgSave => '保存';
@@ -2406,9 +2176,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get eqCanvasHint => '上下拖动调增益 · 双击节点归零 0dB · 双击背景平直复位';
-
-  @override
   String get eqBypassOn => '旁路生效中 (Bypass)';
 
   @override
@@ -2461,15 +2228,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get eqQTip => 'Q-Factor 滤波器锐度 (0.3 ~ 10.0)\n垂直拖动调节 · 双击复位 1.41';
-
-  @override
-  String get stTube => '电子管';
-
-  @override
-  String get stComp => '压限器';
-
-  @override
-  String get stBassmono => '低频单声道';
 
   @override
   String get stGate => '噪声门';
@@ -2532,9 +2290,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stLoudness => '响度补偿';
 
   @override
-  String get stDyneq => '动态EQ';
-
-  @override
   String get dyneqTitle => '动态均衡器';
 
   @override
@@ -2574,9 +2329,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get loudnessAmount => '补偿强度';
 
   @override
-  String get exciterHint => '给高频加谐波，压缩音频的空气感来源';
-
-  @override
   String get exciterAmount => '谐波量';
 
   @override
@@ -2584,15 +2336,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get exciterHifreqInfo => '只取该频率以上成分做谐波。MP3 缺高频时往低调，齿音重时往高调。';
-
-  @override
-  String get chainPinnedFirst => '首位钉死';
-
-  @override
-  String get chainPinnedLast => '末位钉死';
-
-  @override
-  String get haasHint => '延迟侧制造声场宽度，另一侧恒直通保兼容';
 
   @override
   String get haasDelay => '延迟量';
@@ -2647,31 +2390,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get spatialRoom => '房间';
 
   @override
-  String get spatialRoomInfo => '声学室体量与早期反射强度：0 为无反射自由声场，数值增大可扩展房间空间体量与壁面反射余韵。';
-
-  @override
   String get spatialWidth => '张角';
-
-  @override
-  String get spatialWidthInfo => '声场展宽与虚拟扬声器开角：拓展左右声场宽度，营造沉浸式脱箱感。';
 
   @override
   String get spatialCenter => '中置';
 
   @override
-  String get spatialCenterInfo => '中置声像与对白聚焦：适度提升可增强居中人声主体的凝聚力与清晰度。';
-
-  @override
   String get spatialOutGain => '输出';
 
   @override
-  String get spatialOutGainInfo => '空间音效模块后级输出增益补偿 (-12 ~ +6 dB)。';
-
-  @override
   String get spatialAutoGain => '自动增益';
-
-  @override
-  String get spatialAutoGainInfo => '等响度自适应控制：自动匹配输入信号有效能量，避免声场处理引起整体音量跳变。';
 
   @override
   String get spatialMix => '空间化比例';
@@ -2715,13 +2443,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get src51Hint => '多声道文件：混缩进引擎处理，直通绕开引擎；设备声道不足时自动回落混缩';
 
   @override
-  String get bassmonoHint => '链头处理：分频点以下单声道化，防小音箱低频破音';
-
-  @override
   String get bassmonoFreq => '低音单声道分频';
-
-  @override
-  String get stEq => '均衡器';
 
   @override
   String get stArbmag => '任意响应 EQ';
@@ -2738,9 +2460,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get chainOrderHint =>
       '拖拽调整信号处理先后（自上而下）；改动后点\"应用\"。支持独立旁路/启用单节点；右侧显示每节点实时双声道电平。';
-
-  @override
-  String get chainApply => '应用顺序';
 
   @override
   String get chainReset => '恢复默认';
@@ -2767,36 +2486,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainGrpOut => '输出段';
 
   @override
-  String get chainFlowTitle => '信号流（当前顺序）';
-
-  @override
-  String get chainFlowCaption => '全局信号流顺序示意：';
-
-  @override
-  String get chainNodeInput => '输入门控';
-
-  @override
-  String get chainNodeLimiter => '主限幅 Limiter';
-
-  @override
-  String get chainNodeOutputGate => '输出门控';
-
-  @override
-  String get chainNodeOutput => '音频输出';
-
-  @override
   String get lpManual => '参考手册';
-
-  @override
-  String get lpManualTitle => 'EEL2 快速参考手册';
-
-  @override
-  String get lpManualContent =>
-      '【核心音频流寄存器】\n• spl0: 左声道样本值（浮点数，标称 ±1.0）\n• spl1: 右声道样本值（浮点数，标称 ±1.0）\n• srate: 当前设备实际采样率 (Hz)\n\n【交互滑块变量】\n• slider1 ~ slider8: 界面动态滑块参数（默认 0.0 ~ 1.0）\n\n【代码段规范】\n• @init: 脚本加载或重置时执行一次（必须至少包含一条语句）\n• @slider: 用户滑动滑块或参数变动时触发\n• @sample: 每个音频样本点流过时执行';
-
-  @override
-  String get lpEditorTooltip =>
-      '基于 Cockos EEL2 脚本引擎的实时音频 DSP 编程环境，可在音频流中动态注入自定义算法。';
 
   @override
   String get exciterMode => '模式';
@@ -2820,17 +2510,10 @@ class AppLocalizationsZh extends AppLocalizations {
       'Haas 效应差分环绕：将单侧声道延迟 0~25ms，利用双耳到达时间差在耳机中营造自然脱箱的环绕包围感。';
 
   @override
-  String get bassmonoCombinedTooltip =>
-      '将设定分频点以下的超低频合并为单声道，消除低频相位抵消与浑浊感，增强低音凝聚力与下潜力度。';
-
-  @override
   String get inputGate => '输入门控';
 
   @override
   String get inputGain => '总输入增益';
-
-  @override
-  String get channelBalance => '声道平衡';
 
   @override
   String get channelBalanceHint => '每个声道单独控制，默认100%。最终每个声道音量 = 总输入增益 × 单通道控制。';
@@ -2902,23 +2585,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainBypassed => '已旁路';
 
   @override
-  String get chainEnable => '启用';
-
-  @override
-  String lpSaved(String name) {
-    return '已保存：$name.eel';
-  }
-
-  @override
-  String get lpAddDirTitle => '添加外部脚本预设目录';
-
-  @override
-  String get lpAddDirPrompt => '请输入包含 .eel / .txt 脚本预设的完整文件夹路径：';
-
-  @override
-  String get lpAddDirExample => '例：…/AudioScripts/EelPresets';
-
-  @override
   String lpChars(int n) {
     return '$n 字符';
   }
@@ -2937,27 +2603,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get lpShowAll => '全部 8 槽';
-
-  @override
-  String lpAdaptive(int n) {
-    return '自适应 ($n)';
-  }
-
-  @override
-  String get lpNoSliders => '当前代码未声明或引用 slider1..8 参数（纯算法处理）';
-
-  @override
-  String get lpExpandSliders => '展开全部 8 槽滑块';
-
-  @override
   String get lpAddDir => '添加外部目录';
-
-  @override
-  String get lpSlidersHint => '滑块条已自适应当前脚本声明与引用的 slider 参数；支持点击右上角切换模式。';
-
-  @override
-  String get lpLibraryHint => '支持本地脚本库与外部多预设文件夹自动索引。';
 
   @override
   String get convIrTitle => '脉冲响应 (IR)';
@@ -2969,9 +2615,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ddcFilterTitle => 'VDC 滤波器';
-
-  @override
-  String get stereoBandActive => '分带生效中';
 
   @override
   String get stBand0 => '低频段';
@@ -3014,9 +2657,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get presetSaveHint => '输入预设名称保存当前状态为用户预设';
 
   @override
-  String get convSpectrumCaption => '32 频带 · 0..1 归一化能量';
-
-  @override
   String get sliderResetTip => '点击重置默认值';
 
   @override
@@ -3024,9 +2664,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get plugAddDirPrompt => '请输入或粘贴包含 64 位 VST3 / CLAP 效果器的完整文件夹路径：';
-
-  @override
-  String get plugAddDirExample => '例：…/AudioPlugins/VST3';
 
   @override
   String get plugAddScan => '添加并扫描';
@@ -3039,10 +2676,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get plugLibTitle => '第三方效果器库';
-
-  @override
-  String get plugLibHint =>
-      '系统标准 VST3 / CLAP 64 位专业插件扫描与管理，支持无缝延迟补偿与高保真超低延迟运行。';
 
   @override
   String get plugDeepScan => '深度遍历';
@@ -3069,30 +2702,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get plugSearchHint => '搜索插件名称、厂商或路径...';
-
-  @override
-  String get plugM1Title => 'M1 插件宿主引擎规范';
-
-  @override
-  String get plugM1Hint => '多格式进程内宿主已支持 64 位 VST3 与 CLAP 架构。';
-
-  @override
-  String get plugFeatSlots => '四槽位对称机架 (Slot 1 ~ Slot 4) 独立管理与并发';
-
-  @override
-  String get plugFeatStages => '全音效链阶段插入 (Pre-DSP ~ Post-Limiter)';
-
-  @override
-  String get plugFeatGui => '原生 Win32 GUI 弹窗独立消息循环';
-
-  @override
-  String get plugFeatDirs => '可自定义插件目录检索与本地状态快照';
-
-  @override
-  String get plugFeatRt => '实时极速监听：专为专业制作定制的零卡顿音频通道';
-
-  @override
-  String get plugFeatRoute => 'VB 按路插件逐路独立配置';
 
   @override
   String plugSlot(int n) {
@@ -3126,14 +2735,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get plugMountEmptyHint => '请在下方效果器库列表中选择已安装的 VST3 / CLAP 插件进行加载';
-
-  @override
-  String get plugScanNow => '立即扫描本机已安装插件';
-
-  @override
-  String plugMountedTitle(int n) {
-    return '当前挂载插件 (插槽 $n)';
-  }
 
   @override
   String plugMountedTitleNamed(int n, String name) {
@@ -3196,12 +2797,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugUnloading => '卸载中…';
 
   @override
-  String get plugStateActive => '生效';
-
-  @override
-  String get plugStateBypassed => '旁路';
-
-  @override
   String get plugUnloadFromSlot => '从当前槽卸载';
 
   @override
@@ -3243,11 +2838,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String plugSlotBypassed(int n) {
     return '插槽 $n 旁路';
-  }
-
-  @override
-  String plugSlotLoaded(int n) {
-    return '插槽 $n 已载入';
   }
 
   @override
@@ -3383,9 +2973,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get arbmagApply => '应用代码';
 
   @override
-  String get arbmagInvalidFormat => 'GraphicEQ 格式错误或未包含有效节点';
-
-  @override
   String get crossfeedTitle => '串扰消除';
 
   @override
@@ -3411,11 +2998,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get crossfeedFeed => '互馈电平';
-
-  @override
-  String crossfeedActiveDesc(String mode, String fcut, String feed) {
-    return '当前生效：$mode ($fcut Hz, $feed dB)';
-  }
 
   @override
   String get fxCatFront => '前置整形';
@@ -3492,9 +3074,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get testAudioLoad => '加载音频';
-
-  @override
-  String get pathPickerTitle => '选择路径';
 
   @override
   String get pathPickerConfirm => '确认';
@@ -3579,22 +3158,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errHostUnavailable => '宿主不可用';
 
   @override
-  String get lpFindReplace => '查找与替换';
-
-  @override
-  String get lpSidebarLeft => '切换左侧面板 (大纲与脚本库)';
-
-  @override
-  String get lpSidebarRight => '切换右侧面板 (滑块与控制台)';
-
-  @override
   String get lpConsole => '控制台';
-
-  @override
-  String get lpNewScriptWizard => '新建脚本向导';
-
-  @override
-  String get lpApoImportTitle => '导入 APO 预设';
 
   @override
   String get lpConfirmDiscardTitle => '放弃未保存修改？';
@@ -3719,12 +3283,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpLibSaveCurrent => '保存当前脚本到库';
 
   @override
-  String get lpLibCustomDirs => '脚本目录';
-
-  @override
-  String get lpSlidersPanelTitle => '参数调节滑块';
-
-  @override
   String get lpSlidersCollapse => '收起面板';
 
   @override
@@ -3738,13 +3296,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lpTabOutputChannels => '输出通道 (8)';
-
-  @override
-  String get lpCustomVarTag => '脚本变量';
-
-  @override
-  String get lpCustomVarHint =>
-      '脚本内部变量（在 @init 赋初值；若需在宿主中实时调节，可映射至 slider1..8）';
 
   @override
   String get lpInputTrimHint => '8 声道统一架构输入前级平衡与主增益';

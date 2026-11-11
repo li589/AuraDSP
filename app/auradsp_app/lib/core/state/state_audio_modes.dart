@@ -813,10 +813,9 @@ extension AudioModesState on AppModel {
     _notifyUi();
   }
 
-  void setApoAttached(bool attached) {
-    apoAttached = attached;
-    _notifyUi();
-  }
+  // 全面复审 S6（UI-12)：旧 setApoAttached 已删——零调用方，且可
+  // 绕过 apo_config 核验直接伪造 attached 态；附加真值只由
+  // refreshAudioDevices 的装机扫描与 setApoTargetEndpoint 重算。
 
   // ---- ASIO 驱动注册 ----
 

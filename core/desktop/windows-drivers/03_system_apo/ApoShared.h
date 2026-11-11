@@ -107,6 +107,9 @@ struct ApoTelemetryBlock {
     uint32_t fault;         // 1=引擎故障闩锁（本会话透传中）
     uint32_t seatTaken;     // 累计「抢座失败」次数（其他实例在透传）
     uint32_t updateSeq;     // 电平/频谱更新序号（App 侧判新）
+    // 注记（全面复审 S6 / APO-12)：peakIn* 当前由 worker 以 peakOut
+    // 同值回填（引擎 viz 无独立输入峰值口径），App 亦不读这四字段
+    // ——保留占位但禁止当作真实输入峰值消费，要用先补真口径。
     float peakInL, peakInR, peakOutL, peakOutR;  // 线性峰值
     float levelLDb, levelRDb;                    // 输出电平 dBFS
     float spectrum[32];                          // 输出频谱（引擎 viz 口径，[0,1]）

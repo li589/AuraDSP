@@ -774,7 +774,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           if (m['id'] == 'channels.count' && rc == Status.ok) {
             engineChCount = (m['value'] as num).toInt();
           }
-          // 参数镜像 + 桥同路由（setParamStr 如 liveprog.code 暂不同步）。
+          // 参数镜像 + APO 发布 + 桥同路由（字符串侧 setParamStr
+          // 同口径：镜像 + onString 发布 + 桥路由，见其 case）。
           paramMirror[m['id'] as String] = (
             isFloat: m['isFloat'] as bool,
             value: (m['value'] as num).toDouble()
@@ -1563,60 +1564,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
             break;
           }
-        case 'pluginLoad':
-          {
-            if (lib != null && handle != null) {
-              final path = m['path'] as String;
-              final id = (m['id'] as String?) ?? '';
-              final rc = AuraDspLib.pluginLoadWrap(lib, handle, path, id: id);
-              final statusJson = AuraDspLib.pluginGetStatusJson(lib, handle);
-              send({
-                'evt': 'pluginLoaded',
-                'path': path,
-                'rc': rc,
-                'status': statusJson,
-              });
-              // F2：加载可能因延迟线分配失败触发引擎自动关 PDC，
-              // 回读引擎真值同步 UI（get_pdc 此前全仓无调用点）。
-              try {
-                send({
-                  'evt': 'pluginPdcSync',
-                  'pdc': AuraDspLib.pluginGetPdcWrap(lib, handle),
-                });
-              } catch (e) {
-                dbgLog('plugin: pdc sync read failed: $e');
-              }
-            }
-            break;
-          }
-        case 'pluginUnload':
-          {
-            if (lib != null && handle != null) {
-              final rc = AuraDspLib.pluginUnloadWrap(lib, handle);
-              final statusJson = AuraDspLib.pluginGetStatusJson(lib, handle);
-              send({
-                'evt': 'pluginUnloaded',
-                'rc': rc,
-                'status': statusJson,
-              });
-            }
-            break;
-          }
-        case 'pluginSetBypass':
-          {
-            if (lib != null && handle != null) {
-              final bypassVal = m['bypass'] as bool;
-              final rc = AuraDspLib.pluginSetBypassWrap(lib, handle, bypassVal);
-              final statusJson = AuraDspLib.pluginGetStatusJson(lib, handle);
-              send({
-                'evt': 'pluginBypass',
-                'bypass': bypassVal,
-                'rc': rc,
-                'status': statusJson,
-              });
-            }
-            break;
-          }
+        // 全面复审 S6（ENG-5)：单槽旧命令 pluginLoad/pluginUnload/
+        // pluginSetBypass/pluginGetStatus/pluginSlotGetInsertStage/
+        // probeComponentLatency 已删——全仓零发送方（多槽命令族
+        // pluginSlot* 与延迟测定 componentLatency 直查路径为现行
+        // 口径）；事件侧 pluginLoaded 等兼容 shim 在
+        // plugin_manager_events 保留，无害。
         case 'pluginSetPdc':
           {
             if (lib != null && handle != null) {
@@ -1626,17 +1579,6 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'evt': 'pluginPdc',
                 'pdc': pdcVal,
                 'rc': rc,
-              });
-            }
-            break;
-          }
-        case 'pluginGetStatus':
-          {
-            if (lib != null && handle != null) {
-              final statusJson = AuraDspLib.pluginGetStatusJson(lib, handle);
-              send({
-                'evt': 'pluginStatus',
-                'status': statusJson,
               });
             }
             break;
@@ -2062,83 +2004,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
             break;
           }
-        case 'pluginSlotGetInsertStage':
-          {
-            final slot = (m['slot'] as num?)?.toInt() ?? 0;
-            final pb = activePluginBridge();
-            if (pb != null) {
-              send({
-                'evt': 'pluginSlotInsertStage',
-                'slot': slot,
-                'stage': pb.getInsertStage(slot),
-                'rc': 1,
-              });
-              break;
-            }
-            if (lib != null && handle != null) {
-              final stage = AuraDspLib.pluginSlotGetInsertStageWrap(lib, handle, slot);
-              send({
-                'evt': 'pluginSlotInsertStage',
-                'slot': slot,
-                'stage': stage,
-                'rc': 1,
-              });
-            }
-            break;
-          }
         case 'setVizSuspended':
           vizSuspended = (m['value'] as bool?) ?? false;
           break;
         case 'shutdown':
           running = false;
           break;
-        case 'probeComponentLatency':
-          {
-            // D11：真实脉冲响应测量。引擎侧自建一次性探针 handle，不触碰正在
-            // 放音的 handle（两个 handle 可安全共存，见 tools/probe_concurrent.py）。
-            // 代价：每次约数十毫秒，故只在用户显式点击时触发，绝不进音频路径。
-            final comp = (m['comp'] as String?) ?? '';
-            final l = lib;
-            final rate = audioOut?.sampleRate.toDouble() ?? 48000.0;
-            if (l == null || comp.isEmpty) {
-              send({
-                'evt': 'componentLatency',
-                'comp': comp,
-                'rc': -2,
-                'samples': 0,
-              });
-              break;
-            }
-            final out = malloc<Uint32>();
-            final compPtr = comp.toNativeUtf8();
-            int rc;
-            try {
-              out.value = 0;
-              // convolver / ddc 需要外部资源才能在探针内就绪；有路径时走
-              // 带资源探针，才是真正的「实测」而非「不可测」。
-              final resPath = (m['resource'] as String?) ?? '';
-              if (resPath.isEmpty) {
-                rc = l.probeComponent(compPtr, rate, out);
-              } else {
-                final p = resPath.toNativeUtf8();
-                try {
-                  rc = l.probeComponentWithResource(compPtr, p, rate, out);
-                } finally {
-                  malloc.free(p);
-                }
-              }
-              send({
-                'evt': 'componentLatency',
-                'comp': comp,
-                'rc': rc,
-                'samples': rc == 0 ? out.value.toInt() : 0,
-              });
-            } finally {
-              malloc.free(compPtr);
-              malloc.free(out);
-            }
-            break;
-          }
       }
     } catch (e) {
       send({'evt': 'error', 'msg': e.toString()});

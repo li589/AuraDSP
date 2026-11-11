@@ -1658,7 +1658,10 @@ int CmdStatus(bool asJson, const std::optional<double>& timeout) {
     OutLine(std::string("COM 组件注册: ") +
             (comRegistered ? "已就绪" : "未注册"));
     OutLine(std::string("实时音频心跳: ") +
-            (hb.alive ? "活跃处理中" : "静默 (无音频流或未激活)"));
+            // 全面复审 S6（APO-9)：心跳存活只证明 APO 实例在跑、
+            // 不证明引擎在处理（第五轮面板同口径教训）——文案对齐
+            // 「心跳活跃」，不冒称处理中；处理真值看引擎 telemetry。
+            (hb.alive ? "心跳活跃" : "静默 (无音频流或未激活)"));
     if (hb.alive) {
         OutLine("  采样率=" + std::to_string(hb.sr) +
                 "Hz, 序列号=" + std::to_string(hb.seq) +

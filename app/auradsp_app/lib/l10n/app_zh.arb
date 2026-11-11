@@ -17,12 +17,6 @@
   "routingChSr": "右环",
   "routingChBl": "左后",
   "routingChBr": "右后",
-  "routingAllChannels": "全声道 (8/8)",
-  "routingStereo": "立体声 (FL/FR)",
-  "routingNoSub": "无超低 (7/8)",
-  "routingAllBypassed": "全旁路 (0/8)",
-  "routingSurroundOnly": "仅环绕 (4/8)",
-  "routingPairHint": "按立体声对生效：FL/FR、C/LFE、SL/SR、BL/BR 成对勾选，单选无效",
   "routingSelectedCount": "{count}/{total} 声道已选",
   "@routingSelectedCount": {
     "placeholders": {
@@ -38,7 +32,6 @@
   "routingStereoPathHint": "当前处于立体声或矩阵下混路径，所有声道统一处理，独立声道掩码不生效。",
   "flfrOnlyHint": "仅作用于前置 FL/FR 对（多声道离散时环绕与 LFE 直通）",
   "channelRouting": "高级声道路由",
-  "routingPresets": "快速选择:",
   "routingPresetAll": "全选",
   "routingPresetFront": "仅前置",
   "routingPresetBack": "仅后置",
@@ -80,17 +73,6 @@
   },
   "setDefaultEndpoint": "默认音频端点 (Default Render)",
   "setNoEndpoint": "无可用音频端点",
-  "setApoActive": "活跃处理中 ({sr}Hz · {frames} 帧)",
-  "@setApoActive": {
-    "placeholders": {
-      "sr": {
-        "type": "int"
-      },
-      "frames": {
-        "type": "int"
-      }
-    }
-  },
   "setApoAttached": "已挂接 (等待播放流触发)",
   "setProcessing": "处理中...",
   "setApoRegistered": "已向目标设备注册 System APO 钩子并完成服务同步",
@@ -215,14 +197,6 @@
   "eelMissingSample": "缺少 @sample 段（引擎会拒绝编译）",
   "eelEmptyInit": "初始化段为空（@init 段要求包含至少一条执行语句或变量初始化）",
   "eelEmptySample": "@sample 段为空（将输出静音），确认不是漏写？",
-  "eelSliderRange": "slider{n} 越界（仅 slider1..8 会联动滑块）",
-  "@eelSliderRange": {
-    "placeholders": {
-      "n": {
-        "type": "int"
-      }
-    }
-  },
   "eelReadonlyAssign": "{name} 是只读变量，赋值不会生效",
   "@eelReadonlyAssign": {
     "placeholders": {
@@ -231,15 +205,6 @@
       }
     }
   },
-  "lpDocIntro": "EEL2 是针对实时音频处理的高性能表达式语言。在 AuraDSP 中，所有脚本在音频泵线程中即时执行。",
-  "lpDocSectionsTitle": "核心代码段（Sections）",
-  "lpDocSampleCode": "@init\n// 采样率变化或初次加载时执行，用于初始化变量与系数\n\n@sample\n// 每个采样点执行。输入输出变量为 spl0 (左声道) 和 spl1 (右声道)\nspl0 = spl0 * 0.5;\nspl1 = spl1 * 0.5;",
-  "lpDocSlidersTitle": "滑块控制语法（Sliders）",
-  "lpDocSampleSlider": "slider1: 0< -12, 12, 0.5 > 增益 (dB)\n// sliderN: 初始值< 最小值, 最大值, 步进 > 描述标签\n// 宿主将自动生成对应的实时调节滑块！",
-  "lpDocBuiltinsTitle": "常用内置常量与函数",
-  "lpDocBuiltinConsts": "• 常量：srate (当前采样率), $pi (圆周率)\n",
-  "lpDocBuiltinFns": "• 函数：sin, cos, tan, sqrt, exp, log, abs, min, max, rand, floor, ceil\n",
-  "lpDocBuiltinChannels": "• 声道：spl0 (左输入/输出), spl1 (右输入/输出)",
   "ioNoInputDevices": "无可用输入设备",
   "ioRefreshDevice": "刷新设备",
   "ioLoopbackDesc": "默认内录/环回模式：实时采集系统主回放端点音频",
@@ -325,7 +290,6 @@
   },
   "bassHintIntensity": "增强低音量感与冲击力。越高低频下潜越震撼，建议适度提升防轰头。",
   "bassHintFrequency": "低音增强作用的最高频率。低于该频率的声音将被加厚，一般建议 60~120Hz。",
-  "bassShelfRouting": "低频搁架声道路由",
   "irEnvelope": "脉冲响应包络",
   "irMirrorR": "R (镜像)",
   "convHintMix": "卷积混响混合比。0% 为原始干声，100% 完全沉浸在采样的空间声学混响中。",
@@ -418,16 +382,11 @@
   "vbPluginLockedHint": "通道处理关闭时插件不运行（状态保留，开启后立即恢复）",
   "vbAutoProtect": "超预算自动保护",
   "vbProtectHint": "音频处理时限由驱动缓冲区决定（如 128 帧 @ 48kHz = 2.7ms 截止预算）。当效果器/插件的处理耗时（EMA）持续超过预算的 85% 时，系统自动将重负载插件收窄至当前监听总线，其余总线直通，以杜绝爆音与掉字卡顿；负载回落安全阈值后将自动恢复。",
-  "vbProtectActive": "已激活：插件仅作用于监听总线，其余直通（回调超预算）",
   "vbProtectActiveTag": "保护已激活",
-  "shelfTitle": "低频搁架",
   "shelfHint": "分频点以下整体托起/压低，补录音偏瘦的低频或收油腻的轰头",
   "shelfFreq": "增益分频",
   "shelfGain": "增益",
-  "shelfFreqInfo": "低于该频率整体增减，40~400Hz，一般放 80~120Hz。",
-  "shelfGainInfo": "托起为正、压低为负；和低音增强是两条路，可叠加但别 double。",
   "bassShapingTitle": "低音塑形",
-  "bassShapingHint": "融合低频搁架滤波与低音单声道化，塑造紧致干净的低频响应",
   "shelfFreqTooltip": "设定低频搁架滤波器的分频截止频率点（40~400Hz），该频率以下的低音整体增减",
   "shelfGainTooltip": "分频点以下整体增益提升或衰减（-15~+15dB）。正值增强低频厚度，负值收紧轰鸣",
   "bassmonoFreqTooltip": "低于此分频点的低频信号混合为单声道（20~300Hz），集中低音能量，消除低频相位抵消与混浊感",
@@ -522,27 +481,14 @@
   "bassGain": "增强量",
   "reverb": "混响",
   "reverbPreset": "预设",
-  "reverbOff": "关闭",
   "stereoWiden": "立体声扩展",
   "postGain": "输出增益",
   "postPerChannelTrim": "逐声道输出补偿",
   "postPerChannelTrimHint": "对各个输出声道进行独立的电平微调（-15 ~ +15 dB）",
   "postResetAllTrim": "全部归零",
-  "equalizer": "均衡器",
   "limiter": "限制器",
   "engineInfo": "引擎",
   "engineForm": "Desktop（进程内）",
-  "engineAbi": "ABI v{a} · {v}",
-  "@engineAbi": {
-    "placeholders": {
-      "a": {
-        "type": "int"
-      },
-      "v": {
-        "type": "String"
-      }
-    }
-  },
   "theme": "配色方案",
   "themeAuraDark": "Aura 暗色",
   "themeAuraLight": "Aura 亮色",
@@ -560,7 +506,6 @@
   "reverbPreset5": "房间",
   "reverbPreset6": "大礼堂",
   "reverbPreset7": "板式混响",
-  "sourceCard": "音频源",
   "srcTone": "测试音 440Hz",
   "srcPink": "粉噪",
   "srcFile": "打开 WAV 文件",
@@ -586,7 +531,6 @@
     }
   },
   "audioMode": "音频模式",
-  "audioModeHint": "模式切换即时生效；WASAPI 最终只收敛于 AuraVAIO 模式",
   "audioParadigm": "处理范式",
   "audioParadigmHint": "选择音频接入形态：附加模式原地挂载处理，普通管线模式端到端流转",
   "paradigmAttachment": "附加模式",
@@ -621,7 +565,6 @@
   "tagLoopback": "[内录/环回]",
   "tagRecording": "[录制]",
   "apoTargetEndpoint": "附加目标端点",
-  "apoTargetEndpointHint": "选择要挂载 AuraDSP 系统级 APO 处理的音频端点",
   "apoStatus": "APO 挂载状态",
   "apoAttached": "已附加",
   "apoAttachedOn": "已附加（{name}）",
@@ -645,7 +588,6 @@
   "asioDriverStatus": "驱动状态",
   "asioDriverRegistered": "已在系统注册",
   "asioDriverNotRegistered": "未注册",
-  "asioDriverActionRegister": "一键注册驱动",
   "asioDriverActionUnregister": "一键注销驱动",
   "asioDawStatus": "DAW 状态",
   "asioDawConnected": "活跃连接中",
@@ -655,11 +597,8 @@
   "monitorMirroring": "本地耳机监听镜像",
   "monitorMirroringHint": "尚未实现：监听镜像（向物理耳机分路一份处理后音频）仍在开发中，此开关暂不改变任何音频路径",
   "audioDevice": "设备",
-  "modeAuto": "自动",
   "sampleRate": "采样率",
   "buffer": "缓冲区",
-  "modeVaio": "AuraVAIO",
-  "modeVb": "Voicemeeter",
   "modeSysApo": "System APO",
   "linuxModeSystem": "系统",
   "linuxModeVirtual": "虚拟声卡",
@@ -677,7 +616,6 @@
   "linuxOutputToVirtualHint": "提示：系统默认输出当前是 auradsp_virtual，处理后的声音会被送入虚拟设备、在本机听不到。建议在系统声音设置中改回真实设备。",
   "linuxOutputSink": "输出设备",
   "linuxOutputSinkDefault": "PulseAudio 默认输出",
-  "linuxOutputFormat": "输出格式",
   "linuxCaptureSource": "采集源",
   "linuxCaptureNone": "无（当前模式不采集）",
   "linuxVirtualDevice": "虚拟设备",
@@ -694,7 +632,6 @@
   "linuxAlsaDeviceEdit": "编辑",
   "linuxAlsaDeviceUnset": "default（未指定）",
   "linuxAlsaExpertHint": "专家模式经 ALSA 直连设备（period 256 帧），延迟低于 PulseAudio；切换后端或设备后音频引擎会自动重启生效。PipeWire 系统上 hw: 设备可能被会话管理器占用而打开失败，失败原因会显示在状态中。",
-  "modeAsio": "ASIO",
   "asioDriver": "ASIO 驱动",
   "asioBufSize": "缓冲档",
   "asioBufAuto": "自动（驱动首选）",
@@ -727,11 +664,6 @@
   },
   "asioLatChanged": "驱动已上报延迟变更（重开会话后刷新）",
   "asioDropouts": "欠载",
-  "modeRoot": "Root",
-  "modeRootless": "Rootless",
-  "modeSystem": "系统",
-  "modeVirtual": "虚拟",
-  "modeDriver": "驱动",
   "catAppearance": "外观",
   "catAudio": "音频",
   "catSystem": "系统",
@@ -750,11 +682,9 @@
   "pageEffectsTitle": "音效控制",
   "pageVisualizerEyebrow": "分析器",
   "pageVisualizerTitle": "实时频谱",
-  "pageSettingsEyebrow": "偏好",
   "pageSettingsTitle": "设置",
   "statusLabel": "状态",
   "levelsTitle": "电平",
-  "deviceLabel": "输出设备",
   "peakLabel": "峰值",
   "visualizerSettingsTip": "可视化设置",
   "visualizerShowLyricsTip": "显示歌词",
@@ -842,15 +772,7 @@
   "railCollapseTip": "收起导航栏",
   "railExpandTip": "展开导航栏",
   "navLiveprog": "脚本",
-  "pageLiveprogEyebrow": "实时编程",
-  "pageLiveprogTitle": "可编程 DSP",
-  "lpEditor": "EEL2 编辑器",
-  "lpEditorHint": "寄存器 spl0/spl1（左右样本）、srate、slider1..8；@init 段需至少一条语句",
-  "lpApply": "应用并编译",
   "lpUnload": "卸载",
-  "lpNew": "新建模板",
-  "lpCompileOk": "编译成功，脚本运行中",
-  "lpNoCode": "尚未加载脚本（使能时直通）",
   "lpStatusOk": "运行中",
   "lpStatusIdle": "未加载",
   "lpStatusError": "编译失败",
@@ -878,18 +800,11 @@
       }
     }
   },
-  "lpOverwriteTitle": "覆盖确认",
-  "lpOverwriteBody": "已存在同名脚本，覆盖吗？",
-  "lpOverwriteAction": "覆盖",
   "lpDeleteTitle": "删除脚本",
   "lpDeleteBody": "确定删除该脚本文件吗？不可撤销。",
   "lpDeleteAction": "删除",
   "lpRenameTitle": "重命名脚本",
-  "lpOpFailed": "操作失败，请重试",
   "lpCompiledIdle": "已编译 · 点击顶栏应用生效",
-  "lpSliders": "脚本滑块（slider1..8）",
-  "lpSliderHint": "有声明按声明，无声明默认 0..1；改动实时生效",
-  "lpLibrary": "脚本库",
   "lpLibraryEmpty": "库为空 — 用下方名称框保存当前代码",
   "lpSave": "保存到库",
   "lpApoDialogTitle": "导入 EqualizerAPO 预设 (.txt)",
@@ -950,38 +865,25 @@
   "convClear": "清除 IR",
   "convNoIr": "未加载脉冲文件（支持 WAV / FLAC；含格式嗅探、尺寸限额与健全性校验）",
   "convResampled": "源采样率与设备不同，已自动重采样",
-  "fvTitle": "参数化混响",
   "fvDecayLabel": "衰减",
   "fvDampLabel": "阻尼",
-  "fvWetLabel": "湿声",
   "fvDryLabel": "干声",
   "presetTitle": "预设",
   "presetHint": "保存/载入引擎全量参数快照（配置目录下 presets/）；T2 效果在音乐档下会被守卫拒绝（诚实提示）",
-  "presetLoadHint": "点击载入：",
-  "presetEmpty": "库为空 — 调好参数后用下方名称框保存",
   "presetSave": "保存当前",
-  "presetDelete": "删除",
   "presetSaved": "预设已保存",
   "presetSaveFail": "保存失败（名称非法或磁盘不可写）",
   "presetDirtyBadge": "自定义（未保存）",
   "presetDeleted": "预设已删除",
   "presetDeleteFail": "删除失败（文件可能被占用或已不存在）",
-  "presetLoaded": "预设已载入",
-  "presetLoadFail": "预设读取失败",
   "navPlugins": "插件",
   "navChain": "处理链",
   "convMix": "混合比例",
-  "convMixHint": "干湿比：0% = 纯原始信号，100% = 纯卷积结果（默认 100%，等同经典 IR 加载）",
   "ddcTitle": "VDC 空间校正",
   "ddcOpen": "打开 VDC 文件",
   "ddcNoFile": "未加载校正文件（.vdc：耳机/扬声器空间校正系数，兼容蝰蛇音效 DDC）",
   "ddcLoaded": "已加载",
-  "ddcClear": "清除",
-  "lpFormat": "格式化",
-  "convSpectrumTitle": "脉冲频响包络",
-  "fv3DTitle": "3D 声场渲染",
   "advanced": "高级",
-  "stageTube": "电子管",
   "tubeTitle": "电子管模拟器",
   "tubeHint": "模拟经典电子管放大器与开盘磁带机的非线性饱和特性。通过注入富有音乐感的偶次与奇次泛音，消除数字音频生硬冷涩感，赋予声音温润、饱满的模拟胶片暖色调。",
   "spatialReverbTitle": "空间混响",
@@ -991,7 +893,6 @@
   "reverbMix": "混响干湿比",
   "eqMultiBand": "多段图形均衡器",
   "eqBands": "{n}段",
-  "eqPresets": "预设风格",
   "eqFlat": "平直复位",
   "eqBypass": "旁路对比",
   "eqQFactor": "Q值锐度",
@@ -1015,7 +916,6 @@
   "tubeCompensation": "输出电平补偿",
   "tubeMix": "干湿混合比",
   "dlgCancel": "取消",
-  "dlgAdd": "添加",
   "dlgSave": "保存",
   "dlgClose": "关闭",
   "dlgUnload": "卸载",
@@ -1078,7 +978,6 @@
       }
     }
   },
-  "eqCanvasHint": "上下拖动调增益 · 双击节点归零 0dB · 双击背景平直复位",
   "eqBypassOn": "旁路生效中 (Bypass)",
   "eqFilterMinphase": "最小相位 FIR",
   "eqFilterIir6": "6阶 IIR",
@@ -1097,9 +996,6 @@
   "eqPresetCustom": "自定义 (Custom)",
   "eqPresetPick": "选择 EQ 风格预设",
   "eqQTip": "Q-Factor 滤波器锐度 (0.3 ~ 10.0)\n垂直拖动调节 · 双击复位 1.41",
-  "stTube": "电子管",
-  "stComp": "压限器",
-  "stBassmono": "低频单声道",
   "stGate": "噪声门",
   "stFilter": "滤波器",
   "filterHint": "gate 之后的第一道整形：HP 去隆隆声，LP/BP 按需",
@@ -1120,7 +1016,6 @@
   "stHaas": "差分环绕",
   "stExciter": "激励器",
   "stLoudness": "响度补偿",
-  "stDyneq": "动态EQ",
   "dyneqTitle": "动态均衡器",
   "dyneqHint": "三段全参数动态均衡：频段能量超阈后自动衰减，阈下只做静态整形",
   "dyneqBandLow": "低频段",
@@ -1134,13 +1029,9 @@
   "dyneqAttack": "启动时间",
   "dyneqRelease": "释放时间",
   "loudnessAmount": "补偿强度",
-  "exciterHint": "给高频加谐波，压缩音频的空气感来源",
   "exciterAmount": "谐波量",
   "exciterHifreq": "取频点",
   "exciterHifreqInfo": "只取该频率以上成分做谐波。MP3 缺高频时往低调，齿音重时往高调。",
-  "chainPinnedFirst": "首位钉死",
-  "chainPinnedLast": "末位钉死",
-  "haasHint": "延迟侧制造声场宽度，另一侧恒直通保兼容",
   "haasDelay": "延迟量",
   "haasMix": "差分混合比",
   "haasSide": "延迟侧",
@@ -1158,15 +1049,10 @@
   "spatialStyleNeutral": "中性",
   "spatialStyleCustom": "自定义",
   "spatialRoom": "房间",
-  "spatialRoomInfo": "声学室体量与早期反射强度：0 为无反射自由声场，数值增大可扩展房间空间体量与壁面反射余韵。",
   "spatialWidth": "张角",
-  "spatialWidthInfo": "声场展宽与虚拟扬声器开角：拓展左右声场宽度，营造沉浸式脱箱感。",
   "spatialCenter": "中置",
-  "spatialCenterInfo": "中置声像与对白聚焦：适度提升可增强居中人声主体的凝聚力与清晰度。",
   "spatialOutGain": "输出",
-  "spatialOutGainInfo": "空间音效模块后级输出增益补偿 (-12 ~ +6 dB)。",
   "spatialAutoGain": "自动增益",
-  "spatialAutoGainInfo": "等响度自适应控制：自动匹配输入信号有效能量，避免声场处理引起整体音量跳变。",
   "spatialMix": "空间化比例",
   "spatialMixInfo": "干声与空间声的混合比例。0% 等同旁路，100% 为完整虚拟声场",
   "spatialElevation": "高度",
@@ -1180,15 +1066,12 @@
   "src51Fold": "混缩",
   "src51Pass": "直通",
   "src51Hint": "多声道文件：混缩进引擎处理，直通绕开引擎；设备声道不足时自动回落混缩",
-  "bassmonoHint": "链头处理：分频点以下单声道化，防小音箱低频破音",
   "bassmonoFreq": "低音单声道分频",
-  "stEq": "均衡器",
   "stArbmag": "任意响应 EQ",
   "stScript": "脚本",
   "chainTitle": "处理链",
   "chainOrderTitle": "处理顺序",
   "chainOrderHint": "拖拽调整信号处理先后（自上而下）；改动后点\"应用\"。支持独立旁路/启用单节点；右侧显示每节点实时双声道电平。",
-  "chainApply": "应用顺序",
   "chainReset": "恢复默认",
   "chainReserved": "预留",
   "chainGrpInput": "输入整形",
@@ -1197,26 +1080,15 @@
   "chainGrpSound": "声场",
   "chainGrpSpatial": "空间",
   "chainGrpOut": "输出段",
-  "chainFlowTitle": "信号流（当前顺序）",
-  "chainFlowCaption": "全局信号流顺序示意：",
-  "chainNodeInput": "输入门控",
-  "chainNodeLimiter": "主限幅 Limiter",
-  "chainNodeOutputGate": "输出门控",
-  "chainNodeOutput": "音频输出",
   "lpManual": "参考手册",
-  "lpManualTitle": "EEL2 快速参考手册",
-  "lpManualContent": "【核心音频流寄存器】\n• spl0: 左声道样本值（浮点数，标称 ±1.0）\n• spl1: 右声道样本值（浮点数，标称 ±1.0）\n• srate: 当前设备实际采样率 (Hz)\n\n【交互滑块变量】\n• slider1 ~ slider8: 界面动态滑块参数（默认 0.0 ~ 1.0）\n\n【代码段规范】\n• @init: 脚本加载或重置时执行一次（必须至少包含一条语句）\n• @slider: 用户滑动滑块或参数变动时触发\n• @sample: 每个音频样本点流过时执行",
-  "lpEditorTooltip": "基于 Cockos EEL2 脚本引擎的实时音频 DSP 编程环境，可在音频流中动态注入自定义算法。",
   "exciterMode": "模式",
   "exciterModeTooltip": "通过非线性传递函数产生高频泛音与丰富谐波，补偿高频衰减，重塑空气感与通透细节。",
   "exciterAmountInfo": "控制注入的高频谐波与原信号的混合比例。适度提升可显著增加声音光泽度，过高可能产生毛刺感。",
   "eqModeLabel": "模式",
   "eqModeTooltip": "频段模式切换。在频谱画布中上下拖动节点调整增益，双击复位为 0dB，右侧调节选定频点的 Q 值锐度。",
   "haasSideTooltip": "Haas 效应差分环绕：将单侧声道延迟 0~25ms，利用双耳到达时间差在耳机中营造自然脱箱的环绕包围感。",
-  "bassmonoCombinedTooltip": "将设定分频点以下的超低频合并为单声道，消除低频相位抵消与浑浊感，增强低音凝聚力与下潜力度。",
   "inputGate": "输入门控",
   "inputGain": "总输入增益",
-  "channelBalance": "声道平衡",
   "channelBalanceHint": "每个声道单独控制，默认100%。最终每个声道音量 = 总输入增益 × 单通道控制。",
   "channelLeft": "左声道 (L)",
   "channelRight": "右声道 (R)",
@@ -1268,18 +1140,6 @@
   "chainSlotHint": "可在“插件”页面选择效果器加载至本插槽",
   "chainOpenGui": "打开原生界面 (GUI)",
   "chainBypassed": "已旁路",
-  "chainEnable": "启用",
-  "lpSaved": "已保存：{name}.eel",
-  "@lpSaved": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "lpAddDirTitle": "添加外部脚本预设目录",
-  "lpAddDirPrompt": "请输入包含 .eel / .txt 脚本预设的完整文件夹路径：",
-  "lpAddDirExample": "例：…/AudioScripts/EelPresets",
   "lpChars": "{n} 字符",
   "@lpChars": {
     "placeholders": {
@@ -1308,20 +1168,7 @@
       }
     }
   },
-  "lpShowAll": "全部 8 槽",
-  "lpAdaptive": "自适应 ({n})",
-  "@lpAdaptive": {
-    "placeholders": {
-      "n": {
-        "type": "int"
-      }
-    }
-  },
-  "lpNoSliders": "当前代码未声明或引用 slider1..8 参数（纯算法处理）",
-  "lpExpandSliders": "展开全部 8 槽滑块",
   "lpAddDir": "添加外部目录",
-  "lpSlidersHint": "滑块条已自适应当前脚本声明与引用的 slider 参数；支持点击右上角切换模式。",
-  "lpLibraryHint": "支持本地脚本库与外部多预设文件夹自动索引。",
   "convIrTitle": "脉冲响应 (IR)",
   "convFramesLine": "{frames} 帧 · {dur} · {ch}ch · 峰值 {peak} dBFS · 源 {rate}Hz",
   "@convFramesLine": {
@@ -1344,7 +1191,6 @@
     }
   },
   "ddcFilterTitle": "VDC 滤波器",
-  "stereoBandActive": "分带生效中",
   "stBand0": "低频段",
   "stBand1": "中低频",
   "stBand2": "中频",
@@ -1371,11 +1217,9 @@
     }
   },
   "presetSaveHint": "输入预设名称保存当前状态为用户预设",
-  "convSpectrumCaption": "32 频带 · 0..1 归一化能量",
   "sliderResetTip": "点击重置默认值",
   "plugAddDirTitle": "添加插件检索目录",
   "plugAddDirPrompt": "请输入或粘贴包含 64 位 VST3 / CLAP 效果器的完整文件夹路径：",
-  "plugAddDirExample": "例：…/AudioPlugins/VST3",
   "plugAddScan": "添加并扫描",
   "plugTitle": "插件中心",
   "plugUnsupported": "插件功能在当前平台不可用",
@@ -1383,7 +1227,6 @@
     "description": "R4：非 Windows 平台插件宿主不可用时的占位提示"
   },
   "plugLibTitle": "第三方效果器库",
-  "plugLibHint": "系统标准 VST3 / CLAP 64 位专业插件扫描与管理，支持无缝延迟补偿与高保真超低延迟运行。",
   "plugDeepScan": "深度遍历",
   "@plugDeepScan": {
     "description": "深扫勾选：会加载每个插件 DLL 以读取精确元数据，明显更慢"
@@ -1408,14 +1251,6 @@
   "plugScanNoVerify": "快扫不加载插件：仅读取文件元数据，插件在挂载时才验证",
   "plugOpenFolder": "打开 VST3 标准目录",
   "plugSearchHint": "搜索插件名称、厂商或路径...",
-  "plugM1Title": "M1 插件宿主引擎规范",
-  "plugM1Hint": "多格式进程内宿主已支持 64 位 VST3 与 CLAP 架构。",
-  "plugFeatSlots": "四槽位对称机架 (Slot 1 ~ Slot 4) 独立管理与并发",
-  "plugFeatStages": "全音效链阶段插入 (Pre-DSP ~ Post-Limiter)",
-  "plugFeatGui": "原生 Win32 GUI 弹窗独立消息循环",
-  "plugFeatDirs": "可自定义插件目录检索与本地状态快照",
-  "plugFeatRt": "实时极速监听：专为专业制作定制的零卡顿音频通道",
-  "plugFeatRoute": "VB 按路插件逐路独立配置",
   "plugSlot": "插槽 {n} (Slot {n})",
   "@plugSlot": {
     "placeholders": {
@@ -1446,15 +1281,6 @@
     }
   },
   "plugMountEmptyHint": "请在下方效果器库列表中选择已安装的 VST3 / CLAP 插件进行加载",
-  "plugScanNow": "立即扫描本机已安装插件",
-  "plugMountedTitle": "当前挂载插件 (插槽 {n})",
-  "@plugMountedTitle": {
-    "placeholders": {
-      "n": {
-        "type": "int"
-      }
-    }
-  },
   "plugMountedTitleNamed": "当前挂载插件 (插槽 {n})：{name}",
   "@plugMountedTitleNamed": {
     "placeholders": {
@@ -1500,8 +1326,6 @@
   "vbRouteFailed": "失败 · 直通",
   "vbRouteNotApplied": "未生效 · 直通",
   "plugUnloading": "卸载中…",
-  "plugStateActive": "生效",
-  "plugStateBypassed": "旁路",
   "plugUnloadFromSlot": "从当前槽卸载",
   "plugLoadToSlot": "载入至插槽 {n}",
   "@plugLoadToSlot": {
@@ -1529,14 +1353,6 @@
     }
   },
   "@plugSlotActive": {
-    "placeholders": {
-      "n": {
-        "type": "int"
-      }
-    }
-  },
-  "plugSlotLoaded": "插槽 {n} 已载入",
-  "@plugSlotLoaded": {
     "placeholders": {
       "n": {
         "type": "int"
@@ -1596,7 +1412,6 @@
   "arbmagEmptyHint": "尚未加载曲线。可点击上方预设、导入 AutoEq GraphicEQ 文件或粘贴代码。",
   "arbmagEditor": "GraphicEQ 代码编辑器",
   "arbmagApply": "应用代码",
-  "arbmagInvalidFormat": "GraphicEQ 格式错误或未包含有效节点",
   "crossfeedTitle": "串扰消除",
   "crossfeedMode": "模式",
   "crossfeedDesc": "专为耳机设计，通过低通互馈消除头中效应与听觉疲劳",
@@ -1606,20 +1421,6 @@
   "crossfeedModeCustom": "自定义",
   "crossfeedCutoff": "截止频率",
   "crossfeedFeed": "互馈电平",
-  "crossfeedActiveDesc": "当前生效：{mode} ({fcut} Hz, {feed} dB)",
-  "@crossfeedActiveDesc": {
-    "placeholders": {
-      "mode": {
-        "type": "String"
-      },
-      "fcut": {
-        "type": "String"
-      },
-      "feed": {
-        "type": "String"
-      }
-    }
-  },
   "fxCatFront": "前置整形",
   "fxCatCore": "核心处理",
   "channelCenter": "中央声道 (C)",
@@ -1658,7 +1459,6 @@
   "testAudioWavPrompt": "请输入或选择测试音频 (WAV) 文件路径：",
   "testAudioMp3Prompt": "请输入或选择 MP3 音频文件路径：",
   "testAudioLoad": "加载音频",
-  "pathPickerTitle": "选择路径",
   "pathPickerConfirm": "确认",
   "pathPickerBrowse": "浏览...",
   "pathPickerClear": "清空",
@@ -1699,12 +1499,7 @@
   "errReadOnly": "该参数为只读",
   "errInternal": "引擎内部错误",
   "errHostUnavailable": "宿主不可用",
-  "lpFindReplace": "查找与替换",
-  "lpSidebarLeft": "切换左侧面板 (大纲与脚本库)",
-  "lpSidebarRight": "切换右侧面板 (滑块与控制台)",
   "lpConsole": "控制台",
-  "lpNewScriptWizard": "新建脚本向导",
-  "lpApoImportTitle": "导入 APO 预设",
   "lpConfirmDiscardTitle": "放弃未保存修改？",
   "lpConfirmDiscardBody": "当前脚本包含未保存的修改。加载新内容将覆盖现有修改。是否继续？",
   "lpConfirmDiscardAction": "放弃并覆盖",
@@ -1752,15 +1547,11 @@
   "lpLibOpenInExplorer": "在文件管理器中浏览",
   "lpLibDirInvalid": "目录不存在或已失效",
   "lpLibSaveCurrent": "保存当前脚本到库",
-  "lpLibCustomDirs": "脚本目录",
-  "lpSlidersPanelTitle": "参数调节滑块",
   "lpSlidersCollapse": "收起面板",
   "lpSlidersExpand": "展开面板",
   "lpTabScriptSliders": "脚本参数",
   "lpTabInputChannels": "输入通道 (8)",
   "lpTabOutputChannels": "输出通道 (8)",
-  "lpCustomVarTag": "脚本变量",
-  "lpCustomVarHint": "脚本内部变量（在 @init 赋初值；若需在宿主中实时调节，可映射至 slider1..8）",
   "lpInputTrimHint": "8 声道统一架构输入前级平衡与主增益",
   "lpOutputGainHint": "8 声道后级独立输出增益补偿 (-15dB ~ +15dB)",
   "lpResetAll": "全部复位",

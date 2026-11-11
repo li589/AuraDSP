@@ -157,6 +157,8 @@ set_property(TARGET apo_inspect PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"
 # APO 挂载管理 CLI（apo_config.py 的原生移植，2026-11-09 §2.3 方案 A）：
 # 注册表操作在 advapi32，提权/管理员判定在 shell32；端点枚举复用
 # auraapo_inspect。随安装包 driver/ 分发，替代 python 运行时依赖。
+# 本 exe 为唯一实现（全面复审 S6 / APO-13：原生化前的 apo_config.py
+# 已删，App 只定位 apo_config.exe，勿再新增 Python 平行实现）。
 add_executable(apo_config
     "${APO}/apo_config.cpp"
 )
