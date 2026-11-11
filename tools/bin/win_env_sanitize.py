@@ -20,7 +20,16 @@
 
 修法
 ----
-读原生环境块（ctypes `GetEnvironmentStringsW`），按大小写不敏感合并重复键：
+读原生环境块（ctypes `GetEnvironmentStringsW`），先在**双 NUL 终止符处
+截断**，再按大小写不敏感合并重复键：
+
+  * 截断（2026-11-11 补修）：探测循环把整段定长缓冲解码后只查「终止符
+    存在」却不截断，终止符之后的堆内存被当成环境条目一并解析。堆布局
+    benign 时块外恰为零字节、无从察觉；SSH 派生进程里块外是多份环境块
+    拷贝等非零残留，幻影条目可达数千条，合并后的环境块超过 CreateProcess
+    的 32K 上限，子进程以 `OSError: [WinError 87]` 起不来。解析必须以
+    终止符为界（`parse_block`），探测也以字节级对齐扫描为准
+    （`find_block_end`）。
 
   * `PATH` 取所有变体的**并集**（保持出现顺序、去重）——三份取值通常各含
     一部分目录，丢掉任何一份都会让工具链找不到；
@@ -49,6 +58,47 @@ import subprocess
 import sys
 
 
+def find_block_end(data):
+    """返回双 NUL 终止符在原始字节中的起始偏移，未找到返回 -1。
+
+    环境块是 UTF-16LE：条目以单个 NUL 字符分隔，块以双 NUL 结尾，
+    即字节层的 `00 00 00 00`。该序列也可能在奇数偏移处偶然出现
+    （某个字符的低字节为 0x00 等），故只认偶数偏移（字符对齐）。
+    块内条目本身不可能含 NUL 字符，所以首个对齐命中即终止符。
+    """
+    needle = b"\x00\x00\x00\x00"
+    pos = 0
+    while True:
+        idx = data.find(needle, pos)
+        if idx < 0:
+            return -1
+        if idx % 2 == 0:
+            return idx
+        pos = idx + 1
+
+
+def parse_block(data):
+    """把原生环境块字节解析为 (name, value) 列表，保持出现顺序。
+
+    在双 NUL 终止符处截断——终止符之后的字节是进程堆上的残留内存，
+    不是环境内容（2026-11-11 定罪：未截断时 SSH 派生进程里幻影条目
+    可达数千条，合并环境块超 32K 后 CreateProcess 报 WinError 87）。
+    无终止符时按整段解析（read_raw_block 的探测循环保证调用前已确认
+    终止符在缓冲内；整段解析只作防御性兜底）。
+    """
+    end = find_block_end(data)
+    if end >= 0:
+        data = data[:end]
+    text = data.decode("utf-16-le", errors="replace")
+    entries = []
+    for chunk in text.split("\x00"):
+        if not chunk:
+            continue
+        name, sep, value = chunk.partition("=")
+        entries.append((name, value if sep else ""))
+    return entries
+
+
 def read_raw_block():
     """返回原生环境块里的 (name, value) 列表，保持出现顺序。"""
     k32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -65,8 +115,10 @@ def read_raw_block():
     try:
         # 原生块是 UTF-16、以双 NUL 结尾；wstring_at 会在首个 NUL 处截断，
         # 必须整块拷出来再切分。但环境块没有公开长度，一次性读太大会在
-        # 块尾越界触发访问违例，所以按块探测：读到双 NUL 终止符即止，
-        # 越界就折半重来。
+        # 块尾越界触发访问违例，所以按块探测：缓冲内出现双 NUL 终止符
+        # 即止，越界就折半重来。注意缓冲会大于真实块长，终止符之后的
+        # 字节是堆残留，解析时由 parse_block 截断，绝不能一并切分
+        # （旧实现只查存在、不截断，幻影条目由此而来）。
         size = 65536
         while True:
             try:
@@ -78,8 +130,7 @@ def read_raw_block():
                 if size < 4096:
                     raise
                 continue
-            text = data.decode("utf-16-le", errors="replace")
-            if "\x00\x00" in text:
+            if find_block_end(data) >= 0:
                 break
             size *= 2
             if size > (1 << 22):
@@ -87,13 +138,7 @@ def read_raw_block():
     finally:
         k32.FreeEnvironmentStringsW(ptr)
 
-    entries = []
-    for chunk in text.split("\x00"):
-        if not chunk:
-            continue
-        name, sep, value = chunk.partition("=")
-        entries.append((name, value if sep else ""))
-    return entries
+    return parse_block(data)
 
 
 def split_path(value):

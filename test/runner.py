@@ -56,6 +56,10 @@ PLATFORM_ANY = {
     "smoke_apo_plugin_layout.py",
     "smoke_round5_forensics.py",
     "smoke_round6_vaio_unmap.py",
+    # win_env_sanitize 环境块截断门（2026-11-11）：合成缓冲实测
+    # parse_block 在双 NUL 终止符处截断（幻影条目不得入净化结果），
+    # 纯 Python，两平台可跑。
+    "smoke_win_env_sanitize.py",
     # EEL 手册防漂移（2026-11-08）：手册条目 ↔ VM fnTable1 存在性 +
     # 定长签名个数 + 宿主环境条目齐备，纯源码扫描，两平台可跑。
     "smoke_eel_manual.py",
@@ -352,6 +356,7 @@ def run_smoke_tests():
     "smoke_apo_plugin_layout.py",
     "smoke_round5_forensics.py",
     "smoke_round6_vaio_unmap.py",
+    "smoke_win_env_sanitize.py",
         # EEL 手册防漂移门禁（2026-11-08）：手册 92 条 ↔ VM fnTable1
         # 200 函数的存在性与定长签名比对（freembuf 幽灵条目、mldivide /
         # quadprog 等签名个数错误、num_ch 等宿主条目缺失的全量比对收口）。
