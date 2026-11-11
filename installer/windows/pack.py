@@ -497,14 +497,20 @@ def apply_defaults(work_staging: Path, what_if: bool) -> None:
     env = dict(os.environ,
                AURADSP_EMIT_DEFAULTS=str(work_staging / "defaults"))
     log("defaults: 经 App 契约测试生成默认层…")
-    r = subprocess.run(
-        [flutter, "test", "test/defaults_emit_test.dart"],
-        cwd=str(app_dir), env=env,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-        errors="replace")
-    if r.returncode != 0:
-        tail = "\n".join((r.stdout or "").splitlines()[-15:])
-        raise die(f"defaults 生成失败（flutter test rc={r.returncode}）：\n{tail}")
+    # stdout 必须落真实文件、不能用 PIPE：flutter test 的测试子进程经
+    # Python 管道继承句柄时会在加载阶段断连（"Connection closed before
+    # test suite loaded"，2026-11-12 开发机实证）；文件重定向无此问题。
+    import tempfile
+    with tempfile.TemporaryFile(mode="w+b") as lf:
+        r = subprocess.run(
+            [flutter, "test", "test/defaults_emit_test.dart"],
+            cwd=str(app_dir), env=env,
+            stdout=lf, stderr=subprocess.STDOUT)
+        if r.returncode != 0:
+            lf.seek(0)
+            tail = "\n".join(
+                lf.read().decode("utf-8", "replace").splitlines()[-15:])
+            raise die(f"defaults 生成失败（flutter test rc={r.returncode}）：\n{tail}")
     manifest = work_staging / "defaults" / "manifest.json"
     if not manifest.is_file():
         raise die("defaults 生成未产出 manifest.json")
