@@ -1,6 +1,8 @@
 # assets/ — 运行声学资源（原 resource/，P3b 改名）
 
 > 布局：`convolver/`（IR 脉冲）+ `ddc/`（VDC 耳机校正）+ `liveprog/`（EEL2 脚本）
+> + `plugins/`（随包插件，2026-11-12 资源计划 P1 起：暂为空占位，
+> 下分 `clap/`、`vst2/`、`vst3/`，后续可放开源免费插件）
 > + `manifest.json`（1MB，清单位级别盘点，版本化）。
 > 工具：`tools/resource_pipeline/clean_and_organize.py`（盘点入库）+
 > `tools/resource_pipeline/build_packages.py`（分级打包 + 沙箱覆盖演练）。

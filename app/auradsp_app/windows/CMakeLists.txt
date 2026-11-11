@@ -118,34 +118,24 @@ if(EXISTS "${AURAVAIO_BRIDGE_DLL}")
     COMPONENT Runtime)
 endif()
 
-# 声学资源包（VDC耳机校准库、Liveprog 脚本、核心脉冲与清单）：安装到 resources/
+# 声学资源包（卷积脉冲、VDC 校准、Liveprog 脚本、随包插件占位、清单）：
+# 安装到 resources/。资源计划 P1（2026-11-12）：全量存在性安装——
+# assets 下有什么装什么，不再写死 convolver 3/8 分类子集（旧口径下
+# 其余 5 类永不经 CMake 进包）；内容完整性由打包期资源合并
+# （pack.py --resources）与发行档位（标准 full / 轻量 light）负责，
+# CMake 层不裁剪。
 set(AURADSP_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../assets")
 if(EXISTS "${AURADSP_ASSETS_DIR}/manifest.json")
-  install(DIRECTORY "${AURADSP_ASSETS_DIR}/ddc"
-    DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
-    COMPONENT Runtime)
-  install(DIRECTORY "${AURADSP_ASSETS_DIR}/liveprog"
-    DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
-    COMPONENT Runtime)
+  foreach(_auradsp_res_dir convolver ddc liveprog plugins)
+    if(EXISTS "${AURADSP_ASSETS_DIR}/${_auradsp_res_dir}")
+      install(DIRECTORY "${AURADSP_ASSETS_DIR}/${_auradsp_res_dir}"
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
+        COMPONENT Runtime)
+    endif()
+  endforeach()
   install(FILES "${AURADSP_ASSETS_DIR}/manifest.json"
     DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
     COMPONENT Runtime)
-  # 核心常用卷积脉冲分类安装（耳机校准、空间3D、扬声器仿真）
-  if(EXISTS "${AURADSP_ASSETS_DIR}/convolver/01_headphone_correction")
-    install(DIRECTORY "${AURADSP_ASSETS_DIR}/convolver/01_headphone_correction"
-      DESTINATION "${CMAKE_INSTALL_PREFIX}/resources/convolver"
-      COMPONENT Runtime)
-  endif()
-  if(EXISTS "${AURADSP_ASSETS_DIR}/convolver/02_spatial_3d")
-    install(DIRECTORY "${AURADSP_ASSETS_DIR}/convolver/02_spatial_3d"
-      DESTINATION "${CMAKE_INSTALL_PREFIX}/resources/convolver"
-      COMPONENT Runtime)
-  endif()
-  if(EXISTS "${AURADSP_ASSETS_DIR}/convolver/07_speaker_devices")
-    install(DIRECTORY "${AURADSP_ASSETS_DIR}/convolver/07_speaker_devices"
-      DESTINATION "${CMAKE_INSTALL_PREFIX}/resources/convolver"
-      COMPONENT Runtime)
-  endif()
 endif()
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"

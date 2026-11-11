@@ -132,33 +132,22 @@ if(EXISTS "${AURADSP_PLUGIN_HOST_X86}")
 endif()
 
 # 声学资源包（与 Windows 侧同一清单）：安装到 bundle 根 resources/
-# （ResourceLocator 按 exe 旁 resources/ 探测）。
+# （ResourceLocator 按 exe 旁 resources/ 探测）。资源计划 P1
+# （2026-11-12）：与 Windows 同口径全量存在性安装，不再写死
+# convolver 3/8 分类子集；完整性由打包期资源合并（pack.sh
+# --resources）与发行档位（标准 full / 轻量 light）负责。
 set(AURADSP_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../assets")
 if(EXISTS "${AURADSP_ASSETS_DIR}/manifest.json")
-  install(DIRECTORY "${AURADSP_ASSETS_DIR}/ddc"
-    DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
-    COMPONENT Runtime)
-  install(DIRECTORY "${AURADSP_ASSETS_DIR}/liveprog"
-    DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
-    COMPONENT Runtime)
+  foreach(_auradsp_res_dir convolver ddc liveprog plugins)
+    if(EXISTS "${AURADSP_ASSETS_DIR}/${_auradsp_res_dir}")
+      install(DIRECTORY "${AURADSP_ASSETS_DIR}/${_auradsp_res_dir}"
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
+        COMPONENT Runtime)
+    endif()
+  endforeach()
   install(FILES "${AURADSP_ASSETS_DIR}/manifest.json"
     DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
     COMPONENT Runtime)
-  if(EXISTS "${AURADSP_ASSETS_DIR}/convolver/01_headphone_correction")
-    install(DIRECTORY "${AURADSP_ASSETS_DIR}/convolver/01_headphone_correction"
-      DESTINATION "${CMAKE_INSTALL_PREFIX}/resources/convolver"
-      COMPONENT Runtime)
-  endif()
-  if(EXISTS "${AURADSP_ASSETS_DIR}/convolver/02_spatial_3d")
-    install(DIRECTORY "${AURADSP_ASSETS_DIR}/convolver/02_spatial_3d"
-      DESTINATION "${CMAKE_INSTALL_PREFIX}/resources/convolver"
-      COMPONENT Runtime)
-  endif()
-  if(EXISTS "${AURADSP_ASSETS_DIR}/convolver/07_speaker_devices")
-    install(DIRECTORY "${AURADSP_ASSETS_DIR}/convolver/07_speaker_devices"
-      DESTINATION "${CMAKE_INSTALL_PREFIX}/resources/convolver"
-      COMPONENT Runtime)
-  endif()
 endif()
 
 foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
