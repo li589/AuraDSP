@@ -562,7 +562,13 @@ def stage_driver_files(
     _copy2_overwrite(apo.engine_dll, dest / apo.engine_dll.name)
     if include_asio_dll:
         _copy2_overwrite(asio, dest / ASIO_DLL_NAME)
-    (dest / "register_asio.ps1").write_text(REGISTER_ASIO_PS1, encoding="utf-8")
+    # .ps1 必须带 UTF-8 BOM 落盘（资源计划 Stage 0 / §8.4 定罪）：
+    # PowerShell 5.1 对无 BOM 的 .ps1 按系统 ANSI（中文 Windows
+    # = GBK）解码，脚本内中文字符串字节错位可吞掉引号导致解析
+    # 期 ParserError、脚本永不执行（register_asio.ps1 实测中
+    # 招：注册/反注册双向恒失败）。一律字节级补 BOM，正文不动。
+    (dest / "register_asio.ps1").write_bytes(
+        b"\xef\xbb\xbf" + REGISTER_ASIO_PS1.encode("utf-8"))
     for name in DRIVER_TEMPLATE_FILES:
         src = DRIVER_TEMPLATE_DIR / name
         if not src.is_file():
@@ -570,6 +576,11 @@ def stage_driver_files(
         if name.lower().endswith(".txt"):
             (dest / name).write_text(
                 src.read_text(encoding="utf-8"), encoding="utf-8-sig")
+        elif name.lower().endswith(".ps1"):
+            raw = src.read_bytes()
+            if not raw.startswith(b"\xef\xbb\xbf"):
+                raw = b"\xef\xbb\xbf" + raw
+            (dest / name).write_bytes(raw)
         else:
             _copy2_overwrite(src, dest / name)
     return copied

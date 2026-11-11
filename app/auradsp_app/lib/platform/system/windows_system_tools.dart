@@ -156,12 +156,18 @@ final class WindowsSystemTools implements WindowsSystemPort {
     // M-4）：--timeout 只约束工具内心跳等待，工具被拦截/
     // 挂死时无进程级超时则 checkApoStatus 的 Future 永不
     // 完成、设置页刷新悬挂无错误呈现。
+    // stdoutEncoding 必须显式 utf8（资源计划 Stage 0 / §8.3 定罪）：apo_config
+    // 输出 UTF-8 JSON，Dart 默认按 systemEncoding（中文 Windows
+    // = GBK）解码会把设备名解成乱码——面板「已附加（设备名）」
+    // 与端点清单名都走此通道。inspectAudioDevices 早已显式，
+    // 此处漏网。
     return Process.run(exePath, [
       'status',
       '--timeout',
       timeout.toString(),
       '--json',
-    ]).timeout(const Duration(seconds: 10));
+    ], stdoutEncoding: utf8)
+        .timeout(const Duration(seconds: 10));
   }
 
   @override
@@ -189,7 +195,7 @@ final class WindowsSystemTools implements WindowsSystemPort {
       '--force',
       if (composite) '--composite',
       '--json',
-    ]);
+    ], stdoutEncoding: utf8);
     return _apoResultFromStdout(res);
   }
 
@@ -215,7 +221,7 @@ final class WindowsSystemTools implements WindowsSystemPort {
       if (target.isNotEmpty) target,
       '--yes',
       '--json',
-    ]);
+    ], stdoutEncoding: utf8);
     return _apoResultFromStdout(res);
   }
 

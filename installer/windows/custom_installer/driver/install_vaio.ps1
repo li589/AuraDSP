@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   AuraDSP bundled AuraVAIO driver installer (self-contained, flat layout).
 

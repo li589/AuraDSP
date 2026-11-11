@@ -60,6 +60,10 @@ PLATFORM_ANY = {
     # parse_block 在双 NUL 终止符处截断（幻影条目不得入净化结果），
     # 纯 Python，两平台可跑。
     "smoke_win_env_sanitize.py",
+    # 随包 ps1 BOM 编码门（资源计划 Stage 0，2026-11-12）：无 BOM
+    # 的 UTF-8 ps1 在 PS 5.1 按 GBK 误读可致解析期死亡（ASIO 注
+    # 册脚本实测），纯 Python，两平台可跑。
+    "smoke_ps1_bom.py",
     # 第七轮项 6 契约门（2026-11-11）：VAIO 泵格式切换重同步
     # （一致性快照/帧长变化游标重对齐/fmtResyncs）+ 驱动 SetFormat
     # 发布几何，纯源码扫描，两平台可跑。
@@ -361,6 +365,7 @@ def run_smoke_tests():
     "smoke_round5_forensics.py",
     "smoke_round6_vaio_unmap.py",
     "smoke_win_env_sanitize.py",
+    "smoke_ps1_bom.py",
     "smoke_round7_vaio_fmt.py",
         # EEL 手册防漂移门禁（2026-11-08）：手册 92 条 ↔ VM fnTable1
         # 200 函数的存在性与定长签名比对（freembuf 幽灵条目、mldivide /
