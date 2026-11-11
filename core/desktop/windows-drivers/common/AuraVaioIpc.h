@@ -60,6 +60,9 @@ Abstract:
 #define IOCTL_AURAVAIO_UNMAP_SHARED_RING \
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x803, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
+// 注记（全面复审 S5 / VAIO-12)：GET_DEBUG_LOG 只有开发工具消费
+// 者（01_vaio_driver/tools 与 vaio_multichannel_probe)，App/桥均
+// 不调用——保留供真机取证，勿误认为产品路径缺接线。
 #define IOCTL_AURAVAIO_GET_DEBUG_LOG \
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x804, METHOD_BUFFERED, FILE_ANY_ACCESS)
 

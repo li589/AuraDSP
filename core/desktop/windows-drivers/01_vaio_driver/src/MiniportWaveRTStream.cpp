@@ -34,6 +34,8 @@ CMiniportWaveRTStream::~CMiniportWaveRTStream()
     if (m_KsState == KSSTATE_RUN)
     {
         AuraControlDevice_OnStreamStateChange(m_bCapture, KSSTATE_STOP);
+        // VAIO-3：运行中析构同为 RUN 离开边沿，计数须同步回落。
+        AuraControlDevice_OnStreamRunEdge(m_bCapture, FALSE);
     }
 
     //
@@ -110,7 +112,7 @@ CMiniportWaveRTStream::Init(
         m_ulBlockAlign      = wfx->nBlockAlign;
         m_ulBytesPerSecond  = wfx->nAvgBytesPerSec;
 
-        AuraControlDevice_OnFormatChange(wfx->nSamplesPerSec, wfx->nChannels, wfx->wBitsPerSample);
+        AuraControlDevice_OnFormatChange(Capture, wfx->nSamplesPerSec, wfx->nChannels, wfx->wBitsPerSample);
     }
 
     m_pMiniport   = Miniport;
@@ -173,7 +175,7 @@ CMiniportWaveRTStream::SetFormat(
         m_ulBlockAlign      = wfx->nBlockAlign;
         m_ulBytesPerSecond  = wfx->nAvgBytesPerSec;
 
-        AuraControlDevice_OnFormatChange(wfx->nSamplesPerSec, wfx->nChannels, wfx->wBitsPerSample);
+        AuraControlDevice_OnFormatChange(m_bCapture, wfx->nSamplesPerSec, wfx->nChannels, wfx->wBitsPerSample);
     }
 
     return STATUS_SUCCESS;
@@ -190,6 +192,17 @@ CMiniportWaveRTStream::SetState(
     switch (State)
     {
     case KSSTATE_STOP:
+        // 全面复审 S5（VAIO-2）：停钟前先把自上次 GetPosition 以来
+        // 已播放但未搬运的尾段刷进/出共享环——此前直接 Stop+Reset
+        // 令这段音频静默丢失（停播尾截断）。
+        if (m_KsState == KSSTATE_RUN)
+        {
+            KIRQL oldIrql;
+            KeAcquireSpinLock(&m_PositionLock, &oldIrql);
+            qpc = KeQueryPerformanceCounter(NULL);
+            AdvanceAndCopyLocked((ULONGLONG)qpc.QuadPart);
+            KeReleaseSpinLock(&m_PositionLock, oldIrql);
+        }
         qpc = KeQueryPerformanceCounter(NULL);
         m_Clock.Stop(qpc.QuadPart);
         m_Clock.Reset();
@@ -204,6 +217,15 @@ CMiniportWaveRTStream::SetState(
         break;
 
     case KSSTATE_PAUSE:
+        // 同 STOP：暂停前刷尾段（时钟同样停走）。
+        if (m_KsState == KSSTATE_RUN)
+        {
+            KIRQL oldIrql;
+            KeAcquireSpinLock(&m_PositionLock, &oldIrql);
+            qpc = KeQueryPerformanceCounter(NULL);
+            AdvanceAndCopyLocked((ULONGLONG)qpc.QuadPart);
+            KeReleaseSpinLock(&m_PositionLock, oldIrql);
+        }
         qpc = KeQueryPerformanceCounter(NULL);
         m_Clock.Stop(qpc.QuadPart);
         AuraControlDevice_OnStreamStateChange(m_bCapture, State);
@@ -222,10 +244,74 @@ CMiniportWaveRTStream::SetState(
 
     if (NT_SUCCESS(ntStatus))
     {
+        // 全面复审 S5（VAIO-3）：活跃流计数只在 RUN 边沿增减——
+        // 此前 OnStreamStateChange 按调用计数，RUN→PAUSE→RUN
+        // 重复加、PAUSE→STOP 凭空减，计数与真实在跑流数漂移。
+        const BOOLEAN wasRunning = (m_KsState == KSSTATE_RUN);
+        const BOOLEAN nowRunning = (State == KSSTATE_RUN);
+        if (wasRunning != nowRunning)
+        {
+            AuraControlDevice_OnStreamRunEdge(m_bCapture, nowRunning);
+        }
         m_KsState = State;
     }
 
     return ntStatus;
+}
+
+void
+CMiniportWaveRTStream::AdvanceAndCopyLocked(
+    _In_ ULONGLONG QpcNow
+    )
+{
+    ULONGLONG oldPlay = m_Clock.PlayOffset();
+    ULONG bytesAdvanced = m_Clock.Advance(QpcNow, m_ulBytesPerSecond);
+
+    if (bytesAdvanced == 0 || m_pDmaBuffer == NULL || m_ulBufferSize == 0)
+    {
+        return;
+    }
+
+    ULONG bytesToProcess = bytesAdvanced;
+    ULONGLONG startPlay = oldPlay;
+    if (bytesAdvanced > m_ulBufferSize)
+    {
+        // 全面复审 S5（VAIO-2）：停滞超过一整缓冲时只搬最近一缓冲
+        // 的内容，起点须随之前移 (oldPlay + advanced - size)——
+        // 此前仍从 oldPlay 起搬，窗口与播放位置错位 (advanced -
+        // size) 字节且永不自愈（与第七轮桥侧模偏移同类病）。
+        bytesToProcess = m_ulBufferSize;
+        startPlay = oldPlay + (bytesAdvanced - m_ulBufferSize);
+    }
+    ULONG startOffset = (ULONG)(startPlay % m_ulBufferSize);
+    ULONG chunk1 = m_ulBufferSize - startOffset;
+
+    if (!m_bCapture)
+    {
+        // Render: copy played audio from DMA buffer into shared ring buffer
+        if (chunk1 >= bytesToProcess)
+        {
+            AuraControlDevice_WriteRenderSamples(m_pDmaBuffer + startOffset, bytesToProcess);
+        }
+        else
+        {
+            AuraControlDevice_WriteRenderSamples(m_pDmaBuffer + startOffset, chunk1);
+            AuraControlDevice_WriteRenderSamples(m_pDmaBuffer, bytesToProcess - chunk1);
+        }
+    }
+    else
+    {
+        // Capture: read captured audio from shared ring buffer into DMA buffer
+        if (chunk1 >= bytesToProcess)
+        {
+            AuraControlDevice_ReadCaptureSamples(m_pDmaBuffer + startOffset, bytesToProcess);
+        }
+        else
+        {
+            AuraControlDevice_ReadCaptureSamples(m_pDmaBuffer + startOffset, chunk1);
+            AuraControlDevice_ReadCaptureSamples(m_pDmaBuffer, bytesToProcess - chunk1);
+        }
+    }
 }
 
 STDMETHODIMP_(NTSTATUS)
@@ -246,42 +332,7 @@ CMiniportWaveRTStream::GetPosition(
     if (m_KsState == KSSTATE_RUN)
     {
         qpc = KeQueryPerformanceCounter(NULL);
-        ULONGLONG oldPlay = m_Clock.PlayOffset();
-        ULONG bytesAdvanced = m_Clock.Advance((ULONGLONG)qpc.QuadPart, m_ulBytesPerSecond);
-
-        if (bytesAdvanced > 0 && m_pDmaBuffer != NULL && m_ulBufferSize > 0)
-        {
-            ULONG bytesToProcess = (bytesAdvanced > m_ulBufferSize) ? m_ulBufferSize : bytesAdvanced;
-            ULONG startOffset = (ULONG)(oldPlay % m_ulBufferSize);
-            ULONG chunk1 = m_ulBufferSize - startOffset;
-
-            if (!m_bCapture)
-            {
-                // Render: copy played audio from DMA buffer into shared ring buffer
-                if (chunk1 >= bytesToProcess)
-                {
-                    AuraControlDevice_WriteRenderSamples(m_pDmaBuffer + startOffset, bytesToProcess);
-                }
-                else
-                {
-                    AuraControlDevice_WriteRenderSamples(m_pDmaBuffer + startOffset, chunk1);
-                    AuraControlDevice_WriteRenderSamples(m_pDmaBuffer, bytesToProcess - chunk1);
-                }
-            }
-            else
-            {
-                // Capture: read captured audio from shared ring buffer into DMA buffer
-                if (chunk1 >= bytesToProcess)
-                {
-                    AuraControlDevice_ReadCaptureSamples(m_pDmaBuffer + startOffset, bytesToProcess);
-                }
-                else
-                {
-                    AuraControlDevice_ReadCaptureSamples(m_pDmaBuffer + startOffset, chunk1);
-                    AuraControlDevice_ReadCaptureSamples(m_pDmaBuffer, bytesToProcess - chunk1);
-                }
-            }
-        }
+        AdvanceAndCopyLocked((ULONGLONG)qpc.QuadPart);
     }
 
     Position->PlayOffset  = m_Clock.PlayOffset();

@@ -1203,22 +1203,39 @@ int vaio_detect(char* out, int cap) {
     CoUninitialize();
 
     // 3. 构建输出 JSON
+    // 全面复审 S5（VAIO-9)：运行支的 st 是合成值（不碰控制设备）、
+    // ActiveRender/Capture 恒 0——与「真无活跃流」不可分辨。此前
+    // 照常输出两键误导判读；运行支改为整键省略，消费端缺键即知
+    // 「运行中未探测」，非运行支仍输出驱动真值。
+    const bool bridgeRunning =
+        InterlockedCompareExchange(&g_vaio.running, 0, 0) == 1;
     int n = _snprintf_s(
         out, (size_t)cap, _TRUNCATE,
         "{\"found\":%s,\"driverVersion\":\"%lu.%lu.%lu\",\"track\":\"%s\",\"kmdf\":\"%lu.%lu\","
-        "\"sampleRate\":%lu,\"channels\":%lu,\"bits\":%lu,"
-        "\"activeRender\":%lu,\"activeCapture\":%lu,\"endpoints\":[",
+        "\"sampleRate\":%lu,\"channels\":%lu,\"bits\":%lu",
         driverFound ? "true" : "false",
         ver.DriverVersionMajor, ver.DriverVersionMinor, ver.DriverBuildNumber,
         (ver.Track == 1) ? "modern" : "legacy",
         ver.KmdfMajor, ver.KmdfMinor,
         st.SampleRate ? st.SampleRate : 48000,
         st.Channels ? st.Channels : 2,
-        st.BitsPerSample ? st.BitsPerSample : 32,
-        st.ActiveRenderStreams, st.ActiveCaptureStreams
+        st.BitsPerSample ? st.BitsPerSample : 32
     );
-
     if (n < 0) return -1;
+    if (!bridgeRunning) {
+        const int w = _snprintf_s(
+            out + n, (size_t)(cap - n), _TRUNCATE,
+            ",\"activeRender\":%lu,\"activeCapture\":%lu",
+            st.ActiveRenderStreams, st.ActiveCaptureStreams);
+        if (w < 0 || w >= cap - n) return -1;
+        n += w;
+    }
+    {
+        const int w = _snprintf_s(out + n, (size_t)(cap - n), _TRUNCATE,
+                                  ",\"endpoints\":[");
+        if (w < 0 || w >= cap - n) return -1;
+        n += w;
+    }
 
     for (size_t i = 0; i < endpoints.size(); ++i) {
         char epNameEsc[1024] = {0};
@@ -1617,8 +1634,10 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
         UnmapAndCloseRing();
         DestroyEngine();
         DestroyWasapi();
-        g_vaio.startRc = -9;
-        return -9;
+        // 全面复审 S5（VAIO-10)：startRc -9/-10 此前与上方事件句柄
+        // 两步同号、按码无法定位失败步——本步起改 -11/-12 唯一化。
+        g_vaio.startRc = -11;
+        return -11;
     }
 
     // 5. 创建 DSP 引擎 handle (采样率按物理输出采样率或 VAIO 采样率对齐)
@@ -1629,8 +1648,8 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
         UnmapAndCloseRing();
         DestroyEngine();
         DestroyWasapi();
-        g_vaio.startRc = -10;
-        return -10;
+        g_vaio.startRc = -12;  // VAIO-10：与 SetEventHandle 的 -10 分号
+        return -12;
     }
 
     const int32_t initCh = (int32_t)(g_vaio.ringChannels > 0 ? g_vaio.ringChannels : 2);

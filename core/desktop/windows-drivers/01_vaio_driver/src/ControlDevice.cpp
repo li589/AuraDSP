@@ -355,8 +355,10 @@ AuraControlDevice_DispatchDeviceControl(
             pVer->KmdfMinor          = 15;
             pVer->Track              = 1; // Modern (Win10/11)
 #endif
-            RtlStringCchCopyA(pVer->BuildDate, sizeof(pVer->BuildDate), "2026-10-16");
-            RtlStringCchCopyA(pVer->BuildTime, sizeof(pVer->BuildTime), "12:00:00");
+            // 全面复审 S5（VAIO-11)：头文件口径即 __DATE__/__TIME__，
+            // 此前写死字面日期令版本判读（装机新旧比对）恒为旧版。
+            RtlStringCchCopyA(pVer->BuildDate, sizeof(pVer->BuildDate), __DATE__);
+            RtlStringCchCopyA(pVer->BuildTime, sizeof(pVer->BuildTime), __TIME__);
 
             bytesReturned = sizeof(AURA_VAIO_VERSION_INFO);
             ntStatus = STATUS_SUCCESS;
@@ -597,6 +599,9 @@ AuraControlDevice_OnStreamStateChange(
     _In_ KSSTATE State
     )
 {
+    // Capture 自 VAIO-3 起不再参与计数（边沿函数专责），保留形参
+    // 是为调用面稳定；状态字段本身与方向无关。
+    UNREFERENCED_PARAMETER(Capture);
     KIRQL oldIrql;
     PAURA_VAIO_SHARED_HEADER pHeader;
 
@@ -605,26 +610,41 @@ AuraControlDevice_OnStreamStateChange(
     pHeader = reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer);
 
     KeAcquireSpinLock(&g_RingLock, &oldIrql);
-    if (Capture)
-    {
-        if (State == KSSTATE_RUN) InterlockedIncrement(&g_lActiveCaptureStreams);
-        else if (State == KSSTATE_STOP) InterlockedDecrement(&g_lActiveCaptureStreams);
-    }
-    else
-    {
-        if (State == KSSTATE_RUN) InterlockedIncrement(&g_lActiveRenderStreams);
-        else if (State == KSSTATE_STOP) InterlockedDecrement(&g_lActiveRenderStreams);
-    }
-
-    if (g_lActiveRenderStreams < 0) g_lActiveRenderStreams = 0;
-    if (g_lActiveCaptureStreams < 0) g_lActiveCaptureStreams = 0;
-
+    // 共享头 StreamState 口径（AuraVaioIpc.h：0=STOP/1=ACQUIRE/
+    // 2=PAUSE/3=RUN）与 KSSTATE 枚举原值（ks.h：KSSTATE_STOP=0 起）
+    // 本就逐一对应，直写原值即文档编码——全面复审 VAIO-4 曾误判
+    // KSSTATE 自 1 起、险些引入差一错误，特此钉注勿「修正」。
+    // 活跃计数已移至 RUN 边沿通知 OnStreamRunEdge（VAIO-3)，本
+    // 函数只维护状态字段。
     pHeader->StreamState = (ULONG)State;
     KeReleaseSpinLock(&g_RingLock, oldIrql);
 }
 
 VOID
+AuraControlDevice_OnStreamRunEdge(
+    _In_ BOOLEAN Capture,
+    _In_ BOOLEAN Entering
+    )
+{
+    // 边沿计数：每条流在 RUN 期间恰贡献 +1，离开（或运行中析构）
+    // 恰 -1，与状态机调用次数无关（VAIO-3)。
+    if (Capture)
+    {
+        if (Entering) InterlockedIncrement(&g_lActiveCaptureStreams);
+        else InterlockedDecrement(&g_lActiveCaptureStreams);
+        if (g_lActiveCaptureStreams < 0) g_lActiveCaptureStreams = 0;
+    }
+    else
+    {
+        if (Entering) InterlockedIncrement(&g_lActiveRenderStreams);
+        else InterlockedDecrement(&g_lActiveRenderStreams);
+        if (g_lActiveRenderStreams < 0) g_lActiveRenderStreams = 0;
+    }
+}
+
+VOID
 AuraControlDevice_OnFormatChange(
+    _In_ BOOLEAN Capture,
     _In_ ULONG SampleRate,
     _In_ ULONG Channels,
     _In_ ULONG BitsPerSample
@@ -632,6 +652,12 @@ AuraControlDevice_OnFormatChange(
 {
     KIRQL oldIrql;
     PAURA_VAIO_SHARED_HEADER pHeader;
+
+    // 全面复审 S5（VAIO-1)：共享头几何与 g_ulCurrent* 只描述渲染
+    // 方向（环数据流与桥协商的真源）；捕获流的格式变化此前会把
+    // 播放几何整组冲掉（麦克风协商 44.1k 后桥按错几何读渲染环）。
+    // 捕获格式只活在流自身成员里（DMA 步进用），此处直接返回。
+    if (Capture) return;
 
     if (g_pRingBuffer == NULL) return;
 

@@ -99,6 +99,15 @@ private:
     KSSTATE             m_KsState;
     KSPIN_LOCK          m_PositionLock;
     CAuraVirtualClock   m_Clock;
+
+    // Advance the virtual clock to QpcNow and move the newly played
+    // bytes between the DMA buffer and the shared ring. Caller must
+    // hold m_PositionLock and the stream must be in KSSTATE_RUN.
+    // Shared by GetPosition and the SetState STOP/PAUSE flush
+    // （全面复审 S5 / VAIO-2).
+    void AdvanceAndCopyLocked(
+        _In_ ULONGLONG QpcNow
+        );
 };
 
 #endif // _AURA_MINIPORT_WAVERT_STREAM_H_

@@ -79,9 +79,12 @@ STDAPI DllRegisterServer() {
     const std::wstring asioBase = L"SOFTWARE\\ASIO\\" + driverName;
 
     // 1. 显式注册 HKLM\SOFTWARE\Classes\CLSID\{...} (确保 UAC 提权宿主如 DAW/探针与普通用户进程均可无歧义定位)
-    SetRegString(HKEY_LOCAL_MACHINE, hklmClassesBase, L"", driverName, KEY_WOW64_64KEY);
-    SetRegString(HKEY_LOCAL_MACHINE, hklmInprocKey, L"", dllPath, KEY_WOW64_64KEY);
-    SetRegString(HKEY_LOCAL_MACHINE, hklmInprocKey, L"ThreadingModel", L"Apartment", KEY_WOW64_64KEY);
+    // 全面复审 S5（ASIO-8)：本组三写此前丢弃返回值——部分失败时
+    // 后两组成功即报 S_OK，HKLM Classes 树残缺而无人知晓。三写
+    // 一并纳入下方聚合裁定。
+    LONG rc0a = SetRegString(HKEY_LOCAL_MACHINE, hklmClassesBase, L"", driverName, KEY_WOW64_64KEY);
+    LONG rc0b = SetRegString(HKEY_LOCAL_MACHINE, hklmInprocKey, L"", dllPath, KEY_WOW64_64KEY);
+    LONG rc0c = SetRegString(HKEY_LOCAL_MACHINE, hklmInprocKey, L"ThreadingModel", L"Apartment", KEY_WOW64_64KEY);
 
     // 2. 注册 HKCR\CLSID\{...} 与 InprocServer32 (同时写 64-bit 视图)
     LONG rc1 = SetRegString(HKEY_CLASSES_ROOT, clsidBase, L"", driverName, KEY_WOW64_64KEY);
@@ -92,7 +95,8 @@ STDAPI DllRegisterServer() {
     LONG rc4 = SetRegString(HKEY_LOCAL_MACHINE, asioBase, L"CLSID", clsidStr, KEY_WOW64_64KEY);
     LONG rc5 = SetRegString(HKEY_LOCAL_MACHINE, asioBase, L"Description", driverName, KEY_WOW64_64KEY);
 
-    if (rc1 == ERROR_SUCCESS && rc2 == ERROR_SUCCESS && rc3 == ERROR_SUCCESS &&
+    if (rc0a == ERROR_SUCCESS && rc0b == ERROR_SUCCESS && rc0c == ERROR_SUCCESS &&
+        rc1 == ERROR_SUCCESS && rc2 == ERROR_SUCCESS && rc3 == ERROR_SUCCESS &&
         rc4 == ERROR_SUCCESS && rc5 == ERROR_SUCCESS) {
         return S_OK;
     }
@@ -104,7 +108,8 @@ STDAPI DllRegisterServer() {
     SetRegString(HKEY_CURRENT_USER, L"Software\\ASIO\\" + driverName, L"CLSID", clsidStr);
     SetRegString(HKEY_CURRENT_USER, L"Software\\ASIO\\" + driverName, L"Description", driverName);
 
-    if (rc4 == ERROR_ACCESS_DENIED || rc1 == ERROR_ACCESS_DENIED) {
+    if (rc4 == ERROR_ACCESS_DENIED || rc1 == ERROR_ACCESS_DENIED ||
+        rc0a == ERROR_ACCESS_DENIED) {
         return HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED);
     }
 
