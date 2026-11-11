@@ -395,6 +395,11 @@ extension StateChain on AppModel {
 
   /// 卷积使能：废除品质档拦截限制，无条件自由放行
   void setConvolverEnabled(bool on, {String? autoQualityMsg}) {
+    // 全面复审 S3（UI-1）：APO 模式文件型拦截下沉到本汇聚点。
+    if (fileEffectGateBlocks(ParamId.convEnable, on)) {
+      _notifyUi();
+      return;
+    }
     convEnabled = on;
     if (on && !convReady) {
       if (convIrPath != null &&
@@ -490,6 +495,11 @@ extension StateChain on AppModel {
   }
 
   void setDdcEnabled(bool on) {
+    // 全面复审 S3（UI-1）：同 setConvolverEnabled，拦截下沉。
+    if (fileEffectGateBlocks(ParamId.ddcEnable, on)) {
+      _notifyUi();
+      return;
+    }
     ddcOn = on;
     if (on && !ddcReady) {
       if (ddcPath != null &&

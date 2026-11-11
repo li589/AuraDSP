@@ -64,6 +64,12 @@ extension StateCore on AppModel {
   // ---- 命令下发 ----
 
   void setInt(String id, int v) {
+    // 全面复审 S3（UI-1）：链页 stage 开关经 setInt 开卷积的路径
+    // 同样受文件型拦截（仅开启方向、仅两 id 命中）。
+    if (v != 0 && fileEffectGateBlocks(id, true)) {
+      _notifyUi();
+      return;
+    }
     if (id == 'channels.mode') {
       // X-8：引擎 channels.mode 仅接受 0..1，下发前先 clamp，防非法值下发与淤积
       v = v.clamp(0, 1);
@@ -114,6 +120,22 @@ extension StateCore on AppModel {
 
   /// 当前模式能力（Part I ModeCaps）：功能层只问能力。
   ModeCaps get modeCaps => AudioModes.capsFor(audioMode);
+
+  /// 文件型效果在 APO 模式的拦截守卫（全面复审 S3，UI-1）：
+  /// setParam 的内联拦截只覆盖走 setParam 的入口，卡片开关与链页
+  /// stage 开关直调强类型 setter / setInt 曾全部绕过——sysapo 下
+  /// 点开卷积/DDC 不弹拦截、开关照常亮起、影子引擎照常加载文件，
+  /// 而 APO 实际处理毫无变化（违业主裁定）。汇聚点共用本守卫：
+  /// 仅拦截「开启」方向，关闭恒放行（进 APO 模式的自动关闭走
+  /// setter 关方向，不受影响）。
+  bool fileEffectGateBlocks(String id, bool turningOn) {
+    if (!turningOn) return false;
+    if (modeCaps.fileEffects) return false;
+    if (!kApoFileEffectEnables.contains(id)) return false;
+    postNotice('该效果依赖外部文件（卷积 IR / DDC 文件），在 System APO '
+        '模式下不可用', level: NoticeLevel.warning);
+    return true;
+  }
 
   /// 强类型通用参数设值
   void setParam<T>(ParamSpec<T> spec, T value, {bool notify = true}) {

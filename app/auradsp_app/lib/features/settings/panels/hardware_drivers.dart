@@ -162,7 +162,11 @@ class _AsioClientDriverRow extends StatelessWidget {
   const _AsioClientDriverRow({required this.model});
 
   static const _bufSizes = [0, 64, 128, 256, 512, 1024, 2048];
-  static const _outPairs = [0, 1, 2, 3];
+  // 全面复审 S3（ASIO-1）：档位即「输出块起始声道偏移」（与桥
+  // outBase / 配置注释同语义）；旧档位 0..3 是声道对序号，与桥的
+  // 偏移消费错位一档（选 ch 3/4 实播偏移 1）。存量配置经 config
+  // v4 / 会话 v8 一次性迁移按旧标签意图换算。
+  static const _outPairs = [0, 2, 4, 6];
 
   @override
   Widget build(BuildContext context) {
@@ -269,7 +273,7 @@ class _AsioClientDriverRow extends StatelessWidget {
                   for (final n in _outPairs)
                     DropdownMenuItem<int>(
                       value: n,
-                      child: Text('ch ${n * 2 + 1}/${n * 2 + 2}',
+                      child: Text('ch ${n + 1}/${n + 2}',
                           style: TextStyle(
                               fontSize: 12,
                               color: n == model.config.asioOutPair
@@ -535,12 +539,57 @@ class _VirtualAsioDriverCard extends StatelessWidget {
           onTap: () => model.checkAsioDriverStatus(),
         ),
       ],
-      below: model.lastAsioError == null
-          ? null
-          : _ErrorBanner(
+      below: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (model.lastAsioError != null)
+            _ErrorBanner(
               message: model.lastAsioError!,
               onDismiss: () => model.clearAsioError(),
             ),
+          // 全面复审 S3（ASIO-4）：驱动声道档位写者——此前注册表
+          // Channels 值只有驱动读、无人写，档位恒缺省 2。驱动在
+          // 被 DAW 创建时读取，故提示下次连接生效。
+          const SizedBox(height: AuraSpace.xs),
+          Row(children: [
+            SizedBox(
+                width: 104,
+                child: Text(l.asioDriverChannels,
+                    style: labelOf(paletteOf(context), size: 12,
+                        color: paletteOf(context).textDim))),
+            Expanded(
+              child: AuraDropdown<int>(
+                value: model.asioDriverChannels,
+                items: [
+                  for (final n in const [2, 4, 6, 8])
+                    DropdownMenuItem<int>(
+                      value: n,
+                      child: Text('$n ch',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: n == model.asioDriverChannels
+                                  ? paletteOf(context).accent
+                                  : paletteOf(context).text)),
+                    ),
+                ],
+                onChanged: (v) {
+                  if (v == null) return;
+                  final ok = model.setAsioDriverChannels(v);
+                  model.postNotice(
+                    ok
+                        ? l.asioDriverChannelsSaved
+                        : l.asioDriverChannelsFailed,
+                    level: ok ? NoticeLevel.info : NoticeLevel.error,
+                  );
+                },
+              ),
+            ),
+          ]),
+          Text(l.asioDriverChannelsHint,
+              style: captionOf(paletteOf(context),
+                  color: paletteOf(context).textDim)),
+        ],
+      ),
     );
   }
 }

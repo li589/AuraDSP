@@ -36,7 +36,11 @@
 // 内容后令其为偶数（稳定）；读者读前读后各取一次 writeSeq，两次
 // 相同且为偶数才采信快照。bypass 置位时 APO 跳过引擎（等价透传）。
 #define APO_PARAMS_MAGIC 0x41504152u  // 'APAR'
-#define APO_PARAMS_VERSION 1u
+// v2（全面复审 S3 / APO-1）：数值槽 325→339——自定义 setter 家族
+// 的 14 个数值参数（comp.mode / channels.mode / reverb.preset 等）
+// 追加在存量序号之后，存量序号不移位。消费端版本全等校验使旧
+// DLL 对 v2 块整体拒绝（安全降级），永不按错位序号误用参数。
+#define APO_PARAMS_VERSION 2u
 
 struct ApoParamBlockHeader {
     uint32_t magic;        // APO_PARAMS_MAGIC

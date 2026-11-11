@@ -1339,6 +1339,21 @@ class AppLocalizationsJa extends AppLocalizations {
   String get asioDriverCardTitle => 'AuraDSP 仮想 ASIO ドライバー';
 
   @override
+  String get asioDriverChannels => 'ドライバーチャンネル数';
+
+  @override
+  String get asioDriverChannelsHint =>
+      'レジストリに保存され、DAW の次回接続時（ドライバー再作成時）に適用されます';
+
+  @override
+  String get asioDriverChannelsSaved =>
+      'ASIO ドライバーのチャンネル数を保存しました。DAW の次回接続時に適用されます';
+
+  @override
+  String get asioDriverChannelsFailed =>
+      'ASIO ドライバーのチャンネル数の保存に失敗しました（レジストリ書き込み失敗）';
+
+  @override
   String get vaioDriverCardTitle => 'AuraVAIO 仮想オーディオドライバ';
 
   @override
@@ -1380,7 +1395,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get monitorMirroringHint =>
-      '仮想シンクへ出力しながら、ローカル確認用に物理ヘッドホン/スピーカーへ同時にミラーリング出力します';
+      '未実装：モニターミラーリング（処理後の音声を物理ヘッドホンへ分岐）は開発中です。このスイッチは現在どの音声経路も変更しません';
 
   @override
   String get audioDevice => 'デバイス';
@@ -3660,6 +3675,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get lpTargetMultichannel => 'マルチチャンネルスクリプト';
+
+  @override
+  String get lpMcApoUnsupported =>
+      'System APO モードではマルチチャンネルスクリプトは利用できません（スクリプトは APO パラメータブロックに含まれません）';
 
   @override
   String get lpMcHint =>

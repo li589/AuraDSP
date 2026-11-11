@@ -44,8 +44,16 @@ def main():
     shared = read('core/desktop/windows-drivers/03_system_apo/ApoShared.h')
 
     # ③ 产物哨兵
-    check('#define APO_NUM_PARAM_COUNT 325' in c_h, 'C 表数值参数计数 325')
-    check('const int kApoNumParamCount = 325;' in dart, 'Dart 表数值参数计数 325')
+    check('#define APO_NUM_PARAM_COUNT 339' in c_h, 'C 表数值参数计数 339')
+    check('const int kApoNumParamCount = 339;' in dart, 'Dart 表数值参数计数 339')
+    # 全面复审 S3（APO-1）：追加段哨兵——自定义 setter 家族入块、
+    # 存量首槽不移位、块版本三方全等（ApoShared 手写 vs 两生成产物）。
+    check("'channels.mode': 335" in dart and "'viz.fftSize': 338" in dart,
+          'S3 追加段入块（channels.mode@335 … viz.fftSize@338）')
+    check('APO_PARAM_BLOCK_VERSION 2' in c_h
+          and 'const int kApoParamBlockVersion = 2;' in dart
+          and '#define APO_PARAMS_VERSION 2u' in shared,
+          '参数块版本 v2 三方全等')
     sha_c = re.search(r'sha256\[:16\]=(\w+)', c_h)
     sha_d = re.search(r'sha256\[:16\]=(\w+)', dart)
     check(sha_c and sha_d and sha_c.group(1) == sha_d.group(1),

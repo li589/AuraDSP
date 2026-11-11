@@ -19,7 +19,12 @@ id，C 侧（AuraApo worker）与 Dart 侧（isolate publisher）必须共用
   - 动态展开项（引擎以 strncmp 分支处理、不在静态表）：stereo.band1..5、
     input.balance.1..8、liveprog.param1..64、liveprogmc.param1..64，
     均为 float，追加在静态项之后（顺序与 gen_param_contract 的
-    DYNAMIC_IDS 口径一致并扩到 64）。
+    DYNAMIC_IDS 口径一致并扩到 64）；
+  - 自定义 setter 数值项（全面复审 S3 / APO-1，块版本 2 起）：
+    PARAM_CUSTOM_SET_STANDARD_GET（类型取声明 ParamType）与
+    PARAM_CUSTOM 白名单（值类型经 setter 代码核对），**追加**在
+    上述全部序号之后——存量序号永不移位；豁免清单 EXEMPT 与
+    分类完备性断言见 parse_numeric_params。
 字符串槽（定长，id 与容量在本脚本内登记，属布局契约的一部分）：
   eq.curve 4K / arbmag.string 4K / liveprog.code 16K / graph.order 1K。
   convolver.ir.path、ddc.load、liveprogmc.code 不入块（设计 §1 非目标）。
@@ -27,11 +32,11 @@ id，C 侧（AuraApo worker）与 Dart 侧（isolate publisher）必须共用
 块布局（u32 对齐，两侧共用，改布局必须同步 ApoShared.h 并由
 smoke_apo_param_layout 交叉断言）：
   header 64B（magic/version/writeSeq/bypass/numCount/strUsed[4]+预留）
-  valid 区：64B 有效位图——bit i 对应数值槽 i，bit 325+s 对应
-    字符串槽 s；只有置位的槽会被 APO worker 应用（未置位 = 该
-    参数从未被 App 写过，引擎保持其默认值，严禁以块内零值覆
-    盖——首帧全量应用若不设此门会把未触碰参数清零）
-  values 区：325 * 4B
+  valid 区：64B 有效位图——bit i 对应数值槽 i，字符串槽 s 的位
+    在数值槽总数之后；只有置位的槽会被 APO worker 应用（未置
+    位 = 该参数从未被 App 写过，引擎保持其默认值，严禁以块内
+    零值覆盖——首帧全量应用若不设此门会把未触碰参数清零）
+  values 区：数值槽总数 * 4B（v1=325 槽，v2=339 槽）
   strings 区：各槽按上表顺序紧密排列
   映射大小：32768B（向上取整）。
 
@@ -81,6 +86,44 @@ def sha16(path):
     return hashlib.sha256(data).hexdigest()[:16]
 
 
+# 全面复审 S3（APO-1）：此前生成器只收 PARAM_FLOAT/INT/BOOL，
+# 自定义 setter 家族（PARAM_CUSTOM_SET_STANDARD_GET 等）的数值参数
+# 全部不在块内——APO 模式下改这些参数只动影子引擎（如 comp.mode、
+# channels.mode、reverb.preset、bassmono.*、convolver.mix 等 14 项）。
+# 收录规则：标准宏 ∪ CSSG（类型取声明 ParamType）∪ PARAM_CUSTOM
+# 白名单（值类型经引擎 setter 代码核对）；新收录 id 一律**追加**在
+# 既有布局之后（存量序号 0..324 永不移位），块版本升至 2——消费端
+# 版本全等校验使旧 DLL 对新块整体拒绝（安全降级，绝不误用错位）。
+PARAMS_VERSION = 2
+
+CSSG_TYPE = {'kFloat': 0, 'kInt32': 1, 'kBool': 2}
+
+# PARAM_CUSTOM 全自定义行中值类型已核对、可入数值块的白名单。
+CUSTOM_NUMERIC = {
+    'bass.intensity': 0,     # set_bass_intensity: float
+    'gate.maxIrSeconds': 0,  # set_gate_float_param: float
+    'gate.maxFileMb': 0,     # set_gate_float_param: float
+    'viz.fftSize': 1,        # set_viz_fft_size: int32
+}
+
+# 明确豁免（不入块）及理由——分类完备性断言要求表中每个 id 必须
+# 恰好落入「入块 / 豁免 / 只读 / 字符串槽」之一，新增参数不分类即
+# 生成失败，杜绝下一批静默缺席。
+EXEMPT = {
+    'convolver.enable': '模式策略：文件型效果开关，由 ModeCaps.fileEffects 门控',
+    'ddc.enable': '模式策略：同 convolver.enable',
+    'reverb.engine': '只读派生（getter 由 reverb.preset 计算，setter 占位）',
+    'mode.latency': 'ADR-006 墓碑：setter 恒返回 E_PARAM',
+    'channels.count': '几何由音频流格式唯一决定，APO 消费端显式跳过',
+    'liveprogmc.code': '字符串通道；多声道脚本由 ModeCaps.mcScript 门控，不入块',
+    'convolver.ir.path': '文件路径字符串通道，不入数值块',
+    'ddc.load': '文件路径字符串通道（载入命令型），不入数值块',
+    'convolver.clear': '命令型 set-only，无值语义',
+    'liveprog.unload': '命令型 set-only，无值语义',
+    'liveprogmc.unload': '命令型 set-only，无值语义',
+}
+
+
 def parse_numeric_params():
     src = open(PARAM_TABLE, encoding='utf-8').read()
     i = src.find('kEngineParamTable[]')
@@ -93,6 +136,34 @@ def parse_numeric_params():
     for dyn in DYNAMIC_FLOAT_IDS:
         assert dyn not in ids, f'dynamic id collides with static: {dyn}'
         out.append((dyn, 0))
+    # —— S3 追加段（存量序号之后，按表中出现顺序）——
+    have = set(ids) | set(DYNAMIC_FLOAT_IDS)
+    extra = []
+    for m in re.finditer(
+            'PARAM_CUSTOM_SET_STANDARD_GET\\(\\s*"([^"]+)",\\s*\\w+,\\s*'
+            'ParamType::(kFloat|kInt32|kBool)|PARAM_CUSTOM\\(\\s*"([^"]+)"',
+            body):
+        pid = m.group(1) or m.group(3)
+        if pid in EXEMPT or pid in have:
+            continue
+        if m.group(2):
+            extra.append((pid, CSSG_TYPE[m.group(2)]))
+        elif pid in CUSTOM_NUMERIC:
+            extra.append((pid, CUSTOM_NUMERIC[pid]))
+        have.add(pid)
+    out.extend(extra)
+    # —— 分类完备性断言 ——
+    all_ids = {m.group(1) for m in
+               re.finditer(r'PARAM_\w+\(\s*"([^"]+)"', body)}
+    get_only = {m.group(1) for m in re.finditer(
+        r'PARAM_CUSTOM_GET_ONLY\(\s*"([^"]+)"', body)}
+    str_ids = {sid for sid, _ in STRING_SLOTS}
+    covered = {pid for pid, _ in out} | set(EXEMPT) | get_only | str_ids
+    unclassified = all_ids - covered
+    assert not unclassified, \
+        f'未分类参数 id（须入块或登记 EXEMPT）: {sorted(unclassified)}'
+    stale = set(EXEMPT) - all_ids
+    assert not stale, f'EXEMPT 登记了表中不存在的 id: {sorted(stale)}'
     return out
 
 
@@ -138,6 +209,10 @@ static const char* const kApoStrSlotIds[APO_STR_SLOT_COUNT] = {{
 static const unsigned int kApoStrSlotCaps[APO_STR_SLOT_COUNT] = {{ {str_caps} }};
 static const unsigned int kApoStrSlotOffsets[APO_STR_SLOT_COUNT] = {{ {str_offs} }};
 
+// 参数块版本（须与 ApoShared.h 的 APO_PARAMS_VERSION 全等；
+// 消费端以版本全等为门，版本不符即整块拒绝——布局演进的安全阀）。
+#define APO_PARAM_BLOCK_VERSION {PARAMS_VERSION}
+
 // 块布局常量（与 ApoShared.h / Dart apo_param_index.dart 三方一致，
 // smoke_apo_param_layout 交叉断言）。
 #define APO_BLOCK_HEADER_BYTES {HEADER_BYTES}
@@ -176,6 +251,9 @@ const Map<String, int> kApoStrSlotIndex = {{
 }};
 const List<int> kApoStrSlotCaps = [{str_caps}];
 const List<int> kApoStrSlotOffsets = [{str_offs}];
+
+/// 参数块版本（须与 ApoShared.h 的 APO_PARAMS_VERSION 全等）。
+const int kApoParamBlockVersion = {PARAMS_VERSION};
 
 /// 块布局常量（与 ApoShared.h / ApoParamIndex.h 三方一致，
 /// smoke_apo_param_layout 交叉断言）。

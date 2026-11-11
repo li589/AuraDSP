@@ -32,6 +32,18 @@ class _MockRegistry implements RegistryPort {
   }
 
   @override
+  int? readDword(String keyPath, String valueName) {
+    final v = values['$keyPath\\$valueName'];
+    return v == null ? null : int.tryParse(v);
+  }
+
+  @override
+  bool writeDword(String keyPath, String valueName, int value) {
+    values['$keyPath\\$valueName'] = '$value';
+    return true;
+  }
+
+  @override
   bool deleteValue(String keyPath, String valueName) {
     values.remove('$keyPath\\$valueName');
     return true;

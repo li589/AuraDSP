@@ -795,6 +795,9 @@ extension AudioModesState on AppModel {
   }
 
   void setMonitorMirroring(bool enabled) {
+    // 全面复审 S3（ASIO-2）：全仓无消费端（仅持久化）——面板开关
+    // 已置灰明示未实现；本 setter 仅供存量配置/预设回放兼容保留，
+    // 真镜像（第二路渲染泵）属新功能，待业主裁定（遗留登记）。
     config.monitorMirroring = enabled;
     persistRoutingChange();
     _notifyUi();
@@ -819,11 +822,35 @@ extension AudioModesState on AppModel {
       asioDriverInstalled = registry.keyExists(
         r'HKLM\SOFTWARE\ASIO\AuraDSP Driver',
       );
+      // 声道档位镜像同步（ASIO-4）：非法/缺失与驱动同口径回落 2。
+      final ch = registry.readDword(
+        r'HKCU\SOFTWARE\AuraDSP\AsioDriver',
+        'Channels',
+      );
+      asioDriverChannels =
+          (ch != null && const {2, 4, 6, 8}.contains(ch)) ? ch : 2;
     } catch (e, st) {
       swallow(e, st);
       asioDriverInstalled = false;
     }
     _notifyUi();
+  }
+
+  /// 设置 AuraDSP 虚拟 ASIO 驱动的声道档位（全面复审 S3 / ASIO-4）。
+  /// 写 HKCU 注册表值（驱动下次被 DAW 创建时读取生效）；成功返回
+  /// true。档位外数值直接拒绝。
+  bool setAsioDriverChannels(int ch) {
+    if (!const {2, 4, 6, 8}.contains(ch)) return false;
+    final ok = registry.writeDword(
+      r'HKCU\SOFTWARE\AuraDSP\AsioDriver',
+      'Channels',
+      ch,
+    );
+    if (ok) {
+      asioDriverChannels = ch;
+      _notifyUi();
+    }
+    return ok;
   }
 
   /// 一键注册 AuraDSP 虚拟 ASIO 驱动到系统（支持 Windows UAC 提权授权）

@@ -1318,6 +1318,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get asioDriverCardTitle => 'AuraDSP 虚拟 ASIO 驱动';
 
   @override
+  String get asioDriverChannels => '驱动声道数';
+
+  @override
+  String get asioDriverChannelsHint => '写入注册表，DAW 下次连接（重新创建驱动）时生效';
+
+  @override
+  String get asioDriverChannelsSaved => 'ASIO 驱动声道数已保存，DAW 下次连接时生效';
+
+  @override
+  String get asioDriverChannelsFailed => 'ASIO 驱动声道数保存失败（注册表写入失败）';
+
+  @override
   String get vaioDriverCardTitle => 'AuraVAIO 虚拟声卡驱动';
 
   @override
@@ -1358,7 +1370,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get monitorMirroring => '本地耳机监听镜像';
 
   @override
-  String get monitorMirroringHint => '在向虚拟声卡推流的同时，分路一份音频到当前物理扬声器/耳机以供本地监听';
+  String get monitorMirroringHint =>
+      '尚未实现：监听镜像（向物理耳机分路一份处理后音频）仍在开发中，此开关暂不改变任何音频路径';
 
   @override
   String get audioDevice => '设备';
@@ -3624,6 +3637,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lpTargetMultichannel => '多声道脚本';
+
+  @override
+  String get lpMcApoUnsupported => 'System APO 模式下多声道脚本不可用（脚本代码不入 APO 参数块）';
 
   @override
   String get lpMcHint => '多声道模式（声道数 > 2）下运行，可读写全部 8 个声道 spl0..spl7';

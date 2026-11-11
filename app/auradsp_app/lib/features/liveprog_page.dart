@@ -124,6 +124,14 @@ class _LiveprogPageState extends State<LiveprogPage> {
   /// 切换编辑目标：当前文本存回当前目标草稿，载入新目标的草稿/已应用代码。
   void _switchTarget(bool mc) {
     if (_mc == mc) return;
+    // 全面复审 S3（UI-3）：sysapo 下 MC 脚本代码不入 APO 参数块、
+    // 永不达 APO 引擎——切目标即拦截并说明（与文件型效果同口径；
+    // 此前可编译可应用、状态只是影子引擎回读）。
+    if (mc && !widget.model.modeCaps.mcScript) {
+      widget.model.postNotice(l10nOf(context).lpMcApoUnsupported,
+          level: NoticeLevel.warning);
+      return;
+    }
     _tSetDraft(_code.text);
     _mc = mc;
     final m = widget.model;
@@ -563,6 +571,13 @@ class _LiveprogPageState extends State<LiveprogPage> {
 
   /// 切换应用状态（未编译无法应用；已应用允许点击关闭）
   void _toggleApply() {
+    // 全面复审 S3（UI-3）：已在 MC 目标时切入 sysapo 的存量情形，
+    // 启用方向同样拦截（关闭恒放行）。
+    if (!_tEnabled && _mc && !widget.model.modeCaps.mcScript) {
+      widget.model.postNotice(l10nOf(context).lpMcApoUnsupported,
+          level: NoticeLevel.warning);
+      return;
+    }
     if (_tEnabled) {
       if (_mc) {
         widget.model.setLiveprogMcEnabled(false);
@@ -898,10 +913,14 @@ dbg = 0;
   }
 
   Widget _buildTargetToggle(AuraPalette p, AppLocalizations l) {
+    // 全面复审 S3（UI-3）：mcScript 能力门控的呈现半——MC 目标在
+    // sysapo 下置灰不可点并常驻说明（拦截半在 _switchTarget）。
+    final mcBlocked = !widget.model.modeCaps.mcScript;
     Widget pill(bool mc, String label, IconData icon) {
       final selected = _mc == mc;
+      final disabled = mc && mcBlocked;
       return InkWell(
-        onTap: () => _switchTarget(mc),
+        onTap: disabled ? null : () => _switchTarget(mc),
         borderRadius: BorderRadius.circular(AuraRadius.sm),
         child: Container(
           height: 28,
@@ -937,7 +956,16 @@ dbg = 0;
         const SizedBox(width: 6),
         pill(true, l.lpTargetMultichannel, Icons.surround_sound_rounded),
         const SizedBox(width: AuraSpace.sm),
-        if (_mc)
+        if (mcBlocked)
+          Expanded(
+            child: Text(
+              l.lpMcApoUnsupported,
+              style: captionOf(p, color: p.warning),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          )
+        else if (_mc)
           Expanded(
             child: Text(
               l.lpMcHint,

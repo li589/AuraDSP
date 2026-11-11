@@ -507,6 +507,12 @@ class AppModel extends ChangeNotifier {
 
   // ASIO 驱动注册状态 (AuraDSP Virtual ASIO Driver)
   bool asioDriverInstalled = false;
+
+  /// AuraDSP 虚拟 ASIO 驱动的声道档位（2/4/6/8）：驱动构造时读
+  /// HKCU\SOFTWARE\AuraDSP\AsioDriver\Channels（全面复审 S3 /
+  /// ASIO-4——此前该值只有读者没有写者，档位永远是缺省 2）。
+  /// 本字段为 App 侧镜像，checkAsioDriverStatus 时刷新。
+  int asioDriverChannels = 2;
   // System APO 挂载状态与运行时遥测
   // apoAttached = 当前所选目标端点的附加态（附加裁定/引擎注记用）；
   // apoAnyAttached/apoAttachedName = 是否有任意端点已附加及其名

@@ -205,23 +205,17 @@ abstract final class AudioModes {
       case 'sysapo':
         return const ModeCaps(
           pluginProcessing: PluginProcessing.apo,
-          pluginEditors: PluginEditors.shadowInstance,
-          pluginLiveMeters: false,
           routeSelector: false,
           fileEffects: false,
           mcScript: false,
-          chainVizLive: true,
         );
       case 'vbcallback':
       case 'voicemeeter_api':
         return const ModeCaps(
           pluginProcessing: PluginProcessing.local,
-          pluginEditors: PluginEditors.liveInstance,
-          pluginLiveMeters: true,
           routeSelector: true,
           fileEffects: true,
           mcScript: true,
-          chainVizLive: true,
         );
       default:
         return ModeCaps.localDefault;
@@ -232,21 +226,21 @@ abstract final class AudioModes {
 /// 插件处理位置（ModeCaps.pluginProcessing）。
 enum PluginProcessing { local, apo, none }
 
-/// 插件编辑器形态（ModeCaps.pluginEditors）：liveInstance =
-/// 编辑器开在发声实例上；shadowInstance = 编辑器开在 App 侧
-/// 影子实例上（发声在 APO 内），状态经收获/发布同步。
-enum PluginEditors { liveInstance, shadowInstance, none }
-
 /// 模式能力模型（Part I Q0-7 定版，2026-11-10）：功能层只问
 /// 能力、不再写模式字符串判断。随模式变化的能力才进本表；
 /// 故障旁路的呈现与恢复语义与模式无关、不进本表（计划书
 /// I.4——那是槽状态 fault 字段在插件栈一处的决定）。
+///
+/// 全面复审 S3（APO-5）删位记录：pluginEditors / pluginLiveMeters /
+/// chainVizLive 三位自立项起无任何生产消费点（仅测试断言），且
+/// pluginLiveMeters 的 sysapo=false 与现实相悖（APO 槽电平实际经
+/// telemetry 合并呈现）——能力表与行为可静默分叉，故删位。三者
+/// 的真实机制各自存续：编辑器形态由 state_events 的 P1-1 路由锁
+/// 定决定（sysapo 恒影子实例）；插件电平由 telemetry/状态合并的
+/// 数据有无驱动；链路 viz 实时性由 viz 事件来源（本地泵 / APO
+/// telemetry）决定。
 class ModeCaps {
   final PluginProcessing pluginProcessing;
-  final PluginEditors pluginEditors;
-
-  /// 插件槽实时表头（inRms/outRms）是否有实时来源。
-  final bool pluginLiveMeters;
 
   /// VB 路线选择类 UI（插件页路线下拉、频谱仪总线行）。
   final bool routeSelector;
@@ -257,28 +251,19 @@ class ModeCaps {
   /// 多声道 EEL 脚本级是否可用。
   final bool mcScript;
 
-  /// 处理链可视化是否有实时来源。
-  final bool chainVizLive;
-
   const ModeCaps({
     required this.pluginProcessing,
-    required this.pluginEditors,
-    required this.pluginLiveMeters,
     required this.routeSelector,
     required this.fileEffects,
     required this.mcScript,
-    required this.chainVizLive,
   });
 
   /// 本地链缺省能力（未知/新模式的回退：与历史行为一致）。
   static const ModeCaps localDefault = ModeCaps(
     pluginProcessing: PluginProcessing.local,
-    pluginEditors: PluginEditors.liveInstance,
-    pluginLiveMeters: true,
     routeSelector: false,
     fileEffects: true,
     mcScript: true,
-    chainVizLive: true,
   );
 }
 

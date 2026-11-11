@@ -56,6 +56,12 @@ final class NullRegistry implements RegistryPort {
   bool writeString(String keyPath, String valueName, String value) => false;
 
   @override
+  int? readDword(String keyPath, String valueName) => null;
+
+  @override
+  bool writeDword(String keyPath, String valueName, int value) => false;
+
+  @override
   bool deleteValue(String keyPath, String valueName) => false;
 }
 

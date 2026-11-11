@@ -23,6 +23,12 @@ abstract interface class RegistryPort {
   /// 写入 REG_SZ（HKCU 无需提权；HKLM 需管理员，失败返回 false）。
   bool writeString(String keyPath, String valueName, String value);
 
+  /// 读取单个 REG_DWORD 值；不存在、类型不符或失败返回 null。
+  int? readDword(String keyPath, String valueName);
+
+  /// 写入 REG_DWORD（HKCU 无需提权；失败返回 false）。
+  bool writeDword(String keyPath, String valueName, int value);
+
   /// 删除某个值（失败返回 false）。
   bool deleteValue(String keyPath, String valueName);
 }

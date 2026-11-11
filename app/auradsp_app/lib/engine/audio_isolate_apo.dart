@@ -177,12 +177,26 @@ class ApoParamPublisher {
       if (_u32![0] != 0x41504152) {
         // 全新块（系统零填充）：写头；序号从 0 起。
         _u32![0] = 0x41504152; // 'APAR'
-        _u32![1] = 1;
+        _u32![1] = kApoParamBlockVersion;
         _u32![4] = kApoNumParamCount;
         _seq = 0;
         _u32![2] = 0;
       } else {
         _seq = _u32![2];
+        if (_u32![1] != kApoParamBlockVersion ||
+            _u32![4] != kApoNumParamCount) {
+          // 存量旧版块（布局版本不符）：字符串槽的有效位随数值槽
+          // 总数移位，旧位图不可平移解读——整表清位图，由下方
+          // flushAll 以本发布者镜像真值重铺，再盖新版戳。worker
+          // 以版本全等为门，清零窗口内整块被拒、无误用。
+          for (var i = 0; i < 16; i++) {
+            _u32![16 + i] = 0;
+          }
+          _u32![1] = kApoParamBlockVersion;
+          _u32![4] = kApoNumParamCount;
+          dbgLog('apo publisher: stale param block re-stamped '
+              'to v$kApoParamBlockVersion');
+        }
       }
       dbgLog('apo publisher: param block mapped '
           '(seq=$_seq, handle=0x${_mapping!.address.toRadixString(16)})');
@@ -247,9 +261,24 @@ class ApoParamPublisher {
     _u32![5 + slot] = bytes.length;
   }
 
+  /// 已记过日志的未入块 id（每 id 一次，防刷屏）。
+  final Set<String> _unmappedLogged = {};
+
+  void _logUnmapped(String id) {
+    if (_unmappedLogged.add(id)) {
+      dbgLog('apo publisher: param not in block layout, skipped: $id');
+    }
+  }
+
   /// 单个数值参数变更（setParam 镜像写入点调用）。
   void onNumeric(String id, double value) {
-    if (!kApoNumParamIndex.containsKey(id)) return;
+    if (!kApoNumParamIndex.containsKey(id)) {
+      // 全面复审 S3（APO-1）：未入块不再静默丢弃——生成器的分类
+      // 完备性断言保证每个可写数值参数或入块或有豁免理由，此处
+      // 命中即豁免项（文件型开关/几何/墓碑），留一行日志可审计。
+      _logUnmapped(id);
+      return;
+    }
     if (!_ensure()) return;
     _beginWrite();
     _writeNumeric(id, value);
@@ -258,7 +287,10 @@ class ApoParamPublisher {
 
   /// 单个字符串参数变更（setParamStr 镜像写入点调用）。
   void onString(String id, String text) {
-    if (!kApoStrSlotIndex.containsKey(id)) return;
+    if (!kApoStrSlotIndex.containsKey(id)) {
+      _logUnmapped(id);
+      return;
+    }
     if (!_ensure()) return;
     _beginWrite();
     _writeString(id, text);

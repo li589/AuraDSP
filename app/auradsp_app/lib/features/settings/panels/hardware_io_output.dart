@@ -310,10 +310,11 @@ class _VaioOutputSubpanel extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(l.monitorMirroring, style: labelOf(p, size: 12)),
-                    AuraSwitch(
-                      value: model.monitorMirroring,
-                      onChanged: (v) => model.setMonitorMirroring(v),
-                    ),
+                    // 全面复审 S3（ASIO-2）：监听镜像全仓无消费端
+                    // （桥内 g_mirror 是参数镜像、非音频分路），真
+                    // 实现需第二路渲染泵、属新功能——开关置灰并在
+                    // hint 明示未实现，待业主裁定（遗留登记）。
+                    const AuraSwitch(value: false, onChanged: null),
                   ],
                 ),
                 Text(l.monitorMirroringHint,
@@ -455,8 +456,8 @@ class _AsioClientOutputSubpanel extends StatelessWidget {
       children: [
         _InfoRow(l.ioOutputLabel, l.ioAsioHwOutput),
         _InfoRow(l.ioChannelMap,
-            l.ioChannelPair(model.config.asioOutPair * 2 + 1,
-                model.config.asioOutPair * 2 + 2)),
+            l.ioChannelPair(model.config.asioOutPair + 1,
+                model.config.asioOutPair + 2)),
         _InfoRow(l.ioOutputStatus, active ? l.ioAsioPassthrough : l.ioAsioReadyStatus),
         // V-04/R4+R5：ASIO Client 的【设置】控件（驱动选择/缓冲/
         // 声道对）归输出层管理，此前混在只读的驱动信息层。

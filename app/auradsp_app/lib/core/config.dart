@@ -237,8 +237,19 @@ class AppConfig {
     return out;
   }
 
+  /// 配置 v3→v4 一次性迁移（全面复审 S3 / ASIO-1）：asioOutPair 的
+  /// 语义由「声道对序号」（旧面板 0..3，标签 ch 1/2、3/4…）统一为
+  /// 「输出块起始声道偏移」（桥 AsioHost::create_io 的 outBase 本
+  /// 就按偏移消费，配置注释亦然——旧面板是唯一按序号解读处，用
+  /// 户选 ch 3/4 实际却从偏移 1 起播）。按旧面板标签意图换算：
+  /// 0→0、1→2、2→4、3→6；其余值（手改档）钳制到 0..6 偶数。
+  static int migrateAsioOutPairV4(int old) {
+    if (old >= 0 && old <= 3) return old * 2;
+    return (old.clamp(0, 6) ~/ 2) * 2;
+  }
+
   Map<String, dynamic> toJson() => {
-        'version': 3,
+        'version': 4,
         'audio': {
           'sampleRate': sampleRate,
           'maxBlockFrames': maxBlockFrames,
@@ -421,6 +432,12 @@ abstract final class ConfigManager {
       final ver = (json['version'] as num?)?.toInt() ?? 0;
       if (ver < 3) {
         cfg.vizFps = AppConfig.defaultVizFps;
+        save(cfg);
+      }
+      // v3 -> v4 迁移：asioOutPair 语义统一为起始声道偏移
+      // （全面复审 S3 / ASIO-1），按旧面板标签意图一次性换算落盘。
+      if (ver < 4) {
+        cfg.asioOutPair = AppConfig.migrateAsioOutPairV4(cfg.asioOutPair);
         save(cfg);
       }
       return cfg;

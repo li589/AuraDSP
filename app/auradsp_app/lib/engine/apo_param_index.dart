@@ -4,7 +4,7 @@
 
 /// APO 参数块序号表（设计 D4）：块内第 i 个 u32 数值槽恒对应
 /// kApoNumParamIds 第 i 项（C 侧同名表）；本表为 id→序号。
-const int kApoNumParamCount = 325;
+const int kApoNumParamCount = 339;
 const Map<String, int> kApoNumParamIndex = {
   'tube.enable': 0,
   'tube.gain': 1,
@@ -330,11 +330,25 @@ const Map<String, int> kApoNumParamIndex = {
   'liveprogmc.param61': 321,
   'liveprogmc.param62': 322,
   'liveprogmc.param63': 323,
-  'liveprogmc.param64': 324
+  'liveprogmc.param64': 324,
+  'comp.mode': 325,
+  'convolver.mix': 326,
+  'arbmag.enable': 327,
+  'bass.intensity': 328,
+  'reverb.preset': 329,
+  'freeverb.enable': 330,
+  'spatial.fdn': 331,
+  'spatial.late': 332,
+  'bassmono.pairs': 333,
+  'bassmono.merge': 334,
+  'channels.mode': 335,
+  'gate.maxIrSeconds': 336,
+  'gate.maxFileMb': 337,
+  'viz.fftSize': 338
 };
 
 /// 类型码 0=float 1=int32 2=bool（与 C 侧 kApoNumParamTypes 同序）。
-const List<int> kApoNumParamTypes = [2, 0, 1, 0, 0, 0, 2, 1, 1, 2, 2, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 0, 2, 1, 1, 2, 0, 0, 2, 0, 0, 1, 0, 0, 2, 2, 0, 2, 1, 1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 1, 1, 2, 0, 2, 2, 0, 0, 1, 2, 1, 0, 0, 2, 1, 0, 0, 0, 0, 2, 0, 0, 2, 0, 2, 2, 0, 2, 0, 0, 1, 1, 2, 1, 0, 0, 1, 1, 2, 0, 0, 1, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 2, 0, 0, 2, 0, 1, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 0, 0, 0, 2, 2, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+const List<int> kApoNumParamTypes = [2, 0, 1, 0, 0, 0, 2, 1, 1, 2, 2, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 0, 2, 1, 1, 2, 0, 0, 2, 0, 0, 1, 0, 0, 2, 2, 0, 2, 1, 1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 1, 1, 2, 0, 2, 2, 0, 0, 1, 2, 1, 0, 0, 2, 1, 0, 0, 0, 0, 2, 0, 0, 2, 0, 2, 2, 0, 2, 0, 0, 1, 1, 2, 1, 0, 0, 1, 1, 2, 0, 0, 1, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 2, 0, 0, 2, 0, 1, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 0, 0, 0, 2, 2, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 2, 0, 1, 2, 2, 0, 1, 1, 1, 0, 0, 1];
 
 /// 字符串定长槽：id→槽序号（顺序即块内排列）。
 const Map<String, int> kApoStrSlotIndex = {
@@ -344,13 +358,16 @@ const Map<String, int> kApoStrSlotIndex = {
   'graph.order': 3
 };
 const List<int> kApoStrSlotCaps = [4096, 4096, 16384, 1024];
-const List<int> kApoStrSlotOffsets = [1428, 5524, 9620, 26004];
+const List<int> kApoStrSlotOffsets = [1484, 5580, 9676, 26060];
+
+/// 参数块版本（须与 ApoShared.h 的 APO_PARAMS_VERSION 全等）。
+const int kApoParamBlockVersion = 2;
 
 /// 块布局常量（与 ApoShared.h / ApoParamIndex.h 三方一致，
 /// smoke_apo_param_layout 交叉断言）。
 const int kApoBlockHeaderBytes = 64;
 const int kApoBlockMaskOffset = 64;
 const int kApoBlockValuesOffset = 128;
-const int kApoBlockStringsOffset = 1428;
-const int kApoBlockUsedBytes = 27028;
+const int kApoBlockStringsOffset = 1484;
+const int kApoBlockUsedBytes = 27084;
 const int kApoBlockMappingBytes = 32768;

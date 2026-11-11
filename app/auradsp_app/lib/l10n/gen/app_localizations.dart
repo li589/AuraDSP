@@ -2518,6 +2518,30 @@ abstract class AppLocalizations {
   /// **'AuraDSP 虚拟 ASIO 驱动'**
   String get asioDriverCardTitle;
 
+  /// No description provided for @asioDriverChannels.
+  ///
+  /// In zh, this message translates to:
+  /// **'驱动声道数'**
+  String get asioDriverChannels;
+
+  /// No description provided for @asioDriverChannelsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'写入注册表，DAW 下次连接（重新创建驱动）时生效'**
+  String get asioDriverChannelsHint;
+
+  /// No description provided for @asioDriverChannelsSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'ASIO 驱动声道数已保存，DAW 下次连接时生效'**
+  String get asioDriverChannelsSaved;
+
+  /// No description provided for @asioDriverChannelsFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'ASIO 驱动声道数保存失败（注册表写入失败）'**
+  String get asioDriverChannelsFailed;
+
   /// No description provided for @vaioDriverCardTitle.
   ///
   /// In zh, this message translates to:
@@ -2599,7 +2623,7 @@ abstract class AppLocalizations {
   /// No description provided for @monitorMirroringHint.
   ///
   /// In zh, this message translates to:
-  /// **'在向虚拟声卡推流的同时，分路一份音频到当前物理扬声器/耳机以供本地监听'**
+  /// **'尚未实现：监听镜像（向物理耳机分路一份处理后音频）仍在开发中，此开关暂不改变任何音频路径'**
   String get monitorMirroringHint;
 
   /// No description provided for @audioDevice.
@@ -6903,6 +6927,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'多声道脚本'**
   String get lpTargetMultichannel;
+
+  /// No description provided for @lpMcApoUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'System APO 模式下多声道脚本不可用（脚本代码不入 APO 参数块）'**
+  String get lpMcApoUnsupported;
 
   /// No description provided for @lpMcHint.
   ///

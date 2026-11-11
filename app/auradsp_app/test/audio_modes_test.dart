@@ -213,21 +213,17 @@ void main() {
     });
   });
   group('ModeCaps（Part I Q0-7 定版）', () {
-    test('sysapo: apo processing + shadow editors + no file/mc', () {
+    test('sysapo: apo processing + no file/mc', () {
       final c = AudioModes.capsFor('sysapo');
       expect(c.pluginProcessing, PluginProcessing.apo);
-      expect(c.pluginEditors, PluginEditors.shadowInstance);
-      expect(c.pluginLiveMeters, isFalse);
       expect(c.routeSelector, isFalse);
       expect(c.fileEffects, isFalse);
       expect(c.mcScript, isFalse);
-      expect(c.chainVizLive, isTrue);
     });
 
     test('vbcallback: local + route selector on（VB 下拉唯一来源）', () {
       final c = AudioModes.capsFor('vbcallback');
       expect(c.pluginProcessing, PluginProcessing.local);
-      expect(c.pluginEditors, PluginEditors.liveInstance);
       expect(c.routeSelector, isTrue);
       expect(c.fileEffects, isTrue);
       expect(c.mcScript, isTrue);
@@ -239,12 +235,9 @@ void main() {
       for (final m in ['vaio', 'asio', 'system', 'virtual', 'driver']) {
         final c = AudioModes.capsFor(m);
         expect(c.pluginProcessing, PluginProcessing.local, reason: m);
-        expect(c.pluginEditors, PluginEditors.liveInstance, reason: m);
-        expect(c.pluginLiveMeters, isTrue, reason: m);
         expect(c.routeSelector, isFalse, reason: m);
         expect(c.fileEffects, isTrue, reason: m);
         expect(c.mcScript, isTrue, reason: m);
-        expect(c.chainVizLive, isTrue, reason: m);
       }
     });
 

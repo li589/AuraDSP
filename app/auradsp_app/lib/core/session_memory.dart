@@ -53,7 +53,9 @@ abstract final class SessionMemory {
         // 随会话记忆，重启后仍显示「自定义（未保存）」（决策 #3）。
         // v7（2026-10-28）：指纹不再包含 routing（sessionOnly 移出预设系统）
         // → 恢复端按版本丢弃 v6 及更早的锚点，见 restoreMemoryImage。
-        'version': 7,
+        // v8（全面复审 S3 / ASIO-1）：asioOutPair 语义统一为起始声道
+        // 偏移 → 恢复端对 v7 及更早的存量值做一次性换算。
+        'version': 8,
         'savedAt': DateTime.now().toIso8601String(),
         'activePresetName': m.activePresetName,
         'appliedPresetFingerprint': m.appliedPresetFingerprint,
@@ -186,7 +188,11 @@ abstract final class SessionMemory {
         m.config.asioBufSize = (session['asioBufSize'] as num).toInt();
       }
       if (session['asioOutPair'] is num) {
-        m.config.asioOutPair = (session['asioOutPair'] as num).toInt();
+        final pairRaw = (session['asioOutPair'] as num).toInt();
+        final pairVer = (session['version'] as num?)?.toInt() ?? 0;
+        m.config.asioOutPair = pairVer < 8
+            ? AppConfig.migrateAsioOutPairV4(pairRaw)
+            : pairRaw;
       }
       if (session['vaioOutputEndpoint'] is String) {
         m.config.vaioOutputEndpoint = session['vaioOutputEndpoint'] as String;

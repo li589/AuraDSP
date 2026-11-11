@@ -79,6 +79,33 @@ final class WindowsRegistry implements RegistryPort {
   }
 
   @override
+  int? readDword(String keyPath, String valueName) {
+    final res = _run(['query', keyPath, '/v', valueName]);
+    if (res == null || res.exitCode != 0) return null;
+    for (final line in res.stdout.toString().split(RegExp(r'\r?\n'))) {
+      final m = RegExp(r'\sREG_DWORD\s+0x([0-9a-fA-F]+)').firstMatch(line);
+      if (m != null) return int.tryParse(m.group(1)!, radix: 16);
+    }
+    return null;
+  }
+
+  @override
+  bool writeDword(String keyPath, String valueName, int value) {
+    final res = _run([
+      'add',
+      keyPath,
+      '/v',
+      valueName,
+      '/t',
+      'REG_DWORD',
+      '/d',
+      '$value',
+      '/f',
+    ]);
+    return res != null && res.exitCode == 0;
+  }
+
+  @override
   bool writeString(String keyPath, String valueName, String value) {
     final res = _run([
       'add',
