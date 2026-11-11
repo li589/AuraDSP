@@ -394,6 +394,12 @@ abstract class AppLocalizations {
   /// **'复合插槽'**
   String get setCompositeSlot;
 
+  /// No description provided for @apoCompositeTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'复合插槽仅可在附加前选择；附加后需先卸载才能更改'**
+  String get apoCompositeTip;
+
   /// No description provided for @setRefreshStatus.
   ///
   /// In zh, this message translates to:
@@ -4107,6 +4113,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'关闭窗口时隐藏到系统托盘，音频继续播放；退出请用托盘菜单'**
   String get sysTrayHint;
+
+  /// No description provided for @sysTrayHintOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭窗口时直接退出应用（不隐藏到系统托盘）'**
+  String get sysTrayHintOff;
 
   /// No description provided for @sysAutostart.
   ///

@@ -166,6 +166,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setCompositeSlot => '复合插槽';
 
   @override
+  String get apoCompositeTip => '复合插槽仅可在附加前选择；附加后需先卸载才能更改';
+
+  @override
   String get setRefreshStatus => '刷新状态';
 
   @override
@@ -2140,6 +2143,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sysTrayHint => '关闭窗口时隐藏到系统托盘，音频继续播放；退出请用托盘菜单';
+
+  @override
+  String get sysTrayHintOff => '关闭窗口时直接退出应用（不隐藏到系统托盘）';
 
   @override
   String get sysAutostart => '开机自启';

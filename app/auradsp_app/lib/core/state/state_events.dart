@@ -820,6 +820,23 @@ extension StateEvents on AppModel {
         }
         break;
       case 'apotelemetry':
+        // 遥测缺席监督（第十二轮 B2）：读者侧块缺席满 30s 上报。
+        // 已附加却无遥测 = audiodg 内 APO 未在运行（静默无处理），
+        // 每缺席周期通知一次；措辞带条件（若未播放，块本就不会
+        // 创建），避免把「没放声音」误报成故障。
+        if (raw['absent'] == true) {
+          if (!_apoAbsentNotified &&
+              audioMode == 'sysapo' &&
+              apoAnyAttached) {
+            _apoAbsentNotified = true;
+            postNotice(
+                'System APO 已附加，但引擎遥测持续缺席：若正在播放仍无音效处理，'
+                '请重新附加或检查驱动（设置页 APO 面板）',
+                level: NoticeLevel.warning);
+          }
+          break;
+        }
+        _apoAbsentNotified = false;
         // APO 真处理回传（立项 P3）：座位在位/故障闩锁/引擎率与
         // 声道/已应用参数数——变化才刷新 UI（读者侧已节流）。
         final seatOn = raw['seat'] == true;

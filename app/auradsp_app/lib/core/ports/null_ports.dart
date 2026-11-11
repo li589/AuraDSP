@@ -179,6 +179,9 @@ final class NullWindowPort implements WindowPort {
   }
 
   @override
+  void setCloseToTray(bool value) {}
+
+  @override
   Future<void> dispose() async {}
 
   @override

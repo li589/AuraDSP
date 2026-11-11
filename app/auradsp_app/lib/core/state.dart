@@ -534,6 +534,14 @@ class AppModel extends ChangeNotifier {
   bool apoAttached = false;
   bool apoAnyAttached = false;
   String apoAttachedName = '';
+  // status 枚举到的全部端点（第十二轮 B1）：自动附加的「目标仍
+  // 存在」真值源；条目键为工具 status JSON 的 id/name 形状。
+  List<Map<String, dynamic>> apoKnownEndpoints = [];
+  // 启动自动附加一次性闩（第十二轮 B1）。
+  bool _apoAutoAttachTried = false;
+  // 遥测缺席监督的一次性通知闩（第十二轮 B2）：缺席周期内只
+  // 通知一次，遥测恢复（任一正常 apotelemetry 事件）即复位。
+  bool _apoAbsentNotified = false;
   // APO 真处理 telemetry（立项 P3）：isolate 读者经 apotelemetry
   // 事件回填——座位引擎是否在位 / 是否故障闩锁 / 引擎率与声道 /
   // 已应用参数项次。仅 sysapo 模式下有更新，其余模式保持复位值。
@@ -1218,6 +1226,9 @@ class AppModel extends ChangeNotifier {
     // visiblePage 也不变）。凡「设置里改、别的页要立刻响应」的开关都必须
     // 走这样一个 ValueListenable，否则改了配置但画面不动。
     ambientEnabled = ValueNotifier<bool>(config.ambientSpectrum);
+    // 关窗偏好下发窗口端口（第十二轮 A1）：托盘 init 在 main._boot
+    // 里先行，这里把持久化的偏好补推给它（默认 true 与端口默认一致）。
+    this.window.setCloseToTray(config.closeToTray);
     // 可视化配置：config.json 是跨重启持久化副本，这里建立运行时真相源。
     // 随后 SessionMemory.restoreMemoryImage 会再用会话快照覆盖（若存在）。
     visualizerConfig = ValueNotifier<VisualizerConfig>(config.visualizerConfig);
@@ -1293,6 +1304,12 @@ class AppModel extends ChangeNotifier {
       } else {
         SessionMemory.save(this);
       }
+    }
+    if (!_testing) {
+      // 第十二轮 B1：开机/启动自动附加（内部按模式、记忆目标、
+      // 目标存在性、未附加四重自门控；放在会话恢复之后，确保
+      // 恢复出的模式/目标就是裁定依据）。
+      unawaited(maybeAutoAttachApo());
     }
     if (!_testing) _spawn();
   }

@@ -167,6 +167,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setCompositeSlot => '複合スロット';
 
   @override
+  String get apoCompositeTip => '複合スロットは接続前にのみ選択できます。変更するには先に取り外してください';
+
+  @override
   String get setRefreshStatus => '状態を更新';
 
   @override
@@ -2165,6 +2168,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get sysTrayHint => 'ウィンドウを閉じるとシステムトレイに隠れ、音声は再生継続。終了はトレイメニューから';
+
+  @override
+  String get sysTrayHintOff => 'ウィンドウを閉じるとアプリを直接終了します（システムトレイに隠しません）';
 
   @override
   String get sysAutostart => 'ログイン時起動';

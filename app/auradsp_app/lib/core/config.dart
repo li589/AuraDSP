@@ -77,6 +77,11 @@ class AppConfig {
   bool ambientSpectrum;
   int autoSaveDebounceMs;
 
+  /// 关窗行为（第十二轮 A1，此前设置页开关是写死常开的假开关）：
+  /// true = 关闭窗口隐藏到托盘（默认，与旧「常驻」行为一致）；
+  /// false = 点关闭按钮直接退出。托盘不可用时恒直接退出。
+  bool closeToTray;
+
   // 安全与资源参数
   double maxIrDurationSeconds;
   double maxFileSizeMb;
@@ -128,6 +133,7 @@ class AppConfig {
     this.themeId = 'auraDark',
     this.autoRestoreSession = true,
     this.ambientSpectrum = true,
+    this.closeToTray = true,
     this.autoSaveDebounceMs = 500,
     this.maxIrDurationSeconds = 30.0,
     this.maxFileSizeMb = 64.0,
@@ -195,6 +201,7 @@ class AppConfig {
       themeId: (ui['themeId'] as String?) ?? 'auraDark',
       autoRestoreSession: (ui['autoRestoreSession'] as bool?) ?? true,
       ambientSpectrum: (ui['ambientSpectrum'] as bool?) ?? true,
+      closeToTray: (ui['closeToTray'] as bool?) ?? true,
       autoSaveDebounceMs: (ui['autoSaveDebounceMs'] as num?)?.toInt() ?? 500,
       maxIrDurationSeconds: (safety['maxIrDurationSeconds'] as num?)?.toDouble() ?? 30.0,
       maxFileSizeMb: (safety['maxFileSizeMb'] as num?)?.toDouble() ?? 64.0,
@@ -285,6 +292,7 @@ class AppConfig {
           'themeId': themeId,
           'autoRestoreSession': autoRestoreSession,
           'ambientSpectrum': ambientSpectrum,
+          'closeToTray': closeToTray,
           'autoSaveDebounceMs': autoSaveDebounceMs,
         },
         'safety': {

@@ -83,14 +83,19 @@ List<Widget> buildSystemTab(BuildContext context, AppModel model) {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(l.sysTray, style: labelOf(p, size: 12)),
-              const AuraSwitch(
-                value: true,
-                onChanged: null, // 常驻行为；托盘不可用时整卡隐藏
+              AuraSwitch(
+                // 第十二轮 A1：此前是写死常开的假开关（onChanged: null），
+                // 现接真设置 config.closeToTray（关窗裁定在托盘服务侧）。
+                value: model.config.closeToTray,
+                onChanged: model.setCloseToTray,
               ),
             ],
           ),
           const SizedBox(height: 4),
-          Text(l.sysTrayHint, style: captionOf(p)),
+          Text(
+            model.config.closeToTray ? l.sysTrayHint : l.sysTrayHintOff,
+            style: captionOf(p),
+          ),
           const SizedBox(height: AuraSpace.md),
           ValueListenableBuilder<bool>(
             valueListenable:

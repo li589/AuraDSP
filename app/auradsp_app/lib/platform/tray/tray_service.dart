@@ -32,6 +32,31 @@ class TrayService implements WindowPort {
 
   TrayIcon? _icon;
   bool _ready = false;
+
+  /// 关窗行为偏好（第十二轮 A1）：默认 true（旧常驻行为）；
+  /// AppModel 以 config.closeToTray 覆盖。托盘未就绪（_ready
+  /// 为 false）时即使为 true 也不隐藏——无图标可恢复，隐藏即
+  /// 僵尸进程，直接退出。
+  bool _closeToTray = true;
+
+  @override
+  void setCloseToTray(bool value) => _closeToTray = value;
+
+  /// 关窗裁定（_WindowCloseListener 转发至此）：偏好开且托盘
+  /// 就绪 → 隐藏到托盘；否则走托盘退出同路（摘图标 + 销毁
+  /// 窗口）真正退出。
+  Future<void> handleWindowClose() async {
+    if (_closeToTray && _ready) {
+      try {
+        await WindowManager.instance.hide();
+      } catch (e, st) {
+        swallow(e, st);
+      }
+      setWindowVisible(false);
+    } else {
+      await _quitApp();
+    }
+  }
   // 菜单项引用（label 是 live setter：applyLocale 运行时更新，无需重建菜单）
   MenuItem? _showItem;
   MenuItem? _autostartItem;
@@ -213,14 +238,12 @@ class TrayService implements WindowPort {
 }
 
 /// 关窗拦截：setPreventClose 后用户点关闭触发 onWindowClose 而非退出，
-/// 统一隐藏窗口（引擎/音乐继续后台跑）。退出走托盘菜单。
+/// 裁定转发 TrayService.handleWindowClose（偏好 + 托盘就绪与否决定
+/// 隐藏到托盘还是直接退出）。退出也可走托盘菜单。
 class _WindowCloseListener extends WindowListener {
   @override
   void onWindowClose() async {
-    try {
-      await WindowManager.instance.hide();
-    } catch (e, st) { swallow(e, st); }
-    TrayService.instance.setWindowVisible(false);
+    await TrayService.instance.handleWindowClose();
   }
 
   @override

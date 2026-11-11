@@ -26,6 +26,11 @@ abstract interface class WindowPort {
   /// [startInTray] 为 true 时表示开机自启静默模式，启动后窗口保持隐藏在托盘。
   Future<void> init({bool startInTray = false});
 
+  /// 关窗行为偏好（第十二轮 A1）：true = 关窗隐藏到托盘；
+  /// false = 关窗直接退出。由 AppModel 在启动与设置变更时下发；
+  /// 无托盘的平台可忽略。
+  void setCloseToTray(bool value);
+
   /// 注销托盘/窗口监听。
   Future<void> dispose();
 

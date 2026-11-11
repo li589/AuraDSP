@@ -483,38 +483,42 @@ class _SystemApoPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoRow(l.audioParadigm, '${l.paradigmAttachment} · System APO'),
-        // V-03「选了没用」：模式切换只选择附加目标，实际附加/卸载由
-        // 下方一键按钮执行——明示语义，避免用户以为切换即生效。
-        Padding(
-          padding: const EdgeInsets.only(top: 2, bottom: 2),
-          child: Text(l.apoModeHint,
-              style: captionOf(p, color: p.textDim).copyWith(fontSize: 11)),
+        // 第十二轮 D（文案修剪）：V-03 的模式语义说明整段常显太占
+        // 版面，缩为范式行尾的「?」气泡（文本仍是 apoModeHint 本体）。
+        Row(
+          children: [
+            Expanded(
+              child: _InfoRow(
+                  l.audioParadigm, '${l.paradigmAttachment} · System APO'),
+            ),
+            Tooltip(
+              message: l.apoModeHint,
+              child: Icon(Icons.help_outline_rounded,
+                  size: 14, color: p.textDim),
+            ),
+          ],
         ),
         // APO 引擎状态行（立项 P3，撤下第四轮的透传止损标注）：
         // sysapo 模式且已附加时按 telemetry 回传呈现真实状态——
         // 处理中（accent）/ 故障已退回直通（warning）/ 等待就绪
         // （dim）。状态来自 audiodg 内座位实例的回传块，非推测。
+        // 全面复审 S2（APO-7）的实测明细（rate/channels/params）
+        // 第十二轮 D 起收进本行的悬停气泡，不再单独占一行。
         if (model.audioMode == 'sysapo' && model.apoAnyAttached)
           Padding(
             padding: const EdgeInsets.only(top: 2, bottom: 2),
-            child: Text(apoNoteText,
-                style: captionOf(p, color: apoNoteColor)
-                    .copyWith(fontSize: 11)),
-          ),
-        // 全面复审 S2（APO-7）：引擎实测明细——telemetry 的 rate/
-        // channels/paramsApplied 此前读回存入却无呈现点，而这组值
-        // 正是判别「处理在哪个端点、参数是否真下发」的关键证据。
-        if (model.audioMode == 'sysapo' &&
-            model.apoAnyAttached &&
-            model.apoEngineRate > 0)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: Text(
-                l.apoEngineDetail('${model.apoEngineRate}',
-                    '${model.apoEngineChannels}', '${model.apoParamsApplied}'),
-                style:
-                    captionOf(p, color: p.textDim).copyWith(fontSize: 11)),
+            child: model.apoEngineRate > 0
+                ? Tooltip(
+                    message: l.apoEngineDetail('${model.apoEngineRate}',
+                        '${model.apoEngineChannels}',
+                        '${model.apoParamsApplied}'),
+                    child: Text(apoNoteText,
+                        style: captionOf(p, color: apoNoteColor)
+                            .copyWith(fontSize: 11)),
+                  )
+                : Text(apoNoteText,
+                    style: captionOf(p, color: apoNoteColor)
+                        .copyWith(fontSize: 11)),
           ),
         const SizedBox(height: AuraSpace.xs),
         Row(
@@ -757,29 +761,36 @@ class _SystemApoPanel extends StatelessWidget {
                       );
                     },
             ),
-            AuraChip(
-              l.setCompositeSlot,
-              icon: model.apoCompositeMode ? Icons.layers_rounded : Icons.layers_outlined,
-              selected: model.apoCompositeMode,
-              onTap: () => model.setApoCompositeMode(!model.apoCompositeMode),
+            // 第十二轮 C：复合与否只在附加那一刻被工具消费，附加
+            // 中/已附加后点选是假交互——禁用（与附加/卸载同口径），
+            // 理由收进气泡。
+            Tooltip(
+              message: l.apoCompositeTip,
+              child: AuraChip(
+                l.setCompositeSlot,
+                icon: model.apoCompositeMode
+                    ? Icons.layers_rounded
+                    : Icons.layers_outlined,
+                selected: model.apoCompositeMode,
+                onTap: (model.isApoOperating || model.apoAttached)
+                    ? null
+                    : () =>
+                        model.setApoCompositeMode(!model.apoCompositeMode),
+              ),
             ),
             AuraChip(
               l.setRefreshStatus,
               icon: Icons.refresh_rounded,
               onTap: () => model.checkApoStatus(),
             ),
-          ],
-        ),
-        const SizedBox(height: AuraSpace.xs),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.shield_outlined, size: 13, color: p.accent),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                l.setApoSafetyNote,
-                style: TextStyle(fontSize: 11, color: p.textDim, height: 1.3),
+            // 第十二轮 D：注册表安全说明整段常显改为盾形气泡，
+            // 文本仍是 setApoSafetyNote 本体，版面只留一个图标。
+            Tooltip(
+              message: l.setApoSafetyNote,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 7),
+                child: Icon(Icons.shield_outlined,
+                    size: 15, color: p.textDim),
               ),
             ),
           ],

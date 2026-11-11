@@ -977,6 +977,41 @@ extension AudioModesState on AppModel {
     _notifyUi();
   }
 
+  /// 启动自动附加（第十二轮 B1）：恢复为 sysapo、记忆目标仍在
+  /// 系统枚举中、且目标未附加时，启动后自动附加一次——开机自启
+  /// 场景免于每次手动点附加。仅启动路径调用，一次性闩防重复；
+  /// 附加走提权（UAC 由用户确认，系统硬要求）。结果走通知，
+  /// 失败原因在 lastApoError（面板可见），不无声吞掉。
+  Future<void> maybeAutoAttachApo() async {
+    if (_apoAutoAttachTried) return;
+    _apoAutoAttachTried = true;
+    if (!PlatformProfile.supportsBridges) return;
+    if (audioMode != 'sysapo') return;
+    final target = config.apoTargetEndpoint;
+    if (target.isEmpty) return;
+    await checkApoStatus(silent: true);
+    if (apoAttached) return;
+    final t = target.toLowerCase();
+    final exists = apoKnownEndpoints.any((e) {
+      final id = e['id']?.toString().toLowerCase() ?? '';
+      final name = e['name']?.toString().toLowerCase() ?? '';
+      // 目标存值三种历史形状：端点全 ID / 友好名 / 短 GUID
+      // （短 GUID 是全 ID 的子串，故有长度下限的子串匹配）。
+      return id == t || name == t || (t.length >= 8 && id.contains(t));
+    });
+    if (!exists) {
+      dbgLog('apo auto-attach: remembered target not present, skipped');
+      return;
+    }
+    final ok = await attachSystemApo();
+    if (ok) {
+      postNotice('System APO 已自动附加到上次使用的设备');
+    } else {
+      postNotice(lastApoError ?? 'System APO 自动附加未完成，请在设置页手动附加',
+          level: NoticeLevel.error);
+    }
+  }
+
   /// 检查 System APO 在系统注册与端点挂载状态，并检测心跳。
   /// [silent] = 后台探测（模型初始化时）：脚本缺失/查询失败不置错误，
   /// 避免用户未做任何操作就先攒下一条陈旧报错；UI 按钮与附加/卸载
@@ -1029,6 +1064,15 @@ extension AudioModesState on AppModel {
                       .toList()
                 : <Map<String, dynamic>>[];
             apoInstalledEndpoints = installed;
+            // 全部端点枚举（第十二轮 B1）：键为 id/name/direction
+            // 等（与 installed 的 EndpointId/DeviceName 形状不同，
+            // 消费侧分开匹配，勿混用 _apoEndpointMatches）。
+            final rawAll = data['endpoints'] as List?;
+            if (rawAll != null) {
+              apoKnownEndpoints = rawAll
+                  .map((e) => Map<String, dynamic>.from(e as Map))
+                  .toList();
+            }
             // 任意端点附加真值（第六轮项 3）：与所选目标无关，
             // 状态行与卸载目标据此，不让切目标把附加「藏丢」。
             apoAnyAttached = installed.isNotEmpty;

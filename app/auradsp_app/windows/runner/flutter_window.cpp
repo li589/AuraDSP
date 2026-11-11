@@ -30,6 +30,10 @@ bool FlutterWindow::OnCreate() {
   // 第十轮项 1：保存顶层窗口句柄供 OnDestroy 撤销分发关联用
   // （届时基类 window_handle_ 可能已被清零）。
   self_hwnd_ = GetHandle();
+  // 第十二轮 A2：Create() 开头的 Destroy() 空转已跑过一遍
+  // OnDestroy——旗标口径以「控制器在场」为准（见 OnDestroy），
+  // 这里再显式复位，防任何先行空转把分发闩住。
+  destroying_ = false;
 
   bool start_in_tray = false;
   for (const auto& arg : project_.dart_entrypoint_arguments()) {
@@ -65,13 +69,21 @@ void FlutterWindow::OnDestroy() {
   //   2) 撤销 GWLP_USERDATA 关联——WindowProc 的
   //      GetThisFromHandle 落空，重入消息直达 DefWindowProc，
   //      根本进不了 MessageHandler。
-  destroying_ = true;
-  if (self_hwnd_ != nullptr &&
-      reinterpret_cast<Win32Window*>(
-          GetWindowLongPtr(self_hwnd_, GWLP_USERDATA)) == this) {
-    SetWindowLongPtr(self_hwnd_, GWLP_USERDATA, 0);
-  }
+  // 第十二轮 A2 修正（真机定罪）：Win32Window::Create() 开头先
+  // 调 Destroy() 空转——旧实现无条件置位 destroying_，启动时就
+  // 把旗标永久闩住，此后 MessageHandler 对一切消息绕开控制器
+  // proc：window_manager 的关窗拦截（preventClose 委托）永不
+  // 运行，WM_CLOSE 落 DefWindowProc 直接销毁（点 X 无托盘直
+  // 退）。guest 插桩实证：WM_CLOSE 到达 WndProc 且 that 有效，
+  // 但 MessageHandler 入口日志恒空。故旗标与撤销只在控制器
+  // 在场（真销毁）时执行；空转无控制器、无窗口，无可保护。
   if (flutter_controller_) {
+    destroying_ = true;
+    if (self_hwnd_ != nullptr &&
+        reinterpret_cast<Win32Window*>(
+            GetWindowLongPtr(self_hwnd_, GWLP_USERDATA)) == this) {
+      SetWindowLongPtr(self_hwnd_, GWLP_USERDATA, 0);
+    }
     // 先把成员移空再销毁控制器（第九轮项 4 定罪）：直接对成员
     // 赋 nullptr 时，控制器析构在赋值完成前运行，其间销毁子
     // 视图 HWND 会把窗口消息同步重入 MessageHandler，成员仍

@@ -435,6 +435,14 @@ class ApoTelemetryReader {
         dbgLog('apo telemetry: block absent for 5s '
             '(APO not creating it — pre-engine APO build?)');
       }
+      if (_absentTicks == 300) {
+        // 第十二轮 B2：缺席满 30s 上报状态层监督——「附加全绿但
+        // audiodg 内 APO 永不运行」这类静默失效（五~九轮的 ACL/
+        // 旧 DLL 类病灶）此前只有一行日志，状态层无从通知用户。
+        // 每缺席周期只报一次（_absentTicks 连续计数，块打开即
+        // 清零，下一周期重新计）。
+        _send?.call({'evt': 'apotelemetry', 'absent': true});
+      }
       return;
     }
     _absentTicks = 0;

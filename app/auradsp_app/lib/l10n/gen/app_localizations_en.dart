@@ -170,6 +170,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setCompositeSlot => 'Composite slot';
 
   @override
+  String get apoCompositeTip =>
+      'Composite slot can only be chosen before attaching; detach first to change it';
+
+  @override
   String get setRefreshStatus => 'Refresh status';
 
   @override
@@ -2283,6 +2287,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get sysTrayHint =>
       'Closing the window hides to the system tray while audio keeps playing; quit via the tray menu';
+
+  @override
+  String get sysTrayHintOff =>
+      'Closing the window quits the app directly (no hiding to the system tray)';
 
   @override
   String get sysAutostart => 'Launch at login';

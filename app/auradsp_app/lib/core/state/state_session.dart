@@ -560,6 +560,17 @@ extension StateSession on AppModel {
     _notifyUi();
   }
 
+  /// 关窗到托盘开关（第十二轮 A1）：落盘 + 即时下发窗口端口。
+  /// 关窗裁定在托盘服务侧（偏好关、或托盘未就绪时点 X 直接退出，
+  /// 不留无图标可恢复的隐形进程）。
+  void setCloseToTray(bool on) {
+    if (config.closeToTray == on) return;
+    config.closeToTray = on;
+    window.setCloseToTray(on);
+    if (!_testing) ConfigManager.save(config);
+    _notifyUi();
+  }
+
   void setAutoRestoreSession(bool enable) {
     config.autoRestoreSession = enable;
     if (_testing) {
