@@ -11,6 +11,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/design.dart';
+import '../../core/effect_registry.dart';
 import '../../core/plugins/plugin_manager.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
@@ -461,72 +462,60 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
     ));
     addArrow();
 
-    // 3. Stage 0: Pre-DSP 插件槽位
+    void addCoreNode(String id) {
+      widgets.add(_CoreEffectNode(
+        id: id,
+        model: widget.model,
+        palette: p,
+        l10n: l,
+      ));
+      addArrow();
+    }
+
+    // 第七轮 S1：以下段位严格按引擎 process_stereo_chain 真序拼合。
+    // 此前是硬编码分桶（reverb 恒钉 Stage 2 后、loudness 恒钉 Stage 3
+    // 后、其余全部塞进主桶），与真实执行序在默认序下即有四处偏差，
+    // 且跨桶拖动在图上纹丝不动（项 1 定罪）。
+
+    // 3. 前置钉死段 gate → filter → bassmono
+    for (final id in kChainPinnedHead) {
+      if (widget.order.contains(id)) addCoreNode(id);
+    }
+
+    // 4. Stage 0: Pre-DSP 插件槽位
     addPluginSlotsForStage(0);
 
-    // 4. 前置处理节点（Gate, Filter, BassMono, Shelf）
-    for (final id in widget.order) {
-      if (id == 'gate' || id == 'filter' || id == 'bassmono' || id == 'shelf') {
-        widgets.add(_CoreEffectNode(
-          id: id,
-          model: widget.model,
-          palette: p,
-          l10n: l,
-        ));
-        addArrow();
-      }
+    // 5. dyneq（Stage 0 之后、vendor 段之前钉死）
+    for (final id in kChainPinnedMid) {
+      if (widget.order.contains(id)) addCoreNode(id);
     }
 
-    // 5. Stage 1: Pre-Vendor 插件槽位
+    // 6. Stage 1: Pre-Vendor 插件槽位
     addPluginSlotsForStage(1);
 
-    // 6. 主算法链节点
-    for (final id in widget.order) {
-      if (id != 'gate' &&
-          id != 'filter' &&
-          id != 'bassmono' &&
-          id != 'shelf' &&
-          id != 'reverb' &&
-          id != 'loudness') {
-        widgets.add(_CoreEffectNode(
-          id: id,
-          model: widget.model,
-          palette: p,
-          l10n: l,
-        ));
-        addArrow();
-      }
+    // 7. vendor 段（相对序 = graphOrder 的 vendor 子序，
+    //    reverb 在其真实名次，不再被摘出钉位）
+    for (final id in vendorSubsequenceOf(widget.order)) {
+      addCoreNode(id);
     }
 
-    // 7. Stage 2: Post-Vendor 插件槽位
+    // 8. Stage 2: Post-Vendor 插件槽位
     addPluginSlotsForStage(2);
 
-    // 8. 混响节点 (Reverb)
-    if (widget.order.contains('reverb')) {
-      widgets.add(_CoreEffectNode(
-        id: 'reverb',
-        model: widget.model,
-        palette: p,
-        l10n: l,
-      ));
-      addArrow();
+    // 9. 尾段钉死级 haas → spatial → exciter
+    for (final id in kChainPinnedTail) {
+      if (widget.order.contains(id)) addCoreNode(id);
     }
 
-    // 9. Stage 3: Post-Reverb 插件槽位（默认）
+    // 10. Stage 3: Post-Exciter 插件槽位
     addPluginSlotsForStage(3);
 
-    // 10. 后置等响 (Loudness)
-    if (widget.order.contains('loudness')) {
-      widgets.add(_CoreEffectNode(
-        id: 'loudness',
-        model: widget.model,
-        palette: p,
-        l10n: l,
-      ));
-      addArrow();
+    // 11. loudness（Stage 3 之后、限幅器之前钉死）
+    for (final id in kChainPinnedPost) {
+      if (widget.order.contains(id)) addCoreNode(id);
     }
 
-    // 11. Output Gate
+    // 12. Output Gate
     widgets.add(_PinnedNode(
       name: 'Output Gate',
       desc: '输出物理门控',
@@ -536,7 +525,7 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
     ));
     addArrow();
 
-    // 12. 前瞻限幅器 (Limiter)
+    // 13. 前瞻限幅器 (Limiter)
     widgets.add(_PinnedNode(
       name: 'Limiter',
       desc: '1.5ms 前瞻限幅',
@@ -546,10 +535,10 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
     ));
     addArrow();
 
-    // 13. Stage 4: Post-Limiter 插件槽位
+    // 14. Stage 4: Post-Limiter 插件槽位
     addPluginSlotsForStage(4);
 
-    // 14. Audio Output
+    // 15. Audio Output
     widgets.add(_PinnedNode(
       name: 'Audio Out',
       desc: '后级音频输出',

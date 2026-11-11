@@ -111,6 +111,9 @@ extension StateChain on AppModel {
     // chainOrder 在 snapshot/会话 schema 内，必须持久化，
     // 否则处理链重排重启即丢（此前唯一漏掉的大类用户动作）。
     scheduleAutoSave();
+    // 第七轮 S1：改序必须广播 UI——此前缺通知，链卡只在 initState
+    // 同步本地序，预设/会话等路径改序后列表与信号流双双陈旧。
+    _notifyUi();
   }
 
   /// chain 行电平表映射：返回该 stage 在 AURADSP_STAGE_MAX (32) 中的固定槽位索引。

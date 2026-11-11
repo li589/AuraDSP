@@ -10,6 +10,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/design.dart';
+import '../../core/effect_registry.dart';
 import '../../core/nav.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
@@ -34,35 +35,35 @@ class _ChainOrderCardState extends State<ChainOrderCard> {
   final ScrollController _chainScrollCtrl = ScrollController();
   late List<String> _order;
 
+  /// 已同步的模型 graphOrder 原串：区分「自家下发的改序」（不回灌）
+  /// 与「外部改序」（预设/会话/事件回填，必须重同步本地序）。
+  String? _lastSyncedRaw;
+
   @override
   void initState() {
     super.initState();
     _initOrderFromModel();
+    widget.model.addListener(_onModelChanged);
   }
 
+  /// 展示序恒为引擎真序（第七轮 S1）：钉死级归位，只有 vendor 段的
+  /// 相对序取自 graphOrder。此前按存档串原样呈现任意交错序，与引擎
+  /// 实际执行序不符（项 1 定罪）。
   void _initOrderFromModel() {
-    final raw = (widget.model.graphOrder ?? kDefaultCoreOrder.join(',')).split(',');
-    _order = raw.where((id) => id != 'output' && id != 'input' && kDefaultCoreOrder.contains(id)).toList();
-    for (final id in kDefaultCoreOrder) {
-      if (!_order.contains(id)) {
-        final want = kDefaultCoreOrder.indexOf(id);
-        var at = _order.length;
-        for (var i = 0; i < _order.length; i++) {
-          if (kDefaultCoreOrder.indexOf(_order[i]) > want) {
-            at = i;
-            break;
-          }
-        }
-        _order.insert(at, id);
-      }
-    }
+    _lastSyncedRaw = widget.model.graphOrder;
+    _order = trueChainOrderFrom(widget.model.graphOrder);
   }
 
-  /// 检查当前排序是否偏离系统默认排序
+  void _onModelChanged() {
+    if (widget.model.graphOrder == _lastSyncedRaw) return;
+    setState(_initOrderFromModel);
+  }
+
+  /// 检查当前排序是否偏离系统默认排序（以真序默认值为准）
   bool get _isNonDefaultOrder {
-    if (_order.length != kDefaultCoreOrder.length) return true;
+    if (_order.length != kTrueChainDefaultOrder.length) return true;
     for (var i = 0; i < _order.length; i++) {
-      if (_order[i] != kDefaultCoreOrder[i]) return true;
+      if (_order[i] != kTrueChainDefaultOrder[i]) return true;
     }
     return false;
   }
@@ -70,13 +71,14 @@ class _ChainOrderCardState extends State<ChainOrderCard> {
   /// 自动应用新顺序
   void _applyOrder() {
     final fullOrder = '${_order.join(',')},output';
+    _lastSyncedRaw = fullOrder;
     widget.model.setGraphOrder(fullOrder);
   }
 
   /// 恢复默认顺序
   void _resetToDefault() {
     setState(() {
-      _order = List<String>.from(kDefaultCoreOrder);
+      _order = List<String>.from(kTrueChainDefaultOrder);
       _applyOrder();
     });
   }
@@ -98,6 +100,7 @@ class _ChainOrderCardState extends State<ChainOrderCard> {
 
   @override
   void dispose() {
+    widget.model.removeListener(_onModelChanged);
     _chainScrollCtrl.dispose();
     super.dispose();
   }
@@ -144,6 +147,11 @@ class _ChainOrderCardState extends State<ChainOrderCard> {
                     if (newI > oldI) newI -= 1;
                     final item = _order.removeAt(oldI);
                     _order.insert(newI, item);
+                    // 第七轮 S1：落点只决定 vendor 段内的相对名次——
+                    // 随即按真序重新拼合（钉死级恒居其位），列表序与
+                    // 引擎执行序不再背离。拖到钉死级之前/之后等价于
+                    // 成为 vendor 段的首/末位。
+                    _order = composeTrueChainOrder(vendorSubsequenceOf(_order));
                     // 用户移动顺序即刻自动应用，无需手动确认
                     _applyOrder();
                   });
@@ -165,10 +173,11 @@ class _ChainOrderCardState extends State<ChainOrderCard> {
                   );
                   final isEnabled = widget.model.isStageEnabled(id);
 
-                  return ReorderableDragStartListener(
-                    key: ValueKey(id),
-                    index: i,
-                    child: Container(
+                  // 第七轮 S1：钉死级（引擎内位置固定）不给拖柄、示锁形；
+                  // 只有 vendor 级可拖动调序。
+                  final pinned = isChainPinnedStage(id);
+                  final row = Container(
+                    key: pinned ? ValueKey(id) : null,
                       margin: const EdgeInsets.symmetric(vertical: 3),
                       padding: const EdgeInsets.symmetric(
                         horizontal: AuraSpace.md + 2,
@@ -187,8 +196,11 @@ class _ChainOrderCardState extends State<ChainOrderCard> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.drag_indicator_rounded,
-                              size: 16, color: p.textDim),
+                          pinned
+                              ? Icon(Icons.lock_outline_rounded,
+                                  size: 15, color: p.textDim)
+                              : Icon(Icons.drag_indicator_rounded,
+                                  size: 16, color: p.textDim),
                           const SizedBox(width: AuraSpace.sm),
                           Container(
                             width: 24,
@@ -289,7 +301,12 @@ class _ChainOrderCardState extends State<ChainOrderCard> {
                           ),
                         ],
                       ),
-                    ),
+                    );
+                  if (pinned) return row;
+                  return ReorderableDragStartListener(
+                    key: ValueKey(id),
+                    index: i,
+                    child: row,
                   );
                 },
               ),
