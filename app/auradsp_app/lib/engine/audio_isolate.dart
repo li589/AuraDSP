@@ -34,6 +34,7 @@ import 'bridge_manager.dart';
 import 'bridge_plugin_ffi.dart';
 import 'apo_param_index.dart';
 import 'apo_plugin_block.dart';
+import 'apo_transit.dart';
 import 'debug_log.dart';
 import 'local_channel_policy.dart';
 

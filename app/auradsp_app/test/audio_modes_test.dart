@@ -213,11 +213,13 @@ void main() {
     });
   });
   group('ModeCaps（Part I Q0-7 定版）', () {
-    test('sysapo: apo processing + no file/mc', () {
+    test('sysapo: apo processing + file via transit, no mc', () {
       final c = AudioModes.capsFor('sysapo');
       expect(c.pluginProcessing, PluginProcessing.apo);
       expect(c.routeSelector, isFalse);
-      expect(c.fileEffects, isFalse);
+      // 资源计划 P4：卷积/DDC 经 APO 文件中转后可用（此前为
+      // false = 进 APO 模式自动关闭，计划书 Part C 取代之）。
+      expect(c.fileEffects, isTrue);
       expect(c.mcScript, isFalse);
     });
 

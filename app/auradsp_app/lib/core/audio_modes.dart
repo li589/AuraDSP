@@ -198,16 +198,20 @@ abstract final class AudioModes {
     return outputWasapi;
   }
 
-  /// 模式能力查表（Q0-7 定版）：sysapo 的 fileEffects/mcScript
-  /// 为 false 是已上线口径（文件型效果自动关闭、MC 脚本不入
-  /// 参数块）的能力化重述，非新限制。未知 id 回退本地链缺省。
+  /// 模式能力查表（Q0-7 定版）：未知 id 回退本地链缺省。
+  /// sysapo 的 fileEffects 曾为 false（文件型效果自动关闭）；
+  /// 资源计划 P4（2026-11-12）起经 APO 文件中转（参数块只传
+  /// %ProgramData% 中转副本路径、引擎侧围栏校验）后可用，翻
+  /// 为 true——进 APO 模式不再自动关闭卷积/DDC，状态层重放路
+  /// 径时由发布者自动换副本（UI 仍显示原始路径，业主 Q3）。
+  /// mcScript 仍 false：多声道脚本的引擎内编译面未覆盖 APO。
   static ModeCaps capsFor(String mode) {
     switch (mode) {
       case 'sysapo':
         return const ModeCaps(
           pluginProcessing: PluginProcessing.apo,
           routeSelector: false,
-          fileEffects: false,
+          fileEffects: true,
           mcScript: false,
         );
       case 'vbcallback':

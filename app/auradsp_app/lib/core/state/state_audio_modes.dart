@@ -24,14 +24,14 @@ extension AudioModesState on AppModel {
 
   // ---- 模式与管线 ----
 
-  /// 进入 sysapo 时的文件型效果策略（2026-11-10 用户裁定）：
-  /// 卷积/DDC 若开着则自动关闭（经正常 setParamById 路径，全链
-  /// 同步）并通知一次；离开 sysapo 不自动恢复，由用户自行重开。
-  /// setParam 侧另有开启拦截（见 state_core.setParam）。
+  /// 进入 sysapo 时的文件型效果策略（历史口径）：2026-11-10
+  /// 用户裁定曾为「卷积/DDC 若开着则自动关闭并通知一次」；
+  /// 2026-11-12 资源计划 P4 起 sysapo 经文件中转后 fileEffects
+  /// 可用，本策略按 ModeCaps 恒为空操作（函数与调用点保留，
+  /// 作为未来再有 fileEffects 不可用模式时的统一策略位）。
   void applyApoFileEffectPolicy() {
-    // ModeCaps 口径：仅在 fileEffects 不可用的模式下执行本策略
-    // （当前只有 sysapo）；能力可用时整段为空操作，调用方无需
-    // 再写模式判断。
+    // ModeCaps 口径：仅在 fileEffects 不可用的模式下执行本策略；
+    // 能力可用时整段为空操作，调用方无需再写模式判断。
     if (modeCaps.fileEffects) return;
     var turnedOff = false;
     for (final id in kApoFileEffectEnables) {

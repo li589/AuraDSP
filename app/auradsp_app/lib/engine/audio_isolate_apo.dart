@@ -291,9 +291,18 @@ class ApoParamPublisher {
       _logUnmapped(id);
       return;
     }
+    // 文件中转（资源计划 P4）：卷积 IR / DDC 文件路径在写块前
+    // 换成中转副本路径——audiodg（LocalService）读不到用户原
+    // 路径。状态层与 UI 保留原始路径，只有参数块里走副本；
+    // 中转失败写空串（引擎卸载），不写读不到的原路径假装可用。
+    // 引擎侧还有第二道围栏（ApoEngineHost 只认中转根下路径）。
+    var effective = text;
+    if (id == ParamId.convIrPath || id == ParamId.ddcLoad) {
+      effective = ApoTransit.transitPathFor(text) ?? '';
+    }
     if (!_ensure()) return;
     _beginWrite();
-    _writeString(id, text);
+    _writeString(id, effective);
     _endWrite();
   }
 
