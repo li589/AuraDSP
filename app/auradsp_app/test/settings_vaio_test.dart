@@ -35,6 +35,10 @@ void main() {
       await tester.pumpWidget(_app(model));
       await tester.pumpAndSettle();
       model.setAudioMode('vaio');
+      // 2026-11-09 起 pipelineOutputForMode 明确不改写用户输出选择：
+      // 切到 vaio 模式仍保留当前管线输出，需显式选 VAIO 才渲染物理
+      // 输出子面板（旧断言假设模式会自动改写，已过时）。
+      model.setPipelineOutput('vaio');
       await tester.pumpAndSettle();
       expect(find.text('物理输出'), findsOneWidget);
       expect(find.text('自动选择（非VAIO扬声器）'), findsOneWidget);

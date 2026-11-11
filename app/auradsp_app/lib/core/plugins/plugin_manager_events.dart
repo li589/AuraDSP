@@ -114,6 +114,53 @@ extension PluginManagerEvents on PluginManager {
     }
   }
 
+  /// APO telemetry 槽状态合并（Part I Q2/Q3，D5）：sysapo 下
+  /// 槽状态以 APO 侧为真相——处理类字段（hasActive/bypassed/
+  /// fault/latency/rms/processCalls）取 telemetry，插件元数据
+  /// 与总线类字段保留影子状态的（telemetry 不携带）。返回本
+  /// 次新出现的故障边沿（false→true）供状态层发一次性通知。
+  List<({int slot, String category})> onApoPluginStatuses(
+      List<dynamic> rawSlots) {
+    final edges = <({int slot, String category})>[];
+    for (final raw in rawSlots) {
+      if (raw is! Map) continue;
+      final slot = (raw['slot'] as num?)?.toInt() ?? -1;
+      if (slot < 0 || slot >= PluginManager.kMaxSlots) continue;
+      final prev = _slotStatuses[slot];
+      final fault = raw['fault'] as bool? ?? false;
+      if (fault && !prev.fault) {
+        edges.add((
+          slot: slot,
+          category: raw['faultCategory'] as String? ?? 'load_failed',
+        ));
+      }
+      _slotStatuses[slot] = PluginHostStatus(
+        hasActive: raw['hasActive'] as bool? ?? false,
+        bypassed: raw['bypassed'] as bool? ?? false,
+        latency: (raw['latency'] as num?)?.toInt() ?? 0,
+        processCalls: (raw['processCalls'] as num?)?.toInt() ?? 0,
+        inRms: (raw['inRms'] as num?)?.toDouble() ?? 0,
+        outRms: (raw['outRms'] as num?)?.toDouble() ?? 0,
+        maxDiff: prev.maxDiff,
+        lastFrames: prev.lastFrames,
+        plugin: prev.plugin,
+        remoteMode: prev.remoteMode,
+        remoteFailed: prev.remoteFailed,
+        fault: fault,
+        faultStage: raw['faultStage'] as String? ?? 'none',
+        faultCategory: raw['faultCategory'] as String? ?? 'none',
+        transportLatency: prev.transportLatency,
+        inputOverflows: prev.inputOverflows,
+        outputOverflows: prev.outputOverflows,
+        channels: prev.channels,
+        mainInChannels: prev.mainInChannels,
+        mainOutChannels: prev.mainOutChannels,
+      );
+    }
+    if (rawSlots.isNotEmpty) _notify();
+    return edges;
+  }
+
   /// 处理引擎对插入阶段的回执。
   /// 引擎契约：rc=1 成功，rc=0 拒绝；拒绝时回滚到下发前的值，
   /// 避免「引擎拒绝但 UI 显示成功」。

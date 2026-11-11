@@ -1,0 +1,12 @@
+PY= 3.12.9
+IMPERSONATE|ok=True|err=0
+IS_ADMIN_AFTER= False
+APP_DIR= C:\Users\li\AppData\Local\Programs\AuraDSP
+DLL_EXISTS= True
+IS_ADMIN= False
+CREATEFILE|RW|ok=True|err=0|handle=652
+CREATEFILE|RO|ok=True|err=0|handle=652
+CREATEFILE|NONE|ok=True|err=0|handle=652
+VAIO_DETECT_RC= 275
+VAIO_DETECT_OUT= {"found":true,"driverVersion":"1.0.0","track":"modern","kmdf":"1.15","sampleRate":48000,"channels":2,"bits":16,"activeRender":2,"activeCapture":0,"endpoints":[{"name":"扬声器 (High Definition Audio Device)","id":"{0.0.0.00000000}.{ff69ca35-a423-4ae6-82cb-b06962b0fcee}"}]}
+FOUND= True NOTE= None TRACK= modern VERSION= 1.0.0

@@ -28,6 +28,7 @@ int main() {
     auradsp::PluginChainComponent chained;
 
     check(chained.prepare(kSampleRate, kBlock), "chain prepare");
+    check(chained.ensureDelayLines(0), "chain pdc delay lines");
 
     const bool directLoaded =
         direct.loadPluginSlot(0, path, "", kSampleRate, kBlock);

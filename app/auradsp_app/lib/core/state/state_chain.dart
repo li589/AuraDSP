@@ -111,6 +111,9 @@ extension StateChain on AppModel {
     // chainOrder 在 snapshot/会话 schema 内，必须持久化，
     // 否则处理链重排重启即丢（此前唯一漏掉的大类用户动作）。
     scheduleAutoSave();
+    // 第七轮 S1：改序必须广播 UI——此前缺通知，链卡只在 initState
+    // 同步本地序，预设/会话等路径改序后列表与信号流双双陈旧。
+    _notifyUi();
   }
 
   /// chain 行电平表映射：返回该 stage 在 AURADSP_STAGE_MAX (32) 中的固定槽位索引。
@@ -305,6 +308,74 @@ extension StateChain on AppModel {
       'value': 0,
       'isFloat': false,
     });
+    scheduleAutoSave();
+  }
+
+  // ---- 多声道 Liveprog（liveprog.mc，方案 B） ----
+
+  void setLiveprogMcEnabled(bool on) {
+    lpMcEnabled = on;
+    _notifyUi();
+    _markSent(ParamId.lpMcEnable);
+    send({
+      'cmd': 'setParam',
+      'id': ParamId.lpMcEnable,
+      'value': on ? 1 : 0,
+      'isFloat': false,
+    });
+    scheduleAutoSave();
+  }
+
+  void unloadLiveprogMc() {
+    lpMcEnabled = false;
+    lpMcStatus = 0;
+    lpMcError = null;
+    lpMcPresetCodeMismatch = false;
+    lpMcCompileMs = -1;
+    _notifyUi();
+    _markSent(ParamId.lpMcUnload);
+    send({
+      'cmd': 'setParam',
+      'id': ParamId.lpMcUnload,
+      'value': 0,
+      'isFloat': false,
+    });
+    scheduleAutoSave();
+  }
+
+  void setLiveprogMcParam(int index, double v) {
+    if (index >= 0 && index < 8) {
+      lpMcSliderValues[index + 1] = v;
+      lpMcParams[index] = v;
+    }
+    setFloat('liveprogmc.param${index + 1}', v);
+  }
+
+  void setLiveprogMcCode(String text) {
+    lpMcError = null;
+    final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    lpMcCompileMs = -1;
+    lpMcPresetCodeMismatch = false;
+    // 与立体声同口径：脚本内 sliderN: 声明为默认值单一来源——首次
+    // 出现（或声明变化）时采纳声明默认，用户已调值保留。
+    final metas = EelSliderParser.parse(normalized);
+    lpMcSliderMetas.clear();
+    lpMcSliderMetas.addAll(metas);
+    for (final meta in metas.values) {
+      if (!lpMcSliderValues.containsKey(meta.index)) {
+        var d = meta.defaultVal;
+        if (meta.minVal <= meta.maxVal) {
+          d = d.clamp(meta.minVal, meta.maxVal);
+        }
+        lpMcSliderValues[meta.index] = d;
+        if (meta.index >= 1 && meta.index <= 8) {
+          lpMcParams[meta.index - 1] = d;
+        }
+      }
+    }
+    lpMcCode = normalized;
+    lpMcDraftCode = normalized;
+    send({'cmd': 'setParamStr', 'id': ParamId.lpMcCode, 'text': normalized});
     scheduleAutoSave();
   }
 

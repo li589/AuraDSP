@@ -4,6 +4,8 @@
 
 本项目目录汇总了 AuraDSP 面向所有支持平台的安装包制作、打包脚本、元数据管理，以及**自主研发的 Windows 安装向导子项目**。所有发行产物均遵循统一的工程标准，最终成果集中输出至根目录下的 `dist/` 目录。
 
+> **当前状态（2026-11-06）**：**发布规范已裁定**（版本号 `vXX.XX.X`、首版 v0.1.0、仅 Win+Linux、只从 `main` 构建、门禁全绿、每平台驱动包+便携包+正式安装包三件齐备，见 `docs/01_distribution_architecture.md` 发布总则）。**双侧均已落地到「拉取即可构建发行包」**：Linux 入口 `linux/pack.sh --build`（一键：引擎→bundle→同步→deb / 驱动配置包 / AppImage / tar.gz）；Windows 入口 `windows/pack.py`（全量可传参，driver/portable/setup 三模式 + 资源自动合并），配自研两段式安装程序（C++ 引导壳 + Flutter 极光向导，见 `docs/02_windows_installer_design.md` 与 `docs/20-执行/Windows安装程序与打包脚本实施设计-2026-11-06.md`），由 `.github/workflows/windows-installer.yml` 在 windows-latest 持续验证编译与打包逻辑。资源包独立版本线（`resources-v*`，从 0.0.1 起）见 01 §2.4。未决外部项：Windows 驱动正式签名（Attestation/EV，现为测试签名，见 05 号规划风险项）。
+
 ---
 
 ## 1. 目录结构全景
@@ -15,7 +17,8 @@ installer/
 │   ├── 01_distribution_architecture.md   # 发行架构总纲与跨平台分发规范
 │   ├── 02_windows_installer_design.md     # 自研 Windows 安装程序设计方案
 │   ├── 03_linux_packaging_spec.md        # Linux (DEB/AppImage/Flatpak/Snap) 打包规格
-│   └── 04_mobile_macos_spec.md           # Android & macOS 打包与签名规范
+│   ├── 04_mobile_macos_spec.md           # Android & macOS 打包与签名规范
+│   └── 05_installer设计与实施规划-2026-11-06.md  # 子项目总体设计、选型调研与阶段计划
 ├── shared/                        # 跨平台共享资源与元数据
 │   ├── README.md                  # 共享资源说明
 │   ├── assets/                    # 图标、横幅、徽标 (.ico, .png, .svg)
@@ -23,12 +26,15 @@ installer/
 │   └── metadata/                  # 应用元数据 (app_info.json, 多语言描述)
 ├── windows/                       # Windows 发行与打包体系
 │   ├── README.md                  # Windows 打包体系说明
-│   ├── portable/                  # 便携版 (Portable Zip) 打包工具与配置
+│   ├── pack.py                    # Windows 全量可传参打包入口（三模式，见 windows/README.md）
+│   ├── tests/                     # pack.py fixture 自测（CI 同跑）
+│   ├── portable/                  # 便携版 (Portable Zip) 说明
 │   │   └── README.md
 │   └── custom_installer/          # 自研安装程序子项目 (AuraDSP Setup Wizard)
-│       ├── README.md              # 自研安装程序说明与工程规划
+│       ├── README.md              # 自研安装程序说明
 │       ├── architecture.md        # 安装程序内核、Payload、驱动注册架构详解
-│       └── project_template/      # 预留源码骨架与工程配置
+│       ├── bootstrapper/          # C++ 引导壳（零第三方依赖，stored-zip 解包 + SHA256 校验）
+│       └── wizard/                # Flutter 安装向导 auradsp_setup（极光 UI + 安装引擎）
 ├── linux/                         # Linux 发行与打包体系
 │   ├── README.md                  # Linux 打包说明与运行时矩阵
 │   ├── deb/                       # Debian / Ubuntu (.deb) 打包工具与模板
@@ -84,8 +90,9 @@ installer/
 ## 4. 详细技术方案导航
 
 深入了解各个技术环节的架构设计与实现细则，请参阅 `docs/` 目录：
-- [01. 全平台发行架构与产物规范](file:///d:/temp_desktop/Proj/JamesDSP/installer/docs/01_distribution_architecture.md)
-- [02. 自研 Windows 安装程序设计方案](file:///d:/temp_desktop/Proj/JamesDSP/installer/docs/02_windows_installer_design.md)
-- [03. Linux (DEB / AppImage / Flatpak / Snap) 规格方案](file:///d:/temp_desktop/Proj/JamesDSP/installer/docs/03_linux_packaging_spec.md)
-- [04. Android 与 macOS 发行与签名规格方案](file:///d:/temp_desktop/Proj/JamesDSP/installer/docs/04_mobile_macos_spec.md)
+- [01. 全平台发行架构与产物规范](docs/01_distribution_architecture.md)
+- [02. 自研 Windows 安装程序设计方案](docs/02_windows_installer_design.md)
+- [03. Linux (DEB / AppImage / Flatpak / Snap) 规格方案](docs/03_linux_packaging_spec.md)
+- [04. Android 与 macOS 发行与签名规格方案](docs/04_mobile_macos_spec.md)
+- [05. installer 子项目设计与实施规划](docs/05_installer设计与实施规划-2026-11-06.md)
 

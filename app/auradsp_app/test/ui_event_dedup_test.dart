@@ -1,18 +1,20 @@
 import 'package:auradsp_app/core/design.dart';
+import 'package:auradsp_app/core/notice.dart';
+import 'package:auradsp_app/core/plugins/plugin_manager.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
-import 'package:auradsp_app/features/shell.dart';
+import 'package:auradsp_app/features/notice_host.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// 2026-10-18 UI 排查回归：引擎事件同因抑制 + EventBanner 一次性触发。
+/// 2026-10-18 UI 排查回归：引擎事件同因抑制 + NoticeHost 一次性触发。
 ///
 /// 背景（用户上报「通知条出问题通知一两次就够了，结果经常持续不断重复弹出」）：
 /// - paramResult rc!=0（guard 拒绝）与 error 事件在 AppModel 侧零去重，
 ///   预设全量 apply / session 回放 / EQ 曲线节流下发 / liveprog 编译重试
 ///   任一批量路径都会把 N 个拒绝排成一串 4s SnackBar；
-/// - EventBanner 旧实现把 addPostFrameCallback 放在 build 里，首次事件后
+/// - NoticeHost 旧实现把 addPostFrameCallback 放在 build 里，首次事件后
 ///   eventSeq 永不为 0，父级每次重建都重复注册消费回调（帧间连发还会吞事件）。
 Map<String, dynamic> _guardMsg(String id, String msg) => {
       'evt': 'paramResult',
@@ -39,7 +41,7 @@ void main() {
       expect(m.eventSeq.value, base + 1);
       expect(m.lastGuard, isNotNull);
       expect(m.lastGuard!.message, 'out of range');
-      m.clearLastGuard(); // 模拟 EventBanner 消费
+      m.clearLastGuard(); // 模拟 NoticeHost 消费
 
       // 同一 (id, msg) 再次到达：抑制，不自增、不重设一次性字段
       m.handleMessageForTesting(_guardMsg('reverb.preset', 'out of range'));
@@ -109,10 +111,10 @@ void main() {
     });
   });
 
-  group('EventBanner 一次性触发', () {
+  group('NoticeHost 一次性触发', () {
     testWidgets('一次事件一个 SnackBar；同因重复不再弹', (tester) async {
       final model = AppModel(testing: true);
-      await tester.pumpWidget(_wrap(EventBanner(model: model)));
+      await tester.pumpWidget(_wrap(NoticeHost(model: model)));
 
       model.handleMessageForTesting(
           _guardMsg('eq.curve', 'first problem'));
@@ -132,7 +134,7 @@ void main() {
 
     testWidgets('不同成因顺序弹出（排队而不是吞掉）', (tester) async {
       final model = AppModel(testing: true);
-      await tester.pumpWidget(_wrap(EventBanner(model: model)));
+      await tester.pumpWidget(_wrap(NoticeHost(model: model)));
 
       model.handleMessageForTesting(
           _guardMsg('eq.curve', 'first problem'));
@@ -151,6 +153,62 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
       }
       expect(find.text('second problem'), findsOneWidget);
+    });
+  });
+
+  group('通用通知队列（2026-11-09 组件化 postNotice）', () {
+    test('入队保序、等级保留、eventSeq 逐条递增', () {
+      final m = AppModel(testing: true);
+      final base = m.eventSeq.value;
+      m.postNotice('第一条');
+      m.postNotice('第二条', level: NoticeLevel.warning);
+      m.postNotice('第三条', level: NoticeLevel.error);
+      expect(m.eventSeq.value, base + 3);
+      expect(m.hasPendingNotice, isTrue);
+      final n1 = m.takeNotice();
+      final n2 = m.takeNotice();
+      final n3 = m.takeNotice();
+      expect(n1?.text, '第一条');
+      expect(n1?.level, NoticeLevel.info);
+      expect(n2?.text, '第二条');
+      expect(n2?.level, NoticeLevel.warning);
+      expect(n3?.text, '第三条');
+      expect(n3?.level, NoticeLevel.error);
+      expect(m.takeNotice(), isNull);
+      expect(m.hasPendingNotice, isFalse);
+    });
+
+    test('空文案不入队不递增', () {
+      final m = AppModel(testing: true);
+      final base = m.eventSeq.value;
+      m.postNotice('');
+      expect(m.eventSeq.value, base);
+      expect(m.hasPendingNotice, isFalse);
+    });
+  });
+
+  group('PDC 引擎真值同步（F2，2026-11-09）', () {
+    test('引擎自动关 → 开关同步为关 + warning 通知', () {
+      final m = AppModel(testing: true);
+      m.pluginManager.setPdc(true);
+      expect(m.pluginManager.pdcEnabled, isTrue);
+      m.handleMessageForTesting({'evt': 'pluginPdcSync', 'pdc': false});
+      expect(m.pluginManager.pdcEnabled, isFalse);
+      expect(m.hasPendingNotice, isTrue);
+      final n = m.takeNotice();
+      expect(n?.level, NoticeLevel.warning);
+      expect(n?.text, contains('PDC'));
+      expect(n?.text, contains('已自动关闭'));
+    });
+
+    test('真值与 UI 一致时不通知；关→开同步也不通知', () {
+      final m = AppModel(testing: true);
+      m.handleMessageForTesting({'evt': 'pluginPdcSync', 'pdc': false});
+      expect(m.pluginManager.pdcEnabled, isFalse);
+      expect(m.hasPendingNotice, isFalse);
+      m.handleMessageForTesting({'evt': 'pluginPdcSync', 'pdc': true});
+      expect(m.pluginManager.pdcEnabled, isTrue);
+      expect(m.hasPendingNotice, isFalse);
     });
   });
 }

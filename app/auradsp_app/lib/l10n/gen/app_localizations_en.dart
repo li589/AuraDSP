@@ -144,6 +144,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setConnIdle => 'Not connected (waiting for Voicemeeter)';
 
   @override
+  String get setVbNotEnabled => 'Voicemeeter not enabled';
+
+  @override
   String get setDeviceDisconnected => 'Device not connected';
 
   @override
@@ -201,6 +204,31 @@ class AppLocalizationsEn extends AppLocalizations {
       'Registry safety: all changes are atomically protected via HKLM\\SOFTWARE\\AuraDSP\\Child APOs plus a dual-layer disk snapshot; the original driver config is 100% restored on uninstall.';
 
   @override
+  String get apoModeHint =>
+      'Switching modes only selects the attach target; use Attach / Detach below to actually apply or remove the APO.';
+
+  @override
+  String get apoEngineNoteActive =>
+      'APO engine active: audio through this endpoint is processed by the AuraDSP engine in real time (the plugin chain does not run in APO mode).';
+
+  @override
+  String get apoEngineNoteWaiting =>
+      'APO attached, waiting for the engine to become ready; audio passes through until then.';
+
+  @override
+  String get apoEngineNoteFault =>
+      'The APO engine faulted and fell back to pass-through automatically (system audio is unaffected). Re-attach the APO or restart the app to retry.';
+
+  @override
+  String get apoEngineNoteLoadFailed =>
+      'APO is attached, but the engine failed to load; audio passes through. Verify the installation is complete, then re-attach or reinstall the app.';
+
+  @override
+  String setApoHeartbeat(int sr, int frames) {
+    return 'Heartbeat active ($sr Hz · $frames frames)';
+  }
+
+  @override
   String setDriverOffline(String name) {
     return '$name [not detected/offline]';
   }
@@ -212,6 +240,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get setVaioMissing =>
       'AuraVAIO virtual sound card driver not detected';
+
+  @override
+  String get setVaioUnknown => 'AuraVAIO driver status not checked yet';
 
   @override
   String get setVaioDesc =>
@@ -229,6 +260,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'AuraVAIO driver installed and verified successfully!';
 
   @override
+  String get setVaioInstallUnverified =>
+      'Driver install had no effect: AuraVAIO device is still not detected (the driver cannot load while test signing is off — enable it and retry)';
+
+  @override
   String get setDriverInstallFailed => 'Driver installation incomplete';
 
   @override
@@ -238,17 +273,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setVaioUninstallOk => 'AuraVAIO driver uninstalled successfully';
 
   @override
+  String get setVaioUninstallUnverified =>
+      'Driver uninstall had no effect: AuraVAIO device is still detected';
+
+  @override
   String get setDriverUninstallFailed => 'Uninstall incomplete';
 
   @override
-  String get setRedetect => 'Re-detect';
+  String get setRedetect => 'Detect';
 
   @override
   String get setWasapiDesc =>
       'System-level WASAPI shared/exclusive audio engine; no extra driver required';
 
   @override
-  String get setRefreshDevice => 'Refresh devices';
+  String get setRefreshDevice => 'Detect';
 
   @override
   String get setAsioRegisterUac => 'Register driver (UAC)';
@@ -517,6 +556,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ioNoOutputDevices => 'No output devices available';
+
+  @override
+  String get ioNoAvailableSoundCard => 'No sound card available';
+
+  @override
+  String get ioInputOverriddenByVaio =>
+      'Driven by the VAIO bridge chain — this input selection has no effect. Point the player\'s output at the AuraVAIO endpoint';
+
+  @override
+  String get ioOutputOverriddenByVaio =>
+      'Driven by the VAIO bridge chain — this output device selection has no effect. Switch the output type to VAIO to set the physical landing point';
+
+  @override
+  String get ioOutputOverriddenByAsio =>
+      'Driven by the ASIO bridge chain — this output selection has no effect; the ASIO driver decides the output';
+
+  @override
+  String get ioOnlyVirtualOutputs =>
+      'Only virtual output endpoints (no physical sound card)';
 
   @override
   String get ioPhysicalOutput => 'Physical output';
@@ -1190,6 +1248,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'DSP strategy when input or output device is multi-channel (4.0 / 5.1 / 7.1): Discrete = all channels independently pass through DSP with per-effect masks and upmixing plugin support; Matrix = folded to stereo for DSP and upmixed back to surround (LFE passthrough). Binaural Virtual Surround takes highest priority when enabled.';
 
   @override
+  String get upmixFill => 'Fill unused channels';
+
+  @override
+  String get upmixFillHint =>
+      'When off, stereo sources will not fill unused channels; surround sources are unaffected and LFE passes through.';
+
+  @override
+  String meterBusScope(String bus, int ch) {
+    return '$bus · $ch ch';
+  }
+
+  @override
   String get audioMode => 'Audio Mode';
 
   @override
@@ -1201,7 +1271,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get audioParadigmHint =>
-      'Select audio topology: Attachment Mode intercepts in-place; Pipeline Mode flows end-to-end (ADR-009)';
+      'Select audio topology: Attachment Mode intercepts in-place; Pipeline Mode flows end-to-end';
 
   @override
   String get paradigmAttachment => 'Attachment Mode';
@@ -1272,6 +1342,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get driverLayerTitle => 'Driver Information & Controls';
 
   @override
+  String get osVersionLabel => 'Operating system';
+
+  @override
   String get inputLayerTitle => 'Audio Input';
 
   @override
@@ -1317,6 +1390,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get apoAttached => 'Attached';
 
   @override
+  String apoAttachedOn(String name) {
+    return 'Attached on $name';
+  }
+
+  @override
   String get apoNotAttached => 'Not Attached';
 
   @override
@@ -1327,6 +1405,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get asioDriverCardTitle => 'AuraDSP Virtual ASIO Driver';
+
+  @override
+  String get vaioDriverCardTitle => 'AuraVAIO Virtual Audio Driver';
+
+  @override
+  String get wasapiDriverCardTitle => 'WASAPI Audio Engine';
 
   @override
   String get asioDriverStatus => 'Driver Status';
@@ -1353,7 +1437,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get asioDawIdle => 'Idle (Waiting for DAW)';
 
   @override
-  String get asioStatusCheck => 'Check Status';
+  String get asioStatusCheck => 'Detect';
 
   @override
   String get virtualSinkNotice =>
@@ -1569,6 +1653,31 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get catTest => 'Test';
+
+  @override
+  String get catAbout => 'About';
+
+  @override
+  String get aboutVersion => 'Version';
+
+  @override
+  String get aboutForm => 'Form';
+
+  @override
+  String get aboutDeveloper => 'Developer';
+
+  @override
+  String get aboutRepo => 'Source code';
+
+  @override
+  String get aboutLicense => 'License';
+
+  @override
+  String get aboutRefs => 'Built on';
+
+  @override
+  String get aboutOpenFailed =>
+      'Couldn\'t open the link — please visit it manually';
 
   @override
   String get pageHomeEyebrow => 'CONSOLE';
@@ -1848,6 +1957,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get visualizerStyleTornado => 'Particle Tornado';
 
   @override
+  String get visualizerStyleNebulaFlow => 'Nebula Flow';
+
+  @override
   String get visualizerThemeSystem => 'System Theme';
 
   @override
@@ -1861,6 +1973,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get visualizerThemeAuroraGlow => 'Aurora Glow';
+
+  @override
+  String get visualizerThemeEmeraldMist => 'Emerald Mist';
 
   @override
   String get themeSwitchTip => 'Cycle color scheme';
@@ -3223,6 +3338,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugLoading => 'Loading…';
 
   @override
+  String get vbRouteLoading => 'Loading · passthrough';
+
+  @override
+  String get vbRouteReleasing => 'Releasing · passthrough';
+
+  @override
+  String get vbRouteFailed => 'Failed · passthrough';
+
+  @override
+  String get vbRouteNotApplied => 'Not active · passthrough';
+
+  @override
   String get plugUnloading => 'Unloading…';
 
   @override
@@ -3621,6 +3748,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get errInternal => 'Internal engine error';
 
   @override
+  String get errHostUnavailable => 'Host unavailable';
+
+  @override
   String get lpFindReplace => 'Find & Replace';
 
   @override
@@ -3674,6 +3804,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lpTitleEditor => 'EEL2 Editor';
+
+  @override
+  String get lpTargetStereo => 'Stereo Script';
+
+  @override
+  String get lpTargetMultichannel => 'Multichannel Script';
+
+  @override
+  String get lpMcHint =>
+      'Runs in multichannel mode (channels > 2); reads/writes all 8 channels spl0..spl7';
 
   @override
   String get lpBtnApplied => 'Applied';

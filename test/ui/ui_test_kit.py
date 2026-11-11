@@ -136,13 +136,43 @@ def ensure_running(timeout=12.0):
 
 
 def ensure_foreground(hwnd):
+    """把 hwnd 提到前台，并**复核**它真的成了前台窗口。
+
+    为什么必须复核：Windows 有「前台锁」——后台进程调 SetForegroundWindow
+    会被系统直接拒绝，函数返回 FALSE 而不报错。实测本机 IDE 常驻前台时，
+    SetForegroundWindow 完全无效，于是应用的**第一次点击被 IDE 吃掉**，
+    UI 用例表现为「点空也不报错、断言拿到 0 像素差异」——最难查的一类假失败。
+
+    绕过办法（标准做法）：AttachThreadInput 把当前线程临时挂到前台窗口
+    的输入队列上，借它的权限完成置前；随后用 GetForegroundWindow 复核，
+    不成功就再试几轮（BringWindowToTop + SetForegroundWindow）。
+    """
     switch_to_default_desktop()
-    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-    user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
-    user32.SetForegroundWindow(hwnd)
-    time.sleep(0.06)
-    user32.SetWindowPos(hwnd, -2, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
-    time.sleep(0.06)
+    fg = user32.GetForegroundWindow()
+    cur_tid = kernel32.GetCurrentThreadId()
+    fg_tid = None
+    attached = False
+    if fg and fg != hwnd:
+        fg_tid = user32.GetWindowThreadProcessId(fg, None)
+        if fg_tid and fg_tid != cur_tid:
+            user32.AttachThreadInput(cur_tid, fg_tid, True)
+            attached = True
+    try:
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+        user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
+        user32.SetForegroundWindow(hwnd)
+        time.sleep(0.06)
+        user32.SetWindowPos(hwnd, -2, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
+        time.sleep(0.06)
+        for _ in range(4):
+            if user32.GetForegroundWindow() == hwnd:
+                break
+            user32.BringWindowToTop(hwnd)
+            user32.SetForegroundWindow(hwnd)
+            time.sleep(0.08)
+    finally:
+        if attached:
+            user32.AttachThreadInput(cur_tid, fg_tid, False)
 
 
 class AuraAppSession:

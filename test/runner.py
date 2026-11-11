@@ -4,13 +4,15 @@
 支持运行：
 1. 全量引擎 smoke 测试: python test/runner.py --smoke
 2. UI 自动化验证测试: python test/runner.py --ui [test_name]
-3. 默认全量验证 (smoke): python test/runner.py
+3. Windows 性能回归（人工前台会话，四场景）: python test/runner.py --perf
+4. 默认全量验证 (smoke): python test/runner.py
 """
 
 import argparse
 import os
 import subprocess
 import sys
+from datetime import datetime
 
 # 子进程继承：GBK 控制台下 smoke/UI 脚本 print 含 '⟹'、替换字符等会
 # UnicodeEncodeError 崩溃（2026-10-26 实测 smoke_rt_vendor_flags / smoke_d6_
@@ -43,6 +45,33 @@ PLATFORM_ANY = {
     "smoke_ci_workflow.py",
     # S5b（2026-11-02）：XDG 目录规范源码守护，两平台可跑。
     "smoke_xdg_paths.py",
+    # 全修轮次（2026-11-08）：调试体系两门禁自 WINDOWS 集移入——均为
+    # 纯源码扫描（吞异常口径 R1–R4 + print/debugPrint 禁令），此前
+    # Linux CI J3 只 SKIP 不实跑，覆盖是假的（图集 R3 违规漏网实证）。
+    "smoke_d4b_swallow.py",
+    "smoke_debug_policy.py",
+    # APO 参数块布局漂移门（2026-11-10，APO 立项 P1）：生成器
+    # --check + ApoShared.h 手写布局交叉断言，纯源码/脚本，两平台可跑。
+    "smoke_apo_param_layout.py",
+    "smoke_apo_plugin_layout.py",
+    "smoke_round5_forensics.py",
+    "smoke_round6_vaio_unmap.py",
+    # win_env_sanitize 环境块截断门（2026-11-11）：合成缓冲实测
+    # parse_block 在双 NUL 终止符处截断（幻影条目不得入净化结果），
+    # 纯 Python，两平台可跑。
+    "smoke_win_env_sanitize.py",
+    # 第七轮项 6 契约门（2026-11-11）：VAIO 泵格式切换重同步
+    # （一致性快照/帧长变化游标重对齐/fmtResyncs）+ 驱动 SetFormat
+    # 发布几何，纯源码扫描，两平台可跑。
+    "smoke_round7_vaio_fmt.py",
+    # EEL 手册防漂移（2026-11-08）：手册条目 ↔ VM fnTable1 存在性 +
+    # 定长签名个数 + 宿主环境条目齐备，纯源码扫描，两平台可跑。
+    "smoke_eel_manual.py",
+    # 多声道 EEL 脚本级（2026-11-09，方案 B）：引擎 ctypes 活体，
+    # 两平台可跑（产物缺失时 engine_artifact 自行报错口径同其他引擎门禁）。
+    "smoke_liveprog_mc.py",
+    "smoke_liveprog_mc_stress.py",
+    "smoke_liveprog_mc_examples.py",
 }
 
 # PLATFORM_LINUX（2026-11-01，测试补强轮）：与 PLATFORM_WINDOWS 对称的
@@ -60,6 +89,8 @@ PLATFORM_LINUX = {
     "smoke_linux_alsa_backend.py",
     # 二期插件阶段四（2026-11-02）：插件宿主源码不变量 + CLAP 全链活体。
     "smoke_linux_plugin_host.py",
+    # Part I Q1（2026-11-10）：逐槽故障闩锁——加载闩锁活体 + 隔离宿主崩溃外墙。
+    "smoke_plugin_fault_latch.py",
 }
 
 PLATFORM_WINDOWS = {
@@ -107,7 +138,8 @@ PLATFORM_WINDOWS = {
     "smoke_d1_latency_sr.py",
     "smoke_d7_asrc_consistency.py",
     "smoke_d5_slot_timeout.py",
-    "smoke_d4b_swallow.py",
+    # smoke_d4b_swallow.py：2026-11-08 移至 PLATFORM_ANY（见文件头各
+    # 集合），故自 PLATFORM_WINDOWS 摘除。
     "smoke_d6_patch_ids.py",
     "smoke_sr_rate_alignment.py",
     "smoke_eq_response.py",
@@ -119,6 +151,10 @@ PLATFORM_WINDOWS = {
     "smoke_abi_consistency.py",
     "smoke_bridge_unified_abi.py",
     "smoke_release_strings.py",
+    "smoke_apo_engine_binary.py",
+    "smoke_apo_engine.py",
+    "smoke_apo_plan.py",
+    "smoke_apo_doctor.py",
     "smoke_ir_block_jitter.py",
     "smoke_eq_viz_tap.py",
     "smoke_bassmono.py",
@@ -170,7 +206,7 @@ PLATFORM_WINDOWS = {
     "smoke_dynamic_gr_and_gate.py",
     "smoke_multichannel_discrete.py",
     "smoke_effects_allparams.py",
-    "smoke_debug_policy.py",
+    # smoke_debug_policy.py：2026-11-08 移至 PLATFORM_ANY，自本集摘除。
     "smoke_oversample_aliasing.py",
     "smoke_reverb.py",
     "smoke_wp0_scaffold.py",
@@ -314,12 +350,32 @@ def run_smoke_tests():
         # D5 门禁（2026-10-24）：插件槽异步等待上界 150s → 5s + 墙钟收口 +
         # 超时兜底（同步 unload）+ timedOut 上报。数值与链路任一项回退即红。
         "smoke_d5_slot_timeout.py",
-        # D4-b 门禁（2026-10-24）：全仓静默异常。97 处 catch 既不留痕也不绑定
-        # 异常，泵循环更是整个迭代体包在 catch (_) {} + continue 里——一次类型
-        # 错误就能让可视化永远冻结且日志无痕。四类分治 + 四条规则（R1 空块必留痕
-        # /R2 循环包壳必限流/R3 禁匿名 catch/R4 理由不得敷衍），含规则引擎单测、
-        # 全仓扫描、接线完整性（part 共享 library import）与两处反向判红。
+        # D4-b 门禁（2026-10-24）：全仓静默异常。四类分治 + 四条规则
+        # （R1 空块必留痕/R2 循环包壳必限流/R3 禁匿名 catch/R4 理由
+        # 不得敷衍），含规则引擎单测、全仓扫描、接线完整性与反向判红。
+        # 平台分类在 PLATFORM_ANY（2026-11-08 自 WINDOWS 集移入：
+        # 纯源码扫描，Linux CI 必须实跑）。
         "smoke_d4b_swallow.py",
+        "smoke_apo_param_layout.py",
+    "smoke_apo_plugin_layout.py",
+    "smoke_round5_forensics.py",
+    "smoke_round6_vaio_unmap.py",
+    "smoke_win_env_sanitize.py",
+    "smoke_round7_vaio_fmt.py",
+        # EEL 手册防漂移门禁（2026-11-08）：手册 92 条 ↔ VM fnTable1
+        # 200 函数的存在性与定长签名比对（freembuf 幽灵条目、mldivide /
+        # quadprog 等签名个数错误、num_ch 等宿主条目缺失的全量比对收口）。
+        "smoke_eel_manual.py",
+        # 多声道 EEL 脚本级门禁（2026-11-09，方案 B）：8 声道 spl 读写、
+        # 逐声道增益、滑块与立体声隔离、回读/状态、未使能直通。
+        "smoke_liveprog_mc.py",
+        # 多声道 EEL 边界/竞态门禁（2026-11-09，方案 B）：越界声道、
+        # num_ch 切换、坏脚本保旧码、unload、比特精确、非有限卫士、
+        # @block 语义、小块长、换码竞态压测。
+        "smoke_liveprog_mc_stress.py",
+        # 多声道 EEL 范例实测（2026-11-09，方案 B）：增益矩阵/环绕
+        # 延迟填充/中置增强/LFE 保护四个可投产脚本逐个加载断言。
+        "smoke_liveprog_mc_examples.py",
         # D6 门禁（2026-10-24）：补丁编号单点化。77 处 PATCHED 标记里 45 处不带
         # P-NNN，PATCHES.md 号称唯一真相源却九套编号并存（拿代码里的 B5 去查表
         # 查不到；P2.4 全仓只命中一处 PDF）。P-NNN 成为唯一权威标识，专项代号
@@ -365,6 +421,10 @@ def run_smoke_tests():
         "smoke_bridge_unified_abi.py",
         # B-1 调试串门禁：源码零 cout [DBG + Release DLL 无 [DBG（计划 D1 §3.3）
         "smoke_release_strings.py",
+        "smoke_apo_engine_binary.py",
+        "smoke_apo_engine.py",
+        "smoke_apo_plan.py",
+        "smoke_apo_doctor.py",
         # M1 平台隔离门禁（2026-10-29）：引擎可移植核心零 OS 头/Win32 符号；
         # 端口头纯声明 + Windows 实现存在 + 扫描器反向自检。
         "smoke_platform_isolation.py",
@@ -396,6 +456,9 @@ def run_smoke_tests():
         # 二期插件阶段四（2026-11-02）：插件宿主——posix 平台层/App 接线
         # 源码不变量 + 现场编译 CLAP 资产经 C ABI 全链活体断言。
         "smoke_linux_plugin_host.py",
+        # Part I Q1（2026-11-10）：逐槽故障闩锁（加载闩锁/恢复闭环/
+        # 隔离宿主崩溃外墙）。
+        "smoke_plugin_fault_latch.py",
         "smoke_sync_artifacts_tool.py",
         "smoke_ci_workflow.py",
         # S5b：XDG 配置/数据目录拆分守护（XDG 变量、HOME 回退、迁移清单）。
@@ -488,7 +551,8 @@ def run_smoke_tests():
     # （8 按声道效果器 mask=0 不变式 + arbmag/comp/eq 立体声实现语义登记）
     "smoke_effects_allparams.py",
     # 调试体系门禁（2026-11-01）：禁止业务代码直接 print/debugPrint；
-    # DebugTrace/HUD/命令行启动器必须存在，控件动作与引擎回执统一进 JSONL。
+    # DebugTrace/HUD/命令行启动器必须存在。平台分类在 PLATFORM_ANY
+    # （2026-11-08 自 WINDOWS 集移入，理由同 D4-b）。
     "smoke_debug_policy.py",
     "smoke_oversample_aliasing.py",
     "smoke_reverb.py",
@@ -620,12 +684,56 @@ def run_ui_tests(target=None):
     return 0 if all_pass else 1
 
 
+def run_perf_regression(scenario="all", mode="sysapo", strict=False):
+    """Windows 性能回归：转发 tools/perf_regression.py（实现位于 tools/windows/）。
+
+    不属于 --smoke 常驻门禁：会移动鼠标、最小化窗口，必须有前台桌面会话。
+    产物默认落在 <repo>/.tmp/perf-regression/<时间戳>/（已 gitignore）。
+    """
+    print("========================================")
+    print("  AuraDSP Windows Perf Regression     ")
+    print("========================================")
+    if not platform_supported("windows"):
+        print(f"  SKIPPED (requires windows, current {CURRENT_PLATFORM})")
+        print("========================================")
+        return 0
+    tool = os.path.join(ROOT_DIR, "tools", "perf_regression.py")
+    if not os.path.exists(tool):
+        print(f"[ERROR] 性能回归入口缺失: {tool}")
+        return 1
+    exe = os.path.join(ROOT_DIR, "app", "auradsp_app", "build", "windows",
+                       "x64", "runner", "Release", "auradsp_app.exe")
+    if not os.path.exists(exe):
+        print("[ERROR] 缺少 release 产物，先执行：")
+        print("        flutter build windows --release --no-tree-shake-icons")
+        return 1
+    outdir = os.path.join(ROOT_DIR, ".tmp", "perf-regression",
+                          datetime.now().strftime("%Y%m%d-%H%M%S"))
+    cmd = [sys.executable, tool, "--mode", mode, "--scenario", scenario,
+           "--outdir", outdir]
+    if strict:
+        cmd.append("--strict")
+    print(f"[perf] mode={mode} scenario={scenario} strict={strict}")
+    res = subprocess.run(cmd, cwd=ROOT_DIR, check=False)
+    return res.returncode
+
+
 def main():
     parser = argparse.ArgumentParser(description="AuraDSP Test Runner")
     parser.add_argument("--smoke", action="store_true", help="Run C++ engine smoke tests")
     parser.add_argument("--ui", nargs="?", const="all", help="Run UI automation tests (or specify test name)")
+    parser.add_argument("--perf", nargs="?", const="all",
+                        choices=["all", "startup", "viz", "play", "minimized"],
+                        help="Run Windows perf regression (or specify one scenario)")
+    parser.add_argument("--perf-mode", default="sysapo",
+                        choices=["sysapo", "voicemeeter_api"],
+                        help="Perf regression audio mode (default: sysapo)")
+    parser.add_argument("--perf-strict", action="store_true",
+                        help="Perf regression exits non-zero when thresholds are exceeded")
     args = parser.parse_args()
 
+    if args.perf:
+        return run_perf_regression(args.perf, args.perf_mode, args.perf_strict)
     if args.ui:
         target = None if args.ui == "all" else args.ui
         return run_ui_tests(target)

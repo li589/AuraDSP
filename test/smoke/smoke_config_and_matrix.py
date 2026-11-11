@@ -252,6 +252,96 @@ check(abs(dst[0 * CH + 0]) < 1e-6, "仅 SR 有信号时 FL 严格静音 (左侧�
 check(abs(dst[0 * CH + 4]) < 1e-6, "仅 SR 有信号时 SL 严格静音 (左环绕无镜像串扰)")
 lib.auradsp_destroy(h)
 
+# ---------------------------------------------------------------- [4b] upmix_fill
+print("\n=== [4b] channels.upmix_fill 源活动门控（出厂默认 0） ===")
+h = new_engine()
+set_i32(h, "channels.count", 8)
+set_i32(h, "channels.mode", 0)
+rc, v = get_i32(h, "channels.upmix_fill")
+check(rc == 0 and v == 0, f"channels.upmix_fill 出厂默认 0（不填充）(got {v})")
+check(set_i32(h, "channels.upmix_fill", 1) == 0, "channels.upmix_fill=1 接受")
+check(get_i32(h, "channels.upmix_fill")[1] == 1,
+      "channels.upmix_fill 回读 1（可显式打开铺满）")
+lib.auradsp_destroy(h)
+
+F3 = 256
+
+
+def run_matrix8(fill, active_ch):
+    """8ch 矩阵模式跑一块；active_ch 指定哪些输入声道有信号。
+
+    fill=None 表示不显式设置，使用引擎出厂默认（0）。
+    """
+    e = new_engine()
+    set_i32(e, "channels.count", 8)
+    set_i32(e, "channels.mode", 0)
+    if fill is not None:
+        set_i32(e, "channels.upmix_fill", fill)
+    s, d, sp_, dp_ = process(e, F3, 8)
+    for i in range(F3):
+        v = 0.25 * math.sin(2 * math.pi * 440.0 * i / 48000.0)
+        for c in range(8):
+            s[i * 8 + c] = v if c in active_ch else 0.0
+    lib.auradsp_process(e, sp_, dp_, F3)
+    return e, d
+
+
+# 立体声源（仅 FL/FR 有信号）
+e0, d_off = run_matrix8(0, {0, 1})
+e1, d_up = run_matrix8(1, {0, 1})
+bad = max(abs(d_off[i * 8 + c]) for i in range(F3) for c in (2, 4, 5, 6, 7))
+check(bad < 1e-6,
+      f"upmix_fill=0 时立体声源 C/SL/SR/BL/BR 逐样本为 0 (max={bad:.2e})")
+# 出厂默认（不显式设置）即不填充：立体声 8ch 下 C/SL/SR/BL/BR 必须为 0
+e_def, d_def = run_matrix8(None, {0, 1})
+bad_def = max(abs(d_def[i * 8 + c]) for i in range(F3) for c in (2, 4, 5, 6, 7))
+check(bad_def < 1e-6,
+      f"出厂默认（未设置）时 C/SL/SR/BL/BR 逐样本为 0 (max={bad_def:.2e})")
+lib.auradsp_destroy(e_def)
+# FL/FR 必须与现状（fill=1）逐样本一致
+dev = max(abs(d_up[i * 8 + c] - d_off[i * 8 + c])
+          for i in range(F3) for c in (0, 1))
+check(dev < 1e-6, f"upmix_fill 开关不影响 FL/FR (max dev={dev:.2e})")
+# 显式 fill=1 仍必须铺开
+c_rms = math.sqrt(sum(d_up[i * 8 + 2] ** 2 for i in range(F3)) / F3)
+check(c_rms > 1e-4, f"显式 upmix_fill=1 仍铺满 C (rms={c_rms:.4f})")
+lib.auradsp_destroy(e0)
+lib.auradsp_destroy(e1)
+
+# LFE 直通在门控下不变；且无源环绕保持 0
+e, d = run_matrix8(0, {3})
+lfe_dev = max(abs(d[i * 8 + 3] - 0.25 * math.sin(2 * math.pi * 440.0 * i / 48000.0))
+              for i in range(F3))
+check(lfe_dev < 1e-6, f"门控下 LFE 仍逐样本直通 (max dev={lfe_dev:.2e})")
+surr = max(abs(d[i * 8 + c]) for i in range(F3) for c in (2, 4, 5, 6, 7))
+check(surr < 1e-6, f"仅 LFE 有源时环绕声道保持 0 (max={surr:.2e})")
+lib.auradsp_destroy(e)
+
+
+def run_matrix51(fill):
+    """5.1 全声道有源：用于逐样本回归。"""
+    e = new_engine()
+    set_i32(e, "channels.count", 6)
+    set_i32(e, "channels.mode", 0)
+    set_i32(e, "channels.upmix_fill", fill)
+    s, d, sp_, dp_ = process(e, F3, 6)
+    for i in range(F3):
+        v = 0.25 * math.sin(2 * math.pi * 440.0 * i / 48000.0)
+        for c in range(6):
+            s[i * 6 + c] = v
+    lib.auradsp_process(e, sp_, dp_, F3)
+    return e, d
+
+
+ea, d_on = run_matrix51(1)
+eb, d_off51 = run_matrix51(0)
+dev51 = max(abs(d_on[i * 6 + c] - d_off51[i * 6 + c])
+            for i in range(F3) for c in range(6))
+check(dev51 < 1e-6,
+      f"5.1 全声道有源时开/关逐样本一致（无回归, max dev={dev51:.2e}）")
+lib.auradsp_destroy(ea)
+lib.auradsp_destroy(eb)
+
 # ---------------------------------------------------------------- [5] 离散多声道与声道掩码
 print("\n=== [5] 离散多声道与声道独立掩码 (Phase B Category A) ===")
 h = new_engine()

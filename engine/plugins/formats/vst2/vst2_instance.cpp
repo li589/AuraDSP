@@ -25,6 +25,7 @@
 #include "platform/port/module.h"
 #include "plugin_metadata_util.h"
 #include "plugins/plugin_limits.h"
+#include "plugins/preset_io.h"
 #include "win32_util.h"
 
 #include "vst2/vst.h"
@@ -34,6 +35,7 @@
 #endif  // 非 Windows：Win32 类型/惰性 API 由 platform/posix 兼容层提供
 
 #include <algorithm>
+#include <cmath>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -110,7 +112,13 @@ static intptr_t safeCallDispatcher(vst_effect_t* effect, int32_t opcode, int32_t
         if (!effect || !effect->control) return 0;
         return effect->control(effect, opcode, index, value, ptr, opt);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        AURADSP_WARN_S("[DBG VST2] dispatcher triggered SEH exception on opcode " << opcode);
+        // 此处必须用 printf 形态：流式 AURADSP_WARN_S 在 ON 构建下会
+        // 在本函数内展开 std::ostringstream（需要对象展开的对象），
+        // 与 __try 同函数即触发 MSVC C2712——这是 ON 构建从未进过
+        // CI 时埋下的潜伏编译错误，2026-11-08 由 S2 的 J5 ON 步骤
+        // 首次实跑抓出。OFF 构建下两者都是 ((void)0)，无差别。
+        AURADSP_WARN("[DBG VST2] dispatcher triggered SEH exception on opcode %d",
+                     static_cast<int>(opcode));
         return 0;
     }
 }
@@ -687,12 +695,15 @@ public:
         header.uniqueId = m_effect ? static_cast<uint32_t>(m_effect->unique_id) : 0u;
         header.payloadSize = static_cast<uint32_t>(payload.size());
 
-        std::ofstream ofs(filePath, std::ios::binary);
-        if (!ofs) return false;
-        ofs.write(reinterpret_cast<const char*>(&header), sizeof(header));
-        ofs.write(reinterpret_cast<const char*>(payload.data()),
-                  static_cast<std::streamsize>(payload.size()));
-        return ofs.good();
+        // 原子写（2026-11-08 审计·预设中2）：与其余两格式统一口径。
+        return preset_io::writeFileAtomic(
+            filePath, [&header, &payload](std::ofstream& ofs) {
+                ofs.write(reinterpret_cast<const char*>(&header),
+                          sizeof(header));
+                ofs.write(reinterpret_cast<const char*>(payload.data()),
+                          static_cast<std::streamsize>(payload.size()));
+                return ofs.good();
+            });
     }
 
     bool loadPreset(const std::string& filePath) override {
@@ -713,6 +724,11 @@ public:
         uint32_t kind = kAur2KindChunk;
         const uint8_t* payload = nullptr;
         size_t payloadSize = 0;
+        // 文件声明的插件身份（AUR2 头 uniqueId / .fxp 的 fxID）；0 = 无
+        // 从对账。装载前在泵线程内与当前插件对账（审计·预设中1）。
+        uint32_t expectedPluginId = 0;
+        // .fxp 的 FPCh 参数形态：无 count 前缀、float 大端序。
+        bool paramsBigEndianNoCount = false;
 
         if (file.size() >= sizeof(Aur2Header) &&
             std::memcmp(file.data(), kAur2Magic, 4) == 0) {
@@ -721,16 +737,40 @@ public:
             if (header.version > kAur2Version) return false;
             if (header.payloadSize > file.size() - sizeof(header)) return false;
             kind = header.kind;
+            expectedPluginId = header.uniqueId;
             payload = file.data() + sizeof(header);
             payloadSize = header.payloadSize;
-        } else if (file.size() > 20 && std::memcmp(file.data(), "CcnK", 4) == 0) {
-            // 标准 .fxp：'CcnK' + size + fxID + fxVersion + numParams + chunk
-            uint32_t chunkSize = 0;
-            std::memcpy(&chunkSize, file.data() + 4, sizeof(chunkSize));
-            if (chunkSize == 0 || chunkSize > file.size() - 20) return false;
-            kind = kAur2KindChunk;
-            payload = file.data() + 20;
-            payloadSize = chunkSize;
+        } else if (file.size() >= 60 &&
+                   std::memcmp(file.data(), "CcnK", 4) == 0) {
+            // 标准 .fxp（VST2 fxProgram 布局，字段全部大端）：
+            //   'CcnK' | byteSize | fxMagic | version | fxID | fxVersion |
+            //   numPrograms | prgName[28] | (FxCk: chunkSize + chunk)
+            // fxMagic='FxCk' 为 chunk 形态、'FPCh' 为参数形态。
+            // 2026-11-08 审计修正：旧实现按小端在偏移 4 读 chunkSize、
+            // 偏移 20 取数据，与规范布局不符，真实 .fxp 恒被拒绝。
+            auto be32 = [&file](size_t off) -> uint32_t {
+                return (static_cast<uint32_t>(file[off]) << 24) |
+                       (static_cast<uint32_t>(file[off + 1]) << 16) |
+                       (static_cast<uint32_t>(file[off + 2]) << 8) |
+                       static_cast<uint32_t>(file[off + 3]);
+            };
+            const uint32_t fxMagic = be32(8);
+            expectedPluginId = be32(16);
+            if (fxMagic == 0x4678436Bu) {  // 'FxCk'
+                const uint32_t chunkSize = be32(56);
+                if (chunkSize == 0 || chunkSize > file.size() - 60)
+                    return false;
+                kind = kAur2KindChunk;
+                payload = file.data() + 60;
+                payloadSize = chunkSize;
+            } else if (fxMagic == 0x46504368u) {  // 'FPCh'
+                kind = kAur2KindParams;
+                payload = file.data() + 56;
+                payloadSize = file.size() - 56;
+                paramsBigEndianNoCount = true;
+            } else {
+                return false;
+            }
         } else {
             return false;
         }
@@ -739,6 +779,13 @@ public:
         const bool ran = m_pump->postTaskAndWait(
             [&]() {
                 if (!m_effect) return;
+                // 身份对账（审计·预设中1）：A 插件的预设不得装到 B 插件
+                // 上。任一侧 id 为 0 表示无从对账，跳过（历史文件兼容）。
+                if (expectedPluginId != 0 && m_effect->unique_id != 0 &&
+                    expectedPluginId !=
+                        static_cast<uint32_t>(m_effect->unique_id)) {
+                    return;
+                }
                 if (kind == kAur2KindChunk) {
                     if (payloadSize == 0 || payloadSize > 0x7FFFFFFF) return;
                     ok = dispatch(VST_EFFECT_OPCODE_SET_CHUNK_DATA, 1,
@@ -749,19 +796,54 @@ public:
                                       static_cast<intptr_t>(payloadSize),
                                       const_cast<uint8_t*>(payload)) != 0;
                     }
-                } else if (payloadSize >= sizeof(uint32_t) && m_effect->set_parameter) {
+                } else if (m_effect->set_parameter) {
+                    // 参数形态两种：AUR2（count 前缀 + 原生端 float）与
+                    // .fxp FPCh（无前缀、大端 float）。下标按目标插件
+                    // num_params 夹取、值夹到 [0,1]、非有限数归零
+                    // （审计·预设中1：旧实现只按文件长度夹取 count，
+                    // 畸形文件可送越界下标与任意 float）。
                     uint32_t count = 0;
-                    std::memcpy(&count, payload, sizeof(count));
-                    const size_t maxCount =
-                        (payloadSize - sizeof(uint32_t)) / sizeof(float);
-                    count = std::min<uint32_t>(count, static_cast<uint32_t>(maxCount));
-                    for (uint32_t i = 0; i < count; ++i) {
-                        float v = 0.0f;
-                        std::memcpy(&v, payload + sizeof(uint32_t) + sizeof(float) * i,
-                                    sizeof(v));
-                        safeCallSetParameter(m_effect->set_parameter, m_effect, i, v);
+                    const uint8_t* floats = nullptr;
+                    if (paramsBigEndianNoCount) {
+                        count = static_cast<uint32_t>(payloadSize /
+                                                      sizeof(float));
+                        floats = payload;
+                    } else if (payloadSize >= sizeof(uint32_t)) {
+                        std::memcpy(&count, payload, sizeof(count));
+                        const size_t maxCount =
+                            (payloadSize - sizeof(uint32_t)) / sizeof(float);
+                        count = std::min<uint32_t>(
+                            count, static_cast<uint32_t>(maxCount));
+                        floats = payload + sizeof(uint32_t);
                     }
-                    ok = true;
+                    if (floats) {
+                        const int32_t np =
+                            m_effect->num_params > 0 ? m_effect->num_params
+                                                     : 0;
+                        count = std::min<uint32_t>(
+                            count, static_cast<uint32_t>(np));
+                        for (uint32_t i = 0; i < count; ++i) {
+                            float v = 0.0f;
+                            if (paramsBigEndianNoCount) {
+                                const uint8_t* b = floats + sizeof(float) * i;
+                                const uint32_t bits =
+                                    (static_cast<uint32_t>(b[0]) << 24) |
+                                    (static_cast<uint32_t>(b[1]) << 16) |
+                                    (static_cast<uint32_t>(b[2]) << 8) |
+                                    static_cast<uint32_t>(b[3]);
+                                std::memcpy(&v, &bits, sizeof(v));
+                            } else {
+                                std::memcpy(&v,
+                                            floats + sizeof(float) * i,
+                                            sizeof(v));
+                            }
+                            if (!std::isfinite(v)) v = 0.0f;
+                            v = std::clamp(v, 0.0f, 1.0f);
+                            safeCallSetParameter(m_effect->set_parameter,
+                                                 m_effect, i, v);
+                        }
+                        ok = true;
+                    }
                 }
             },
             3000);

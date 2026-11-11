@@ -929,4 +929,106 @@ void main() {
       expect(matchVendorIn(<String, String>{'': 'X'}, 'Anything', '/x'), isNull);
     });
   });
+  group('Part I Q3: APO 状态合并与故障呈现/重试', () {
+    PluginMetadata meta() => PluginMetadata.fromJson(const {
+          'id': 'com.test.gain',
+          'name': 'Test Gain',
+          'vendor': 'AuraDSP Test',
+          'version': '1.0.0',
+          'category': 'audio-effect',
+          'format': 'CLAP',
+          'path': '/plugins/TestGain.clap',
+          'isCompatible': true,
+          'errorMessage': '',
+        });
+
+    Map<String, dynamic> shadowStatus() => {
+          'hasActive': true,
+          'bypassed': false,
+          'latency': 128,
+          'plugin': meta().toJson(),
+          'channels': 0xFF,
+        };
+
+    Map<String, dynamic> apoFault() => {
+          'slot': 0,
+          'hasActive': true,
+          'bypassed': true,
+          'fault': true,
+          'faultStage': 'process',
+          'faultCategory': 'process_crash',
+          'latency': 128,
+          'inRms': 0.1,
+          'outRms': 0.0,
+          'processCalls': 42,
+          'appliedLoadGen': 1,
+          'appliedStateGen': 0,
+        };
+
+    test('telemetry 合并：处理字段取 APO、元数据保留影子、边沿只报一次', () {
+      final m = PluginManager(commandSender: (_) {});
+      m.onPluginSlotStatus(0, shadowStatus(), 3);
+      expect(m.getSlotStatus(0).plugin?.id, 'com.test.gain');
+      final edges = m.onApoPluginStatuses([apoFault()]);
+      expect(edges.length, 1);
+      expect(edges.single.slot, 0);
+      expect(edges.single.category, 'process_crash');
+      final st = m.getSlotStatus(0);
+      expect(st.fault, isTrue);
+      expect(st.bypassed, isTrue); // 有效旁路（含故障）
+      expect(st.processCalls, 42);
+      expect(st.plugin?.id, 'com.test.gain'); // 元数据未被 telemetry 冲掉
+      // 同一故障重复回传不产生新边沿（通知不刷屏）。
+      expect(m.onApoPluginStatuses([apoFault()]), isEmpty);
+      // 故障清除后再次故障 → 新边沿。
+      final cleared = apoFault()
+        ..['fault'] = false
+        ..['bypassed'] = false
+        ..['faultCategory'] = 'none';
+      m.onApoPluginStatuses([cleared]);
+      expect(m.getSlotStatus(0).fault, isFalse);
+      expect(m.onApoPluginStatuses([apoFault()]).length, 1);
+    });
+
+    test('故障槽 toggleBypass = 重试加载（本地链），不发旁路命令', () {
+      final sent = <Map<String, dynamic>>[];
+      final m = PluginManager(commandSender: sent.add);
+      m.onPluginSlotStatus(0, shadowStatus(), 3);
+      m.onApoPluginStatuses([apoFault()]);
+      sent.clear();
+      m.toggleBypass(slot: 0);
+      expect(sent.map((e) => e['cmd']), contains('pluginSlotLoad'));
+      expect(sent.map((e) => e['cmd']),
+          isNot(contains('pluginSlotSetBypass')));
+    });
+
+    test('影子链故障重试另发 apoPluginReload 推进 APO 侧 loadGen', () {
+      final sent = <Map<String, dynamic>>[];
+      final m = PluginManager(commandSender: sent.add);
+      m.setApoShadow(true);
+      m.onPluginSlotStatus(0, shadowStatus(), 3);
+      m.onApoPluginStatuses([apoFault()]);
+      sent.clear();
+      m.toggleBypass(slot: 0);
+      final cmds = sent.map((e) => e['cmd']).toList();
+      expect(cmds, contains('apoPluginReload'));
+      expect(cmds, contains('pluginSlotLoad')); // 影子同步重挂
+    });
+
+    test('正常槽 toggleBypass 仍是旁路翻转（故障分流不误伤）', () {
+      final sent = <Map<String, dynamic>>[];
+      final m = PluginManager(commandSender: sent.add);
+      m.onPluginSlotStatus(0, shadowStatus(), 3);
+      m.toggleBypass(slot: 0);
+      expect(sent.map((e) => e['cmd']), contains('pluginSlotSetBypass'));
+      expect(sent.map((e) => e['cmd']), isNot(contains('apoPluginReload')));
+    });
+
+    test('故障类别中文文案', () {
+      expect(pluginFaultCategoryZh('process_crash'), contains('崩溃'));
+      expect(pluginFaultCategoryZh('not_found'), contains('找不到'));
+      expect(pluginFaultCategoryZh('arch_mismatch'), contains('架构'));
+      expect(pluginFaultCategoryZh('whatever'), contains('加载失败'));
+    });
+  });
 }

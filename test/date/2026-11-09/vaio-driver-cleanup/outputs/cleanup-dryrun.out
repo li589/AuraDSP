@@ -1,0 +1,11 @@
+﻿
+[清理] 当前：MEDIA 节点 2 个 / DriverStore 同名包 4 个
+  保留节点  : ROOT\MEDIA\0000 [Root\AuraVAIO]
+  保留驱动包: oem12.inf
+  将移除    : 节点 1 个 / 驱动包 3 个
+    NODE  ROOT\MEDIA\0001  [Root\AuraVaioDriver]
+    PKG   oem10.inf  (11/05/2026 21.17.30.265)
+    PKG   oem9.inf  (11/05/2026 20.55.5.700)
+    PKG   oem11.inf  (11/09/2026 13.46.2.47)
+  [预演] 未做任何改动。
+

@@ -141,6 +141,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setConnIdle => '未连接 (等待 Voicemeeter 启动)';
 
   @override
+  String get setVbNotEnabled => 'Voicemeeter 未启用';
+
+  @override
   String get setDeviceDisconnected => '未连接设备';
 
   @override
@@ -196,6 +199,29 @@ class AppLocalizationsZh extends AppLocalizations {
       '注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。';
 
   @override
+  String get apoModeHint => '模式切换仅选择附加目标；实际附加 / 卸载由下方「一键附加」「一键卸载」执行。';
+
+  @override
+  String get apoEngineNoteActive =>
+      'APO 引擎处理中：经过此端点的声音由 AuraDSP 引擎实时处理（插件链在 APO 模式下不生效）。';
+
+  @override
+  String get apoEngineNoteWaiting => 'APO 已附加，等待引擎就绪；就绪前声音直通。';
+
+  @override
+  String get apoEngineNoteFault =>
+      'APO 引擎发生故障，已自动退回直通（系统音频不受影响）；重新附加 APO 或重启应用后重试。';
+
+  @override
+  String get apoEngineNoteLoadFailed =>
+      'APO 已附加，但引擎加载失败，声音直通；请确认安装完整后重新附加或重装应用。';
+
+  @override
+  String setApoHeartbeat(int sr, int frames) {
+    return '心跳活跃 (${sr}Hz · $frames 帧)';
+  }
+
+  @override
   String setDriverOffline(String name) {
     return '$name [未检测到/离线]';
   }
@@ -205,6 +231,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get setVaioMissing => '未检测到 AuraVAIO 虚拟声卡驱动';
+
+  @override
+  String get setVaioUnknown => 'AuraVAIO 驱动状态未检测';
 
   @override
   String get setVaioDesc => 'KMDF 内核模式虚拟音频驱动，提供全双工虚拟音频线缆通道';
@@ -219,6 +248,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setVaioInstallOk => 'AuraVAIO 驱动已成功安装并通过系统验收！';
 
   @override
+  String get setVaioInstallUnverified =>
+      '驱动安装未生效：仍未检测到 AuraVAIO 设备（未开启测试签名时驱动无法加载，请开启后重试）';
+
+  @override
   String get setDriverInstallFailed => '驱动安装未完成';
 
   @override
@@ -228,16 +261,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setVaioUninstallOk => 'AuraVAIO 驱动已成功卸载';
 
   @override
+  String get setVaioUninstallUnverified => '驱动卸载未生效：仍检测到 AuraVAIO 设备';
+
+  @override
   String get setDriverUninstallFailed => '卸载未完成';
 
   @override
-  String get setRedetect => '重新检测';
+  String get setRedetect => '检测';
 
   @override
   String get setWasapiDesc => '系统底层 WASAPI 共享/独占音频引擎，无额外驱动依赖';
 
   @override
-  String get setRefreshDevice => '刷新设备';
+  String get setRefreshDevice => '检测';
 
   @override
   String get setAsioRegisterUac => 'UAC提权注册驱动';
@@ -478,6 +514,23 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ioNoOutputDevices => '无可用输出设备';
+
+  @override
+  String get ioNoAvailableSoundCard => '无可用声卡';
+
+  @override
+  String get ioInputOverriddenByVaio =>
+      '当前由 VAIO 桥链驱动，输入选择不生效；请将播放器输出指向 AuraVAIO 端点';
+
+  @override
+  String get ioOutputOverriddenByVaio =>
+      '当前由 VAIO 桥链驱动，此输出设备选择不生效；物理落点请将输出类型切换为 VAIO 后设置';
+
+  @override
+  String get ioOutputOverriddenByAsio => '当前由 ASIO 桥链驱动，此输出选择不生效；输出由 ASIO 驱动决定';
+
+  @override
+  String get ioOnlyVirtualOutputs => '仅有虚拟输出端点（无物理声卡）';
 
   @override
   String get ioPhysicalOutput => '物理输出';
@@ -1099,6 +1152,17 @@ class AppLocalizationsZh extends AppLocalizations {
       '当输入音频或输出设备为多声道（4.0 / 5.1 / 7.1）时的 DSP 策略：离散多声道＝全声道独立流经 DSP，各效果器可独立指定作用声道，支持多声道插件与上混；矩阵下混＝折叠为立体声流经 DSP 效果器后再上混回填环绕声道（超低音直接直通）。「双耳虚拟环绕」开启时优先级最高，将自动以 HRIR 渲染为耳机立体声。';
 
   @override
+  String get upmixFill => '未使用声道填充';
+
+  @override
+  String get upmixFillHint => '关闭后立体声源不会填充未使用声道，环绕源不受影响，LFE 直通。';
+
+  @override
+  String meterBusScope(String bus, int ch) {
+    return '$bus · $ch 声道';
+  }
+
+  @override
   String get audioMode => '音频模式';
 
   @override
@@ -1108,7 +1172,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioParadigm => '处理范式';
 
   @override
-  String get audioParadigmHint => '选择音频接入形态：附加模式原地挂载处理，普通管线模式端到端流转（ADR-009）';
+  String get audioParadigmHint => '选择音频接入形态：附加模式原地挂载处理，普通管线模式端到端流转';
 
   @override
   String get paradigmAttachment => '附加模式';
@@ -1176,6 +1240,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get driverLayerTitle => '驱动信息与控制';
 
   @override
+  String get osVersionLabel => '操作系统';
+
+  @override
   String get inputLayerTitle => '音频输入';
 
   @override
@@ -1218,6 +1285,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get apoAttached => '已附加';
 
   @override
+  String apoAttachedOn(String name) {
+    return '已附加（$name）';
+  }
+
+  @override
   String get apoNotAttached => '未附加';
 
   @override
@@ -1228,6 +1300,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get asioDriverCardTitle => 'AuraDSP 虚拟 ASIO 驱动';
+
+  @override
+  String get vaioDriverCardTitle => 'AuraVAIO 虚拟声卡驱动';
+
+  @override
+  String get wasapiDriverCardTitle => 'WASAPI 音频引擎';
 
   @override
   String get asioDriverStatus => '驱动状态';
@@ -1254,7 +1332,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get asioDawIdle => '空闲（等待 DAW 接入）';
 
   @override
-  String get asioStatusCheck => '检查状态';
+  String get asioStatusCheck => '检测';
 
   @override
   String get virtualSinkNotice =>
@@ -1467,6 +1545,30 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get catTest => '测试';
+
+  @override
+  String get catAbout => '关于';
+
+  @override
+  String get aboutVersion => '版本';
+
+  @override
+  String get aboutForm => '形态';
+
+  @override
+  String get aboutDeveloper => '开发商';
+
+  @override
+  String get aboutRepo => '开源地址';
+
+  @override
+  String get aboutLicense => '开源协议';
+
+  @override
+  String get aboutRefs => '参考核心项目';
+
+  @override
+  String get aboutOpenFailed => '链接打开失败，请手动访问';
 
   @override
   String get pageHomeEyebrow => '控制台';
@@ -1722,6 +1824,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get visualizerStyleTornado => '粒子龙卷风';
 
   @override
+  String get visualizerStyleNebulaFlow => '星云流';
+
+  @override
   String get visualizerThemeSystem => '跟随系统';
 
   @override
@@ -1735,6 +1840,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get visualizerThemeAuroraGlow => '极光';
+
+  @override
+  String get visualizerThemeEmeraldMist => '翡翠雾';
 
   @override
   String get themeSwitchTip => '切换配色方案';
@@ -3038,6 +3146,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugLoading => '加载中…';
 
   @override
+  String get vbRouteLoading => '加载中 · 直通';
+
+  @override
+  String get vbRouteReleasing => '释放中 · 直通';
+
+  @override
+  String get vbRouteFailed => '失败 · 直通';
+
+  @override
+  String get vbRouteNotApplied => '未生效 · 直通';
+
+  @override
   String get plugUnloading => '卸载中…';
 
   @override
@@ -3421,6 +3541,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errInternal => '引擎内部错误';
 
   @override
+  String get errHostUnavailable => '宿主不可用';
+
+  @override
   String get lpFindReplace => '查找与替换';
 
   @override
@@ -3473,6 +3596,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lpTitleEditor => 'EEL2 编辑器';
+
+  @override
+  String get lpTargetStereo => '立体声脚本';
+
+  @override
+  String get lpTargetMultichannel => '多声道脚本';
+
+  @override
+  String get lpMcHint => '多声道模式（声道数 > 2）下运行，可读写全部 8 个声道 spl0..spl7';
 
   @override
   String get lpBtnApplied => '已应用';

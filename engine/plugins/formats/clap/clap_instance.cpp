@@ -7,6 +7,7 @@
 #include "plugin_bundle.h"
 #include "plugin_metadata_util.h"
 #include "plugins/plugin_limits.h"
+#include "plugins/preset_io.h"
 #include "win32_util.h"
 
 #include <clap/clap.h>
@@ -856,10 +857,18 @@ public:
 
     struct ClapOstreamContext {
         std::ofstream* ofs;
+        bool failed = false;
     };
     static int64_t clapOstreamWrite(const clap_ostream_t* stream, const void* buffer, uint64_t size) {
         auto ctx = reinterpret_cast<ClapOstreamContext*>(stream->ctx);
+        // 写流校验（2026-11-08 审计·预设低1）：旧实现无条件返回请求
+        // 字节数，磁盘满时插件以为写成功、宿主也报成功。
+        if (ctx->failed) return -1;
         ctx->ofs->write(reinterpret_cast<const char*>(buffer), static_cast<std::streamsize>(size));
+        if (!ctx->ofs->good()) {
+            ctx->failed = true;
+            return -1;
+        }
         return static_cast<int64_t>(size);
     }
 
@@ -879,22 +888,46 @@ public:
                 fs::create_directories(p.parent_path());
             }
 
-            std::ofstream ofs(filePath, std::ios::binary);
+            // 原子写（审计·预设中2）：先写同目录 .tmp，插件保存成功且
+            // 写流无误、关闭无误后才 rename 覆盖目标。
+            const std::string tmpPath = preset_io::tmpPathFor(filePath);
+            std::ofstream ofs(tmpPath, std::ios::binary | std::ios::trunc);
             if (!ofs) return;
-            ClapOstreamContext ctx{&ofs};
+            ClapOstreamContext ctx{&ofs, false};
             clap_ostream_t ostream = { &ctx, clapOstreamWrite };
-            ok = stateExt->save(m_plugin, &ostream);
+            bool savedOk = stateExt->save(m_plugin, &ostream) &&
+                           !ctx.failed && ofs.good();
+            ofs.close();
+            savedOk = savedOk && !ofs.fail();
+            if (savedOk) {
+                ok = preset_io::commitTmpFile(tmpPath, filePath);
+            } else {
+                preset_io::discardTmpFile(tmpPath);
+            }
         }, 5000);
         return done && ok;
     }
 
     struct ClapIstreamContext {
         std::ifstream* ifs;
+        uint64_t total = 0;
+        bool overCap = false;
     };
+    // 流式读取的宿主侧字节上限（审计·预设信息项口径统一）：与 VST3
+    // PLG-01 的 256MiB 对齐——流式本身不做无界分配，但总读取量仍设顶，
+    // 防损坏/被替换的超大文件让插件无界吞入。
+    static constexpr uint64_t kMaxPresetStreamBytes = 256ull * 1024 * 1024;
     static int64_t clapIstreamRead(const clap_istream_t* stream, void* buffer, uint64_t size) {
         auto ctx = reinterpret_cast<ClapIstreamContext*>(stream->ctx);
+        if (ctx->overCap) return -1;
         ctx->ifs->read(reinterpret_cast<char*>(buffer), static_cast<std::streamsize>(size));
-        return static_cast<int64_t>(ctx->ifs->gcount());
+        const int64_t got = static_cast<int64_t>(ctx->ifs->gcount());
+        ctx->total += static_cast<uint64_t>(got);
+        if (ctx->total > kMaxPresetStreamBytes) {
+            ctx->overCap = true;
+            return -1;
+        }
+        return got;
     }
 
     bool loadPreset(const std::string& filePath) override {

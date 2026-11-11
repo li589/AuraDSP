@@ -54,7 +54,13 @@ class _FluidField {
   static const int _nx = 128;
   static const int _ny = 72;
   static const int _cells = _nx * _ny;
-  static const int _pressureIterations = 12;
+  static const int _pressureIterationsMax = 12;
+  static const int _pressureIterationsMin = 5;
+
+  /// 当前压力投影迭代数：自适应调节（见 step），初值即上限（质量优先）。
+  int _pressureIters = _pressureIterationsMax;
+  final Stopwatch _stepWatch = Stopwatch();
+  double _stepEmaMs = 0;
   static const int _lutSize = 128;
 
   // 渲染网格规格（轻量化 48×28 采样，顶点数从 9417 降至 1421，原生内存骤降 85%）
@@ -142,6 +148,12 @@ class _FluidField {
     final dt = _consumeDelta(time);
     if (dt <= 0) return;
 
+    // 自适应压力迭代（2026-11-08）：投影是全场最贵的一步（迭代 × 9216 格）。
+    // 统计步进耗时 EMA：持续 >9ms 时逐帧降迭代（下限 _pressureIterationsMin，
+    // 不可压性略降但视觉无感），持续 <3.5ms 时逐帧回升至上限——快机器永远
+    // 满质量，慢机器自动保帧率。每帧至多调整 1 次，避免档位震荡。
+    _stepWatch.reset();
+    _stepWatch.start();
     _simTime += dt;
     if (!_primed) {
       _seedDye();
@@ -156,6 +168,14 @@ class _FluidField {
     _project();
     _advectDye(dt);
     _relaxVelocity(dt);
+    _stepWatch.stop();
+    final ms = _stepWatch.elapsedMicroseconds / 1000.0;
+    _stepEmaMs = _stepEmaMs == 0 ? ms : _stepEmaMs * 0.9 + ms * 0.1;
+    if (_stepEmaMs > 9.0 && _pressureIters > _pressureIterationsMin) {
+      _pressureIters--;
+    } else if (_stepEmaMs < 3.5 && _pressureIters < _pressureIterationsMax) {
+      _pressureIters++;
+    }
   }
 
   /// 全场漂移墨云（2026-10-31）：旧实现只从底边喷嘴注入染料，上半屏几乎是
@@ -165,8 +185,7 @@ class _FluidField {
   /// 只覆盖 blob 的包围盒（每团约 40×40 格），不遍历全网格；用 max 而非累加，
   /// 避免持续注入把画面堆成一层均匀浓雾。
   void _injectHaze() {
-    // 每条：[横向游走幅度, 角频率X, 相位, 纵向游走幅度, 半径(格), 峰值浓度]
-    // [横向中心, 横向游走幅度, 角频率X, 纵向中心, 纵向游走幅度, 角频率Y, 半径(格), 峰值浓度]
+    // 每条：[横向中心, 横向游走幅度, 角频率X, 纵向中心, 纵向游走幅度, 角频率Y, 半径(格), 峰值浓度]
     const blobs = <List<double>>[
       [0.50, 0.35, 0.55, 0.50, 0.28, 0.35, 28.0, 0.16],
       [0.26, 0.20, 0.85, 0.24, 0.18, 0.55, 24.0, 0.14],
@@ -179,8 +198,11 @@ class _FluidField {
       final b = blobs[bi];
       final centerX = (_nx - 1) * (b[0] + b[1] * math.sin(_simTime * b[2] + bi * 1.3));
       final centerY = (_ny - 1) * (b[3] + b[4] * math.sin(_simTime * b[5] + bi * 2.1));
-      final radius = b[4] + 2.0 * math.sin(_simTime * 0.12 + bi * 2.0);
-      final peak = b[5];
+      // 索引修正（2026-11-08）：半径/峰值应取 b[6]/b[7]。旧代码误取
+      // b[4]（纵向游走幅度 ≈0.2）与 b[5]（角频率 ≈0.5），墨云实际缩成
+      // 半径 ≤2 格的高浓度小点，设计中的大团漂移墨云从未真正出现过。
+      final radius = b[6] + 2.0 * math.sin(_simTime * 0.12 + bi * 2.0);
+      final peak = b[7];
       final r2 = radius * radius;
 
       final xStart = (centerX - radius * 1.6).floor().clamp(1, _nx - 2);
@@ -600,7 +622,7 @@ class _FluidField {
       }
     }
 
-    for (var iteration = 0; iteration < _pressureIterations; iteration++) {
+    for (var iteration = 0; iteration < _pressureIters; iteration++) {
       for (var y = 0; y < _ny; y++) {
         final rowBase = y * _nx;
         for (var x = 0; x < _nx; x++) {

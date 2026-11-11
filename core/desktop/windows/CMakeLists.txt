@@ -81,6 +81,46 @@ if(NOT AURADSP_PLUGIN_HOST_REMOTE)
     set(AURADSP_PLUGIN_REMOTE_SOURCES "")
 endif()
 
+# Part I Q1（D1/Q0-5）：APO 风味插件源表——真实插件子系统的裁剪版，
+# 供 auradsp_engine_apo 使用（/MT + /guard:cf 不变）。纳入：管理器/
+# 链组件/bundle/注册表/json/线程角色、格式九件、integration 四件、
+# win32 平台件（util/module/paths）。排除：远程三件套（audiodg 内
+# 不 spawn 子进程，目标另定义 AURADSP_HOST_INPROC=1 编掉管理器
+# 远端分支）与 plugin_gui_win32（编辑器窗口实现；其五个 win32_util
+# 辅助符号由 plugin_gui_apo_stub.cpp 空实现顶替，编辑器路径在
+# APO 风味经 ABI 门 AURADSP_NO_PLUGIN_EDITOR 不可达）。
+# 与 Q0-5 的一处执行偏差：plugin_scanner/plugin_paths 保留编入
+# ——扫描器类与管理器同 TU 耦合（PluginScanner 声明在
+# plugin_host.h、管理器扫描方法直接调用），剔除需在共享代码
+# 散布 #ifdef，违 I.4；能力面由 ABI 门关闭（scan 入口返回不
+# 支持），扫描代码在 APO 内无调用方、永不执行。
+set(AURADSP_APO_PLUGIN_SOURCES
+    "${API}/plugins/platform/win32/win32_util.cpp"
+    "${API}/plugins/platform/win32/plugin_paths.cpp"
+    "${API}/plugins/platform/win32/plugin_module.cpp"
+    "${API}/plugins/platform/win32/plugin_gui_apo_stub.cpp"
+    "${API}/plugins/driver/plugin_bundle.cpp"
+    "${API}/plugins/driver/plugin_scanner.cpp"
+    "${API}/plugins/driver/plugin_driver_registry.cpp"
+    "${API}/plugins/driver/plugin_json.cpp"
+    "${API}/plugins/driver/plugin_thread.cpp"
+    "${API}/plugins/driver/plugin_host_manager.cpp"
+    "${API}/plugins/driver/plugin_chain_component.cpp"
+    "${API}/plugins/formats/clap/clap_driver.cpp"
+    "${API}/plugins/formats/clap/clap_instance.cpp"
+    "${API}/plugins/formats/clap/clap_metadata.cpp"
+    "${API}/plugins/formats/vst3/vst3_driver.cpp"
+    "${API}/plugins/formats/vst3/vst3_instance.cpp"
+    "${API}/plugins/formats/vst3/vst3_metadata.cpp"
+    "${API}/plugins/formats/vst2/vst2_driver.cpp"
+    "${API}/plugins/formats/vst2/vst2_instance.cpp"
+    "${API}/plugins/formats/vst2/vst2_metadata.cpp"
+    "${API}/plugins/integration/plugin_host.cpp"
+    "${API}/plugins/integration/plugin_engine_state.cpp"
+    "${API}/plugins/integration/plugin_chain_adapter.cpp"
+    "${API}/plugins/integration/plugin_abi.cpp"
+)
+
 # CP-02：引擎实际编入的插件源表。ON = 完整插件子系统；OFF = 两个 ABI/链阶段 stub，
 # 导出集与 plugin_abi.cpp 同集（F3 要求不增不减），但所有能力返回「不可用」。
 if(AURADSP_ENABLE_PLUGINS)
@@ -204,6 +244,114 @@ set_property(TARGET auradsp_engine PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedD
 set_property(TARGET auradsp_engine PROPERTY WINDOWS_EXPORT_ALL_SYMBOLS OFF)
 target_link_libraries(auradsp_engine PRIVATE version)
 
+# ---- APO 专用引擎变体（2026-11-10 立项 P2，设计 D2/R1）----
+# System APO 把引擎拉进 audiodg 宿主：该进程的两条定罪纪律——
+# 静态 CRT（/MT，绝不首次拉入 System32 版 VCRUNTIME）与 CFG
+# （/guard:cf，无位图在被保护虚调用点 fail-fast）——主引擎的
+# /MD 口径不满足，故同源另建纪律版 auradsp_engine_apo.dll：
+# 核心源码清单与主引擎完全一致（core_sources.cmake 同一份变量），
+# 差异为：MSVC_RUNTIME_LIBRARY=MultiThreaded、/guard:cf 编译+
+# 链接。主引擎与其全部消费者（App/桥）零改动。产物纪律由
+# smoke_apo_engine_binary.py 解析 PE 断言（导入表无动态
+# VCRUNTIME/MSVCP + CFG 函数表在位），J5 在默认构建后实跑。
+#
+# Part I Q1 修订（2026-11-10，计划书 D1/Q0-5）：插件子系统由
+# 「不进 audiodg」（CP-02 stub + AURADSP_NO_PLUGINS）改为真实
+# 子系统裁剪版（AURADSP_APO_PLUGIN_SOURCES）：进程内托管、
+# 无扫描/无编辑器（ABI 门 AURADSP_NO_PLUGIN_EDITOR）、无远程
+# 宿主（AURADSP_HOST_INPROC=1）。handle 恢复 PluginEngineState
+# 与主引擎同构；导出面（.def）不变。
+option(AURADSP_BUILD_APO_ENGINE "Build auradsp_engine_apo (audiodg-hosted engine variant)" ON)
+if(AURADSP_BUILD_APO_ENGINE)
+    add_library(auradsp_core_apo STATIC
+        ${AURADSP_CORE_LEGACY_C}
+        ${AURADSP_CORE_CXX_SOURCES}
+    )
+    target_include_directories(auradsp_core_apo PUBLIC
+        "${API}"
+        "${API}/chain"
+        "${API}/plugins/api"
+        "${API}/plugins/driver"
+        "${LEGACY}"
+        "${LEGACY}/jdsp"
+        "${PLUGIN_API}"
+    )
+    target_compile_definitions(auradsp_core_apo PRIVATE
+        NDEBUG
+        _CRT_SECURE_NO_WARNINGS
+        _WIN32_WINNT=0x0601
+        WINVER=0x0601
+        NTDDI_VERSION=0x06010000
+    )
+    target_compile_options(auradsp_core_apo PRIVATE /utf-8 /W1 /EHa /guard:cf)
+    target_compile_options(auradsp_core_apo PRIVATE /FI"${API}/auradsp_msvc_shim.h")
+    set_property(TARGET auradsp_core_apo PROPERTY C_STANDARD 11)
+    set_property(TARGET auradsp_core_apo PROPERTY CXX_STANDARD 20)
+    set_property(TARGET auradsp_core_apo PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+
+    add_library(auradsp_wincompat_apo OBJECT
+        "${API}/platform/windows/win_compat.cpp"
+    )
+    target_compile_options(auradsp_wincompat_apo PRIVATE /guard:cf)
+    set_property(TARGET auradsp_wincompat_apo PROPERTY CXX_STANDARD 20)
+    set_property(TARGET auradsp_wincompat_apo PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+
+    # Part I Q1：插件子系统裁剪版仅在全局插件开关 ON 时成立；
+    # OFF 配置（核心带 AURADSP_NO_PLUGINS）必须回到 CP-02 两
+    # stub，否则 handle 布局与核心不一致。
+    if(AURADSP_ENABLE_PLUGINS)
+        set(APO_PLUGIN_SRCS ${AURADSP_APO_PLUGIN_SOURCES})
+    else()
+        set(APO_PLUGIN_SRCS
+            "${API}/plugins/integration/plugin_chain_adapter_stub.cpp"
+            "${API}/plugins/integration/plugin_abi_stub.cpp")
+    endif()
+    add_library(auradsp_engine_apo SHARED
+        "${API}/platform/windows/fs_win.cpp"
+        "${API}/platform/windows/env_win.cpp"
+        "${API}/platform/windows/log_win.cpp"
+        ${APO_PLUGIN_SRCS}
+        "${API}/auradsp_engine.def"
+    )
+    target_link_libraries(auradsp_engine_apo PRIVATE auradsp_core_apo auradsp_wincompat_apo)
+    target_include_directories(auradsp_engine_apo PRIVATE
+        "${API}"
+        "${API}/chain"
+        "${API}/plugins/api"
+        "${API}/plugins/driver"
+        "${API}/plugins/platform/win32/host"
+        "${API}/plugins/platform/win32"
+        "${LEGACY}"
+        "${LEGACY}/jdsp"
+        "${PLUGIN_API}"
+    )
+    target_compile_definitions(auradsp_engine_apo PRIVATE
+        NDEBUG
+        _CRT_SECURE_NO_WARNINGS
+        _WIN32_WINNT=0x0601
+        WINVER=0x0601
+        NTDDI_VERSION=0x06010000
+    )
+    target_compile_options(auradsp_engine_apo PRIVATE /utf-8 /W1 /EHa /guard:cf)
+    target_compile_options(auradsp_engine_apo PRIVATE /FI"${API}/auradsp_msvc_shim.h")
+    target_link_options(auradsp_engine_apo PRIVATE /guard:cf)
+    set_property(TARGET auradsp_engine_apo PROPERTY CXX_STANDARD 20)
+    set_property(TARGET auradsp_engine_apo PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+    set_property(TARGET auradsp_engine_apo PROPERTY WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+    target_link_libraries(auradsp_engine_apo PRIVATE version)
+    if(AURADSP_ENABLE_PLUGINS)
+        # Part I Q1（D1/Q0-5 单点行为定义）：进程内托管（编掉
+        # 管理器远端分支）+ 扫描/编辑器 ABI 门。
+        target_compile_definitions(auradsp_engine_apo PRIVATE
+            AURADSP_HOST_INPROC=1
+            AURADSP_NO_PLUGIN_EDITOR=1
+        )
+    else()
+        target_compile_definitions(auradsp_core_apo PRIVATE AURADSP_NO_PLUGINS=1)
+        target_compile_definitions(auradsp_engine_apo PRIVATE AURADSP_NO_PLUGINS=1)
+    endif()
+endif()
+
 if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
     if(CMAKE_SIZEOF_VOID_P EQUAL 4)
         set(HOST_EXE_TARGET_NAME "plugin_host_x86")
@@ -217,6 +365,11 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         # Win32 主程序只保留管道/看门狗/唤醒等平台原语。
         "${API}/plugins/platform/host/plugin_host_command.cpp"
         "${API}/plugins/platform/win32/host/plugin_shared_region.cpp"
+        # 平台日志实现（与 Linux 宿主含 log_linux.cpp 对称）：S1 给宿主
+        # 目标补了 AURADSP_DBG_LOG 定义后，ON 构建下格式/管理源会真实
+        # 调用 log_level/log_emit，宿主源表缺此文件即 LNK2001——由
+        # S2 的 J5 ON 步骤于 2026-11-08 首次实跑抓出。
+        "${API}/platform/windows/log_win.cpp"
         ${AURADSP_PLUGIN_HOST_SOURCES}
     )
     target_include_directories(${HOST_EXE_TARGET_NAME} PRIVATE
@@ -233,6 +386,11 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         _CRT_SECURE_NO_WARNINGS
         AURADSP_HOST_INPROC=1
     )
+    # 2026-11-08 审计补接线：[DBG 调用点绝大多数在宿主进程编入的源里，
+    # 只给引擎定义时默认远程模式排障拿不到出事进程的日志。
+    if(AURADSP_DBG_LOG)
+        target_compile_definitions(${HOST_EXE_TARGET_NAME} PRIVATE AURADSP_DBG_LOG)
+    endif()
     target_compile_options(${HOST_EXE_TARGET_NAME} PRIVATE /utf-8 /W1 /EHa)
     set_property(TARGET ${HOST_EXE_TARGET_NAME} PROPERTY CXX_STANDARD 20)
     set_property(TARGET ${HOST_EXE_TARGET_NAME} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")

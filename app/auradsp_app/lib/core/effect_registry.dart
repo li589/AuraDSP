@@ -221,6 +221,92 @@ final Map<String, List<String>> kChainGroups = () {
   return groups;
 }();
 
+/// 链序分类（第七轮 S1，2026-11-11）：引擎 `process_stereo_chain`
+/// （engine/chain/engine_chain.cpp）的真实执行序里，只有 vendor 段的
+/// 相对顺序由 graph.order 决定，其余自研级位置钉死。段位逐行对应：
+///   gate → filter → bassmono → [插件 Stage 0] → shelf（不在链页列表）
+///   → dyneq → [插件 Stage 1] → vendor 段 → [插件 Stage 2]
+///   → haas → spatial → exciter → [插件 Stage 3] → loudness
+///   → limiter（不在链页列表） → [插件 Stage 4]
+/// 链页 19 级列表的真序 = 前置段 + dyneq + vendor 段 + 尾段 + loudness。
+/// 此前链页把 19 级呈现为可任意拖拽的线性序、信号流面板又按硬编码
+/// 分桶重排，两者与引擎执行序都不一致（第七轮项 1 定罪）。
+const List<String> kChainPinnedHead = ['gate', 'filter', 'bassmono'];
+const List<String> kChainPinnedMid = ['dyneq'];
+const List<String> kChainPinnedTail = ['haas', 'spatial', 'exciter'];
+const List<String> kChainPinnedPost = ['loudness'];
+
+/// vendor 段成员（链内 11 级；与 AppModel 的 vendor 白名单去掉
+/// output 后一致，白名单本体在 state.dart 的 filterVendorOrder）。
+const List<String> kChainVendorStages = [
+  'tube',
+  'comp',
+  'bass',
+  'eq',
+  'arbmag',
+  'convolver',
+  'ddc',
+  'liveprog',
+  'crossfeed',
+  'stereo',
+  'reverb',
+];
+
+bool isChainVendorStage(String id) => kChainVendorStages.contains(id);
+
+bool isChainPinnedStage(String id) =>
+    kChainPinnedHead.contains(id) ||
+    kChainPinnedMid.contains(id) ||
+    kChainPinnedTail.contains(id) ||
+    kChainPinnedPost.contains(id);
+
+/// 从任意顺序中提取 vendor 子序：保序去重；缺失的 vendor 级按默认
+/// 相对序回插（旧存档/残缺 graphOrder 的收敛口径，与链卡历史行为一致）。
+List<String> vendorSubsequenceOf(Iterable<String> order) {
+  final result = <String>[];
+  for (final id in order) {
+    if (isChainVendorStage(id) && !result.contains(id)) result.add(id);
+  }
+  for (final id in kChainVendorStages) {
+    if (result.contains(id)) continue;
+    final want = kChainVendorStages.indexOf(id);
+    var at = result.length;
+    for (var i = 0; i < result.length; i++) {
+      if (kChainVendorStages.indexOf(result[i]) > want) {
+        at = i;
+        break;
+      }
+    }
+    result.insert(at, id);
+  }
+  return result;
+}
+
+/// 把 vendor 子序拼回链页 19 级真序。
+List<String> composeTrueChainOrder(List<String> vendorOrder) => [
+      ...kChainPinnedHead,
+      ...kChainPinnedMid,
+      ...vendorOrder,
+      ...kChainPinnedTail,
+      ...kChainPinnedPost,
+    ];
+
+/// 默认 vendor 子序（默认 graphOrder 中的 vendor 相对序）。
+final List<String> kDefaultVendorOrder = vendorSubsequenceOf(kDefaultCoreOrder);
+
+/// 链页默认真序（与默认 graphOrder 的 vendor 子序等价、钉死级归位）。
+final List<String> kTrueChainDefaultOrder =
+    composeTrueChainOrder(kDefaultVendorOrder);
+
+/// 把任意 graphOrder 串规范化为链页真序列表（链卡展示/信号流共用）。
+List<String> trueChainOrderFrom(String? graphOrder) {
+  final ids = (graphOrder ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty);
+  return composeTrueChainOrder(vendorSubsequenceOf(ids));
+}
+
 /// stage 查表（O(1)）。
 final Map<String, EffectStageSpec> kEffectStageById = {
   for (final e in kEffectRegistry) e.id: e,

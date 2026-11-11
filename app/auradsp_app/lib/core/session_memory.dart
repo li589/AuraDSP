@@ -10,6 +10,7 @@ import 'dart:io';
 
 import 'config.dart';
 import 'audio_modes.dart';
+import '../platform/platform_profile.dart';
 import 'io/document_store.dart';
 import 'plugins/plugin_manager.dart';
 import 'presets.dart';
@@ -60,6 +61,7 @@ abstract final class SessionMemory {
         'locale': m.locale.languageCode,
         'themeId': m.themeId.name,
         'channelsMode': m.channelsMode,
+        'channelsUpmixFill': m.channelsUpmixFill,
         'channelsCountMode': m.channelsCountMode,
         'channelsCount': m.channelsCount,
         'audioMode': m.audioMode,
@@ -82,6 +84,8 @@ abstract final class SessionMemory {
         'ddcPath': m.ddcPath,
         'lpCode': m.lpCode,
         'lpDraftCode': m.lpDraftCode,
+        'lpMcCode': m.lpMcCode,
+        'lpMcDraftCode': m.lpMcDraftCode,
         'lpSliderValues': m.lpSliderValues.map((k, v) => MapEntry(k.toString(), v)),
         'arbmagString': m.arbmagString,
         'pluginPath': m.pluginManager.getSlotPlugin(0)?.path,
@@ -118,6 +122,9 @@ abstract final class SessionMemory {
         // clamp 同 state_core 镜像路径：历史 UI 的非法 2（"7.1"）不得复苏
         m.channelsMode = (session['channelsMode'] as num).toInt().clamp(0, 1);
       }
+      if (session['channelsUpmixFill'] is num) {
+        m.channelsUpmixFill = (session['channelsUpmixFill'] as num).toInt().clamp(0, 1);
+      }
       if (session['channelsCountMode'] is num) {
         m.channelsCountMode = (session['channelsCountMode'] as num).toInt().clamp(0, 1);
       }
@@ -133,10 +140,19 @@ abstract final class SessionMemory {
           m.config.attachmentMode = (m.audioMode == 'vbcallback')
               ? AudioModes.attachVoicemeeterApi
               : AudioModes.attachSysApo;
-        } else {
-          m.config.pipelineOutput = (m.audioMode == 'asio')
-              ? AudioModes.outputAsioClient
-              : (m.audioMode == 'vaio' ? AudioModes.outputVaio : AudioModes.outputWasapi);
+        } else if (!PlatformProfile.isLinux) {
+          // Windows 管线口径（细审 R-D L8）：Linux 模式集
+          // （system/virtual/driver）走 else 会把
+          // pipelineOutput 写成 'wasapi' 惰性落盘，不写。
+          if (m.audioMode == 'asio') {
+            m.config.pipelineOutput = AudioModes.outputAsioClient;
+          } else if (m.audioMode == 'vaio') {
+            if (m.config.pipelineOutput == AudioModes.outputAsioClient) {
+              m.config.pipelineOutput = AudioModes.outputVaio;
+            }
+          } else {
+            m.config.pipelineOutput = AudioModes.outputWasapi;
+          }
         }
       }
       if (session['modeCategory'] is String) {
@@ -196,6 +212,12 @@ abstract final class SessionMemory {
       }
       if (session['lpDraftCode'] is String) {
         m.lpDraftCode = session['lpDraftCode'] as String;
+      }
+      if (session['lpMcCode'] is String) {
+        m.lpMcCode = session['lpMcCode'] as String;
+      }
+      if (session['lpMcDraftCode'] is String) {
+        m.lpMcDraftCode = session['lpMcDraftCode'] as String;
       }
       if (session['lpSliderValues'] is Map) {
         m.lpSliderValues.clear();

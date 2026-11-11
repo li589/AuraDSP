@@ -81,11 +81,8 @@ class _ArbmagCardState extends State<_ArbmagCard> {
     }
     final err = precheckGraphicEq(l, cleaned);
     if (err != null) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l.arbmagGraphicEqInvalid(err))),
-        );
-      }
+      widget.model.postNotice(l.arbmagGraphicEqInvalid(err),
+          level: NoticeLevel.error);
       return false;
     }
     widget.model.setArbmagString(cleaned);
@@ -106,11 +103,8 @@ class _ArbmagCardState extends State<_ArbmagCard> {
     if (path != null) {
       final read = ResourceGate.readText(path);
       if (!read.ok) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l.arbmagReadFailed('${read.issue}'))),
-          );
-        }
+        widget.model.postNotice(l.arbmagReadFailed('${read.issue}'),
+            level: NoticeLevel.error);
         return;
       }
       final cleaned = _cleanGraphicEqText(read.text!);

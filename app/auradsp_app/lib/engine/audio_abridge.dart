@@ -52,7 +52,9 @@ class AuraAsioBridge implements AudioBridgeCommon {
   /// 驱动清单（UTF-8 显示名列表；桥内持有 SDK load 键映射）。
   /// 返回 null = 桥加载失败/枚举失败；空 list = 注册表无 ASIO 驱动。
   List<Map<String, dynamic>>? detect() {
-    final raw = core.detectJson(4096);
+    // cap 16384（细审 R-D L7 同口径留量）：驱动条目约
+    // 200B，4096 在 ≳20 个 ASIO 驱动时溢出恒失败。
+    final raw = core.detectJson(16384);
     final drivers = raw?['drivers'] as List?;
     if (drivers == null) return null;
     return [for (final d in drivers) Map<String, dynamic>.from(d as Map)];

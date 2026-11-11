@@ -170,6 +170,19 @@ class _PageScaffoldState extends State<PageScaffold>
               ),
             ),
           ),
+          // 顶部守卫带（真机报告 2026-11-09 §2.5）：页眉随内容滚动，
+          // 滚到视口顶边附近时其控件残片会紧贴外壳顶栏形成无文字
+          // 灰框伪影。以页面底色覆盖 pageTop 高度带区，让残片在
+          // 带区内干净滑出。有氛围层的页面（主页）不加，避免压平
+          // 氛围渐变。
+          if (widget.ambient == null)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: AuraSpace.pageTop,
+              child: IgnorePointer(child: ColoredBox(color: p.bg)),
+            ),
         ],
       ),
     );
@@ -1079,6 +1092,11 @@ class AuraChip extends StatefulWidget {
   /// 切换在途：文字替换为受控尺寸的小 spinner（高度锁 chipH，不跳版），
   /// 用于旁路等异步切换的过渡反馈。onTap 应同时置 null 禁点。
   final bool busy;
+
+  /// 呼吸闪动（Part I 故障呈现裁定）：文案与常态完全一致，仅
+  /// 以底色/描边的周期明暗示「异常」——当前唯一消费者是故障
+  /// 闩锁中的插件旁路 chip。
+  final bool pulse;
   const AuraChip(
     this.label, {
     super.key,
@@ -1088,14 +1106,49 @@ class AuraChip extends StatefulWidget {
     this.danger = false,
     this.busy = false,
     this.warning = false,
+    this.pulse = false,
   });
 
   @override
   State<AuraChip> createState() => _AuraChipState();
 }
 
-class _AuraChipState extends State<AuraChip> {
+class _AuraChipState extends State<AuraChip>
+    with SingleTickerProviderStateMixin {
   bool _hover = false;
+  AnimationController? _pulseCtl;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.pulse) _ensurePulse();
+  }
+
+  void _ensurePulse() {
+    _pulseCtl ??= AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..addListener(() {
+        if (mounted) setState(() {});
+      });
+    if (!_pulseCtl!.isAnimating) _pulseCtl!.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(AuraChip old) {
+    super.didUpdateWidget(old);
+    if (widget.pulse) {
+      _ensurePulse();
+    } else {
+      _pulseCtl?.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseCtl?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1106,12 +1159,20 @@ class _AuraChipState extends State<AuraChip> {
             ? p.warning
             : (widget.selected ? p.accent : p.text));
     final active = widget.selected || widget.warning;
-    final bg = active
-        ? tint.withValues(alpha: 0.14)
-        : (_hover ? hoverOn(p) : Colors.transparent);
-    final border = active
-        ? tint.withValues(alpha: 0.55)
-        : (_hover ? p.textDim.withValues(alpha: 0.45) : p.hairline);
+    // 呼吸系数 0.55..1.0：只调底色/描边明暗，文案与色相不变。
+    final pulseK = (widget.pulse && _pulseCtl != null)
+        ? 0.55 + 0.45 * _pulseCtl!.value
+        : 1.0;
+    final bg = widget.pulse
+        ? tint.withValues(alpha: 0.16 * pulseK)
+        : (active
+            ? tint.withValues(alpha: 0.14)
+            : (_hover ? hoverOn(p) : Colors.transparent));
+    final border = widget.pulse
+        ? tint.withValues(alpha: 0.35 + 0.35 * pulseK)
+        : (active
+            ? tint.withValues(alpha: 0.55)
+            : (_hover ? p.textDim.withValues(alpha: 0.45) : p.hairline));
 
     return MouseRegion(
       cursor: widget.onTap == null
@@ -1281,8 +1342,10 @@ class _AuraDropdownState<T> extends State<AuraDropdown<T>> {
     final border = enabled
         ? (_hover ? p.accent.withValues(alpha: 0.6) : p.hairline)
         : p.hairline.withValues(alpha: 0.4);
+    // 静止底色不透明（2026-11-09 §2.5 硬化）：半透明底在页眉滚动
+    // 裁剪带会透出下层内容、读作无字灰框；实色后残片即控件本身。
     final bg = enabled
-        ? (_hover ? hoverOn(p) : p.panelRaised.withValues(alpha: 0.75))
+        ? (_hover ? hoverOn(p) : p.panelRaised)
         : p.panelRaised.withValues(alpha: 0.35);
 
     // 1. 无可用项时的留空占位状态

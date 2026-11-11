@@ -16,6 +16,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color, Locale;
+import 'package:flutter/scheduler.dart';
 
 import '../engine/audio_isolate.dart';
 import '../engine/audio_out/alsa_ffi.dart' as alsa_ffi;
@@ -39,6 +40,7 @@ import '../platform/port/registry.dart';
 import '../platform/port/window.dart';
 import '../platform/port/windows_system.dart';
 import 'config.dart';
+import 'notice.dart';
 import 'audio_modes.dart';
 import 'eel_slider_parser.dart';
 import 'plugins/plugin_manager.dart';
@@ -48,6 +50,7 @@ import 'param_schema.dart';
 import 'ports/null_ports.dart';
 import 'presets.dart';
 import 'session_memory.dart';
+import 'vaio_boot_guard.dart';
 import 'theme.dart';
 import 'visualizer_types.dart';
 
@@ -192,6 +195,9 @@ class AppModel extends ChangeNotifier {
       inputBalanceR = ParamDefaults.inputBalanceR;
   int reverbPreset = -1;
   int channelsMode = 0;
+  // [channels.upmix_fill] 矩阵模式下是否将立体声铺满未使用声道。
+  // 2026-11-07 出厂默认改 0：未使用声道保持静默，需要时用户显式打开。
+  int channelsUpmixFill = 0;
   int channelsCount = 2;
   int channelsCountMode = 0; // 0=自动, 1=手动
   // 音频处理模式 id（AudioModes.optionsFor(currentOs) 取值；'auto' 表跟随当前引擎）。
@@ -239,9 +245,15 @@ class AppModel extends ChangeNotifier {
     scheduleAutoSave();
   }
   // VB 总线掩码（bit g=第 g 条总线进 DSP；落盘，进桥时下发；CHANGE 重建不丢）。
-  int vbBusMask = 0xFF;
+  // 出厂只开 A1/A2：未开的路不建引擎句柄（按需开路再建）。
+  int vbBusMask = 0x03;
   // 按路插件处理掩码（bit g=组 g 总线吃插件链；落盘，进桥时下发）。
-  int vbPluginGroupMask = 0xFF;
+  int vbPluginGroupMask = 0x03;
+  // 路开关在途状态（2026-11-07 异步化）：g → 目标 on/off。
+  // 点击即入表（UI 立刻显示加载/释放动画并暂禁重复点击），
+  // 心跳 routeState 到达目标（开=2 / 关=0）后清除；超时兜底防永久锁死。
+  final Map<int, bool> vbRoutePending = <int, bool>{};
+  final Map<int, int> vbRoutePendingAt = <int, int>{};
   // v2 按路编辑器目标总线（会话级，不落盘）。
   // 取值：kVbRouteUnselected(-2)=未选择（初值；v3.3 已撤除「全部」，
   // 本值不承载任何合法路语义）；0-7=具体路；-1=无有效选中路。
@@ -260,6 +272,17 @@ class AppModel extends ChangeNotifier {
   String asioDriversNote = ''; // 桥缺失/无驱动时的原因（设置页展示）
   // AuraVAIO 桥状态（01 桥；isolate 回推，与 VB/ASIO 互斥）。
   bool vaioActive = false;
+  // VAIO 崩溃断路器（第六轮用户裁定）：构造期消费到「上一会
+  // 话带着在跑的桥非正常结束」标记时为 true，本次跳过 VAIO
+  // 自动起桥（一次性）；用户手动选 VAIO 即解除（见
+  // vaio_boot_guard.dart 与 setAudioMode）。
+  bool vaioBootGuardTripped = false;
+  // 断路器跳过通知只发一轮（isolate 重启会重复进 ready 处理）。
+  bool _vaioGuardNoticeShown = false;
+  // 管线本地捕获链状态（全接线，isolate capturestatus 回推；
+  // 与三桥互斥，是管线类别内子状态而非第四种 audioMode）。
+  bool captureActive = false;
+  String captureNote = '';
   // S5a（ADR-012 D-5）：Linux 三模式状态（isolate 的 linuxstatus 事件回推，
   // 设置页据此渲染可用性与提示，不拿它当错误态）。
   bool linuxCaptureActive = false;
@@ -272,6 +295,14 @@ class AppModel extends ChangeNotifier {
   String linuxCaptureSource = '';
   Map<String, dynamic> vaioInfo = {};
   Map<String, dynamic> vaioDetectInfo = {};
+
+  /// 等待下一次 vaiodetect 事件的完成器（安装/卸载后诚实校验用，
+  /// 真机报告 2026-11-09 §2.2）；事件到达时由 state_events 完成。
+  Completer<void>? vaioDetectWaiter;
+
+  /// 最近一次 VAIO 安装/卸载「脚本报成功但复检不符」标记：通知层
+  /// 据此改走未生效诚实文案（setVaioInstall/UninstallUnverified）。
+  bool vaioActionUnverified = false;
 
   // ADR-009 范式与细分项快捷 getter
   String get modeCategory => config.modeCategory;
@@ -292,6 +323,15 @@ class AppModel extends ChangeNotifier {
   bool get pipelineInputEnabled => config.pipelineInputEnabled;
   bool get pipelineOutputEnabled => config.pipelineOutputEnabled;
   List<AudioDeviceItem> wasapiDevices = [];
+
+  /// 系统默认端点身份（第七轮 S2 地基）：apo_inspect 报告的
+  /// defaultRender/defaultCapture（eConsole 口径端点 id）。解析层
+  /// 此前只消费 endpoints、把这两个字段丢弃，模型层不知道
+  /// 「默认」是谁——反馈守卫只能符号比较 ''、下拉互斥也撤不掉
+  /// 默认端点的具名别名（项 3 定罪）。刷新成功后由
+  /// refreshAudioDevices 写入；尚未刷新时为空（守卫退回旧口径）。
+  String defaultRenderId = '';
+  String defaultCaptureId = '';
 
   List<AudioDeviceItem> get filteredWasapiInputs {
     final list = <AudioDeviceItem>[];
@@ -353,6 +393,45 @@ class AppModel extends ChangeNotifier {
     }
     return list;
   }
+
+  /// 输入是否占据一个渲染槽（第四轮项 2 互斥规格）：输入类型为
+  /// WASAPI 且（设备为 '' 默认回录——其身份就是系统默认渲染端点，
+  /// 或选中的是渲染端点）时为真。此时输出下拉的 '' 默认项与该
+  /// 端点具名项都必须撤下（'' 正是它的别名）。
+  bool get inputOccupiesRenderSlot {
+    if (config.pipelineInput != AudioModes.inputWasapi) return false;
+    if (config.pipelineInputDevice.isEmpty) return true;
+    final item = _resolveWasapiDevice(config.pipelineInputDevice);
+    return item?.isRender ?? false;
+  }
+
+  /// 输出候选（互斥规格）：filteredWasapiOutputs 剔除输入已选的
+  /// 渲染端点。输入为录音端点时不剔除——同名不同端点、id 不同，
+  /// 天然不误伤；解析不到（离线存值）时不剔除，起链守卫兜底。
+  List<AudioDeviceItem> get wasapiOutputsExcludingInput {
+    final outs = filteredWasapiOutputs;
+    if (config.pipelineInput != AudioModes.inputWasapi) return outs;
+    final capItem = _resolveWasapiDevice(config.pipelineInputDevice);
+    if (capItem == null) {
+      // 输入为 ''（默认回录）时解析不到具名项——默认端点本人的
+      // 具名项是同一端点的别名，同须撤下（第七轮 S2 项 3；撤后
+      // 只剩它时下拉即呈「无可用声卡」，与第四轮规格一致）。
+      if (config.pipelineInputDevice.isEmpty && defaultRenderId.isNotEmpty) {
+        return outs.where((d) => d.id != defaultRenderId).toList();
+      }
+      return outs;
+    }
+    if (!capItem.isRender) return outs;
+    if (capItem.id.isNotEmpty) {
+      return outs.where((d) => d.id != capItem.id).toList();
+    }
+    return outs.where((d) => d.name != capItem.name).toList();
+  }
+
+  /// 当前持久化的输入/输出设备值是否构成自激对（下拉呈现层用：
+  /// 区分「当前输出值是被互斥规则撤下的」与「设备离线」）。
+  bool get pipelinePairConflicts =>
+      _isFeedbackPair(config.pipelineInputDevice, config.pipelineOutputDevice);
 
   /// 解析后的 VAIO 物理输出端点列表（过滤掉虚拟驱动自身，供 UI 选择真实物理扬声器/耳机）
   List<AudioDeviceItem> get vaioPhysicalEndpoints {
@@ -423,7 +502,26 @@ class AppModel extends ChangeNotifier {
   // ASIO 驱动注册状态 (AuraDSP Virtual ASIO Driver)
   bool asioDriverInstalled = false;
   // System APO 挂载状态与运行时遥测
+  // apoAttached = 当前所选目标端点的附加态（附加裁定/引擎注记用）；
+  // apoAnyAttached/apoAttachedName = 是否有任意端点已附加及其名
+  // 称（状态行真值，第六轮项 3：装在 A 切到 B 时 A 的附加不得被
+  // 「未附加」藏起，卸载亦应对实际附加端点执行）。
   bool apoAttached = false;
+  bool apoAnyAttached = false;
+  String apoAttachedName = '';
+  // APO 真处理 telemetry（立项 P3）：isolate 读者经 apotelemetry
+  // 事件回填——座位引擎是否在位 / 是否故障闩锁 / 引擎率与声道 /
+  // 已应用参数项次。仅 sysapo 模式下有更新，其余模式保持复位值。
+  bool apoEngineActive = false;
+  bool apoEngineFault = false;
+  int apoEngineRate = 0;
+  int apoEngineChannels = 0;
+  int apoParamsApplied = 0;
+  // 加载诊断（第五轮 S3，telemetry v4）：audiodg 内最近一次引擎
+  // 加载结局——loadStage 0 未试 / 1 自目录失败 / 2 DLL 加载失败 /
+  // 3 ABI 不符 / 4 create 失败 / 5 就绪；loadErr 为 Win32 错误码。
+  int apoLoadStage = 0;
+  int apoLoadErr = 0;
   bool apoHeartbeatAlive = false;
   int apoHeartbeatSeq = 0;
   int apoHeartbeatSr = 0;
@@ -452,6 +550,14 @@ class AppModel extends ChangeNotifier {
   // v2：上次应用代码的滑块声明签名。签名不变的重应用（改注释/调格式）
   // 保留用户已调的滑块值；声明变化才采纳新默认值。
   String _lpDeclSig = '';
+
+  // 多声道 Liveprog（liveprog.mc，方案 B）：与立体声 lp* 平行、互不可见
+  bool lpMcEnabled = false;
+  int lpMcStatus = 0;
+  String? lpMcError;
+  final List<double> lpMcParams = List.filled(8, 0);
+  int lpMcCompileMs = -1;
+  bool lpMcPresetCodeMismatch = false;
 
   // 卷积 / IR（v1.1 M4）：meta 由引擎门卫校验后回读
   bool convEnabled = false, convReady = false;
@@ -742,6 +848,14 @@ class AppModel extends ChangeNotifier {
   /// Liveprog 实时未编译草稿代码（软件关闭又打开不丢失正在编辑的代码）
   String? lpDraftCode;
 
+  /// 多声道 Liveprog 已应用代码与草稿（方案 B，独立于立体声）
+  String? lpMcCode;
+  String? lpMcDraftCode;
+
+  /// 多声道 Liveprog 滑块值/元数据（键为 slider 下标 1..64）
+  final Map<int, double> lpMcSliderValues = {};
+  final Map<int, EelSliderMeta> lpMcSliderMetas = {};
+
   /// Liveprog 扩展滑块参数表（支持 1..64 及自定义变量，以 meta.index 为键）
   final Map<int, double> lpSliderValues = {};
 
@@ -760,6 +874,30 @@ class AppModel extends ChangeNotifier {
       return lpParams[idx - 1];
     }
     return defaultVal;
+  }
+
+  double getLiveprogMcSliderVal(int idx, double defaultVal) {
+    if (lpMcSliderValues.containsKey(idx)) {
+      return lpMcSliderValues[idx]!;
+    }
+    if (idx >= 1 && idx <= 8) {
+      return lpMcParams[idx - 1];
+    }
+    return defaultVal;
+  }
+
+  /// 多声道滑块写值（方案 B）：只推引擎参数，不做立体声那套代码文本
+  /// 对齐——MC 脚本的 slider 声明默认值在 setLiveprogMcCode 时采纳。
+  void setLiveprogMcSliderVal(int idx, double v, {EelSliderMeta? meta}) {
+    lpMcSliderValues[idx] = v;
+    if (idx >= 1 && idx <= 8) {
+      lpMcParams[idx - 1] = v;
+    }
+    if (idx >= 1 && idx <= 64) {
+      setFloat('liveprogmc.param$idx', v);
+    }
+    _notifyUi();
+    scheduleAutoSave();
   }
 
   void setLiveprogSliderVal(int idx, double v, {EelSliderMeta? meta}) {
@@ -916,6 +1054,27 @@ class AppModel extends ChangeNotifier {
     lastEngineError = null;
   }
 
+  /* ---- 通用通知队列（2026-11-09 通知组件化）----
+   * 全 app 瞬时通知的唯一投递口：页面/状态层经 postNotice 入队，
+   * shell 的 NoticeHost 逐条渲染为底部提醒框，不再各页面自行
+   * showSnackBar。引擎事件（上方 guard/error/info 一次性字段）是
+   * 本通道的专用前身，保持原字段与同因抑制不变；NoticeHost 先
+   * 消费它们、再消费本队列。队列保证同帧连发不互相吞掉。 */
+  final List<AppNotice> _noticeQueue = [];
+
+  /// 投递一条通用通知（text 须为已本地化文案）。
+  void postNotice(String text, {NoticeLevel level = NoticeLevel.info}) {
+    if (text.isEmpty) return;
+    _noticeQueue.add(AppNotice(text, level));
+    eventSeq.value = ++_guardSeq;
+  }
+
+  /// NoticeHost 消费端：取走队首一条（无则 null）。
+  AppNotice? takeNotice() =>
+      _noticeQueue.isEmpty ? null : _noticeQueue.removeAt(0);
+
+  bool get hasPendingNotice => _noticeQueue.isNotEmpty;
+
   /* ---- 事件同因抑制（防通知条刷屏，2026-10-18 UI 排查）----
    * 引擎 guard 拒绝（paramResult rc!=0）与 isolate 错误（error 事件）在
    * 历史上零去重：预设全量 apply / session 回放 / EQ 曲线节流下发 /
@@ -1034,13 +1193,22 @@ class AppModel extends ChangeNotifier {
     }
     if (!testing) {
       checkAsioDriverStatus();
-      checkApoStatus();
+      checkApoStatus(silent: true);
+      // VAIO 崩溃断路器消费点：必须早于 isolate ready 的自动
+      // 起桥（ready 处理在 state_events）。消费即删，本次跳过
+      // 只生效一轮。
+      if (PlatformProfile.supportsBridges &&
+          VaioBootGuard.consume(ConfigManager.dataDir)) {
+        vaioBootGuardTripped = true;
+        dbgLog('vaio-guard: previous session ended uncleanly with the '
+            'VAIO bridge running; autostart will be skipped once');
+      }
     }
-    // VB 总线掩码：落盘值 0（=全关，无意义）回全开；其余取低 8 bit。
-    final m = config.vbBusMask & 0xFF;
-    vbBusMask = m == 0 ? 0xFF : m;
+    // VB 总线掩码：0 现在是合法状态（用户显式全关），不再回填全开；
+    // 键缺失时 fromJson 已给出厂默认 0x03（A1/A2）。
+    vbBusMask = config.vbBusMask & 0xFF;
     // 按路插件掩码：0（全关）是用户显式选择，直接取用；键缺失时
-    // fromJson 已给默认 0xFF。
+    // fromJson 已给出厂默认 0x03（A1/A2）。
     vbPluginGroupMask = config.vbPluginGroupMask & 0xFF;
     /* C4：按真实采样率重建 EQ 网格。必须放在 config 加载之后 ——
      * 字段初始化器早于构造函数体，那时 config 还是默认值。
@@ -1059,6 +1227,8 @@ class AppModel extends ChangeNotifier {
     // F-3：启动即同步 VB 多总线标志（配置里已是 vbcallback 时，-1 路
     // 从一开始就不是合法路——不能等首次模式切换才生效）。
     pluginManager.setVbMultiBus(audioMode == 'vbcallback');
+    pluginManager
+        .setApoShadow(modeCaps.pluginProcessing == PluginProcessing.apo);
     pluginManager.addListener(notifyListeners);
     // 2026-10-28：扫描目录单源在 config.pluginScanDirs；该方法同时
     // 补内置条目、首次播种平台目录并同步参与扫描的目录集。
@@ -1077,6 +1247,10 @@ class AppModel extends ChangeNotifier {
         } finally {
           _isReplayingSession = false;
         }
+        // 第五轮 S1 对齐：恢复中的规范化/派生（audioMode normalize、
+        // 管线输出推导等）只落在内存，磁盘仍是旧快照——立即对齐
+        // 一次，防旧快照里的过期路由字段在后续启动继续回滚派生值。
+        SessionMemory.save(this);
       } else {
         SessionMemory.save(this);
       }
@@ -1318,7 +1492,12 @@ class AppModel extends ChangeNotifier {
     }
     _compThresholdThrottleTimer?.cancel();
     // 测试隔离：testing 构造不落盘（且 _iso/_fromIso 本来就是 null，?. 本就安全）。
-    if (!_testing) SessionMemory.save(this);
+    if (!_testing) {
+      SessionMemory.save(this);
+      // 正常退出 = 干净收尾：解除 VAIO 断路器布防（桥还在跑
+      // 也不算未净退出——进程是被正常关闭的）。
+      VaioBootGuard.disarm(ConfigManager.dataDir);
+    }
     _toIso?.send({'cmd': 'shutdown'});
     _iso?.kill(priority: Isolate.beforeNextEvent);
     _fromIso?.close();

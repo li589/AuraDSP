@@ -15,6 +15,8 @@ bridge/
     VmBridge.{h,cpp,def}
   asio_bridge/       # ASIO 常驻桥 → auraasio_bridge.dll（Dart: audio_abridge.dart）
     AsioBridge.{h,cpp,def}   # 宿主仍在 ../04_asio_client（AsioHost.*），桥只含 FFI 适配
+  vaio_bridge/       # AuraVAIO 常驻桥 → auravaio_bridge.dll（Dart: audio_vaio_bridge.dart）
+                     # 经控制设备 MAP 共享环泵送；DRV-04 后映射为独占持有（见 ../README.md 安全收紧小节）
 ```
 
 ## 规约

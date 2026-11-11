@@ -119,8 +119,8 @@ AuraDSP 的虚拟声卡与 ASIO 能力依赖系统级集成：
 **键值清单**：
 ```ini
 DisplayName = "AuraDSP"
-DisplayVersion = "0.5.0.1"
-Publisher = "AuraDSP Team"
+DisplayVersion = "0.1.0.1"
+Publisher = "AuraDSP Project"
 DisplayIcon = "C:\Path\To\auradsp_app.exe,0"
 InstallLocation = "C:\Path\To\AuraDSP"
 UninstallString = "\"C:\Path\To\AuraDSP\uninstall.exe\""
@@ -143,7 +143,7 @@ URLInfoAbout = "https://github.com/AuraDSP/AuraDSP"
 
 ## 5. 打包封装结构 (Single Setup EXE Packaging)
 
-安装包发布文件为一个单体可执行文件：`AuraDSP-Setup-x64-v0.5.0.exe`。
+安装包发布文件为一个单体可执行文件：`AuraDSP-Setup-x64-v0.1.0.exe`。
 它的内部物理结构由“**引导启动器（Bootstrapper）**”和“**高压缩 Payload 数据区**”融合构成：
 
 ```text
@@ -164,3 +164,19 @@ URLInfoAbout = "https://github.com/AuraDSP/AuraDSP"
 打包工具只需一行命令，即可将 `dist/AuraDSP-Windows-x64/` 绿色目录无缝封装成此安装包。
 详细的工程骨架与脚本接入规划见 `installer/windows/custom_installer/README.md`。
 
+
+---
+
+## 发行构成定位（与 01 总纲对齐，2026-11-06）
+
+按发布总则，Windows 平台的完整发行由三件构成，本设计只覆盖第三件：
+
+| 构成 | 产物 | 实现载体 |
+| :--- | :--- | :--- |
+| 驱动包 | `AuraDSP-Driver-x64-v{VERSION}.zip` | AuraVAIO 驱动文件 + `01_vaio_driver/install_driver.ps1`（已落地，含 §4.2 DRV 规约残留清理） |
+| 便携包 | `AuraDSP-Windows-x64-v{VERSION}.zip` | `tools/windows/build_windows.ps1` 绿色包（已落地，含 dist 清单刷新） |
+| 正式安装包 | `AuraDSP-Setup-x64-v{VERSION}.exe` | **本设计的自研安装向导（未落地，发行前置条件之一）** |
+
+正式安装包落地前，Windows 侧不满足「完整发行」定义（见 01 §2.3），
+只能以驱动包 + 便携包形态预发布。版本号、发行分支（`main`）与门禁
+口径一律以 01 号文档发布总则为准。

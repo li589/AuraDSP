@@ -208,8 +208,14 @@ b.vb_set_bus_mask.argtypes = [ctypes.c_int]
 
 st = get_status()
 nh = st.get("handles", 0)
+# 句柄按路懒建：handles 是版型槽数（含未开路），实际在用句柄另计。
+# vb_set_param_str 返回的是**成功落参的在用句柄数**，故按在用路数比对，
+# 拿槽位数比对会恒不相等（桥侧实现里镜像写入也是按在用路数判的）。
+_route_state = st.get("routeState") or []
+live_eng = len([s for s in _route_state if s != 0]) or nh
 n = b.vb_set_param_str(b"liveprog.code", LP_CODE.encode("utf-8"), len(LP_CODE))
-check("set_param_str applied", n == nh and nh > 0, f"n={n} handles={nh}")
+check("set_param_str applied", n == live_eng and live_eng > 0,
+      f"n={n} live_eng={live_eng} handles={nh}")
 rc = b.vb_set_param(b"liveprog.enable", 0, ctypes.byref(ctypes.c_int32(1)))
 check("liveprog enable", rc and rc > 0, f"rc={rc}")
 rc, stcode = get_param("liveprog.status")
@@ -268,8 +274,13 @@ check("grpLive field plumbed", isinstance(st.get("grpLive"), int),
 b.vb_plugin_group_enable.restype = ctypes.c_int
 b.vb_plugin_group_enable.argtypes = [ctypes.c_int]
 b.vb_plugin_group_mask.restype = ctypes.c_int
-check("plugin_group default==0xFF", b.vb_plugin_group_mask() == 0xFF,
-      f"mask={b.vb_plugin_group_mask():#x}")
+# 出厂默认只勾**在用路**（A1/A2）：255e61f「路开关即生命周期 + 异步加载动画；
+# 默认只开 A1/A2」把插件链默认从"全开"改成"只开前两条路"。组位数是版面容量（8），
+# 默认只有 A1/A2 真的在跑。早先断言 0xFF 是"默认全开"时代的残留。
+# 注意：这是**出厂常量**，与 busMask 无关（busMask 是总线版位，本用例中途改过）。
+_default_mask = b.vb_plugin_group_mask()
+check("plugin_group default==出厂 A1/A2 (0x03)", _default_mask == 0x03,
+      f"mask={_default_mask:#x}")
 rc = b.vb_plugin_group_enable(0xFE)
 check("plugin_group g0 off", rc == 0xFE, f"rc={rc:#x}")
 check("plugin_group_mask==0xFE", b.vb_plugin_group_mask() == 0xFE,

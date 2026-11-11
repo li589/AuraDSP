@@ -5,7 +5,7 @@
  *    Tube/Exciter、Spatial（空间声学耳廓滤波）、Convolver（卷积IR频谱）、
  *    DDC（VDC耳机校准滤波）、Liveprog（脚本特征响应）、Limiter等全链路联动
  * 3. 多声道动态适配：严格对齐设置中的有效声道数（2/4/6/8声道），提供 FL/FR/C/LFE/SL/SR/BL/BR 逐声道分析
- * 4. Voicemeeter (VB) 驱动严格隔离：仅在 audioMode == 'vbcallback' 模式下展示总线下拉
+ * 4. Voicemeeter (VB) 驱动严格隔离：仅在 ModeCaps.routeSelector 为真的模式下展示总线下拉
  * 5. 延迟精准测定与反哺：同步更新 model.latencyMs 与主状态机
  * 6. 交互式 EqualizerAPO 风格曲线/折线图：对数网格、十字准星探针、dB刻度线、几何节点折线模式
  */
@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/audio_modes.dart';
 import '../../core/design.dart';
+import '../../core/error_sink.dart';
 import '../../core/io/resource_gate.dart';
 import '../../core/channel_layout.dart';
 import '../../core/state.dart';
@@ -254,7 +255,9 @@ class FullChainTransferCalculator {
       }
       _cachedVdcPath = path;
       _cachedVdcBiquads = list;
-    } catch (_) {}
+    } catch (e, st) {
+      swallow(e, st);
+    }
     return list;
   }
 
@@ -269,7 +272,11 @@ class FullChainTransferCalculator {
     final sampleRate = model.engineRate > 0 ? model.engineRate : 48000;
 
     // 1. Voicemeeter 总线路由判定
-    final isVbMode = model.audioMode == 'vbcallback' ||
+    // VB 总线掩码语义：合成模式为 VB（routeSelector）或附加
+    // 端已选 Voicemeeter 时都生效——后者是计算器既有契约
+    // （范式未切附加时掩码已先行，chain_spectrum_analyzer_test
+    // 钉死）；总线下拉等 UI 显现仍只看 routeSelector。
+    final isVbMode = model.modeCaps.routeSelector ||
         model.attachmentMode == AudioModes.attachVoicemeeterApi;
     bool isBypassed = false;
     if (isVbMode && vbBusIndex != null) {
@@ -607,7 +614,7 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
       _selectedChannel = availableChannels.first;
     }
 
-    final isVb = widget.model.audioMode == 'vbcallback';
+    final isVb = widget.model.modeCaps.routeSelector;
 
     // 获取当前计算结果
     final res = FullChainTransferCalculator.compute(
@@ -695,18 +702,10 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
                   await widget.model.refreshAllComponentLatencies();
                   if (context.mounted) {
                     setState(() {});
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        duration: const Duration(milliseconds: 1400),
-                        behavior: SnackBarBehavior.floating,
-                        backgroundColor: p.panelRaised,
-                        content: Text(
-                          l.chainLatencyMeasuredMsg(
-                            LatencyPresenter.number(
-                              widget.model.fullChainLatencyMs,
-                            ),
-                          ),
-                          style: TextStyle(color: p.text, fontSize: 12),
+                    widget.model.postNotice(
+                      l.chainLatencyMeasuredMsg(
+                        LatencyPresenter.number(
+                          widget.model.fullChainLatencyMs,
                         ),
                       ),
                     );

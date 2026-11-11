@@ -130,15 +130,16 @@ void main() {
 
       expect(synth.waveL.length, WaveformSynthesizer.pointCount);
       expect(synth.waveR.length, WaveformSynthesizer.pointCount);
-      expect(synth.lissajousPoints.length, WaveformSynthesizer.pointCount);
+      // f60e8353 起利萨如坐标改为交错 Float32List（x,y,x,y…），总长 2 倍点数。
+      expect(synth.lissajousXY.length, WaveformSynthesizer.pointCount * 2);
 
       // Verify bounds
       for (final val in synth.waveL) {
         expect(val, inInclusiveRange(-1.0, 1.0));
       }
-      for (final pt in synth.lissajousPoints) {
-        expect(pt.dx, inInclusiveRange(-1.5, 1.5));
-        expect(pt.dy, inInclusiveRange(-1.5, 1.5));
+      for (var i = 0; i < WaveformSynthesizer.pointCount; i++) {
+        expect(synth.lissajousXY[i * 2], inInclusiveRange(-1.5, 1.5));
+        expect(synth.lissajousXY[i * 2 + 1], inInclusiveRange(-1.5, 1.5));
       }
     });
 
@@ -165,9 +166,8 @@ void main() {
         expect(val.isFinite, isTrue);
         expect(val, inInclusiveRange(-1.0, 1.0));
       }
-      for (final pt in synth.lissajousPoints) {
-        expect(pt.dx.isFinite, isTrue);
-        expect(pt.dy.isFinite, isTrue);
+      for (final v in synth.lissajousXY) {
+        expect(v.isFinite, isTrue);
       }
     });
   });

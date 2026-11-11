@@ -33,4 +33,28 @@ final class DesktopShellOpen implements ShellOpenPort {
       return false;
     }
   }
+
+  @override
+  Future<bool> openUrl(String url) async {
+    try {
+      switch (PlatformProfile.os) {
+        case 'windows':
+          // explorer 拉起进程即视为成功（同 openPath 口径）；URL 交由
+          // 系统默认浏览器接管。
+          await Process.run('explorer.exe', [url]);
+          return true;
+        case 'macos':
+          final res = await Process.run('open', [url]);
+          return res.exitCode == 0;
+        case 'linux':
+          final res = await Process.run('xdg-open', [url]);
+          return res.exitCode == 0;
+        default:
+          return false;
+      }
+    } catch (e, st) {
+      swallow(e, st);
+      return false;
+    }
+  }
 }

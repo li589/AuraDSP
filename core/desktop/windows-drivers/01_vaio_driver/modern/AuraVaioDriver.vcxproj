@@ -82,6 +82,22 @@
       <AdditionalDependencies>$(DDK_LIB_PATH)\portcls.lib;$(DDK_LIB_PATH)\libcntpr.lib;$(DDK_LIB_PATH)\wdmsec.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup>
+    <!-- /utf-8：驱动源码含中文注释（ControlDevice.cpp / AuraVaio.h / common/AuraVaioIpc.h）。
+         不显式声明时 MSVC 按系统代码页(936)解析 UTF-8 文件 → C4819「该文件包含不能
+         在当前代码页表示的字符」；而 WDK 工程默认 /WX（警告即错误）→ 升级为 C2220
+         → **整个驱动编译失败**。症状隐蔽：错报在"无关"的头文件行号上，
+         且中文提示在 GBK 控制台里码成乱码。
+         /Brepro：可复现构建。不加时同一份源码重编三次会得到三个不同哈希
+         （PE 头时间戳 + PDB GUID），于是**无法证明"发出去的 .sys 就是验证过的那个"**
+         ——对内核驱动这种安全敏感组件是实质缺口。CL 与 Link 两侧都要给。 -->
+    <ClCompile>
+      <AdditionalOptions>/utf-8 /Brepro %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <AdditionalOptions>/Brepro %(AdditionalOptions)</AdditionalOptions>
+    </Link>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\src\Driver.cpp" />
     <ClCompile Include="..\src\AdapterCommon.cpp" />

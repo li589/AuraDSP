@@ -145,11 +145,37 @@ CMiniportWaveRTStream::SetFormat(
         return STATUS_INVALID_PARAMETER;
     }
 
+    if (DataFormat->FormatSize < sizeof(KSDATAFORMAT_WAVEFORMATEX))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
     //
-    // A WaveRT stream's format is fixed when NewStream() creates it; the data
-    // range negotiation already happened at the pin level.  Accept the request
-    // (the class driver treats a failure here as fatal to the pin).
+    // A WaveRT stream's format is normally fixed when NewStream() creates
+    // it, but the audio engine can also renegotiate in place on a running
+    // stream.  Mirror Init(): record the new geometry and publish it to
+    // the shared ring header.  Without this, an in-place change leaves
+    // the header (and therefore the bridge pump) describing the old
+    // format while the stream already writes the new one — the pump
+    // then misreads the ring indefinitely (round-7 item 6).  Still
+    // accept every well-formed request (the class driver treats a
+    // failure here as fatal to the pin).
     //
+    {
+        PWAVEFORMATEX wfx = reinterpret_cast<PWAVEFORMATEX>(
+                                reinterpret_cast<PBYTE>(DataFormat) + sizeof(KSDATAFORMAT));
+
+        if (wfx->nBlockAlign == 0 || wfx->nAvgBytesPerSec == 0)
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+
+        m_ulBlockAlign      = wfx->nBlockAlign;
+        m_ulBytesPerSecond  = wfx->nAvgBytesPerSec;
+
+        AuraControlDevice_OnFormatChange(wfx->nSamplesPerSec, wfx->nChannels, wfx->wBitsPerSample);
+    }
+
     return STATUS_SUCCESS;
 }
 

@@ -38,7 +38,12 @@ abstract final class ParamId {
   static const lpCode = 'liveprog.code';
   static const lpUnload = 'liveprog.unload';
   static const lpStatus = 'liveprog.status';
+  static const lpMcEnable = 'liveprogmc.enable';
+  static const lpMcCode = 'liveprogmc.code';
+  static const lpMcUnload = 'liveprogmc.unload';
+  static const lpMcStatus = 'liveprogmc.status';
   static List<String> lpParams() => List.generate(8, (i) => 'liveprog.param${i + 1}');
+  static List<String> lpMcParams() => List.generate(8, (i) => 'liveprogmc.param${i + 1}');
   // v1.1：卷积 / 脉冲响应（M4）
   static const convEnable = 'convolver.enable';
   static const convIrPath = 'convolver.ir.path';

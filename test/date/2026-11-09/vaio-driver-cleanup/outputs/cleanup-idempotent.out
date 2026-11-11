@@ -1,0 +1,8 @@
+﻿
+[清理] 当前：MEDIA 节点 1 个 / DriverStore 同名包 1 个
+  保留节点  : ROOT\MEDIA\0000 [Root\AuraVAIO]
+  保留驱动包: oem12.inf
+  将移除    : 节点 0 个 / 驱动包 0 个
+[清理后] MEDIA 节点 1 个 / DriverStore 同名包 1 个，移除失败 0 项
+  收敛达标：MEDIA 节点数 == 1。
+

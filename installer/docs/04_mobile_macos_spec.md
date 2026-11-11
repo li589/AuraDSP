@@ -2,6 +2,8 @@
 
 本文档涵盖移动端（Android）与苹果桌面端（macOS）的标准打包、代码签名、分包与产物输出规格。
 
+> **状态：预留规格（不在当前发行范围）**。正式发行范围为 Windows + Linux（2026-11-06 owner 裁定，见 [01_distribution_architecture.md](01_distribution_architecture.md) 发布总则）；Android 为研究验证线、macOS 未实现。本文保留作未来立项时的规格参考，文内产物与流程不代表已交付能力。
+
 ---
 
 ## 1. Android 发行体系 (APK / AAB)

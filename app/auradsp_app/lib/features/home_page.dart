@@ -5,16 +5,20 @@
  * 测试音频源已移入设置页测试卡（为输入/输出设备选择预留位置）。
  * 注：右上引擎简报行已移除（信息冗余，设备信息见设置页设备卡）。
  */
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
 import '../core/nav.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../platform/adapters.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   final AppModel model;
   const HomePage({super.key, required this.model});
 
@@ -24,10 +28,23 @@ class HomePage extends StatelessWidget {
       ValueNotifier<List<double>>(List.filled(32, 0.0));
 
   @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  /// 主页活动门：呼吸点与频谱卡共用同一份「有没有真实能量」判断。
+  late final _HomeActivityGate _activity = _HomeActivityGate(widget.model);
+
+  @override
+  void dispose() {
+    _activity.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
-    // R2（2026-10-23）：页可见性门控——IndexedStack 保活后本页离屏仍在
-    // 树上（SDK 实证全子节点参与 layout），高频可视化订阅据此摘除。
+    final model = widget.model;
     return ValueListenableBuilder<AppPage>(
       valueListenable: model.visiblePage,
       builder: (_, page, _) {
@@ -43,10 +60,10 @@ class HomePage extends StatelessWidget {
             // 关掉氛围背景 → 直接不传数据源，整层不构造（零绘制/零订阅）
             ambient: !ambientOn
                 ? null
-                : (active ? model.spectrum : _frozenSpectrum),
+                : (active ? model.spectrum : HomePage._frozenSpectrum),
             children: [
-              _SpectrumCard(model: model, active: active), // 可视化置顶
-              _Hero(model: model), // 引擎总览：状态 / 延迟 / 旁路
+              _SpectrumCard(model: model, active: active, audible: _activity),
+              _Hero(model: model, audible: _activity),
             ],
           ),
         );
@@ -55,18 +72,93 @@ class HomePage extends StatelessWidget {
   }
 }
 
+/* ---- 主页活动门 ---- */
+
+/// 主页「有没有真实音频能量」门控（**仅主页**）。
+///
+/// 与可视化页是两套东西：可视化页有自己的 `active`/时间轴门（P0-1），这里
+/// 不触碰它。本门只回答一件事——现在有没有真实能量，供两处消费：
+///   1. Hero 呼吸点：连接态（VB 已挂载 / ASIO 已开）不等于有音频。旧实现把
+///      「引擎在处理」直接当活动，桥挂上但没媒体时呼吸点 60fps 空转，Impeller
+///      每帧整窗重绘，实测 VB 主页 165~172% CPU / 32~37% GPU，全部由这颗点驱动。
+///   2. 频谱卡：静默/隐藏时停止转发帧，绘制侧零重绘（最后一帧保留）。
+///
+/// 判定：任一面板电平 > -60 dBFS 或任一频段 > 0.001 即有声；无声后保持 2s
+/// 再落闸（让柱体自然衰减到底）。窗口不可见（最小化/托盘）直接落闸，
+/// 恢复可见后由首个有声帧重新拉起。
+class _HomeActivityGate extends ValueNotifier<bool> {
+  static const double _audibleLevelDb = -60.0;
+  static const double _audibleBandPeak = 0.001;
+  static const Duration _silenceHold = Duration(seconds: 2);
+
+  final AppModel _model;
+  Timer? _hold;
+  bool _visible = PlatformAdapters.instance.window.isVisible;
+
+  _HomeActivityGate(this._model) : super(false) {
+    _model.spectrum.addListener(_onFrame);
+    PlatformAdapters.instance.window.visibleListenable
+        .addListener(_onVisibility);
+  }
+
+  void _onVisibility() {
+    final visible = PlatformAdapters.instance.window.isVisible;
+    if (visible == _visible) return;
+    _visible = visible;
+    _hold?.cancel();
+    _hold = null;
+    // 隐藏期不产帧；恢复可见由下一帧有声数据拉起，避免用陈旧状态续跑。
+    value = false;
+  }
+
+  void _onFrame() {
+    if (!_visible) return;
+    final bands = _model.spectrum.value;
+    var peak = 0.0;
+    for (final v in bands) {
+      if (v > peak) peak = v;
+    }
+    final lDb = _model.levelL.value;
+    final rDb = _model.levelR.value;
+    final level = lDb > rDb ? lDb : rDb;
+    if (level > _audibleLevelDb || peak > _audibleBandPeak) {
+      _hold?.cancel();
+      _hold = null;
+      if (!value) value = true;
+    } else if (value) {
+      // 迟滞窗口内保持开闸，让柱体自然衰减到底再冻结。
+      _hold ??= Timer(_silenceHold, () {
+        _hold = null;
+        value = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _hold?.cancel();
+    _model.spectrum.removeListener(_onFrame);
+    PlatformAdapters.instance.window.visibleListenable
+        .removeListener(_onVisibility);
+    super.dispose();
+  }
+}
+
 /* ---- hero 状态区 ---- */
 
 class _Hero extends StatelessWidget {
   final AppModel model;
-  const _Hero({required this.model});
+
+  /// 主页活动门：连接态 ≠ 有音频。呼吸点只在这份门为真时产帧。
+  final ValueListenable<bool> audible;
+  const _Hero({required this.model, required this.audible});
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);
     return ListenableBuilder(
-      listenable: model,
+      listenable: Listenable.merge([model, audible]),
       builder: (_, _) {
         // 与 StateBadge 同口径，见 AppModel.engineDisplay。
         final disp = model.engineDisplay;
@@ -76,7 +168,9 @@ class _Hero extends StatelessWidget {
           EngineDisplay.idle => (l.stateIdle, p.textDim),
           EngineDisplay.processing => (l.stateProcessing, p.accent),
         };
-        final live = disp == EngineDisplay.processing;
+        // 旧口径 liveSpectrum 在 VB/ASIO 挂载后恒真（没有媒体也算），
+        // 呼吸点会 60fps 空转；这里额外要求真实能量。
+        final live = disp == EngineDisplay.processing && audible.value;
         return SectionCard(
           hero: true,
           padding: const EdgeInsets.all(AuraSpace.xl),
@@ -213,12 +307,74 @@ class _BypassButtonState extends State<_BypassButton> {
 
 /* ---- 频谱 + 电平 ---- */
 
-class _SpectrumCard extends StatelessWidget {
+class _SpectrumCard extends StatefulWidget {
   final AppModel model;
   /// R2（2026-10-23）：宿主页可见性（HomePage 经 visiblePage 门控传入）。
   /// false = 离屏——LevelMeter 与 dBFS 读数不订阅 30fps 通知器。
   final bool active;
-  const _SpectrumCard({required this.model, this.active = true});
+
+  /// 主页活动门（能量判定 + 窗口可见性 + 2s 静默迟滞，见 _HomeActivityGate）。
+  final _HomeActivityGate audible;
+  const _SpectrumCard({
+    required this.model,
+    required this.audible,
+    this.active = true,
+  });
+
+  @override
+  State<_SpectrumCard> createState() => _SpectrumCardState();
+}
+
+/// 主页频谱卡的活动门控（2026-11-06，结案报告 7.3 的遗留项）。
+///
+/// 与可视化页是两套东西：这里只决定「本卡片要不要消费频谱帧」，不触碰
+/// 可视化页的 `active`/时间轴开关。三个条件同时成立才向下游转发：
+/// 页面在栈位上、引擎有实时数据、当前有真实能量（含 2s 迟滞，窗口隐藏时
+/// 由活动门直接落闸）。任一不成立即冻结 SpectrumView 代理通知器——
+/// `CustomPaint` 的 repaint 挂在代理上，冻结后不再产帧，但最后一帧保留。
+/// 恢复播放/重新可见后由首个有声帧立即开闸。
+class _SpectrumCardState extends State<_SpectrumCard> {
+  /// 门控后的频谱代理：静默/离屏期不转发，绘制侧零重绘。
+  late final ValueNotifier<List<double>> _gatedSpectrum =
+      ValueNotifier<List<double>>(widget.model.spectrum.value);
+
+  bool get _effective =>
+      widget.active && widget.model.liveSpectrum && widget.audible.value;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.model.spectrum.addListener(_onSpectrumFrame);
+  }
+
+  void _onSpectrumFrame() => _syncGate();
+
+  /// 门控唯一入口：不满足条件即停止转发（保留最后一帧）；
+  /// 恢复后由下一帧续上，不会停留在陈旧柱体上。
+  void _syncGate() {
+    if (!_effective) return;
+    _gatedSpectrum.value = widget.model.spectrum.value;
+  }
+
+  @override
+  void didUpdateWidget(_SpectrumCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.model != widget.model) {
+      oldWidget.model.spectrum.removeListener(_onSpectrumFrame);
+      widget.model.spectrum.addListener(_onSpectrumFrame);
+    }
+    if (oldWidget.active != widget.active) {
+      // 切页立刻按新条件裁定一次；回页用当前值补一帧。
+      _syncGate();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.model.spectrum.removeListener(_onSpectrumFrame);
+    _gatedSpectrum.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -226,25 +382,24 @@ class _SpectrumCard extends StatelessWidget {
     final l = l10nOf(context);
     return SectionCard(
       title: l.spectrum,
-      trailing: _StateHint(model: model),
+      trailing: _StateHint(model: widget.model),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
             height: 140,
             child: ListenableBuilder(
-              listenable: model,
+              listenable: widget.model,
               builder: (_, _) {
-                if (!model.liveSpectrum) {
+                if (!widget.model.liveSpectrum) {
                   return _EmptySpectrum(text: l.noAudio);
                 }
                 // 频谱主体 + 右侧 dB 纵轴（与可视化页同一套坐标语义）。
-                // SpectrumView 走 CustomPainter(repaint:)，离屏只标记脏
-                // 不实际绘制，无需门控。
+                // 传门控代理而非 model.spectrum：静默/最小化时零重绘。
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(child: SpectrumView(spectrum: model.spectrum)),
+                    Expanded(child: SpectrumView(spectrum: _gatedSpectrum)),
                     const SizedBox(width: AuraSpace.sm),
                     const _DbScaleMini(),
                   ],
@@ -255,17 +410,22 @@ class _SpectrumCard extends StatelessWidget {
           const SizedBox(height: AuraSpace.sm),
           const FreqAxis(),
           const SizedBox(height: AuraSpace.lg),
-          _OutputLevelRow(model: model, active: active),
+          // 总线轴标识：8 根柱是「当前最热总线」的声道轴，不是 A1–B3 总线轴。
+          if (widget.model.vbActive) ...[
+            _MeterBusScope(model: widget.model),
+            const SizedBox(height: AuraSpace.xs),
+          ],
+          _OutputLevelRow(model: widget.model, active: widget.active),
           const SizedBox(height: AuraSpace.sm + 2),
           Align(
             alignment: Alignment.centerRight,
             // R2：离屏不订阅 levelL/R——静态读数替代（回页父级以
             // active=true 重建即恢复）。
-            child: active
+            child: widget.active
                 ? ValueListenableBuilder<double>(
-                    valueListenable: model.levelL,
+                    valueListenable: widget.model.levelL,
                     builder: (_, lDb, _) => ValueListenableBuilder<double>(
-                      valueListenable: model.levelR,
+                      valueListenable: widget.model.levelR,
                       builder: (_, rDb, _) => Text(
                           'L ${dbfsText(lDb)}  R ${dbfsText(rDb)} dBFS',
                           style: monoOf(p, size: 11, color: p.textDim)),
@@ -357,6 +517,39 @@ class _OutputLevelRow extends StatelessWidget {
               ],
             );
           },
+        );
+      },
+    );
+  }
+}
+
+/// 主页电平区总线标识：读 VB 桥 status 的 `vizGrp`（当前 viz 跟随的总线组），
+/// 明示「这 8 根柱是哪条总线的声道」，避免把声道轴误读成 A1–B3 总线轴。
+/// 只改显示，不动电平数值口径；按 hbTick 心跳更新，不牵动外层重建。
+class _MeterBusScope extends StatelessWidget {
+  final AppModel model;
+  const _MeterBusScope({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+    return HbBuilder(
+      tick: model.hbTick,
+      builder: (context) {
+        if (!model.vbActive) return const SizedBox.shrink();
+        final g = (model.vbInfo['vizGrp'] as num?)?.toInt() ?? -1;
+        if (g < 0 || g > 7) return const SizedBox.shrink();
+        final names =
+            vbBusNames((model.vbInfo['edition'] as num?)?.toInt() ?? 0);
+        final bus = g < names.length ? names[g] : 'G${g + 1}';
+        final cc = model.vizChannelCount.value;
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            l.meterBusScope(bus, cc),
+            style: monoOf(p, size: 10, color: p.textDim),
+          ),
         );
       },
     );

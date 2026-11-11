@@ -81,7 +81,8 @@ class _WasapiOutputSubpanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     final p = paletteOf(context);
-    final outputs = model.filteredWasapiOutputs;
+    // 互斥规格（第四轮项 2）：候选已在状态层剔除输入已选端点。
+    final outputs = model.wasapiOutputsExcludingInput;
     final curDev = model.pipelineOutputDevice;
     final matched = outputs.cast<AudioDeviceItem?>().firstWhere(
         (d) => d?.id == curDev || d?.name == curDev,
@@ -90,11 +91,34 @@ class _WasapiOutputSubpanel extends StatelessWidget {
         ? (matched.id.isNotEmpty ? matched.id : matched.name)
         : (curDev.isEmpty ? '' : curDev);
     final info = model.info;
+    // '' 默认项是系统默认渲染端点的别名：输入占据渲染槽时它与
+    // 输入是同一端点，必须撤下（单声卡机撤完即无任何可选）。
+    final inputBlocksDefault = model.inputOccupiesRenderSlot;
+    // 当前输出值不在候选里且与输入构成自激对 = 被互斥规则撤下，
+    // 不是离线——不许离线兜底项把它再塞回来。
+    final curExcluded =
+        curDev.isNotEmpty && matched == null && model.pipelinePairConflicts;
+    final offlineShown = curDev.isNotEmpty && matched == null && !curExcluded;
+    final noItems = inputBlocksDefault && outputs.isEmpty && !offlineShown;
+    // 项 4 诚实呈现（第七轮 S2）：合成链为桥链（VAIO/ASIO）时本
+    // 下拉的设备字段不被链路消费（只供捕获链）——与输入侧
+    // overriddenByVaio 同口径：说明行 + 置灰，不再假装切换有效
+    // （实测：输入 VAIO 时切「系统默认渲染」无事发生且无提示）。
+    final overriddenByBridge = model.pipelineChain == PipelineChain.vaio ||
+        model.pipelineChain == PipelineChain.asio;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _InfoRow(l.outputWasapi, l.ioWasapiRenderDesc),
+        if (overriddenByBridge) ...[
+          _InfoRow(
+              l.outputDeviceLabel,
+              model.pipelineChain == PipelineChain.vaio
+                  ? l.ioOutputOverriddenByVaio
+                  : l.ioOutputOverriddenByAsio),
+          const SizedBox(height: AuraSpace.xs),
+        ],
         const SizedBox(height: AuraSpace.xs),
         Row(
           children: [
@@ -107,6 +131,7 @@ class _WasapiOutputSubpanel extends StatelessWidget {
               child: AuraDropdown<String>(
                 value: selectedValue,
                 items: [
+                  if (!inputBlocksDefault)
                   DropdownMenuItem<String>(
                     value: '',
                     child: Row(
@@ -128,7 +153,7 @@ class _WasapiOutputSubpanel extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (curDev.isNotEmpty && matched == null)
+                  if (offlineShown)
                     DropdownMenuItem<String>(
                       value: curDev,
                       child: Row(
@@ -179,10 +204,25 @@ class _WasapiOutputSubpanel extends StatelessWidget {
                       ),
                     ),
                 ],
-                hint: outputs.isEmpty ? l.ioNoOutputDevices : null,
-                onChanged: (v) {
-                  if (v != null) model.setPipelineOutputDevice(v);
-                },
+                // 无任何可选时控件按空 items 呈置灰态，文案按成因
+                // 区分：枚举里连渲染端点都没有是「无输出设备」；有
+                // 渲染端点但全是虚拟端点（被名字过滤）是「仅有虚拟
+                // 输出端点」（第七轮 S2 项 5 极端口径）；被互斥撤
+                // 空是用户规格的「无可用声卡」。
+                hint: noItems
+                    ? (model.filteredWasapiOutputs.isEmpty
+                        ? (model.wasapiDevices.any((d) => d.isRender)
+                            ? l.ioOnlyVirtualOutputs
+                            : l.ioNoOutputDevices)
+                        : l.ioNoAvailableSoundCard)
+                    : (outputs.isEmpty && !inputBlocksDefault
+                        ? l.ioNoOutputDevices
+                        : null),
+                onChanged: overriddenByBridge
+                    ? null
+                    : (v) {
+                        if (v != null) model.setPipelineOutputDevice(v);
+                      },
               ),
             ),
             const SizedBox(width: AuraSpace.xs),
@@ -236,6 +276,9 @@ class _VaioOutputSubpanel extends StatelessWidget {
     final selectedValue = matched != null
         ? matched.name
         : (curEndpoint.isEmpty ? '' : curEndpoint);
+    // 第七轮 S2（项 4 同口径）：合成链为 ASIO 桥时 VAIO 物理落点
+    // 不被消费——说明行 + 置灰，与 WASAPI 输出子面板一致。
+    final overriddenByAsio = model.pipelineChain == PipelineChain.asio;
 
     return ListenableBuilder(
       listenable: model,
@@ -279,6 +322,10 @@ class _VaioOutputSubpanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AuraSpace.sm),
+          if (overriddenByAsio) ...[
+            _InfoRow(l.ioPhysicalOutput, l.ioOutputOverriddenByAsio),
+            const SizedBox(height: AuraSpace.sm),
+          ],
           Row(children: [
             SizedBox(
                 width: 104,
@@ -355,9 +402,11 @@ class _VaioOutputSubpanel extends StatelessWidget {
                     ),
                 ],
                 hint: endpoints.isEmpty ? l.ioNoPhysicalOutputs : null,
-                onChanged: (v) {
-                  if (v != null) model.setVaioOutputEndpoint(v);
-                },
+                onChanged: overriddenByAsio
+                    ? null
+                    : (v) {
+                        if (v != null) model.setVaioOutputEndpoint(v);
+                      },
               ),
             ),
             const SizedBox(width: AuraSpace.xs),
@@ -399,6 +448,12 @@ class _AsioClientOutputSubpanel extends StatelessWidget {
             l.ioChannelPair(model.config.asioOutPair * 2 + 1,
                 model.config.asioOutPair * 2 + 2)),
         _InfoRow(l.ioOutputStatus, active ? l.ioAsioPassthrough : l.ioAsioReadyStatus),
+        // V-04/R4+R5：ASIO Client 的【设置】控件（驱动选择/缓冲/
+        // 声道对）归输出层管理，此前混在只读的驱动信息层。
+        const SizedBox(height: AuraSpace.sm),
+        HbBuilder(
+            tick: model.hbTick,
+            builder: (_) => _AsioClientDriverRow(model: model)),
       ],
     );
   }

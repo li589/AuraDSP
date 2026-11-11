@@ -98,6 +98,13 @@ abstract final class PresetLibrary {
       List.unmodifiable(_factoryAssetFiles);
 
   /// 当前预设 schema 版本（`snapshot` 写入、`importFromFile` 校验的唯一真源）。
+  ///
+  /// 版本口径（2026-11-08 审计登记）：schemaVersion 只做 [1, 本版本]
+  /// 准入闸门，**没有显式版本迁移器**——v1/v2 老预设的「迁移」由
+  /// [apply] 的 defaults.json 基线深合并 + 按现行 registry 规格迭代
+  /// 完成（缺键补默认、未知键忽略）。推论：registry 删键即静默丢弃
+  /// 老预设的对应设置且无迁移日志；删键前须知悉此口径。基线与规格
+  /// 的键集一致性由 preset_defaults_contract_test 钉住。
   static const int schemaVersionCurrent = 3;
 
   /// 预载出厂预设与默认基线资产（异步）。rootBundle 仅提供异步 API，
@@ -222,7 +229,14 @@ abstract final class PresetLibrary {
     try {
       for (final f in DocumentStore.listJsonFiles(userDir)) {
         final read = DocumentStore.readJson(f.path);
-        if (read.ok) list.add(AuraPreset.fromJson(read.data!));
+        if (read.ok) {
+          list.add(AuraPreset.fromJson(read.data!));
+        } else {
+          // 损坏的用户预设（2026-11-08 审计·预设低4）：旧实现静默
+          // 跳过，坏文件永久留在目录里、UI 无痕、每次启动重复扫。
+          // 对齐 config.json 的 APP-01 口径：改名隔离留证、不再重扫。
+          _quarantineCorruptUserPreset(f);
+        }
       }
     } catch (e, st) { swallow(e, st); }
 
@@ -255,6 +269,18 @@ abstract final class PresetLibrary {
       return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
     return list;
+  }
+
+  /// 坏用户预设隔离：改名为 `<原名>.corrupt-<毫秒戳>`（后缀不再是
+  /// .json，listJsonFiles 不会再扫到）。隔离失败只记吞异常，不阻塞
+  /// 列表加载——与 ConfigManager 对 config.json 的处理同口径。
+  static void _quarantineCorruptUserPreset(File f) {
+    try {
+      f.renameSync('${f.path}.corrupt-'
+          '${DateTime.now().millisecondsSinceEpoch}');
+    } catch (e, st) {
+      swallow(e, st);
+    }
   }
 
   /// 保存为用户预设。

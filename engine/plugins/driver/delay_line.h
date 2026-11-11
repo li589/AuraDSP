@@ -82,7 +82,15 @@ public:
         const uint32_t size = maxDelay + 1;
         for (auto& buf : m_bufs) {
             buf.reset(new (std::nothrow) float[size]());
-            if (!buf) return false;
+            if (!buf) {
+                /* 分配失败：释放已成功的部分，保持 m_size=0，RT 路径全部
+                 * 直通（pushOnly/process 首行即返回），不会出现 %0。 */
+                for (auto& b : m_bufs) b.reset();
+                m_size = 0;
+                m_writePos = 0;
+                m_delay = 0;
+                return false;
+            }
         }
         m_size = size;
         m_writePos = 0;
@@ -110,7 +118,7 @@ public:
 
     void pushOnly(const float* interleaved, uint32_t frames, uint32_t channels,
                   uint32_t mask) {
-        if (!interleaved || !m_bufs[0] || channels == 0) return;
+        if (!interleaved || m_size == 0 || !m_bufs[0] || channels == 0) return;
         if (channels > kMaxChannels) channels = kMaxChannels;
         const uint32_t useMask = mask & ((1u << channels) - 1u);
         if (useMask == 0) return;

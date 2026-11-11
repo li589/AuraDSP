@@ -1,10 +1,13 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../models/visualizer_themes.dart';
+import 'visualizer_static_grid.dart';
 
 /// 利萨如相位与立体声度极坐标仪 (Goniometer) 渲染画笔
 class GoniometerPainter extends CustomPainter {
-  final List<Offset> points;
+  /// 利萨如坐标（x,y 交错，由 WaveformSynthesizer 原地复用）。
+  final Float32List points;
   final VisualizerPalette palette;
   final bool showGrid;
   final double bloom;
@@ -19,13 +22,19 @@ class GoniometerPainter extends CustomPainter {
   /// 李萨如轨迹 Path 跨帧复用；点列直接流式计算，不再分配 `List<Offset>`。
   final Path _path = Path();
 
+  /// 网格线坐标缓冲（3 条同心圆 + 4 条交叉轴的轴线部分，原地覆写）。
+  final Float32List _gridLines = Float32List(4 * 4);
+
+  /// 辉光色只取决于 bloom（画笔实例跨帧复用），构造时算好。
+  final Color _glowColor;
+
   GoniometerPainter({
     required this.points,
     required this.palette,
     required this.showGrid,
     required this.bloom,
     this.lineWidth = 1.5,
-  }) {
+  }) : _glowColor = palette.glow.withValues(alpha: (bloom * 0.18).clamp(0.0, 0.32)) {
     _gridPaint.color = palette.grid;
     _axisPaint.color = palette.grid.withValues(alpha: 0.4);
 
@@ -49,22 +58,25 @@ class GoniometerPainter extends CustomPainter {
       _drawPolarGrid(canvas, center, radius);
     }
 
-    if (points.isEmpty) return;
+    final n = points.length ~/ 2;
+    if (n == 0) return;
 
     final path = _path..reset();
-    final sx = center.dx + points[0].dx * radius;
-    final sy = center.dy + points[0].dy * radius;
+    final sx = center.dx + points[0] * radius;
+    final sy = center.dy + points[1] * radius;
     path.moveTo(sx, sy);
     var prevX = sx;
     var prevY = sy;
-    for (var i = 1; i < points.length; i++) {
-      final p1x = center.dx + points[i].dx * radius;
-      final p1y = center.dy + points[i].dy * radius;
+    for (var i = 1; i < n; i++) {
+      final ox = points[i * 2];
+      final oy = points[i * 2 + 1];
+      final p1x = center.dx + ox * radius;
+      final p1y = center.dy + oy * radius;
       final midX = (prevX + p1x) / 2.0;
       final midY = (prevY + p1y) / 2.0;
       path.quadraticBezierTo(prevX, prevY, midX, midY);
 
-      if (i % 8 == 0 && (points[i].dx.abs() > 0.1 || points[i].dy.abs() > 0.1)) {
+      if (i % 8 == 0 && (ox.abs() > 0.1 || oy.abs() > 0.1)) {
         canvas.drawCircle(Offset(p1x, p1y), math.max(1.5, lineWidth * 1.2), _dotPaint);
       }
       prevX = p1x;
@@ -74,7 +86,7 @@ class GoniometerPainter extends CustomPainter {
     // 荧光余辉（加宽低透地平描，避免每帧模糊图层）
     if (bloom > 0.1) {
       _glowPaint
-        ..color = palette.glow.withValues(alpha: (bloom * 0.18).clamp(0.0, 0.32))
+        ..color = _glowColor
         ..strokeWidth = lineWidth * 2.0 + bloom * 3.5
         ..maskFilter = null;
       canvas.drawPath(path, _glowPaint);
@@ -83,24 +95,15 @@ class GoniometerPainter extends CustomPainter {
     canvas.drawPath(path, _tracePaint);
   }
 
-  void _drawPolarGrid(Canvas canvas, Offset center, double radius) {
-    // 绘制 3 层同心圆
-    canvas.drawCircle(center, radius * 0.33, _gridPaint);
-    canvas.drawCircle(center, radius * 0.66, _gridPaint);
-    canvas.drawCircle(center, radius, _gridPaint);
-
-    // 绘制 45° 立体声交叉坐标轴 (L / R / M / S)
-    canvas.drawLine(
-      Offset(center.dx - radius * 0.707, center.dy - radius * 0.707),
-      Offset(center.dx + radius * 0.707, center.dy + radius * 0.707),
-      _axisPaint,
-    );
-    canvas.drawLine(
-      Offset(center.dx - radius * 0.707, center.dy + radius * 0.707),
-      Offset(center.dx + radius * 0.707, center.dy - radius * 0.707),
-      _axisPaint,
-    );
-  }
+  void _drawPolarGrid(Canvas canvas, Offset center, double radius) =>
+      paintPolarGrid(
+        canvas,
+        center,
+        radius,
+        _gridPaint,
+        _axisPaint,
+        _gridLines,
+      );
 
   @override
   bool shouldRepaint(covariant GoniometerPainter oldDelegate) => true;

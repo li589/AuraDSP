@@ -53,6 +53,11 @@ option(AURADSP_ENABLE_PLUGINS "Build VST3/CLAP plugin hosting subsystem" ON)
 # remoteMode 运行时分派，两路俱在）；OFF 时引擎定义 HOST_INPROC
 # 恒进程内（裁剪构建）。宿主可执行体随 ON 一并产出。
 option(AURADSP_PLUGIN_HOST_REMOTE "Build out-of-process plugin host (plugin_host_x64)" ON)
+# B-1 调试日志（与 Windows 同名同义，2026-11-08 审计补接线）：宿主 [DBG
+# 诊断默认编译期剥离；-DAURADSP_DBG_LOG=ON 重建可恢复输出（stderr 通道，
+# 运行期再受环境变量 AURADSP_LOG=0|1|2 控制）。引擎与两个宿主目标统一
+# 接线——默认远程模式下出事的往往是宿主进程，它也必须有日志。
+option(AURADSP_DBG_LOG "Emit host [DBG diagnostics to stderr (OFF in default builds)" OFF)
 if(AURADSP_ENABLE_PLUGINS)
     set(AURADSP_OUT_DIR_NAME "out")
 else()
@@ -185,6 +190,9 @@ add_library(auradsp_engine SHARED
 target_compile_options(auradsp_engine PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-include ${API}/auradsp_gcc_shim.h>
 )
+if(AURADSP_DBG_LOG)
+    target_compile_definitions(auradsp_engine PRIVATE AURADSP_DBG_LOG)
+endif()
 target_include_directories(auradsp_engine PRIVATE
     "${API}"
     "${API}/chain"
@@ -277,6 +285,9 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
     target_compile_definitions(plugin_host_x64 PRIVATE
         AURADSP_HOST_INPROC=1
     )
+    if(AURADSP_DBG_LOG)
+        target_compile_definitions(plugin_host_x64 PRIVATE AURADSP_DBG_LOG)
+    endif()
     target_compile_options(plugin_host_x64 PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:-include ${API}/auradsp_gcc_shim.h>
     )
@@ -313,6 +324,9 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         target_compile_definitions(plugin_host_x86 PRIVATE
             AURADSP_HOST_INPROC=1
         )
+        if(AURADSP_DBG_LOG)
+            target_compile_definitions(plugin_host_x86 PRIVATE AURADSP_DBG_LOG)
+        endif()
         target_compile_options(plugin_host_x86 PRIVATE
             -m32
             $<$<COMPILE_LANGUAGE:CXX>:-include ${API}/auradsp_gcc_shim.h>

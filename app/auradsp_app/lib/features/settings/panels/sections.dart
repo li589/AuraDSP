@@ -19,6 +19,7 @@ class _CatBar extends StatelessWidget {
     Icons.graphic_eq_rounded,
     Icons.memory_outlined,
     Icons.science_outlined,
+    Icons.info_outline,
   ];
 
   @override
@@ -98,18 +99,32 @@ class _DynamicAudioPanel extends StatelessWidget {
       return _LinuxDevicePanel(model: model);
     }
 
-    // 1. 附加模式
-    if (model.modeCategory == AudioModes.categoryAttachment) {
-      if (model.attachmentMode == AudioModes.attachVoicemeeterApi) {
-        return HbBuilder(
-            tick: model.hbTick, builder: (_) => _VoicemeeterPanel(model: model));
-      } else {
-        return _SystemApoPanel(model: model);
-      }
-    }
-
-    // 2. 管线模式：三层设备显示卡（驱动层、输入层、输出层）
-    return _PipelineThreeLayerCard(model: model);
+    // V-04/R6：驱动信息层恒显示，可见性不再被处理范式裁剪；
+    // 范式只决定其下是附加面板还是管线输入/输出层。
+    final p = paletteOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _DriverLayer(model: model),
+        const SizedBox(height: AuraSpace.md),
+        Container(height: 1, color: p.hairline),
+        const SizedBox(height: AuraSpace.md),
+        if (model.modeCategory == AudioModes.categoryAttachment)
+          if (model.attachmentMode == AudioModes.attachVoicemeeterApi)
+            HbBuilder(
+                tick: model.hbTick,
+                builder: (_) => _VoicemeeterPanel(model: model))
+          else
+            _SystemApoPanel(model: model)
+        else ...[
+          _InputLayer(model: model),
+          const SizedBox(height: AuraSpace.md),
+          Container(height: 1, color: p.hairline),
+          const SizedBox(height: AuraSpace.md),
+          _OutputLayer(model: model),
+        ],
+      ],
+    );
   }
 }
 
@@ -134,27 +149,25 @@ class _LinuxDevicePanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 版式与 Windows 驱动层统一（2026-11-10 用户裁定）：层标题 +
+        // _DriverBlock 块组（文字左、按钮同行右）+ 操作系统行收尾。
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(alsa ? 'ALSA (Linux)' : 'PulseAudio (Linux)',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: p.text,
-                      )),
-                  if (info != null) ...[
-                    const SizedBox(height: 2),
-                    Text('ABI v${info.abi} · ${info.version}',
-                        style: monoOf(p, size: 10, color: p.textDim)),
-                  ],
-                ],
-              ),
-            ),
+            Icon(Icons.developer_board_rounded, size: 15, color: p.accent),
+            const SizedBox(width: AuraSpace.xs),
+            Text(l.driverLayerTitle, style: sectionOf(p, color: p.text)),
+          ],
+        ),
+        const SizedBox(height: AuraSpace.sm),
+        _DriverBlock(
+          title: alsa ? 'ALSA (Linux)' : 'PulseAudio (Linux)',
+          lines: [
+            if (info != null) _DriverDetail('ABI v${info.abi} · ${info.version}'),
+            if (info != null)
+              _DriverDetail('${info.deviceRate} Hz · ${info.deviceCh} ch · '
+                  '${info.bufferFrames} frames'),
+          ],
+          actions: [
             AuraChip(
               l.setRefreshStatus,
               icon: Icons.refresh_rounded,
@@ -162,7 +175,7 @@ class _LinuxDevicePanel extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: AuraSpace.xs),
+        const SizedBox(height: AuraSpace.sm),
         Row(children: [
           SizedBox(
               width: 104,
@@ -218,24 +231,40 @@ class _LinuxDevicePanel extends StatelessWidget {
               onTap: () => _editAlsaCaptureDevice(context),
             ),
           ]),
-        if (info != null)
-          _InfoRow(
-            l.linuxOutputFormat,
-            '${info.deviceRate} Hz · ${info.deviceCh} ch · '
-                '${info.bufferFrames} frames',
-          ),
         _InfoRow(
             l.linuxCaptureSource,
             captureOn
                 ? (capSource.isEmpty ? '—' : capSource)
                 : l.linuxCaptureNone),
-        _InfoRow(l.linuxVirtualDevice,
-            model.linuxVirtualSink ? l.linuxVirtualPresent : l.linuxVirtualAbsent),
-        _InfoRow(l.linuxModeDriver,
-            model.linuxDriverLoaded ? l.linuxDriverPresent : l.linuxDriverAbsent),
+        const SizedBox(height: AuraSpace.xs),
+        _DriverBlock(
+          title: l.linuxVirtualDevice,
+          lines: [
+            _DriverStatus(
+              model.linuxVirtualSink
+                  ? l.linuxVirtualPresent
+                  : l.linuxVirtualAbsent,
+              model.linuxVirtualSink ? p.success : p.textDim,
+            ),
+          ],
+        ),
+        const SizedBox(height: AuraSpace.sm),
+        _DriverBlock(
+          title: l.linuxModeDriver,
+          lines: [
+            _DriverStatus(
+              model.linuxDriverLoaded
+                  ? l.linuxDriverPresent
+                  : l.linuxDriverAbsent,
+              model.linuxDriverLoaded ? p.success : p.textDim,
+            ),
+          ],
+        ),
         const SizedBox(height: AuraSpace.xs),
         Text(alsa ? l.linuxAlsaExpertHint : l.linuxDeviceHint,
             style: captionOf(p, color: p.textDim).copyWith(fontSize: 11)),
+        const SizedBox(height: AuraSpace.xs),
+        _InfoRow(l.osVersionLabel, PlatformProfile.osVersion),
       ],
     );
   }
@@ -330,6 +359,19 @@ class _LinuxDevicePanel extends StatelessWidget {
   }
 }
 
+/// VB 桥 note 语义化（V-03/R2）：桥写入的 slug 形内部 token
+/// （如 no-voicemeeter-remote-dll）与 bridge-missing 前缀是诊断信息，
+/// 永不直接当用户文案外显，统一映射为「Voicemeeter 未启用」；
+/// 其余自由文本（如桥的人类可读状态）原样透传。
+String _vbNoteText(AppLocalizations l, Object? note) {
+  if (note is! String || note.isEmpty) return l.setConnIdle;
+  if (note.startsWith('bridge-missing') ||
+      RegExp(r'^[a-z0-9]+(-[a-z0-9]+)+$').hasMatch(note)) {
+    return l.setVbNotEnabled;
+  }
+  return note;
+}
+
 class _VoicemeeterPanel extends StatelessWidget {
   final AppModel model;
   const _VoicemeeterPanel({required this.model});
@@ -344,7 +386,7 @@ class _VoicemeeterPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _InfoRow(l.audioParadigm, '${l.paradigmAttachment} · ${l.modeVoicemeeterApi}'),
-        _InfoRow(l.setConnStatus, model.vbActive ? l.setConnActive : (note is String && note.isNotEmpty ? note : l.setConnIdle)),
+        _InfoRow(l.setConnStatus, model.vbActive ? l.setConnActive : _vbNoteText(l, note)),
         if (sr is num) _InfoRow(l.sampleRate, '${sr.toInt()} Hz'),
         if (model.vbActive)
           HbBuilder(tick: model.hbTick, builder: (_) => _VbBuses(model: model)),
@@ -410,14 +452,56 @@ class _SystemApoPanel extends StatelessWidget {
     final matched = endpoints.cast<AudioDeviceItem?>().firstWhere(
         (e) => e?.name == selEndpoint || e?.id == selEndpoint,
         orElse: () => null);
+    // 目标值用端点 ID（全局唯一）：用名称子串匹配时，同一
+    // 物理设备的扬声器/麦克风端点、VAIO 与物理的同名扬声器
+    // 都会造成「匹配到多个端点」（真机报告 2026-11-10）；
+    // ID 匹配永不歧义。旧配置存的名称仍兼容（工具按子串
+    // 匹配 id/name 两路，状态侧 apoAttached 亦然）。
     final selectedValue = matched != null
-        ? matched.name
+        ? matched.id
         : (selEndpoint.isEmpty ? '' : selEndpoint);
+
+    // APO 引擎状态行口径（第五轮 S3）：故障 > 加载失败（telemetry
+    // v4 诊断）> 处理中 > 等待。加载失败附 stage/err 原始码便于
+    // 排障（文案本体走 l10n）；心跳活跃不再等同于处理中（心跳
+    // 芯片已改述其真实含义，见下方 setApoHeartbeat）。
+    final apoLoadFailed = model.apoLoadStage >= 1 && model.apoLoadStage <= 4;
+    final apoNoteText = model.apoEngineFault
+        ? l.apoEngineNoteFault
+        : apoLoadFailed
+            ? '${l.apoEngineNoteLoadFailed} '
+                '[stage=${model.apoLoadStage} err=${model.apoLoadErr}]'
+            : model.apoEngineActive
+                ? l.apoEngineNoteActive
+                : l.apoEngineNoteWaiting;
+    final apoNoteColor = model.apoEngineFault || apoLoadFailed
+        ? p.warning
+        : model.apoEngineActive
+            ? p.accent
+            : p.textDim;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _InfoRow(l.audioParadigm, '${l.paradigmAttachment} · System APO'),
+        // V-03「选了没用」：模式切换只选择附加目标，实际附加/卸载由
+        // 下方一键按钮执行——明示语义，避免用户以为切换即生效。
+        Padding(
+          padding: const EdgeInsets.only(top: 2, bottom: 2),
+          child: Text(l.apoModeHint,
+              style: captionOf(p, color: p.textDim).copyWith(fontSize: 11)),
+        ),
+        // APO 引擎状态行（立项 P3，撤下第四轮的透传止损标注）：
+        // sysapo 模式且已附加时按 telemetry 回传呈现真实状态——
+        // 处理中（accent）/ 故障已退回直通（warning）/ 等待就绪
+        // （dim）。状态来自 audiodg 内座位实例的回传块，非推测。
+        if (model.audioMode == 'sysapo' && model.apoAnyAttached)
+          Padding(
+            padding: const EdgeInsets.only(top: 2, bottom: 2),
+            child: Text(apoNoteText,
+                style: captionOf(p, color: apoNoteColor)
+                    .copyWith(fontSize: 11)),
+          ),
         const SizedBox(height: AuraSpace.xs),
         Row(
           children: [
@@ -476,7 +560,7 @@ class _SystemApoPanel extends StatelessWidget {
                     ),
                   for (final ep in endpoints)
                     DropdownMenuItem<String>(
-                      value: ep.name,
+                      value: ep.id,
                       child: Row(
                         children: [
                           Icon(
@@ -512,7 +596,13 @@ class _SystemApoPanel extends StatelessWidget {
             const SizedBox(width: AuraSpace.xs),
             AuraChip(l.asioRefresh,
                 icon: Icons.refresh_rounded,
-                onTap: () => model.refreshVaioDetect()),
+                // V-03：旧实现只发 vaiodetect，对 APO 状态毫无作用，
+                // 用户感知为「点刷新没反应」。端点列表（经 detect 回
+                // vaioPhysicalEndpoints）与 APO 挂载状态一并刷新。
+                onTap: () {
+                  model.refreshVaioDetect();
+                  model.checkApoStatus();
+                }),
           ],
         ),
         const SizedBox(height: AuraSpace.xs),
@@ -529,11 +619,18 @@ class _SystemApoPanel extends StatelessWidget {
                 runSpacing: 4,
                 children: [
                   Text(
-                    model.apoAttached ? l.apoAttached : l.apoNotAttached,
+                    // 状态行报真值（第六轮项 3）：目标已附加 /
+                    // 已附加在他端点（具名，不被当前选择藏起）/
+                    // 未附加。
+                    model.apoAttached
+                        ? l.apoAttached
+                        : (model.apoAnyAttached
+                            ? l.apoAttachedOn(model.apoAttachedName)
+                            : l.apoNotAttached),
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: model.apoAttached ? p.accent : p.textDim,
+                      color: model.apoAnyAttached ? p.accent : p.textDim,
                     ),
                   ),
                   if (model.apoHeartbeatAlive)
@@ -550,14 +647,14 @@ class _SystemApoPanel extends StatelessWidget {
                           const Icon(Icons.graphic_eq_rounded, size: 12, color: Colors.green),
                           const SizedBox(width: 4),
                           Text(
-                            l.setApoActive(model.apoHeartbeatSr,
+                            l.setApoHeartbeat(model.apoHeartbeatSr,
                                 model.apoHeartbeatFrames),
                             style: const TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
                     )
-                  else if (model.apoAttached)
+                  else if (model.apoAnyAttached)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
@@ -622,14 +719,12 @@ class _SystemApoPanel extends StatelessWidget {
                   ? null
                   : () async {
                       final ok = await model.attachSystemApo();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(ok
-                              ? l.setApoRegistered
-                              : (model.lastApoError ?? l.setApoAttachFailed)),
-                          duration: const Duration(milliseconds: 2000),
-                        ));
-                      }
+                      model.postNotice(
+                        ok
+                            ? l.setApoRegistered
+                            : (model.lastApoError ?? l.setApoAttachFailed),
+                        level: ok ? NoticeLevel.info : NoticeLevel.error,
+                      );
                     },
             ),
             AuraChip(
@@ -640,14 +735,12 @@ class _SystemApoPanel extends StatelessWidget {
                   ? null
                   : () async {
                       final ok = await model.detachSystemApo();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(ok
-                              ? l.setApoUnregistered
-                              : (model.lastApoError ?? l.setApoUnregisterFailed)),
-                          duration: const Duration(milliseconds: 2000),
-                        ));
-                      }
+                      model.postNotice(
+                        ok
+                            ? l.setApoUnregistered
+                            : (model.lastApoError ?? l.setApoUnregisterFailed),
+                        level: ok ? NoticeLevel.info : NoticeLevel.error,
+                      );
                     },
             ),
             AuraChip(

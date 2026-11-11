@@ -26,6 +26,7 @@ import '../core/engine_error_map.dart';
 import '../core/error_sink.dart';
 import '../core/io/resource_gate.dart';
 import '../core/path_memory.dart';
+import '../core/notice.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import '../l10n/gen/app_localizations.dart';
@@ -101,6 +102,49 @@ class _LiveprogPageState extends State<LiveprogPage> {
   late final EelSyntaxTextEditingController _code;
 
   Map<int, EelSliderMeta> _activeSliders = {};
+
+  /// 编辑目标（方案 B）：false = 立体声 liveprog，true = 多声道 liveprog.mc。
+  /// 两套脚本的代码/状态/滑块在模型侧完全独立，页面经 _t* 访问器切换。
+  bool _mc = false;
+  bool get _tEnabled => _mc ? widget.model.lpMcEnabled : widget.model.lpEnabled;
+  int get _tStatus => _mc ? widget.model.lpMcStatus : widget.model.lpStatus;
+  String? get _tError => _mc ? widget.model.lpMcError : widget.model.lpError;
+  String? get _tCode => _mc ? widget.model.lpMcCode : widget.model.lpCode;
+  int get _tCompileMs => _mc ? widget.model.lpMcCompileMs : widget.model.lpCompileMs;
+  bool get _tMismatch =>
+      _mc ? widget.model.lpMcPresetCodeMismatch : widget.model.lpPresetCodeMismatch;
+  void _tSetDraft(String t) {
+    if (_mc) {
+      widget.model.lpMcDraftCode = t;
+    } else {
+      widget.model.lpDraftCode = t;
+    }
+  }
+
+  /// 切换编辑目标：当前文本存回当前目标草稿，载入新目标的草稿/已应用代码。
+  void _switchTarget(bool mc) {
+    if (_mc == mc) return;
+    _tSetDraft(_code.text);
+    _mc = mc;
+    final m = widget.model;
+    final draft = mc ? m.lpMcDraftCode : m.lpDraftCode;
+    final applied = mc ? m.lpMcCode : m.lpCode;
+    final text = (draft != null && draft.isNotEmpty)
+        ? draft
+        : ((applied != null && applied.isNotEmpty)
+            ? applied
+            : LiveprogLibrary.template);
+    _code.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: 0),
+    );
+    _lastCompiledCode = applied ?? '';
+    _isCodeDirty = text != _lastCompiledCode;
+    _activeSliders = EelSliderParser.parse(text);
+    _compiling = false;
+    _runLint();
+    setState(() {});
+  }
 
   // 编译与应用互锁状态
   bool _compiling = false;
@@ -241,8 +285,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
 
   /// 引擎回了编译结果（成功或失败）→ 松开状态并刷新错误飘红
   void _onModelTick() {
-    if (_compiling &&
-        (widget.model.lpStatus == 1 || widget.model.lpError != null)) {
+    if (_compiling && (_tStatus == 1 || _tError != null)) {
       _compileFallback?.cancel();
       if (mounted) {
         setState(() {
@@ -254,7 +297,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
       _updateErrorLines();
     }
     // 当模型侧代码因滑块/预设调节热更新，且编辑器未处于未编译修改状态时，平滑同步文本
-    final modelCode = widget.model.lpCode;
+    final modelCode = _tCode;
     if (mounted && modelCode != null && modelCode.isNotEmpty && modelCode != _lastCompiledCode) {
       if (!_isCodeDirty) {
         final oldSel = _code.selection;
@@ -297,7 +340,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
 
   /// 即时 lint + 自适应滑块解析 + 脏检查
   void _onCodeChanged(String text) {
-    widget.model.lpDraftCode = text;
+    _tSetDraft(text);
     widget.model.scheduleAutoSave();
     _runLint();
     setState(() {
@@ -318,8 +361,8 @@ class _LiveprogPageState extends State<LiveprogPage> {
   /// 收集当前代码的错误行（词法检查 + 引擎编译报错行），驱动行号栏和代码行醒目标红
   void _updateErrorLines() {
     final lines = <int>{};
-    final st = widget.model.lpStatus;
-    final err = widget.model.lpError;
+    final st = _tStatus;
+    final err = _tError;
     final hasCompiledCleanly = st == 1 && err == null && !_isCodeDirty;
 
     // 若当前代码在引擎中已编译成功且未被修改，则不产生报错飘红
@@ -469,14 +512,11 @@ class _LiveprogPageState extends State<LiveprogPage> {
 
   /// 纯编译代码并载入虚拟机（应用状态下禁止编译；异常文本隔离）
   void _compile() {
-    if (widget.model.lpEnabled) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-        content: Text(
-          l10nOf(context).lpTooltipUnapplyToCompile,
-          style: TextStyle(color: paletteOf(context).text, fontSize: 13),
-        ),
-        duration: const Duration(seconds: 2),
-      ));
+    if (_tEnabled) {
+      widget.model.postNotice(
+        l10nOf(context).lpTooltipUnapplyToCompile,
+        level: NoticeLevel.warning,
+      );
       return;
     }
 
@@ -486,13 +526,10 @@ class _LiveprogPageState extends State<LiveprogPage> {
     // 引擎必拒结构问题本地拦截
     final blocking = _issues.where((e) => e.blocking).toList();
     if (blocking.isNotEmpty) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-        content: Text(
-            '${l10nOf(context).lpBlockedByLint}：${blocking.first.message}',
-            style:
-                TextStyle(color: paletteOf(context).text, fontSize: 13)),
-        duration: const Duration(seconds: 3),
-      ));
+      widget.model.postNotice(
+        '${l10nOf(context).lpBlockedByLint}：${blocking.first.message}',
+        level: NoticeLevel.error,
+      );
       if (blocking.first.line > 0) _gotoLine(blocking.first.line);
       return;
     }
@@ -509,7 +546,11 @@ class _LiveprogPageState extends State<LiveprogPage> {
     });
 
     try {
-      widget.model.setLiveprogCode(text);
+      if (_mc) {
+        widget.model.setLiveprogMcCode(text);
+      } else {
+        widget.model.setLiveprogCode(text);
+      }
     } catch (e, st) {
       swallow(e, st);
     }
@@ -522,22 +563,27 @@ class _LiveprogPageState extends State<LiveprogPage> {
 
   /// 切换应用状态（未编译无法应用；已应用允许点击关闭）
   void _toggleApply() {
-    if (widget.model.lpEnabled) {
-      widget.model.setLiveprogEnabled(false);
+    if (_tEnabled) {
+      if (_mc) {
+        widget.model.setLiveprogMcEnabled(false);
+      } else {
+        widget.model.setLiveprogEnabled(false);
+      }
       return;
     }
-    final hasCompiled = widget.model.lpStatus == 1 && widget.model.lpError == null;
+    final hasCompiled = _tStatus == 1 && _tError == null;
     if (_isCodeDirty || _compiling || !hasCompiled) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-        content: Text(
-          l10nOf(context).lpTooltipCompileFirst,
-          style: TextStyle(color: paletteOf(context).text, fontSize: 13),
-        ),
-        duration: const Duration(seconds: 2),
-      ));
+      widget.model.postNotice(
+        l10nOf(context).lpTooltipCompileFirst,
+        level: NoticeLevel.warning,
+      );
       return;
     }
-    widget.model.setLiveprogEnabled(true);
+    if (_mc) {
+      widget.model.setLiveprogMcEnabled(true);
+    } else {
+      widget.model.setLiveprogEnabled(true);
+    }
   }
 
   Future<bool> _confirmDiscardUnsavedIfNeeded() async {
@@ -658,12 +704,7 @@ dbg = 0;
         }
       } else {
         // 用户主动导入失败必须有反馈（旧实现只写日志，用户会误以为成功）
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(l10nOf(context).lpFileImportFailed),
-            duration: const Duration(seconds: 3),
-          ));
-        }
+        widget.model.postNotice(l.lpFileImportFailed, level: NoticeLevel.error);
       }
     }
   }
@@ -693,20 +734,10 @@ dbg = 0;
     }
     try {
       await file.writeAsString(_code.text, encoding: utf8);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(l.lpSave),
-          duration: const Duration(seconds: 2),
-        ));
-      }
+      widget.model.postNotice(l.lpSave);
     } catch (e, st) {
       swallow(e, st);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(l.lpSaveFailed),
-          duration: const Duration(seconds: 3),
-        ));
-      }
+      widget.model.postNotice(l.lpSaveFailed, level: NoticeLevel.error);
     }
   }
 
@@ -786,18 +817,18 @@ dbg = 0;
       );
     }
 
-    final st = m.lpStatus;
-    final err = m.lpError;
+    final st = _tStatus;
+    final err = _tError;
     final failed = st < 0 || (st == 0 && err != null);
     final ok = st == 1;
-    final running = ok && m.lpEnabled;
-    final slow = running && m.lpCompileMs >= 2000;
+    final running = ok && _tEnabled;
+    final slow = running && _tCompileMs >= 2000;
 
     String? tookStr;
-    if (m.lpCompileMs >= 0) {
-      tookStr = m.lpCompileMs >= 1000
-          ? '${(m.lpCompileMs / 1000).toStringAsFixed(1)}s'
-          : '${m.lpCompileMs}ms';
+    if (_tCompileMs >= 0) {
+      tookStr = _tCompileMs >= 1000
+          ? '${(_tCompileMs / 1000).toStringAsFixed(1)}s'
+          : '${_tCompileMs}ms';
     }
 
     if (failed) {
@@ -816,7 +847,7 @@ dbg = 0;
     if (ok) {
       if (_isCodeDirty) {
         final tookPart = tookStr != null ? ' · ${l.lpCompileTook(tookStr)}' : '';
-        final runningOld = m.lpEnabled ? ' (${l.lpRunningOldCode})' : '';
+        final runningOld = _tEnabled ? ' (${l.lpRunningOldCode})' : '';
         return _capsuleBody(
           p,
           p.warning,
@@ -863,9 +894,62 @@ dbg = 0;
     );
   }
 
+  Widget _buildTargetToggle(AuraPalette p, AppLocalizations l) {
+    Widget pill(bool mc, String label, IconData icon) {
+      final selected = _mc == mc;
+      return InkWell(
+        onTap: () => _switchTarget(mc),
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        child: Container(
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: selected
+                ? p.accent.withValues(alpha: 0.16)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(AuraRadius.sm),
+            border: Border.all(
+                color: selected ? p.accent : p.hairline),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon,
+                  size: 13, color: selected ? p.accent : p.textDim),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: captionOf(p,
+                    color: selected ? p.accent : p.textDim),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        pill(false, l.lpTargetStereo, Icons.speaker_rounded),
+        const SizedBox(width: 6),
+        pill(true, l.lpTargetMultichannel, Icons.surround_sound_rounded),
+        const SizedBox(width: AuraSpace.sm),
+        if (_mc)
+          Expanded(
+            child: Text(
+              l.lpMcHint,
+              style: captionOf(p, color: p.textDim),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildMismatchBanner(
       AuraPalette p, AppLocalizations l, AppModel m) {
-    if (!m.lpPresetCodeMismatch) return const SizedBox.shrink();
+    if (!_tMismatch) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
@@ -891,8 +975,8 @@ dbg = 0;
   }
 
   Widget _buildStatusBar(AuraPalette p, AppLocalizations l, AppModel m) {
-    final st = m.lpStatus;
-    final err = m.lpError;
+    final st = _tStatus;
+    final err = _tError;
     final failed = st < 0 || (st == 0 && err != null);
 
     final Widget statusBadge;
@@ -938,7 +1022,7 @@ dbg = 0;
         ),
       );
     } else if (_isCodeDirty) {
-      final runningOld = m.lpEnabled ? ' (${l.lpRunningOldCode})' : '';
+      final runningOld = _tEnabled ? ' (${l.lpRunningOldCode})' : '';
       statusBadge = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1008,6 +1092,9 @@ dbg = 0;
       eyebrow: l.lpEyebrowDsp,
       title: l.lpTitleEditor,
       children: [
+        // ---- 编辑目标切换（方案 B）：立体声脚本 / 多声道脚本 ----
+        _buildTargetToggle(p, l),
+        const SizedBox(height: AuraSpace.sm),
         // ---- IDE 核心工作区卡片（顶栏 + 编译提示条 + 编辑器 + 状态行 + 控制台紧密组合）----
         Container(
           decoration: BoxDecoration(
@@ -1023,11 +1110,11 @@ dbg = 0;
               ListenableBuilder(
                 listenable: m,
                 builder: (_, _) => LiveprogIdeToolbar(
-                  isApplied: m.lpEnabled,
+                  isApplied: _tEnabled,
                   isCompiling: _compiling,
                   isCodeDirty: _isCodeDirty,
                   hasCompiledSuccessfully:
-                      m.lpStatus == 1 && m.lpError == null && !_isCodeDirty,
+                      _tStatus == 1 && _tError == null && !_isCodeDirty,
                   isConsoleOpen: _showConsole,
                   isOutlineOpen: _showOutline,
                   isFindReplaceOpen: _showFindReplace,
@@ -1056,7 +1143,7 @@ dbg = 0;
               ListenableBuilder(
                 listenable: m,
                 builder: (_, _) {
-                  if (!m.lpPresetCodeMismatch) return const SizedBox.shrink();
+                  if (!_tMismatch) return const SizedBox.shrink();
                   return Column(
                     children: [
                       const SizedBox(height: 6),
@@ -1260,6 +1347,7 @@ dbg = 0;
         LiveprogSlidersPanel(
           model: m,
           activeSliders: _activeSliders,
+          mcTarget: _mc,
         ),
       ],
     );

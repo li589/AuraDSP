@@ -1,0 +1,100 @@
+{
+  "@@locale": "en",
+  "appTitle": "AuraDSP Setup",
+  "welcomeTitle": "Welcome to AuraDSP",
+  "welcomeBody": "A cross-platform global audio effects system: real-time DSP chain, plugin hosting and virtual audio devices for your whole system.",
+  "licenseAgree": "I have read and agree to the license agreement (GPL-3.0 / bundled component licenses)",
+  "quickInstall": "Install now",
+  "quickUpdate": "Update now",
+  "customInstall": "Custom install",
+  "optionsTitle": "Install options",
+  "installDirLabel": "Install location",
+  "dirAutoAppendHint": "If the last folder is not AuraDSP it is appended automatically, e.g. D:\\Games to D:\\Games\\AuraDSP",
+  "updateDirLocked": "An update reuses the existing folder and keeps your settings and data.",
+  "driverGroupTitle": "Drivers (optional, selected by default)",
+  "driverOptionalHint": "Unchecking only skips automatic installation; driver files and manual scripts stay in the install folder.",
+  "compAsio": "AuraASIO driver (exposes AuraDSP to DAWs)",
+  "compVaio": "AuraVAIO virtual audio device driver",
+  "compDdc": "Preinstall curated headphone/speaker DDC calibration files",
+  "allUsers": "Install for all users (requires administrator)",
+  "scDesktop": "Desktop shortcut",
+  "scStartMenu": "Start menu entry",
+  "scAutostart": "Start with Windows",
+  "needsElevation": "This choice needs administrator rights. The wizard will ask Windows to elevate and then continue.",
+  "signWarnTitle": "AuraVAIO is test-signed",
+  "signWarnShort": "64-bit Windows refuses test-signed kernel drivers by default. Without test-signing mode the driver will not load (the app itself is unaffected).",
+  "signGuideTitle": "Driver signing setup",
+  "signGuideBody": "AuraVAIO uses a self-generated test certificate, not a Microsoft Attestation/EV signature.\n\n[Affected systems] Every 64-bit Windows (Win7 / 8.1 / 10 / 11) refuses test-signed kernel drivers by default; only 32-bit editions generally allow them. Windows 11 merely adds Secure Boot and Memory Integrity hurdles - it is NOT true that Windows 10 or older is unaffected.\n\n[Option A - persistent, recommended]\n1. Open an elevated Command Prompt and run: bcdedit /set testsigning on\n2. Reboot. A 'Test Mode' watermark at the lower right is expected.\n3. If you get 'protected by Secure Boot policy', disable Secure Boot in BIOS (suspend BitLocker first).\n4. On Windows 11, if it still fails: Windows Security > Device security > Core isolation > turn off Memory Integrity, then reboot.\n5. Run as administrator: <install dir>\\driver\\install_vaio.ps1 -Action install\nTo revert: bcdedit /set testsigning off and reboot.\n\n[Option B - one boot only]\nSettings > System > Recovery > Advanced startup > Restart now > Troubleshoot > Advanced options > Startup Settings > Restart > press 7 or F7 'Disable driver signature enforcement'. This resets on the next reboot and is only for a quick check.\n\nAuraASIO is a user-mode COM component and needs none of the above. Full details: <install dir>\\driver\\README.txt.",
+  "signViewGuide": "View setup guide",
+  "openDriverReadme": "Open driver readme",
+  "manualDriverHint": "The install folder keeps driver\\ with manual install scripts, so you can install them later as administrator.",
+  "updateDetected": "AuraDSP v{oldVer} is installed. It will be updated to v{newVer} (settings and data are kept).",
+  "@updateDetected": {
+    "placeholders": {
+      "oldVer": {"type": "String"},
+      "newVer": {"type": "String"}
+    }
+  },
+  "updateRepair": "Version v{ver} is already installed. A repair / reinstall will run (settings and data are kept).",
+  "@updateRepair": {
+    "placeholders": {
+      "ver": {"type": "String"}
+    }
+  },
+  "updateDowngrade": "Installed version v{oldVer} is newer than this package v{newVer}. Uninstall the existing version first.",
+  "@updateDowngrade": {
+    "placeholders": {
+      "oldVer": {"type": "String"},
+      "newVer": {"type": "String"}
+    }
+  },
+  "blockedHint": "The wizard does not downgrade automatically, to avoid incompatible settings.",
+  "updateFrom": "Updated from v{oldVer} to v{newVer}",
+  "@updateFrom": {
+    "placeholders": {
+      "oldVer": {"type": "String"},
+      "newVer": {"type": "String"}
+    }
+  },
+  "finishUpdatedTitle": "Update complete",
+  "awaitingElevation": "Waiting for Windows administrator approval... Please click Yes in the UAC prompt.",
+  "elevDeniedTitle": "Administrator rights not granted",
+  "elevDeniedBody": "The elevation request was cancelled or denied. You can retry, or continue with current rights (the virtual audio driver and all-users install will be skipped).",
+  "elevUninstallDeniedBody": "The elevation request was cancelled or denied. Continuing will skip driver, device and system registry cleanup and may leave leftovers; retrying is recommended.",
+  "elevRetry": "Retry elevation",
+  "elevContinue": "Continue anyway",
+  "elevCancel": "Go back",
+  "finishDesktopShortcut": "Create desktop shortcut",
+  "back": "Back",
+  "startInstall": "Start install",
+  "progressTitle": "Installing…",
+  "stepGuard": "Checking running processes",
+  "stepBackup": "Backing up previous version",
+  "stepRestore": "Restoring previous version",
+  "stepExtract": "Extracting files",
+  "stepAsio": "Registering ASIO driver",
+  "stepDriver": "Installing virtual audio driver",
+  "stepShortcuts": "Creating shortcuts",
+  "stepRegistry": "Writing system registration",
+  "stepUninstaller": "Preparing uninstaller",
+  "stepCleanup": "Removing files",
+  "stepDone": "Done",
+  "finishTitle": "Installation complete",
+  "warningsTitle": "Completed with notes:",
+  "launchApp": "Launch AuraDSP now",
+  "openSound": "Open Windows sound settings",
+  "done": "Done",
+  "errorTitle": "Something went wrong",
+  "errorBody": "The operation failed and completed steps were rolled back where possible. Details:",
+  "close": "Close",
+  "uninstallTitle": "Uninstall AuraDSP",
+  "uninstallBody": "AuraDSP and its components will be removed from this device.",
+  "uninstallProgressTitle": "Uninstalling…",
+  "uninstalledTitle": "Uninstall complete",
+  "startUninstall": "Uninstall",
+  "keepData": "Keep my settings, presets and calibration data",
+  "keepDataHint": "Keeps %APPDATA%\\AuraDSP (settings / presets / calibration / session) and any files you added to the install folder. Drivers, registry entries and shortcuts are still removed.",
+  "uninstallDeleteAllHint": "The user data above will also be deleted. This cannot be undone.",
+  "uninstallKeptTitle": "User data kept:",
+  "uninstallCleanNote": "Program files, drivers, registry entries and shortcuts were removed."
+}

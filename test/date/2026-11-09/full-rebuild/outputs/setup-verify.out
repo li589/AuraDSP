@@ -1,0 +1,7 @@
+[pack] verify: magic OK 
+[pack] verify: fmtVer OK (=1)
+[pack] verify: offsets OK (W@121344+30641145, P@30762489+136961845, file=167724414)
+[pack] verify: payload sha256 OK (519f0d963745…)
+[pack] verify: wizard zip OK (14 条目)
+[pack] verify: manifest payloadSha256 OK 
+[pack] verify: payload zip OK (1605 条目)

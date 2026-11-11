@@ -228,7 +228,7 @@ class BridgePluginFfi {
     final buf = malloc<Uint8>(cap).cast<Utf8>();
     try {
       final n = _getStatus(slot, buf, cap);
-      if (n <= 0) return '';
+      if (n <= 0 || n > cap) return ''; // 长度钳制，同 bridge_manager
       return buf.toDartString(length: n);
     } finally {
       malloc.free(buf);

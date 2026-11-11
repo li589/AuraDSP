@@ -30,12 +30,16 @@ cd app/auradsp_app && flutter analyze
 cd app/auradsp_app && flutter build windows --release --no-tree-shake-icons
 
 # Build C++ engine DLL and auto-sync artifacts to test/app-runner/dist
-# (build_engine.sh invokes tools/sync_artifacts.ps1 after a successful build)
+# (root preset windows-x64 / windows-x64-release, build tree build/windows/x64;
+#  build_engine.sh invokes tools/sync_artifacts.ps1 after a successful build)
 bash core/desktop/windows/build_engine.sh
 
 # One-shot incremental artifact sync ONLY (no compile): cover-distribute truth sources
 # to test/, app-runner, dist/. Any missing endpoint or single-file failure warns and skips.
 powershell -ExecutionPolicy Bypass -File tools/sync_artifacts.ps1
+
+# Dist manifest (build-info.txt): version / commit / SHA256 of top-level binaries
+python tools/bin/dist_manifest.py --check
 
 # Push via API fallback if git push origin fails
 python tools/bin/push_via_api.py main

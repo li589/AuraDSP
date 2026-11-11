@@ -105,9 +105,19 @@ def main():
         with open(config_file, "r", encoding="utf-8") as f:
             cfg = json.load(f)
         paths = cfg.get("paths", {})
-        assert "customPluginDirs" in paths, "config.json 缺少 paths.customPluginDirs 字段"
+        # 插件扫描目录 2026-10-28 改版：旧版「纯路径表」customPluginDirs 已在
+        # AppConfig.fromJson 自动迁移为 pluginScanDirs（显式条目 + 勾选态 +
+        # 内置标记），写出侧不再有 customPluginDirs。早先断言旧字段必然失败——
+        # 那是迁移前的残留，与现行产品语义不符。两种结构都接受（老配置仍可能
+        # 带旧字段），但新配置必须能看到迁移后的 pluginScanDirs。
+        assert ("pluginScanDirs" in paths) or ("customPluginDirs" in paths), \
+            "config.json 缺少 paths.pluginScanDirs（迁移来源 customPluginDirs）"
         assert "customScriptDirs" in paths, "config.json 缺少 paths.customScriptDirs 字段"
-        print(f"  -> AppConfig 持久化校验通过: customPluginDirs={paths['customPluginDirs']}, customScriptDirs={paths['customScriptDirs']}")
+        plugin_dirs = paths.get("pluginScanDirs")
+        if plugin_dirs is None:
+            plugin_dirs = paths.get("customPluginDirs")
+        print(f"  -> AppConfig 持久化校验通过: pluginScanDirs={plugin_dirs}, "
+              f"customScriptDirs={paths['customScriptDirs']}")
 
     if os.path.exists(session_file):
         with open(session_file, "r", encoding="utf-8") as f:

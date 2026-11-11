@@ -1,0 +1,24 @@
+-- Selecting Windows SDK version 10.0.28000.0 to target Windows 10.0.26300.
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: D:/temp_desktop/Proj/JamesDSP/build/installer/bootstrapper
+适用于 .NET Framework MSBuild 版本 18.11.1-1.26513.3+940033be3
+
+  bootstrapper.vcxproj -> D:\temp_desktop\Proj\JamesDSP\build\installer\bootstrapper\Release\bootstrapper.exe
+Building Windows application...                                     5.6s
+√ Built build\windows\x64\runner\Release\auradsp_setup.exe
+[env] 已归一化 0 处大小写重复键（PATH 取并集，其余保留首次值）
+[run] argv=['flutter', 'build', 'windows', '--release', '--no-tree-shake-icons']
+[run] 批处理转发: C:\FreeRulesPrograms\BasicToolkits\flutter\bin\flutter.BAT
+[pack] 版本 0.1.0（v0.1.0），模式 ['driver', 'portable', 'setup']，资源 core
+[pack] 驱动新鲜度校验通过: D:\temp_desktop\Proj\JamesDSP\core\desktop\windows-drivers\01_vaio_driver\modern\x64\Release\AuraVaioDriver
+[pack] driver: AuraDSP-Driver-x64-v0.1.0.zip（10 条目，0.1 MB）
+[pack] resources: core（staging 自带）
+[pack] portable: AuraDSP-Windows-x64-v0.1.0.zip（1594 条目，136.8 MB）
+[pack] 构建引导壳（cmake）…
+[pack] 构建向导（flutter build windows）…
+[pack] installer 构建汇集完成: D:\temp_desktop\Proj\JamesDSP\build\installer\dist
+[pack] resources: core（staging 自带）
+[pack] setup: AuraDSP-Setup-x64-v0.1.0.exe（167.7 MB，payload sha256 519f0d963745…）
+[pack] SHA256SUMS.txt 已更新（3 条）
+[pack] 完成

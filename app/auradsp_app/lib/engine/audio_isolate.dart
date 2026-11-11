@@ -8,6 +8,7 @@
  * COM vtable 索引按 x64 ABI 手写（IUnknown 0-2 起）。
  */
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
@@ -19,9 +20,11 @@ import 'package:ffi/ffi.dart';
 import 'auradsp_ffi.dart';
 import 'audio_out/audio_out.dart';
 import 'audio_out/audio_out_wasapi.dart';
+import 'audio_out/audio_in_wasapi.dart';
 import 'audio_out/alsa_ffi.dart';
 import 'audio_out/audio_in_alsa.dart';
 import 'audio_out/audio_in_linux.dart';
+import 'audio_out/out_recovery.dart';
 import 'audio_out/pulse_context.dart';
 import 'audio_vbridge.dart';
 import 'audio_abridge.dart';
@@ -29,16 +32,19 @@ import 'audio_vaio_bridge.dart';
 import 'backend_switch.dart';
 import 'bridge_manager.dart';
 import 'bridge_plugin_ffi.dart';
+import 'apo_param_index.dart';
+import 'apo_plugin_block.dart';
 import 'debug_log.dart';
 import 'local_channel_policy.dart';
 
 
 import '../core/error_sink.dart';
-import '../platform/platform_profile.dart';
 part 'audio_wav.dart';
 part 'audio_sources.dart';
 part 'audio_slots.dart';
 part 'audio_isolate_linux.dart';
+part 'audio_isolate_windows.dart';
+part 'audio_isolate_apo.dart';
 
 
 
@@ -78,6 +84,10 @@ String _cfgStr(Map<String, dynamic> cfg, String key, String fallback) {
 const int _kPluginSlots = 4;
 
 void audioIsolateMain(Map<String, dynamic> cfg) {
+  // 日志按 isolate 分文件（debug_log.dart 文件头 2026-11-10 更正）：
+  // 本 isolate 的 dbgLog 写 auradsp_debug_iso.log，与 UI isolate
+  // 的 auradsp_debug.log 互不覆写。必须先于一切 dbgLog 调用。
+  debugLogUseRole('iso');
   final toMain = cfg['toMain'] as SendPort;
   final fromMain = ReceivePort();
 
@@ -99,6 +109,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   AuraDspLib? lib;
   Pointer<Void>? handle;
   AudioOut? audioOut;
+
+  /// 引擎建链采样率（init 时由 audioOut 协商值定格）：捕获链
+  /// 重建输出/捕获设备时以它为请求率，防设备协商漂移导致
+  /// 引擎变速变调（WindowsCaptureController 消费）。
+  double engineRateHz = 0;
   Source? source;
   bool bypass = false;
   // 5.1 直通（Phase 2）：file 源 raw 多声道绕开引擎直出（输出 untouched；
@@ -133,21 +148,50 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   int bridgeStatusPollAt = 0; // 上次 status 轮询（1s 节流）
   // P4 静音门控：桥上报 gated=1 时泵降到 50ms；gated=0 下一轮即回落 10ms。
   bool bridgeGated = false;
+    String lastVaioGeo = '';
+    String lastVaioFx = ''; // S4 取证对象的上次落盘内容（每 start 一次）
   // 参数镜像：每次 setParam 记录，vb_start 后全量回放，保证两边一致。
   final Map<String, ({bool isFloat, double value})> paramMirror = {};
   // 字符串参数镜像（liveprog.code / arbmag.string）：成功才记；进 VB 时全量
   // 回放，桥内另有镜像应对 CHANGE 重建（与 paramMirror 同口径）。
   final Map<String, String> paramStrMirror = {};
+
+  // APO 真处理通道（P1）：参数块发布者 + telemetry 读者。两平台
+  // 无条件构造、惰性激活（非 Windows 首次激活失败即永久静默）。
+  final apoPublisher = ApoParamPublisher()
+    ..bind(mirror: paramMirror, strMirror: paramStrMirror, bypassOf: () => bypass);
+  // Part I Q2：插件块发布者（sysapo 激活时把 pluginMirror 同步进
+  // AuraDSP_ApoPlugins；未激活时全部方法为空操作）。
+  final apoPluginPublisher = ApoPluginPublisher();
+  final apoTelemetry = ApoTelemetryReader();
   // VB 总线掩码（session 级；进桥/重建后下发，CHANGE 重建不丢——掩码活在 ctx）。
-  int vbBusMask = 0xFF;
+  // 出厂只开 A1/A2：其余路按需开路再建句柄。
+  int vbBusMask = 0x03;
   // 按路插件处理掩码（bit g = 组 g 总线吃插件链；进桥后与 busMask 同步下发）。
-  int vbPluginGroupMask = 0xFF;
+  int vbPluginGroupMask = 0x03;
   // Z12 超预算自动保护（进桥后与 pluginGroupMask 同步下发；桥默认开）。
   bool vbAutoProtect = true;
 
   // 插件槽会话镜像：无论当前走本地还是桥，插件命令都先落到这里。
   final List<PluginSlotCfg> pluginMirror =
       List<PluginSlotCfg>.generate(_kPluginSlots, (_) => PluginSlotCfg());
+
+  // Part I Q2：把插件镜像同步进 APO 插件块（发布者内部 diff，
+  // 未激活/块不存在时静默）。链开关与 PDC 读本地引擎真值。
+  void syncApoPlugins() {
+    if (!apoPluginPublisher.active) return;
+    final l = lib;
+    final h = handle;
+    apoPluginPublisher.syncFromMirror(
+      pluginMirror,
+      chainEnabled: (l != null && h != null)
+          ? AuraDspLib.pluginChainGetEnabledWrap(l, h)
+          : true,
+      pdcEnabled: (l != null && h != null)
+          ? AuraDspLib.pluginGetPdcWrap(l, h)
+          : false,
+    );
+  }
 
   // P1 桥治理：注册表 + 惰性加载 + 当前后端（vm/asio/vaio）。
   // 未选中的桥全程不 load；同一时刻只有一个后端出声（互斥见 stopOtherBridges）。
@@ -162,6 +206,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     deviceRate: () => audioOut?.sampleRate ?? 48000,
     alsaExpert: _cfgStr(cfg, 'linuxAudioBackend', 'pulse') == 'alsa',
     alsaCaptureDevice: _cfgStr(cfg, 'alsaCaptureDevice', ''),
+  );
+
+  // 全接线 W2（2026-11-10）：Windows 管线本地捕获链控制器
+  // （与 linuxModes 同构）。非 Windows 平台永不被命令触达，
+  // 构造零副作用。
+  final windowsCapture = WindowsCaptureController(
+    getSource: () => source,
+    setSource: (s) => source = s,
+    getAudioOut: () => audioOut,
+    setAudioOut: (o) => audioOut = o,
+    send: send,
+    engineRate: () => engineRateHz,
   );
 
   // P-041（2026-10-28）：本地引擎 load 走 _slotLoadAsync 异步任务，期间
@@ -180,6 +236,20 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       dbgLog('plugin: bridge ABI missing: $e');
     }
     return null;
+  }
+
+  /// 桥接管音频后，本地句柄不再处理音频：它上面残留的插件实例（从非桥
+  /// 模式切过来时加载的）是纯重复内存——VB 8 路时是第 9 份，重插件下可
+  /// 达上百 MB。这里静默卸载本地各槽，pluginMirror 保留，桥停时由
+  /// [syncPluginMirrorToLocal] 按镜像重建。**不发 pluginSlotUnloaded 事件**，
+  /// 否则 UI 会在桥上还挂着的插件突然显示为已卸载。
+  void unloadLocalSlotsWhileBridged() {
+    final l = lib;
+    final h = handle;
+    if (l == null || h == null) return;
+    for (var i = 0; i < _kPluginSlots; ++i) {
+      AuraDspLib.pluginSlotUnloadWrap(l, h, i);
+    }
   }
 
   /// 桥 stop 后把镜像同步回本地引擎（否则本地 handle 还挂着旧插件，
@@ -290,6 +360,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   }
 
   void startVbBridge() {
+    windowsCapture.detach(restoreSaved: false);
     if (bridgeManager.isActive('vm')) return;
     dbgLog('vbmode: start requested');
     try {
@@ -361,6 +432,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     source = null;
     bridgeManager.switchTo('vm', vb!);
     bridgeManager.replayPluginMirror(vb!, pluginMirror, send);
+    unloadLocalSlotsWhileBridged();
     bridgeVizNullLogged = false;
     bridgeNoCbLogged = false;
     bridgeVizOkLogged = false;
@@ -402,7 +474,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       send({'evt': 'asiodrivers', 'drivers': [], 'note': 'bridge-missing: $e'});
       return;
     }
+    dbgLog('asiodetect: detect begin', sync: true);
     final list = ab!.detect();
+    dbgLog('asiodetect: detect done', sync: true);
     if (list == null) {
       send({'evt': 'asiodrivers', 'drivers': [], 'note': 'detect-failed'});
       return;
@@ -433,6 +507,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       required int bufSize,
       required int outPair,
       int channels = 2}) {
+    windowsCapture.detach(restoreSaved: false);
     if (bridgeManager.isActive('asio')) return;
     dbgLog('asiomode: start requested driver="$driver" '
         'buf=$bufSize pair=$outPair ch=$channels');
@@ -465,6 +540,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     dbgLog('asiomode: start rc=$rc');
     if (rc != 0) {
       final st = ab!.status();
+      dbgLog('asiomode: start failed note=${st?['note']}');
       send({
         'evt': 'asiostatus',
         'running': false,
@@ -509,6 +585,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     asioBufSize = bufSize;
     asioOutPair = outPair;
     bridgeManager.replayPluginMirror(ab!, pluginMirror, send);
+    unloadLocalSlotsWhileBridged();
     bridgeVizNullLogged = false;
     bridgeNoCbLogged = false;
     bridgeVizOkLogged = false;
@@ -555,11 +632,24 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       send({'evt': 'vaiodetect', 'found': false, 'note': 'bridge-missing: $e', 'endpoints': []});
       return;
     }
-    final info = vaio!.detect();
+    // FFI detect() 的 Dart 层异常（符号/参数）不得穿透 isolate 消息处理：
+    // 兜底回一个 found=false 事件，UI 侧按未检测到处理并保留 note 取证。
+    // （native 侧崩溃 Dart 兜不住，属 V-02 待真机取证范畴。）
+    Map<String, dynamic>? info;
+    dbgLog('vaiodetect: detect begin', sync: true);
+    try {
+      info = vaio!.detect();
+    } catch (e) {
+      dbgLog('vaiodetect: detect() threw: $e');
+      send({'evt': 'vaiodetect', 'found': false, 'note': 'detect-failed: $e', 'endpoints': []});
+      return;
+    }
+    dbgLog('vaiodetect: detect done', sync: true);
     send({'evt': 'vaiodetect', ...?info});
   }
 
   void startVaioBridge({String outputEndpointSubstr = ''}) {
+    windowsCapture.detach(restoreSaved: false);
     if (bridgeManager.isActive('vaio')) return;
     dbgLog('vaiomode: start requested output="$outputEndpointSubstr"');
     try {
@@ -570,6 +660,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     }
     final rc = vaio!.start(AuraDspLib.loadedPath ?? '', '', outputEndpointSubstr: outputEndpointSubstr);
     dbgLog('vaiomode: start rc=$rc');
+    lastVaioGeo = ''; // 每次桥启动必落一条几何快照（噪声态取证）
+    lastVaioFx = ''; // S4：取证对象同口径，每 start 必落一次
     if (rc != 0) {
       final st = vaio!.status();
       send({
@@ -612,6 +704,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     bridgeManager.switchTo('vaio', vaio!);
     vaioOutputEndpointInUse = outputEndpointSubstr;
     bridgeManager.replayPluginMirror(vaio!, pluginMirror, send);
+    unloadLocalSlotsWhileBridged();
     bridgeVizNullLogged = false;
     bridgeNoCbLogged = false;
     bridgeVizOkLogged = false;
@@ -686,6 +779,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             isFloat: m['isFloat'] as bool,
             value: (m['value'] as num).toDouble()
           );
+          apoPublisher.onNumeric(
+              m['id'] as String, (m['value'] as num).toDouble());
           final brcBridge = bridgeManager.active;
           if (brcBridge != null) {
             final bridgeId = bridgeManager.activeId ?? '?';
@@ -753,6 +848,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iChCount = idp(ParamId.channelsCount);
             final iChCountMode = idp(ParamId.channelsCountMode);
             final iLpEn = idp('liveprog.enable'), iLpSt = idp('liveprog.status');
+            final iLpMcEn = idp('liveprogmc.enable'), iLpMcSt = idp('liveprogmc.status');
             final iCvEn = idp('convolver.enable'), iCvRd = idp('convolver.ready');
             final iCvF = idp('convolver.ir.frames'), iCvCh = idp('convolver.ir.channels');
             final iCvSr = idp('convolver.ir.srcRate'), iCvPk = idp('convolver.ir.peak');
@@ -908,6 +1004,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'channelsCountMode': rdInt(iChCountMode) ?? 0,
                 'lpEnable': rdInt(iLpEn) ?? 0,
                 'lpStatus': rdInt(iLpSt) ?? 0,
+                'lpMcEnable': rdInt(iLpMcEn) ?? 0,
+                'lpMcStatus': rdInt(iLpMcSt) ?? 0,
                 'convEnable': rdInt(iCvEn) ?? 0,
                 'convReady': cvReady,
                 'convFrames': rdInt(iCvF) ?? 0,
@@ -1064,7 +1162,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'eqCurve': eqCurveRb,
               });
             } finally {
-              for (final q in [iBass, iBassG, iRev, iRevEng, iRevPre, iRevLfe, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iHsS, iExE, iExA, iExF, iBoG, iBoA, iEoG, iEoA, iToG, iToA, iCoG, iCoA, iRoG, iRoA, iGtE, iGtT, iGtA, iGtR, iGtG, iDsE, iDsF, iDsA, iLdE, iLdA, iBhH, iBhB, iBhS, iBhC, iFtE, iFtT, iFtF, iFtQ, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR, iArbE, iArbR, iArbN, iLpCode, iArbStr, iEqCurve]) {
+              for (final q in [iBass, iBassG, iRev, iRevEng, iRevPre, iRevLfe, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iLpMcEn, iLpMcSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iHsS, iExE, iExA, iExF, iBoG, iBoA, iEoG, iEoA, iToG, iToA, iCoG, iCoA, iRoG, iRoA, iGtE, iGtT, iGtA, iGtR, iGtG, iDsE, iDsF, iDsA, iLdE, iLdA, iBhH, iBhB, iBhS, iBhC, iFtE, iFtT, iFtF, iFtQ, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR, iArbE, iArbR, iArbN, iLpCode, iArbStr, iEqCurve]) {
                 malloc.free(q);
               }
             }
@@ -1079,6 +1177,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             // 字符串镜像 + VB 桥同路由（成功才记；桥内镜像应对 CHANGE 重建）。
             if (rc == Status.ok) {
               paramStrMirror[m['id'] as String] = m['text'] as String;
+              apoPublisher.onString(m['id'] as String, m['text'] as String);
             }
             final activeBridge = bridgeManager.active;
             if (activeBridge != null) {
@@ -1192,6 +1291,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           if (srcBridge != null) {
             srcBridge.testStop();
           }
+          // 捕获链在跑时点测试源 = 用户显式接管本地链：先拆
+          // 捕获链（状态经 capturestatus 回 state 对账），再
+          // 按 kind 装新源/停源。
+          if (windowsCapture.active) {
+            windowsCapture.detach(restoreSaved: false);
+          }
           switch (kind) {
             case 'stop':
               source = null;
@@ -1243,6 +1348,30 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           break;
         case 'linuxstatus':
           linuxModes.reportStatus();
+          break;
+        case 'capturemode':
+          // 全接线 W2：本地捕获链组建/拆除（管线 WASAPI 输入+
+          // WASAPI 输出）。开链前先停任一在跑的桥（互斥）。
+          if (m['on'] as bool) {
+            stopOtherBridges('');
+            windowsCapture.attach(
+              captureEndpoint: (m['captureEndpoint'] as String?) ?? '',
+              loopback: (m['loopback'] as bool?) ?? true,
+              outputEndpoint: (m['outputEndpoint'] as String?) ?? '',
+            );
+          } else {
+            windowsCapture.detach(restoreSaved: true);
+          }
+          break;
+        case 'capturerestart':
+          // 端点参数变更：链在跑才热重建。
+          if (windowsCapture.active) {
+            windowsCapture.attach(
+              captureEndpoint: (m['captureEndpoint'] as String?) ?? '',
+              loopback: (m['loopback'] as bool?) ?? true,
+              outputEndpoint: (m['outputEndpoint'] as String?) ?? '',
+            );
+          }
           break;
         case 'vbmode':
           if (m['on'] as bool) {
@@ -1304,7 +1433,69 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         case 'bypass':
           bypass = m['value'] as bool;
           bridgeManager.active?.setBypass(bypass);
+          apoPublisher.onBypass(bypass);
           break;
+        case 'apopublish':
+          // 进 sysapo / 附加后全量重发参数块（镜像即全量真相）。
+          apoPublisher.flushAll();
+          // Part I Q2：插件发布者同点激活并同步镜像（身份+开关）。
+          apoPluginPublisher.active = true;
+          syncApoPlugins();
+          break;
+        case 'apotelemetry':
+          // sysapo 生效期间读 APO 回传块并合成 viz 事件。
+          if (m['on'] == true) {
+            apoTelemetry.start(send);
+            apoPluginPublisher.active = true;
+            syncApoPlugins();
+          } else {
+            apoTelemetry.stop();
+            apoPluginPublisher.active = false;
+          }
+          break;
+        case 'apoPluginReload':
+          {
+            // Part I Q3：故障槽点击重试——发布器推进 loadGen，
+            // APO worker 据此重载该槽（结果经 telemetry 回传）。
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            apoPluginPublisher.forceReload(slot);
+            break;
+          }
+        case 'apoHarvestState':
+          {
+            // Part I Q3/D3：影子链状态收获——影子 savePreset 到
+            // 本进程临时文件，读回字节经发布器进插件块状态区
+            // （取代 Q2 的 base64 命令口径：全程不出 isolate）。
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final l = lib;
+            final h = handle;
+            var ok = false;
+            var tooLarge = false;
+            if (l != null && h != null && apoPluginPublisher.active) {
+              try {
+                final tmp = File('${Directory.systemTemp.path}'
+                    '/auradsp_apo_harvest_$slot.bin');
+                final rc = AuraDspLib.pluginSlotSavePresetWrap(
+                    l, h, slot, tmp.path);
+                if (rc == 1 && tmp.existsSync()) {
+                  final bytes = tmp.readAsBytesSync();
+                  tooLarge = bytes.length > kApoPluginStateBytes;
+                  if (!tooLarge) {
+                    ok = apoPluginPublisher.publishSlotState(slot, bytes);
+                  }
+                }
+              } catch (e) {
+                dbgLog('apo harvest failed slot=$slot: $e');
+              }
+            }
+            send({
+              'evt': 'apoPluginStateResult',
+              'slot': slot,
+              'ok': ok,
+              'tooLarge': tooLarge,
+            });
+            break;
+          }
         case 'source51':
           // 0=混缩（默认） 1=直通；桥注入（试音）恒走 fold stereo，本旗只管本地渲染。
           passthrough51 = (m['value'] as int) != 0;
@@ -1385,6 +1576,16 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'rc': rc,
                 'status': statusJson,
               });
+              // F2：加载可能因延迟线分配失败触发引擎自动关 PDC，
+              // 回读引擎真值同步 UI（get_pdc 此前全仓无调用点）。
+              try {
+                send({
+                  'evt': 'pluginPdcSync',
+                  'pdc': AuraDspLib.pluginGetPdcWrap(lib, handle),
+                });
+              } catch (e) {
+                dbgLog('plugin: pdc sync read failed: $e');
+              }
             }
             break;
           }
@@ -1515,6 +1716,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                         AuraDspLib.pluginSlotGetStatusJson(l, h, slot),
                   });
                 }
+                // F2：同 pluginLoad——槽位加载后回读 PDC 引擎真值。
+                try {
+                  send({
+                    'evt': 'pluginPdcSync',
+                    'pdc': AuraDspLib.pluginGetPdcWrap(l, h),
+                  });
+                } catch (e) {
+                  dbgLog('plugin: pdc sync read failed: $e');
+                }
               }));
             }
             break;
@@ -1607,6 +1817,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'pluginSlotGetStatus':
           {
+            // Part I Q2：sysapo 激活时状态轮询顺带把插件镜像
+            // diff 同步进插件块（发布者未激活时为空操作）。
+            syncApoPlugins();
             final slot = (m['slot'] as num?)?.toInt() ?? 0;
             final pb = activePluginBridge();
             if (pb != null) {
@@ -1957,11 +2170,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       dbgLog('local audio out unsupported, degraded ready');
     }
     // 无输出设备时按请求速率建引擎（有设备则跟设备协商值）。
-    final engineRate = audioOut != null
-        ? audioOut.sampleRate.toDouble()
+    // initOut 别名：audioOut 自 W2 起会被控制器回调赋值（闭包
+    // 写捕获使字段的类型提升失效），本段判定走别名。
+    final initOut = audioOut;
+    final engineRate = initOut != null
+        ? initOut.sampleRate.toDouble()
         : (requestedRate > 0
             ? requestedRate.toDouble()
             : kFallbackSampleRate.toDouble());
+    engineRateHz = engineRate;
     handle = lib.create(engineRate, maxBlockFrames);
     dbgLog('auradsp_create rate=$engineRate '
         'maxBlock=$maxBlockFrames '
@@ -1985,7 +2202,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       audioOutError ??= 'wasapi-start: $e';
       dbgLog('AudioOut start failed, degraded ready: $e');
     }
-    if (audioOut != null && audioOut.started) {
+    if (initOut != null && initOut.started) {
       // 后端名取运行时类型（WasapiOut / PulseAudioOut）：旧文案在 Linux
       // 也写 WASAPI，S5c 改为平台中立（字段名 audioOut 是历史命名，
       // 类型实为 AudioOut 抽象，不在本阶段改名）。
@@ -2027,13 +2244,21 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   final inBufEng = inPtrEng.asTypedList(maxBlock * 8);
   final outPtrEng8 = malloc<Float>(maxBlock * 8);
   final vizBuf = malloc<VizFrame>(8); // 持久化复用，零运行时堆分配
-  String? lastPumpErr;
   var lastPumpErrAt = 0;
-  // WASAPI 端点被占计数（0x8889000a = AUDCLNT_E_DEVICE_IN_USE：端点被独占，
-  // 典型是 VB 以独占/KS 方式开着同一设备。旧 client 在独占释放前永好不了，
+  // 泵连续失败计数（细审 R-B 2 后为通用计数：任何泵轮异常
+  // 都累计、仅成功轮清零；旧口径只认 WASAPI 死亡码两码并
+  // 对其余异常清零，交替错误下 latch 永不触发。阈值 400 轮
+  // 的由来：端点被占（0x8889000a = AUDCLNT_E_DEVICE_IN_USE，
+  // 典型是 VB 以独占/KS 方式开着同一设备）时旧 client 在独占释放前永好不了，
   // 必须等对端释放后重建链路）。
   // 连续 ~2s（400 轮）即上报一次（latch，不反复刷）；model 侧重启 isolate。
   var audioOutErrRounds = 0;
+  // 第五轮 S2：端点失效（0x88890004）恢复状态——失效时刻、已试
+  // 次数、下次可试时刻。窗口内（kOutReinitWindowMs）泵错误被
+  // 原地重建路径吸收；超窗回落上方通用死亡计数。成功轮清零。
+  var outInvalidSince = 0;
+  var outReinitAttempts = 0;
+  var outReinitNextAt = 0;
   var pumpRounds = 0;
   var procRounds = 0;
   // 桥 viz 断流守卫（三桥共用：同一时刻只有一个后端出声）：桥引擎停产（VB
@@ -2134,6 +2359,34 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                   'outputEndpoint': vaioOutputEndpointInUse,
               });
               bridgeGated = ((st['gated'] as num?)?.toInt() ?? 0) == 1;
+              // VAIO 几何快照（2026-11-09）：格式/声道几何元组变化
+              // 时落一行日志——噪声态时用户无需操作，事后从日志尾
+              // 即可读出当时的 bits/ringSr/ringCh/outCh/outBits，
+              // 对照端点实际格式终裁启动期几何采样嫌疑。
+              if (backend == 'vaio') {
+                final geo = '${st['bits']}/${st['ringSr']}/${st['ringCh']}'
+                    '/${st['sr']}/${st['outCh']}/${st['outBits']}';
+                if (geo != lastVaioGeo) {
+                  lastVaioGeo = geo;
+                  dbgLog('vaio-geometry: bits/ringSr/ringCh/sr/outCh/outBits = $geo');
+                }
+                // S4 白噪取证（第五轮）：桥侧每 start 采集一次的
+                // 首块证据（起始游标/原始字节/正位与错位统计），
+                // 首见即落盘——复现时从日志直接读判定材料。
+                final fx = st['forensics'];
+                if (fx is Map) {
+                  final fxs = 'tw0=${fx['tw0']} cur0=${fx['cur0']} '
+                      'size=${fx['dataSize']} align=${fx['align']} '
+                      'bits=${fx['bits']} raw=${fx['raw']} '
+                      'peak=${fx['peak']} meanAbs=${fx['meanAbs']} '
+                      'peakShift=${fx['peakShift']} '
+                      'meanAbsShift=${fx['meanAbsShift']}';
+                  if (fxs != lastVaioFx) {
+                    lastVaioFx = fxs;
+                    dbgLog('vaio-forensics: $fxs');
+                  }
+                }
+              }
             }
           }
         } catch (e, st) { swallowThrottled(e, st, 'pump-$vizBackend'); }
@@ -2296,40 +2549,69 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
           }
         }
+        audioOutErrRounds = 0; // 成功轮清零（死亡计数只许成功清零，细审 R-B 2）
+        outInvalidSince = 0;
+        outReinitAttempts = 0;
       } catch (e, st) {
-        // 错误节流：同一消息 3s 内只上报一次，防 UI 事件洪泛（5ms 一轮的循环）
+        // 第五轮 S2：端点失效分流——WasapiOut 客户端被端点栈重启
+        // 打死（0x88890004）时客户端永不自愈，旧口径只能陪跑
+        // 400 轮后整 isolate 重启。现口径：恢复窗口内按退避表原
+        // 地重建输出（经捕获控制器的回滚链换入），错误被吸收
+        // （不落 PUMP ERROR、不发 error 事件、不计死亡计数）；
+        // 超窗则回落下方通用口径。仅 WASAPI 实例适用（Linux
+        // 后端错误文案不含 HRESULT，分类天然不命中）。
+        if (audioOut is WasapiOut && isDeviceInvalidatedError(e)) {
+          final nowMs = DateTime.now().millisecondsSinceEpoch;
+          if (outInvalidSince == 0) {
+            outInvalidSince = nowMs;
+            outReinitAttempts = 0;
+            outReinitNextAt = nowMs; // 首试立即（端点多半已回来）
+            dbgLog('wasapi: output invalidated, entering reinit');
+          }
+          if (nowMs - outInvalidSince < kOutReinitWindowMs) {
+            if (nowMs >= outReinitNextAt) {
+              outReinitAttempts++;
+              if (windowsCapture.reinitOutput()) {
+                dbgLog('wasapi: out reinit ok '
+                    '(attempt $outReinitAttempts)');
+                outInvalidSince = 0;
+                outReinitAttempts = 0;
+                audioOutErrRounds = 0;
+              } else {
+                outReinitNextAt =
+                    nowMs + outReinitBackoffMs(outReinitAttempts);
+              }
+            }
+            continue;
+          }
+          // 超窗：保持 outInvalidSince 非零，本轮起走通用计数。
+        }
+        // 错误节流：同一消息 3s 内只上报一次，防 UI 事件洪泛（5ms 一轮的循环）。
+        // 日志文件同口径节流（细审 R-B 2 改全局窗）：旧口径按
+        // 消息分别节流，端点死亡若在相邻轮次交替抛两种错误，
+        // 每条都算「新消息」逐轮落盘、节流被击穿。现口径为
+        // 全局 3s 窗：窗内任何 PUMP ERROR 不再落盘/上报；持
+        // 续抛错的当前消息会在窗到期后落下，最终证据不丢。
         final now = DateTime.now().millisecondsSinceEpoch;
         final msg = e.toString();
-        dbgLog('PUMP ERROR: $msg\n$st');
-        if (msg != lastPumpErr || now - lastPumpErrAt > 3000) {
-          lastPumpErr = msg;
+        if (now - lastPumpErrAt > 3000) {
           lastPumpErrAt = now;
+          dbgLog('PUMP ERROR: $msg\n$st');
           send({'evt': 'error', 'msg': msg});
         }
-        // 端点死亡（WASAPI 认 0x8889000a；Linux 认输出后端 StateError，
-        // 见下。其余错误走上面的常规上报，不触发重启）。
-        if (msg.contains('0x8889000a')) {
-          audioOutErrRounds++;
-        } else if (PlatformProfile.isLinux &&
-            audioOut != null &&
-            e is StateError &&
-            (msg.contains('pa_simple') ||
-                msg.contains('PulseAudioOut') ||
-                msg.contains('snd_pcm') ||
-                msg.contains('AlsaAudioOut'))) {
-          // DRV-02（全项目审查 S7）：PA/PipeWire 重启或 ALSA 设备拔出后，
-          // pa_simple/snd_pcm 连接不可自愈，其错误文案永不含 WASAPI 的
-          // HRESULT——旧逻辑下计数恒被清零，泵无限重试、永不恢复，用户
-          // 永久无声。按同口径累计：连续 400 轮（≈2s）即判端点死亡，
-          // 借 wasapiLost 通道让 UI 重起 isolate 重建输出流（ALSA 的
-          // XRUN 在后端内自恢复、不抛错，不会误触发本路径）。
-          audioOutErrRounds++;
-        } else {
-          audioOutErrRounds = 0;
-        }
+        // 端点死亡计数（细审 R-B 2 + 低 4）：旧逻辑只认死亡
+        // 码（0x8889000a 独占 / 0x88890004 失效），其余异常落
+        // else 清零——交替错误下计数永不累积、400 轮 latch 永
+        // 不触发，与原洪水 bug 同构；且服务停止的 0x8889000f
+        // 也不在集合内。现口径：泵轮任何异常都累计、仅成功
+        // 轮清零（见 try 末尾）；连续 400 轮抛错即判链死亡走
+        // wasapiLost 自愈。Linux 侧同口径并入（DRV-02 的 PA/
+        // ALSA 特判并入通用计数：其错误文案不含 HRESULT，
+        // 旧特判靠 StateError+后端名匹配，现无需）。
+        audioOutErrRounds++;
         if (audioOutErrRounds >= 400) {
           audioOutErrRounds = -1000000; // latch：旧 client 已死，不可能自愈
-          dbgLog('PUMP: device invalidated 2s+, reporting wasapiLost');
+          dbgLog('PUMP: pump failing 400 rounds, reporting wasapiLost');
           send({'evt': 'wasapiLost'});
         }
       }

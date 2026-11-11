@@ -12,7 +12,7 @@
   app/auradsp_app/test/fixtures/param_defaults_contract.g.dart
     - kParamDefaultRows:      (engineId, member, cppDefault) 可默认校验的参数
     - kEngineCustomOnlyIds:   表内无 struct member 的 custom 参数
-    - kEngineDynamicParamIds: set 分支动态展开 id（stereo.bandN/input.balance.N/liveprog.paramN）
+    - kEngineDynamicParamIds: set 分支动态展开 id（stereo.bandN/input.balance.N/liveprog.paramN/liveprogmc.paramN）
     - kEngineRangeRows:       (engineId, min, max) FLOAT/INT 表内范围（Part F 消费）
     - kContractLineCounts:    两个 header + create 的行数哨兵；
                               header/create 变更而未重生 fixture → 测试红
@@ -38,11 +38,17 @@ DYNAMIC_IDS = (
     [f'stereo.band{i}' for i in range(1, 6)]
     + [f'input.balance.{i}' for i in range(1, 9)]
     + [f'liveprog.param{i}' for i in range(1, 9)]
+    + [f'liveprogmc.param{i}' for i in range(1, 9)]
 )
 
 
 def sha16(path):
-    return hashlib.sha256(open(path, 'rb').read()).hexdigest()[:16]
+    # 摘要必须与检出行尾无关（第六轮 CI 实证）：Windows 检出
+    # （autocrlf）把 LF 变 CRLF 时原始字节摘要随之而变，生成
+    # 物在 Win 生成、CI（LF）核验必漂移。先归一化 CRLF→LF
+    # 再摘要，任何检出口径下摘要恒定。
+    data = open(path, 'rb').read().replace(b'\r\n', b'\n')
+    return hashlib.sha256(data).hexdigest()[:16]
 
 
 def parse_param_table():

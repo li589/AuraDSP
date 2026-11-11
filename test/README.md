@@ -4,7 +4,8 @@
 
 ## 目录结构
 
-- `smoke/`：C++ 音频引擎烟囱测试（通过 Python `ctypes` 直接加载 `auradsp_engine.dll`，RT 契约、内存无泄漏、锁安全、参数状态机验证）。
+- `smoke/`：C++ 音频引擎冒烟测试（通过 Python `ctypes` 直接加载引擎库——Windows `auradsp_engine.dll` / Linux `libauradsp_engine.so`，RT 契约、内存无泄漏、锁安全、参数状态机验证）；含 Linux 专属门禁（PA/ALSA 后端、虚拟 sink、XDG、插件宿主与 32 位桥、X11 编辑器）。全量 143 项登记，Linux 口径 PASS 14 / SKIP 129（Windows 专属）/ FAIL 0（2026-11-05 基线）。
+- Dart 单测在 `app/auradsp_app/test/`（CI J6 口径 70 文件 PASS / 4 平台跳过），入口 `tools/bin/run_dart_tests.py`。
 - `ui/`：Win11 活动桌面严格前置置顶（HWND_TOPMOST + SetForegroundWindow）UI 自动化交互与像素断言回归。
 - `data/`：测试输入数据与音频基准样本（IR 脉冲、DDC 空间校正文件等）。
 - `runner.py`：全量测试执行器。

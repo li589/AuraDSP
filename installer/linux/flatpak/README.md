@@ -7,8 +7,8 @@
 ## 1. 基础配置规格
 
 - **应用 ID**：`org.auradsp.AuraDSP`
-- **运行时环境**：`org.freedesktop.Platform // 23.08`
-- **SDK 环境**：`org.freedesktop.Sdk // 23.08`
+- **运行时环境**：`org.freedesktop.Platform // 25.08`
+- **SDK 环境**：`org.freedesktop.Sdk // 25.08`
 - **清单文件**：`org.auradsp.AuraDSP.yml`
 
 ---

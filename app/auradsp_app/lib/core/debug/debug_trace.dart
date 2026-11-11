@@ -23,6 +23,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../../engine/debug_log.dart';
+
 class DebugEvent {
   DebugEvent(this.seq, this.ts, this.cat, this.action, this.data);
 
@@ -72,6 +74,7 @@ class DebugTrace {
 
   final StringBuffer _pending = StringBuffer();
   RandomAccessFile? _file;
+  int _bytesWritten = 0;
   Timer? _flushTimer;
   int _seq = 0;
   String _session = '';
@@ -110,6 +113,15 @@ class DebugTrace {
     try {
       final f = File(logPath);
       f.parent.createSync(recursive: true);
+      // 打开前先轮转（2026-11-08 审计·调试低4）：与 dbgLog 共用
+      // rotateLogFileIfOversized 口径，此前本文件只追加无上限。
+      // 轮转失败不许拖垮整个 trace 打开流程：单独兜住并报告。
+      try {
+        rotateLogFileIfOversized(logPath, kLogRotateCapBytes);
+      } catch (e) {
+        debugPrint('[DebugTrace] rotate on open failed: $e');
+      }
+      _bytesWritten = 0;
       _file = f.openSync(mode: FileMode.append);
       _flushTimer = Timer.periodic(const Duration(milliseconds: 200), (_) => flush());
       event('debug', 'session.start', data: {
@@ -138,6 +150,7 @@ class DebugTrace {
       debugPrint('[DebugTrace] close failed: $e');
     }
     _file = null;
+    _bytesWritten = 0;
     enabled = false;
     console = false;
     logPath = '';
@@ -242,15 +255,36 @@ class DebugTrace {
   void flush() {
     if (_pending.isEmpty || _file == null) return;
     try {
-      _file!.writeStringSync(_pending.toString());
+      final chunk = _pending.toString();
+      _file!.writeStringSync(chunk);
       _pending.clear();
       _file!.flushSync();
+      _bytesWritten += chunk.length;
+      if (_bytesWritten > kLogRotateCapBytes) _rotateTraceFile();
     } catch (e) {
       _pending.clear();
       if (!_flushWarned) {
         _flushWarned = true;
         debugPrint('[DebugTrace] flush failed: $e');
       }
+    }
+  }
+
+  /// 会话内写量超上限时轮转：关句柄 → 改名备份 → 重开（审计·低4）。
+  void _rotateTraceFile() {
+    try {
+      _file?.closeSync();
+    } catch (e) {
+      debugPrint('[DebugTrace] rotate close failed: $e');
+    }
+    _file = null;
+    rotateLogFileIfOversized(logPath, 0);
+    try {
+      _file = File(logPath).openSync(mode: FileMode.append);
+      _bytesWritten = 0;
+    } catch (e) {
+      enabled = false;
+      debugPrint('[DebugTrace] reopen after rotate failed: $e');
     }
   }
 

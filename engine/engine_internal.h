@@ -54,6 +54,7 @@ extern "C" {
 #include "legacy/jdsp/jdsp_header.h"
 #include "legacy/jdsp/Effects/eel2/fft.h"
 }
+#include "dsp/dsp_mc_liveprog.h" /* 多声道 EEL 脚本级宿主（方案 B） */
 
 /* legacy liveprogWrapper.c 的错误码转文案（未在头文件声明，全局符号） */
 extern "C" const char* checkErrorCode(int errCode);
@@ -142,12 +143,19 @@ struct Params {
     std::atomic<float>    post_gain_ch[8];
     /* latency_mode 已由 ADR-006 移除：延迟改为纯测量，不再有档位准入。 */
     std::atomic<int32_t>  channels_mode{0};     /* 0=stereo（Phase A，ADR-003） */
+    /* [channels.upmix_fill] 矩阵上混回填策略：1=无条件铺满未使用声道，
+     * 0=仅回填「对应下混输入声道本块非严格零」的声道。
+     * 出厂默认 0（2026-11-07）：未使用声道保持静默，用户需要时显式打开。 */
+    std::atomic<int32_t>  upmix_fill{0};
     /* WP0 脚手架：channels.count 的纯状态载体（0=自动/1=手动，同 bass.mode
      * 模式，不参与 DSP 计算，仅保证 UI 选择可回读）。 */
     std::atomic<int32_t>  channels_count_mode{0};
     /* Liveprog（EEL2 实时可编程 DSP；vendor 补丁 P-001 提供 slider1..8） */
     std::atomic<int32_t>  lp_enable{0};
     std::atomic<float>    lp_param[64];         /* slider1..64（C++20 值初始化 = 0） */
+    /* 多声道 Liveprog（liveprog.mc，方案 B）：与立体声 lp_* 完全平行、互不可见 */
+    std::atomic<int32_t>  lp_mc_enable{0};
+    std::atomic<float>    lp_mc_param[64];      /* slider1..64（MC 独立） */
     /* 卷积 / 脉冲响应（v1.1 M4） */
     std::atomic<int32_t>  conv_enable{0};
     std::atomic<float>    conv_mix{1.0f};      /* 干湿比 [0,1]：1=纯湿（P-005） */
@@ -360,6 +368,15 @@ struct McReverbState {
     float damp = 0.0f;            /* 每线阻尼系数（每块算一次） */
     float rt60 = 2.5f;
     float room_scale = 1.0f;
+
+    /* L-04 自定义参数惯性平滑（一阶惯性，τ≈50ms）：拖滑块时 rt60/
+     * room/damp 不再整块跳变砸进正在衰减的尾音（爆音核心）。reset
+     * 清状态后 sm_init 为假、首块直接吸附目标——预设切换另有 5ms
+     * 淡出+清状态，不经平滑扫过。 */
+    float rt60_sm = 0.0f;
+    float room_sm = 0.0f;
+    float damp_sm = 0.0f;         /* Hz */
+    bool  sm_init = false;
 
     /* 每声道预延迟（同一长度；读指针共享，写指针每声道独立）。 */
     float pre_buf[kLines][kPreMax] = {};
@@ -595,6 +612,12 @@ struct auradsp_handle_s {
     int    lp_status = 0;             /* 0=无代码 1=编译成功 <0=LiveProgStringParser 错误码 */
     char*  lp_code = nullptr;         /* 已下发代码副本（get_param 回读用） */
     size_t lp_code_len = 0;
+    /* 多声道 Liveprog 状态（方案 B） */
+    McLiveProgHost* mc_lp = nullptr;  /* create 时构造、destroy 时析构 */
+    float* lp_mc_slider_ptr[64] = {}; /* slider1..64 的 MC VM 寄存器指针 */
+    int    lp_mc_status = 0;          /* 0=无代码 1=编译成功 <0=错误码 */
+    char*  lp_mc_code = nullptr;      /* 已下发代码副本（get_param 回读用） */
+    size_t lp_mc_code_len = 0;
     /* 字符串回读副本（预设 §8.1 / 调研 §1：存原始串而非重序列化，避免格式漂移；析构释放） */
     char*  eq_curve = nullptr;        /* 已下发 eq.curve 原串副本（get_param 回读用） */
     size_t eq_curve_len = 0;
@@ -788,6 +811,9 @@ struct auradsp_handle_s {
     std::atomic<int> channel_count{2};   /* 驱动层交织缓冲的声道数（2=立体声） */
     float* mx_scratch = nullptr;         /* max_block*kMxMaxChannels，留存各声道 */
     float* mx_stereo = nullptr;          /* max_block*2，下混后的立体声链输出 */
+    /* [channels.upmix_fill] 源活动保持窗（帧，RT 独占；0=该声道不填充）。
+     * 严格零判定 + ~250ms 保持，避免乐句间隙/静音段来回跳变。 */
+    int upmix_hold[kMxMaxChannels] = {};
 
     /* WP5: post_gain 逐声道输出平滑状态（一阶平滑 10ms，RT 独占） */
     float post_gain_sm[8] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
@@ -829,6 +855,8 @@ void apply_crossfeed(auradsp_handle h);
 void apply_eq(auradsp_handle h);
 void apply_fx_gains(auradsp_handle h);
 void apply_liveprog(auradsp_handle h);
+void apply_liveprogmc(auradsp_handle h);
+void mc_lp_refresh_sliders(auradsp_handle h);
 void apply_params_locked(auradsp_handle h);
 void apply_post(auradsp_handle h);
 void apply_reverb(auradsp_handle h);

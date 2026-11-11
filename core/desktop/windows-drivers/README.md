@@ -223,6 +223,27 @@ EWDK 19041 的头文件有个不对称：`POOL_FLAG_*` **常量**在更早的
 > 因此 `ExAllocatePoolWithTag(type, size, tag)` 在 Win7 目标下仍是真三参内核 API，
 > 不会被降成两参宏。
 
+### 控制设备安全收紧（DRV-03 / DRV-04，2026-11-05 全项目深度审查）
+
+- **DRV-03（P0）**：环形缓冲拷贝几何一律由内核真值派生
+  （`g_ulRingTotalSize - sizeof(共享头)`），不再信任用户可写的共享头
+  `DataOffsetBytes/DataSizeBytes`；MAP 应答同样回内核值。
+- **DRV-04（P1）**：控制设备改 `IoCreateDeviceSecure` + SDDL
+  `D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGWGX;;;IU)`（剥离 Everyone；
+  `wdmsec.lib` 两轨工程均已链接）；MAP 独占持有（他人持有返回
+  `STATUS_DEVICE_BUSY` → Win32 170），UNMAP 与 GET_DEBUG_LOG 均加
+  持有者校验（非持有者 `STATUS_ACCESS_DENIED` → Win32 5）；持有
+  进程退出由 MJ_CLEANUP 按进程解映射回收，不会永久锁死。
+- 验证：`01_vaio_driver/tools/test_drv04_exclusive.py`（双进程反
+  劫持断言，真机运行；需先退出主程序/桥）。2026-11-05 已在
+  vm-win10 实测 170/5 双拒 + 持有者释放顺畅；**2026-11-09 以
+  `--with-debug-log` 首次真机运行 7/7 ALL PASS**（第 6 项：A 持有
+  映射期间 B 读 GET_DEBUG_LOG 被拒，`winerror=5`），驱动为 WDK
+  重编版（`.sys` SHA256 前 16 位 `2C64E03ACE123583`），结论见
+  `test/date/2026-11-09/vaio-driver-e2e/outputs/`。DRV-03 经 VS2026 +
+  WDK 28000 Release 构建（0 警告 0 错误）与 vm-win10/vm-win7 双机
+  探针验证。详见 `docs/30-审查/全项目深度审查方案与报告-2026-11-05.md`。
+
 ## 装载与卸载（Phase 4 验收 ①：设备管理器识别 AuraVAIO）
 
 AuraVAIO 是 **root 枚举**的软件设备（无硬件），装载链路为：
@@ -254,11 +275,20 @@ core\desktop\windows-drivers\01_vaio_driver\install_driver.ps1 -Action uninstall
 ```
 
 `install_driver.ps1` 做的事：体检 → （可选）生成/复用 `CN=AuraDSP Test Signing`
-自签证书并签 `.cat` + 导入 `Root`/`TrustedPublisher` → `pnputil /add-driver /install`
-→ `devcon install <inf> Root\AuraVAIO` → 复验。
+自签证书并签 `.cat` + 导入 `Root`/`TrustedPublisher` → **幂等清理** →
+`pnputil /add-driver /install` → `devcon install <inf> Root\AuraVAIO` →
+收敛到单节点 + 复验。
 **它不代改启动配置、也不代重启**：`testsigning` 未开时只打印
 `bcdedit /set testsigning on` + 重启命令后停下。
-默认 `-Action status` 纯只读；`install`/`uninstall` 需要显式指定并要求管理员。
+默认 `-Action status` 纯只读；`install` / `uninstall` / `cleanup` 需要显式指定并要求管理员；
+`-DryRun` 对三者都是只读预演（不签名、不删节点、不删包）。
+
+**新增动作（2026-11-09）**：`-Action cleanup` 把环境收敛到「1 个 MEDIA 节点
++ 1 份在用 oem 包」，移除重复安装残留的备用硬件 ID 节点与陈旧驱动包，不卸载驱动。
+成因：INF 同时声明 `Root\AuraVAIO` / `Root\AuraVaioDriver` 两个硬件 ID，旧脚本在
+`devcon install` 返回非零时直接 fallback 装备用 ID（此时主节点可能已建好），且安装前
+清理只查主 ID、依赖 devcon 输出文本判定 → 多次安装叠加成双节点。`vm-win10` 实测曾
+出现 2 个节点 / 4 份 oem 包，设备管理器里表现为两套 `AuraVAIO` 设备与带 `2-` 前缀的端点。
 
 手工等价命令：
 
@@ -273,10 +303,17 @@ devcon remove Root\AuraVAIO
 pnputil /delete-driver auravaiodriver.inf /uninstall /force
 ```
 
-验收判据：`设备管理器` 出现 **AuraVAIO Virtual Audio Device**；`声音设置` 的
-输出设备列表出现 **AuraVAIO**；`install_driver.ps1` 体检第 [4]/[6] 节中
-状态为 `OK`。本机实测（未提权）当前为：包三件套齐全、
-**未发现 AuraVAIO 设备**、本机 21 个 OK 音频端点中 AuraVAIO = 0 —— 即"已具备装载条件、尚未装载"。
+验收判据（2026-11-09 更新，以 `install_driver.ps1 -Action status` 输出为准）：
+- **[4] MEDIA 设备节点数 == 1**（按两个硬件 ID 精确匹配），状态 OK；
+- **[5] DriverStore 中 `auravaiodriver.inf` 只剩 1 份**（每次 `add-driver` 都会累积 oem 包）；
+- **[6] 名称含 AuraVAIO 的 OK 音频端点 ≈ 节点数 × 2**（每节点派生 1 扬声器 + 1 麦克风）。
+
+旧口径只写「Status 为 OK」，且 [6] 用前缀 `'AuraVAIO*'` 匹配端点名，会把双节点残留
+判成通过、把实际 4 个端点报成 0 —— 两处假阴性已修正。`vm-win10` 2026-11-09 实测：
+清理前 2 节点 / 4 包 / 4 个 OK 端点（含 `2-` 前缀），`-Action cleanup` 后 1 节点 / 1 包 /
+2 个 OK 端点，二次执行零移除；`test_drv04_exclusive.py --with-debug-log` 仍 7/7 ALL PASS，
+控制通道未受影响。详见
+`test/date/2026-11-09/vaio-driver-cleanup/outputs/清理幂等性真机验证结论.md`。
 
 > **已知缺口（legacy 轨真要装 Win7 时）**：INF 目前没有
 > `[<Service>.NT.CoInstallers]` 段与 `WdfCoinstaller01011.dll` 的

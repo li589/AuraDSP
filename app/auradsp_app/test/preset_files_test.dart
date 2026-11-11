@@ -153,4 +153,28 @@ void main() {
           closeTo(0.1, 1e-9), reason: '用户原有的 Dup 不得被导入件覆盖');
     });
   });
+
+  group('损坏预设隔离（2026-11-08 审计·预设低4）', () {
+    test('坏 JSON 用户预设被改名隔离、不入列表、内容留证', () {
+      final dir = Directory(PresetLibrary.userDir);
+      final bad = File('${dir.path}${Platform.pathSeparator}broken.json');
+      bad.writeAsStringSync('{not json!!');
+      final good = _p('GoodOne');
+      expect(PresetLibrary.saveUserPreset(good), isTrue);
+
+      final names = _userPresets().map((e) => e.name).toList();
+      expect(names, ['GoodOne'], reason: '坏预设不得入列表、好预设不受影响');
+      expect(bad.existsSync(), isFalse,
+          reason: '坏文件应已被改名隔离，不再留在 .json 名下重复扫');
+      final quarantined = dir
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.contains('.corrupt-'))
+          .toList();
+      expect(quarantined.length, 1, reason: '隔离件应恰一份');
+      expect(quarantined.single.readAsStringSync(), '{not json!!',
+          reason: '隔离是改名留证，不是删除');
+      quarantined.single.deleteSync();
+    });
+  });
 }

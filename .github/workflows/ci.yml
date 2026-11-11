@@ -64,6 +64,12 @@ jobs:
             core/desktop/linux/out/Release/plugin_host_x64
             core/desktop/linux/out/Release/plugin_host_x86
           if-no-files-found: error
+          # 该产物只作同一 run 内 J3/J6/J8 的跨 job 传递，保留期取
+          # 7 天：足够失败排障与复跑取证，又避免默认 90 天囤积把
+          # 账户 artifact 存储配额占满（曾囤 128 个占满，见
+          # installer/docs/01 §5 存储注记）。Release 资产是另一套
+          # 存储，不受此配额影响。
+          retention-days: 7
 
   # J3 Linux smoke ----------------------------------------------------
   smoke-linux:
@@ -116,6 +122,86 @@ jobs:
         run: cmake --preset windows-x64 -DAURADSP_BUILD_BRIDGES=OFF
       - name: Build
         run: cmake --build --preset windows-x64-release
+      # APO 纪律版引擎供 J5b 的进程内冒烟宿主（D1 同目录搜索）；
+      # 必须在 DBG-ON 变体覆盖 out/Release 之前上传默认构建产物。
+      - name: Upload APO engine artifact (for J5b)
+        uses: actions/upload-artifact@v4
+        with:
+          name: auradsp-engine-apo-windows
+          path: core/desktop/windows/out/Release/auradsp_engine_apo.dll
+          if-no-files-found: error
+          retention-days: 7
+      # B-1 门禁进 CI（2026-11-08 审计·调试中3）：smoke_release_strings
+      # 此前只登记在 runner.py 的 PLATFORM_WINDOWS 集，CI 从未执行，
+      # 「防宏没接线」的反向断言长期空转。先对默认（OFF）产物跑正向
+      # 断言（Release DLL 无 [DBG ），再用独立构建树编一份 ON 产物跑
+      # 反向断言（引擎 DLL 与宿主 exe 都必须含 [DBG ）——产物同写
+      # 子工程 out/Release，后步会覆盖前步 DLL，故必须顺序执行。
+      - name: Release-strings gate (default OFF build)
+        run: python test/smoke/smoke_release_strings.py
+      # APO 引擎变体纪律门（2026-11-10 立项 P2）：PE 本体断言
+      # /MT（无动态 CRT 导入）+ CFG 函数表 + 导出面。必须在
+      # DBG-ON 变体覆盖 out/Release 之前跑（同 release-strings）。
+      - name: APO engine binary gate (default build)
+        run: python test/smoke/smoke_apo_engine_binary.py
+      - name: Configure ON variant (AURADSP_DBG_LOG)
+        run: cmake -S . -B build/windows/dbg-on -G "Visual Studio 18 2026" -A x64 -DAURADSP_BUILD_BRIDGES=OFF -DAURADSP_DBG_LOG=ON
+      - name: Build ON variant
+        run: cmake --build build/windows/dbg-on --config Release
+      - name: Release-strings gate (ON build, engine)
+        env:
+          AURADSP_EXPECT_DBG: "1"
+        run: python test/smoke/smoke_release_strings.py
+      - name: Release-strings gate (ON build, plugin host)
+        env:
+          AURADSP_EXPECT_DBG: "1"
+          AURADSP_DLL: core/desktop/windows/out/Release/plugin_host_x64.exe
+        run: python test/smoke/smoke_release_strings.py
+
+  # J5b APO 家族构建 --------------------------------------------------
+  build-apo-windows:
+    name: J5b build-apo-windows
+    runs-on: windows-latest
+    needs: build-engine-windows
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download APO engine artifact (from J5)
+        uses: actions/download-artifact@v4
+        with:
+          name: auradsp-engine-apo-windows
+          path: core/desktop/windows-drivers/out/Release
+      # 驱动套件全量构建需要 Steinberg ASIO SDK（stock runner 没有）；
+      # APO 家族（AuraApo + 引擎宿主 / apo_config / apo_selftest 等）
+      # 以 AURADSP_DRIVERS_APO_ONLY 独立配置构建，给这部分此前只在
+      # 用户本机编译的 C++ 以真实 MSVC 覆盖。引擎纪律版 DLL 本体
+      # 由 J5 构建并过 PE 纪律门（smoke_apo_engine_binary）。
+      - name: Configure (APO only)
+        run: cmake -S core/desktop/windows-drivers -B build/windows/apo-only -G "Visual Studio 18 2026" -A x64 -DAURADSP_DRIVERS_APO_ONLY=ON
+      - name: Build
+        run: cmake --build build/windows/apo-only --config Release
+      # 安装计划矩阵单测（Part II W1）：纯逻辑 exe，退出码即裁定。
+      - name: APO install plan matrix test
+        run: core/desktop/windows-drivers/out/Release/apo_plan_test.exe
+      # doctor 只读契约冒烟（Part II W3）：验 JSON 结构与六项
+      # 检查齐名；检查结论随裸机环境变、不作门禁（包装内说明）。
+      - name: APO doctor contract smoke
+        run: python test/smoke/smoke_apo_doctor.py
+      # 真处理端到端冒烟：COM 直驱 APOProcess，断言参数通道
+      # 发布 input.gain=-12dB 后输出 RMS 相对基线跌至 ~0.2512、
+      # telemetry 座位/应用计数/频谱在动、INPLACE 变体一致、
+      # 解锁后座位释放。退出码即裁定。
+      - name: APO engine end-to-end smoke
+        run: core/desktop/windows-drivers/out/Release/apo_engine_test.exe
+      # 桥编译检查（第五轮 S4）：runner 无 ASIO SDK、全量配置 FATAL，
+      # 桥家族此前 CI 零覆盖；ci_check 工程以真实 MSVC 编译 VAIO 桥
+      # TU 并跑其等待原语测试（ASIO 桥依赖 SDK 仍只能本机验，缺口
+      # 登记在第五轮收口文档）。
+      - name: Configure (bridge check, no ASIO SDK)
+        run: cmake -S core/desktop/windows-drivers/ci_check -B build/windows/bridge-check -G "Visual Studio 18 2026" -A x64
+      - name: Build bridge check
+        run: cmake --build build/windows/bridge-check --config Release
+      - name: VAIO pump wait test
+        run: build/windows/bridge-check/Release/vaio_pump_wait_test.exe
 
   # J6 Dart 测试 --------------------------------------------------------
   dart-tests:
@@ -226,13 +312,13 @@ jobs:
           done
           [ -S /tmp/.X11-unix/X99 ]
           fc-cache -f >/dev/null 2>&1 || true
-          rm -f /tmp/auradsp_debug.log
+          rm -f /tmp/auradsp_debug.log /tmp/auradsp_debug_iso.log
           cd app/auradsp_app/build/linux/x64/release/bundle
           ./auradsp_app >/tmp/j8_app_stdout.log 2>&1 &
           APP_PID=$!
           ok=0
           for i in $(seq 1 60); do
-            if grep -q "AudioOut started (PulseAudioOut)" /tmp/auradsp_debug.log 2>/dev/null; then ok=1; break; fi
+            if grep -q "AudioOut started (PulseAudioOut)" /tmp/auradsp_debug.log /tmp/auradsp_debug_iso.log 2>/dev/null; then ok=1; break; fi
             if ! kill -0 $APP_PID 2>/dev/null; then echo "app exited before audio start"; break; fi
             sleep 2
           done
@@ -242,6 +328,8 @@ jobs:
             cat /tmp/j8_app_stdout.log || true
             echo "=== auradsp_debug.log ==="
             cat /tmp/auradsp_debug.log || true
+            echo "=== auradsp_debug_iso.log ==="
+            cat /tmp/auradsp_debug_iso.log || true
           fi
-          grep -q "PULSE init: stream open" /tmp/auradsp_debug.log
+          grep -q "PULSE init: stream open" /tmp/auradsp_debug.log /tmp/auradsp_debug_iso.log
           test $ok -eq 1

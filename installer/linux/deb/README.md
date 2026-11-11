@@ -27,10 +27,16 @@
 
 ---
 
-## 3. 构建步骤规划
-打包工具将自动化执行：
-1. 校验 Staging 目录完整性。
-2. 建立临时 `pkg_root/` 目录并依照 FHS 目录结构填充文件。
-3. 动态从 `pubspec.yaml` 生成 `DEBIAN/control`、`postinst`、`postrm` 脚本。
-4. 调用系统命令 `dpkg-deb --build --root-owner-group pkg_root dist/auradsp_<ver>_amd64.deb` 生成最终发布包。
+## 3. 构建（已实现）
+
+实现：`build_deb.sh`（由 `../pack.sh` 调用，版本经
+`installer/shared/version_resolver.py` 从 `pubspec.yaml` 注入）：
+1. 校验 bundle 完整性（主程序 + 引擎 .so 在位）。
+2. 临时 staging 按 FHS 填充：bundle 原样进 `/usr/lib/auradsp/`
+   （保持 runner 要求的相对布局，引擎/宿主在 `lib/` 子目录内）、
+   `/usr/bin/auradsp` 符号链接、桌面入口与全尺寸图标、doc 文档。
+3. 生成 `DEBIAN/control`（依赖含 24.04 的 `libgtk-3-0t64 | libgtk-3-0`
+   与 `libasound2t64 | libasound2` 双写）、`postinst`/`postrm`。
+4. `dpkg-deb --build --root-owner-group` 产出
+   `dist/auradsp_<ver>_amd64.deb`。
 

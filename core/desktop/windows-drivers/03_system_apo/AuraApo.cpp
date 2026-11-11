@@ -1,4 +1,4 @@
-// AuraApo.cpp — 自研 System APO v1（透传 + 心跳 + RT-safe）。
+// AuraApo.cpp — 自研 System APO（透传 + 心跳 + RT-safe；引擎接线见 ApoEngineHost）。
 #include "AuraApo.h"
 
 #include <sddl.h>
@@ -82,7 +82,9 @@ STDMETHODIMP CAuraApo::Reset() {
 
 STDMETHODIMP CAuraApo::GetLatency(HNSTIME* pTime) {
     if (!pTime) return E_POINTER;
-    *pTime = 0;  // 透传零延迟
+    // 引擎在位时如实报告其测量延迟（HNSTIME = 100ns 单位）；
+    // 透传（含抢不到座位/引擎不可用）仍为 0（设计 D9）。
+    *pTime = (HNSTIME)(engine_.LatencyMs() * 10000.0);
     return S_OK;
 }
 
@@ -175,10 +177,13 @@ STDMETHODIMP CAuraApo::LockForProcess(UINT32 numIn, APO_CONNECTION_DESCRIPTOR** 
     blockAlign_ = wf->nBlockAlign ? wf->nBlockAlign : (channels_ * sizeof(float));
     locked_ = true;
     OpenHeartbeat();
+    // 真处理尝试（设计 P2）：失败静默——本实例保持透传。
+    engine_.TryStart(rate_, channels_);
     return S_OK;
 }
 
 STDMETHODIMP CAuraApo::UnlockForProcess() {
+    engine_.Stop();
     CloseHeartbeat();
     locked_ = false;
     return S_OK;
@@ -200,6 +205,10 @@ STDMETHODIMP_(void) CAuraApo::APOProcess(UINT32 numIn, APO_CONNECTION_PROPERTY**
     if (cin->u32BufferFlags & BUFFER_SILENT) {
         if (dst) memset(dst, 0, bytes);
         cout->u32BufferFlags = BUFFER_SILENT;
+    } else if (engine_.Process((const float*)src, (float*)dst, frames)) {
+        // 真处理已写出 dst（INPLACE 同址亦可）；故障/旁路/未就绪
+        // 时 Process 返回 false，落到下方透传拷贝。
+        cout->u32BufferFlags = cin->u32BufferFlags;
     } else {
         if (dst && src && dst != src) memcpy(dst, src, bytes);
         cout->u32BufferFlags = cin->u32BufferFlags;
@@ -235,7 +244,12 @@ void CAuraApo::OpenHeartbeat() {
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
             L"D:(A;;GA;;;LS)(A;;GA;;;WD)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)", SDDL_REVISION_1,
-            &sd, nullptr))
+            &sd, nullptr) &&
+        // Win7 退路：AppContainer ACE 在 Win7 的解析成败微软文档
+        // 未载；失败时退回不含 LPAC 的口径（语义完整，见
+        // ApoShared.h 的 AURA_APO_SHARED_SDDL_FALLBACK 注）。
+        !ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            L"D:(A;;GA;;;LS)(A;;GA;;;WD)", SDDL_REVISION_1, &sd, nullptr))
         return;
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof(sa);

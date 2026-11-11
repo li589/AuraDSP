@@ -116,12 +116,58 @@ void release_active_driver() {
     if (asioDrivers) asioDrivers->removeCurrentDriver();
 }
 
+// 第五轮 S4 取证：纯注册表预查（无 COM/SDK 副作用，不扰动
+// asioDrivers 单例）——目标名是否在 HKLM\SOFTWARE\ASIO 在册、
+// 其 CLSID 值是什么。loadAsioDriver 的失败原本不分步，靠本预查
+// 把失败定位到「注册/名称步」还是「COM 加载步」。
+bool LookupAsioRegistry(const char* driverName, std::string& clsidOut) {
+    clsidOut.clear();
+    HKEY hRoot = nullptr;
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\ASIO", 0,
+                      KEY_READ, &hRoot) != ERROR_SUCCESS) {
+        return false;
+    }
+    bool found = false;
+    char sub[256];
+    for (DWORD i = 0;; i++) {
+        DWORD len = (DWORD)sizeof(sub);
+        const LSTATUS rc = RegEnumKeyExA(hRoot, i, sub, &len, nullptr,
+                                         nullptr, nullptr, nullptr);
+        if (rc != ERROR_SUCCESS) break;
+        if (_stricmp(sub, driverName) != 0) continue;
+        found = true;
+        HKEY hSub = nullptr;
+        if (RegOpenKeyExA(hRoot, sub, 0, KEY_READ, &hSub) == ERROR_SUCCESS) {
+            char val[128];
+            DWORD vlen = (DWORD)sizeof(val) - 1;
+            DWORD type = 0;
+            if (RegQueryValueExA(hSub, "CLSID", nullptr, &type, (LPBYTE)val,
+                                 &vlen) == ERROR_SUCCESS &&
+                (type == REG_SZ || type == REG_EXPAND_SZ)) {
+                val[vlen] = 0;
+                clsidOut = val;
+            }
+            RegCloseKey(hSub);
+        }
+        break;
+    }
+    RegCloseKey(hRoot);
+    return found;
+}
+
 bool AsioHost::open(const char* driverName, void* sysRef, std::string& why) {
     close();  // 幂律：重复 open 先关旧实例
     if (!driverName || !driverName[0]) { why = "empty driver name"; return false; }
 
     if (!loadAsioDriver(const_cast<char*>(driverName))) {
-        why = "loadAsioDriver failed (not in registry or COM load failed)";
+        std::string clsid;
+        if (LookupAsioRegistry(driverName, clsid)) {
+            why = "loadAsioDriver failed at COM step (registered clsid=" +
+                  clsid + ")";
+        } else {
+            why = "loadAsioDriver failed at registry step "
+                  "(name not in HKLM\\SOFTWARE\\ASIO)";
+        }
         return false;
     }
     ASIODriverInfo info;

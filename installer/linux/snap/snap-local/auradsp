@@ -1,0 +1,2 @@
+#!/bin/sh
+exec "$SNAP/lib/auradsp/auradsp_app" "$@"

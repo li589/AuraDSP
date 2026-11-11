@@ -150,6 +150,19 @@ extension StateSession on AppModel {
     );
   }
 
+  /// 模式/管线类变更的统一落盘（第五轮 S1）：config + 会话快照同刷。
+  ///
+  /// 教训（真机第五轮项 4/6）：启动恢复以 session 快照为权威并覆盖
+  /// config，而模式类 setter 此前只写 config、session 只随参数编辑
+  /// 刷新——纯切模式/输入/设备/附加目标的会话，重启后被旧快照回退
+  /// （输入变回 WASAPI、APO 目标变空），尽管 config 里存的是对的。
+  /// 凡改 config 路由字段的 setter 一律经此落盘，禁止裸调
+  /// ConfigManager.save（config_and_presets 源码契约测试钉住）。
+  void persistRoutingChange() {
+    ConfigManager.save(config);
+    scheduleAutoSave();
+  }
+
   /// 防抖回读（决策 #4）：拉一次引擎全量 getParams，'params' 事件归来后
   /// 由分支顶部守卫决定采用或丢弃。快速频繁改动时每个 settle 窗口
   /// （autoSaveDebounceMs）只花一次往返，不在 setter 热路径上。
@@ -189,6 +202,7 @@ extension StateSession on AppModel {
       // （不预设持久化），此前恢复后 UI 分段控件显示"离散逐声道"，引擎却
       // 停在默认的矩阵模式——多声道策略在重启后静默降级。
       setInt('channels.mode', channelsMode);
+      setInt('channels.upmix_fill', channelsUpmixFill);
       setInt('channels.countMode', channelsCountMode);
       if (channelsCountMode == 1) {
         setInt('channels.count', channelsCount);

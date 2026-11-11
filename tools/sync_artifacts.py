@@ -19,12 +19,15 @@ wrapper 转发到本脚本）。语义与 PS1 版严格一致：
     Linux 消费端：
       test/、app/auradsp_app/build/linux/x64/release/bundle/lib、
       dist/AuraDSP-Linux-x64
-      （Linux 一期无桥与 plugin_host 产物，清单只有引擎 .so。）
+      （dist 目录为 bundle 布局时，二进制同步进其 lib/ 子目录，
+      与 app 的引擎/宿主搜索路径一致；平铺目录则仍落根目录。）
 
   行为（与 PS1 一致）：
     - 任一目标目录缺失或单文件拷贝失败 => 警告并跳过，不中断其余
     - 源文件缺失 => 跳过该文件，不中断
     - 本脚本不编译；编译归各平台 build 脚本
+    - 分发目录存在时刷新 build-info.txt（版本 / 提交 / 哈希清单，
+      tools/bin/dist_manifest.py）；--what-if 不写任何文件
     - --pack-zip 在同步后重打包 dist 绿色包 zip（默认关；正式 zip
       归 build_windows.ps1 Step6 / 各平台打包流程所有）
 
@@ -36,6 +39,7 @@ wrapper 转发到本脚本）。语义与 PS1 版严格一致：
 
 import argparse
 import shutil
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -85,6 +89,19 @@ def warn(msg):
     print(f"WARNING: {msg}")
 
 
+def refresh_dist_manifest(dist_dir: Path) -> None:
+    """分发目录存在时刷新 build-info.txt（产物的规范化，2026-11-05）。"""
+    script = ROOT / "tools" / "bin" / "dist_manifest.py"
+    if not dist_dir.is_dir() or not script.is_file():
+        return
+    print(f"\nRefreshing dist manifest: {dist_dir / 'build-info.txt'}")
+    rc = subprocess.call([sys.executable, str(script),
+                          "--dist-dir", str(dist_dir)])
+    if rc != 0:
+        warn(f"dist manifest generation failed (rc={rc}); "
+             "binaries were synced, manifest is stale")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="AuraDSP 产物同步（跨平台版 sync_artifacts）")
@@ -124,15 +141,22 @@ def main() -> int:
             skipped += 1
             warn(f"  copy failed (skip this file): {label} -> {e}")
 
+    dist_dir = ROOT / "dist" / dist_name
     for tgt in targets:
-        print(f"\n--- Target: {tgt}")
+        eff = tgt
+        # Linux 的 dist 分发目录是 bundle 布局（auradsp_app + lib/）：
+        # 引擎/宿主必须进 lib/ 才是 app 的实际搜索路径，落根目录
+        # 只会留下一份永远不被加载的陈旧副本。
+        if tgt == dist_dir and (tgt / "lib").is_dir():
+            eff = tgt / "lib"
+        print(f"\n--- Target: {eff}")
         if not tgt.is_dir():
             planned += len(sources)
             skipped += len(sources)
             warn(f"Target dir missing, skip whole target: {tgt}")
             continue
         for src_dir, name in sources:
-            copy_one(src_dir / name, tgt / name, name)
+            copy_one(src_dir / name, eff / name, name)
 
     # 专用拷贝（Windows：engine -> drivers out；PS1 原注：2026-10-24 VM
     # 测试抓到这条拷贝静默停留在 ABI-1 旧版，真源已到 ABI 2）
@@ -146,6 +170,9 @@ def main() -> int:
             else:
                 copy_one(src, dst, "auradsp_engine.dll -> "
                                    "windows-drivers/out/Release")
+
+    if not args.what_if:
+        refresh_dist_manifest(ROOT / "dist" / dist_name)
 
     print("\n=== Sync result ===")
     print(f"Planned {planned} files | OK {ok} | Skipped {skipped}")

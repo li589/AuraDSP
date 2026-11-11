@@ -15,6 +15,15 @@ import os
 import re
 import sys
 
+# Windows CI runner 的控制台是 cp1252，打印中文检查名会直接
+# UnicodeEncodeError 崩掉门禁（2026-11-08 S2 进 CI 后 J5 首跑实证；
+# 与 installer pack.py 的 91efc67 同一坑）。强制 UTF-8 标准流。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ENGINE = os.path.join(ROOT, "engine")
 DLL_DEFAULT = os.path.join(ROOT, "core", "desktop", "windows", "out",

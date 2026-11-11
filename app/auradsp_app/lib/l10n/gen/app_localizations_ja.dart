@@ -143,6 +143,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setConnIdle => '未接続（Voicemeeter 起動待ち）';
 
   @override
+  String get setVbNotEnabled => 'Voicemeeter が有効になっていません';
+
+  @override
   String get setDeviceDisconnected => 'デバイス未接続';
 
   @override
@@ -198,6 +201,29 @@ class AppLocalizationsJa extends AppLocalizations {
       'レジストリ保護：すべての変更は HKLM\\SOFTWARE\\AuraDSP\\Child APOs とディスク二層スナップショットで原子的に保護され、アンインストール時に元のドライバー構成を 100% 復元します。';
 
   @override
+  String get apoModeHint => 'モード切替は附加先の選択のみです。実際の附加 / 解除は下の「一括附加」「一括解除」で実行します。';
+
+  @override
+  String get apoEngineNoteActive =>
+      'APO エンジン処理中：このエンドポイントを通る音声は AuraDSP エンジンでリアルタイム処理されます（プラグインチェーンは APO モードでは動作しません）。';
+
+  @override
+  String get apoEngineNoteWaiting => 'APO は装着済みです。エンジンの準備ができるまで音声はスルーされます。';
+
+  @override
+  String get apoEngineNoteFault =>
+      'APO エンジンで障害が発生し、自動的にスルーへ戻りました（システム音声への影響はありません）。APO の再装着かアプリの再起動で再試行してください。';
+
+  @override
+  String get apoEngineNoteLoadFailed =>
+      'APO は装着済みですが、エンジンの読み込みに失敗し、音声はスルーされます。インストールが完全か確認し、再装着または再インストールしてください。';
+
+  @override
+  String setApoHeartbeat(int sr, int frames) {
+    return 'ハートビート応答中（$sr Hz · $frames フレーム）';
+  }
+
+  @override
   String setDriverOffline(String name) {
     return '$name [未検出/オフライン]';
   }
@@ -207,6 +233,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get setVaioMissing => 'AuraVAIO 仮想サウンドカードドライバーが見つかりません';
+
+  @override
+  String get setVaioUnknown => 'AuraVAIO ドライバーの状態は未検出です';
 
   @override
   String get setVaioDesc => 'KMDF カーネルモード仮想オーディオドライバー。全二重の仮想オーディオケーブルを提供';
@@ -222,6 +251,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setVaioInstallOk => 'AuraVAIO ドライバーのインストールと検証が完了しました！';
 
   @override
+  String get setVaioInstallUnverified =>
+      'ドライバーのインストールが反映されていません：AuraVAIO デバイスが検出されません（テスト署名が無効な環境ではドライバーを読み込めません。有効化して再試行してください）';
+
+  @override
   String get setDriverInstallFailed => 'ドライバーのインストールが完了しませんでした';
 
   @override
@@ -231,16 +264,20 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setVaioUninstallOk => 'AuraVAIO ドライバーをアンインストールしました';
 
   @override
+  String get setVaioUninstallUnverified =>
+      'ドライバーのアンインストールが反映されていません：AuraVAIO デバイスがまだ検出されます';
+
+  @override
   String get setDriverUninstallFailed => 'アンインストールが完了しませんでした';
 
   @override
-  String get setRedetect => '再検出';
+  String get setRedetect => '検出';
 
   @override
   String get setWasapiDesc => 'システム標準の WASAPI 共有/排他オーディオエンジン。追加ドライバー不要';
 
   @override
-  String get setRefreshDevice => 'デバイスを更新';
+  String get setRefreshDevice => '検出';
 
   @override
   String get setAsioRegisterUac => 'ドライバーを登録（UAC）';
@@ -487,6 +524,24 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get ioNoOutputDevices => '利用可能な出力デバイスがありません';
+
+  @override
+  String get ioNoAvailableSoundCard => '利用可能なサウンドカードなし';
+
+  @override
+  String get ioInputOverriddenByVaio =>
+      'VAIOブリッジチェーンで駆動中です。この入力の選択は無効です。プレーヤーの出力を AuraVAIO エンドポイントに向けてください';
+
+  @override
+  String get ioOutputOverriddenByVaio =>
+      'VAIOブリッジチェーンで駆動中です。この出力デバイスの選択は無効です。物理的な出力先は出力タイプを VAIO に切り替えて設定してください';
+
+  @override
+  String get ioOutputOverriddenByAsio =>
+      'ASIOブリッジチェーンで駆動中です。この出力の選択は無効です。出力は ASIO ドライバーが決定します';
+
+  @override
+  String get ioOnlyVirtualOutputs => '仮想出力エンドポイントのみ（物理サウンドカードなし）';
 
   @override
   String get ioPhysicalOutput => '物理出力';
@@ -1112,6 +1167,18 @@ class AppLocalizationsJa extends AppLocalizations {
       '入力またはデバイスがマルチチャンネル（4.0 / 5.1 / 7.1）時のDSP方針：ディスクリート＝全チャンネルが独立してDSPを通過、エフェクターごとのマスク設定やアップミックスに対応；マトリックス＝ステレオに畳み込んでDSP処理後に再展開（LFE直通）。バイノーラル仮想サラウンド有効時はそちらが最優先されます。';
 
   @override
+  String get upmixFill => '未使用チャンネルの充填';
+
+  @override
+  String get upmixFillHint =>
+      'オフにするとステレオ音源は未使用チャンネルを埋めません。サラウンド音源は影響を受けず、LFE は直通します。';
+
+  @override
+  String meterBusScope(String bus, int ch) {
+    return '$bus · $ch ch';
+  }
+
+  @override
   String get audioMode => 'オーディオモード';
 
   @override
@@ -1122,7 +1189,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get audioParadigmHint =>
-      'オーディオ接続形態の選択：アタッチメントモードはインプレース傍受、パイプラインモードはエンドツーエンド転送（ADR-009）';
+      'オーディオ接続形態の選択：アタッチメントモードはインプレース傍受、パイプラインモードはエンドツーエンド転送';
 
   @override
   String get paradigmAttachment => 'アタッチメントモード';
@@ -1191,6 +1258,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get driverLayerTitle => 'ドライバ情報と制御';
 
   @override
+  String get osVersionLabel => 'OS';
+
+  @override
   String get inputLayerTitle => 'オーディオ入力';
 
   @override
@@ -1234,6 +1304,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get apoAttached => 'アタッチ済み';
 
   @override
+  String apoAttachedOn(String name) {
+    return '$name に接続済み';
+  }
+
+  @override
   String get apoNotAttached => '未アタッチ';
 
   @override
@@ -1244,6 +1319,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get asioDriverCardTitle => 'AuraDSP 仮想 ASIO ドライバー';
+
+  @override
+  String get vaioDriverCardTitle => 'AuraVAIO 仮想オーディオドライバ';
+
+  @override
+  String get wasapiDriverCardTitle => 'WASAPI オーディオエンジン';
 
   @override
   String get asioDriverStatus => 'ドライバー状態';
@@ -1270,7 +1351,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get asioDawIdle => '待機中 (DAW の接続待ち)';
 
   @override
-  String get asioStatusCheck => '状態確認';
+  String get asioStatusCheck => '検出';
 
   @override
   String get virtualSinkNotice =>
@@ -1485,6 +1566,30 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get catTest => 'テスト';
+
+  @override
+  String get catAbout => 'について';
+
+  @override
+  String get aboutVersion => 'バージョン';
+
+  @override
+  String get aboutForm => '形態';
+
+  @override
+  String get aboutDeveloper => '開発者';
+
+  @override
+  String get aboutRepo => 'ソースコード';
+
+  @override
+  String get aboutLicense => 'ライセンス';
+
+  @override
+  String get aboutRefs => '参照プロジェクト';
+
+  @override
+  String get aboutOpenFailed => 'リンクを開けませんでした。手動でアクセスしてください';
 
   @override
   String get pageHomeEyebrow => 'コンソール';
@@ -1742,6 +1847,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get visualizerStyleTornado => 'パーティクル竜巻';
 
   @override
+  String get visualizerStyleNebulaFlow => 'ネビュラフロー';
+
+  @override
   String get visualizerThemeSystem => 'システムテーマ';
 
   @override
@@ -1755,6 +1863,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get visualizerThemeAuroraGlow => 'オーロラグロー';
+
+  @override
+  String get visualizerThemeEmeraldMist => 'エメラルドミスト';
 
   @override
   String get themeSwitchTip => '配色を切り替え';
@@ -3062,6 +3173,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugLoading => 'ロード中…';
 
   @override
+  String get vbRouteLoading => '読み込み中・スルー';
+
+  @override
+  String get vbRouteReleasing => '解放中・スルー';
+
+  @override
+  String get vbRouteFailed => '失敗・スルー';
+
+  @override
+  String get vbRouteNotApplied => '未反映・スルー';
+
+  @override
   String get plugUnloading => 'アンロード中…';
 
   @override
@@ -3450,6 +3573,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get errInternal => 'エンジン内部エラー';
 
   @override
+  String get errHostUnavailable => 'ホストが利用できません';
+
+  @override
   String get lpFindReplace => '検索と置換';
 
   @override
@@ -3503,6 +3629,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get lpTitleEditor => 'EEL2 エディタ';
+
+  @override
+  String get lpTargetStereo => 'ステレオスクリプト';
+
+  @override
+  String get lpTargetMultichannel => 'マルチチャンネルスクリプト';
+
+  @override
+  String get lpMcHint =>
+      'マルチチャンネルモード（チャンネル数 > 2）で動作し、全 8 チャンネル spl0..spl7 を読み書きできます';
 
   @override
   String get lpBtnApplied => '適用中';

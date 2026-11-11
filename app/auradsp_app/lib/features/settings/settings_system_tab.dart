@@ -54,10 +54,7 @@ List<Widget> buildSystemTab(BuildContext context, AppModel model) {
                 icon: Icons.delete_outline_rounded,
                 onTap: () {
                   SessionMemory.clear();
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(l.memCleared),
-                    duration: const Duration(milliseconds: 1400),
-                  ));
+                  model.postNotice(l.memCleared);
                 },
               ),
               const SizedBox(width: AuraSpace.sm),
@@ -66,10 +63,7 @@ List<Widget> buildSystemTab(BuildContext context, AppModel model) {
                 icon: Icons.restore_rounded,
                 onTap: () {
                   model.resetConfig();
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(l.memResetDone),
-                    duration: const Duration(milliseconds: 1400),
-                  ));
+                  model.postNotice(l.memResetDone);
                 },
               ),
             ],

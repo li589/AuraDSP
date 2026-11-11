@@ -29,8 +29,14 @@ AuraDSP 是核心音频效果器应用，与 Linux 底层音频架构（PulseAud
 `.deb` 包用于适配所有 Debian 系生态系统（Debian, Ubuntu, Linux Mint, Pop!_OS, Deepin, Kylin 等）。
 
 ### 2.1 文件系统层级规范 (FHS Layout)
+
+> **实现注（2026-11-06）**：Flutter runner 要求主程序与 `lib/`、`data/`
+> 保持 bundle 原生相对结构，下方示意树中的引擎/宿主实际随 bundle 的
+> `lib/` 子目录装入 `/usr/lib/auradsp/lib/`，不拆平到 `/usr/lib/auradsp/`
+> 根下；其余（bin 链接、share 布局）与示意一致。实现见
+> `installer/linux/deb/build_deb.sh`。
 ```text
-auradsp_0.5.0-1_amd64/
+auradsp_0.1.0-1_amd64/
 ├── DEBIAN/
 │   ├── control                     # 包元数据与 APT 依赖
 │   ├── postinst                    # 安装后脚本 (更新 desktop/icon 缓存)
@@ -61,7 +67,7 @@ auradsp_0.5.0-1_amd64/
 ### 2.2 `DEBIAN/control` 规范示例
 ```ini
 Package: auradsp
-Version: 0.5.0-1
+Version: 0.1.0-1
 Section: sound
 Priority: optional
 Architecture: amd64
@@ -126,7 +132,7 @@ exec "${HERE}/usr/bin/auradsp_app" "$@"
 
 ### 4.1 Flatpak 规格 (`installer/linux/flatpak/`)
 - **应用 ID**：`org.auradsp.AuraDSP`
-- **运行时环境**：`org.freedesktop.Platform // 23.08`
+- **运行时环境**：`org.freedesktop.Platform // 25.08`（2026-11-06 更新，见 05 号规划 §2.2）
 - **沙盒权限配置 (`finish-args`)**：
   ```yaml
   finish-args:
@@ -140,7 +146,7 @@ exec "${HERE}/usr/bin/auradsp_app" "$@"
 
 ### 4.2 Snap 规格 (`installer/linux/snap/`)
 - **应用名称**：`auradsp`
-- **基础镜像**：`core22`
+- **基础镜像**：`core24`（2026-11-06 更新，见 05 号规划 §2.2）
 - **权限插槽 (Plugs)**：
   ```yaml
   plugs:
@@ -156,9 +162,37 @@ exec "${HERE}/usr/bin/auradsp_app" "$@"
 ---
 
 ## 5. 打包自动化产物落地
+打包入口：`installer/linux/pack.sh`（读取 `installer/shared/version_resolver.py`
+导出的版本号；输入为 Flutter Linux bundle + 引擎产物，见 `installer/linux/README.md`）。
 所有打包产物统一输出到根目录 `dist/`：
-- `dist/auradsp_0.5.0_amd64.deb`
-- `dist/AuraDSP-v0.5.0-x86_64.AppImage`
-- `dist/org.auradsp.AuraDSP.flatpak` (预留)
-- `dist/auradsp_0.5.0_amd64.snap` (预留)
+- `dist/auradsp_0.1.0_amd64.deb`（正式安装包）
+- `dist/auradsp-driver-loopback_0.1.0_all.deb`（驱动包，见 §6）
+- `dist/AuraDSP-v0.1.0-x86_64.AppImage`（便携包）
+- `dist/AuraDSP-Linux-x64-v0.1.0.tar.gz`（便携包补充形态）
+- `dist/org.auradsp.AuraDSP.flatpak` (预留，manifest 已备)
+- `dist/auradsp_0.1.0_amd64.snap` (预留，snapcraft.yaml 已备)
+
+---
+
+## 6. Linux 驱动包：`auradsp-driver-loopback`（snd-aloop 配置包）
+
+Linux 无自研内核驱动；AuraDSP 的「驱动模式」依赖内核自带模块 **snd-aloop**
+（回环声卡 `hw:Loopback`）。驱动包的职责是把该模块的自启与参数固化下来，
+使驱动模式开箱可用，与 01 §2.3 的「每平台驱动包」构成对齐。
+
+```text
+auradsp-driver-loopback/
+├── etc/
+│   ├── modules-load.d/auradsp-loopback.conf   # 内容：snd-aloop（开机自启）
+│   └── modprobe.d/auradsp-loopback.conf       # options snd-aloop enable=1（参数固化）
+└── usr/
+    └── lib/auradsp-driver-loopback/
+        └── auradsp-loopback-check             # 自检脚本：模块在位/声卡可见性报告
+```
+
+- 架构 `all`（纯配置，无二进制）；与主包无硬依赖，可独立安装/卸载。
+- `postinst` 尽力即时加载一次（`modprobe snd-aloop`，失败不中断安装——
+  如容器/无权限环境，配置仍会在下次开机生效）。
+- 卸载（`postrm`）只移除配置，不强制卸载正在使用的模块。
+- 实现：`installer/linux/driver/`，由 `pack.sh` 一并构建。
 

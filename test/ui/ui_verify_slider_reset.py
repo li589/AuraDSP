@@ -35,10 +35,19 @@ _cur_class = 'front'   # effectsCategory 不持久化，每次启动必为 front
 
 # core 类全折叠态：第 1 卡（动态压限器）开关中心（灰色 OFF 态实测 knob 中心 1279）。
 _COMP_SW = (1279, 350)
-# comp 卡展开后（首屏、无需滚动）：
-_COMP_MAIN_ROW = (340, 415, 1320, 465)     # 主滑块「响应时常数」
-_COMP_ADV_HEAD = (460, 497)                # 高级折叠头
-_COMP_ADV_ROW = (340, 720, 1320, 775)      # 高级区「输出增益门」滑块
+# comp 卡展开后的几何（卡片改版后重测，1400x900 实测）：
+#   * 主滑块三行：压缩阈值 y≈647 / 压缩比率 y≈714 / 响应时常数 y≈780（滚动到顶时）
+#   * 「高级」折叠头挪到卡片**底部**，需先向下滚 3 格进视口，此时稳定在 y≈538
+#   * 高级抽屉内容改版：不再有「输出增益门」滑块，现为「分频中心频率」(y≈805)
+#     与「压限·扩展数值」(y≈858)；抽屉顶部是「分析颗粒度/时频分辨率」两组 chip
+# 旧值（主行 415..465 / 折叠头 497 / 高级行 720..775）是改版前坐标，
+# 落在空白处 → find_thumb 直接抛「未能定位 Thumb」，点空也不报错。
+_COMP_MAIN_ROW = (340, 760, 1320, 800)     # 主滑块「响应时常数」
+_SCROLL_DOWN = 3                            # 把卡片底部的「高级」折叠头带进视口
+_COMP_ADV_HEAD = (460, 538)                # 高级折叠头（滚下 3 格后）
+_COMP_ADV_ROW = (340, 790, 1320, 825)      # 高级区「分频中心频率」滑块
+# 归位图标实测 x≈1295（各行右端的 ⟳），行右端取 1320 会覆盖到图标。
+_RESET_X = 1295
 # spatial 类：空间 mega 卡开关与「房间」滑块（归位图标实测 x≈1247，
 # 故行右端取 1265 而非 1320，确保 reset_box 覆盖图标）。
 _SPATIAL_SW = (1280, 361)
@@ -141,12 +150,15 @@ def _run(app):
     collapse_all(app)            # 全折叠后第 1 卡位置恒定
     ensure_switch_on(app, *_COMP_SW, label="动态压限器主开关")
     time.sleep(0.8)
-    drag_and_reset(app, _COMP_MAIN_ROW, 1306, "压限器主滑块", "20-comp-main-reset.png")
+    drag_and_reset(app, _COMP_MAIN_ROW, _RESET_X, "压限器主滑块", "20-comp-main-reset.png")
 
     print("\n[Step 3] 展开高级区，高级区滑块拖拽与归位...")
+    # 卡片改版后「高级」折叠头在卡片底部：向下滚 3 格把它带进视口再点。
+    app.scroll(700, 500, clicks=-_SCROLL_DOWN, delay=0.5)
+    time.sleep(1.0)
     app.click(*_COMP_ADV_HEAD, delay=0.8)
     time.sleep(0.9)              # AnimatedCrossFade 展开
-    drag_and_reset(app, _COMP_ADV_ROW, 1284, "输出增益门", "22-comp-adv-reset.png")
+    drag_and_reset(app, _COMP_ADV_ROW, _RESET_X, "分频中心频率", "22-comp-adv-reset.png")
 
     print("\n[Step 4] 空间类：空间卡滑块实测...")
     select_category(app, 'spatial')

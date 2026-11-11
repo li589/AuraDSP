@@ -27,6 +27,17 @@ static ULONG                    g_ulRingTotalSize       = 0;
 static PMDL                     g_pRingMdl              = NULL;
 static PVOID                    g_pMappedUserAddress    = NULL;
 static PEPROCESS                g_pMappedProcess        = NULL;
+// 映射归属的 FILE_OBJECT（第六轮项 1 定罪）：IRP_MJ_CLEANUP 在
+// 同进程任意控制句柄关闭时都会到达，旧实现只按进程判定就解
+// 映射——App 里 vaio_detect 开/关一次控制设备，就把正在运行
+// 的桥泵线程的环映射拆了，泵下一次读共享头即 AV（WinDbg 实
+// 证 auravaio_bridge+0x6d51 读 header->Channels）。CLEANUP 只
+// 许拆「建立映射的那个文件对象」自己的映射。
+static PFILE_OBJECT             g_pMappedFileObject     = NULL;
+// GET_DEBUG_LOG 持久持有者（2026-11-08 审计·调试低6）：最近一次成功
+// MAP 的进程。解映射时**不清**（校验要覆盖解映射后的窗口），持有者
+// 进程退出时由 Cleanup 路径清除。受 g_RingLock 保护。
+static PEPROCESS                g_pDebugLogHolder       = NULL;
 static KSPIN_LOCK               g_RingLock;
 static LONG                     g_lActiveRenderStreams  = 0;
 static LONG                     g_lActiveCaptureStreams = 0;
@@ -185,6 +196,7 @@ AuraControlDevice_Destroy(
         }
         g_pMappedUserAddress = NULL;
         g_pMappedProcess = NULL;
+        g_pMappedFileObject = NULL;
     }
     KeReleaseSpinLock(&g_RingLock, oldIrql);
 
@@ -260,12 +272,17 @@ AuraControlDevice_DispatchCleanup(
 {
     KIRQL oldIrql;
     PEPROCESS currentProc = PsGetCurrentProcess();
+    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(Irp);
 
     UNREFERENCED_PARAMETER(DeviceObject);
     AURA_TRACE("ControlDevice Cleanup (proc=%p)\n", currentProc);
 
     KeAcquireSpinLock(&g_RingLock, &oldIrql);
-    if (g_pMappedUserAddress != NULL && g_pMappedProcess == currentProc && g_pRingMdl != NULL)
+    // 只拆建立映射的文件对象本身的 cleanup（第六轮项 1 定罪）：
+    // 同进程其他句柄（detect 探测等）的关闭不得拆在用映射。
+    if (g_pMappedUserAddress != NULL && g_pMappedProcess == currentProc &&
+        g_pMappedFileObject != NULL && stack->FileObject == g_pMappedFileObject &&
+        g_pRingMdl != NULL)
     {
         __try
         {
@@ -278,6 +295,12 @@ AuraControlDevice_DispatchCleanup(
         }
         g_pMappedUserAddress = NULL;
         g_pMappedProcess = NULL;
+        g_pMappedFileObject = NULL;
+    }
+    // 持有者进程退出：释放 GET_DEBUG_LOG 的持久持有记录（审计低6）。
+    if (g_pDebugLogHolder == currentProc)
+    {
+        g_pDebugLogHolder = NULL;
     }
     KeReleaseSpinLock(&g_RingLock, oldIrql);
 
@@ -423,6 +446,8 @@ AuraControlDevice_DispatchDeviceControl(
                 {
                     g_pMappedUserAddress = userVa;
                     g_pMappedProcess     = currentProc;
+                    g_pMappedFileObject  = stack->FileObject;
+                    g_pDebugLogHolder    = currentProc;
                 }
             }
 
@@ -490,6 +515,7 @@ AuraControlDevice_DispatchDeviceControl(
                 }
                 g_pMappedUserAddress = NULL;
                 g_pMappedProcess = NULL;
+                g_pMappedFileObject = NULL;
                 ntStatus = STATUS_SUCCESS;
             }
             else
@@ -506,11 +532,43 @@ AuraControlDevice_DispatchDeviceControl(
             ntStatus = STATUS_BUFFER_TOO_SMALL;
             break;
         }
+        // DRV-04 follow-up: reading the debug log drains it (copy + clear),
+        // so while the ring is mapped, only the holding process may read it.
+        // A non-holder must not be able to wipe the owner's diagnostics.
+        // The holder snapshot is taken under g_RingLock and released before
+        // g_DebugLock is acquired (no nested locking anywhere in this file).
+        {
+            PEPROCESS currentProc = PsGetCurrentProcess();
+            BOOLEAN denied = FALSE;
+            KeAcquireSpinLock(&g_RingLock, &oldIrql);
+            // 审计·调试低6：校验不能只在映射期生效——解映射后旧实现
+            // 任意本地进程都能读走并清掉日志。映射中以当前持有者为
+            // 准；解映射后以 g_pDebugLogHolder（最近一次成功 MAP 的
+            // 进程）为准，直到该进程退出由 Cleanup 清除记录。从未
+            // MAP 过时不设防（此时日志只有格式协商记录，探针工具的
+            // 独立读取依赖这一点）。
+            {
+                const PEPROCESS holder = (g_pMappedUserAddress != NULL)
+                                             ? g_pMappedProcess
+                                             : g_pDebugLogHolder;
+                if (holder != NULL && holder != currentProc)
+                {
+                    denied = TRUE;
+                }
+            }
+            KeReleaseSpinLock(&g_RingLock, oldIrql);
+            if (denied)
+            {
+                ntStatus = STATUS_ACCESS_DENIED;
+                break;
+            }
+        }
         {
             PAURA_DEBUG_LOG pLog = reinterpret_cast<PAURA_DEBUG_LOG>(systemBuffer);
             KeAcquireSpinLock(&g_DebugLock, &oldIrql);
             RtlCopyMemory(pLog, &g_DebugLog, sizeof(AURA_DEBUG_LOG));
             g_DebugLog.Count = 0;
+            g_DebugLog.WriteIndex = 0;
             RtlZeroMemory(g_DebugLog.Entries, sizeof(g_DebugLog.Entries));
             KeReleaseSpinLock(&g_DebugLock, oldIrql);
             bytesReturned = sizeof(AURA_DEBUG_LOG);
@@ -756,10 +814,20 @@ AuraControlDevice_LogIntersection(
 {
     KIRQL oldIrql;
     KeAcquireSpinLock(&g_DebugLock, &oldIrql);
-    if (g_DebugLog.Count < 32)
+    // 审计·调试低7：真环形（写满后覆盖最旧）+ 驱动侧盖系统时间戳。
+    // 旧实现是 32 条写满即丢弃新条目且无时间：长会话里最关键的首
+    // 发交集记录反而留不住，也无法与用户态日志对时。
     {
-        g_DebugLog.Entries[g_DebugLog.Count] = *Entry;
-        g_DebugLog.Count++;
+        AURA_INTERSECTION_LOG_ENTRY stamped = *Entry;
+        LARGE_INTEGER now = {0};
+        KeQuerySystemTime(&now);
+        stamped.Timestamp100ns = static_cast<ULONGLONG>(now.QuadPart);
+        g_DebugLog.Entries[g_DebugLog.WriteIndex % 32] = stamped;
+        g_DebugLog.WriteIndex++;
+        if (g_DebugLog.Count < 32)
+        {
+            g_DebugLog.Count++;
+        }
     }
     KeReleaseSpinLock(&g_DebugLock, oldIrql);
 }

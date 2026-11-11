@@ -208,6 +208,12 @@ final class WasapiOut implements AudioOut {
   /// 本次 init 选中的端点实名（排障用；_hr 失败时拼进异常，红屏直接见名）。
   String endpointName = '';
 
+  /// 指定端点 ID（MMDevice id）：非空时 init 改走
+  /// IMMDeviceEnumerator::GetDevice 按 ID 打开（管线本地
+  /// 捕获链按 pipelineOutputDevice 重建输出用）；空 = 系统
+  /// 默认端点（既有行为）。init 前赋值，init 后只读。
+  String endpointId = '';
+
   /// 实际协商到的设备采样率（供泵循环/引擎建链使用）。
   @override
   int get sampleRate => mix.sampleRate;
@@ -240,18 +246,36 @@ final class WasapiOut implements AudioOut {
 
     // ---- 按时序交错绑定/调用（vtable 绑定依赖前一步产出的对象指针） ----
 
-    // IMMDeviceEnumerator::GetDefaultAudioEndpoint(eRender=0, eMultimedia=1)
-    final getDefaultAudioEndpoint = _vt<NativeFunction<
-            Int32 Function(Pointer<Void>, Int32, Int32,
-                Pointer<Pointer<Void>>)>>(enumerator, 4)
-        .asFunction<int Function(Pointer<Void>, int, int,
-            Pointer<Pointer<Void>>)>();
     final pDev = malloc<Pointer<Void>>();
-    _hr('GetDefaultAudioEndpoint',
-        getDefaultAudioEndpoint(enumerator, 0, 1, pDev));
+    if (endpointId.isNotEmpty) {
+      // IMMDeviceEnumerator::GetDevice(端点 ID)：按 ID 打开指定
+      // 设备（vtable 索引 5，紧随 GetDefaultAudioEndpoint）。
+      // ID 失效/设备消失由 _hr 抛错，调用方负责回滚。
+      final getDevice = _vt<NativeFunction<
+              Int32 Function(Pointer<Void>, Pointer<Utf16>,
+                  Pointer<Pointer<Void>>)>>(enumerator, 5)
+          .asFunction<int Function(Pointer<Void>, Pointer<Utf16>,
+              Pointer<Pointer<Void>>)>();
+      final idPtr = endpointId.toNativeUtf16();
+      try {
+        _hr('GetDevice', getDevice(enumerator, idPtr, pDev));
+      } finally {
+        malloc.free(idPtr);
+      }
+      dbgLog('GetDevice ok (by endpointId)');
+    } else {
+      // IMMDeviceEnumerator::GetDefaultAudioEndpoint(eRender=0, eMultimedia=1)
+      final getDefaultAudioEndpoint = _vt<NativeFunction<
+              Int32 Function(Pointer<Void>, Int32, Int32,
+                  Pointer<Pointer<Void>>)>>(enumerator, 4)
+          .asFunction<int Function(Pointer<Void>, int, int,
+              Pointer<Pointer<Void>>)>();
+      _hr('GetDefaultAudioEndpoint',
+          getDefaultAudioEndpoint(enumerator, 0, 1, pDev));
+      dbgLog('GetDefaultAudioEndpoint ok');
+    }
     device = pDev.value;
     malloc.free(pDev);
-    dbgLog('GetDefaultAudioEndpoint ok');
 
     // 端点实名（排障用：再报 DEVICE_INVALIDATED 时，日志直接写明是哪块设备，
     // 不用猜默认端点是谁）。PKEY_Device_FriendlyName =
@@ -514,9 +538,19 @@ final class WasapiOut implements AudioOut {
     started = false;
   }
 
+  /// FAIL 日志采样：异常照抛（上层计数/恢复语义不变），日志行
+  /// 只记前 5 次、之后每 200 次 1 次——端点死亡时泵 20ms 一轮
+  /// 重试，无采样即日志洪水（真机报告 2026-11-09）。
+  /// 实例级而非 static（细审 R-B 低 5）：static 计数跨实例/
+  /// 跨会话共享，第一个端点死亡吃满 head 后，换端点/新会话
+  /// 的 FAIL 首现也被采样吞掉、排障首证据缺失。
+  final ThrottledLog _failLog = ThrottledLog('wasapi-fail', head: 5, every: 200);
+
   void _hr(String what, int hr) {
     if (hr < 0) {
-      dbgLog('WASAPI FAIL $what hr=0x${(hr & 0xFFFFFFFF).toRadixString(16)}');
+      if (_failLog.shouldLog) {
+        dbgLog('WASAPI FAIL $what hr=0x${(hr & 0xFFFFFFFF).toRadixString(16)}');
+      }
       throw StateError('WASAPI $what failed hr=0x${(hr & 0xFFFFFFFF).toRadixString(16)}'
           '${endpointName.isNotEmpty ? " (endpoint: $endpointName)" : ""}');
     }

@@ -13,6 +13,12 @@
  * 即时生效；vaio/sysapo 选择仅持久化（VAIO 驱动点亮后接线）。
  * 方向锁定：WASAPI 渲染最终只收敛于 AuraVAIO 模式，sysapo 回归纯配置面；
  * 进程内链路是过渡形态，不再上新功能。
+ *
+ * 【2026-11-10 业主裁定变更】管线模式全接线推翻了上款对管线
+ * 输入侧的适用：管线输入 WASAPI 的回录捕获链（进程内本地链）
+ * 正式接线为受支持链路（见 composeChain）；「不再上新功能」
+ * 只余对 sysapo/附加范式的约束。管线合成规则以 composeChain
+ * 为唯一真相：输入第一次参与合成，切换输入即驱动链路起停。
  */
 import '../platform/platform_profile.dart';
 
@@ -147,7 +153,141 @@ abstract final class AudioModes {
     }
     return 'vaio';
   }
+
+  /// 管线链路合成（全接线，2026-11-10 业主裁定）：输入第一次
+  /// 参与合成——链路由（输入, 输出）共同决定，切换任一端都
+  /// 必须重估链路（state 的 applyPipelineChain 是唯一下发方）。
+  ///
+  /// 规则（桥自带双端，输入选择从属于桥）：
+  /// - 输出 ASIO 客户端 或 输入 ASIO 驱动 -> asio 桥链；
+  /// - 输入 VAIO -> vaio 桥链（环的消费方只有 VAIO 桥）；
+  /// - 输入 WASAPI + 输出 WASAPI -> capture 本地捕获链
+  ///   （回录/直采 -> 本地引擎 -> 指定输出端点）；
+  /// - 输入 WASAPI + 输出 VAIO -> vaio 桥链（桥不接受外源
+  ///   注入；播放器须改投 VAIO 端点，面板指引已有此口径）；
+  /// - 其余/未知 -> vaio 桥链（历史默认）。
+  static PipelineChain composeChain({
+    required String input,
+    required String output,
+  }) {
+    if (output == outputAsioClient || input == inputAsioDriver) {
+      return PipelineChain.asio;
+    }
+    if (input == inputVaio) return PipelineChain.vaio;
+    if (input == inputWasapi && output == outputWasapi) {
+      return PipelineChain.capture;
+    }
+    return PipelineChain.vaio;
+  }
+
+  /// 模式切换时对 pipelineOutput 的覆写（非损口径，2026-11-09
+  /// 真机报告 §2.1）：引擎模式与输出端是多对一映射（wasapi/vaio
+  /// 输出同合成 vaio 模式），覆写只纠正与模式硬冲突的选择——
+  /// asio 模式必须 ASIO 输出；vaio 模式下残留的 ASIO 选择降为
+  /// VAIO；其余情况不得改动用户已选的兼容输出（历史上把
+  /// wasapi 覆写成 vaio，输出分段控件被拖回中间项、需二次
+  /// 点击才落位）。纯函数：setAudioMode 的 OS 归一化使
+  /// AppModel 级 Windows 管线用例无法在 Linux CI 运行，本
+  /// helper 即落位口径的可测接缝。
+  static String pipelineOutputForMode(String mode, String current) {
+    if (mode == 'asio') return outputAsioClient;
+    if (mode == 'vaio') {
+      return current == outputAsioClient ? outputVaio : current;
+    }
+    return outputWasapi;
+  }
+
+  /// 模式能力查表（Q0-7 定版）：sysapo 的 fileEffects/mcScript
+  /// 为 false 是已上线口径（文件型效果自动关闭、MC 脚本不入
+  /// 参数块）的能力化重述，非新限制。未知 id 回退本地链缺省。
+  static ModeCaps capsFor(String mode) {
+    switch (mode) {
+      case 'sysapo':
+        return const ModeCaps(
+          pluginProcessing: PluginProcessing.apo,
+          pluginEditors: PluginEditors.shadowInstance,
+          pluginLiveMeters: false,
+          routeSelector: false,
+          fileEffects: false,
+          mcScript: false,
+          chainVizLive: true,
+        );
+      case 'vbcallback':
+      case 'voicemeeter_api':
+        return const ModeCaps(
+          pluginProcessing: PluginProcessing.local,
+          pluginEditors: PluginEditors.liveInstance,
+          pluginLiveMeters: true,
+          routeSelector: true,
+          fileEffects: true,
+          mcScript: true,
+          chainVizLive: true,
+        );
+      default:
+        return ModeCaps.localDefault;
+    }
+  }
 }
+
+/// 插件处理位置（ModeCaps.pluginProcessing）。
+enum PluginProcessing { local, apo, none }
+
+/// 插件编辑器形态（ModeCaps.pluginEditors）：liveInstance =
+/// 编辑器开在发声实例上；shadowInstance = 编辑器开在 App 侧
+/// 影子实例上（发声在 APO 内），状态经收获/发布同步。
+enum PluginEditors { liveInstance, shadowInstance, none }
+
+/// 模式能力模型（Part I Q0-7 定版，2026-11-10）：功能层只问
+/// 能力、不再写模式字符串判断。随模式变化的能力才进本表；
+/// 故障旁路的呈现与恢复语义与模式无关、不进本表（计划书
+/// I.4——那是槽状态 fault 字段在插件栈一处的决定）。
+class ModeCaps {
+  final PluginProcessing pluginProcessing;
+  final PluginEditors pluginEditors;
+
+  /// 插件槽实时表头（inRms/outRms）是否有实时来源。
+  final bool pluginLiveMeters;
+
+  /// VB 路线选择类 UI（插件页路线下拉、频谱仪总线行）。
+  final bool routeSelector;
+
+  /// 依赖外部文件的效果（卷积 IR / DDC）是否可用。
+  final bool fileEffects;
+
+  /// 多声道 EEL 脚本级是否可用。
+  final bool mcScript;
+
+  /// 处理链可视化是否有实时来源。
+  final bool chainVizLive;
+
+  const ModeCaps({
+    required this.pluginProcessing,
+    required this.pluginEditors,
+    required this.pluginLiveMeters,
+    required this.routeSelector,
+    required this.fileEffects,
+    required this.mcScript,
+    required this.chainVizLive,
+  });
+
+  /// 本地链缺省能力（未知/新模式的回退：与历史行为一致）。
+  static const ModeCaps localDefault = ModeCaps(
+    pluginProcessing: PluginProcessing.local,
+    pluginEditors: PluginEditors.liveInstance,
+    pluginLiveMeters: true,
+    routeSelector: false,
+    fileEffects: true,
+    mcScript: true,
+    chainVizLive: true,
+  );
+}
+
+/// 管线链路种类（composeChain 的产出）：vaio/asio 为桥链，
+/// capture 为本地捕获链（进程内引擎 + WASAPI 捕获源 +
+/// 指定端点输出）。capture 不是 audioMode id——模式簿记仍由
+/// composeMode 产出（vaio），链路是管线类别内的子状态，由
+/// isolate 的 capturestatus 事件回填。
+enum PipelineChain { vaio, asio, capture }
 
 /// Linux 三模式卡的提示决策（打磨二期，纯逻辑可单测）。
 ///

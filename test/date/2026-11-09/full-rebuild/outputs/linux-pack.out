@@ -1,0 +1,76 @@
+AuraDSP Linux packaging — version 0.1.0 (tag v0.1.0)
+== --build: engine -> app bundle -> sync ==
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/li/Workspace/AuraDSP/build/linux/x64
+[0/2] Re-checking globbed directories...
+ninja: no work to do.
+Resolving dependencies...
+Downloading packages...
+  code_assets 2.1.0 (2.2.0 available)
+  cross_file 0.3.5+5 (0.4.0 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  native_toolchain_c 0.19.5 (0.19.6 available)
+  screen_retriever 0.2.2 (0.3.1 available)
+  test_api 0.7.12 (0.7.15 available)
+  window_manager 0.5.2 (0.6.0 available)
+Got dependencies!
+7 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Building Linux application...                                   
+✓ Built build/linux/x64/release/bundle/auradsp_app
+manifest -> /home/li/Workspace/AuraDSP/dist/AuraDSP-Linux-x64/build-info.txt (4 artifacts)
+ProjectRoot: /home/li/Workspace/AuraDSP
+Source files: 3 | Target endpoints: 3
+
+--- Target: /home/li/Workspace/AuraDSP/test
+  OK  libauradsp_engine.so
+  OK  plugin_host_x64
+  OK  plugin_host_x86
+
+--- Target: /home/li/Workspace/AuraDSP/app/auradsp_app/build/linux/x64/release/bundle/lib
+  OK  libauradsp_engine.so
+  OK  plugin_host_x64
+  OK  plugin_host_x86
+
+--- Target: /home/li/Workspace/AuraDSP/dist/AuraDSP-Linux-x64
+  OK  libauradsp_engine.so
+  OK  plugin_host_x64
+  OK  plugin_host_x86
+
+Refreshing dist manifest: /home/li/Workspace/AuraDSP/dist/AuraDSP-Linux-x64/build-info.txt
+
+=== Sync result ===
+Planned 9 files | OK 9 | Skipped 0
+bundle: /home/li/Workspace/AuraDSP/app/auradsp_app/build/linux/x64/release/bundle
+out:    /home/li/Workspace/AuraDSP/dist
+built: /home/li/Workspace/AuraDSP/dist/auradsp_0.1.0_amd64.deb
+built: /home/li/Workspace/AuraDSP/dist/auradsp-driver-loopback_0.1.0_all.deb
+tool ok: appimagetool 1.9.1 (sha256 verified)
+tool ok: type2-runtime 20251108 (sha256 verified)
+appimagetool, continuous build (git version 8c8c91f), build 296 built on 2025-12-04 17:55:56 UTC
+Using architecture x86_64
+WARNING: AppStream upstream metadata is missing, please consider creating it
+         in usr/share/metainfo/auradsp.appdata.xml
+         Please see https://www.freedesktop.org/software/appstream/docs/chap-Quickstart.html#sect-Quickstart-DesktopApps
+         for more information or use the generator at
+         https://docs.appimage.org/packaging-guide/optional/appstream.html#using-the-appstream-generator
+Generating squashfs...
+Embedding ELF...
+Marking the AppImage as executable...
+Embedding MD5 digest
+Success
+
+Please consider submitting your AppImage to AppImageHub, the crowd-sourced
+central directory of available AppImages, by opening a pull request
+at https://github.com/AppImage/appimage.github.io
+built: /home/li/Workspace/AuraDSP/dist/AuraDSP-v0.1.0-x86_64.AppImage
+built: /home/li/Workspace/AuraDSP/dist/AuraDSP-Linux-x64-v0.1.0.tar.gz
+reserved manifest ok: installer/linux/flatpak/org.auradsp.AuraDSP.yml
+reserved manifest ok: installer/linux/snap/snapcraft.yaml
+done. artifacts in /home/li/Workspace/AuraDSP/dist:
+auradsp_0.1.0_amd64.deb
+auradsp-driver-loopback_0.1.0_all.deb
+AuraDSP-Linux-x64
+AuraDSP-Linux-x64-v0.1.0.tar.gz
+AuraDSP-v0.1.0-x86_64.AppImage

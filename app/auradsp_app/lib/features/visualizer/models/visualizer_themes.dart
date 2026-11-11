@@ -68,6 +68,22 @@ class VisualizerPalette {
           ],
         );
 
+      case VisualizerColorTheme.emeraldMist:
+        // 贴近 WMP 参考图的绿雾：明度整体抬高（参考图是亮绿雾场，不是暗场），
+        // 高光近白、底层深翡翠，与 matrixGreen 的纯亮绿区分开。
+        return const VisualizerPalette(
+          primary: Color(0xFF9BFFC9),
+          secondary: Color(0xFF2FCE85),
+          peak: Color(0xFFF4FFF9),
+          grid: Color(0x1A9BFFC9),
+          glow: Color(0x809BFFC9),
+          gradient: [
+            Color(0xFF116B47),
+            Color(0xFF54DE9C),
+            Color(0xFFD8FFE9),
+          ],
+        );
+
       case VisualizerColorTheme.aurora:
         return const VisualizerPalette(
           primary: Color(0xFF7000FF),

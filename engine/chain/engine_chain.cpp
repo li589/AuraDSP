@@ -255,6 +255,7 @@ void reset_channel_state(auradsp_handle h) {
     /* 4. liveprog 环境感知 [PATCHED-AuraDSP P-038] */
     const int cur_ch = h->channel_count.load(std::memory_order_relaxed);
     LiveProgSetChannels(&h->jdsp, cur_ch > 0 ? cur_ch : 2);
+    if (h->mc_lp) mc_liveprog_set_channels(h->mc_lp, cur_ch > 0 ? cur_ch : 2);
 
     /* 5. 请求 RT 侧清理独占状态（RT 在 auradsp_process 入口消费） */
     h->reset_req.store(1, std::memory_order_release);
@@ -361,6 +362,11 @@ void reset_channel_state_rt(auradsp_handle h) {
     /* 11. post_gain 平滑状态 (WP5) */
     for (int c = 0; c < 8; ++c) {
         h->post_gain_sm[c] = 1.0f;
+    }
+
+    /* 12. [channels.upmix_fill] 源活动保持窗（拓扑变化后不得跨块残留） */
+    for (int c = 0; c < kMxMaxChannels; ++c) {
+        h->upmix_hold[c] = 0;
     }
 }
 
@@ -489,6 +495,30 @@ void apply_liveprog(auradsp_handle h) {
         LiveProgEnable(&h->jdsp);
     else
         LiveProgDisable(&h->jdsp);
+}
+
+
+/* 多声道 Liveprog（方案 B）：同步环境（采样率/声道数）并下发使能。 */
+void apply_liveprogmc(auradsp_handle h) {
+    if (!h->mc_lp) return;
+    mc_liveprog_set_sample_rate(h->mc_lp,
+        (h->jdsp.trueSampleRate > 0.0f) ? h->jdsp.trueSampleRate : h->jdsp.fs);
+    const int cur_ch = h->channel_count.load(std::memory_order_relaxed);
+    mc_liveprog_set_channels(h->mc_lp, cur_ch > 0 ? cur_ch : 2);
+    mc_liveprog_set_enabled(h->mc_lp,
+        h->p.lp_mc_enable.load(std::memory_order_relaxed) ? 1 : 0);
+}
+
+
+/* MC 代码加载成功后刷新滑块指针并写回宿主存储值（平移 lp_refresh_sliders）。 */
+void mc_lp_refresh_sliders(auradsp_handle h) {
+    if (!h->mc_lp) return;
+    for (int i = 0; i < 64; ++i) {
+        h->lp_mc_slider_ptr[i] = mc_liveprog_slider_var(h->mc_lp, i + 1);
+        if (h->lp_mc_slider_ptr[i])
+            *h->lp_mc_slider_ptr[i] = h->p.lp_mc_param[i].load(std::memory_order_relaxed);
+    }
+    mc_liveprog_exec_slider_section(h->mc_lp);
 }
 
 
@@ -1167,6 +1197,35 @@ void mx_upmix(auradsp_handle h, float* out, const float* stereo,
 
     const SpeakerLayout ly = layout_for(ch);
 
+    /* [channels.upmix_fill] 0 = 源活动门控：只有「对应下混输入声道本块
+     * 非严格零」（或仍在 ~250ms 保持窗内）才回填；无源声道写 0，避免把
+     * 立体声源铺成 C/SL/SR/BL/BR 幻象环绕。1 = 历史行为（无条件铺满）。
+     * 判零沿用仓库严格 0 语义（极弱信号也算有声）；LFE 直通、FL/FR 恒写。
+     * 只访问 RT 独占的 h->upmix_hold，无锁无分配。 */
+    const bool gated =
+        h->p.upmix_fill.load(std::memory_order_relaxed) == 0 && ch > 2;
+    bool fill[kMxMaxChannels] = {};
+    if (gated) {
+        int hold_frames = (int)(h->sample_rate * 0.25f);
+        if (hold_frames < 1) hold_frames = 1;
+        uint32_t active = 0;
+        for (int i = 0; i < frames; ++i) {
+            const float* sp = keep + (size_t)i * ch;
+            for (int c = 0; c < ch && c < kMxMaxChannels; ++c) {
+                if (sp[c] != 0.0f) active |= (1u << c);
+            }
+        }
+        for (int c = 0; c < ch && c < kMxMaxChannels; ++c) {
+            if (active & (1u << c)) {
+                h->upmix_hold[c] = hold_frames;
+            } else {
+                const int next = h->upmix_hold[c] - frames;
+                h->upmix_hold[c] = next > 0 ? next : 0;
+            }
+            fill[c] = h->upmix_hold[c] > 0;
+        }
+    }
+
     for (int i = 0; i < frames; ++i) {
         const float* sp = keep + (size_t)i * ch;
         float* dp = out + (size_t)i * ch;
@@ -1182,15 +1241,25 @@ void mx_upmix(auradsp_handle h, float* out, const float* stereo,
         dp[ly.fl] = l;
         dp[ly.fr] = r;
         if (ly.c >= 0) {
-            dp[ly.c] = (l + r) * 0.5f * kMxSqrtHalf; // Center: 居中单声道和
+            dp[ly.c] = (!gated || fill[ly.c])
+                           ? (l + r) * 0.5f * kMxSqrtHalf
+                           : 0.0f; // Center: 居中单声道和（门控关则留空）
         }
         if (ly.lfe >= 0) {
             dp[ly.lfe] = std::isfinite(sp[ly.lfe]) ? sp[ly.lfe] : 0.0f;
         }
-        if (ly.sl >= 0) dp[ly.sl] = l * kMxSqrtHalf; // SL: 严格取 L
-        if (ly.sr >= 0) dp[ly.sr] = r * kMxSqrtHalf; // SR: 严格取 R
-        if (ly.bl >= 0) dp[ly.bl] = l * kMxSqrtHalf; // BL: 严格取 L
-        if (ly.br >= 0) dp[ly.br] = r * kMxSqrtHalf; // BR: 严格取 R
+        if (ly.sl >= 0) {
+            dp[ly.sl] = (!gated || fill[ly.sl]) ? l * kMxSqrtHalf : 0.0f;
+        }
+        if (ly.sr >= 0) {
+            dp[ly.sr] = (!gated || fill[ly.sr]) ? r * kMxSqrtHalf : 0.0f;
+        }
+        if (ly.bl >= 0) {
+            dp[ly.bl] = (!gated || fill[ly.bl]) ? l * kMxSqrtHalf : 0.0f;
+        }
+        if (ly.br >= 0) {
+            dp[ly.br] = (!gated || fill[ly.br]) ? r * kMxSqrtHalf : 0.0f;
+        }
     }
 }
 

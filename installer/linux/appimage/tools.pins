@@ -1,0 +1,6 @@
+# AppImage 构建工具钉版表（供应链钉死，见 docs/05 §2.2）。
+# 格式：<name> <version> <sha256> <url>
+# appimagetool 的 sha256 与上游 1.9.1 发布及第三方钉版记录交叉核对一致；
+# type2-runtime 的 sha256 为 2026-11-06 首次获取时实测记录（日期版不可变发布）。
+appimagetool 1.9.1 ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0 https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+type2-runtime 20251108 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64

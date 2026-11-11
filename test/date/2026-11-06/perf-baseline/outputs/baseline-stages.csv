@@ -1,0 +1,30 @@
+stage,label,rss_avg_mb,rss_max_mb,cpu_avg_core_pct,cpu_avg_total_pct,gpu_3d_avg_pct,gpu_shared_avg_mb,note
+S1,startup_idle,219.2,219.6,1.0,0.03,0.0,4,首启后静止（release / 1400x900）
+S2,home_idle,322.1,323.0,0.8,0.03,0.1,8,主页空闲（GPU 计数 705 采样≈35min 长稳）
+S3,viz_idle,349.5,350.1,1.2,0.04,1.9,43,可视化页未播放（ticker 已停；GPU 478 采样≈24min 长稳）
+S4,viz_force_silent_bars,602.1,662.0,163.8,5.12,32.0,188,强制播放态+频谱全零+歌词关
+S5,ctr_bars_lyrics_on,563.6,573.7,163.3,5.10,38.6,201,强制播放态+歌词开（计数器构建）
+S6,ctr_bars_lyrics_off,525.4,529.8,162.4,5.08,-,-,强制播放态+歌词关（计数器构建）
+S7,viz_pink,1077.1,1200.5,135.0,4.22,38(35-41),450-780,真实播放（粉噪）+歌词关
+S8,viz_pink_lyrics,1270.4,1503.4,129.5,4.05,-,-,真实播放（粉噪）+歌词开
+S9,effects_page_force,320.3,335.0,7.3,0.23,-,-,强制播放标志下切到 Effects 页（舞台不在树）
+S10,style_oscilloscope,648.8,672.8,162.6,5.08,-,-,样式矩阵
+S11,style_goniometer,665.8,692.7,164.3,5.13,-,-,样式矩阵
+S12,style_cyberGrid,668.3,677.9,163.8,5.12,-,-,样式矩阵
+S13,style_pulseOrb,670.6,678.5,163.4,5.11,-,-,样式矩阵
+S14,style_auroraShader,478.7,617.8,161.6,5.05,-,-,样式矩阵
+S15,style_tunnelShader,337.8,339.3,167.9,5.25,-,-,样式矩阵
+S16,style_tornado,321.7,323.1,164.6,5.14,-,-,样式矩阵
+S17,noblur_bars,392.0,407.9,167.0,5.22,17.2,92,对照实验：HUD 玻璃层去掉 BackdropFilter
+S18,idlegate_bars,376.1,387.5,166.6,5.21,4.6,27,对照实验：只冻结时间轴（ticker 仍在跑）
+S19,skia_bars,507.8,529.0,162.3,5.07,36.1,185,对照实验：enable-impeller=false（Skia）
+S20,profile_home,362.8,363.4,1.0,0.03,0.0,4,profile 构建主页静态（VM Service 读取）
+S21,play_style_bars,371.9,380.7,44.48,1.39,12.98,132.5,2026-11-07 样式开销对照：真实粉噪播放 120s＋sysapo＋1400x900（HEAD e59eec5）
+S22,play_style_tornado,469.3,473.6,96.08,3.00,28.74,214.1,同上；Δ vs bars＝+97.4MB／+51.6pp core／+15.8pp GPU3D
+S23,play_style_mirrorWeave,456.7,903.4,90.32,2.82,25.40,179.9,同上；均值同 tornado 量级但峰值 903.4MB 为离屏层异常（样式已于 2daa49b 删除，仅留作异常证据）
+S24,idle_style_tornado,316.5,317.9,1.19,0.04,0.0,151.0,2026-11-07 静默态（可视化页未播放、ticker 已停；与 S27 同轮同二进制）
+S25,idle_style_nebulaFlow,316.5,318.5,0.74,0.02,0.0,150.8,同上（与 S26 同轮）
+S26,play_style_nebulaFlow_pre_atlas,796.4,799.6,83.81,2.62,26.57,503.1,2026-11-07 播放态（粉噪 120s、sysapo）：运行期烘焙图集（修复前，HEAD 1ad4767）
+S27,play_style_tornado_pre_atlas,768.7,772.8,85.68,2.68,26.25,501.8,同上（修复前）
+S28,play_style_nebulaFlow_asset,392.0,404.5,74.64,2.33,29.17,175.0,2026-11-08 播放态 60s：构建期 PNG 图集、仅解码一次（修复后，HEAD b728555，bake#=0）
+S29,play_style_tornado_asset,423.3,428.4,77.95,2.44,26.13,190.1,同上（修复后）

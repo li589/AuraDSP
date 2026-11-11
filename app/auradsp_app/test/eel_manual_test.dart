@@ -32,6 +32,29 @@ void main() {
       }
     });
 
+    test('宿主环境条目齐备且与引擎实现一致（2026-11-08 声道信息收口）', () {
+      final names = EelManualRegistry.entries.map((e) => e.name).toList();
+      // P-038 宿主环境变量必须有条目（此前缺失，用户无从知晓）
+      expect(names.any((n) => n.contains('num_ch')), isTrue,
+          reason: 'num_ch / nch entry required');
+      expect(names.any((n) => n.contains('dev_srate')), isTrue,
+          reason: 'dev_srate entry required');
+      // VM 中不存在的函数不得收录（freembuf 曾是幽灵条目，编译实测 Syntax error）
+      expect(names.any((n) => n.contains('freembuf')), isFalse,
+          reason: 'freembuf does not exist in the EEL VM');
+      // 复合条目必须写真实函数全名，简写照抄无法编译
+      expect(names.any((n) => n.contains('fractionalDelayLineProcess')), isTrue);
+      expect(names.any((n) => n.contains('fractionalDelayLineSetDelay')), isTrue);
+      expect(
+          names.any((n) => n.contains('PolyphaseFilterbankSynthesisStereo')),
+          isTrue);
+      // spl 条目必须写明「只处理前 2 声道、其余直通」的声道真相
+      final spl = EelManualRegistry.entries
+          .firstWhere((e) => e.name.contains('spl0'));
+      expect(spl.descZh, contains('直通'));
+      expect(spl.descEn.toLowerCase(), contains('pass through'));
+    });
+
     test('模糊搜索与分类筛选功能', () {
       // 搜索 sin
       final sinResults = EelManualRegistry.search(query: 'sin');

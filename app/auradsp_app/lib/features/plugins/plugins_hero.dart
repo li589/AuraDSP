@@ -258,6 +258,7 @@ void _safeShowMenu<T>(
 /// - 复原：清激活槽预设（继承的源预设不动）。
 /// - [locked]（编辑器打开）时全部禁用。
 class _AbPresetBar extends StatelessWidget {
+  final AppModel model;
   final PluginManager manager;
   final int slot;
   final int group;
@@ -266,6 +267,7 @@ class _AbPresetBar extends StatelessWidget {
   final List<String> routeNames;
 
   const _AbPresetBar({
+    required this.model,
     required this.manager,
     required this.slot,
     required this.group,
@@ -371,13 +373,7 @@ class _AbPresetBar extends StatelessWidget {
                 ? null
                 : () {
                     manager.resetAb(slot, group: group, ab: active);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(l10nOf(context).abResetDone),
-                        duration: const Duration(seconds: 1),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
+                    model.postNotice(l10nOf(context).abResetDone);
                   },
             icon: Icon(
               Icons.restart_alt_rounded,
@@ -456,7 +452,9 @@ class _ActivePluginHero extends StatelessWidget {
     // v3.3 按路插件 + A/B 预设：下拉选路 = 打开该路引擎的编辑器 + 该路的
     // A/B 预设视图。选项源 = vbEffectiveRouteMask（通道开且插件勾）。
     // 「全部」选项已撤除（统一调音用「预设继承」表达）。
-    final isVb = model.audioMode == 'vbcallback';
+    // 路线类 UI 与 VB 路由语义统一挂 ModeCaps.routeSelector
+    // （Part I Q3；sysapo 下恒不出现——测试钉死）。
+    final isVb = model.modeCaps.routeSelector;
     final routeMask = model.vbEffectiveRouteMask;
     final editorGroup = model.vbPluginEditorGroup;
     final routeNames = vbBusNames(
@@ -634,6 +632,10 @@ class _ActivePluginHero extends StatelessWidget {
             selected: !isBypassed && !partialBypass,
             danger: isBypassed,
             warning: partialBypass,
+            // 故障呈现（业主裁定）：文案恒与普通旁路一致（上方
+            // isBypassed 已含故障有效旁路），仅呼吸闪动示异常；
+            // 点击由 toggleBypass 分流为重试加载（Q3b）。
+            pulse: status.fault,
             busy: manager.isSlotBypassPending(slot),
             onTap: (isBusy || manager.isSlotBypassPending(slot))
                 ? null
@@ -875,6 +877,7 @@ class _ActivePluginHero extends StatelessWidget {
                 const Spacer(),
                 // v3.3 A/B 预设条（所有驱动模式显示；VB 点击展开继承下拉）。
                 _AbPresetBar(
+                  model: model,
                   manager: manager,
                   slot: slot,
                   group: isVb ? editorGroup : -1,

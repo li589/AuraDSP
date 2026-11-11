@@ -31,9 +31,15 @@ _cur_class = 'front'
 
 # core 类全折叠态：动态压限器（第 1 卡）开关与高级折叠头。
 _COMP_SW = (1279, 350)
-HEADER_X, HEADER_Y = 460, 497
-# 高级内容带：x 收缩到 1240，避开右缘开关列（ON 开关的 accent 会污染计数）。
-CONTENT_BOX = (380, 520, 1240, 800)
+# 卡片改版后「高级」折叠头挪到了卡片**底部**，必须先向下滚 3 格把它带进视口，
+# 此后它稳定停在 (460, 538)（x=460 正落在「高级」文字本体上）。
+# 旧值 497 是改版前的坐标，点在卡片主体上、点空也不报错 → 断言拿到 0 像素差异。
+_SCROLL_DOWN = 3
+HEADER_X, HEADER_Y = 460, 538
+# 高级抽屉内容带：折叠头**下方**的区域。改版前抽屉开在卡片中部，现落在折叠头之下；
+# x 收缩到 1240，避开右缘开关列（ON 开关的 accent 会污染计数）。
+# 判定用这条带的 accent 像素数：折叠 50 → 展开 4150 → 折叠回 50。
+CONTENT_BOX = (380, 560, 1240, 880)
 FAIL = []
 
 
@@ -108,6 +114,10 @@ def main():
         collapse_all(app)                              # 前卡全折叠 → 第 1 卡位置恒定
         ensure_switch_on(app, *_COMP_SW, label="动态压限器主开关")
         time.sleep(0.9)
+        # 卡片改版后「高级」折叠头在卡片底部：向下滚 3 格把它带进视口，
+        # 之后折叠头位置稳定（HEADER_X/HEADER_Y 由此实测）。
+        app.scroll(700, 500, clicks=-_SCROLL_DOWN, delay=0.5)
+        time.sleep(1.0)
 
         # 高级区默认应折叠（首屏内容带无 accent 控件）
         base_shaders = card_is_expanded(app)
@@ -120,12 +130,14 @@ def main():
             base_shaders = card_is_expanded(app)
             print("  归一后折叠基线 accent 像素 %d" % base_shaders)
 
-        before = app.capture(SCRATCH)
+        # 只比内容带、不比全窗：卡片内曲线图与延迟读数是**实时动画**，
+        # 全窗差分恒为几千像素（会掩盖抽屉没开的情况）——必须用静态带。
+        before = app.capture(SCRATCH, CONTENT_BOX)
 
         # --- 展开 ---
         app.click(HEADER_X, HEADER_Y, delay=0.7)
         time.sleep(0.7)
-        after_open = app.capture(SCRATCH)
+        after_open = app.capture(SCRATCH, CONTENT_BOX)
         open_shaders = card_is_expanded(app)
         print("  点击折叠头后：accent 像素 %d" % open_shaders)
 
@@ -141,7 +153,7 @@ def main():
         # --- 折叠回去 ---
         app.click(HEADER_X, HEADER_Y, delay=0.7)
         time.sleep(0.7)
-        after_close = app.capture(SCRATCH)
+        after_close = app.capture(SCRATCH, CONTENT_BOX)
         close_shaders = card_is_expanded(app)
         print("  再次点击后：accent 像素 %d" % close_shaders)
 

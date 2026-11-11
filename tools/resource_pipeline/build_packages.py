@@ -49,6 +49,14 @@ def calculate_md5_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def calculate_sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(65536):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def build_zip(zip_path: Path, items_to_include, root_dir: Path, custom_manifest=None):
     zip_path.parent.mkdir(parents=True, exist_ok=True)
     if zip_path.exists():
@@ -199,6 +207,18 @@ def run_packaging():
         print("  • [Step C 验证] ✅ 相对路径 100% 确定性统一，无任何路径分叉或同名冲突！")
         print("  • [Step C 验证] ✅ 用户私有数据 (user_data/) 100% 隔离安全！")
         print("  • [Step C 验证] ✅ 全量包覆盖核心包呈现标准幂等特性！")
+
+    # 3. 生成 SHA256SUMS.txt（发行规范 §4 的校验执行点输入）：随资源
+    # Release 一同发布；pack.py 合并时逐包对账、应用 Release 说明里
+    # 钉住同一份哈希供用户手工导入前核对。包内 manifest 的 MD5 仅作
+    # 变更检测，与此处的完整性校验口径分离（2026-11-08 审计·预设低3）。
+    print("\n3. 正在生成 SHA256SUMS.txt ...")
+    zips = sorted(DIST_DIR.glob("auradsp-*.zip"))
+    sums_path = DIST_DIR / "SHA256SUMS.txt"
+    with open(sums_path, "w", encoding="utf-8") as f:
+        for z in zips:
+            f.write(f"{calculate_sha256_file(z)}  {z.name}\n")
+    print(f"  • 已登记 {len(zips)} 个资源包 → {sums_path}")
 
     print(f"\n🎉 资源包打包与防冲突演练全部成功完成！生成目录: {DIST_DIR}")
     return True

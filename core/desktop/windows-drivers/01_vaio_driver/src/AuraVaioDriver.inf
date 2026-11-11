@@ -136,7 +136,7 @@ PKEY_AudioEndpoint_Association      = "{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},2"
 PKEY_AudioEndpoint_PhysicalSpeakers = "{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},3"
 
 ; -- Localizable --
-ProviderName              = "AuraDSP"
+ProviderName              = "AuraDSP Project"
 DiskName                  = "AuraVAIO Driver Installation Disk"
 AuraVAIO.DeviceDesc       = "AuraVAIO Virtual Audio Device"
 AuraVAIO.Wave.szPname     = "AuraVAIO"

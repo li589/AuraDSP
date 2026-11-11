@@ -12,38 +12,74 @@ abstract interface class WindowsSystemPort {
   /// 从当前工作目录向上最多 4 层查找仓库内的文件（相对候选路径）。
   String? findRepoFile(List<String> relativeCandidates);
 
+  /// 以可执行文件所在目录为基准查找随包文件（安装版扁平布局）。
+  /// 候选为相对可执行文件目录的路径（如 `driver/install_vaio.ps1`）；
+  /// 不依赖当前工作目录——安装版定位必须走这一路，源码树查找只作
+  /// 开发期兜底（findRepoFile）。
+  String? findInstalledFile(List<String> relativeCandidates);
+
   /// 运行 apo_inspect.exe 获取端点 JSON。
   Future<ProcessResult> inspectAudioDevices(String exePath);
 
   /// 安装/卸载 AuraVAIO 驱动脚本。
+  /// [bundled] = 随包自包含脚本（install_vaio.ps1，无 -Config 参数）；
+  /// false = 源码树开发脚本（install_driver.ps1，带 -Config Release）。
   Future<ProcessResult> vaioDriver(
     String scriptPath, {
     required bool install,
     required bool elevated,
+    bool bundled = false,
   });
 
   /// 注册/反注册 Virtual ASIO 驱动脚本。
-  Future<ProcessResult> asioDriverScript(
+  /// [bundled] = 随包脚本（register_asio.ps1：无参注册 / -Unregister
+  /// 反注册）；false = 源码树开发脚本（register_driver.ps1，-Action 口径）。
+  Future<ApoRunResult> asioDriverScript(
     String scriptPath, {
     required bool register,
     required bool elevated,
+    bool bundled = false,
   });
 
-  /// apo_config.py status（非提权）。
-  Future<ProcessResult> apoStatus(String scriptPath, double timeout);
+  /// apo_config.exe status（非提权；原生工具，2026-11-09 §2.3）。
+  Future<ProcessResult> apoStatus(String exePath, double timeout);
 
-  /// apo_config.py install（可选 UAC 提权 / 复合插槽）。
-  Future<ProcessResult> apoInstall(
-    String scriptPath, {
+  /// apo_config.exe install（可选 UAC 提权 / 复合插槽）。
+  Future<ApoRunResult> apoInstall(
+    String exePath, {
     required String target,
     required bool composite,
     required bool elevated,
   });
 
-  /// apo_config.py uninstall（可选 UAC 提权）。
-  Future<ProcessResult> apoUninstall(
-    String scriptPath, {
+  /// apo_config.exe uninstall（可选 UAC 提权）。
+  Future<ApoRunResult> apoUninstall(
+    String exePath, {
     required String target,
     required bool elevated,
   });
+}
+
+/// apo_config.exe install/uninstall 的运行结果。
+///
+/// 提权运行时子进程 stdout 跨不过 UAC 边界（Start-Process
+/// 无法重定向提权进程输出）：工具经 --result-file 把最终
+/// JSON 裁定写回文件，[toolOk] / [toolError] / [toolMessage]
+/// 即工具自报的成败与原因；非提权运行则解析其 stdout JSON。
+/// 拿不到工具信息时 [toolOk] 为 null，调用方回退旧判定。
+class ApoRunResult {
+  const ApoRunResult({
+    required this.exitCode,
+    this.toolOk,
+    this.toolError,
+    this.toolMessage,
+  });
+
+  /// 承载进程退出码（提权时为 PowerShell 的，不代表工具成败）。
+  final int exitCode;
+
+  /// 工具自报成败；null = 未取得工具裁定。
+  final bool? toolOk;
+  final String? toolError;
+  final String? toolMessage;
 }

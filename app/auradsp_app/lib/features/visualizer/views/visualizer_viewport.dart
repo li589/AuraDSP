@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:ui' as ui;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -8,7 +11,10 @@ import '../controllers/waveform_synthesizer.dart';
 import '../models/visualizer_themes.dart';
 import '../models/visualizer_types.dart';
 import '../styles/style_atmosphere.dart';
+import '../styles/style_nebula_flow.dart';
+import '../styles/style_tornado.dart';
 import '../styles/visualizer_painter_dispatcher.dart';
+import '../styles/visualizer_static_grid.dart';
 import '../styles/visualizer_time_aware.dart';
 import 'visualizer_db_scale.dart';
 
@@ -19,31 +25,23 @@ import 'visualizer_db_scale.dart';
 /// 2026-10-31 内存优化：旧实现每帧 `build(time)` 新建一个画笔，Path /
 /// Paint / Shader 等 Skia 原生对象只能等 GC finalizer 回收；在核显上还会
 /// 让光栅线程落后、GPU 表面排队（实测可视化页可涨到 2GB+）。
-/// 单层合批渲染画笔：将背景氛围层与主视效画笔合并到同一个 Canvas 进行绘制
-/// 彻底废除双层全屏 RepaintBoundary 堆叠，消除双份全屏离屏 Surface 显存占用与 GPU 排队。
+/// 动态层画笔：只承载随时间/频谱变化的主视效（频谱柱、波形、粒子等）。
+///
+/// 2026-11-06（P2-1）：静态内容（烘焙氛围位图 + 网格基底）已上移到
+/// [_StaticLayerPainter] 的独立缓存层，本层 `willChange: true`——
+/// 它每帧都变，不应让光栅缓存保留全屏离屏层；由于静态内容在**另一个**
+/// RepaintBoundary 里，这里的 willChange 不会让静态层缓存失效。
 class _CompositeVisualizerPainter extends CustomPainter {
-  final CustomPainter? ambience;
   final CustomPainter mainPainter;
   final ValueListenable<double>? mainTime;
-  final ValueListenable<double>? ambienceTime;
 
   _CompositeVisualizerPainter({
-    this.ambience,
     required this.mainPainter,
     this.mainTime,
-    this.ambienceTime,
-  }) : super(repaint: mainTime ?? ambienceTime);
+  }) : super(repaint: mainTime);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final a = ambience;
-    if (a != null) {
-      final at = ambienceTime;
-      if (at != null && a is VisualizerTimeAware) {
-        (a as VisualizerTimeAware).setVisualizerTime(at.value);
-      }
-      a.paint(canvas, size);
-    }
     final mt = mainTime;
     final mp = mainPainter;
     if (mt != null && mp is VisualizerTimeAware) {
@@ -54,11 +52,55 @@ class _CompositeVisualizerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CompositeVisualizerPainter oldDelegate) {
-    if (oldDelegate.ambience != ambience || oldDelegate.mainPainter != mainPainter) {
-      return true;
-    }
+    if (oldDelegate.mainPainter != mainPainter) return true;
     return mainTime == null;
   }
+}
+
+/// 静态层画笔：风格基底 + 烘焙氛围位图 + 网格基底。三者都与音频帧无关
+/// （基底只在风格/调色板变化时重建，氛围位图 10 Hz 刷新，网格只在风格/
+/// 调色板变化时重建），因此本层允许光栅缓存
+/// （`willChange: false`），避免 30 Hz 动态层把它一起拖入每帧重绘。
+class _StaticLayerPainter extends CustomPainter {
+  final ValueListenable<ui.Image?>? ambienceImage;
+  final CustomPainter? grid;
+
+  /// 风格自带的静态基底（如龙卷风的暗场/地面辉光/中轴光柱）。
+  final CustomPainter? backdrop;
+
+  /// 烘焙位图与画布像素 1:1，禁用采样即可保证与矢量绘制逐像素一致。
+  final Paint _bakedPaint = Paint()
+    ..filterQuality = FilterQuality.none
+    ..isAntiAlias = false;
+
+  _StaticLayerPainter({this.ambienceImage, this.grid, this.backdrop})
+      : super(repaint: ambienceImage);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final b = backdrop;
+    if (b != null) b.paint(canvas, size);
+    final il = ambienceImage;
+    if (il != null) {
+      final img = il.value;
+      if (img != null) {
+        canvas.drawImageRect(
+          img,
+          Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+          Offset.zero & size,
+          _bakedPaint,
+        );
+      }
+    }
+    final g = grid;
+    if (g != null) g.paint(canvas, size);
+  }
+
+  @override
+  bool shouldRepaint(covariant _StaticLayerPainter oldDelegate) =>
+      oldDelegate.ambienceImage != ambienceImage ||
+      oldDelegate.grid != grid ||
+      oldDelegate.backdrop != backdrop;
 }
 
 /// 视效主舞台活跃渲染画布视口
@@ -96,15 +138,45 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   CustomPainter? _ambience;
   Object? _ambienceKey;
 
-  /// 氛围层时间轴：独立的 ~20fps 节流通知（星点漂移/光晕呼吸本就是慢动作，
-  /// 无需跟随 30fps 主画布；旧实现每帧重建整屏径向渐变）。
+  /// 静态网格画笔墨迹只在风格/调色板变化时重建，配合独立缓存层永不逐帧重绘。
+  CustomPainter? _gridPainter;
+  Object? _gridKey;
+
+  /// 风格自带静态基底（龙卷风暗场/地面辉光/中轴光柱）。
+  CustomPainter? _backdrop;
+  Object? _backdropKey;
+
+  /// 氛围层时间轴：独立的 ~10fps 节流通知。星点漂移/光晕呼吸本就是慢动作，
+  /// 10 Hz 更新在 30 Hz 主画布上肉眼不可分辨（旧实现是 30 帧全屏径向渐变）。
   final ValueNotifier<double> _ambienceTime = ValueNotifier<double>(0.0);
+
+  /// 烘焙产物：整层氛围位图（像素尺寸 = 画布逻辑尺寸 × DPR）。
+  final ValueNotifier<ui.Image?> _ambienceImage =
+      ValueNotifier<ui.Image?>(null);
+
+  /// 已退役但仍可能被最近几帧 Picture 引用的位图，延迟释放避免重放已销毁图像。
+  final List<ui.Image> _retiredImages = <ui.Image>[];
+
+  Size _canvasSize = Size.zero;
+  double _devicePixelRatio = 1.0;
+  bool _baking = false;
+  bool _bakePending = false;
 
   @override
   void initState() {
     super.initState();
     _ambienceTime.value = widget.time.value;
     widget.time.addListener(_onTime);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    if (dpr != _devicePixelRatio) {
+      _devicePixelRatio = dpr;
+      if (_canvasSize != Size.zero) _scheduleAmbienceBake();
+    }
   }
 
   @override
@@ -120,12 +192,82 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   void dispose() {
     widget.time.removeListener(_onTime);
     _ambienceTime.dispose();
+    final current = _ambienceImage.value;
+    _ambienceImage.dispose();
+    // 仍在退役队列里的位图由各自的延迟计时器释放；当前位图同样延迟，避免
+    // 光栅线程重放已销毁图像。
+    if (current != null) {
+      Timer(const Duration(milliseconds: 400), current.dispose);
+    }
     super.dispose();
   }
 
   void _onTime() {
-    if (widget.time.value - _ambienceTime.value >= 0.05) {
+    if (_canvasSize == Size.zero) return;
+    if (widget.time.value - _ambienceTime.value >= _ambiencePeriod) {
       _ambienceTime.value = widget.time.value;
+      _scheduleAmbienceBake();
+    }
+  }
+
+  /// 氛围层烘焙刷新周期：10 Hz。全屏径向渐变从「每帧一次」降为「每 100 ms 一次」。
+  static const double _ambiencePeriod = 0.1;
+
+  /// 触发一次烘焙；烘焙是异步的（Picture → GPU 纹理），同一时刻只允许一次在飞。
+  void _scheduleAmbienceBake() {
+    if (!mounted || _ambience == null || _canvasSize.isEmpty) return;
+    if (_baking) {
+      _bakePending = true;
+      return;
+    }
+    unawaited(_bakeAmbience());
+  }
+
+  Future<void> _bakeAmbience() async {
+    _baking = true;
+    final painter = _ambience;
+    final size = _canvasSize;
+    final dpr = _devicePixelRatio;
+    if (painter == null || size.isEmpty) {
+      _baking = false;
+      return;
+    }
+    final ambienceClock = _ambienceTime.value;
+    if (painter is VisualizerTimeAware) {
+      (painter as VisualizerTimeAware).setVisualizerTime(ambienceClock);
+    }
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.scale(dpr, dpr);
+    painter.paint(canvas, size);
+    final picture = recorder.endRecording();
+    ui.Image? image;
+    try {
+      image = await picture.toImage(
+        (size.width * dpr).round(),
+        (size.height * dpr).round(),
+      );
+    } finally {
+      picture.dispose();
+      _baking = false;
+    }
+    if (!mounted) {
+      image.dispose();
+      return;
+    }
+    final previous = _ambienceImage.value;
+    _ambienceImage.value = image;
+    if (previous != null) {
+      // 上一帧（甚至上上帧）的 Picture 可能仍在光栅线程排队，延迟 300 ms 再释放。
+      _retiredImages.add(previous);
+      Timer(const Duration(milliseconds: 300), () {
+        _retiredImages.remove(previous);
+        previous.dispose();
+      });
+    }
+    if (_bakePending) {
+      _bakePending = false;
+      _scheduleAmbienceBake();
     }
   }
 
@@ -135,7 +277,8 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         VisualizerStyle.tunnelShader ||
         VisualizerStyle.milkDrop ||
         VisualizerStyle.fluidDynamics ||
-        VisualizerStyle.tornado =>
+        VisualizerStyle.tornado ||
+        VisualizerStyle.nebulaFlow =>
           false,
         _ => true,
       };
@@ -143,12 +286,16 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   /// 仅在「风格/配置/调色板/数据缓冲身份」变化时重建画笔；常规频谱帧
   /// 只触发重绘（数据列表是原地复用的，画笔持有同一引用即可看到新值）。
   CustomPainter _delegateFor(
-      List<double> renderedBands, List<double> peaks) {
+    List<double> renderedBands,
+    List<double> peaks, {
+    required bool separateGrid,
+  }) {
     final key = (
       widget.config,
       widget.palette,
       renderedBands,
       peaks,
+      separateGrid,
     );
     if (_delegate == null || _delegateKey != key) {
       _delegateKey = key;
@@ -160,9 +307,49 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         peaks: peaks,
         waveformSynth: widget.waveformSynth,
         time: widget.time.value,
+        showGrid: separateGrid ? false : null,
       );
     }
     return _delegate!;
+  }
+
+  /// 静态网格画笔：`showGrid` 打开且该风格网格不随时间变化时，交给独立缓存层。
+  CustomPainter? _gridFor() {
+    if (!widget.config.showGrid ||
+        !StaticGridPainter.supports(widget.config.style)) {
+      return null;
+    }
+    final key = (widget.config.style, widget.palette);
+    if (_gridPainter == null || _gridKey != key) {
+      _gridKey = key;
+      _gridPainter = StaticGridPainter(
+        style: widget.config.style,
+        palette: widget.palette,
+      );
+    }
+    return _gridPainter;
+  }
+
+  /// 每风格静态基底：龙卷风与星云流各自带一层可烘焙的暗场/渐晕。
+  CustomPainter? _backdropFor() {
+    final style = widget.config.style;
+    if (style != VisualizerStyle.tornado && style != VisualizerStyle.nebulaFlow) {
+      return null;
+    }
+    final key = (widget.palette, widget.config.bloom, style);
+    if (_backdrop == null || _backdropKey != key) {
+      _backdropKey = key;
+      _backdrop = style == VisualizerStyle.tornado
+          ? TornadoBackdropPainter(
+              palette: widget.palette,
+              bloom: widget.config.bloom,
+            )
+          : NebulaBackdropPainter(
+              palette: widget.palette,
+              bloom: widget.config.bloom,
+            );
+    }
+    return _backdrop;
   }
 
   CustomPainter _ambienceFor(List<double> renderedBands) {
@@ -175,6 +362,8 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         animationTime: widget.time.value,
         intensity: 0.55 + widget.config.bloom * 0.45,
       );
+      // 调色板/强度变化必须重新烘焙，否则会继续贴旧位图。
+      _scheduleAmbienceBake();
     }
     return _ambience!;
   }
@@ -203,22 +392,61 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
             ? widget.peakEngine.renderedBands
             : rawBands;
 
-        final delegate = _delegateFor(renderedBands, peaks);
+        final gridPainter = _gridFor();
+        final delegate = _delegateFor(
+          renderedBands,
+          peaks,
+          separateGrid: gridPainter != null,
+        );
         final bool usesAmbience = _usesAmbience(widget.config.style);
-        final CustomPainter? ambienceDelegate =
-            usesAmbience ? _ambienceFor(renderedBands) : null;
+        if (usesAmbience) _ambienceFor(renderedBands);
+        final backdropPainter = _backdropFor();
 
-        // 单层合批渲染：将背景氛围与主画笔合为一个 CustomPaint，0 额外 GPU 离屏缓冲
-        final paintLayer = RepaintBoundary(
-          child: CustomPaint(
-            painter: _CompositeVisualizerPainter(
-              ambience: ambienceDelegate,
-              mainPainter: delegate,
-              mainTime: delegate is VisualizerTimeAware ? widget.time : null,
-              ambienceTime: usesAmbience ? _ambienceTime : null,
-            ),
-            child: const SizedBox.expand(),
-          ),
+        final bool hasStaticLayer =
+            usesAmbience || gridPainter != null || backdropPainter != null;
+
+        // 两层分工：静态层（氛围位图 + 网格基底，允许缓存）在下，
+        // 动态层（主视效，willChange 不缓存）在上，层间互不影响缓存命中。
+        final paintLayer = LayoutBuilder(
+          builder: (context, constraints) {
+            final size = constraints.biggest;
+            if (size.isFinite && size != _canvasSize) {
+              _canvasSize = size;
+              _scheduleAmbienceBake();
+            }
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                if (hasStaticLayer)
+                  RepaintBoundary(
+                    child: CustomPaint(
+                      isComplex: true,
+                      willChange: false,
+                      painter: _StaticLayerPainter(
+                        ambienceImage: usesAmbience ? _ambienceImage : null,
+                        grid: gridPainter,
+                        backdrop: backdropPainter,
+                      ),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                RepaintBoundary(
+                  child: CustomPaint(
+                    // 主内容每帧都在变：显式告知光栅缓存不要为它保留离屏层，
+                    // 否则 30 Hz 变化的全屏 Picture 会在 GPU 侧持续占住大块 Shared 内存。
+                    willChange: true,
+                    painter: _CompositeVisualizerPainter(
+                      mainPainter: delegate,
+                      mainTime: delegate is VisualizerTimeAware
+                          ? widget.time
+                          : null,
+                    ),
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+              ],
+            );
+          },
         );
 
         Widget body;

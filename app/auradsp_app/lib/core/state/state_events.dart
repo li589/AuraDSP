@@ -66,7 +66,8 @@ extension StateEvents on AppModel {
         // 就绪后加载并下发 close 名单；同时检查上一进程崩溃日志做自动登记。
         pluginManager.loadPluginTables();
         // 持久化的是 ASIO 模式：就绪后自动进桥（isolate 内部自带 detect）。
-        if (audioMode == 'asio') {
+        // 第七轮 S2：开关总闸同样压过就绪恢复（见 _pipelineIoSuppressed）。
+        if (audioMode == 'asio' && !_pipelineIoSuppressed) {
           _toIso?.send({
             'cmd': 'asiomode',
             'on': true,
@@ -76,12 +77,65 @@ extension StateEvents on AppModel {
           });
         }
         // 持久化的是 AuraVAIO 模式：就绪后自动进桥。
-        if (audioMode == 'vaio') {
-          _toIso?.send({
-            'cmd': 'vaiomode',
-            'on': true,
-            'outputEndpoint': config.vaioOutputEndpoint,
+        // 全接线门控：合成链为捕获链/ASIO 输入链时不起 VAIO
+        // 桥（链路对账在下方统一补发正确命令）。
+        // 崩溃断路器（第六轮用户裁定）：上一会话带着在跑的桥
+        // 非正常结束时，本次跳过自动起桥一次并通知，防崩溃
+        // 循环把软件锁死；用户手动选 VAIO 即解除（setAudioMode）。
+        if (audioMode == 'vaio' &&
+            !_pipelineIoSuppressed &&
+            pipelineChain != PipelineChain.capture &&
+            pipelineChain != PipelineChain.asio) {
+          if (vaioBootGuardTripped) {
+            dbgLog('vaio-guard: skip VAIO autostart once (breaker)');
+            if (!_vaioGuardNoticeShown) {
+              _vaioGuardNoticeShown = true;
+              postNotice(
+                  '上次会话在 VAIO 桥运行期间异常结束，本次已跳过 VAIO '
+                  '桥自动启动以防崩溃循环；如需使用，请手动重新选择 '
+                  'VAIO 模式。',
+                  level: NoticeLevel.warning);
+            }
+          } else {
+            _toIso?.send({
+              'cmd': 'vaiomode',
+              'on': true,
+              'outputEndpoint': config.vaioOutputEndpoint,
+            });
+            _armVaioGuard();
+          }
+        }
+        // 持久化的是 System APO 模式：就绪后开 telemetry 回传
+        // 并全量重发参数块（立项 P1/P3；非 Windows 侧静默）。
+        if (audioMode == 'sysapo') {
+          applyApoFileEffectPolicy();
+          _toIso?.send({'cmd': 'apotelemetry', 'on': true});
+          _toIso?.send({'cmd': 'apopublish'});
+        }
+        // 模式恢复取证（2026-11-09）：与 isolate 侧
+        // 'vaiomode: start requested' 的时间戳对齐，可判「桥是
+        // 就绪时起的还是用户点出来的」这一分支。
+        dbgLog('ready-restore: audioMode=$audioMode');
+        // 全接线：捕获链/ASIO 输入链的恢复（模式簿记仍是
+        // vaio，必须按链路合成补发，见上门控）。
+        if (pipelineChain == PipelineChain.capture) {
+          // 枚举先行（细审 R-A M3）：ready 时 wasapiDevices
+          // 尚空，loopback 标志（麦克风 vs 回录）与按名存值
+          // 都无从解析——刷新完成后按最新枚举对账起链。
+          refreshAudioDevices().then((_) {
+            if (pipelineChain == PipelineChain.capture) {
+              applyPipelineChain();
+            }
           });
+        } else if (pipelineChain == PipelineChain.asio) {
+          applyPipelineChain();
+        }
+        // V-01：VAIO 检测此前只有手动按钮触发，启动后 vaioDetectInfo
+        // 恒为空 map、驱动行恒显「未检测到」（真机误报根因 A）。就绪后
+        // 自动探测一次；isolate 重启（采样率切换等）再 ready 时同样
+        // 刷新，保证检测状态与桥现状一致。
+        if (PlatformProfile.supportsBridges) {
+          refreshVaioDetect();
         }
         // 会话回放必须落在音频后端就绪之后：VB/ASIO/VAIO 模式下桥引擎才是
         // 真正的处理路径，提前回放会把插件装到本地引擎、随后建桥时镜像为空
@@ -181,6 +235,13 @@ extension StateEvents on AppModel {
         limiterOn = (raw['limiterEnable'] as int) != 0;
         lpEnabled = (raw['lpEnable'] as int) != 0;
         lpStatus = raw['lpStatus'] as int;
+        if (raw['lpMcEnable'] != null) {
+          lpMcEnabled = (raw['lpMcEnable'] as int) != 0;
+        }
+        if (raw['lpMcStatus'] != null) {
+          lpMcStatus = raw['lpMcStatus'] as int;
+          if (lpMcStatus == 1) lpMcError = null;
+        }
         convEnabled = (raw['convEnable'] as int) != 0;
         convReady = (raw['convReady'] as int) != 0;
         // auto-bypass 的另一半：资源在此刻就绪且用户开关为开 → 立即生效，
@@ -671,14 +732,20 @@ extension StateEvents on AppModel {
         _notifyUi();
         // 设备被占是持续态（对端独占释放前不会好）：backoff 重起，
         // 5 次约 10s 还起不来才认命留 fatal 屏。其它错误直接留屏。
-        if (fatalMsg?.contains('0x8889000a') == true) {
+        if (fatalMsg?.contains('0x8889000a') == true ||
+            fatalMsg?.contains('0x88890004') == true) {
           _scheduleFatalRetry();
         }
         break;
       case 'wasapiLost':
         // 运行中端点被独占（旧 client 在对端释放前永好不了）：只有还在进程内
         // 模式才重起；用户若已切走（桥模式），忽略（桥侧自有重建/状态）。
-        if (audioMode != 'vbcallback' && audioMode != 'asio') {
+        // 第五轮 S2：sysapo 同样忽略——附加模式下本地输出无职责，
+        // APO 通道（发布器/telemetry）不随本地输出生死；为它重启
+        // isolate 反而把 APO 链路一起陪葬（真机第五轮项 6 实测）。
+        if (audioMode != 'vbcallback' &&
+            audioMode != 'asio' &&
+            audioMode != 'sysapo') {
           _fatalRetries = 0;
           _restartIsolate();
           _notifyUi();
@@ -750,6 +817,29 @@ extension StateEvents on AppModel {
         } else if (id == ParamId.convIrPath) {
           // IR 加载成功 → 回读 meta（frames/channels/srcRate/peak）
           _toIso?.send({'cmd': 'getParams'});
+        }
+        break;
+      case 'apotelemetry':
+        // APO 真处理回传（立项 P3）：座位在位/故障闩锁/引擎率与
+        // 声道/已应用参数数——变化才刷新 UI（读者侧已节流）。
+        final seatOn = raw['seat'] == true;
+        final faultOn = raw['fault'] == true;
+        final appliedN = (raw['applied'] as num?)?.toInt() ?? 0;
+        final loadStageN = (raw['loadStage'] as num?)?.toInt() ?? 0;
+        final loadErrN = (raw['loadErr'] as num?)?.toInt() ?? 0;
+        if (apoEngineActive != seatOn ||
+            apoEngineFault != faultOn ||
+            apoParamsApplied != appliedN ||
+            apoLoadStage != loadStageN ||
+            apoLoadErr != loadErrN) {
+          apoEngineActive = seatOn;
+          apoEngineFault = faultOn;
+          apoEngineRate = (raw['rate'] as num?)?.toInt() ?? 0;
+          apoEngineChannels = (raw['channels'] as num?)?.toInt() ?? 0;
+          apoParamsApplied = appliedN;
+          apoLoadStage = loadStageN;
+          apoLoadErr = loadErrN;
+          _notifyUi();
         }
         break;
       case 'viz':
@@ -844,6 +934,13 @@ extension StateEvents on AppModel {
         final was = vbActive;
         vbActive = (raw['running'] as bool?) ?? false;
         vbInfo = Map<String, dynamic>.from(raw);
+        // 路开关在途收尾（2026-11-07 异步化）：心跳确认目标达成才解除
+        // "加载中/释放中"标注与开关禁点；桥停则直接清空，不让界面等到超时。
+        if (vbActive) {
+          vbReconcileRoutePending();
+        } else {
+          vbClearRoutePending();
+        }
         if (vbActive && !was) {
           // VB 上升沿：清掉上一会话的残留帧，基线归零，活数据随后流入。
           // A5（2026-10-22 审查）：进 VB 时编辑器目标路可能还是上一会话
@@ -897,6 +994,28 @@ extension StateEvents on AppModel {
         hbTick.value++;
         if (wasA != asioActive) _notifyUi();
         break;
+      case 'capturestatus':
+        final wasCap = captureActive;
+        captureActive = (raw['active'] as bool?) ?? false;
+        captureNote = (raw['note'] as String?) ?? '';
+        if (!captureActive) {
+          if (captureNote == 'capture-lost') {
+            postNotice('音频捕获中断（设备断开或被占用），捕获链已停止',
+                level: NoticeLevel.warning);
+          } else if (captureNote == 'rate-mismatch') {
+            postNotice('输出设备拒绝以当前引擎采样率运行，捕获链未启动',
+                level: NoticeLevel.warning);
+          } else if (captureNote == 'output-init-failed') {
+            postNotice('输出设备打开失败，捕获链未启动',
+                level: NoticeLevel.error);
+          } else if (captureNote == 'capture-init-failed') {
+            postNotice('捕获设备打开失败，捕获链未启动',
+                level: NoticeLevel.error);
+          }
+        }
+        hbTick.value++;
+        if (wasCap != captureActive) _notifyUi();
+        break;
       case 'vaiostatus':
         final wasV = vaioActive;
         vaioActive = (raw['running'] as bool?) ?? false;
@@ -919,8 +1038,28 @@ extension StateEvents on AppModel {
         if (wasV != vaioActive) _notifyUi();
         break;
       case 'vaiodetect':
+        // 回程面包屑（第四轮项 5）：detect 的 send/begin/done 三点
+        // 已钉，补 UI 收到事件这一点，往返链才闭合——下次闪退若
+        // 四点齐全而进程仍死，即可把嫌疑移出 detect 全链路。
+        final epsRecv = raw['endpoints'];
+        dbgLog(
+          'vaiodetect: ui received endpoints=${epsRecv is List ? epsRecv.length : '?'}',
+          sync: true,
+        );
         vaioDetectInfo = Map<String, dynamic>.from(raw);
+        final waiter = vaioDetectWaiter;
+        if (waiter != null && !waiter.isCompleted) waiter.complete();
+        vaioDetectWaiter = null;
         _notifyUi();
+        // 第五轮 S5 分层钉点：第五轮实测四点（send/begin/done/
+        // received）全齐进程仍死——再钉 handler 出口与重建帧两
+        // 点。下次闪退：handled 缺失 = 死在 handler 内；handled
+        // 有而 settled 缺失 = 死在随后的重建帧；两点全有 = 死因
+        // 与本次 detect 往返无关（另查并行原生面）。
+        dbgLog('vaiodetect: ui handled', sync: true);
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          dbgLog('vaiodetect: frame settled', sync: true);
+        });
         break;
       case 'asiodrivers':
         // 驱动清单（isolate 内 asio_detect 的结果；桥缺失/无驱动时 note 有原因）。
@@ -978,6 +1117,21 @@ extension StateEvents on AppModel {
         scheduleAutoSave();
         _notifyUi();
         break;
+      case 'pluginPdcSync':
+        // F2：加载后引擎 PDC 真值同步。引擎侧 setPdc(false) 只有两类
+        // 触发：用户命令（走 pluginPdc 回执）与延迟线分配失败的自动
+        // 降级——此处 UI 曾为开、引擎为关，只可能是后者：同步开关
+        // 显示为关，并经通用通知告知用户（owner 裁定口径）。
+        final pdcActual = raw['pdc'] as bool;
+        final pdcWas = pluginManager.pdcEnabled;
+        pluginManager.syncPdcFromEngine(pdcActual);
+        if (pdcWas != pdcActual) scheduleAutoSave();
+        if (pdcWas && !pdcActual) {
+          postNotice('插件延迟补偿（PDC）已自动关闭：延迟线分配失败',
+              level: NoticeLevel.warning);
+        }
+        _notifyUi();
+        break;
       case 'pluginStatus':
         pluginManager.onPluginStatus(raw['status']);
         _notifyUi();
@@ -1015,11 +1169,16 @@ extension StateEvents on AppModel {
         _notifyUi();
         break;
       case 'pluginSlotStatus':
-        pluginManager.onPluginSlotStatus(
-          raw['slot'] as int,
-          raw['status'],
-          (raw['stage'] as num).toInt(),
-        );
+        // sysapo 下本地句柄只是影子：其处理状态不作数（APO
+        // telemetry 才是真相，见 apoPluginStatus）；编辑器打开
+        // 态是影子的真实状态，仍照常同步（P1-1 路由锁定）。
+        if (modeCaps.pluginProcessing != PluginProcessing.apo) {
+          pluginManager.onPluginSlotStatus(
+            raw['slot'] as int,
+            raw['status'],
+            (raw['stage'] as num).toInt(),
+          );
+        }
         // P1-1 路由锁定轮询兜底：编辑器打开态随 status 回执同步。
         final eoSlot = (raw['slot'] as num?)?.toInt() ?? 0;
         if (raw['editorOpen'] is bool) {
@@ -1029,6 +1188,31 @@ extension StateEvents on AppModel {
           );
         }
         _notifyUi();
+        break;
+      case 'apoPluginStatus':
+        {
+          // Part I Q2/Q3（D5）：APO 侧槽状态（telemetry 合成）——
+          // 合并进槽状态并对新故障边沿发一次性通知（文案口径与
+          // 故障呈现裁定一致：已自动旁路、点击旁路重试）。
+          final edges = pluginManager.onApoPluginStatuses(
+              (raw['slots'] as List?) ?? const []);
+          for (final e in edges) {
+            postNotice(
+                '插件故障（槽 ${e.slot + 1}：'
+                '${pluginFaultCategoryZh(e.category)}），已自动旁路；'
+                '点击该槽的旁路可重试加载',
+                level: NoticeLevel.warning);
+          }
+          _notifyUi();
+        }
+        break;
+      case 'apoPluginStateResult':
+        // 影子状态收获结果：仅超限值得打扰用户（其余失败已在
+        // isolate 日志留痕，状态保持 APO 侧旧值不致命）。
+        if (raw['tooLarge'] == true) {
+          postNotice('插件状态超过 512KB 上限，未能同步到 System APO',
+              level: NoticeLevel.warning);
+        }
         break;
       case 'pluginSlotInsertStage':
         pluginManager.onPluginSlotInsertStage(

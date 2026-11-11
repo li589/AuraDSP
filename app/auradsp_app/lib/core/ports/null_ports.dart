@@ -82,6 +82,9 @@ final class NullShellOpen implements ShellOpenPort {
 
   @override
   Future<bool> openPath(String path) async => false;
+
+  @override
+  Future<bool> openUrl(String url) async => false;
 }
 
 final class NullWindowsSystem implements WindowsSystemPort {
@@ -96,6 +99,9 @@ final class NullWindowsSystem implements WindowsSystemPort {
   String? findRepoFile(List<String> relativeCandidates) => null;
 
   @override
+  String? findInstalledFile(List<String> relativeCandidates) => null;
+
+  @override
   Future<ProcessResult> inspectAudioDevices(String exePath) async => _fail();
 
   @override
@@ -103,37 +109,39 @@ final class NullWindowsSystem implements WindowsSystemPort {
     String scriptPath, {
     required bool install,
     required bool elevated,
+    bool bundled = false,
   }) async =>
       _fail();
 
   @override
-  Future<ProcessResult> asioDriverScript(
+  Future<ApoRunResult> asioDriverScript(
     String scriptPath, {
     required bool register,
     required bool elevated,
+    bool bundled = false,
   }) async =>
+      const ApoRunResult(exitCode: 1);
+
+  @override
+  Future<ProcessResult> apoStatus(String exePath, double timeout) async =>
       _fail();
 
   @override
-  Future<ProcessResult> apoStatus(String scriptPath, double timeout) async =>
-      _fail();
-
-  @override
-  Future<ProcessResult> apoInstall(
-    String scriptPath, {
+  Future<ApoRunResult> apoInstall(
+    String exePath, {
     required String target,
     required bool composite,
     required bool elevated,
   }) async =>
-      _fail();
+      const ApoRunResult(exitCode: 1);
 
   @override
-  Future<ProcessResult> apoUninstall(
-    String scriptPath, {
+  Future<ApoRunResult> apoUninstall(
+    String exePath, {
     required String target,
     required bool elevated,
   }) async =>
-      _fail();
+      const ApoRunResult(exitCode: 1);
 }
 
 final class NullWindowPort implements WindowPort {

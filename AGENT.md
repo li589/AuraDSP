@@ -17,7 +17,7 @@
 | **平台适配器** | `core/desktop/windows/` | CMake + MSVC + WASAPI | 桌面 DLL 构建脚本与 Windows 音频适配；产物 `out/Release/auradsp_engine.dll` 为 DLL 真相源 |
 | **Windows 驱动套件** | `core/desktop/windows-drivers/` | Windows SDK（用户态）+ WDK（内核态，待） | 与 `engine/` 彻底解耦的传输/格式层：`02_voicemeeter_client/`（VM 回调泵）、`03_system_apo/`（自研 APO `AuraApo.dll` + Configurator/selftest/tone_play/诊断探针）、`bridge/`（无编号 FFI 桥：`common/PluginBridge.h` + `vm_bridge/` VB 桥 + `asio_bridge/` ASIO 桥 + `vaio_bridge/` VAIO 桥）。规则与现状见该目录 README |
 | **第三方源码** | `vendor/` | C / C++ | **只读**：仅剩 `plugin-api/{clap,steinberg}`（行业接口标准）。原 `libjamesdsp/` 已于 2026-10-16 收编至 `engine/legacy/`（见下「核心引擎」行与 `engine/legacy/PATCHES.md`）；补丁仍须 `[PATCHED-AuraDSP P-xxx]` 标注并登记 `engine/legacy/PATCHES.md` |
-| **运行资源** | `assets/` | IR / VDC / EEL | **P3b 后由 `resource/` 改名**：`convolver/`、`ddc/`、`liveprog/` + `manifest.json`。本地约 242.9MB（2501 文件）；`.irs`/`.vdc` **已彻底不在 git 中**（D-2，2026-10-31 夜：`filter-repo` 重写全部历史 + force-push，本地 `.git` 203.6MB → 50.6MB；重写前为 2443 个 / 241.6MB），走 release 附件（Release v0.5.0 挂 5 个资源包，`dist/AuraDSP-Windows-x64.zip` 内嵌 `resources/`）；`manifest.json` + `README.md` 仍在版本控制内作台账；门禁 `tools/bin/assets_untracked_scan.py` 常驻守卫，**不得 `git add -f`** |
+| **运行资源** | `assets/` | IR / VDC / EEL | **P3b 后由 `resource/` 改名**：`convolver/`、`ddc/`、`liveprog/` + `manifest.json`。本地约 242.9MB（2501 文件）；`.irs`/`.vdc` **已彻底不在 git 中**（D-2，2026-10-31 夜：`filter-repo` 重写全部历史 + force-push，本地 `.git` 203.6MB → 50.6MB；重写前为 2443 个 / 241.6MB），走 release 附件（资源包现由 Release v0.5.0 挂 5 个资源包承载；独立版本线 `resources-v*` 首版 0.0.1 就绪后迁移，见 `installer/docs/01` §2.4，`dist/AuraDSP-Windows-x64.zip` 内嵌 `resources/`）；`manifest.json` + `README.md` 仍在版本控制内作台账；门禁 `tools/bin/assets_untracked_scan.py` 常驻守卫，**不得 `git add -f`** |
 | **应用前端** | `app/auradsp_app/` | Flutter 3.47.7+, Dart FFI | 现代暗黑精致音频工作站 UI；6 页导航体系（主页/效果/脚本/插件/处理链/可视化）；高频可视化与状态隔离 |
 | **无锁桥接** | `engine/auradsp_engine.h/.cpp` | SPSC 无锁环形缓冲区 | 引擎以 30fps 向 UI 单向推送 1600 字节定长 `VizFrame`（ABI v2；前 536B 与 v1 兼容；含 32 带输出频谱 + 32 带 EQ 输入频谱、总峰值及 21 节点 per-stage 电平/GR 槽位及 per-channel 电平；`sizeof == 1600` 断言守护 ABI，改动须同步全部 ctypes 镜像） |
 | **参考源码** | `source/` | C/C++/Java/Kotlin | 第三方参考代码库（只读，严禁嵌套 `.git`，严禁在此写代码） |
@@ -35,7 +35,8 @@
 | `vendor/` | **行业接口标准只读源码**：`plugin-api/`（CLAP / Steinberg VST3 官方头 / **VST2 Xaymar 净室 `vst.h`**）。原 `libjamesdsp/` 已于 2026-10-16 迁至 `engine/legacy/`（`a81dc04`） | 补丁必须 `[PATCHED-AuraDSP P-xxx]` + `engine/legacy/PATCHES.md` 登记；升级即重新提取覆盖。**VST2 编译只认 `vst2/vst.h`（BSD-3-Clause）；Steinberg 官方 2.4 归档仅 `source/` 只读，严禁入 vendor/Release** |
 | `assets/` | **运行资源**：`convolver/`、`ddc/`、`liveprog/` + `manifest.json`（本地 242.9MB，原 `resource/`，P3b 改名） | 打包与盘点走 `tools/resource_pipeline/`；勿把 python 脚本或日志混进资源树；`.irs`/`.vdc` **已不在 git 中**（D-2，2026-10-31 夜 `filter-repo` 重写全部历史 + force-push；重写前为 2443 个 / 241.6MB），门禁 `tools/bin/assets_untracked_scan.py` 守卫，**勿 `git add -f`** |
 | `app/` | Flutter 前端工程、L10n、各功能页、FFI 绑定 | 构建命令必须带 `--no-tree-shake-icons` |
-| `test/` | **全量测试套件**：`test/smoke/`（C++ 引擎单测）、`test/ui/`（UI 自动化置顶测试）、`test/data/`（测试数据） | 测试统一入口 `python test/runner.py` |
+| `test/` | **全量测试套件**：`test/smoke/`（C++ 引擎单测）、`test/ui/`（UI 自动化置顶测试）、`test/data/`（测试数据）、`test/date/`（**日期任务归档区**） | 测试统一入口 `python test/runner.py` |
+| `test/date/` | **日期任务归档区**：`test/date/2026-XX-XX/<task>/`（如 `perf-baseline`、`perf-final`）；每个任务固定 `work/`（原始采样、临时构建、对照截图）+ `outputs/`（结论文档、机器可读总表） | **根目录不再新建日期目录**：所有按日期组织的任务产物一律落 `test/date/2026-XX-XX/<task>/`；`work/` 由 `.gitignore`（`test/date/**/work/`）忽略、不入库，`outputs/` 正常跟踪；跨目录引用必须写全 `test/date/...` 路径 |
 | `tools/` | **开发辅助工具与小组件**：`bin/push_via_api.py`、`probe/gen_test_irs.py`、`probe/diag_rail_icons.py`、`probe/bench_effects.py` 等；另有 `resource_pipeline/`（资源打包）与 `calibration/`（校准转换） | 纯工具性质，不包含测试用例；`probe/` 为一次性探针、`archive/` 为过程产物，均不进门禁 |
 | `docs/` | 架构方案、UI 设计规范、决策记录 (ADR)、阶段报告；含 `参考技术手册/`（第三方 PDF 手册本地只读区，约 220MB，仅 README 清单入库） | 方案先行，设计更新后必须同步文档；参考手册区只读，禁改禁搬，规则见 `docs/参考技术手册/README.md` |
 | `.ai/` | **AI 自治沉淀区**：`.ai/memory/`（**项目记忆唯一入库真相源**：`MEMORY.md` 长期范式 + `YYYY-MM-DD.md` 当日过程）、`.ai/rules/`（硬规则与 UI 设计规范） | 各类智能体共享知识，无需人工介入。**注意**：`.workbuddy/memory/` 被 `.gitignore` 忽略、跨智能体不可见，只能当热副本，阶段结束必须搬迁合并到 `.ai/memory/`（规则见 `.ai/README.md` 记忆分工） |
@@ -115,12 +116,16 @@ cd app/auradsp_app; flutter analyze
 cd app/auradsp_app; flutter build windows --release --no-tree-shake-icons
 
 # 4b. 构建 C++ 引擎并自动同步产物到 test/app-runner/dist
-#     （build_engine.sh 构建成功后自动调用 tools/sync_artifacts.ps1 分发三处消费端）
+#     入口 = 根 preset（windows-x64 → windows-x64-release，构建树 build/windows/x64，
+#     产物 core/desktop/windows/out/Release）；成功后自动分发三处消费端
 bash core/desktop/windows/build_engine.sh
 
 # 4c. 仅同步已构建产物（不重新编译）：把真相源覆盖分发到 test/app-runner/dist
 #     任意端点缺失或单文件失败仅告警跳过；-WhatIf 预演，-PackZip 重打包发行 zip
 powershell -ExecutionPolicy Bypass -File tools/sync_artifacts.ps1
+
+# 4d. 发行包清单：dist/<产品>-<平台>/build-info.txt（版本/提交/DLL SHA256）
+python tools/bin/dist_manifest.py --check
 
 # 4d. 设计令牌：改 app/auradsp_app/design/tokens/aura.tokens.json 后重生成（tokens.g.dart 勿手改）
 python tools/gen_theme.py            # --check 只校验不写盘

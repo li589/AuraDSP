@@ -1,0 +1,76 @@
+============================================================
+         AuraDSP Windows 全栈构建与产物整理流水线           
+============================================================
+  根目录   : D:\temp_desktop\Proj\JamesDSP
+  构建模式 : Release
+  自动打包 : 否 (仅输出目录)
+============================================================
+
+
+
+[1/6] 检查运行中进程与文件锁...
+  -> 无进程锁定，状态良好。
+
+[2/6] 检查与编译 C++ 核心引擎 (auradsp_engine.dll)...
+  配置 CMake (预设 windows-x64，构建树 build/windows/x64)...
+  编译 Release 引擎动态库与进程外插件宿主...
+[env] 已归一化 29 处大小写重复键（PATH 取并集，其余保留首次值）
+[run] argv=['cmake', '--build', '--preset', 'windows-x64-release', '--target', 'auradsp_engine', 'plugin_host_x64', '--', '-m:8']
+[log] 已写入 D:\temp_desktop\Proj\JamesDSP\build\reports\build_engine.log
+  -> 提示: 核心引擎 时间戳 2026/11/9 10:28:30 早于最新源文件 2026/11/9 14:11:27（若该目标确实无需改动则属正常）
+  -> 核心引擎就绪: auradsp_engine.dll (2.09 MB)
+  -> 提示: 64 位插件宿主 时间戳 2026/11/9 10:28:41 早于最新源文件 2026/11/9 14:11:27（若该目标确实无需改动则属正常）
+  -> 64 位插件宿主就绪: plugin_host_x64.exe
+  配置与编译 32 位位桥插件宿主 (plugin_host_x86.exe)...
+[env] 已归一化 23 处大小写重复键（PATH 取并集，其余保留首次值）
+[run] argv=['cmake', '--build', 'D:\\temp_desktop\\Proj\\JamesDSP\\core\\desktop\\windows\\build-x86', '--config', 'Release', '--target', 'plugin_host_x86', '--', '-m:8']
+[log] 已写入 D:\temp_desktop\Proj\JamesDSP\build\reports\build_host_x86.log
+  -> 提示: 32 位位桥插件宿主 时间戳 2026/11/9 10:29:58 早于最新源文件 2026/11/9 14:11:27（若该目标确实无需改动则属正常）
+  -> 32 位位桥插件宿主就绪: plugin_host_x86.exe
+
+[3/6] 检查与编译 C++ 驱动常驻桥...
+  配置 CMake (预设 windows-x64；桥与引擎同一构建树)...
+  编译桥接动态库 (auradsp_bridges: vm / vaio / asio)...
+[env] 已归一化 0 处大小写重复键（PATH 取并集，其余保留首次值）
+[run] argv=['cmake', '--build', '--preset', 'windows-x64-release', '--target', 'auradsp_bridges', '--', '-m:8']
+[log] 已写入 D:\temp_desktop\Proj\JamesDSP\build\reports\build_bridges.log
+  编译 ASIO 虚拟驱动 (auraasio_driver，发行包必需)...
+[env] 已归一化 11 处大小写重复键（PATH 取并集，其余保留首次值）
+[run] argv=['cmake', '--build', '--preset', 'windows-x64-release', '--target', 'auraasio_driver', '--', '-m:8']
+[log] 已写入 D:\temp_desktop\Proj\JamesDSP\build\reports\build_asio.log
+  -> 提示: ASIO 驱动 时间戳 2026/11/8 18:23:34 早于最新源文件 2026/11/9 14:11:27（若该目标确实无需改动则属正常）
+  -> ASIO 驱动就绪: auraasio_driver.dll
+  -> 提示: 桥接模块 时间戳 2026/11/9 10:30:04 早于最新源文件 2026/11/9 14:11:27（若该目标确实无需改动则属正常）
+  -> 桥接模块就绪: auravm_bridge.dll
+  -> 提示: 桥接模块 时间戳 2026/11/9 10:30:02 早于最新源文件 2026/11/9 14:11:27（若该目标确实无需改动则属正常）
+  -> 桥接模块就绪: auravaio_bridge.dll
+  -> 提示: 桥接模块 时间戳 2026/11/9 10:30:00 早于最新源文件 2026/11/9 14:11:27（若该目标确实无需改动则属正常）
+  -> 桥接模块就绪: auraasio_bridge.dll
+
+[3b/6] 编译 smoke 门禁依赖的测试目标...
+[env] 已归一化 1224 处大小写重复键（PATH 取并集，其余保留首次值）
+[run] argv=['cmake', '--build', '--preset', 'windows-x64-release', '--target', 'test_plugin_chain', 'test_host_quarantine', 'test_dll_dirs', 'rt_drain_test', 'vaio_pump_wait_test', 'vm_detect', 'vm_pump_test', 'vm_parallel_test', 'apo_inspect', 'silence_gate_test', 'AuraApo', '--', '-m:8']
+[log] 已写入 D:\temp_desktop\Proj\JamesDSP\build\reports\build_test_targets.log
+  -> 测试目标就绪: 11 个
+
+[4/6] 编译 Flutter 桌面端 (auradsp_app)...
+  执行: flutter build windows --no-tree-shake-icons --release...
+[env] 已归一化 12 处大小写重复键（PATH 取并集，其余保留首次值）
+[run] argv=['flutter', 'build', 'windows', '--no-tree-shake-icons', '--release']
+[run] 批处理转发: C:\FreeRulesPrograms\BasicToolkits\flutter\bin\flutter.BAT
+[log] 已写入 D:\temp_desktop\Proj\JamesDSP\build\reports\build_flutter.log
+  -> 桌面端主程序构建成功: auradsp_app.exe
+
+[5/6] 规整分发产物与声学资源目录...
+  同步主程序运行目录到 dist/AuraDSP-Windows-x64...
+  -> 随包内置资源验证: DDC 耳机校准 (450 文件), Liveprog 脚本 (47 文件), 核心卷积 (1056 文件)
+  写入发行产物清单 (build-info.txt)...
+manifest -> D:\temp_desktop\Proj\JamesDSP\dist\AuraDSP-Windows-x64\build-info.txt (12 artifacts)
+
+============================================================
+                 AuraDSP Windows 构建全部就绪!              
+============================================================
+  绿色便携目录 : D:\temp_desktop\Proj\JamesDSP\dist\AuraDSP-Windows-x64
+  启动可执行程序: D:\temp_desktop\Proj\JamesDSP\dist\AuraDSP-Windows-x64\auradsp_app.exe
+============================================================
+

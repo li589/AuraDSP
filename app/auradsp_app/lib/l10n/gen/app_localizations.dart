@@ -352,6 +352,12 @@ abstract class AppLocalizations {
   /// **'未连接 (等待 Voicemeeter 启动)'**
   String get setConnIdle;
 
+  /// No description provided for @setVbNotEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'Voicemeeter 未启用'**
+  String get setVbNotEnabled;
+
   /// No description provided for @setDeviceDisconnected.
   ///
   /// In zh, this message translates to:
@@ -448,6 +454,42 @@ abstract class AppLocalizations {
   /// **'注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。'**
   String get setApoSafetyNote;
 
+  /// No description provided for @apoModeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'模式切换仅选择附加目标；实际附加 / 卸载由下方「一键附加」「一键卸载」执行。'**
+  String get apoModeHint;
+
+  /// No description provided for @apoEngineNoteActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'APO 引擎处理中：经过此端点的声音由 AuraDSP 引擎实时处理（插件链在 APO 模式下不生效）。'**
+  String get apoEngineNoteActive;
+
+  /// No description provided for @apoEngineNoteWaiting.
+  ///
+  /// In zh, this message translates to:
+  /// **'APO 已附加，等待引擎就绪；就绪前声音直通。'**
+  String get apoEngineNoteWaiting;
+
+  /// No description provided for @apoEngineNoteFault.
+  ///
+  /// In zh, this message translates to:
+  /// **'APO 引擎发生故障，已自动退回直通（系统音频不受影响）；重新附加 APO 或重启应用后重试。'**
+  String get apoEngineNoteFault;
+
+  /// No description provided for @apoEngineNoteLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'APO 已附加，但引擎加载失败，声音直通；请确认安装完整后重新附加或重装应用。'**
+  String get apoEngineNoteLoadFailed;
+
+  /// No description provided for @setApoHeartbeat.
+  ///
+  /// In zh, this message translates to:
+  /// **'心跳活跃 ({sr}Hz · {frames} 帧)'**
+  String setApoHeartbeat(int sr, int frames);
+
   /// No description provided for @setDriverOffline.
   ///
   /// In zh, this message translates to:
@@ -465,6 +507,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'未检测到 AuraVAIO 虚拟声卡驱动'**
   String get setVaioMissing;
+
+  /// No description provided for @setVaioUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 驱动状态未检测'**
+  String get setVaioUnknown;
 
   /// No description provided for @setVaioDesc.
   ///
@@ -490,6 +538,12 @@ abstract class AppLocalizations {
   /// **'AuraVAIO 驱动已成功安装并通过系统验收！'**
   String get setVaioInstallOk;
 
+  /// No description provided for @setVaioInstallUnverified.
+  ///
+  /// In zh, this message translates to:
+  /// **'驱动安装未生效：仍未检测到 AuraVAIO 设备（未开启测试签名时驱动无法加载，请开启后重试）'**
+  String get setVaioInstallUnverified;
+
   /// No description provided for @setDriverInstallFailed.
   ///
   /// In zh, this message translates to:
@@ -508,6 +562,12 @@ abstract class AppLocalizations {
   /// **'AuraVAIO 驱动已成功卸载'**
   String get setVaioUninstallOk;
 
+  /// No description provided for @setVaioUninstallUnverified.
+  ///
+  /// In zh, this message translates to:
+  /// **'驱动卸载未生效：仍检测到 AuraVAIO 设备'**
+  String get setVaioUninstallUnverified;
+
   /// No description provided for @setDriverUninstallFailed.
   ///
   /// In zh, this message translates to:
@@ -517,7 +577,7 @@ abstract class AppLocalizations {
   /// No description provided for @setRedetect.
   ///
   /// In zh, this message translates to:
-  /// **'重新检测'**
+  /// **'检测'**
   String get setRedetect;
 
   /// No description provided for @setWasapiDesc.
@@ -529,7 +589,7 @@ abstract class AppLocalizations {
   /// No description provided for @setRefreshDevice.
   ///
   /// In zh, this message translates to:
-  /// **'刷新设备'**
+  /// **'检测'**
   String get setRefreshDevice;
 
   /// No description provided for @setAsioRegisterUac.
@@ -975,6 +1035,36 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'无可用输出设备'**
   String get ioNoOutputDevices;
+
+  /// No description provided for @ioNoAvailableSoundCard.
+  ///
+  /// In zh, this message translates to:
+  /// **'无可用声卡'**
+  String get ioNoAvailableSoundCard;
+
+  /// No description provided for @ioInputOverriddenByVaio.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前由 VAIO 桥链驱动，输入选择不生效；请将播放器输出指向 AuraVAIO 端点'**
+  String get ioInputOverriddenByVaio;
+
+  /// No description provided for @ioOutputOverriddenByVaio.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前由 VAIO 桥链驱动，此输出设备选择不生效；物理落点请将输出类型切换为 VAIO 后设置'**
+  String get ioOutputOverriddenByVaio;
+
+  /// No description provided for @ioOutputOverriddenByAsio.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前由 ASIO 桥链驱动，此输出选择不生效；输出由 ASIO 驱动决定'**
+  String get ioOutputOverriddenByAsio;
+
+  /// No description provided for @ioOnlyVirtualOutputs.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅有虚拟输出端点（无物理声卡）'**
+  String get ioOnlyVirtualOutputs;
 
   /// No description provided for @ioPhysicalOutput.
   ///
@@ -2122,6 +2212,24 @@ abstract class AppLocalizations {
   /// **'当输入音频或输出设备为多声道（4.0 / 5.1 / 7.1）时的 DSP 策略：离散多声道＝全声道独立流经 DSP，各效果器可独立指定作用声道，支持多声道插件与上混；矩阵下混＝折叠为立体声流经 DSP 效果器后再上混回填环绕声道（超低音直接直通）。「双耳虚拟环绕」开启时优先级最高，将自动以 HRIR 渲染为耳机立体声。'**
   String get channelPhaseA;
 
+  /// No description provided for @upmixFill.
+  ///
+  /// In zh, this message translates to:
+  /// **'未使用声道填充'**
+  String get upmixFill;
+
+  /// No description provided for @upmixFillHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭后立体声源不会填充未使用声道，环绕源不受影响，LFE 直通。'**
+  String get upmixFillHint;
+
+  /// No description provided for @meterBusScope.
+  ///
+  /// In zh, this message translates to:
+  /// **'{bus} · {ch} 声道'**
+  String meterBusScope(String bus, int ch);
+
   /// No description provided for @audioMode.
   ///
   /// In zh, this message translates to:
@@ -2143,7 +2251,7 @@ abstract class AppLocalizations {
   /// No description provided for @audioParadigmHint.
   ///
   /// In zh, this message translates to:
-  /// **'选择音频接入形态：附加模式原地挂载处理，普通管线模式端到端流转（ADR-009）'**
+  /// **'选择音频接入形态：附加模式原地挂载处理，普通管线模式端到端流转'**
   String get audioParadigmHint;
 
   /// No description provided for @paradigmAttachment.
@@ -2266,6 +2374,12 @@ abstract class AppLocalizations {
   /// **'驱动信息与控制'**
   String get driverLayerTitle;
 
+  /// No description provided for @osVersionLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'操作系统'**
+  String get osVersionLabel;
+
   /// No description provided for @inputLayerTitle.
   ///
   /// In zh, this message translates to:
@@ -2350,6 +2464,12 @@ abstract class AppLocalizations {
   /// **'已附加'**
   String get apoAttached;
 
+  /// No description provided for @apoAttachedOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'已附加（{name}）'**
+  String apoAttachedOn(String name);
+
   /// No description provided for @apoNotAttached.
   ///
   /// In zh, this message translates to:
@@ -2373,6 +2493,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'AuraDSP 虚拟 ASIO 驱动'**
   String get asioDriverCardTitle;
+
+  /// No description provided for @vaioDriverCardTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 虚拟声卡驱动'**
+  String get vaioDriverCardTitle;
+
+  /// No description provided for @wasapiDriverCardTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'WASAPI 音频引擎'**
+  String get wasapiDriverCardTitle;
 
   /// No description provided for @asioDriverStatus.
   ///
@@ -2425,7 +2557,7 @@ abstract class AppLocalizations {
   /// No description provided for @asioStatusCheck.
   ///
   /// In zh, this message translates to:
-  /// **'检查状态'**
+  /// **'检测'**
   String get asioStatusCheck;
 
   /// No description provided for @virtualSinkNotice.
@@ -2817,6 +2949,54 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'测试'**
   String get catTest;
+
+  /// No description provided for @catAbout.
+  ///
+  /// In zh, this message translates to:
+  /// **'关于'**
+  String get catAbout;
+
+  /// No description provided for @aboutVersion.
+  ///
+  /// In zh, this message translates to:
+  /// **'版本'**
+  String get aboutVersion;
+
+  /// No description provided for @aboutForm.
+  ///
+  /// In zh, this message translates to:
+  /// **'形态'**
+  String get aboutForm;
+
+  /// No description provided for @aboutDeveloper.
+  ///
+  /// In zh, this message translates to:
+  /// **'开发商'**
+  String get aboutDeveloper;
+
+  /// No description provided for @aboutRepo.
+  ///
+  /// In zh, this message translates to:
+  /// **'开源地址'**
+  String get aboutRepo;
+
+  /// No description provided for @aboutLicense.
+  ///
+  /// In zh, this message translates to:
+  /// **'开源协议'**
+  String get aboutLicense;
+
+  /// No description provided for @aboutRefs.
+  ///
+  /// In zh, this message translates to:
+  /// **'参考核心项目'**
+  String get aboutRefs;
+
+  /// No description provided for @aboutOpenFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'链接打开失败，请手动访问'**
+  String get aboutOpenFailed;
 
   /// No description provided for @pageHomeEyebrow.
   ///
@@ -3322,6 +3502,12 @@ abstract class AppLocalizations {
   /// **'粒子龙卷风'**
   String get visualizerStyleTornado;
 
+  /// No description provided for @visualizerStyleNebulaFlow.
+  ///
+  /// In zh, this message translates to:
+  /// **'星云流'**
+  String get visualizerStyleNebulaFlow;
+
   /// No description provided for @visualizerThemeSystem.
   ///
   /// In zh, this message translates to:
@@ -3351,6 +3537,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'极光'**
   String get visualizerThemeAuroraGlow;
+
+  /// No description provided for @visualizerThemeEmeraldMist.
+  ///
+  /// In zh, this message translates to:
+  /// **'翡翠雾'**
+  String get visualizerThemeEmeraldMist;
 
   /// No description provided for @themeSwitchTip.
   ///
@@ -5806,6 +5998,30 @@ abstract class AppLocalizations {
   /// **'加载中…'**
   String get plugLoading;
 
+  /// No description provided for @vbRouteLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载中 · 直通'**
+  String get vbRouteLoading;
+
+  /// No description provided for @vbRouteReleasing.
+  ///
+  /// In zh, this message translates to:
+  /// **'释放中 · 直通'**
+  String get vbRouteReleasing;
+
+  /// No description provided for @vbRouteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'失败 · 直通'**
+  String get vbRouteFailed;
+
+  /// No description provided for @vbRouteNotApplied.
+  ///
+  /// In zh, this message translates to:
+  /// **'未生效 · 直通'**
+  String get vbRouteNotApplied;
+
   /// No description provided for @plugUnloading.
   ///
   /// In zh, this message translates to:
@@ -6526,6 +6742,12 @@ abstract class AppLocalizations {
   /// **'引擎内部错误'**
   String get errInternal;
 
+  /// No description provided for @errHostUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'宿主不可用'**
+  String get errHostUnavailable;
+
   /// No description provided for @lpFindReplace.
   ///
   /// In zh, this message translates to:
@@ -6633,6 +6855,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'EEL2 编辑器'**
   String get lpTitleEditor;
+
+  /// No description provided for @lpTargetStereo.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声脚本'**
+  String get lpTargetStereo;
+
+  /// No description provided for @lpTargetMultichannel.
+  ///
+  /// In zh, this message translates to:
+  /// **'多声道脚本'**
+  String get lpTargetMultichannel;
+
+  /// No description provided for @lpMcHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'多声道模式（声道数 > 2）下运行，可读写全部 8 个声道 spl0..spl7'**
+  String get lpMcHint;
 
   /// No description provided for @lpBtnApplied.
   ///

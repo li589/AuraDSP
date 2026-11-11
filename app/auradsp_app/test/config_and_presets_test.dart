@@ -322,6 +322,79 @@ void main() {
       }
     });
 
+    test('守护：管线输入/输出与 APO 目标随会话记忆 round-trip（第五轮 S1）', () {
+      final m = AppModel(testing: true);
+      m.config.pipelineInput = 'vaio';
+      m.config.pipelineOutput = 'wasapi';
+      m.config.pipelineInputDevice = 'dev-in-id';
+      m.config.pipelineOutputDevice = 'dev-out-id';
+      m.config.apoTargetEndpoint = 'speaker-endpoint-id';
+      m.config.vaioOutputEndpoint = 'vaio-out-name';
+      expect(SessionMemory.save(m), isTrue);
+      final session = SessionMemory.load()!;
+      expect(session['pipelineInput'], 'vaio');
+      expect(session['pipelineOutput'], 'wasapi');
+      expect(session['apoTargetEndpoint'], 'speaker-endpoint-id');
+      final m2 = AppModel(testing: true);
+      SessionMemory.restoreMemoryImage(m2, session);
+      expect(m2.config.pipelineInput, 'vaio',
+          reason: '重启后输入选择必须回到关闭前（第五轮项 4）');
+      expect(m2.config.pipelineInputDevice, 'dev-in-id');
+      expect(m2.config.pipelineOutputDevice, 'dev-out-id');
+      expect(m2.config.apoTargetEndpoint, 'speaker-endpoint-id',
+          reason: 'APO 附加目标不得在重启后变回未选（第五轮项 6）');
+      expect(m2.config.vaioOutputEndpoint, 'vaio-out-name');
+    });
+
+    test('不变量：模式/管线类 setter 一律经 persistRoutingChange 落盘（第五轮 S1）', () {
+      // persistRoutingChange 内部走 scheduleAutoSave 防抖，_testing 下
+      // 短路，功能断言不可达——与既有先例同模式，以源码形状钉住：
+      // ① 两个模式文件里不得再有裸 ConfigManager.save(config)；
+      // ② 关键 setter 的函数体窗口内必须出现 persistRoutingChange。
+      final lib = _readStateLibrary();
+      final modes = File('lib/core/state/state_audio_modes.dart')
+          .readAsStringSync();
+      final vbAsio =
+          File('lib/core/state/state_vb_asio.dart').readAsStringSync();
+      expect(modes.contains('ConfigManager.save(config)'), isFalse,
+          reason: 'state_audio_modes 不得裸存 config（session 会过期）');
+      expect(vbAsio.contains('ConfigManager.save(config)'), isFalse,
+          reason: 'state_vb_asio 不得裸存 config（session 会过期）');
+      final def = lib.indexOf('void persistRoutingChange() {');
+      expect(def, greaterThan(-1), reason: '找不到 persistRoutingChange');
+      final defBody = lib.substring(def, lib.indexOf('\n  }', def));
+      expect(defBody.contains('ConfigManager.save(config)'), isTrue);
+      expect(defBody.contains('scheduleAutoSave()'), isTrue,
+          reason: 'persistRoutingChange 必须同时刷 session 快照');
+      const setters = [
+        'void setAudioMode(String id)',
+        'void setModeCategory(String category)',
+        'void setAttachmentMode(String mode)',
+        'void setPipelineInput(String inType)',
+        'void setPipelineOutput(String outType)',
+        'void setPipelineInputDevice(String device)',
+        'void setPipelineOutputDevice(String device)',
+        'void setPipelineInputEnabled(bool enabled)',
+        'void setPipelineOutputEnabled(bool enabled)',
+        'void setApoTargetEndpoint(String endpoint)',
+        'void setMonitorMirroring(bool enabled)',
+        'void setAsioDriver(String name)',
+        'void setAsioBufSize(int frames)',
+        'void setAsioOutPair(int ch)',
+        'void setVaioOutputEndpoint(String endpoint)',
+      ];
+      for (final sig in setters) {
+        final i = lib.indexOf(sig);
+        expect(i, greaterThan(-1), reason: '找不到 setter: $sig');
+        // 窗口末端夹紧：state_vb_asio 位于聚合源码尾部，setter
+        // 距文件尾不足 3000 字符时 substring 会越界（S6 自审发现）。
+        final end = i + 3000 > lib.length ? lib.length : i + 3000;
+        final window = lib.substring(i, end);
+        expect(window.contains('persistRoutingChange()'), isTrue,
+            reason: '$sig 必须经 persistRoutingChange 落盘（第五轮 S1）');
+      }
+    });
+
     test('守护：测试音状态不落盘（关闭前开着 440Hz，重启必须默认关闭）', () {
       final m = AppModel(testing: true);
       m.setSource('tone');

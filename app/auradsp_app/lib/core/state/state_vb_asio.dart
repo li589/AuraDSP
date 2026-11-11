@@ -32,19 +32,85 @@ extension VbAsioState on AppModel {
   // ---- Voicemeeter 桥 ----
 
   /// VB 总线开关：落盘 + 通知；桥在跑则即时下发（mask 活在 ctx，CHANGE 重建不丢）。
+  ///
+  /// 异步语义（2026-11-07）：界面不等原生返回。开路要建引擎+回放效果器/脚本+
+  /// 后台挂插件（重插件 2-4s），关路要逐槽旁路再销毁；底层结构锁在后台补挂
+  /// 期间可能被持有 2-4s。这里只发命令 + 入"在途表"，由心跳 routeState 收尾，
+  /// 动画由 [vbRouteBusy] 驱动（不夺走行内控件），绝不阻塞 UI 心跳。
   void setVbBus(int group, bool on) {
     if (group < 0 || group > 7) return;
+    // 在途期间允许**反向**操作（用户可直接取消加载 / 立刻关回），只拒绝同向
+    // 重复点击（那只会把同一目标重复下发）。用户口径：加载态不得夺走行内
+    // 控件——开关照常可操作。
+    if (vbRouteBusy(group) && vbRoutePendingOn(group) == on) return;
     final next = on ? (vbBusMask | (1 << group)) : (vbBusMask & ~(1 << group));
     if (next == vbBusMask) return;
     vbBusMask = next & 0xFF;
     config.vbBusMask = vbBusMask;
-    ConfigManager.save(config);
+    persistRoutingChange();
+    vbRoutePending[group] = on;
+    vbRoutePendingAt[group] = DateTime.now().millisecondsSinceEpoch;
     _toIso?.send({'cmd': 'setBusMask', 'mask': vbBusMask});
     // 关掉当前编辑器所在总线后，目标路会脱离有效掩码 → 与按路插件开关
     // 走同一回落逻辑（否则 UI 下拉指向不存在的 items）。
     _fallbackVbPluginEditorGroup();
     _notifyUi();
   }
+
+  /// 该路是否有在途启停（UI 据此禁点 + 显示加载/释放动画）。
+  /// 纯读：超时清理交给 [vbReconcileRoutePending]（避免 build 期改状态）。
+  bool vbRouteBusy(int g) {
+    final at = vbRoutePendingAt[g];
+    if (at == null) return false;
+    return DateTime.now().millisecondsSinceEpoch - at <= _kVbRoutePendingMs;
+  }
+
+  /// 在途目标是"打开"（true=加载中；false=释放中）。仅在 busy 时有意义。
+  bool vbRoutePendingOn(int g) => vbRoutePending[g] ?? false;
+
+  /// 心跳 routeState 确认目标达成 → 清在途，UI 从"加载中/释放中"回到稳态。
+  /// 开=就绪(2) 或失败/超时(3)——3 也是确定终态（该路直通，不再等待）；
+  /// 关=已关闭(0)。超时兜底避免桥异常时开关永久锁死。
+  void vbReconcileRoutePending() {
+    if (vbRoutePending.isEmpty) return;
+    final st = (vbInfo['routeState'] as List?)
+        ?.map((e) => (e as num?)?.toInt() ?? 0)
+        .toList();
+    var changed = false;
+    final done = <int>[];
+    for (final e in vbRoutePending.entries) {
+      final state = (st != null && e.key < st.length) ? st[e.key] : -1;
+      final bit = (vbBusMask >> e.key) & 1;
+      final reached = e.value
+          ? (state == 2 || state == 3) // 3=失败/超时，已收敛，不再等
+          : (state == 0 && bit == 0);
+      if (reached) done.add(e.key);
+    }
+    for (final g in done) {
+      vbRoutePending.remove(g);
+      vbRoutePendingAt.remove(g);
+      changed = true;
+    }
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    vbRoutePendingAt.removeWhere((g, at) {
+      if (nowMs - at <= _kVbRoutePendingMs) return false;
+      vbRoutePending.remove(g);
+      changed = true;
+      return true;
+    });
+    if (changed) _notifyUi();
+  }
+
+  /// 桥停/失活：清空在途（否则开关会等到超时才解禁）。
+  void vbClearRoutePending() {
+    if (vbRoutePending.isEmpty) return;
+    vbRoutePending.clear();
+    vbRoutePendingAt.clear();
+    _notifyUi();
+  }
+
+  static const int _kVbRoutePendingMs = 20000;
+
 
   /// VB 按路插件处理开关：bit g = 组 g 总线吃插件链（厂商 DSP 不受影响）。
   void setVbPluginGroup(int group, bool on) {
@@ -55,7 +121,7 @@ extension VbAsioState on AppModel {
     if (next == vbPluginGroupMask) return;
     vbPluginGroupMask = next & 0xFF;
     config.vbPluginGroupMask = vbPluginGroupMask;
-    ConfigManager.save(config);
+    persistRoutingChange();
     _toIso?.send({'cmd': 'setPluginGroupMask', 'mask': vbPluginGroupMask});
     _fallbackVbPluginEditorGroup();
     _notifyUi();
@@ -68,7 +134,7 @@ extension VbAsioState on AppModel {
   void setVbAutoProtect(bool on) {
     if (config.vbAutoProtect == on) return;
     config.vbAutoProtect = on;
-    ConfigManager.save(config);
+    persistRoutingChange();
     _toIso?.send({'cmd': 'setPluginAutoProtect', 'on': on});
     _notifyUi();
   }
@@ -77,11 +143,11 @@ extension VbAsioState on AppModel {
   void setVbPluginGroupAll(bool on) {
     final next = on ? 0xFF : 0x00;
     if (next == vbPluginGroupMask) return;
-    // 全关在 UI 语义 = 「全部不勾」；落盘仍用原值（0 回全开口径只影响加载），
-    // 这里直接保存 0xFF/0x00 原值：全关是用户显式选择。
+    // 全关 = 「全部不勾」：只影响有实例的路是否参与插件处理，不决定实例
+    // 生死（实例由路开关 mask 决定）。全关仍是合法显式选择，原值落盘。
     vbPluginGroupMask = next;
     config.vbPluginGroupMask = next;
-    ConfigManager.save(config);
+    persistRoutingChange();
     _toIso?.send({'cmd': 'setPluginGroupMask', 'mask': vbPluginGroupMask});
     _fallbackVbPluginEditorGroup();
     _notifyUi();
@@ -120,7 +186,7 @@ extension VbAsioState on AppModel {
   void setAsioDriver(String name) {
     if (config.asioDriver == name) return;
     config.asioDriver = name;
-    ConfigManager.save(config);
+    persistRoutingChange();
     if (asioActive) _sendAsioRestart();
     _notifyUi();
   }
@@ -129,7 +195,7 @@ extension VbAsioState on AppModel {
   void setAsioBufSize(int frames) {
     if (config.asioBufSize == frames) return;
     config.asioBufSize = frames;
-    ConfigManager.save(config);
+    persistRoutingChange();
     if (asioActive) _sendAsioRestart();
     _notifyUi();
   }
@@ -138,13 +204,14 @@ extension VbAsioState on AppModel {
   void setAsioOutPair(int ch) {
     if (config.asioOutPair == ch) return;
     config.asioOutPair = ch;
-    ConfigManager.save(config);
+    persistRoutingChange();
     if (asioActive) _sendAsioRestart();
     _notifyUi();
   }
 
   /// 触发一次 ASIO 驱动清单刷新（设置页进入/下拉点开时调）。
   void refreshAsioDrivers() {
+    dbgLog('ui.refreshAsioDrivers: send', sync: true);
     _toIso?.send({'cmd': 'asiodetect'});
   }
 
@@ -152,7 +219,7 @@ extension VbAsioState on AppModel {
   void setVaioOutputEndpoint(String endpoint) {
     if (config.vaioOutputEndpoint == endpoint) return;
     config.vaioOutputEndpoint = endpoint;
-    ConfigManager.save(config);
+    persistRoutingChange();
     if (vaioActive) {
       _toIso?.send({
         'cmd': 'vaiorestart',
@@ -164,7 +231,36 @@ extension VbAsioState on AppModel {
 
   /// 触发一次 AuraVAIO 驱动与端点探测。
   void refreshVaioDetect() {
+    // 同步落盘：VAIO 输出面刷新按钮的闪退若发生在 native
+    // detect 内，进程猝死会吞掉缓冲日志（真机报告
+    // 2026-11-10 项 6）；入口/出口成对出现即可分层。
+    dbgLog('ui.refreshVaioDetect: send', sync: true);
     _toIso?.send({'cmd': 'vaiodetect'});
+  }
+
+  /// 触发探测并等待结果事件（安装/卸载后的诚实校验）：收到
+  /// vaiodetect 事件返回 true，超时返回 false（按未检出处理）。
+  Future<bool> awaitVaioDetect({
+    Duration timeout = const Duration(seconds: 6),
+  }) async {
+    // 并发并入（细审 R-D L2）：已有等待中的探测时并入同一
+    // 等待（结果事件同源）。旧实现无条件覆盖等待器：装/卸
+    // chip 在等待期不禁用，连点时先行 Completer 成孤儿、
+    // 走满 6s 超时并以未生效口径误发矛盾通知，还多跑一次
+    // 提权脚本。
+    var waiter = vaioDetectWaiter;
+    if (waiter == null || waiter.isCompleted) {
+      waiter = Completer<void>();
+      vaioDetectWaiter = waiter;
+      refreshVaioDetect();
+    }
+    try {
+      await waiter.future.timeout(timeout);
+      return true;
+    } on TimeoutException {
+      if (identical(vaioDetectWaiter, waiter)) vaioDetectWaiter = null;
+      return false;
+    }
   }
 
   void _sendAsioRestart() {

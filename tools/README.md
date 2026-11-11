@@ -19,6 +19,8 @@
 |---|---|
 | `bin/run_tests.py` | 统一测试执行入口桥接（转发 `test/runner.py`） |
 | `bin/push_via_api.py` | GitHub REST API 离线/受限网络推送兜底（自行组装 blob/tree/commit，sha 逐字一致） |
+| `bin/fetch_via_api.py` | `push_via_api.py` 的对偶：`github.com:443` 不通、`git fetch` 挂死时，用 Git Data API 把远端提交**逐字重建**进本地对象库（只下载真正新增的 blob/tree，重建后断言 SHA 与远端一致，对不上即中止；时区未知时按候选表试算并校验） |
+| `bin/win_env_sanitize.py` | Windows 环境变量大小写重复键归一化器：宿主（沙箱/CI 包装器）会让 `PATH`/`path`/`Path` 并存、每个变量存两份，而 .NET Framework 的 `ProcessStartInfo.EnvironmentVariables` 大小写敏感 → 第二个 "path" 撞键抛 `ArgumentException('path')`，MSBuild 的 CL.exe 根本没被拉起、编译静默产出陈旧二进制。本脚本读原生块按大小写合并（PATH 取并集、其余留首次值）后启动子进程；顺带支持 PATHEXT 解析与 `.bat` 垫片转发（`flutter` 是 .bat）、`MSBUILDDISABLENODEREUSE=1`、编译日志原始字节直写 |
 | `bin/verify_dll_copies.py` | DLL 三处同哈希单向校验（仅校验；**分发**已改由 `sync_artifacts.ps1` 负责） |
 | `windows/sync_artifacts.ps1` | 增量产物一次性同步：把引擎 DLL / 宿主 EXE / 三个桥从真相源覆盖分发到 `test/`、`app build runner`、`dist` 三处；端点缺失或单文件覆盖失败仅告警并跳过（替代手工 cp；`-WhatIf` 预演、`-PackZip` 重打包发行 zip） |
 | `windows/build_windows.ps1` | Windows 全栈构建/产物整理/资源打包流水线（根 CMake preset → 引擎/桥/Flutter → dist；根级 `tools/build_windows.ps1` 薄转发，命令不变） |
@@ -74,7 +76,34 @@
 
 ---
 
-## 5. 运行方式
+## 5. 性能回归（Windows，需前台桌面会话）
+
+| 工具 | 用途 |
+|---|---|
+| `windows/perf_regression.py` | 四场景（启动空载 / 可视化静默 / 播放态 / 最小化）内存·CPU·GPU 采集，输出 JSON + CSV + 截图，路径全部由脚本自身推导 |
+| `windows/gpu_sampler.ps1` | 按 PID 采 `\GPU Engine(*)\Utilization Percentage` 与 `\GPU Process Memory(*)`（tab 分隔 CSV） |
+| `perf_regression.py` | 根级薄转发，命令行不变 |
+
+```bash
+flutter build windows --release --no-tree-shake-icons   # 先出 release
+python tools/perf_regression.py                        # 四场景 sysapo
+python tools/perf_regression.py --mode voicemeeter_api # VB attach
+python tools/perf_regression.py --scenario play --strict
+# 编排入口（同样转发到 tools/windows/）：
+python test/runner.py --perf --perf-strict
+python test/runner.py --perf viz --perf-mode voicemeeter_api
+```
+
+**不属于 `--smoke` 常驻门禁**：会移动鼠标、最小化窗口，必须有真实桌面会话。
+产物默认在 `<repo>/.tmp/perf-regression/<时间戳>/`（gitignore）：`summary.json` 是
+机器可读总表，`stages.csv` 是一行一场景的对照表，`proc_<scene>.json` 是逐秒原始样本，
+`stage_<scene>.png` 用来确认点击落点。阈值是“本机最终值 ≈1.3–1.5 倍”的软门禁，
+不加 `--strict` 只打印 WARN；VB 的 CPU 由 8 路引擎泵送主导，阈值刻意放宽。
+详见 `test/date/2026-11-06/perf-final/outputs/perf-final-report.md`。
+
+---
+
+## 6. 运行方式
 
 ```bash
 python tools/bin/run_tests.py --smoke     # 转发 test/runner.py --smoke
@@ -82,6 +111,7 @@ python tools/bin/run_tests.py --ui        # 转发 test/runner.py --ui
 # 或直接用原生入口：
 python test/runner.py --smoke
 python test/runner.py --ui
+python test/runner.py --perf              # Windows 性能回归（四场景）
 ```
 
 受限网络下推送：

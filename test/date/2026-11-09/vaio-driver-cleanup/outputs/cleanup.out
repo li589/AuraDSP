@@ -1,0 +1,28 @@
+﻿
+[清理] 当前：MEDIA 节点 2 个 / DriverStore 同名包 4 个
+  保留节点  : ROOT\MEDIA\0000 [Root\AuraVAIO]
+  保留驱动包: oem12.inf
+  将移除    : 节点 1 个 / 驱动包 3 个
+    NODE  ROOT\MEDIA\0001  [Root\AuraVaioDriver]
+    PKG   oem10.inf  (11/05/2026 21.17.30.265)
+    PKG   oem9.inf  (11/05/2026 20.55.5.700)
+    PKG   oem11.inf  (11/09/2026 13.46.2.47)
+  移除节点 ROOT\MEDIA\0001 ...
+  删除驱动包 oem10.inf ...
+    Microsoft PnP 工具
+    
+    已卸载驱动程序包。
+    已成功删除驱动程序程序包。
+  删除驱动包 oem9.inf ...
+    Microsoft PnP 工具
+    
+    已卸载驱动程序包。
+    已成功删除驱动程序程序包。
+  删除驱动包 oem11.inf ...
+    Microsoft PnP 工具
+    
+    已卸载驱动程序包。
+    已成功删除驱动程序程序包。
+[清理后] MEDIA 节点 1 个 / DriverStore 同名包 1 个，移除失败 0 项
+  收敛达标：MEDIA 节点数 == 1。
+

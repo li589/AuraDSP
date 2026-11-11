@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=AuraDSP
+GenericName=Audio Effects Processor
+Comment=Cross-platform global audio effects system
+Comment[zh_CN]=跨平台全局音频效果系统
+Exec=auradsp
+Icon=auradsp
+Categories=AudioVideo;Audio;
+Keywords=DSP;Equalizer;Audio;Effects;VST;CLAP;
+StartupNotify=true
+Terminal=false

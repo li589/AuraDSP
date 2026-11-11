@@ -124,7 +124,10 @@ class AudioBridgeCore {
     final buf = malloc<Uint8>(cap).cast<Utf8>();
     try {
       final n = _detect(buf, cap);
-      if (n <= 0) return null;
+      // 长度钳制（防御纵深）：原生侧契约违例（n > cap）时按失败
+      // 处理，绝不按 n 越界读 malloc 缓冲——越界读是堆损坏/闪退
+      // 级隐患，三桥当前实现均守约，此钳制防未来回归。
+      if (n <= 0 || n > cap) return null;
       return jsonDecode(buf.toDartString(length: n)) as Map<String, dynamic>?;
     } catch (e, st) {
       swallowThrottled(e, st, logTag);
@@ -140,7 +143,7 @@ class AudioBridgeCore {
     final buf = malloc<Uint8>(cap).cast<Utf8>();
     try {
       final n = _status(buf, cap);
-      if (n <= 0) return null;
+      if (n <= 0 || n > cap) return null; // 长度钳制，同 detectJson
       return jsonDecode(buf.toDartString(length: n)) as Map<String, dynamic>?;
     } catch (e, st) {
       swallowThrottled(e, st, logTag);
@@ -255,7 +258,7 @@ class AudioBridgeCore {
     final buf = malloc<Uint8>(256 * 1024 + 1).cast<Utf8>();
     try {
       final n = _getParamStr(idp.cast(), buf, 256 * 1024 + 1);
-      if (n <= 0) return null;
+      if (n <= 0 || n > 256 * 1024 + 1) return null; // 长度钳制，同上
       return buf.toDartString(length: n);
     } catch (e, st) {
       swallowThrottled(e, st, logTag);
@@ -400,13 +403,25 @@ class BridgeManager {
     required bool bypass,
   }) {
     var n = 0;
+    ({bool isFloat, double value})? lpEnable;
     for (final e in params.entries) {
+      // 脚本"已应用"位必须排在代码之后（加载顺序：效果器 → 编译 → 已应用）。
+      // 仅编译未应用时镜像里没有 enable=1，这里也就不会隐式启用。
+      if (e.key == 'liveprog.enable') {
+        lpEnable = e.value;
+        continue;
+      }
       b.setParam(e.key, isFloat: e.value.isFloat, value: e.value.value);
       ++n;
     }
     var ns = 0;
     for (final e in paramsStr.entries) {
       if (b.setParamStr(e.key, e.value) >= 0) ++ns;
+    }
+    if (lpEnable != null) {
+      b.setParam('liveprog.enable',
+          isFloat: lpEnable.isFloat, value: lpEnable.value);
+      ++n;
     }
     final bypassRc = b.setBypass(bypass);
     dbgLog('bridge(${_activeId ?? '?'}): replay params=$n str=$ns '

@@ -1,0 +1,31 @@
+name: auradsp_setup
+description: "AuraDSP Setup — 自研安装/卸载向导（极光主题，实施设计见 docs/20-执行/Windows安装程序与打包脚本实施设计-2026-11-06.md）。"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  # 无边框窗口/标题栏拖拽（与主应用同款插件）
+  window_manager: ^0.5.1
+  # ZIP-P 产品载荷解压（纯 Dart，可测）
+  archive: ^4.0.7
+  # 系统集成 FFI 基础（注册表/进程/COM 调用走自有 ffi 封装）
+  win32: ^5.10.1
+  ffi: ^2.1.4
+  path: ^1.9.1
+  crypto: ^3.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  generate: true
+  uses-material-design: true

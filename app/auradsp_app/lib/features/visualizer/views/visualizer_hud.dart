@@ -1,6 +1,3 @@
-import 'dart:ui' as ui;
-import '../../../platform/platform_profile.dart';
-
 import 'package:flutter/material.dart';
 
 import '../../../core/design.dart';
@@ -249,9 +246,11 @@ class _VisualizerHudState extends State<VisualizerHud> {
 }
 
 
-/// 平台自适应磨砂面板容器：
-/// Linux 环境（特别是虚拟机 llvmpipe 软件渲染）BackdropFilter 会引发高 CPU 卷积开销造成严重卡顿；
-/// 降级为高不透明度面板质感（alpha 0.94），免去全屏采样卷积，帧率显著提升。
+/// 平台自适应磨砂面板容器。
+/// P0-3：全平台走无模糊路径。BackdropFilter 每次合成都要对整块背景做
+/// sigma=12 的卷积并额外持有离屏纹理（本机实测 HUD 可见时 RSS +77 MB、
+/// GPU 3D +16pp）；面板本身 alpha 0.94 已接近不透明，去掉模糊观感差异
+/// 很小。Linux 原本就因 llvmpipe 开销走这条路径，此处统一。
 class _GlassSurface extends StatelessWidget {
   final BorderRadius borderRadius;
   final Widget child;
@@ -259,18 +258,9 @@ class _GlassSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (PlatformProfile.isLinux) {
-      return ClipRRect(
-        borderRadius: borderRadius,
-        child: child,
-      );
-    }
     return ClipRRect(
       borderRadius: borderRadius,
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: child,
-      ),
+      child: child,
     );
   }
 }

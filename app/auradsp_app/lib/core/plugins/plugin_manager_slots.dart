@@ -86,9 +86,37 @@ extension PluginManagerSlots on PluginManager {
   }
 
   /// 切换指定槽位旁路开关
+  ///
+  /// 故障槽特例（业主裁定 2026-11-10）：故障闩锁中的槽显示与
+  /// 正常旁路同文案，此刻点击 = 尝试重新加载该插件（成功解除
+  /// 闩锁、失败维持故障旁路），不走普通旁路翻转。
   void toggleBypass({int? slot}) {
     final s = slot ?? _selectedSlot;
+    if (getSlotStatus(s).fault) {
+      retryFaultedSlot(s);
+      return;
+    }
     setBypass(!isSlotBypassed(s), slot: s);
+  }
+
+  /// 故障槽重试加载：本地链重挂本槽插件；sysapo 影子链另发
+  /// apoPluginReload 让发布器推进 loadGen（APO 侧据此重载，
+  /// 结果经 telemetry 回传——成功清闩锁、失败维持并保持呼吸
+  /// 闪动，不重复发边沿通知）。
+  void retryFaultedSlot(int s) {
+    if (_apoShadow) {
+      _commandSender?.call({'cmd': 'apoPluginReload', 'slot': s});
+    }
+    final p = getSlotPlugin(s);
+    if (p != null) loadPlugin(p, slot: s);
+    _notify();
+  }
+
+  /// sysapo 影子链的编辑器关闭收获（D3）：影子状态经 isolate
+  /// savePreset → 插件块发布到 APO。其余模式为空操作。
+  void _harvestShadowState(int slot) {
+    if (!_apoShadow) return;
+    _commandSender?.call({'cmd': 'apoHarvestState', 'slot': slot});
   }
 
   void setPdc(bool enable) {
@@ -103,6 +131,16 @@ extension PluginManagerSlots on PluginManager {
     if (rc == 1) {
       _pdcEnabled = pdc;
     }
+    _notify();
+  }
+
+  /// 引擎侧 PDC 真值同步（F2）：槽位加载时延迟线分配失败会触发
+  /// 引擎自动关 PDC（plugin_abi 的既定降级），该路径不经 setPdc
+  /// 命令回执——isolate 在加载后回读 auradsp_plugin_get_pdc 并经
+  /// pluginPdcSync 事件同步，UI 开关以引擎真值为准，不再撒谎。
+  void syncPdcFromEngine(bool actual) {
+    if (_pdcEnabled == actual) return;
+    _pdcEnabled = actual;
     _notify();
   }
 
@@ -178,6 +216,8 @@ extension PluginManagerSlots on PluginManager {
       _editorRoute[slot] = -1;
       // P2 自动记录：编辑器关闭即把当前调音落盘到激活 A/B 槽。
       autoSaveAb(slot, group: r >= 0 ? r : -1);
+      // sysapo：影子调音同步收获到 APO（D3）。
+      _harvestShadowState(slot);
       _notify();
       return;
     }
@@ -200,6 +240,8 @@ extension PluginManagerSlots on PluginManager {
         final r = _editorRoute[slot];
         autoSaveAb(slot, group: r >= 0 ? r : -1);
         _editorRoute[slot] = -1;
+        // sysapo：影子调音同步收获到 APO（D3）。
+        _harvestShadowState(slot);
       }
       _notify();
     }

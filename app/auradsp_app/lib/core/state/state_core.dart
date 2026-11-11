@@ -5,6 +5,11 @@ part of '../state.dart';
 ///
 /// 方法体逐字保留自 AppModel 类体；extension 成员与类内成员同库作用域，
 /// 原有调用点（实例调用、tear-off、跨 part 互调）解析不变。
+/// APO 文件型效果的参数 id（卷积 IR / DDC 文件）：sysapo 下
+/// APO 侧引擎读不到用户目录文件，这两节恒不可用（2026-11-10
+/// 用户裁定：进模式自动关闭 + 尝试开启时拦截并通知）。
+const kApoFileEffectEnables = {'convolver.enable', 'ddc.enable'};
+
 extension StateCore on AppModel {
   void send(Map<String, dynamic> m) {
     // [PATCHED-AuraDSP P-032] testing 模式记录已下发的 setParam 载荷。
@@ -107,8 +112,19 @@ extension StateCore on AppModel {
     return current;
   }
 
+  /// 当前模式能力（Part I ModeCaps）：功能层只问能力。
+  ModeCaps get modeCaps => AudioModes.capsFor(audioMode);
+
   /// 强类型通用参数设值
   void setParam<T>(ParamSpec<T> spec, T value, {bool notify = true}) {
+    if (!modeCaps.fileEffects &&
+        kApoFileEffectEnables.contains(spec.id) &&
+        (value == true || (value is num && value != 0))) {
+      postNotice('该效果依赖外部文件（卷积 IR / DDC 文件），在 System APO '
+          '模式下不可用', level: NoticeLevel.warning);
+      if (notify) _notifyUi();
+      return;
+    }
     final clamped = spec.clamp(value);
     _paramValues[spec.id] = clamped;
     spec.write(this, clamped);
@@ -226,6 +242,9 @@ extension StateCore on AppModel {
         // 且 setInt 的乐观镜像不回滚）。历史 UI 曾有非法的 2（"7.1"）档位，
         // 会淤积在镜像与自动保存里——此处 clamp 保证镜像即引擎真相。
         channelsMode = v.toInt().clamp(0, 1);
+        break;
+      case 'channels.upmix_fill':
+        channelsUpmixFill = v.toInt().clamp(0, 1);
         break;
       case 'channels.countMode':
         channelsCountMode = v.toInt().clamp(0, 1);
@@ -788,6 +807,16 @@ extension StateCore on AppModel {
     _iso = null;
     _toIso = null;
     _fromIso = null;
+    // 桥/链 Active 旗标随 isolate 一起复位（细审 R-D M1）：
+    // 新 isolate 无任何链路，旗标陈旧会让 ready 的增量对账
+    // （applyPipelineChain 以 !active 为发送条件）跳过重发，
+    // 捕获链/ASIO 输入链在采样率切换、wasapiLost 自愈、
+    // fatal 重试后静默死亡且 UI 仍显示 active。
+    vaioActive = false;
+    asioActive = false;
+    vbActive = false;
+    captureActive = false;
+    captureNote = '';
     try {
       oldFrom?.close();
     } catch (e, st) { swallow(e, st); }
