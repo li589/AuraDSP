@@ -51,7 +51,16 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   if (flutter_controller_) {
-    flutter_controller_ = nullptr;
+    // 先把成员移空再销毁控制器（第九轮项 4 定罪）：直接对成员
+    // 赋 nullptr 时，控制器析构在赋值完成前运行，其间销毁子
+    // 视图 HWND 会把窗口消息同步重入 MessageHandler，成员仍
+    // 指向半析构的控制器 → HandleTopLevelWindowProc 解引用
+    // 引擎内部已释放指针（rcx=0）→ 退出时崩溃（vm-win10
+    // 2026-11-11 dump：flutter_windows+0x1e220，c0000005 →
+    // c000041d FATAL_USER_CALLBACK_EXCEPTION；同签名 10-24
+    // 旧版已现）。移空后重入消息只走基类默认处理，安全。
+    auto controller = std::move(flutter_controller_);
+    controller.reset();
   }
 
   Win32Window::OnDestroy();
@@ -73,7 +82,10 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
 
   switch (message) {
     case WM_FONTCHANGE:
-      flutter_controller_->engine()->ReloadSystemFonts();
+      // 同上：控制器销毁后仍可能收到该消息，裸解引用即空指针。
+      if (flutter_controller_) {
+        flutter_controller_->engine()->ReloadSystemFonts();
+      }
       break;
   }
 
