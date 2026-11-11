@@ -13,10 +13,16 @@
 # 版本：installer/shared/version_resolver.py 解析 pubspec（发布格式校验）。
 #
 # 用法：pack.sh [--build] [--bundle DIR] [--out DIR] [--only deb,driver,appimage,portable]
+#        [--resources core|full|light|addons|none] [--packs-dir DIR]
 #   --build  先一键构建再打包：引擎（cmake 预设 linux-x64）→ Flutter
 #            bundle → sync_artifacts 同步引擎/宿主进 bundle/lib，然后打包。
 #            从干净拉取到产出三件只需这一条命令（需 cmake/ninja/flutter
 #            与 multilib 等构建依赖在位，同 CI J2/J8 口径）。
+#   --resources 资源档位（资源计划 P1，2026-11-12）：与 Windows
+#            pack.py 同名同义（full=标准包、light=轻量包、core=
+#            bundle 自带+收尾），经 tools/resource_pipeline/
+#            merge_resources.py 调 pack.py 的同一合并实现，在
+#            bundle 的临时副本上加工，不污染构建产物。
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,6 +31,8 @@ BUNDLE="$ROOT/app/auradsp_app/build/linux/x64/release/bundle"
 OUT="$ROOT/dist"
 ONLY=""
 BUILD=0
+RESOURCES="core"
+PACKS_DIR="$ROOT/dist/resources"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -32,6 +40,8 @@ while [ $# -gt 0 ]; do
         --bundle) BUNDLE="$2"; shift 2 ;;
         --out) OUT="$2"; shift 2 ;;
         --only) ONLY="$2"; shift 2 ;;
+        --resources) RESOURCES="$2"; shift 2 ;;
+        --packs-dir) PACKS_DIR="$2"; shift 2 ;;
         *) echo "error: 未知参数 $1" >&2; exit 2 ;;
     esac
 done
@@ -62,6 +72,18 @@ echo "out:    $OUT"
 want() { [ -z "$ONLY" ] || [[ ",$ONLY," == *",$1,"* ]]; }
 
 mkdir -p "$OUT"
+
+# 资源合并（P1）：bundle 拷到临时副本上加工，四件产物统一消费
+# 副本；构建原 bundle 不受污染。副本随脚本退出清理。
+STAGE="$(mktemp -d "$OUT/.pack-staging.XXXXXX")"
+trap 'rm -rf "$STAGE"' EXIT
+mkdir -p "$STAGE/bundle"
+cp -r "$BUNDLE/." "$STAGE/bundle/"
+python3 "$ROOT/tools/resource_pipeline/merge_resources.py" \
+    --staging "$STAGE/bundle" --resources "$RESOURCES" \
+    --packs-dir "$PACKS_DIR"
+BUNDLE="$STAGE/bundle"
+echo "resources: 档位 $RESOURCES（已在 staging 副本合并）"
 if want deb;      then bash "$HERE/deb/build_deb.sh" "$BUNDLE" "$AURADSP_VERSION" "$OUT"; fi
 if want driver;   then bash "$HERE/driver/build_driver_deb.sh" "$AURADSP_VERSION" "$OUT"; fi
 if want appimage; then bash "$HERE/appimage/build_appimage.sh" "$BUNDLE" "$AURADSP_VERSION" "$OUT"; fi
