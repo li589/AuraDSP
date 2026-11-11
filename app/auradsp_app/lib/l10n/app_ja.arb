@@ -1478,6 +1478,7 @@
     }
   },
   "plugScanDirsBuiltin": "内蔵",
+  "plugScanDirInvalid": "フォルダが存在しないか、無効になっています",
   "plugScanDirsBuiltinHint": "アプリ同梱のフォルダー。自動作成され、削除できません",
   "plugScanDirsRemove": "この項目を削除",
   "plugFormatSoon": "この形式のスキャンとホスト機能は今後のバージョンで対応予定です",

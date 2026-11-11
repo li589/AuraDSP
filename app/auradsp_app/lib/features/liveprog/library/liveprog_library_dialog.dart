@@ -114,9 +114,9 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
     super.initState();
     _ensureDefaultDir();
     _initSelectedDir();
-    if (widget.model.config.customScriptDirs.isNotEmpty) {
-      _checkDirsAsync();
-    }
+    // 存在性检测覆盖全部目录行（本地/安装内置/外部），失效标记
+    // 统一走 _dirExistence（资源计划 P2）。
+    _checkDirsAsync();
     _loadScriptsForSelectedDir();
   }
 
@@ -137,9 +137,18 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
     }
   }
 
+  /// 全部目录行：本地库 + 安装内置（打包登记，可空）+ 用户外部。
+  List<String> get _allScriptDirs {
+    final install = widget.model.installBuiltinDir('liveprog');
+    return [
+      LiveprogLibrary.dir,
+      ?install,
+      ...widget.model.config.customScriptDirs,
+    ];
+  }
+
   void _initSelectedDir() {
-    final customDirs = widget.model.config.customScriptDirs;
-    final allDirs = [LiveprogLibrary.dir, ...customDirs];
+    final allDirs = _allScriptDirs;
     final saved = PathMemory.rawDirFor(PathMemory.slotLiveprogSelectedDir);
     if (saved != null && allDirs.contains(saved)) {
       _selectedDir = saved;
@@ -186,9 +195,9 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
     }
   }
 
-  /// 每次打开或变更后异步检测外部目录是否存在
+  /// 每次打开或变更后异步检测全部目录（本地/安装内置/外部）是否存在
   Future<void> _checkDirsAsync() async {
-    final dirs = widget.model.config.customScriptDirs;
+    final dirs = _allScriptDirs;
     if (dirs.isEmpty) return;
     setState(() => _checkingDirs = true);
     final results = <String, bool>{};
@@ -243,7 +252,11 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
         ? rawName
         : '$rawName.eel';
 
+    // 保存目标不得落安装内置目录（随包内容只读语义，资源计划
+    // P2）：选中它时回退本地库。
+    final installDir = widget.model.installBuiltinDir('liveprog');
     final targetDir = (_selectedDir != null &&
+            _selectedDir != installDir &&
             (_selectedDir == LiveprogLibrary.dir ||
                 (_dirExistence[_selectedDir] ?? false)))
         ? _selectedDir!
@@ -400,8 +413,8 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);
-    final customDirs = widget.model.config.customScriptDirs;
-    final allDirs = [LiveprogLibrary.dir, ...customDirs];
+    final allDirs = _allScriptDirs;
+    final installDir = widget.model.installBuiltinDir('liveprog');
 
     return AlertDialog(
       backgroundColor: p.panel,
@@ -480,8 +493,10 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
                 itemBuilder: (ctx, idx) {
                   final d = allDirs[idx];
                   final isDefault = idx == 0;
+                  final isInstallBuiltin =
+                      installDir != null && d == installDir;
                   final isSelected = _selectedDir == d;
-                  final exists = isDefault ? true : (_dirExistence[d] ?? true);
+                  final exists = _dirExistence[d] ?? true;
 
                   return InkWell(
                     onTap: () => _selectDirectory(d),
@@ -546,7 +561,30 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
                                   ),
                                 ),
                                 const SizedBox(width: AuraSpace.xs),
-                              ] else if (!exists) ...[
+                              ],
+                              // 安装内置目录（随包 EEL 脚本，资源计划
+                              // P2）：内置 chip 与插件扫描目录同款，
+                              // 不可移除；与失效标记可同时出现。
+                              if (isInstallBuiltin) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: p.accent.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: Text(
+                                    l.plugScanDirsBuiltin,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: p.accent,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: AuraSpace.xs),
+                              ],
+                              if (!exists) ...[
                                 Tooltip(
                                   message: l.lpLibDirInvalid,
                                   child: Icon(
@@ -568,8 +606,8 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
                                     ? () => _browseInFileManager(d)
                                     : null,
                               ),
-                              // 移除外部目录（默认目录禁止删除）
-                              if (!isDefault)
+                              // 移除外部目录（默认/安装内置目录禁止删除）
+                              if (!isDefault && !isInstallBuiltin)
                                 IconButton(
                                   tooltip: l.lpDeleteAction,
                                   icon: const Icon(Icons.close_rounded,
@@ -635,6 +673,11 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
                             itemCount: _items.length,
                             itemBuilder: (ctx, idx) {
                               final item = _items[idx];
+                              // 安装内置目录的条目只读：不给重命名/
+                              // 删除入口（底层 deletePath/renamePath
+                              // 的路径收敛本来也只放行本地+外部）。
+                              final fromInstall = installDir != null &&
+                                  _selectedDir == installDir;
                               return ListTile(
                                 dense: true,
                                 leading: Icon(
@@ -648,7 +691,9 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
                                   item.name,
                                   style: monoOf(p, size: 12),
                                 ),
-                                trailing: Row(
+                                trailing: fromInstall
+                                    ? null
+                                    : Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     IconButton(

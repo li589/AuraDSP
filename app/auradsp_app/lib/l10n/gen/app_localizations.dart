@@ -6400,6 +6400,12 @@ abstract class AppLocalizations {
   /// **'内置'**
   String get plugScanDirsBuiltin;
 
+  /// No description provided for @plugScanDirInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'目录不存在或已失效'**
+  String get plugScanDirInvalid;
+
   /// No description provided for @plugScanDirsBuiltinHint.
   ///
   /// In zh, this message translates to:

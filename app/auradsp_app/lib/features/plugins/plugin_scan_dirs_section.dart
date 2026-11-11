@@ -220,6 +220,20 @@ class _ScanDirRow extends StatelessWidget {
               ),
             ),
           ],
+          // 失效标记与脚本库统一（资源计划 P2 / Part B3）：此前
+          // 只有图标/颜色变化、无文字说明，用户无从知道目录已
+          // 失效；现补警告图标 + 气泡，与脚本库三件套对齐。
+          if (!exists) ...[
+            const SizedBox(width: 6),
+            Tooltip(
+              message: l.plugScanDirInvalid,
+              child: Icon(
+                Icons.warning_amber_rounded,
+                size: 14,
+                color: p.warning,
+              ),
+            ),
+          ],
           IconButton(
             tooltip: l.plugOpenFolder,
             onPressed: onOpen,

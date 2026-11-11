@@ -3392,6 +3392,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugScanDirsBuiltin => '内蔵';
 
   @override
+  String get plugScanDirInvalid => 'フォルダが存在しないか、無効になっています';
+
+  @override
   String get plugScanDirsBuiltinHint => 'アプリ同梱のフォルダー。自動作成され、削除できません';
 
   @override

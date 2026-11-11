@@ -3356,6 +3356,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugScanDirsBuiltin => '内置';
 
   @override
+  String get plugScanDirInvalid => '目录不存在或已失效';
+
+  @override
   String get plugScanDirsBuiltinHint => '应用自带插件目录，自动创建且不可移除';
 
   @override

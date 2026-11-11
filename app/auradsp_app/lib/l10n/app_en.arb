@@ -1478,6 +1478,7 @@
     }
   },
   "plugScanDirsBuiltin": "Built-in",
+  "plugScanDirInvalid": "Folder missing or no longer valid",
   "plugScanDirsBuiltinHint": "Folder shipped with the app; created automatically and cannot be removed",
   "plugScanDirsRemove": "Remove this folder",
   "plugFormatSoon": "Scanning and hosting for this format will arrive in a later release",

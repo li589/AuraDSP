@@ -3546,6 +3546,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugScanDirsBuiltin => 'Built-in';
 
   @override
+  String get plugScanDirInvalid => 'Folder missing or no longer valid';
+
+  @override
   String get plugScanDirsBuiltinHint =>
       'Folder shipped with the app; created automatically and cannot be removed';
 
