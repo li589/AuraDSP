@@ -728,6 +728,12 @@ void main() {
   group('Part A — getter/setter 运行时闭环（allParams 全覆盖）', () {
     test('每个 spec 的 setter 必须可感知写入自身 getter 并可还原', () {
       final m = AppModel(testing: true);
+      // 平台默认模式差异钉死（Windows 主机测试债务修复）：构造
+      // 归一化落平台默认——Windows 默认 sysapo，其 ModeCaps 按
+      // 设计拦截文件型效果 setter（convolver/ddc enable），Part A
+      // 测的是 setter/getter 接线闭环而非模式门禁，显式钉到本地
+      // 链默认（与 Linux CI 的 system 默认同 caps），消除平台差。
+      m.audioMode = 'system';
       final failures = <String>[];
       var checked = 0;
       for (final spec in ParamRegistry.allParams) {

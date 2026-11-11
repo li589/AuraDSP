@@ -91,7 +91,10 @@ void main() {
       expect(find.text('提示：AuraVAIO 为虚拟声卡输出，需在 OBS 或录音软件中选择 AuraVAIO 才能听到声音。'),
           findsOneWidget);
       expect(find.text('本地耳机监听镜像'), findsOneWidget);
-      expect(find.text('物理输出'), findsOneWidget);
+      // 「物理输出」两处同名是设计内（第七轮 S2）：本用例输入为
+      // ASIO 驱动（合成链 = asio），VAIO 输出子面板除物理输出
+      // 字段行外，另有一条同名标签的「被 ASIO 接管」说明行。
+      expect(find.text('物理输出'), findsNWidgets(2));
 
       // 切到 WASAPI 渲染输出端
       model.setPipelineOutput(AudioModes.outputWasapi);

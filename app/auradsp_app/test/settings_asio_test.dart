@@ -62,11 +62,14 @@ void main() {
       // 清单为空时无下拉可点：直接走 setter（桥未跑不触发 restart）。
       model.setAsioDriver('FL Studio ASIO');
       model.setAsioBufSize(512);
-      model.setAsioOutPair(1);
+      // 全面复审 S3 起 asioOutPair 是起始声道偏移（下拉域
+      // [0,2,4,6]，标签 ch {n+1}/{n+2}）：ch 3/4 对应偏移 2。
+      // 旧断言按对索引 1 写，在偏移语义下不可表示（下拉回落 0）。
+      model.setAsioOutPair(2);
       await tester.pumpAndSettle();
       expect(model.config.asioDriver, 'FL Studio ASIO');
       expect(model.config.asioBufSize, 512);
-      expect(model.config.asioOutPair, 1);
+      expect(model.config.asioOutPair, 2);
       // 输出对切换后显示 ch 3/4。
       expect(find.text('ch 3/4'), findsOneWidget);
       expect(find.text('512 frames'), findsOneWidget);
