@@ -62,6 +62,20 @@ LONG DeleteRegKeyTree(HKEY root, const std::wstring& subKey, REGSAM samExtra = 0
     return RegDeleteKeyExW(root, subKey.c_str(), samExtra, 0);
 }
 
+// 目标键是否已消失（反注册的事后核验：删除返回失败与「本来就
+// 不存在」都收敛为「不在」这一事实，残留才是真失败）。
+bool RegKeyAbsent(HKEY root, const std::wstring& subKey, REGSAM samExtra = 0) {
+    HKEY hKey = nullptr;
+    LONG rc = RegOpenKeyExW(root, subKey.c_str(), 0,
+                            KEY_READ | samExtra, &hKey);
+    if (rc == ERROR_FILE_NOT_FOUND) return true;
+    if (rc == ERROR_SUCCESS) {
+        RegCloseKey(hKey);
+        return false;
+    }
+    return false;  // 其它错误下无法证明已清，按残留处理
+}
+
 }  // namespace
 
 STDAPI DllRegisterServer() {
@@ -137,5 +151,22 @@ STDAPI DllUnregisterServer() {
     DeleteRegKeyTree(HKEY_CURRENT_USER, L"Software\\Classes\\" + inprocKey);
     DeleteRegKeyTree(HKEY_CURRENT_USER, L"Software\\Classes\\" + clsidBase);
 
-    return S_OK;
+    // 聚合裁定（资源计划 Stage 0 / §8.4 纵深防御）：旧实现无条
+    // 件返回 S_OK，任一步删除失败都被吞掉——regsvr32 退出 0、
+    // 脚本报成功、注册表却纹丝不动，用户侧呈「卸不掉」。现以
+    // 事后核验为准：ASIO 发现键（全局状态真值）或两处
+    // InprocServer32（我方载荷键）任一残留即返回失败，让失败
+    // 可见；CLSID 基键下若有外来子键致父键删不掉，不阻塞裁定
+    // （发现键已摘除，驱动已不可被宿主发现）。HKCU 回退键仅
+    // 在当初回退注册时存在，清理尽力而为、不纳入裁定。
+    const bool asioGone =
+        RegKeyAbsent(HKEY_LOCAL_MACHINE, asioBase, KEY_WOW64_64KEY);
+    const bool hklmGone =
+        RegKeyAbsent(HKEY_LOCAL_MACHINE, hklmInprocKey, KEY_WOW64_64KEY);
+    const bool hkcrGone =
+        RegKeyAbsent(HKEY_CLASSES_ROOT, inprocKey, KEY_WOW64_64KEY);
+    if (asioGone && hklmGone && hkcrGone) {
+        return S_OK;
+    }
+    return HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED);
 }

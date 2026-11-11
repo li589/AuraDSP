@@ -890,10 +890,15 @@ extension AudioModesState on AppModel {
         _notifyUi();
         return false;
       }
-      final ok =
-          res.toolOk == true || (res.exitCode == 0 && asioDriverInstalled);
+      // 裁定必须与注册表复查一致（资源计划 Stage 0 / §8.4）：
+      // 工具自报成功但复查无键不算注册成功——旧口径 toolOk 单
+      // 独短路，脚本/驱动侧假成功时状态机对外说谎。
+      final toolClaimedOk = res.toolOk ?? (res.exitCode == 0);
+      final ok = toolClaimedOk && asioDriverInstalled;
       if (!ok) {
-        lastAsioError = 'ASIO 驱动注册未完成，请确认在 UAC 提权弹窗中选择“是”以授予管理员权限';
+        lastAsioError = (res.toolOk == true && !asioDriverInstalled)
+            ? 'ASIO 驱动注册未生效：脚本自报成功，但注册表复查未见 AuraDSP Driver 键'
+            : 'ASIO 驱动注册未完成，请确认在 UAC 提权弹窗中选择“是”以授予管理员权限';
       } else {
         lastAsioError = null;
       }
@@ -930,10 +935,14 @@ extension AudioModesState on AppModel {
         _notifyUi();
         return false;
       }
-      final ok =
-          res.toolOk == true || (res.exitCode == 0 && !asioDriverInstalled);
+      // 同注册侧口径（Stage 0 / §8.4）：自报成功但键还在，
+      // 就是没卸掉，必须如实报未生效而非成功。
+      final toolClaimedOk = res.toolOk ?? (res.exitCode == 0);
+      final ok = toolClaimedOk && !asioDriverInstalled;
       if (!ok) {
-        lastAsioError = 'ASIO 驱动注销未完成';
+        lastAsioError = (res.toolOk == true && asioDriverInstalled)
+            ? 'ASIO 驱动注销未生效：脚本自报成功，但注册表复查显示驱动仍在册'
+            : 'ASIO 驱动注销未完成';
       } else {
         lastAsioError = null;
       }
