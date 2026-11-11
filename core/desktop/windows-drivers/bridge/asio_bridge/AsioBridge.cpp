@@ -417,6 +417,12 @@ int asio_start_ex(const char* driver_name, const char* engine_dll,
         return -4;
     }
     g_b.outPair = out_pair < 0 ? 0 : out_pair;
+    // 全面复审 S4（ASIO-7）：请求缓冲尺寸被驱动范围/粒度协商钳制
+    // 时在 note 如实呈现（与 ioCh 协商注同口径）。
+    if (g_b.host.buf_clamped_from() > 0) {
+        snprintf(g_b.note, sizeof(g_b.note), "bufSize %ld->%ld (driver granularity)",
+                 g_b.host.buf_clamped_from(), g_b.host.buffer_size());
+    }
     // 驱动回值缓冲大小与预估不符（granularity 取整等）：按实际值重建引擎句柄
     if (g_b.engine && g_b.host.buffer_size() != g_b.nbs) {
         if (g_b.destroy) g_b.destroy(g_b.engine);

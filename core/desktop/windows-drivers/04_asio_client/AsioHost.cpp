@@ -267,6 +267,23 @@ bool AsioHost::query_caps(DriverCaps& out) {
     return true;
 }
 
+long AsioHost::NegotiateBufSize(long req, long mn, long mx, long gran) {
+    long adj = req;
+    if (adj < mn) adj = mn;
+    if (adj > mx) adj = mx;
+    if (gran == -1) {
+        // 2 的幂档：从 mn 起翻倍到首个 >= adj 的档（不超过 mx）。
+        long p2 = mn > 0 ? mn : 1;
+        while (p2 < adj && p2 < mx) p2 <<= 1;
+        adj = p2;
+    } else if (gran > 0 && adj > mn) {
+        const long k = (adj - mn + gran / 2) / gran;
+        adj = mn + k * gran;
+        if (adj > mx) adj = mn + ((mx - mn) / gran) * gran;
+    }
+    return adj;
+}
+
 bool AsioHost::create_output_stereo(long bufSize, std::string& why) {
     if (!opened_) { why = "host not open"; return false; }
     if (buffers_) { why = "buffers already created"; return false; }
@@ -281,7 +298,7 @@ bool AsioHost::create_output_stereo(long bufSize, std::string& why) {
     }
     long mn = 0, mx = 0, pref = 0, gran = 0;
     if (ASIOGetBufferSize(&mn, &mx, &pref, &gran) != ASE_OK) { why = "getBufferSize failed"; return false; }
-    const long bs = (bufSize > 0) ? bufSize : pref;
+    const long bs = NegotiateBufSize((bufSize > 0) ? bufSize : pref, mn, mx, gran);
     if (bs <= 0) { why = "invalid buffer size"; return false; }
 
     ASIOBufferInfo infos[2];
@@ -443,7 +460,14 @@ bool AsioHost::create_io(long nCh, long bufSize, long outBase, std::string& why)
     }
     long mn = 0, mx = 0, pref = 0, gran = 0;
     if (ASIOGetBufferSize(&mn, &mx, &pref, &gran) != ASE_OK) { why = "getBufferSize failed"; return false; }
-    const long bs = (bufSize > 0) ? bufSize : pref;
+    // 全面复审 S4（ASIO-7）：请求尺寸先经驱动范围/粒度协商——此前
+    // 原样下发，驱动按非请求尺寸建缓冲或直接失败且无记录。钳制
+    // 原值记 bufClampedFrom_，桥在 status note 如实呈现；实际尺寸
+    // 本就经 buffer_size() 由桥回读对账重建引擎。
+    bufClampedFrom_ = 0;
+    const long reqBs = (bufSize > 0) ? bufSize : pref;
+    const long bs = NegotiateBufSize(reqBs, mn, mx, gran);
+    if (bs != reqBs) bufClampedFrom_ = reqBs;
     if (bs <= 0) { why = "invalid buffer size"; return false; }
     if (bs > kMaxNbs) {
         char b[128];
@@ -586,7 +610,17 @@ ASIOTime* AsioHost::buffer_switch_time_info(ASIOTime* params, long doubleBufferI
 }
 
 void AsioHost::sample_rate_did_change(ASIOSampleRate sRate) {
-    if (s_active) s_active->srLive_.store((double)sRate, std::memory_order_relaxed);
+    if (!s_active) return;
+    const double prev =
+        s_active->srLive_.exchange((double)sRate, std::memory_order_relaxed);
+    // 全面复审 S4（ASIO-5）：驱动侧改采样率此前只更新 srLive——
+    // 引擎与缓冲仍按旧率运行而面板显示新率。率真变且 IO 已建时
+    // 置 resetPending，走既有 asiorestart 通道由控制面重建（不在
+    // 回调上下文动缓冲）。部分驱动只发本回调不发 kAsioResetRequest。
+    if (prev > 0.0 && std::fabs(prev - (double)sRate) > 0.5 &&
+        s_active->buffers_) {
+        s_active->resetPending_.store(true, std::memory_order_release);
+    }
 }
 
 long AsioHost::asio_message(long selector, long value, void* message, double* opt) {

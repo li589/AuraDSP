@@ -171,6 +171,16 @@ extension AudioModesState on AppModel {
     }
     applyPipelineChain();
     _notifyUi();
+    // 全面复审 S4（ENG-2）：桥模式期间改过的采样率只落了盘，
+    // isolate 仍按生成率运行——切回进程内模式（含 sysapo 影子
+    // 引擎）时对账：生成率 != 配置率则重启 isolate 使新率生效
+    // （此前永不生效：面板显示新率、引擎跑旧率）。
+    if (valid != 'vbcallback' && valid != 'asio' && valid != 'vaio' &&
+        isolateSpawnSampleRate != 0 &&
+        isolateSpawnSampleRate != config.sampleRate) {
+      _pendingRestartPush = true;
+      _restartIsolate();
+    }
   }
 
   /// Linux 设备面板「刷新」：请求 isolate 重新探测 PA 设备并回推

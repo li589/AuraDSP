@@ -302,6 +302,12 @@ class AppModel extends ChangeNotifier {
   String lastVaioFailNote = '';
   String lastAsioFailNote = '';
 
+  /// ASIO 驱动请求重置的热切换在飞标记（全面复审 S4 / ASIO-6）：
+  /// asiostatus 心跳在桥清标志前会连报多帧 resetPending=1，此前
+  /// 每帧都重发 asiorestart、桥被反复 stop/start。置位后等状态
+  /// 回到 resetPending=0（或桥停）才允许下一次状态驱动重启。
+  bool asioResetRestartInFlight = false;
+
   /// 等待下一次 vaiodetect 事件的完成器（安装/卸载后诚实校验用，
   /// 真机报告 2026-11-09 §2.2）；事件到达时由 state_events 完成。
   Completer<void>? vaioDetectWaiter;
@@ -1323,6 +1329,11 @@ class AppModel extends ChangeNotifier {
   /// 回放：参数/脚本/IR/插件/音源/bypass 全回来，约 1 秒静音间隙）。
   /// 桥模式跟对端走：仅落盘（回进程内/下次启动生效），设置页有 hint 明示。
   bool _pendingRestartPush = false; // isolate 重启后就绪时重推音源/bypass
+
+  /// isolate 生成时带入的采样率（全面复审 S4 / ENG-2）：桥模式
+  /// 下改采样率只落盘，isolate 仍按此旧率运行；切回进程内模式
+  /// 时与 config.sampleRate 比对、不符则重启 isolate 生效。
+  int isolateSpawnSampleRate = 0;
   /// isolate 重启（采样率等 spawn 期配置变更用）：关旧端口、杀旧实例、重起。
   /// 就绪后标准回放 + _pendingRestartPush 重推音源/bypass。
   int _restartToken = 0;

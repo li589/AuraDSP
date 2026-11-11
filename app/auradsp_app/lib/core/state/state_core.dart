@@ -781,6 +781,7 @@ extension StateCore on AppModel {
 
   void _spawn() {
     setConn(EngineConn.connecting);
+    isolateSpawnSampleRate = config.sampleRate; // ENG-2：生成率锚点
     _notifyUi();
     final port = ReceivePort();
     _fromIso = port;

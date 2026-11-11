@@ -79,8 +79,8 @@ class CAuraApo : public IAudioProcessingObject,
     // 真处理宿主（设计 P2）：抢不到座位/引擎不可用时恒惰性，
     // APOProcess 自动回落 v1 透传，行为不劣于现状。
     ApoEngineHost engine_;
-    volatile LONG seq_ = 0;
-    volatile LONGLONG frames_ = 0;
+    // 心跳计数直接原子累加进共享块（全面复审 S4 / APO-2），本实例
+    // 不再持本地镜像（旧 seq_/frames_ 已删）。
 
     void OpenHeartbeat();
     void CloseHeartbeat();

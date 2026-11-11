@@ -134,6 +134,9 @@ public:
     bool running() const { return running_; }
 
     long buffer_size() const { return bufSize_; }
+    // 全面复审 S4（ASIO-7）：最近一次 create 时请求尺寸被驱动
+    // [min,max]+granularity 协商钳制时的原请求值；未钳制为 0。
+    long buf_clamped_from() const { return bufClampedFrom_; }
     double sample_rate() const { return sampleRate_; }
     long out_sample_type() const { return outType_[0]; }
     long io_ch() const { return ioCh_; }   // io 声道数（create_io 后为 2/4/6/8，否则 0）
@@ -176,7 +179,13 @@ private:
     static AsioHost* s_active;   // 单活跃实例（SDK 进程级全局驱动模型所致）
 
     bool opened_ = false;
+    // 按驱动 ASIOGetBufferSize 的 [mn,mx]+granularity 协商请求尺寸
+    // （全面复审 S4 / ASIO-7）：gran=-1 为 2 的幂档、gran>0 为
+    // mn+k*gran 步进、gran=0 任意——钳制/取整后返回实际可用值。
+    static long NegotiateBufSize(long req, long mn, long mx, long gran);
+
     bool buffers_ = false;
+    long bufClampedFrom_ = 0;
     bool running_ = false;
     long bufSize_ = 0;
     double sampleRate_ = 0.0;          // start 前由控制线程写；RT 只读快照进局部

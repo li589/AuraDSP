@@ -581,7 +581,10 @@ extension StateSession on AppModel {
     config.sampleRate = rate;
     ConfigManager.save(config);
     _rebuildEqGridForSampleRate();
-    if (audioMode == 'vbcallback' || audioMode == 'asio') {
+    // 桥模式（vb/asio/vaio）自协商率：只落盘不重启 isolate；
+    // 切回进程内模式时由 setAudioMode 的 ENG-2 对账补重启。
+    if (audioMode == 'vbcallback' || audioMode == 'asio' ||
+        audioMode == 'vaio') {
       _notifyUi();
       return;
     }

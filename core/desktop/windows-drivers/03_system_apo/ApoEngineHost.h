@@ -129,6 +129,9 @@ class ApoEngineHost {
     // 插件块（Part I Q2；本进程创建保活，口径同参数块）
     HANDLE hPluginMap_ = nullptr;
     const uint8_t* pluginView_ = nullptr;
+    // ApplyPlugins 的整槽快照缓冲（全面复审 S4 / APO-10）：堆分配
+    // 一次复用，Stop 时释放。载荷只从快照读，不直读活映射。
+    uint8_t* pluginSnap_ = nullptr;
     struct AppliedPlugin {
         uint32_t loadGen = 0, stateGen = 0;
         uint32_t stage = 0, mask = 0, bypass = 0;

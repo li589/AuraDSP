@@ -215,14 +215,15 @@ STDMETHODIMP_(void) CAuraApo::APOProcess(UINT32 numIn, APO_CONNECTION_PROPERTY**
     }
     cout->u32ValidFrameCount = frames;
 
-    // 心跳上报：无锁、无分配
-    const LONG seq = InterlockedIncrement(&seq_);
-    const LONGLONG total =
-        InterlockedExchangeAdd64((volatile LONGLONG*)&frames_, (LONGLONG)frames) + (LONGLONG)frames;
+    // 心跳上报：无锁、无分配。全面复审 S4（APO-2）：心跳块由全部
+    // APO 实例（SFX/MFX/EFX × 多端点，同在 audiodg）共用——直接
+    // 对块内字段原子累加，不再以实例本地计数覆写（本地总数回写
+    // 会让 framesTotal 随实例交替倒退、seq 被后 Lock 者清零）。
     auto* hb = (AuraHeartbeat*)hbView_;
     if (hb) {
-        hb->seq = (uint32_t)seq;
-        hb->framesTotal = (uint64_t)total;
+        InterlockedIncrement((volatile LONG*)&hb->seq);
+        InterlockedExchangeAdd64((volatile LONGLONG*)&hb->framesTotal,
+                                 (LONGLONG)frames);
         hb->lastNbs = frames;
     }
 }
@@ -264,6 +265,7 @@ void CAuraApo::OpenHeartbeat() {
     const wchar_t* hbName = localHb ? L"Local\\AuraAPO_Heartbeat" : AURA_HEARTBEAT_MAP_NAME;
     HANDLE hMap = CreateFileMappingW(INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE, 0,
                                      (DWORD)sizeof(AuraHeartbeat), hbName);
+    const bool preExisting = (GetLastError() == ERROR_ALREADY_EXISTS);
     LocalFree(sd);
     if (!hMap) return;
 
@@ -273,12 +275,22 @@ void CAuraApo::OpenHeartbeat() {
         return;
     }
     auto* hb = (AuraHeartbeat*)view;
-    hb->magic = AURA_HEARTBEAT_MAGIC;
-    hb->version = AURA_HEARTBEAT_VERSION;
-    hb->seq = 0;
-    hb->sampleRate = rate_;
-    hb->framesTotal = 0;
-    hb->lastNbs = 0;
+    // 全面复审 S4（APO-2）：仅创建者（或块内容无效时）初始化——
+    // 此前每个实例 Lock 都把 seq/framesTotal 清零重写，多端点
+    // 共存时计数互相踩踏。已存活块只补 pid（同进程恒同值）与
+    // 尚为 0 的 sampleRate（首个锁定者的率优先，避免多端点抖动）。
+    const bool alive = preExisting && hb->magic == AURA_HEARTBEAT_MAGIC &&
+                       hb->version == AURA_HEARTBEAT_VERSION;
+    if (!alive) {
+        hb->magic = AURA_HEARTBEAT_MAGIC;
+        hb->version = AURA_HEARTBEAT_VERSION;
+        hb->seq = 0;
+        hb->sampleRate = rate_;
+        hb->framesTotal = 0;
+        hb->lastNbs = 0;
+    } else if (hb->sampleRate == 0) {
+        hb->sampleRate = rate_;
+    }
     hb->pid = GetCurrentProcessId();
     hMap_ = hMap;
     hbView_ = view;

@@ -3,6 +3,7 @@
 
 #include <sddl.h>
 #include <cmath>
+#include <cstdlib>  // pluginSnap_ 的 malloc/free（S4 / APO-10）
 #include <cstring>
 #include <vector>
 
@@ -216,7 +217,17 @@ bool ApoEngineHost::LoadEngine() {
 // 生命周期
 // ---------------------------------------------------------------------------
 bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels) {
-    if (active_.load()) return true;
+    if (active_.load()) {
+        // 全面复审 S4（APO-8）：已活跃时此前无条件 return true——
+        // 同实例被以新格式（率/声道）重新 Lock 时，引擎仍按旧
+        // 几何运行、telemetry 却报新几何。几何相符才短路返回；
+        // 不符先停旧引擎、落入下方按新几何完整重建。
+        if (rate_ == rate &&
+            streamCh_ == (streamChannels ? streamChannels : 2)) {
+            return true;
+        }
+        Stop();
+    }
     rate_ = rate;
     streamCh_ = streamChannels ? streamChannels : 2;
     // 声道决议（D8）：引擎只认 {2,4,6,8}。
@@ -335,6 +346,10 @@ void ApoEngineHost::Stop() {
     if (pluginView_) {
         UnmapViewOfFile(pluginView_);
         pluginView_ = nullptr;
+    }
+    if (pluginSnap_) {
+        free(pluginSnap_);
+        pluginSnap_ = nullptr;
     }
     if (hPluginMap_) {
         CloseHandle(hPluginMap_);
@@ -605,6 +620,20 @@ void ApoEngineHost::ApplyPlugins() {
     }
     if (hdr->writeSeq != s1) return;  // 撕裂帧：下轮重试
 
+    // 全面复审 S4（APO-10）：载荷（path/id/state）此前在头快照后
+    // 仍直读活映射——发布者并发写可让载荷与已消费的代次撕裂
+    // （按新 loadGen 加载到一半被改写的 state）。整槽区先快照并
+    // 复核 writeSeq 未变（变了整轮放弃、下轮重试），此后本轮的
+    // 全部载荷读都走快照，与参数路径的整块快照口径一致。
+    if (!pluginSnap_) {
+        pluginSnap_ = (uint8_t*)malloc((size_t)APO_PLUGIN_SLOTS *
+                                       APO_PLUGIN_SLOT_STRIDE);
+        if (!pluginSnap_) return;
+    }
+    memcpy(pluginSnap_, pluginView_ + APO_PLUGIN_BLOCK_HEADER_BYTES,
+           (size_t)APO_PLUGIN_SLOTS * APO_PLUGIN_SLOT_STRIDE);
+    if (hdr->writeSeq != s1) return;  // 拷贝期间被写：下轮重试
+
     if (!pluginHdrSeen_ || h.chainEnabled != appliedChainEnabled_) {
         fnChainEnabled_(engine_, (int)h.chainEnabled);
         appliedChainEnabled_ = h.chainEnabled;
@@ -619,8 +648,7 @@ void ApoEngineHost::ApplyPlugins() {
     for (uint32_t slot = 0; slot < APO_PLUGIN_SLOTS; slot++) {
         AppliedPlugin& ap = appliedPlugins_[slot];
         const ApoPluginSlotHeader& want = sh[slot];
-        const uint8_t* base = pluginView_ + APO_PLUGIN_BLOCK_HEADER_BYTES +
-                              slot * APO_PLUGIN_SLOT_STRIDE;
+        const uint8_t* base = pluginSnap_ + slot * APO_PLUGIN_SLOT_STRIDE;
         if (!ap.seen || want.loadGen != ap.loadGen) {
             // 身份代次变化（含首见）：按块内身份重载该槽。
             if (want.format == 0 || want.pathBytes == 0) {

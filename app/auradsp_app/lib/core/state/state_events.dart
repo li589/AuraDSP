@@ -1016,8 +1016,16 @@ extension StateEvents on AppModel {
         }
         // Phase 4：驱动请求重置（kAsioResetRequest，采样率/设备变化等）→
         // 复用热切换（stop→start 新参数；C++ 侧 start 时清标志，不会循环）。
+        // 全面复审 S4（ASIO-6）：加在飞去重——桥清标志前心跳连报
+        // 多帧，此前每帧重发 restart 令桥反复 stop/start；在飞期
+        // 间只发一次，状态回到 resetPending=0 或桥停后才再允许。
         if (asioActive && (raw['resetPending'] as int? ?? 0) == 1) {
-          _sendAsioRestart();
+          if (!asioResetRestartInFlight) {
+            asioResetRestartInFlight = true;
+            _sendAsioRestart();
+          }
+        } else {
+          asioResetRestartInFlight = false;
         }
         hbTick.value++;
         if (wasA != asioActive) _notifyUi();
