@@ -21,8 +21,13 @@
 资源策略（--resources）：
   core   staging 自带资源原样
   full   合并 dist/resources/auradsp-resource-full.zip 覆盖 resources/
+         （标准发行包档位，资源计划 P1 / 业主 Q2 裁定）
+  light  轻量发行包：合并 resource-core + addon-headphone-ddc——
+         全类别齐全，卷积只用 core 轻档，脚本/VDC 全量（Q2 裁定）
   addons 依次合并 resource-core → resource-full → 全部 addon 包
   none   剔除 resources（保留 manifest.json 与占位说明）
+非 none 档位在合并后统一生成 resources/builtin_dirs.json（内置
+目录登记，App 侧 P2 消费）并补齐 plugins/{clap,vst2,vst3} 空占位。
 合并在 staging 的临时副本上进行，不污染原 staging；资源包根即
 resources 内容布局（build_packages.py 口径，覆盖幂等）。
 
@@ -328,14 +333,64 @@ def resource_pack_paths(kind: str, packs_dir: Path) -> list[Path]:
     full = packs_dir / "auradsp-resource-full.zip"
     if kind == "full":
         return [full] if full.is_file() else []
+    if kind == "light":
+        # 轻量包（Q2 裁定）：core（卷积轻档 + 全部脚本）打底，
+        # headphone-ddc 补齐 VDC 全量；其余 addon（声学空间/社区
+        # 调音等卷积大包）不进轻量包。
+        ordered = []
+        for name in ("auradsp-resource-core.zip",
+                     "auradsp-addon-headphone-ddc.zip"):
+            p = packs_dir / name
+            if p.is_file():
+                ordered.append(p)
+        return ordered
     # addons：core → full → addons（文件名序）
-    ordered: list[Path] = []
+    ordered = []
     for name in ("auradsp-resource-core.zip", "auradsp-resource-full.zip"):
         p = packs_dir / name
         if p.is_file():
             ordered.append(p)
     ordered += sorted(packs_dir.glob("auradsp-addon-*.zip"))
     return ordered
+
+
+# 内置目录登记（资源计划 P1 / 计划书 Part B1）：打包期生成，
+# App 启动读取，把安装目录 resources/ 下四类内容登记为内置扫
+# 描位置。rel 相对 exe 目录；文件随包携带，App 只读不写。
+BUILTIN_DIRS_JSON = {
+    "version": 1,
+    "dirs": [
+        {"kind": "convolver", "rel": "resources/convolver"},
+        {"kind": "ddc", "rel": "resources/ddc"},
+        {"kind": "liveprog", "rel": "resources/liveprog"},
+        {"kind": "plugins", "rel": "resources/plugins"},
+    ],
+}
+
+PLUGIN_PLACEHOLDER_KEEP = (
+    "AuraDSP bundled plugin placeholder (resource plan P1, 2026-11-12).\n"
+    "This directory intentionally ships empty for now; future open-source\n"
+    "free plugins may be bundled here.\n")
+
+
+def finalize_resources(res_dir: Path, what_if: bool) -> None:
+    """合并后的统一收尾：插件空占位目录 + builtin_dirs.json。
+
+    staging 若来自旧构建（无 plugins/）或资源 zip 覆盖后占位丢
+    失，这里兜底补齐，保证任何档位（core/full/light/addons）
+    的 resources/ 结构恒完整。
+    """
+    if what_if:
+        log("resources: what-if 跳过 finalize（占位 + builtin_dirs.json）")
+        return
+    for sub in ("clap", "vst2", "vst3"):
+        keep = res_dir / "plugins" / sub / ".keep"
+        if not keep.is_file():
+            keep.parent.mkdir(parents=True, exist_ok=True)
+            keep.write_text(PLUGIN_PLACEHOLDER_KEEP, encoding="utf-8")
+    (res_dir / "builtin_dirs.json").write_text(
+        json.dumps(BUILTIN_DIRS_JSON, indent=1) + "\n", encoding="utf-8")
+    log("resources: builtin_dirs.json 已生成 + plugins 占位已补齐")
 
 
 def load_sha256sums(packs_dir: Path) -> dict[str, str]:
@@ -378,7 +433,7 @@ def apply_resources(work_staging: Path, kind: str, packs_dir: Path,
         log("resources: none（已剔除，保留 manifest.json）")
         return records
     packs = resource_pack_paths(kind, packs_dir)
-    if kind in ("full", "addons") and not packs:
+    if kind in ("full", "addons", "light") and not packs:
         raise die(f"--resources {kind} 需要资源包，但 {packs_dir} 下没有找到"
                   "（先跑 build_packages.py 或加 --rebuild-resource-packs）")
     expected_sums = load_sha256sums(packs_dir)
@@ -418,6 +473,7 @@ def apply_resources(work_staging: Path, kind: str, packs_dir: Path,
         log(f"resources: 合并 {pack.name}（{count} 文件，sha256 {sha[:12]}…）")
     if kind == "core":
         log("resources: core（staging 自带）")
+    finalize_resources(res_dir, what_if)
     return records
 
 
@@ -928,7 +984,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     ap.add_argument("--mode", default="all",
                     help="driver,portable,setup,staging 或 all（逗号分隔）")
     ap.add_argument("--resources", default="core",
-                    choices=("core", "full", "addons", "none"))
+                    choices=("core", "full", "light", "addons", "none"))
     ap.add_argument("--rebuild-resource-packs", action="store_true")
     ap.add_argument("--packs-dir", type=Path, default=ROOT / "dist" / "resources")
     ap.add_argument("--staging", type=Path,
