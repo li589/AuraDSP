@@ -28,6 +28,15 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // 第十轮项 1：OnCreate 时保存的顶层窗口句柄。OnDestroy 被调用时
+  // 基类的 window_handle_ 可能已被清零，靠它撤销 GWLP_USERDATA
+  // 分发关联（见 flutter_window.cpp OnDestroy 的 v2 修复说明）。
+  HWND self_hwnd_ = nullptr;
+
+  // 第十轮项 1：销毁开始旗标；MessageHandler 见之直走基类处理，
+  // 不再把消息交给控制器 proc。
+  bool destroying_ = false;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

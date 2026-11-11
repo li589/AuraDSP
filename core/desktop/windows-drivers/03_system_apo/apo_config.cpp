@@ -2050,6 +2050,140 @@ bool TakeOwnershipRepair(const std::wstring& fxSub) {
     return ok;
 }
 
+// ---- 第十轮项 2：APO 文件对 audiodg（LocalService）可读 ----
+// audiodg 以 LocalService（S-1-5-19）身份加载 AuraApo.dll 与
+// 引擎 DLL；per-user 安装目录（AppData 等）默认 ACL 只有
+// SYSTEM/管理员/本人，LocalService 无读权 → 附加全绿但 APO
+// 永不加载、永不处理（第九轮收口新发现，guest 实证：只授
+// driver 目录 + 两 DLL 读权后同次播放 telemetry/心跳立现）。
+// 祖先目录遍历不查：LocalService 持 SeChangeNotifyPrivilege
+// 可绕过遍历检查，目标文件/目录自身 DACL 决定可读性。
+
+// DACL 中是否存在让 audiodg 身份可读的 ALLOW ACE：直接给
+// LocalService，或给 Everyone / Authenticated Users /
+// Builtin Users（LocalService 均可匹配）。上述任一 SID 被
+// DENY 读则以拒绝为准（本工具只追加 ALLOW、从严评估）。
+bool DaclAllowsAudiodgRead(PACL dacl) {
+    if (!dacl) return false;
+    SID_IDENTIFIER_AUTHORITY ntAuth = SECURITY_NT_AUTHORITY;
+    SID_IDENTIFIER_AUTHORITY worldAuth = SECURITY_WORLD_SID_AUTHORITY;
+    PSID sids[4] = {nullptr, nullptr, nullptr, nullptr};
+    AllocateAndInitializeSid(&ntAuth, 1, SECURITY_LOCAL_SERVICE_RID,
+                             0, 0, 0, 0, 0, 0, 0, &sids[0]);
+    AllocateAndInitializeSid(&ntAuth, 1,
+                             SECURITY_AUTHENTICATED_USER_RID,
+                             0, 0, 0, 0, 0, 0, 0, &sids[1]);
+    AllocateAndInitializeSid(&ntAuth, 2, SECURITY_BUILTIN_DOMAIN_RID,
+                             DOMAIN_ALIAS_RID_USERS, 0, 0, 0, 0, 0, 0,
+                             &sids[2]);
+    AllocateAndInitializeSid(&worldAuth, 1, SECURITY_WORLD_RID,
+                             0, 0, 0, 0, 0, 0, 0, &sids[3]);
+    const ACCESS_MASK kReadBits = FILE_READ_DATA | FILE_EXECUTE |
+                                  GENERIC_READ | GENERIC_EXECUTE |
+                                  GENERIC_ALL | FILE_ALL_ACCESS;
+    bool allowed = false;
+    for (WORD i = 0; i < dacl->AceCount; ++i) {
+        ACE_HEADER* hdr = nullptr;
+        if (!GetAce(dacl, i, reinterpret_cast<void**>(&hdr)) || !hdr)
+            continue;
+        if (hdr->AceType == ACCESS_ALLOWED_ACE_TYPE) {
+            const auto* ace = reinterpret_cast<ACCESS_ALLOWED_ACE*>(hdr);
+            if ((ace->Mask & kReadBits) == 0) continue;
+            const PSID sid = reinterpret_cast<PSID>(
+                const_cast<BYTE*>(&ace->SidStart));
+            for (PSID s : sids) {
+                if (s && EqualSid(sid, s)) allowed = true;
+            }
+        } else if (hdr->AceType == ACCESS_DENIED_ACE_TYPE) {
+            const auto* ace = reinterpret_cast<ACCESS_DENIED_ACE*>(hdr);
+            if ((ace->Mask & kReadBits) == 0) continue;
+            const PSID sid = reinterpret_cast<PSID>(
+                const_cast<BYTE*>(&ace->SidStart));
+            for (PSID s : sids) {
+                if (s && EqualSid(sid, s)) allowed = false;
+            }
+        }
+    }
+    for (PSID s : sids) {
+        if (s) FreeSid(s);
+    }
+    return allowed;
+}
+
+bool FileReadableByAudiodg(const std::wstring& path) {
+    PACL dacl = nullptr;
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    if (GetNamedSecurityInfoW(const_cast<LPWSTR>(path.c_str()),
+                              SE_FILE_OBJECT, DACL_SECURITY_INFORMATION,
+                              nullptr, nullptr, &dacl, nullptr,
+                              &sd) != ERROR_SUCCESS) {
+        return false;
+    }
+    const bool ok = DaclAllowsAudiodgRead(dacl);
+    LocalFree(sd);
+    return ok;
+}
+
+// 给 path 合并追加 LocalService 读+执行 ALLOW ACE（保留既有
+// ACE；目录带继承供今后放入的文件，既有文件另行逐个授）。
+// 已可读则不动。成功（含本已可读）返回 true。
+bool GrantAudiodgRead(const std::wstring& path, bool isDir) {
+    if (FileReadableByAudiodg(path)) return true;
+    PACL oldDacl = nullptr;
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    if (GetNamedSecurityInfoW(const_cast<LPWSTR>(path.c_str()),
+                              SE_FILE_OBJECT, DACL_SECURITY_INFORMATION,
+                              nullptr, nullptr, &oldDacl, nullptr,
+                              &sd) != ERROR_SUCCESS) {
+        return false;
+    }
+    PSID ls = nullptr;
+    SID_IDENTIFIER_AUTHORITY ntAuth = SECURITY_NT_AUTHORITY;
+    bool ok = false;
+    if (AllocateAndInitializeSid(&ntAuth, 1, SECURITY_LOCAL_SERVICE_RID,
+                                 0, 0, 0, 0, 0, 0, 0, &ls)) {
+        EXPLICIT_ACCESS_W ea{};
+        ea.grfAccessPermissions = FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
+        ea.grfAccessMode = GRANT_ACCESS;
+        ea.grfInheritance = isDir ? (CONTAINER_INHERIT_ACE |
+                                     OBJECT_INHERIT_ACE)
+                                  : NO_INHERITANCE;
+        ea.Trustee.TrusteeForm = TRUSTEE_IS_SID;
+        ea.Trustee.TrusteeType = TRUSTEE_IS_USER;
+        ea.Trustee.ptstrName = reinterpret_cast<LPWSTR>(ls);
+        PACL newDacl = nullptr;
+        if (SetEntriesInAclW(1, &ea, oldDacl, &newDacl) == ERROR_SUCCESS &&
+            newDacl) {
+            ok = SetNamedSecurityInfoW(
+                     const_cast<LPWSTR>(path.c_str()), SE_FILE_OBJECT,
+                     DACL_SECURITY_INFORMATION, nullptr, nullptr, newDacl,
+                     nullptr) == ERROR_SUCCESS;
+            LocalFree(newDacl);
+        }
+        FreeSid(ls);
+    }
+    LocalFree(sd);
+    return ok && FileReadableByAudiodg(path);
+}
+
+// 确保 APO 所在目录与关键 DLL 对 audiodg 可读（install 与
+// doctor --fix 共用）。返回 AuraApo.dll 的最终可读状态。
+bool EnsureApoFilesReadable() {
+    const std::wstring dll = FindDll();
+    if (dll.empty()) return false;
+    std::wstring dir = dll;
+    const size_t slash = dir.find_last_of(L"\\/");
+    if (slash != std::wstring::npos) dir = dir.substr(0, slash);
+    GrantAudiodgRead(dir, true);
+    for (const wchar_t* f :
+         {L"AuraApo.dll", L"auradsp_engine_apo.dll",
+          L"auradsp_engine.dll", L"apo_config.exe"}) {
+        const std::wstring p = dir + L"\\" + f;
+        if (FileExists(p)) GrantAudiodgRead(p, false);
+    }
+    return FileReadableByAudiodg(dll);
+}
+
 struct DoctorCheck {
     std::string name;
     bool ok = false;
@@ -2209,6 +2343,29 @@ int CmdDoctor(bool fix, bool asJson) {
         checks.push_back(c);
     }
 
+    // 7. APO DLL 对 audiodg（LocalService）可读（第十轮项 2：
+    // per-user 目录 ACL 无 LocalService 时附加全绿但不处理）
+    {
+        DoctorCheck c;
+        c.name = "dll_audiodg_readable";
+        const std::wstring dll = FindDll();
+        auto probe = [&] {
+            return FileExists(dll) && FileReadableByAudiodg(dll);
+        };
+        c.ok = probe();
+        c.detail = c.ok ? "AuraApo.dll 对 LocalService 可读"
+                        : "AuraApo.dll 对 LocalService 不可读"
+                          "（per-user 目录 ACL）—audiodg 加载不了";
+        if (!c.ok && fix) {
+            EnsureApoFilesReadable();
+            if (probe()) {
+                c.ok = true;
+                c.fixed = true;
+            }
+        }
+        checks.push_back(c);
+    }
+
     bool allOk = true;
     for (const auto& c : checks) allOk = allOk && c.ok;
     if (asJson) {
@@ -2353,6 +2510,11 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
         }
         return 1;
     }
+
+    // 第十轮项 2：确保 audiodg（LocalService）能读 APO/引擎
+    // DLL——per-user 安装目录默认 ACL 无 LocalService，附加会
+    // 全绿但永不处理。结果进 JSON 的 acl_granted，绝不静默。
+    const bool aclOk = EnsureApoFilesReadable();
 
     const auto testenv =
         RegRead(HKEY_LOCAL_MACHINE, kTestEnvKey, kTestEnvVal);
@@ -2589,6 +2751,7 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
             {"capture_pre_only", Json::Bool(plan.capturePreOnly)},
             {"backup", std::move(meta)},
             {"audio_restarted", Json::Bool(restarted)},
+            {"acl_granted", Json::Bool(aclOk)},
         }));
     } else {
         OutLine("成功将 AuraAPO 挂载到 '" + WideToUtf8(name) + "' (" +

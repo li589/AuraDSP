@@ -3,7 +3,7 @@
 #
 # doctor 的检查结论随机器环境变（CI 裸机上 testenv/注册必然
 # FAIL），故本门只验**契约结构**：doctor --json 能跑通、输出可
-# 解析、六项检查齐名且字段形状正确。结论本身（ok true/false）
+# 解析、七项检查齐名且字段形状正确。结论本身（ok true/false）
 # 不是门禁对象。exe 缺失（未做 Windows 构建）→ SKIP。
 import json
 import os
@@ -21,7 +21,7 @@ OUT = os.path.join(ROOT, 'core', 'desktop', 'windows-drivers', 'out', 'Release')
 EXE = os.path.join(OUT, 'apo_config.exe')
 EXPECTED = {
     'testenv', 'com_registration', 'apo_dll', 'engine_dll',
-    'fx_writable', 'snapshot_versions',
+    'fx_writable', 'snapshot_versions', 'dll_audiodg_readable',
 }
 
 
