@@ -131,6 +131,9 @@ void main() {
           'themeId': 'aurora',
           'autoRestoreSession': false,
           'ambientSpectrum': false,
+          // 第十二轮 A1 新增键：默认 true，哨兵取非默认 false，
+          // 同时防漏读（回落默认）与漏写（键缺失）。
+          'closeToTray': false,
           'autoSaveDebounceMs': 250,
         },
         'safety': <String, dynamic>{
