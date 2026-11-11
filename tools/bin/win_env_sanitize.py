@@ -30,6 +30,12 @@
     的 32K 上限，子进程以 `OSError: [WinError 87]` 起不来。解析必须以
     终止符为界（`parse_block`），探测也以字节级对齐扫描为准
     （`find_block_end`）。
+  * 等号分界（同日真机复验补修）：块内还有一类隐藏条目以 `=` 开头
+    （每盘符当前目录 `=C:=C:\\...`，由部分父进程注入，SSH 会话必有、
+    交互会话常无）。这类条目的名字含首个 `=`，须在**第二个** `=` 处
+    分界；旧解析一律在首个 `=` 切分，得到空名字条目，拼进环境块后
+    CreateProcess 同样以 WinError 87 拒绝。截断修好后此条单独即可
+    复现，真机二分定位（剔除空名条目后子进程立即正常）。
 
   * `PATH` 取所有变体的**并集**（保持出现顺序、去重）——三份取值通常各含
     一部分目录，丢掉任何一份都会让工具链找不到；
@@ -94,8 +100,16 @@ def parse_block(data):
     for chunk in text.split("\x00"):
         if not chunk:
             continue
-        name, sep, value = chunk.partition("=")
-        entries.append((name, value if sep else ""))
+        if chunk.startswith("="):
+            # 隐藏条目（每盘符当前目录，如 =C:=C:\...）：名字含开头
+            # 的 '='，在第二个 '=' 处分界（与 os.environ 的口径一
+            # 致）；在首个 '=' 切分会得到空名字，拼出的环境块会被
+            # CreateProcess 以 WinError 87 拒绝。
+            name, sep, value = chunk[1:].partition("=")
+            entries.append(("=" + name, value if sep else ""))
+        else:
+            name, sep, value = chunk.partition("=")
+            entries.append((name, value if sep else ""))
     return entries
 
 

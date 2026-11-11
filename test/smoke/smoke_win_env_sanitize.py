@@ -51,7 +51,8 @@ def main():
 
     real = [('Path', 'C:\\Windows;C:\\Tools'),
             ('AURADSP_REAL', '1'),
-            ('OS', 'Windows_NT')]
+            ('OS', 'Windows_NT'),
+            ('=D:', 'D:\\work')]
     block = build_block(real)
 
     # 1) 终止符之后堆残留（另一份块拷贝 + 幻影条目）不得被解析。
@@ -62,6 +63,15 @@ def main():
     entries = mod.parse_block(block + garbage)
     check(entries == real,
           'parse_block truncates at terminator (got %r)' % (entries,))
+
+    # 1b) 隐藏条目（=盘符:）须在第二个 '=' 分界，名字非空——在首个
+    #     '=' 切分出的空名条目会让 CreateProcess 以 WinError 87 拒收
+    #     整个环境块（真机二分定罪）。merged env 亦不得含空键。
+    check(all(name for name, _ in entries),
+          'no empty entry names (incl. =D: hidden entry)')
+    env1, _ = mod.merge_entries(entries)
+    check('' not in env1 and env1.get('=D:') == 'D:\\work',
+          'merged env keeps =D: entry, no empty key')
 
     # 2) 净化结果不得带幻影：PATH 不含 phantom、条目数与真值一致，
     #    合并环境块长度在 CreateProcess 32K 上限内。
