@@ -92,7 +92,9 @@ void main() {
     test('AppConfig toJson/fromJson covers every persisted key (contract)',
         () {
       final sentinel = <String, dynamic>{
-        'version': 3,
+        // v4（全面复审 S3，2026-11-11）：asioOutPair 语义统一为起始
+        // 声道偏移，config 版本随迁移阶梯抬至 4。
+        'version': 4,
         'audio': <String, dynamic>{
           'sampleRate': 44100,
           'maxBlockFrames': 512,
@@ -421,9 +423,10 @@ void main() {
             .writeAsStringSync('{"version":2,"audio":{"vizFps":30}}');
         final cfg = ConfigManager.load();
         expect(cfg.vizFps, AppConfig.defaultVizFps);
-        // 迁移后落盘为 v3，避免每次启动重复迁移
+        // 迁移后落盘为当前版本（v3=vizFps 阶梯、v4=asioOutPair 语义
+        // 阶梯，全面复审 S3），避免每次启动重复迁移
         expect(File(ConfigManager.configPath).readAsStringSync(),
-            contains('"version": 3'));
+            contains('"version": 4'));
       } finally {
         ConfigManager.baseDirOverride = prev;
         try {
@@ -491,7 +494,9 @@ void main() {
         final session = SessionMemory.load()!;
         // v7（2026-10-28）：routing 移出预设/指纹，锚点算法变更 → 版本抬一位，
         // 恢复端据此丢弃 v6 及更早的锚点（否则升级后误显「自定义（未保存）」）。
-        expect(session['version'], 7);
+        // v8（全面复审 S3，2026-11-11）：asioOutPair 语义迁移 → 恢复端对
+        // v7 及更早会话中的该值做一次性映射，故落盘版本为 8。
+        expect(session['version'], 8);
         expect(session['presetDirty'], isTrue);
         expect(session['appliedPresetFingerprint'], anchor);
 
