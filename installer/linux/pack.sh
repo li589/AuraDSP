@@ -90,11 +90,13 @@ echo "resources: 档位 $RESOURCES（已在 staging 副本合并）"
 # 与出厂预设到 bundle/defaults/。无 flutter 时仅警告跳过（App
 # 侧无默认层自动回退代码默认，不阻塞打包）。
 if command -v flutter >/dev/null 2>&1; then
+    # 产出目录走包根标记文件（与 pack.py 同一通道纪律，见生成器注释）。
+    printf '%s' "$STAGE/bundle/defaults" > "$ROOT/app/auradsp_app/.auradsp_emit_defaults"
     (cd "$ROOT/app/auradsp_app" && \
-        AURADSP_EMIT_DEFAULTS="$STAGE/bundle/defaults" \
         flutter test test/defaults_emit_test.dart >/dev/null 2>&1) \
         && echo "defaults: 默认层已生成" \
         || echo "warning: defaults/ 生成失败，包将不带默认层" >&2
+    rm -f "$ROOT/app/auradsp_app/.auradsp_emit_defaults"
 else
     echo "warning: 无 flutter，跳过 defaults/ 生成（App 回退代码默认）" >&2
 fi

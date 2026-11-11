@@ -47,7 +47,19 @@ void main() {
   });
 
   test('emit defaults layer when AURADSP_EMIT_DEFAULTS is set', () {
-    final out = Platform.environment['AURADSP_EMIT_DEFAULTS'];
+    // 产出目录的传递通道有两条：环境变量 AURADSP_EMIT_DEFAULTS，或
+    // 包根标记文件 .auradsp_emit_defaults（内容为目标目录）。后者是
+    // pack.py 的主通道——Windows 上经 Python subprocess → cmd →
+    // flutter.bat 多层包裹时环境变量会丢失（2026-11-12 开发机实证：
+    // rc=0 但未产出），文件通道不受影响。flutter test 的 CWD 恒为
+    // 包根，本文件的相对路径读取（assets/、pubspec.yaml）同源于此。
+    var out = Platform.environment['AURADSP_EMIT_DEFAULTS'];
+    if (out == null || out.isEmpty) {
+      final marker = File('.auradsp_emit_defaults');
+      if (marker.existsSync()) {
+        out = marker.readAsStringSync().trim();
+      }
+    }
     if (out == null || out.isEmpty) {
       // 普通 CI/本地跑测：不产出，只确认生成前提（往返契约）成立。
       return;

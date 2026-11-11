@@ -494,23 +494,30 @@ def apply_defaults(work_staging: Path, what_if: bool) -> None:
         raise die("生成 defaults/ 需要 flutter 在 PATH 中"
                   "（默认层由 App 代码经契约测试导出）")
     app_dir = ROOT / "app" / "auradsp_app"
-    env = dict(os.environ,
-               AURADSP_EMIT_DEFAULTS=str(work_staging / "defaults"))
     log("defaults: 经 App 契约测试生成默认层…")
-    # stdout 必须落真实文件、不能用 PIPE：flutter test 的测试子进程经
-    # Python 管道继承句柄时会在加载阶段断连（"Connection closed before
-    # test suite loaded"，2026-11-12 开发机实证）；文件重定向无此问题。
+    # 两个通道纪律（2026-11-12 开发机实证）：
+    #  1) 产出目录走包根标记文件 .auradsp_emit_defaults，不走环境
+    #     变量——Windows 上 Python subprocess → cmd → flutter.bat 的
+    #     多层包裹会把 AURADSP_EMIT_DEFAULTS 弄丢（rc=0 却不产出，
+    #     生成器静默跳过）；文件通道确定可达，生成器双通道都认。
+    #  2) stdout 落真实文件、不用 PIPE——管道继承会让 flutter test
+    #     的测试子进程在加载阶段断连。
     import tempfile
-    with tempfile.TemporaryFile(mode="w+b") as lf:
-        r = subprocess.run(
-            [flutter, "test", "test/defaults_emit_test.dart"],
-            cwd=str(app_dir), env=env,
-            stdout=lf, stderr=subprocess.STDOUT)
-        if r.returncode != 0:
-            lf.seek(0)
-            tail = "\n".join(
-                lf.read().decode("utf-8", "replace").splitlines()[-15:])
-            raise die(f"defaults 生成失败（flutter test rc={r.returncode}）：\n{tail}")
+    marker = app_dir / ".auradsp_emit_defaults"
+    marker.write_text(str(work_staging / "defaults"), encoding="utf-8")
+    try:
+        with tempfile.TemporaryFile(mode="w+b") as lf:
+            r = subprocess.run(
+                [flutter, "test", "test/defaults_emit_test.dart"],
+                cwd=str(app_dir),
+                stdout=lf, stderr=subprocess.STDOUT)
+            if r.returncode != 0:
+                lf.seek(0)
+                tail = "\n".join(
+                    lf.read().decode("utf-8", "replace").splitlines()[-15:])
+                raise die(f"defaults 生成失败（flutter test rc={r.returncode}）：\n{tail}")
+    finally:
+        marker.unlink(missing_ok=True)
     manifest = work_staging / "defaults" / "manifest.json"
     if not manifest.is_file():
         raise die("defaults 生成未产出 manifest.json")
