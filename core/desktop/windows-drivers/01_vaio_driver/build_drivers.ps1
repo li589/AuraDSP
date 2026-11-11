@@ -57,9 +57,14 @@ switch ($Track) {
         # resolves the ApiValidator universalDDIs\x64 path correctly (the WDK VS
         # integration normally sets DDKPlatform; we supply it for the hand-authored toolset).
         & $msb $proj /p:Configuration=$Config /p:Platform=$Platform /p:DDKPlatform=x64 /p:SkipPackageVerification=true
+        # 全面复审 S5b：必须把 MSBuild 退出码传出去——`powershell -File`
+        # 默认以 0 退出，pack.py 的 check=True 曾因此对编译失败视而不见，
+        # 签名步骤又刷新了旧 .sys 的 mtime，新鲜度门随之被洗绿。
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
     'legacy' {
         & (Join-Path $PSScriptRoot 'legacy\build_legacy.ps1') -Config $Config -Platform $Platform
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
     default { Write-Error "Unknown Track: $Track (use modern | legacy)"; exit 1 }
 }

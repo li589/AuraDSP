@@ -355,10 +355,14 @@ AuraControlDevice_DispatchDeviceControl(
             pVer->KmdfMinor          = 15;
             pVer->Track              = 1; // Modern (Win10/11)
 #endif
-            // 全面复审 S5（VAIO-11)：头文件口径即 __DATE__/__TIME__，
-            // 此前写死字面日期令版本判读（装机新旧比对）恒为旧版。
-            RtlStringCchCopyA(pVer->BuildDate, sizeof(pVer->BuildDate), __DATE__);
-            RtlStringCchCopyA(pVer->BuildTime, sizeof(pVer->BuildTime), __TIME__);
+            // 全面复审 S5/S5b（VAIO-11 定案）：本驱动以 /d1nodatetime
+            // 可复现构建，__DATE__/__TIME__ 被编译器禁用（S5 一度改用
+            // 之，开发机 MSBuild 实测 C2065 而撤销）——BuildDate 的
+            // 语义是「驱动源码版本日期」，随驱动源码变更手工同步；
+            // BuildTime 在可复现构建下不跟踪钟点，恒 00:00:00。
+            // 精确构建时刻看 INF 的 DriverVer（打包时由 MSBuild 盖戳）。
+            RtlStringCchCopyA(pVer->BuildDate, sizeof(pVer->BuildDate), "2026-11-11");
+            RtlStringCchCopyA(pVer->BuildTime, sizeof(pVer->BuildTime), "00:00:00");
 
             bytesReturned = sizeof(AURA_VAIO_VERSION_INFO);
             ntStatus = STATUS_SUCCESS;

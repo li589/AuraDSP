@@ -176,6 +176,16 @@ def check_driver_freshness(driver_dir: Path) -> list[str]:
 
 def build_driver(track: str = "modern", config: str = "Release") -> None:
     """按需重编 + 测试签名 VAIO 驱动（内核驱动只能用 signtool 签）。"""
+    # 全面复审 S5b（2026-11-11 实测事故）：build_drivers.ps1 曾不向外
+    # 传播 MSBuild 退出码（powershell -File 默认 exit 0)，编译失败后
+    # 本函数的 check=True 形同虚设；随后 sign_drivers.ps1 给旧 .sys
+    # 重签名刷新了 mtime，下方新鲜度门（纯 mtime 口径）被「洗绿」，
+    # pack 以退出码 0 发出了源码不符的旧驱动。脚本侧已修退出码传播；
+    # 这里再加一条与签名无关的硬断言：构建脚本跑完后，.sys 必须被
+    # 本次构建实际重写（mtime 不早于构建开始），否则直接中止。
+    ddir = find_driver_dir(None)
+    sys_path = (ddir / "AuraVaioDriver.sys") if ddir else None
+    build_started = time.time()
     for script, args in (
         ("build_drivers.ps1", ["-Track", track, "-Config", config]),
         ("sign_drivers.ps1", []),
@@ -188,6 +198,13 @@ def build_driver(track: str = "modern", config: str = "Release") -> None:
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
              "-File", str(p)] + args,
             check=True, cwd=str(DRIVER_SRC_ROOT))
+        if script == "build_drivers.ps1":
+            if sys_path is None or not sys_path.is_file():
+                raise die("驱动构建后未找到 AuraVaioDriver.sys，中止打包")
+            if sys_path.stat().st_mtime < build_started - 2:
+                raise die(
+                    "驱动构建脚本报告成功，但 AuraVaioDriver.sys 未被重写"
+                    "（仍是旧构建）——拒绝继续打包，避免发出与源码不符的驱动")
 
 
 # ASIO 驱动 DLL 的规范文件名（ADR-008：CMake 目标 auraasio_driver 的

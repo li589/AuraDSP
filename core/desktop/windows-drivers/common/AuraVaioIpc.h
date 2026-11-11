@@ -79,8 +79,9 @@ typedef struct _AURA_VAIO_VERSION_INFO {
     ULONG   KmdfMajor;              // 1
     ULONG   KmdfMinor;              // 15 (modern) or 11 (legacy)
     ULONG   Track;                  // 1 = modern (Win10/11), 2 = legacy (Win7/8)
-    CHAR    BuildDate[32];          // "__DATE__"
-    CHAR    BuildTime[32];          // "__TIME__"
+    CHAR    BuildDate[32];          // 驱动源码版本日期 "YYYY-MM-DD"，随源码变更
+                                    // 手工同步（/d1nodatetime 禁用 __DATE__）
+    CHAR    BuildTime[32];          // 可复现构建不跟踪钟点，恒 "00:00:00"
 } AURA_VAIO_VERSION_INFO, *PAURA_VAIO_VERSION_INFO;
 
 typedef struct _AURA_VAIO_STATUS_INFO {
