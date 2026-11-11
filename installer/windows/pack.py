@@ -504,7 +504,11 @@ def apply_defaults(work_staging: Path, what_if: bool) -> None:
     #     的测试子进程在加载阶段断连。
     import tempfile
     marker = app_dir / ".auradsp_emit_defaults"
-    marker.write_text(str(work_staging / "defaults"), encoding="utf-8")
+    # 必须写绝对路径：work_staging 可能是相对路径（如 --mode staging
+    # 直传 args.staging），而生成器进程的 CWD 是 app_dir，相对路径会
+    # 被它解析到包内、产出落错地方（2026-11-12 实证）。
+    marker.write_text(str((work_staging / "defaults").resolve()),
+                      encoding="utf-8")
     try:
         with tempfile.TemporaryFile(mode="w+b") as lf:
             r = subprocess.run(
