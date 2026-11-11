@@ -466,6 +466,12 @@ abstract class AppLocalizations {
   /// **'APO 引擎处理中：经过此端点的声音由 AuraDSP 引擎实时处理（插件链在 APO 模式下不生效）。'**
   String get apoEngineNoteActive;
 
+  /// No description provided for @apoEngineDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'引擎实测：{rate} Hz · {ch} 声道 · 已应用 {n} 个参数'**
+  String apoEngineDetail(String rate, String ch, String n);
+
   /// No description provided for @apoEngineNoteWaiting.
   ///
   /// In zh, this message translates to:
@@ -1876,6 +1882,18 @@ abstract class AppLocalizations {
   /// **'桥模式跟随 VB/ASIO 设备，此处选择仅保存偏好（切回进程内模式或下次启动才生效）'**
   String get sampleRateFollowBridge;
 
+  /// No description provided for @sampleRateFollowApo.
+  ///
+  /// In zh, this message translates to:
+  /// **'System APO 模式下采样率由端点流格式决定，此处仅为本地链请求值'**
+  String get sampleRateFollowApo;
+
+  /// No description provided for @channelsFollowApo.
+  ///
+  /// In zh, this message translates to:
+  /// **'System APO 模式下声道由端点流格式决定，本设置不作用于 APO 处理'**
+  String get channelsFollowApo;
+
   /// No description provided for @latencyLabel.
   ///
   /// In zh, this message translates to:
@@ -1909,7 +1927,7 @@ abstract class AppLocalizations {
   /// No description provided for @pdcLatencyTooltip.
   ///
   /// In zh, this message translates to:
-  /// **'全链路端到端总延迟: {ms} ms\n点击触发全链路测量与时钟同步'**
+  /// **'DSP 链总延迟: {ms} ms\n点击触发链路测量与时钟同步'**
   String pdcLatencyTooltip(String ms);
 
   /// No description provided for @chainFreqRefreshTooltip.
@@ -1921,8 +1939,14 @@ abstract class AppLocalizations {
   /// No description provided for @chainLatencyMeasuredMsg.
   ///
   /// In zh, this message translates to:
-  /// **'已完成全链路延迟测定，端到端延迟已更新为 {ms} ms'**
+  /// **'DSP 链延迟已更新为 {ms} ms'**
   String chainLatencyMeasuredMsg(String ms);
+
+  /// No description provided for @chainLatencyMeasuredPartialMsg.
+  ///
+  /// In zh, this message translates to:
+  /// **'DSP 链延迟已更新为 {ms} ms（部分组件为估算值）'**
+  String chainLatencyMeasuredPartialMsg(String ms);
 
   /// No description provided for @bassBoost.
   ///
@@ -5487,6 +5511,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'延迟补偿 (PDC)'**
   String get chainPdcLabel;
+
+  /// No description provided for @chainPdcBridgeUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'桥/APO 模式下 PDC 同步不可用（仅进程内链路生效）'**
+  String get chainPdcBridgeUnsupported;
 
   /// No description provided for @chainSlotStatusLine.
   ///

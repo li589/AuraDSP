@@ -208,6 +208,11 @@ class AppLocalizationsJa extends AppLocalizations {
       'APO エンジン処理中：このエンドポイントを通る音声は AuraDSP エンジンでリアルタイム処理されます（プラグインチェーンは APO モードでは動作しません）。';
 
   @override
+  String apoEngineDetail(String rate, String ch, String n) {
+    return 'エンジン実測：$rate Hz · $ch チャンネル · $n パラメータ適用済';
+  }
+
+  @override
   String get apoEngineNoteWaiting => 'APO は装着済みです。エンジンの準備ができるまで音声はスルーされます。';
 
   @override
@@ -988,6 +993,14 @@ class AppLocalizationsJa extends AppLocalizations {
       'ブリッジモードではVB/ASIOデバイスに追従。本選択は優先度として保存されるのみ（プロセス内モードへ戻すか次回起動時に適用）';
 
   @override
+  String get sampleRateFollowApo =>
+      'System APO モードではサンプルレートはエンドポイントのストリーム形式に従います（これはローカルチェーンの要求値です）';
+
+  @override
+  String get channelsFollowApo =>
+      'System APO モードではチャンネルはエンドポイントのストリーム形式に従い、本設定は APO 処理に影響しません';
+
+  @override
   String get latencyLabel => '遅延';
 
   @override
@@ -1006,7 +1019,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String pdcLatencyTooltip(String ms) {
-    return '全チェーン端到端遅延: $ms ms\nクリックで全チェーン測定とクロック同期を実行';
+    return 'DSPチェーン総遅延: $ms ms\nクリックでチェーン測定とクロック同期を実行';
   }
 
   @override
@@ -1014,7 +1027,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String chainLatencyMeasuredMsg(String ms) {
-    return '全チェーン遅延の測定が完了しました。端到端遅延を $ms ms に更新しました';
+    return 'DSPチェーン遅延を $ms ms に更新しました';
+  }
+
+  @override
+  String chainLatencyMeasuredPartialMsg(String ms) {
+    return 'DSPチェーン遅延を $ms ms に更新しました（一部コンポーネントは推定値）';
   }
 
   @override
@@ -2880,6 +2898,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chainPdcLabel => 'レイテンシ補正 (PDC)';
+
+  @override
+  String get chainPdcBridgeUnsupported =>
+      'ブリッジ/APO モードでは PDC 同期は利用できません（インプロセスチェーンのみ）';
 
   @override
   String chainSlotStatusLine(String a, int b) {

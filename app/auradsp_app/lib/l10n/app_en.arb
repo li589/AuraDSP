@@ -78,6 +78,14 @@
   "setApoSafetyNote": "Registry safety: all changes are atomically protected via HKLM\\SOFTWARE\\AuraDSP\\Child APOs plus a dual-layer disk snapshot; the original driver config is 100% restored on uninstall.",
   "apoModeHint": "Switching modes only selects the attach target; use Attach / Detach below to actually apply or remove the APO.",
   "apoEngineNoteActive": "APO engine active: audio through this endpoint is processed by the AuraDSP engine in real time (the plugin chain does not run in APO mode).",
+  "apoEngineDetail": "Engine actual: {rate} Hz · {ch} ch · {n} params applied",
+  "@apoEngineDetail": {
+    "placeholders": {
+      "rate": {"type": "String"},
+      "ch": {"type": "String"},
+      "n": {"type": "String"}
+    }
+  },
   "apoEngineNoteWaiting": "APO attached, waiting for the engine to become ready; audio passes through until then.",
   "apoEngineNoteFault": "The APO engine faulted and fell back to pass-through automatically (system audio is unaffected). Re-attach the APO or restart the app to retry.",
   "apoEngineNoteLoadFailed": "APO is attached, but the engine failed to load; audio passes through. Verify the installation is complete, then re-attach or reinstall the app.",
@@ -344,6 +352,8 @@
     }
   },
   "sampleRateFollowBridge": "Bridge modes follow the VB/ASIO device; this choice is only saved as a preference (it applies after switching back to in-process mode or on the next launch)",
+  "sampleRateFollowApo": "In System APO mode the sample rate follows the endpoint stream format; this is only the local-chain request value",
+  "channelsFollowApo": "In System APO mode channels follow the endpoint stream format; this setting does not affect APO processing",
   "latencyLabel": "Latency",
   "latencyMs": "Latency {n}ms",
   "latencyTip": "Added algorithmic latency: only latency-introducing effects count (e.g. reverb +30ms); low-latency effects add 0ms",
@@ -356,7 +366,7 @@
   },
   "dspBypassHint": "DSP bypassed · Click to resume processing",
   "dspActiveHint": "DSP processing · Click to toggle global bypass",
-  "pdcLatencyTooltip": "Full-chain end-to-end latency: {ms} ms\nClick to run full-chain measurement and clock sync",
+  "pdcLatencyTooltip": "Total DSP-chain latency: {ms} ms\nClick to run chain measurement and clock sync",
   "@pdcLatencyTooltip": {
     "placeholders": {
       "ms": {
@@ -365,8 +375,16 @@
     }
   },
   "chainFreqRefreshTooltip": "Re-measure full-chain frequency response and end-to-end latency",
-  "chainLatencyMeasuredMsg": "Full-chain latency measurement complete; end-to-end latency updated to {ms} ms",
+  "chainLatencyMeasuredMsg": "DSP-chain latency updated to {ms} ms",
   "@chainLatencyMeasuredMsg": {
+    "placeholders": {
+      "ms": {
+        "type": "String"
+      }
+    }
+  },
+  "chainLatencyMeasuredPartialMsg": "DSP-chain latency updated to {ms} ms (some components are estimates)",
+  "@chainLatencyMeasuredPartialMsg": {
     "placeholders": {
       "ms": {
         "type": "String"
@@ -1098,6 +1116,7 @@
   "chainSlotProcessing": "Processing",
   "chainSlotRemoteFailed": "Plugin host lost - bypassed",
   "chainPdcLabel": "Delay compensation (PDC)",
+  "chainPdcBridgeUnsupported": "PDC sync is unavailable in bridge/APO modes (in-process chain only)",
   "chainSlotStatusLine": "Status: {a} • latency: {b} samples",
   "@chainSlotStatusLine": {
     "placeholders": {

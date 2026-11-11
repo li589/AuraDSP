@@ -502,6 +502,20 @@ class _SystemApoPanel extends StatelessWidget {
                 style: captionOf(p, color: apoNoteColor)
                     .copyWith(fontSize: 11)),
           ),
+        // 全面复审 S2（APO-7）：引擎实测明细——telemetry 的 rate/
+        // channels/paramsApplied 此前读回存入却无呈现点，而这组值
+        // 正是判别「处理在哪个端点、参数是否真下发」的关键证据。
+        if (model.audioMode == 'sysapo' &&
+            model.apoAnyAttached &&
+            model.apoEngineRate > 0)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Text(
+                l.apoEngineDetail('${model.apoEngineRate}',
+                    '${model.apoEngineChannels}', '${model.apoParamsApplied}'),
+                style:
+                    captionOf(p, color: p.textDim).copyWith(fontSize: 11)),
+          ),
         const SizedBox(height: AuraSpace.xs),
         Row(
           children: [

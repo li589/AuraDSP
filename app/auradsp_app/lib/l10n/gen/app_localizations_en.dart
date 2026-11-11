@@ -212,6 +212,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'APO engine active: audio through this endpoint is processed by the AuraDSP engine in real time (the plugin chain does not run in APO mode).';
 
   @override
+  String apoEngineDetail(String rate, String ch, String n) {
+    return 'Engine actual: $rate Hz · $ch ch · $n params applied';
+  }
+
+  @override
   String get apoEngineNoteWaiting =>
       'APO attached, waiting for the engine to become ready; audio passes through until then.';
 
@@ -1065,6 +1070,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Bridge modes follow the VB/ASIO device; this choice is only saved as a preference (it applies after switching back to in-process mode or on the next launch)';
 
   @override
+  String get sampleRateFollowApo =>
+      'In System APO mode the sample rate follows the endpoint stream format; this is only the local-chain request value';
+
+  @override
+  String get channelsFollowApo =>
+      'In System APO mode channels follow the endpoint stream format; this setting does not affect APO processing';
+
+  @override
   String get latencyLabel => 'Latency';
 
   @override
@@ -1084,7 +1097,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String pdcLatencyTooltip(String ms) {
-    return 'Full-chain end-to-end latency: $ms ms\nClick to run full-chain measurement and clock sync';
+    return 'Total DSP-chain latency: $ms ms\nClick to run chain measurement and clock sync';
   }
 
   @override
@@ -1093,7 +1106,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String chainLatencyMeasuredMsg(String ms) {
-    return 'Full-chain latency measurement complete; end-to-end latency updated to $ms ms';
+    return 'DSP-chain latency updated to $ms ms';
+  }
+
+  @override
+  String chainLatencyMeasuredPartialMsg(String ms) {
+    return 'DSP-chain latency updated to $ms ms (some components are estimates)';
   }
 
   @override
@@ -3027,6 +3045,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chainPdcLabel => 'Delay compensation (PDC)';
+
+  @override
+  String get chainPdcBridgeUnsupported =>
+      'PDC sync is unavailable in bridge/APO modes (in-process chain only)';
 
   @override
   String chainSlotStatusLine(String a, int b) {

@@ -2355,8 +2355,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'evt': evt,
                 ...st,
                 if (backend == 'asio') 'driverInUse': asioDriverInUse,
+                // 全面复审 S2（VAIO-7）：请求值改键名下发，不再覆盖
+                // 桥 status 自带的 outputEndpoint（实际落地端点名）；
+                // 此前覆盖使自动选择时面板端点行恒空、具名时显示的
+                // 也是请求值而非桥核实值。
                 if (backend == 'vaio')
-                  'outputEndpoint': vaioOutputEndpointInUse,
+                  'requestedEndpoint': vaioOutputEndpointInUse,
               });
               bridgeGated = ((st['gated'] as num?)?.toInt() ?? 0) == 1;
               // VAIO 几何快照（2026-11-09）：格式/声道几何元组变化

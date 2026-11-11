@@ -501,8 +501,12 @@ class ApoTelemetryReader {
     final seq = u32[9];
     if (seq == _lastSeq) return;
     _lastSeq = seq;
-    final channels = u32[5];
-    final chCount = channels >= 1 && channels <= 8 ? channels : 2;
+    // 全面复审 S2（APO-11）：telemetry 逐声道数据只有 L/R 两路；
+    // 此前按流真实声道数合成 chLevels（ch3+ 恒 -90 假静音）与
+    // stageCh 全 -90 表，多声道端点下主页电平排呈假数据。viz 按
+    // 立体声口径上报（chCount=2），待 telemetry 块带逐声道电平
+    // 后再展开。
+    const chCount = 2;
     final levelL = f32[14];
     final levelR = f32[15];
     final spectrum = List<double>.generate(32, (i) => f32[16 + i]);

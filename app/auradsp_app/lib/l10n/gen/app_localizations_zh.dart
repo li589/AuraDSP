@@ -206,6 +206,11 @@ class AppLocalizationsZh extends AppLocalizations {
       'APO 引擎处理中：经过此端点的声音由 AuraDSP 引擎实时处理（插件链在 APO 模式下不生效）。';
 
   @override
+  String apoEngineDetail(String rate, String ch, String n) {
+    return '引擎实测：$rate Hz · $ch 声道 · 已应用 $n 个参数';
+  }
+
+  @override
   String get apoEngineNoteWaiting => 'APO 已附加，等待引擎就绪；就绪前声音直通。';
 
   @override
@@ -973,6 +978,12 @@ class AppLocalizationsZh extends AppLocalizations {
       '桥模式跟随 VB/ASIO 设备，此处选择仅保存偏好（切回进程内模式或下次启动才生效）';
 
   @override
+  String get sampleRateFollowApo => 'System APO 模式下采样率由端点流格式决定，此处仅为本地链请求值';
+
+  @override
+  String get channelsFollowApo => 'System APO 模式下声道由端点流格式决定，本设置不作用于 APO 处理';
+
+  @override
   String get latencyLabel => '延迟';
 
   @override
@@ -991,7 +1002,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String pdcLatencyTooltip(String ms) {
-    return '全链路端到端总延迟: $ms ms\n点击触发全链路测量与时钟同步';
+    return 'DSP 链总延迟: $ms ms\n点击触发链路测量与时钟同步';
   }
 
   @override
@@ -999,7 +1010,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String chainLatencyMeasuredMsg(String ms) {
-    return '已完成全链路延迟测定，端到端延迟已更新为 $ms ms';
+    return 'DSP 链延迟已更新为 $ms ms';
+  }
+
+  @override
+  String chainLatencyMeasuredPartialMsg(String ms) {
+    return 'DSP 链延迟已更新为 $ms ms（部分组件为估算值）';
   }
 
   @override
@@ -2854,6 +2870,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chainPdcLabel => '延迟补偿 (PDC)';
+
+  @override
+  String get chainPdcBridgeUnsupported => '桥/APO 模式下 PDC 同步不可用（仅进程内链路生效）';
 
   @override
   String chainSlotStatusLine(String a, int b) {

@@ -8,6 +8,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../core/audio_modes.dart';
 import '../../core/design.dart';
 import '../../core/plugins/plugin_manager.dart';
 import '../../core/state.dart';
@@ -64,7 +65,8 @@ class _PluginSlotChainCard extends StatelessWidget {
     final isActive = manager.isSlotActive(slot);
     final active = manager.getSlotPlugin(slot);
     final isBypassed = manager.isSlotBypassed(slot);
-    final remoteFailed = manager.getSlotStatus(slot).remoteFailed;
+    final slotStatus = manager.getSlotStatus(slot);
+    final remoteFailed = slotStatus.remoteFailed;
     final currentStage = manager.getSlotStage(slot);
 
     return Container(
@@ -197,13 +199,17 @@ class _PluginSlotChainCard extends StatelessWidget {
               visualDensity: VisualDensity.compact,
             ),
             const SizedBox(width: AuraSpace.xs),
-            // 旁路开关
+            // 旁路开关。全面复审 S2（UI-6）：故障呈现与插件页同
+            // 口径——文案恒同普通旁路、仅呼吸闪动示异常（业主裁
+            // 定）；此前链页未传 pulse，故障槽与普通旁路无区别，
+            // 点击重试加载用户无从知晓。
             AuraChip(
               isBypassed
                   ? l10nOf(context).chainBypassed
                   : l10nOf(context).chainActive,
               selected: !isBypassed,
               danger: isBypassed,
+              pulse: slotStatus.fault,
               busy: manager.isSlotBypassPending(slot),
               onTap: manager.isSlotBypassPending(slot)
                   ? null
@@ -226,20 +232,41 @@ class _PdcToggleRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final manager = model.pluginManager;
-    return Row(
+    // 全面复审 S2（ENG-4）：PDC 同步只作用于进程内本地链；桥链
+    // （VAIO/ASIO，声音在桥进程内处理、桥 FFI 无 PDC 面）与 APO
+    // 影子链下拨动无效——置灰并给说明，不再假装功能正常。
+    final chain = model.pipelineChain;
+    final pdcSupported = model.modeCaps.pluginProcessing ==
+            PluginProcessing.local &&
+        chain != PipelineChain.vaio &&
+        chain != PipelineChain.asio;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(Icons.timeline_rounded, size: 16, color: p.accent),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            l10nOf(context).chainPdcLabel,
-            style: captionOf(p),
+        Row(
+          children: [
+            Icon(Icons.timeline_rounded, size: 16, color: p.accent),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                l10nOf(context).chainPdcLabel,
+                style: captionOf(p),
+              ),
+            ),
+            AuraSwitch(
+              value: manager.pdcEnabled,
+              onChanged: pdcSupported ? (v) => manager.setPdc(v) : null,
+            ),
+          ],
+        ),
+        if (!pdcSupported)
+          Padding(
+            padding: const EdgeInsets.only(top: 2, left: 22),
+            child: Text(
+              l10nOf(context).chainPdcBridgeUnsupported,
+              style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
+            ),
           ),
-        ),
-        AuraSwitch(
-          value: manager.pdcEnabled,
-          onChanged: (v) => manager.setPdc(v),
-        ),
       ],
     );
   }

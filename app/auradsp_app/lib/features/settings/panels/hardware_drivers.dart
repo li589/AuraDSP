@@ -283,6 +283,10 @@ class _AsioClientDriverRow extends StatelessWidget {
               ),
             ),
           ]),
+          // 全面复审 S2（ASIO-3 呈现半）：起桥失败 note 上屏（与
+          // VAIO 面板 note 行同口径；通知半已在 S1 落地）。
+          if (info['note'] is String && (info['note'] as String).isNotEmpty)
+            _InfoRow('ASIO', '${info['note']}'),
           if (model.asioActive) ...[
             if (info['inCh'] is num && info['outCh'] is num)
               _InfoRow(l.asioDeviceChannels,
@@ -375,6 +379,11 @@ class _VaioDriverRow extends StatelessWidget {
           !detected ? p.textDim : (found ? p.success : p.warning),
         ),
         _DriverDetail(l.setVaioDesc),
+        // 全面复审 S2（VAIO-8）：驱动版本/track/KMDF 上屏——detect
+        // 早已回传，此前无呈现点，装机版本排障只能靠日志。
+        if (found && det['driverVersion'] is String)
+          _DriverDetail(
+              'v${det['driverVersion']} · ${det['track']} · KMDF ${det['kmdf']}'),
       ],
       actions: [
         if (detected && !found)

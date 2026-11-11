@@ -418,9 +418,19 @@ class _VaioOutputSubpanel extends StatelessWidget {
             _InfoRow('AuraVAIO', '${info['note']}'),
           if (model.vaioActive) ...[
             if (info['sr'] is num)
-              _InfoRow(l.sampleRate, '${(info['sr'] as num).toInt()} Hz / 2 ch'),
+              // 全面复审 S2（VAIO-6）：声道数读桥真值，不再硬编码 2 ch。
+              _InfoRow(l.sampleRate,
+                  '${(info['sr'] as num).toInt()} Hz / ${(info['channels'] as num?)?.toInt() ?? 2} ch'),
             if (info['frames'] is num)
               _InfoRow(l.ioProcessedFrames, '${(info['frames'] as num).toInt()} frames'),
+            // 全面复审 S2（VAIO-8）：格式重同步计数与参数应用失败数
+            // 上屏（此前只进日志，切歌噪声排障无从看起）。
+            if ((info['fmtResyncs'] as num?)?.toInt() != null &&
+                (info['fmtResyncs'] as num).toInt() > 0)
+              _InfoRow('fmtResyncs', '${(info['fmtResyncs'] as num).toInt()}'),
+            if ((info['paramsFailed'] as num?)?.toInt() != null &&
+                (info['paramsFailed'] as num).toInt() > 0)
+              _InfoRow('paramsFailed', '${(info['paramsFailed'] as num).toInt()}'),
             if (info['outputEndpoint'] is String &&
                 (info['outputEndpoint'] as String).isNotEmpty)
               _InfoRow(l.ioOutputLabel, '${info['outputEndpoint']}'),

@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/audio_modes.dart';
 import '../../core/design.dart';
+import '../../core/effect_registry.dart';
 import '../../core/error_sink.dart';
 import '../../core/io/resource_gate.dart';
 import '../../core/channel_layout.dart';
@@ -702,8 +703,18 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
                   await widget.model.refreshAllComponentLatencies();
                   if (context.mounted) {
                     setState(() {});
+                    // 全面复审 S2（UI-15）：通知按成分分级——含估算
+                    // 成分时明示，不再一律宣称「测定完成」。
+                    final m = widget.model;
+                    final hasEstimate = kFullChainStageIds.any((id) =>
+                            m.isStageEnabled(id) &&
+                            m.componentLatency(id).estimated) ||
+                        (m.limiterOn &&
+                            m.componentLatency('limiter').estimated);
                     widget.model.postNotice(
-                      l.chainLatencyMeasuredMsg(
+                      (hasEstimate
+                              ? l.chainLatencyMeasuredPartialMsg
+                              : l.chainLatencyMeasuredMsg)(
                         LatencyPresenter.number(
                           widget.model.fullChainLatencyMs,
                         ),

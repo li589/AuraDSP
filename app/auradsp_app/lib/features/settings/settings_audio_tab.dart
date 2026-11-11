@@ -102,9 +102,13 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
     // 3. 采样率（移入音频页；VB/ASIO 等桥模式跟随驱动，此处作为软件请求值与内部回退基准）
     SectionCard(
       title: l.sampleRate,
-      hint: (model.audioMode == 'vbcallback' || model.audioMode == 'asio')
-          ? l.sampleRateFollowBridge
-          : null,
+      // 全面复审 S2（UI-4）：sysapo 下采样率由端点流格式决定，
+      // 与桥模式同型补跟随说明（此前无置灰无说明、可操作不生效）。
+      hint: model.audioMode == 'sysapo'
+          ? l.sampleRateFollowApo
+          : (model.audioMode == 'vbcallback' || model.audioMode == 'asio')
+              ? l.sampleRateFollowBridge
+              : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -133,7 +137,10 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
     // 4. 声道数量（物理设备拓扑：0=自动协商；2/4/6/8 手动指定）
     SectionCard(
       title: l.channelCount,
-      hint: l.channelCountHint,
+      // 全面复审 S2（UI-4）：sysapo 下声道由端点流格式决定。
+      hint: model.audioMode == 'sysapo'
+          ? '${l.channelCountHint}\n${l.channelsFollowApo}'
+          : l.channelCountHint,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -172,7 +179,10 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
     // 5. 声道模式（多声道 DSP 策略：矩阵下混 vs 离散多声道）
     SectionCard(
       title: l.channelMode,
-      hint: l.channelPhaseA,
+      // 全面复审 S2（UI-4）：同声道数卡，sysapo 下补归属说明。
+      hint: model.audioMode == 'sysapo'
+          ? '${l.channelPhaseA}\n${l.channelsFollowApo}'
+          : l.channelPhaseA,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -785,6 +785,11 @@ extension AudioModesState on AppModel {
 
   void setApoTargetEndpoint(String endpoint) {
     config.apoTargetEndpoint = endpoint;
+    // 全面复审 S2（UI-5）：切换目标端点即按已知装机真值重算
+    // apoAttached——此前须手动刷新才纠正，切到未附加端点时状态
+    // 行与附加 chip 仍呈旧端点的「已附加」。
+    apoAttached =
+        apoInstalledEndpoints.any((e) => _apoEndpointMatches(e, endpoint));
     persistRoutingChange();
     _notifyUi();
   }
