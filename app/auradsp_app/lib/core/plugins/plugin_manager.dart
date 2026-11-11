@@ -74,6 +74,10 @@ class PluginManager extends ChangeNotifier {
     PluginHostStatus.empty,
     growable: true,
   );
+
+  /// 本地/桥路径摄入时检出的故障边沿（全面复审 S1，ENG-1）；
+  /// 由状态层在 pluginSlotStatus 事件后取走并通知。
+  final List<({int slot, String category})> _localFaultEdges = [];
   final List<int> _slotStages = List.filled(
     kMaxSlots,
     PluginInsertStage.defaultStage,

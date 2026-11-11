@@ -895,6 +895,7 @@
   "trayShow": "Show Main Window",
   "trayQuit": "Quit",
   "sysAutostartHint": "Start AuraDSP automatically when signing in to the system",
+  "sysAutostartFailed": "Failed to change the autostart setting",
   "latUnmeasured": "Unmeasured",
   "latTipMeasured": "Component latency (impulse-response measured): {text}\nTap ↻ to re-measure (tens of ms, playback unaffected)",
   "@latTipMeasured": {

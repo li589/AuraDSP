@@ -832,6 +832,21 @@ extension StateEvents on AppModel {
             apoParamsApplied != appliedN ||
             apoLoadStage != loadStageN ||
             apoLoadErr != loadErrN) {
+          // 全面复审 S1（APO-4）：引擎故障闩锁/加载失败此前只有设
+          // 置面板一行小字，不在设置页完全无感——边沿各通知一次
+          // （与 APO 插件故障通知同口径）。
+          if (faultOn && !apoEngineFault) {
+            postNotice('System APO 引擎故障，已自动退回直通（当前无音频处理）',
+                level: NoticeLevel.warning);
+          }
+          if (loadStageN >= 1 &&
+              loadStageN <= 4 &&
+              loadStageN != apoLoadStage) {
+            postNotice(
+                'System APO 引擎加载失败（阶段 $loadStageN，错误 $loadErrN），'
+                '当前无音频处理',
+                level: NoticeLevel.error);
+          }
           apoEngineActive = seatOn;
           apoEngineFault = faultOn;
           apoEngineRate = (raw['rate'] as num?)?.toInt() ?? 0;
@@ -971,6 +986,19 @@ extension StateEvents on AppModel {
         final wasA = asioActive;
         asioActive = (raw['running'] as bool?) ?? false;
         asioInfo = Map<String, dynamic>.from(raw);
+        // 全面复审 S1（ASIO-3）：起桥失败 note 此前无任何用户可见
+        // 面——同 VAIO-5 口径按 note 去重通知一次。
+        final asioNote = (raw['note'] as String?) ?? '';
+        if (!asioActive && asioNote.isNotEmpty) {
+          if (asioNote != lastAsioFailNote) {
+            lastAsioFailNote = asioNote;
+            postNotice(
+                wasA ? 'ASIO 桥已停止：$asioNote' : 'ASIO 桥启动失败：$asioNote',
+                level: NoticeLevel.error);
+          }
+        } else if (asioActive) {
+          lastAsioFailNote = '';
+        }
         if (asioActive && !wasA) {
           // ASIO 上升沿：同 VB——清残留帧，基线归零（长度同上，12）。
           spectrum.value = List<double>.filled(32, 0.0);
@@ -1020,6 +1048,21 @@ extension StateEvents on AppModel {
         final wasV = vaioActive;
         vaioActive = (raw['running'] as bool?) ?? false;
         vaioInfo = Map<String, dynamic>.from(raw);
+        // 全面复审 S1（VAIO-5）：起桥失败/泵端点死亡此前只落面板
+        // note 行，不在面板就无感——与 capturestatus 的通知口径对
+        // 齐：未运行且 note 非空（桥 note 恒为失败形字符串，干净
+        // 停止时为空）时按 note 去重通知一次。
+        final vaioNote = (raw['note'] as String?) ?? '';
+        if (!vaioActive && vaioNote.isNotEmpty) {
+          if (vaioNote != lastVaioFailNote) {
+            lastVaioFailNote = vaioNote;
+            postNotice(
+                wasV ? 'VAIO 桥已停止：$vaioNote' : 'VAIO 桥启动失败：$vaioNote',
+                level: NoticeLevel.error);
+          }
+        } else if (vaioActive) {
+          lastVaioFailNote = '';
+        }
         if (vaioActive && channelsCountMode == 0 && raw['channels'] != null) {
           final c = (raw['channels'] as num).toInt();
           if (c == 2 || c == 4 || c == 6 || c == 8) {
@@ -1178,6 +1221,15 @@ extension StateEvents on AppModel {
             raw['status'],
             (raw['stage'] as num).toInt(),
           );
+          // 全面复审 S1（ENG-1）：本地/桥模式的插件故障边沿此前无
+          // 离开插件页的呈现——与 apoPluginStatus 同口径通知。
+          for (final e in pluginManager.takeLocalFaultEdges()) {
+            postNotice(
+                '插件故障（槽 ${e.slot + 1}：'
+                '${pluginFaultCategoryZh(e.category)}），已自动旁路；'
+                '点击该槽的旁路可重试加载',
+                level: NoticeLevel.warning);
+          }
         }
         // P1-1 路由锁定轮询兜底：编辑器打开态随 status 回执同步。
         final eoSlot = (raw['slot'] as num?)?.toInt() ?? 0;
@@ -1262,9 +1314,35 @@ extension StateEvents on AppModel {
         final samples = (raw['samples'] as num?)?.toInt() ?? 0;
         _onComponentLatencyResult(comp, rc, samples);
         break;
+      case 'pluginSlotPresetSaved':
+        // 全面复审 S1（ENG-3）：预置保存/加载回执此前无消费者，
+        // 失败被静默丢弃。rc 契约 1=成功 0=失败（引擎 ABI）。
+        if (((raw['rc'] as num?)?.toInt() ?? 0) != 1) {
+          postNotice(
+              '插件预设保存失败（槽 ${((raw['slot'] as num?)?.toInt() ?? 0) + 1}）',
+              level: NoticeLevel.error);
+        }
+        break;
+      case 'pluginSlotPresetLoaded':
+        if (((raw['rc'] as num?)?.toInt() ?? 0) != 1) {
+          postNotice(
+              '插件预设加载失败（槽 ${((raw['slot'] as num?)?.toInt() ?? 0) + 1}）',
+              level: NoticeLevel.error);
+        }
+        break;
+      case 'outRecovering':
+        // 全面复审 S1（ENG-9）：WASAPI 失效进 30s 恢复窗此前全
+        // 静默（界面仍显正常播放）——进窗通知一次。
+        postNotice('输出设备失效，正在尝试自动恢复…',
+            level: NoticeLevel.warning);
+        break;
+      case 'outRecovered':
+        postNotice('输出设备已恢复', level: NoticeLevel.info);
+        break;
       default:
         // 兜底：未知事件至少留痕，避免再次出现「发了但静默丢弃」。
         // 绝不 notifyListeners()，未知事件不应引发 UI 重建。
+        dbgLog('state_events: unhandled evt=${raw['evt']}');
         break;
     }
   }

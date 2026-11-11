@@ -24,13 +24,19 @@ import '../widgets.dart';
 class EqualizerApoDialog extends StatefulWidget {
   final String? initialText;
 
-  const EqualizerApoDialog({super.key, this.initialText});
+  /// 打开文件读取失败时的回调（全面复审 S1，UI-14）：对话框本身
+  /// 无 AppModel 引用，失败反馈由调用方接线，避免静默无反应。
+  final VoidCallback? onReadError;
 
-  static Future<String?> show(BuildContext context, {String? initialText}) {
+  const EqualizerApoDialog({super.key, this.initialText, this.onReadError});
+
+  static Future<String?> show(BuildContext context,
+      {String? initialText, VoidCallback? onReadError}) {
     return showDialog<String>(
       context: context,
       barrierDismissible: true,
-      builder: (ctx) => EqualizerApoDialog(initialText: initialText),
+      builder: (ctx) => EqualizerApoDialog(
+          initialText: initialText, onReadError: onReadError),
     );
   }
 
@@ -102,7 +108,12 @@ Filter 4: ON HSC Fc 8000 Hz Gain 2.0 dB Q 0.71
     );
     if (path != null && mounted) {
       final read = ResourceGate.readText(path);
-      if (!read.ok) return;
+      if (!read.ok) {
+        // 全面复审 S1（UI-14）：读失败不再静默（与 LiveProg 导入
+        // 失败有通知的口径对齐，经回调外发）。
+        widget.onReadError?.call();
+        return;
+      }
       _inputCtrl.text = read.text!;
       _recompute();
     }

@@ -296,6 +296,12 @@ class AppModel extends ChangeNotifier {
   Map<String, dynamic> vaioInfo = {};
   Map<String, dynamic> vaioDetectInfo = {};
 
+  /// 桥失败通知去重锚（全面复审 S1，VAIO-5/ASIO-3）：桥状态以约
+  /// 1s 节拍轮询回推，同一失败 note 只通知一次；桥恢复运行后清锚，
+  /// 下一次失败可再通知。
+  String lastVaioFailNote = '';
+  String lastAsioFailNote = '';
+
   /// 等待下一次 vaiodetect 事件的完成器（安装/卸载后诚实校验用，
   /// 真机报告 2026-11-09 §2.2）；事件到达时由 state_events 完成。
   Completer<void>? vaioDetectWaiter;
@@ -1063,8 +1069,22 @@ class AppModel extends ChangeNotifier {
   final List<AppNotice> _noticeQueue = [];
 
   /// 投递一条通用通知（text 须为已本地化文案）。
+  /// postNotice 同文去重锚（全面复审 S1，UI-10）：同一 (level|text)
+  /// 在窗口内重复投递只入队一次——状态事件可由轮询/边沿双路触发，
+  /// 防同因警告堆叠成串。窗口外再现视为新事件，正常投递。
+  String _lastNoticeKey = '';
+  int _lastNoticeAtMs = 0;
+  static const int _kNoticeDedupWindowMs = 10000;
+
   void postNotice(String text, {NoticeLevel level = NoticeLevel.info}) {
     if (text.isEmpty) return;
+    final now = debugNowOverride ?? DateTime.now().millisecondsSinceEpoch;
+    final key = '${level.name}|$text';
+    if (key == _lastNoticeKey && now - _lastNoticeAtMs < _kNoticeDedupWindowMs) {
+      return;
+    }
+    _lastNoticeKey = key;
+    _lastNoticeAtMs = now;
     _noticeQueue.add(AppNotice(text, level));
     eventSeq.value = ++_guardSeq;
   }

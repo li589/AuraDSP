@@ -102,8 +102,17 @@ List<Widget> buildSystemTab(BuildContext context, AppModel model) {
                   Text(l.sysAutostart, style: labelOf(p, size: 12)),
                   AuraSwitch(
                     value: autostartEnabled,
-                    onChanged: (v) =>
-                        PlatformAdapters.instance.autoStart.setEnabled(v),
+                    // 全面复审 S1（UI-13）：适配层失败是吞错返回
+                    // false 的，此前返回值被忽略、开关默默停在原
+                    // 值——失败必须通知。
+                    onChanged: (v) {
+                      final ok =
+                          PlatformAdapters.instance.autoStart.setEnabled(v);
+                      if (!ok) {
+                        model.postNotice(l.sysAutostartFailed,
+                            level: NoticeLevel.error);
+                      }
+                    },
                   ),
                 ],
               );

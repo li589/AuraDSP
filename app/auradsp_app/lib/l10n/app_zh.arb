@@ -1028,6 +1028,7 @@
   "trayShow": "显示主窗口",
   "trayQuit": "退出",
   "sysAutostartHint": "登录系统时自动启动并后台运行 AuraDSP",
+  "sysAutostartFailed": "开机自启设置失败",
   "latUnmeasured": "未测量",
   "latTipMeasured": "组件处理延迟（脉冲响应实测）: {text}\n点击 ↻ 重新测量（约数十毫秒，不影响正在播放的音频）",
   "@latTipMeasured": {

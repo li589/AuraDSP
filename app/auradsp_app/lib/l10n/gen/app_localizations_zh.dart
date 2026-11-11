@@ -2355,6 +2355,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sysAutostartHint => '登录系统时自动启动并后台运行 AuraDSP';
 
   @override
+  String get sysAutostartFailed => '开机自启设置失败';
+
+  @override
   String get latUnmeasured => '未测量';
 
   @override

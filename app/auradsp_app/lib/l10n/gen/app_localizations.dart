@@ -4522,6 +4522,12 @@ abstract class AppLocalizations {
   /// **'登录系统时自动启动并后台运行 AuraDSP'**
   String get sysAutostartHint;
 
+  /// No description provided for @sysAutostartFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'开机自启设置失败'**
+  String get sysAutostartFailed;
+
   /// No description provided for @latUnmeasured.
   ///
   /// In zh, this message translates to:

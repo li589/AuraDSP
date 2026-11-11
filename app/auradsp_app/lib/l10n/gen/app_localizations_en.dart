@@ -2507,6 +2507,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Start AuraDSP automatically when signing in to the system';
 
   @override
+  String get sysAutostartFailed => 'Failed to change the autostart setting';
+
+  @override
   String get latUnmeasured => 'Unmeasured';
 
   @override

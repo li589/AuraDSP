@@ -2567,6 +2567,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             outReinitAttempts = 0;
             outReinitNextAt = nowMs; // 首试立即（端点多半已回来）
             dbgLog('wasapi: output invalidated, entering reinit');
+            // 全面复审 S1（ENG-9）：进恢复窗通知 UI 一次（此前
+            // 最长约 30s 静默无声而界面仍显正常）。
+            send({'evt': 'outRecovering'});
           }
           if (nowMs - outInvalidSince < kOutReinitWindowMs) {
             if (nowMs >= outReinitNextAt) {
@@ -2574,6 +2577,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               if (windowsCapture.reinitOutput()) {
                 dbgLog('wasapi: out reinit ok '
                     '(attempt $outReinitAttempts)');
+                // 全面复审 S1（ENG-9）：恢复成功回 UI 一次。
+                send({'evt': 'outRecovered'});
                 outInvalidSince = 0;
                 outReinitAttempts = 0;
                 audioOutErrRounds = 0;

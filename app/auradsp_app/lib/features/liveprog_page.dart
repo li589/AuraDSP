@@ -674,7 +674,10 @@ dbg = 0;
   Future<void> _openApoConverter() async {
     if (!await _confirmDiscardUnsavedIfNeeded()) return;
     if (!mounted) return;
-    final generated = await EqualizerApoDialog.show(context);
+    final generated = await EqualizerApoDialog.show(context,
+        onReadError: () => widget.model.postNotice(
+            l10nOf(context).lpFileImportFailed,
+            level: NoticeLevel.error));
     if (generated != null && mounted) {
       _code.text = generated;
       _onCodeChanged(generated);

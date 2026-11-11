@@ -52,24 +52,37 @@ class _NoticeHostState extends State<NoticeHost> {
     final p = paletteOf(context);
 
     // 1) 引擎事件一次性字段（优先消费，行为与 EventBanner 时代一致）：
-    //    读取即清空，杜绝后续操作重复唤起。
+    //    读取即清空，杜绝后续操作重复唤起。全面复审 S1（UI-9）：
+    //    每帧只消费优先级最高的一个字段，其余保留到下一帧逐个呈
+    //    现——旧实现三字段一次性全清、同帧并发的两条只呈一条。
     final guard = model.lastGuard;
     final err = model.lastEngineError;
     final info = model.lastInfo;
     if (guard != null || err != null || info != null) {
-      model.clearLastGuard();
-      model.clearLastEngineError();
-      model.clearLastInfo();
-      final rawText = guard != null ? guard.message : (err ?? info ?? '');
+      final String rawText;
+      final bool isError;
+      final bool isInfo;
+      if (guard != null) {
+        model.clearLastGuard();
+        rawText = guard.message;
+        isError = false;
+        isInfo = false;
+      } else if (err != null) {
+        model.clearLastEngineError();
+        rawText = err;
+        isError = true;
+        isInfo = false;
+      } else {
+        model.clearLastInfo();
+        rawText = info ?? '';
+        isError = false;
+        isInfo = true;
+      }
       // B-2（D2）：引擎错误展示层本地化 + 脱敏（guard/error 来自引擎；
       // info 为 Dart 侧已本地化文案，原样透传）。detail 在此丢弃；
       // 原始串已由 state.dart 消费点 dbgLog 保留。
-      final text = (guard != null || err != null)
-          ? localizeEngineError(rawText, l10nOf(context))
-          : rawText;
+      final text = isInfo ? rawText : localizeEngineError(rawText, l10nOf(context));
       if (text.isNotEmpty) {
-        final isError = guard == null && err != null;
-        final isInfo = guard == null && err == null;
         _show(
           messenger,
           p,
@@ -93,8 +106,11 @@ class _NoticeHostState extends State<NoticeHost> {
       }
     }
 
-    // 队列里还有积压 → 下一帧继续消费，逐条呈现不吞条。
-    if (model.hasPendingNotice) {
+    // 队列/一次性字段还有积压 → 下一帧继续消费，逐条呈现不吞条。
+    if (model.hasPendingNotice ||
+        model.lastGuard != null ||
+        model.lastEngineError != null ||
+        model.lastInfo != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _drain());
     }
   }

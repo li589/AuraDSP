@@ -240,6 +240,14 @@ extension PluginManagerEvents on PluginManager {
     }
   }
 
+  /// 取走并清空本地故障边沿队列（全面复审 S1，ENG-1）。
+  List<({int slot, String category})> takeLocalFaultEdges() {
+    if (_localFaultEdges.isEmpty) return const [];
+    final out = List<({int slot, String category})>.from(_localFaultEdges);
+    _localFaultEdges.clear();
+    return out;
+  }
+
   void _parseStatusJsonForSlot(int slot, dynamic raw) {
     try {
       final Map<String, dynamic> map;
@@ -251,6 +259,16 @@ extension PluginManagerEvents on PluginManager {
         return;
       }
       final status = PluginHostStatus.fromJson(map);
+      // 全面复审 S1（ENG-1）：本地/桥路径的故障边沿收集——与
+      // onApoPluginStatuses 的 APO 边沿同形，供状态层发一次性通知
+      // （此前本地状态摄入只覆盖字段，播放中闩锁无人知晓）。
+      final prevStatus = _slotStatuses[slot];
+      if (status.fault && !prevStatus.fault) {
+        _localFaultEdges.add((
+          slot: slot,
+          category: status.faultCategory,
+        ));
+      }
       _slotStatuses[slot] = status;
       // 引擎回读确认旁路到位 → 解除在途标记（与请求值一致才算到位）。
       // 调用方（onPluginSlotBypass/onPluginSlotStatus 等）随后 notifyListeners。

@@ -895,6 +895,7 @@
   "trayShow": "主ウィンドウを表示",
   "trayQuit": "終了",
   "sysAutostartHint": "システムログイン時に AuraDSP を自動起動",
+  "sysAutostartFailed": "自動起動の設定に失敗しました",
   "latUnmeasured": "未測定",
   "latTipMeasured": "コンポーネント遅延（インパルス応答実測）: {text}\n↻タップで再測定（数十ms、再生に影響しません）",
   "@latTipMeasured": {

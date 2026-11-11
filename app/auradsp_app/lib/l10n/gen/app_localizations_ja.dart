@@ -2378,6 +2378,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sysAutostartHint => 'システムログイン時に AuraDSP を自動起動';
 
   @override
+  String get sysAutostartFailed => '自動起動の設定に失敗しました';
+
+  @override
   String get latUnmeasured => '未測定';
 
   @override
