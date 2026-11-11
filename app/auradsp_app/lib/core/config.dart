@@ -9,6 +9,7 @@
 
 import 'dart:io';
 
+import 'defaults/defaults_layer.dart';
 import 'io/document_store.dart';
 import 'io/resource_gate.dart';
 
@@ -432,12 +433,22 @@ abstract final class ConfigManager {
   static AppConfig load() {
     final read = DocumentStore.readJson(configPath);
     if (read.ok) {
-      final json = read.data!;
+      final userJson = read.data!;
+      // 版本号先从用户原始档读（迁移判定口径不变）：分层合并后
+      // version 会被默认层同名键干扰——用户档缺 version 的远古
+      // 档若被默认层的现行 version 顶上，迁移会被误跳过。
+      final ver = (userJson['version'] as num?)?.toInt() ?? 0;
+      // 分层解析（资源计划 Part D）：默认层（安装目录 defaults/
+      // config.default.json）在下、用户档在上深合并——用户覆盖
+      // 默认、未覆盖用默认；无默认层时合并恒等、行为不变。
+      final defaults = DefaultsLayer.configDefaults();
+      final json = defaults.isEmpty
+          ? userJson
+          : DefaultsLayer.deepMergeUnder(defaults, userJson);
       final cfg = AppConfig.fromJson(json);
       // v2 -> v3 迁移：可视化帧率旧默认 30 在核显上把 GPU 顶到 ~70%
       //（30fps 全窗口重绘，见 §13.4.27.3）。旧配置里 vizFps 恒为旧默认
       //（无 UI 可改），故按版本号安全强制降到新默认并落盘新版本。
-      final ver = (json['version'] as num?)?.toInt() ?? 0;
       if (ver < 3) {
         cfg.vizFps = AppConfig.defaultVizFps;
         save(cfg);
@@ -465,8 +476,12 @@ abstract final class ConfigManager {
         swallow(e, st);
       }
     }
-    // 首次运行或解析失败，生成并写入默认配置
-    final cfg = AppConfig();
+    // 首次运行或解析失败，生成并写入默认配置。有默认层时以
+    // 它为基（分发面可携带与代码默认不同的发行口径）；无默认
+    // 层时即代码默认 AppConfig()，行为与分层前一致。
+    final defaults = DefaultsLayer.configDefaults();
+    final cfg =
+        defaults.isEmpty ? AppConfig() : AppConfig.fromJson(defaults);
     save(cfg);
     return cfg;
   }

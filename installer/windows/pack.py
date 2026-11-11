@@ -477,6 +477,40 @@ def apply_resources(work_staging: Path, kind: str, packs_dir: Path,
     return records
 
 
+def apply_defaults(work_staging: Path, what_if: bool) -> None:
+    """在 staging 根生成 defaults/ 默认层（资源计划 Part D）。
+
+    生成器是 App 自己的契约测试 test/defaults_emit_test.dart
+    （AURADSP_EMIT_DEFAULTS 触发产出）：config.default.json 由
+    AppConfig 代码本尊导出，生成物与代码默认永不漂移；presets
+    复制出厂资产。flutter 不可用时直接 die——发行构建机必备
+    Flutter，静默跳过会发出「有分层之名、无默认层之实」的包。
+    """
+    if what_if:
+        log("defaults: what-if 跳过生成")
+        return
+    flutter = shutil.which("flutter")
+    if flutter is None:
+        raise die("生成 defaults/ 需要 flutter 在 PATH 中"
+                  "（默认层由 App 代码经契约测试导出）")
+    app_dir = ROOT / "app" / "auradsp_app"
+    env = dict(os.environ,
+               AURADSP_EMIT_DEFAULTS=str(work_staging / "defaults"))
+    log("defaults: 经 App 契约测试生成默认层…")
+    r = subprocess.run(
+        [flutter, "test", "test/defaults_emit_test.dart"],
+        cwd=str(app_dir), env=env,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        errors="replace")
+    if r.returncode != 0:
+        tail = "\n".join((r.stdout or "").splitlines()[-15:])
+        raise die(f"defaults 生成失败（flutter test rc={r.returncode}）：\n{tail}")
+    manifest = work_staging / "defaults" / "manifest.json"
+    if not manifest.is_file():
+        raise die("defaults 生成未产出 manifest.json")
+    log("defaults: 默认层已生成（config.default.json + presets + manifest）")
+
+
 # ---------------------------------------------------------------------------
 # 通用小工具
 # ---------------------------------------------------------------------------
@@ -720,6 +754,7 @@ def mode_staging(args, ver: dict[str, str], out: Path) -> Path:
     .ps1 Step 5 亦调用本模式，绿色目录与绿色 zip 同样完整。
     """
     complete_payload_tree(args.staging, args)
+    apply_defaults(args.staging, args.what_if)
     refresh_dist_manifest(args.staging)
     log(f"staging: {args.staging} 已补齐（根 ASIO + driver/），"
         "可直接打开文件夹运行测试")
@@ -736,6 +771,7 @@ def prepare_staging_copy(args) -> tuple[tempfile.TemporaryDirectory, Path]:
     work = Path(td.name) / "staging"
     shutil.copytree(args.staging, work)
     records = apply_resources(work, args.resources, args.packs_dir, args.what_if)
+    apply_defaults(work, args.what_if)
     refresh_build_info(work, {
         "pack.resources": args.resources,
         **{f"pack.resource.{r['pack']}": r["sha256"] for r in records},

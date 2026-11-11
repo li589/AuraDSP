@@ -12,6 +12,7 @@ import 'dart:io';
 import 'package:flutter/services.dart' show rootBundle;
 
 import 'config.dart';
+import 'defaults/defaults_layer.dart';
 import 'io/document_store.dart';
 import 'io/resource_gate.dart';
 import 'param_schema.dart';
@@ -153,6 +154,39 @@ abstract final class PresetLibrary {
           if (read.ok && read.text == content) continue; // 一致，跳过
         }
         f.writeAsStringSync(content);
+      }
+
+      // 默认层预设（资源计划 Part D）：安装目录 defaults/presets/
+      // 是出厂预设的第二分发面，与资产同一内容同步口径；同名冲
+      // 突时默认层在后写入即为准（分发面比编译资产新）。随后做
+      // 对账删除：factory 目录由应用全权管理，其中既非资产清单
+      // 亦非当前默认层清单的 .json = 已下架的出厂预设，删除以
+      // 免旧版残留（仅默认层在场时启用：开发态无默认层，factory
+      // 目录可能有测试/历史内容，不动）。
+      final defaultsPresets = DefaultsLayer.presetFiles();
+      for (final e in defaultsPresets.entries) {
+        final f = File(
+            '$factoryDir${Platform.pathSeparator}${_safeFileName(e.key)}');
+        if (f.existsSync()) {
+          final read = ResourceGate.readText(f.path);
+          if (read.ok && read.text == e.value) continue;
+        }
+        f.writeAsStringSync(e.value);
+      }
+      if (DefaultsLayer.presetsPresent) {
+        final expected = <String>{
+          for (final n in _factoryAssetFiles) _safeFileName(n),
+          for (final n in defaultsPresets.keys) _safeFileName(n),
+        };
+        for (final f in DocumentStore.listJsonFiles(factoryDir)) {
+          if (!expected.contains(f.uri.pathSegments.last)) {
+            try {
+              f.deleteSync();
+            } catch (e, st) {
+              swallow(e, st);
+            }
+          }
+        }
       }
     } catch (e, st) { swallow(e, st); }
   }
