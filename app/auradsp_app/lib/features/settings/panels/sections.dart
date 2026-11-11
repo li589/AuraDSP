@@ -733,7 +733,11 @@ class _SystemApoPanel extends StatelessWidget {
               model.isApoOperating ? l.setProcessing : l.apoActionAttach,
               icon: Icons.link,
               selected: model.apoAttached,
-              onTap: model.isApoOperating
+              // 当前选择已附加时置灰（Stage 0 / §8.2）：重复附加
+              // 只会重走备份/写槽并刷新时间戳，让人误以为卸载
+              // 「没反应」后又被重挂；与复合钮置灰同口径。切换
+              // 到未附加端点时 apoAttached 转假、自动恢复可点。
+              onTap: (model.isApoOperating || model.apoAttached)
                   ? null
                   : () async {
                       final ok = await model.attachSystemApo();

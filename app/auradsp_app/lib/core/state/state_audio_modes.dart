@@ -1160,6 +1160,11 @@ extension AudioModesState on AppModel {
         composite: useComposite,
         elevated: elevated,
       );
+      // apo 操作留痕（Stage 0 / §8.2）：此前附加/卸载在主日志
+      // 里完全无记录，真机排障只能靠结果文件残骸反推时序。
+      dbgLog('apo attach: target=$target composite=$useComposite '
+          'exit=${res.exitCode} toolOk=${res.toolOk} '
+          'err=${res.toolError ?? res.toolMessage ?? ""}');
 
       // 工具自报失败（如端点匹配歧义/注册表写入失败）：原因
       // 就在结果通道里，直接呈现，不再走退出码猜层。工具经
@@ -1221,27 +1226,25 @@ extension AudioModesState on AppModel {
         return false;
       }
 
-      // 卸载对象 = 实际已附加的端点，不是下拉的当前选择（第六
-      // 轮项 3 定罪）：装在 A、切到 B 点卸载，旧实现对未装的
-      // B 执行、工具报「未找到匹配的已安装端点」，且状态行按
-      // B 推导把 A 的附加显示成「未附加」。先静默刷新附加清
-      // 单，清单非空时以其首个端点为准；显式参数仍最高优先。
+      // 卸载对象口径（两段定罪）：第六轮项 3 定过「卸实际已
+      // 附加的端点、不是下拉的当前选择」；Stage 0（§8.2）再
+      // 定「无显式端点 = 全端点卸载」——中间实现只卸清单首个
+      // 端点，而状态行是任一端点真值，多端点附加时一次点击
+      // 数学上卸不干净（开发机实测 3 端点附加、卸后仍显已附
+      // 加 + 心跳活跃，显示的全是真值）。工具无 target 时本
+      // 就卸全部（台账 ∪ 实时扫描），裁定随之为复查清单空。
       await checkApoStatus(silent: true);
-      var target = (endpointNameOrId != null && endpointNameOrId.isNotEmpty)
-          ? endpointNameOrId
-          : config.apoTargetEndpoint;
-      if ((endpointNameOrId == null || endpointNameOrId.isEmpty) &&
-          apoInstalledEndpoints.isNotEmpty) {
-        final first = apoInstalledEndpoints.first;
-        target = first['EndpointId']?.toString() ??
-            first['short_guid']?.toString() ??
-            target;
-      }
+      final explicit =
+          endpointNameOrId != null && endpointNameOrId.isNotEmpty;
+      final target = explicit ? endpointNameOrId : '';
       final res = await windowsSystem.apoUninstall(
         script,
         target: target,
         elevated: elevated,
       );
+      dbgLog('apo detach: target=${explicit ? target : "(all)"} '
+          'exit=${res.exitCode} toolOk=${res.toolOk} '
+          'err=${res.toolError ?? res.toolMessage ?? ""}');
 
       await Future.delayed(const Duration(milliseconds: 600));
       await checkApoStatus(timeout: 0.6);
@@ -1251,16 +1254,16 @@ extension AudioModesState on AppModel {
             'System APO 卸载失败：${res.toolMessage ?? res.toolError ?? '工具未报告原因'}';
       }
       // 裁定与 attach 对称（细审 R-C M-1 的 App 侧一半）：
-      // 此前 detach 完全不看复查结果，端点级还原失败时假
-      // 报成功。现口径：工具自报（或退出码）成功且复查确
-      // 认【被卸端点】已摘除，才算卸载完成（不用所选目标的
-      // apoAttached——选择与被卸端点可能不是同一个）。
-      final stillThere =
-          apoInstalledEndpoints.any((e) => _apoEndpointMatches(e, target));
+      // 工具自报（或退出码）成功且复查确认已摘除，才算卸载
+      // 完成。显式单端点时查该端点；全端点卸载时查清单为空
+      // （任一端点残留都算未完成——状态行正是任一端点真值）。
+      final stillThere = explicit
+          ? apoInstalledEndpoints.any((e) => _apoEndpointMatches(e, target))
+          : apoInstalledEndpoints.isNotEmpty;
       final ok = (res.toolOk ?? (res.exitCode == 0)) && !stillThere;
       if (!ok && lastApoError == null) {
         lastApoError = stillThere
-            ? 'System APO 卸载后复查仍显示已附加，请重试或检查工具返回明细'
+            ? 'System APO 卸载后复查仍有端点处于附加状态，请重试或检查工具返回明细'
             : 'System APO 卸载未完成，请确认在 UAC 提权弹窗中选择“是”';
       }
       isApoOperating = false;
