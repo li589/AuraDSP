@@ -207,6 +207,11 @@ struct VaioBridgeCtl {
     double fxPeakShift = -1, fxMeanAbsShift = -1; // 错位统计（仅 PCM16）
     volatile LONG fxDone = 0;  // 0 未采集 1 已采集（泵写、status 读）
 
+    // 第七轮 S3：格式切换重同步计数（帧长相关几何变化时泵把消费
+    // 游标重对齐到最新写入位置、弃旧格式尾巴；status 恒输出，
+    // 切歌白噪声复现时凭它判「重同步是否发生过」）。
+    volatile LONG fmtResyncs = 0;
+
     // 驱动版本缓存（start 时经同一控制句柄查一次）：detect 在桥
     // 运行期不得再开控制设备（第六轮项 1 定罪，见 vaio_detect），
     // 其版本/状态输出改由本缓存与环几何合成。
@@ -753,33 +758,60 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             continue;
         }
 
-        // 动态检测驱动共享环上的声道配置变更
-        if (pHeader && pHeader->Channels != ringChannels && pHeader->Channels > 0) {
-            ringChannels = pHeader->Channels;
-            g_vaio.ringChannels = ringChannels;
-            blockAlign = pHeader->BlockAlign > 0 ? pHeader->BlockAlign : (ringChannels * (ringBits == 16 ? sizeof(int16_t) : sizeof(float)));
-            g_vaio.ringBlockAlign = blockAlign;
-            if (g_vaio.countMode == 0) {
-                SetEngineChannels((int32_t)ringChannels);
+        // 动态跟随驱动共享环的格式变更（切歌换流时内核在新流 Init
+        // 即覆盖共享头）。第七轮 S3（项 6 定罪）：旧实现分三次直读
+        // 头字段、只更新本地几何变量，消费游标 userBytesRead 不做
+        // 任何重对齐——帧长（声道×位深）一变，游标相对新帧长的模
+        // 偏移永久存在（消费增量恒为新帧长整数倍、永不自愈），旧
+        // 格式尾巴还会被新格式误读，呈持续白噪声、只能重启桥恢复。
+        // 现口径：几何元组先做一致性快照（连读两遍比对，防读到内
+        // 核写一半的混合元组；TotalBytesWritten 恒在变、不入比对）；
+        // 帧长相关变化（声道/位深）→ 游标重对齐到最新写入位置、
+        // 弃旧格式尾巴并计数；纯采样率变化维持逐轮跟随。
+        if (pHeader) {
+            const ULONG snapCh = pHeader->Channels;
+            const ULONG snapBits = pHeader->BitsPerSample;
+            const ULONG snapRate = pHeader->SampleRate;
+            const ULONG snapAlign = pHeader->BlockAlign;
+            const bool snapConsistent =
+                snapCh == pHeader->Channels &&
+                snapBits == pHeader->BitsPerSample &&
+                snapRate == pHeader->SampleRate &&
+                snapAlign == pHeader->BlockAlign;
+            if (snapConsistent) {
+                const bool frameShapeChanged =
+                    (snapCh > 0 && snapCh != ringChannels) ||
+                    (snapBits > 0 && snapBits != ringBits);
+                if (snapCh > 0 && snapCh != ringChannels) {
+                    ringChannels = snapCh;
+                    g_vaio.ringChannels = ringChannels;
+                    if (g_vaio.countMode == 0) {
+                        SetEngineChannels((int32_t)ringChannels);
+                    }
+                }
+                if (snapBits > 0 && snapBits != ringBits) {
+                    ringBits = snapBits;
+                    g_vaio.ringBits = ringBits;
+                }
+                if (frameShapeChanged) {
+                    blockAlign = snapAlign > 0
+                        ? snapAlign
+                        : (ringChannels *
+                           (ringBits == 16 ? sizeof(int16_t) : sizeof(float)));
+                    g_vaio.ringBlockAlign = blockAlign;
+                    // 弃旧格式尾巴：游标对齐到此刻的写入位置，模
+                    // 偏移与旧尾巴一并清零；重采样相位同步清零。
+                    userBytesRead = pHeader->TotalBytesWritten;
+                    fracPhase = 0.0;
+                    InterlockedIncrement(&g_vaio.fmtResyncs);
+                }
+                if (snapRate > 0 && snapRate != ringRate) {
+                    ringRate = snapRate;
+                    g_vaio.ringSampleRate = ringRate;
+                    inRatio = (double)ringRate / (double)outRate;
+                    fracPhase = 0.0;
+                }
             }
-        }
-
-        // 动态检测位深/采样率变更（端点格式变化时内核同步更新共享
-        // 头）：位深决定归一方式、速率决定重采样比，漏检即回到
-        // §1.2 的格式误读。
-        if (pHeader && pHeader->BitsPerSample > 0 && pHeader->BitsPerSample != ringBits) {
-            ringBits = pHeader->BitsPerSample;
-            g_vaio.ringBits = ringBits;
-            if (pHeader->BlockAlign > 0) {
-                blockAlign = pHeader->BlockAlign;
-                g_vaio.ringBlockAlign = blockAlign;
-            }
-        }
-        if (pHeader && pHeader->SampleRate > 0 && pHeader->SampleRate != ringRate) {
-            ringRate = pHeader->SampleRate;
-            g_vaio.ringSampleRate = ringRate;
-            inRatio = (double)ringRate / (double)outRate;
-            fracPhase = 0.0;
         }
 
         UINT32 padFrames = 0;
@@ -1226,6 +1258,7 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.engineChannels = 2;
     // S4 取证复位（泵线程启动后重新采集本会话的首块证据）。
     InterlockedExchange(&g_vaio.fxDone, 0);
+    InterlockedExchange(&g_vaio.fmtResyncs, 0);
     g_vaio.fxPeak = 0;
     g_vaio.fxMeanAbs = 0;
     g_vaio.fxPeakShift = -1;
@@ -1774,6 +1807,15 @@ int vaio_status(char* out, int cap) {
             g_vaio.fxRawHex,
             g_vaio.fxPeak, g_vaio.fxMeanAbs,
             g_vaio.fxPeakShift, g_vaio.fxMeanAbsShift);
+        if (m < 0) return -1;
+        total += m;
+    }
+    // 第七轮 S3：格式重同步计数（恒输出，与 forensics 采集与否无关）。
+    {
+        const int m = _snprintf_s(
+            out + total, (size_t)(cap - total), _TRUNCATE,
+            ",\"fmtResyncs\":%ld",
+            InterlockedCompareExchange(&g_vaio.fmtResyncs, 0, 0));
         if (m < 0) return -1;
         total += m;
     }
