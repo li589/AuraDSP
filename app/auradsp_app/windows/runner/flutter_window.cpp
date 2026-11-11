@@ -67,7 +67,8 @@ void FlutterWindow::OnDestroy() {
   //      根本进不了 MessageHandler。
   destroying_ = true;
   if (self_hwnd_ != nullptr &&
-      Win32Window::GetThisFromHandle(self_hwnd_) == this) {
+      reinterpret_cast<Win32Window*>(
+          GetWindowLongPtr(self_hwnd_, GWLP_USERDATA)) == this) {
     SetWindowLongPtr(self_hwnd_, GWLP_USERDATA, 0);
   }
   if (flutter_controller_) {
