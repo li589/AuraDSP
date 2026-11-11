@@ -1177,6 +1177,121 @@ std::vector<InstalledEndpoint> GetInstalledChildApos() {
 }
 
 // ---------------------------------------------------------------------------
+// 第九轮（2026-11-11）：挂载真值与 FX 安全写。定罪背景：卸载/计数/
+// doctor 旧实现只枚举上方台账（Child APOs），台账记录一旦缺失便
+// 集体失明——FxProperties 里三槽残留我方 CLSID 却报「未发现任何
+// 挂载端点」，残留再被 testenv 关闭放大为音频图构建失败、整机
+// 无声（vm-win10 实证）。自本轮起：存在性一律以 MMDevices 现值
+// 扫描为准，台账只作快照数据源；基线快照防毒（我方 CLSID 不入
+// 基线）；FX 写不开时走所有权接管退路且写后回读验证。
+// ---------------------------------------------------------------------------
+
+bool TakeOwnershipRepair(const std::wstring& fxSub);  // 定义在 doctor 段
+
+// 读一个端点的 FX 槽位占用（与 CmdStatus 实时推断同一读法）。
+apoplan::SlotOccupancy ReadOccupancy(const Endpoint& ep) {
+    auto rd = [&](const wchar_t* suffix) {
+        return RegRead(HKEY_LOCAL_MACHINE, ep.FxSub(),
+                       std::wstring(kFxBase) + suffix);
+    };
+    auto szOf = [&](const wchar_t* suffix) {
+        const auto v = rd(suffix);
+        return (v && v->type == REG_SZ) ? v->sz : std::wstring();
+    };
+    auto multiOf = [&](const wchar_t* suffix) {
+        const auto v = rd(suffix);
+        if (v && v->type == REG_MULTI_SZ) return v->multi;
+        if (v && v->type == REG_SZ && !v->sz.empty())
+            return std::vector<std::wstring>{v->sz};
+        return std::vector<std::wstring>{};
+    };
+    apoplan::SlotOccupancy occ;
+    occ.lfx = szOf(L",1");
+    occ.gfx = szOf(L",2");
+    occ.sfx = szOf(L",5");
+    occ.mfx = szOf(L",6");
+    occ.efx = szOf(L",7");
+    occ.compSfx = multiOf(L",13");
+    occ.compMfx = multiOf(L",14");
+    occ.compEfx = multiOf(L",15");
+    return occ;
+}
+
+struct LiveAttached {
+    Endpoint ep;
+    std::wstring shortGuid;
+    apoplan::InferredState inf;
+};
+
+// 现值扫描：任一槽位含我方 CLSID 的端点即「已挂载」（真值）。
+std::vector<LiveAttached> ScanLiveAttached() {
+    std::vector<LiveAttached> out;
+    for (const auto& ep : FindEndpoints(L"")) {
+        auto inf = apoplan::InferInstallState(ReadOccupancy(ep), kOurClsid);
+        if (inf.oursAnywhere) {
+            out.push_back(
+                LiveAttached{ep, ShortGuid(Utf8ToWide(ep.id)), inf});
+        }
+    }
+    return out;
+}
+
+// 回读验证：FX 任一受管槽位仍含我方 CLSID → true。
+bool FxContainsOurs(const std::wstring& fxSub) {
+    for (const auto& kn : SlotKeys()) {
+        const auto v = RegRead(HKEY_LOCAL_MACHINE, fxSub, kn);
+        if (!v) continue;
+        if (v->type == REG_SZ && apoplan::GuidEq(v->sz, kOurClsid))
+            return true;
+        if (v->type == REG_MULTI_SZ && apoplan::ListHas(v->multi, kOurClsid))
+            return true;
+    }
+    return false;
+}
+
+// 基线防毒：我方 CLSID 出现在「原始值」里只可能是自家残留——
+// 单槽等值 → 空 GUID 基线；复合列表 → 剔除我方（剔空 → 无值
+// 哨兵）。返回值是否被改动经 changed 回传（可审计）。
+RegValue SanitizeBaselineValue(const RegValue& v, bool* changed) {
+    if (v.type == REG_SZ && apoplan::GuidEq(v.sz, kOurClsid)) {
+        if (changed) *changed = true;
+        return RegSz(kNullGuid);
+    }
+    if (v.type == REG_MULTI_SZ) {
+        std::vector<std::wstring> clean;
+        for (const auto& x : v.multi) {
+            if (!apoplan::GuidEq(x, kOurClsid)) clean.push_back(x);
+        }
+        if (clean.size() != v.multi.size()) {
+            if (changed) *changed = true;
+            if (clean.empty()) return RegSz(kSentinelNoValue);
+            return RegMulti(clean);
+        }
+    }
+    return v;
+}
+
+// FX 键可写打开：直开失败且为拒绝访问时，接管所有权后重试
+// 一次（FxProperties 的 ACL 连管理员直写都拒，doctor --fix 同
+// 路径）；仍失败返回 nullptr，调用方如实报错。
+HKEY OpenFxKeyWritable(const std::wstring& fxSub) {
+    HKEY k = nullptr;
+    LONG r = RegCreateKeyExW(HKEY_LOCAL_MACHINE, fxSub.c_str(), 0, nullptr,
+                             0, KEY_SET_VALUE | KEY_QUERY_VALUE, nullptr,
+                             &k, nullptr);
+    if (r == ERROR_SUCCESS) return k;
+    if (r == ERROR_ACCESS_DENIED && TakeOwnershipRepair(fxSub)) {
+        k = nullptr;
+        if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, fxSub.c_str(), 0, nullptr,
+                            0, KEY_SET_VALUE | KEY_QUERY_VALUE, nullptr,
+                            &k, nullptr) == ERROR_SUCCESS) {
+            return k;
+        }
+    }
+    return nullptr;
+}
+
+// ---------------------------------------------------------------------------
 // 音频服务重启（对齐 Python restart_audio：依赖倒序起停）
 // ---------------------------------------------------------------------------
 
@@ -1246,6 +1361,17 @@ Json BackupEndpoint(const Endpoint& ep, const std::wstring& mode) {
             snapshot.emplace_back(keyName, RegSz(kSentinelNoValue));
         }
     }
+    // 基线防毒（第九轮）：端点在无台账状态下已残留我方 CLSID
+    // 时（旧版/异源挂载未清），现值即「基线」会被毒化——日后
+    // 还原把残留当原始值写回、永不可清。入快照前一律消毒，
+    // 并以 baseline_sanitized 标记留痕（见 SanitizeBaselineValue）。
+    bool baselineSanitized = false;
+    for (auto& [kn, v] : snapshot) {
+        if (v.IsSentinel()) continue;
+        bool ch = false;
+        v = SanitizeBaselineValue(v, &ch);
+        baselineSanitized = baselineSanitized || ch;
+    }
 
     // 1. 注册表 Child APOs 快照。两条纪律（细审 R-C H-1/L-5）：
     // 其一，已有快照时保留首份——重复 install 无条件覆写会把
@@ -1306,6 +1432,7 @@ Json BackupEndpoint(const Endpoint& ep, const std::wstring& mode) {
         {"install_mode", Json::Str(WideToUtf8(mode))},
         {"schema", Json::Num(2)},
         {"backup_preserved", Json::Bool(snapExists)},
+        {"baseline_sanitized", Json::Bool(baselineSanitized)},
         {"slots", Json::Obj(std::move(slotObj))},
     });
     // 与 Python json.dump(indent=2) 的可读落盘等价（缩进不影响解析）。
@@ -1442,6 +1569,16 @@ RestoreResult RestoreEndpoint(const std::wstring& shortId) {
         }
     }
 
+    // 载入侧消毒（第九轮）：第九轮之前写下的台账/磁盘快照可能
+    // 已被毒化（基线含我方 CLSID），还原前统一消毒，老快照
+    // 由此自愈，不必逐台手工清理。
+    for (const auto& kn : SlotKeys()) {
+        const auto it = stored.find(kn);
+        if (it != stored.end() && !it->second.IsSentinel()) {
+            it->second = SanitizeBaselineValue(it->second, nullptr);
+        }
+    }
+
     if (snapSchema > 2) {
         return {false, L"备份数据版本 " + std::to_wstring(snapSchema) +
                             L" 高于本工具支持的 2，已中止还原（请使用新版 apo_config）"};
@@ -1470,10 +1607,10 @@ RestoreResult RestoreEndpoint(const std::wstring& shortId) {
     if (!hadKey) {
         RegDeleteKeyW(HKEY_LOCAL_MACHINE, fxSub.c_str());
     } else {
-        HKEY k = nullptr;
-        if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, fxSub.c_str(), 0, nullptr, 0,
-                            KEY_SET_VALUE | KEY_QUERY_VALUE, nullptr, &k,
-                            nullptr) != ERROR_SUCCESS) {
+        // 打开走所有权接管退路（第九轮）：FxProperties 的 ACL
+        // 拒绝管理员直写时，旧实现在此直接失败、卸载全链中断。
+        HKEY k = OpenFxKeyWritable(fxSub);
+        if (!k) {
             return {false, L"写入 FxProperties 失败: 无法打开键"};
         }
         auto setValue = [&](const std::wstring& name, const RegValue& v) {
@@ -1525,11 +1662,72 @@ RestoreResult RestoreEndpoint(const std::wstring& shortId) {
         if (!writeOk) return {false, L"写入 FxProperties 失败"};
     }
 
+    // 写后回读验证（第九轮）：任一受管槽位仍含我方 CLSID 即
+    // 还原未成——如实失败且**不删台账记录**，保住重试与审计
+    // 线索；旧实现写完即删记录，残留自此不可见、不可清。
+    if (FxContainsOurs(fxSub)) {
+        return {false, L"还原后回读验证失败: FxProperties 仍残留 AuraAPO"};
+    }
+
     RegDeleteKeyW(HKEY_LOCAL_MACHINE, childSub.c_str());
     if (RegEnumSubkeys(HKEY_LOCAL_MACHINE, kChildApoRoot).empty()) {
         RegDeleteKeyW(HKEY_LOCAL_MACHINE, kChildApoRoot);
     }
     return {true, L"端点 " + shortId + L" 恢复完成"};
+}
+
+// 无快照端点的现值剥离（第九轮）：现值扫描发现已挂载、台账
+// 与磁盘均无快照时（旧版/异源挂载残留），没有「原始值」可还
+// 原——按现值把我方 CLSID 从各槽位剥除：单槽等值改空 GUID
+// （Windows 无 FX 标记），复合列表剔除我方（剔空删值），他
+// 方值一律原样保留。写后回读验证，无残留才算成。
+RestoreResult StripOursFromFx(const Endpoint& ep) {
+    const std::wstring shortId = ShortGuid(Utf8ToWide(ep.id));
+    const std::wstring fxSub = ep.FxSub();
+    HKEY k = OpenFxKeyWritable(fxSub);
+    if (!k) {
+        return {false, L"剥离失败: 无法打开 FxProperties 键"};
+    }
+    bool writeOk = true;
+    const std::wstring fx = kFxBase;
+    for (const wchar_t* suffix : {L",1", L",2", L",5", L",6", L",7"}) {
+        const std::wstring name = fx + suffix;
+        const auto cur = RegRead(HKEY_LOCAL_MACHINE, fxSub, name);
+        if (cur && cur->type == REG_SZ &&
+            apoplan::GuidEq(cur->sz, kOurClsid)) {
+            if (!SetRegValueRaw(k, name, RegSz(kNullGuid))) writeOk = false;
+        }
+    }
+    for (const wchar_t* suffix : {L",13", L",14", L",15"}) {
+        const std::wstring name = fx + suffix;
+        const auto cur = RegRead(HKEY_LOCAL_MACHINE, fxSub, name);
+        if (!cur) continue;
+        std::vector<std::wstring> list;
+        if (cur->type == REG_MULTI_SZ) {
+            list = cur->multi;
+        } else if (cur->type == REG_SZ && !cur->sz.empty()) {
+            list = {cur->sz};
+        } else {
+            continue;
+        }
+        std::vector<std::wstring> clean;
+        for (const auto& x : list) {
+            if (!apoplan::GuidEq(x, kOurClsid)) clean.push_back(x);
+        }
+        if (clean.size() == list.size()) continue;
+        if (clean.empty()) {
+            if (RegDeleteValueW(k, name.c_str()) != ERROR_SUCCESS)
+                writeOk = false;
+        } else if (!SetRegValueRaw(k, name, RegMulti(clean))) {
+            writeOk = false;
+        }
+    }
+    RegCloseKey(k);
+    if (!writeOk) return {false, L"剥离失败: 写入 FxProperties 失败"};
+    if (FxContainsOurs(fxSub)) {
+        return {false, L"剥离后回读验证失败: 仍残留 AuraAPO"};
+    }
+    return {true, L"端点 " + shortId + L" 已按现值剥离 AuraAPO（无快照）"};
 }
 
 // ---------------------------------------------------------------------------
@@ -1587,30 +1785,7 @@ int CmdStatus(bool asJson, const std::optional<double>& timeout) {
         std::vector<std::wstring> keptGuids;
         for (const auto& b : installed) keptGuids.push_back(b.shortGuid);
         for (const auto& ep : FindEndpoints(L"")) {
-            auto rd = [&](const wchar_t* suffix) {
-                return RegRead(HKEY_LOCAL_MACHINE, ep.FxSub(),
-                               std::wstring(kFxBase) + suffix);
-            };
-            auto szOf = [&](const wchar_t* suffix) {
-                const auto v = rd(suffix);
-                return (v && v->type == REG_SZ) ? v->sz : std::wstring();
-            };
-            auto multiOf = [&](const wchar_t* suffix) {
-                const auto v = rd(suffix);
-                if (v && v->type == REG_MULTI_SZ) return v->multi;
-                if (v && v->type == REG_SZ && !v->sz.empty())
-                    return std::vector<std::wstring>{v->sz};
-                return std::vector<std::wstring>{};
-            };
-            apoplan::SlotOccupancy occ;
-            occ.lfx = szOf(L",1");
-            occ.gfx = szOf(L",2");
-            occ.sfx = szOf(L",5");
-            occ.mfx = szOf(L",6");
-            occ.efx = szOf(L",7");
-            occ.compSfx = multiOf(L",13");
-            occ.compMfx = multiOf(L",14");
-            occ.compEfx = multiOf(L",15");
+            apoplan::SlotOccupancy occ = ReadOccupancy(ep);
             LiveEp le;
             le.ep = ep;
             le.inf = apoplan::InferInstallState(occ, kOurClsid);
@@ -1620,6 +1795,37 @@ int CmdStatus(bool asJson, const std::optional<double>& timeout) {
                                     sg) != keptGuids.end();
             live.push_back(std::move(le));
         }
+    }
+
+    // 已挂载清单（第九轮）：存在性以现值扫描为准（live 里
+    // oursAnywhere 的端点），字段尽量取台账快照（EndpointId/
+    // DeviceName/InstallMode 等 App 消费形状不变）；无台账的
+    // 残留端点以现值合成最小字段集。旧实现直接把台账当清单，
+    // 台账缺失时面板/卸载与真实挂载状态全面脱节。
+    std::vector<InstalledEndpoint> attached;
+    for (const auto& le : live) {
+        if (!le.inf.oursAnywhere) continue;
+        const std::wstring sg = ShortGuid(Utf8ToWide(le.ep.id));
+        InstalledEndpoint m;
+        m.shortGuid = sg;
+        const InstalledEndpoint* rec = nullptr;
+        for (const auto& b : installed) {
+            if (b.shortGuid == sg) {
+                rec = &b;
+                break;
+            }
+        }
+        if (rec) {
+            m.values = rec->values;
+        } else {
+            m.values = {
+                {L"EndpointId", RegSz(Utf8ToWide(le.ep.id))},
+                {L"DeviceName", RegSz(le.ep.name)},
+                {L"Direction", RegSz(le.ep.DirectionTitle())},
+                {L"InstallMode", RegSz(le.inf.mode)},
+            };
+        }
+        attached.push_back(std::move(m));
     }
 
     const bool comRegistered =
@@ -1643,7 +1849,7 @@ int CmdStatus(bool asJson, const std::optional<double>& timeout) {
 
     if (asJson) {
         std::vector<Json> eps;
-        for (const auto& ep : installed) {
+        for (const auto& ep : attached) {
             std::vector<std::pair<std::string, Json>> o;
             o.emplace_back("short_guid", Json::Str(WideToUtf8(ep.shortGuid)));
             for (const auto& [n, v] : ep.values) {
@@ -1719,8 +1925,8 @@ int CmdStatus(bool asJson, const std::optional<double>& timeout) {
                 ", 累计帧数=" + std::to_string(hb.frames) +
                 ", audiodg_PID=" + std::to_string(hb.pid));
     }
-    OutLine("已挂载端点数: " + std::to_string(installed.size()));
-    for (const auto& ep : installed) {
+    OutLine("已挂载端点数: " + std::to_string(attached.size()));
+    for (const auto& ep : attached) {
         OutLine("  - [" + WideToUtf8(ep.GetSz(L"Direction")) + "] " +
                 WideToUtf8(ep.GetSz(L"DeviceName")) + " (" +
                 WideToUtf8(ep.shortGuid) +
@@ -1942,17 +2148,26 @@ int CmdDoctor(bool fix, bool asJson) {
         DoctorCheck c;
         c.name = "fx_writable";
         std::vector<std::pair<std::wstring, std::wstring>> bad;
+        // 检查集合 = 台账 ∪ 现值挂载（第九轮）：无台账的残留
+        // 端点同样要查可写性——旧实现只查台账，残留端点恒报
+        // 「全部可写（0 个）」假绿。
+        std::map<std::wstring, std::wstring> fxByGuid;
         for (const auto& ep : installed) {
-            const std::wstring fxSub =
+            fxByGuid[ep.shortGuid] =
                 std::wstring(kMmBase) + L"\\" +
                 ep.GetSz(L"Direction") + L"\\" + ep.shortGuid +
                 L"\\FxProperties";
-            if (!FxKeyWritable(fxSub)) bad.emplace_back(ep.shortGuid, fxSub);
+        }
+        for (const auto& la : ScanLiveAttached()) {
+            fxByGuid.emplace(la.shortGuid, la.ep.FxSub());
+        }
+        for (const auto& [guid, fxSub] : fxByGuid) {
+            if (!FxKeyWritable(fxSub)) bad.emplace_back(guid, fxSub);
         }
         c.ok = bad.empty();
         if (c.ok) {
             c.detail = "已挂载端点 FxProperties 全部可写（" +
-                       std::to_string(installed.size()) + " 个）";
+                       std::to_string(fxByGuid.size()) + " 个）";
         } else {
             std::string list;
             for (const auto& [g, f] : bad) {
@@ -2170,10 +2385,11 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
     // 整段静默跳过、RegSetValueExW 返回值全弃，末尾仍报
     // ok:true——ACL 异常/DLL 缺失时全链假成功。
     bool fxOk = true;
-    HKEY k = nullptr;
-    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, fxSub.c_str(), 0, nullptr, 0,
-                        KEY_SET_VALUE | KEY_QUERY_VALUE, nullptr, &k,
-                        nullptr) == ERROR_SUCCESS) {
+    // 打开走所有权接管退路（第九轮）：ACL 拒写时旧实现整段
+    // 跳过式失败的面已收窄为 fx_write_failed，但不做接管重试
+    // 会让可修的端点恒装不上（doctor 探针同路径已证可修）。
+    HKEY k = OpenFxKeyWritable(fxSub);
+    if (k) {
         auto setSz = [&](const std::wstring& n, const std::wstring& v) {
             if (RegSetValueExW(
                     k, n.c_str(), 0, REG_SZ,
@@ -2196,7 +2412,10 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
             if (stored && stored->IsSentinel()) {
                 RegDeleteValueW(k, slot.c_str());
             } else if (stored) {
-                RegValue v = *stored;
+                // 跨模式清理写回的基线同样消毒（第九轮）：旧
+                // 台账里的毒化基线不能借清理之名把我方 CLSID
+                // 再写回 foreign 槽位。
+                RegValue v = SanitizeBaselineValue(*stored, nullptr);
                 if (v.type == REG_MULTI_SZ) {
                     std::vector<std::wstring> clean;
                     for (const auto& x : v.multi) {
@@ -2305,6 +2524,40 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
     } else {
         fxOk = false;
     }
+    if (fxOk) {
+        // 写后回读验证（第九轮）：逐计划槽位核对现值——本应
+        // 写入我方的槽位必须在、本应清净的 foreign 槽位不得
+        // 残留我方（清理里的删除失败旧实现被忽略，正由此漏
+        // 网）；任一不符即按 fx_write_failed 如实失败，不报
+        // 假成功。
+        for (const int idx : plan.singleIdx) {
+            const auto v = RegRead(HKEY_LOCAL_MACHINE, fxSub, slotKeys[idx]);
+            if (!v || v->type != REG_SZ ||
+                !apoplan::GuidEq(v->sz, kOurClsid)) {
+                fxOk = false;
+            }
+        }
+        for (const int idx : plan.multiIdx) {
+            const auto v = RegRead(HKEY_LOCAL_MACHINE, fxSub, slotKeys[idx]);
+            bool has = false;
+            if (v && v->type == REG_MULTI_SZ)
+                has = apoplan::ListHas(v->multi, kOurClsid);
+            if (v && v->type == REG_SZ)
+                has = apoplan::GuidEq(v->sz, kOurClsid);
+            if (!has) fxOk = false;
+        }
+        for (const int idx : plan.foreignIdx) {
+            const auto v = RegRead(HKEY_LOCAL_MACHINE, fxSub, slotKeys[idx]);
+            if (v && v->type == REG_SZ &&
+                apoplan::GuidEq(v->sz, kOurClsid)) {
+                fxOk = false;
+            }
+            if (v && v->type == REG_MULTI_SZ &&
+                apoplan::ListHas(v->multi, kOurClsid)) {
+                fxOk = false;
+            }
+        }
+    }
     if (!fxOk) {
         const std::string msg = "写入 FxProperties 失败（注册表键不可写）";
         if (asJson) {
@@ -2369,7 +2622,22 @@ int CmdUninstall(const std::wstring& target, bool asJson) {
     }
 
     const auto installed = GetInstalledChildApos();
-    if (installed.empty()) {
+    // 工作集 = 台账 ∪ 现值挂载（第九轮）：台账端点走快照还
+    // 原；现值挂载而无台账者（旧版/异源残留）走现值剥离。
+    // 旧实现只有台账一集，残留端点对卸载完全不可见。
+    const auto liveAttached = ScanLiveAttached();
+    std::vector<const LiveAttached*> liveOnly;
+    for (const auto& la : liveAttached) {
+        bool bookkept = false;
+        for (const auto& b : installed) {
+            if (b.shortGuid == la.shortGuid) {
+                bookkept = true;
+                break;
+            }
+        }
+        if (!bookkept) liveOnly.push_back(&la);
+    }
+    if (installed.empty() && liveAttached.empty()) {
         const std::string msg = "未发现任何挂载了 AuraAPO 的端点";
         if (asJson) {
             OutJson(Json::Obj({
@@ -2384,9 +2652,11 @@ int CmdUninstall(const std::wstring& target, bool asJson) {
     }
 
     std::vector<const InstalledEndpoint*> toRestore;
+    std::vector<const LiveAttached*> toStrip;
     const std::wstring tLower = ToLowerW(target);
     if (target.empty() || tLower == L"all" || tLower == L"*") {
         for (const auto& ep : installed) toRestore.push_back(&ep);
+        for (const auto* la : liveOnly) toStrip.push_back(la);
     } else {
         for (const auto& ep : installed) {
             if (ContainsCi(ep.shortGuid, target) ||
@@ -2395,8 +2665,15 @@ int CmdUninstall(const std::wstring& target, bool asJson) {
                 toRestore.push_back(&ep);
             }
         }
+        for (const auto* la : liveOnly) {
+            if (ContainsCi(la->shortGuid, target) ||
+                ContainsCi(la->ep.name, target) ||
+                ContainsCi(Utf8ToWide(la->ep.id), target)) {
+                toStrip.push_back(la);
+            }
+        }
     }
-    if (toRestore.empty()) {
+    if (toRestore.empty() && toStrip.empty()) {
         const std::string msg =
             "未找到匹配 '" + WideToUtf8(target) + "' 的已安装端点";
         if (asJson) {
@@ -2422,10 +2699,24 @@ int CmdUninstall(const std::wstring& target, bool asJson) {
         }));
         restoredText.emplace_back(ep->shortGuid, r);
     }
+    for (const auto* la : toStrip) {
+        RestoreResult r = StripOursFromFx(la->ep);
+        restored.push_back(Json::Obj({
+            {"short_guid", Json::Str(WideToUtf8(la->shortGuid))},
+            {"ok", Json::Bool(r.ok)},
+            {"message", Json::Str(WideToUtf8(r.message))},
+            {"stripped", Json::Bool(true)},
+        }));
+        restoredText.emplace_back(la->shortGuid, r);
+    }
 
     // 全部卸载后清理全局未签名开关（testenv.json 从未由脚本写入时
-    // prev 恒为空 → 删除该值，与 Python 版行为一致）。
-    const auto remaining = GetInstalledChildApos();
+    // prev 恒为空 → 删除该值，与 Python 版行为一致）。「全部」
+    // 以现值扫描为准（第九轮）：任一端点仍挂载（含本次未选中
+    // 的目标）即不清——旧实现按台账判空，残留端点尚在挂载时
+    // 把 testenv 关掉，受保护 audiodg 拒载未签名 APO、音频图
+    // 构建失败整机无声（vm-win10 第九轮事件的放大器）。
+    const auto remaining = ScanLiveAttached();
     if (remaining.empty()) {
         std::optional<DWORD> prev;
         std::string text;
@@ -2469,6 +2760,8 @@ int CmdUninstall(const std::wstring& target, bool asJson) {
         fields.emplace_back(
             "remaining_count",
             Json::Num(static_cast<double>(remaining.size())));
+        fields.emplace_back("testenv_kept",
+                            Json::Bool(!remaining.empty()));
         if (!allOk) {
             fields.emplace_back(
                 "message", Json::Str("部分端点还原失败，见 restored 明细"));
@@ -2478,6 +2771,10 @@ int CmdUninstall(const std::wstring& target, bool asJson) {
         for (const auto& [guid, r] : restoredText) {
             OutLine("还原结果: " + WideToUtf8(guid) + " -> " +
                     WideToUtf8(r.message));
+        }
+        if (!remaining.empty()) {
+            OutLine("仍有 " + std::to_string(remaining.size()) +
+                    " 个端点挂载，保留未签名加载环境（testenv）不清");
         }
         OutLine(std::string("音频服务重启: ") + (restarted ? "成功" : "失败"));
     }
@@ -2518,7 +2815,7 @@ void PrintHelp() {
     OutLine("  apo_config verify-heartbeat [--timeout <秒>] [--json]");
     OutLine("  apo_config install <端点名子串> --yes [--force] [--mode sfx-efx|composite|sfx-only|win7-sapo] [--only pre|post] [--json] [--elevate] [--result-file <文件>]");
     OutLine("  apo_config uninstall [目标] --yes [--json] [--elevate] [--result-file <文件>]");
-    OutLine("  apo_config testenv-on | testenv-off [--json] [--elevate]");
+    OutLine("  apo_config testenv-on | testenv-off [--force] [--json] [--elevate]");
     OutLine("  apo_config doctor [--fix] [--json] [--elevate] [--result-file <文件>]");
 }
 
@@ -2613,6 +2910,28 @@ int wmain(int argc, wchar_t* argv[]) {
             return 1;
         }
         const bool on = verb == L"testenv-on";
+        // 关 testenv 前先看现值（第九轮）：仍有端点挂载时关掉
+        // 它，受保护 audiodg 立即拒载未签名 APO、整机无声——
+        // 拒绝执行并如实报错；确需强制关闭加 --force。
+        if (!on && !hasFlag(L"--force")) {
+            const auto still = ScanLiveAttached();
+            if (!still.empty()) {
+                const std::string msg =
+                    "仍有 " + std::to_string(still.size()) +
+                    " 个端点挂载 AuraAPO，拒绝关闭未签名加载环境"
+                    "（先卸载，或加 --force 强制关闭）";
+                if (asJson) {
+                    OutJson(Json::Obj({
+                        {"ok", Json::Bool(false)},
+                        {"error", Json::Str("still_attached")},
+                        {"message", Json::Str(msg)},
+                    }));
+                } else {
+                    OutLine("FATAL: " + msg);
+                }
+                return 1;
+            }
+        }
         if (on) {
             RegWrite(HKEY_LOCAL_MACHINE, kTestEnvKey, kTestEnvVal, RegDword(1));
         } else {
