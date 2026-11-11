@@ -1096,21 +1096,54 @@ std::vector<Endpoint> FindEndpoints(const std::wstring& substr) {
     return out;
 }
 
-// COM 注册就绪检查（对齐 Python ensure_com_registered）。
+// 注册路径真值：InprocServer32 默认值指向的 DLL 路径。
+std::optional<std::wstring> RegisteredDllPath() {
+    auto v = RegRead(HKEY_CLASSES_ROOT,
+                     std::wstring(L"CLSID\\") + kOurClsid +
+                         L"\\InprocServer32",
+                     L"");
+    if (!v || v->type != REG_SZ || v->sz.empty()) return std::nullopt;
+    return v->sz;
+}
+
+// 路径规范化比较（去包裹引号 + 绝对化 + 大小写不敏感）。
+bool SameDllPath(const std::wstring& a, const std::wstring& b) {
+    auto norm = [](std::wstring p) {
+        if (p.size() >= 2 && p.front() == L'"' && p.back() == L'"')
+            p = p.substr(1, p.size() - 2);
+        wchar_t buf[MAX_PATH];
+        const DWORD n = GetFullPathNameW(p.c_str(), MAX_PATH, buf, nullptr);
+        if (n > 0 && n < MAX_PATH) p.assign(buf, n);
+        return ToLowerW(p);
+    };
+    return norm(a) == norm(b);
+}
+
+// COM 注册「现行」判定：注册项齐全，且 InprocServer32 指向随包
+// DLL。只查存在性会让旧版残留注册永久蒙混——vm-win10 第八轮
+// 项 2 实证定罪（2026-11-11）：注册指向 System32 里的 v1 透传
+// 副本（178,688 B），audiodg 按注册路径加载旧 DLL，引擎宿主
+// 永不启动、telemetry 块永不出现，面板却恒显「已就绪」。
+bool ComRegistrationCurrent() {
+    auto hasApo = RegRead(HKEY_CLASSES_ROOT,
+                          std::wstring(L"AudioEngine\\"
+                                       L"AudioProcessingObjects\\") +
+                              kOurClsid,
+                          L"FriendlyName");
+    auto reg = RegisteredDllPath();
+    if (!hasApo || !reg) return false;
+    const std::wstring dll = FindDll();
+    return FileExists(dll) && SameDllPath(*reg, dll);
+}
+
+// COM 注册就绪检查：未注册或注册指向旧路径时，用随包 DLL 重新
+// 注册并复核（自愈旧版残留注册）。
 bool EnsureComRegistered() {
-    const std::wstring apoSub =
-        std::wstring(L"AudioEngine\\AudioProcessingObjects\\") + kOurClsid;
-    const std::wstring clsidSub =
-        std::wstring(L"CLSID\\") + kOurClsid + L"\\InprocServer32";
-    auto hasApo = RegRead(HKEY_CLASSES_ROOT, apoSub, L"FriendlyName");
-    auto hasClsid = RegRead(HKEY_CLASSES_ROOT, clsidSub, L"");
-    if (hasApo && hasClsid) return true;
+    if (ComRegistrationCurrent()) return true;
     const std::wstring dll = FindDll();
     if (FileExists(dll)) {
         RunCmd({L"regsvr32", L"/s", dll});
-        hasApo = RegRead(HKEY_CLASSES_ROOT, apoSub, L"FriendlyName");
-        hasClsid = RegRead(HKEY_CLASSES_ROOT, clsidSub, L"");
-        return hasApo.has_value() && hasClsid.has_value();
+        return ComRegistrationCurrent();
     }
     return false;
 }
@@ -1599,6 +1632,14 @@ int CmdStatus(bool asJson, const std::optional<double>& timeout) {
                 std::wstring(L"CLSID\\") + kOurClsid + L"\\InprocServer32",
                 L"")
             .has_value();
+    // 注册路径现行性（第八轮项 2）：键在不等于指向对——旧版残留
+    // 注册指向 System32 旧副本时 com_registered 恒真却永不处理。
+    // JSON 的 com_registered 收紧为「键齐 + 路径现行」，另附
+    // com_registered_path / com_path_current 供判读。
+    const auto registeredPath = RegisteredDllPath();
+    const bool comPathCurrent =
+        comRegistered && registeredPath.has_value() &&
+        FileExists(FindDll()) && SameDllPath(*registeredPath, FindDll());
 
     if (asJson) {
         std::vector<Json> eps;
@@ -1614,7 +1655,11 @@ int CmdStatus(bool asJson, const std::optional<double>& timeout) {
             {"admin", Json::Bool(admin)},
             {"testenv", testenv ? testenv->ToJson() : Json{}},
             {"heartbeat", HeartbeatJson(hb, true)},
-            {"com_registered", Json::Bool(comRegistered)},
+            {"com_registered", Json::Bool(comRegistered && comPathCurrent)},
+            {"com_registered_path",
+             registeredPath ? Json::Str(WideToUtf8(*registeredPath))
+                            : Json{}},
+            {"com_path_current", Json::Bool(comPathCurrent)},
             {"installed_endpoints", Json::Arr(std::move(eps))},
             {"endpoints", Json::Arr([&] {
                  std::vector<Json> arr;
@@ -1656,7 +1701,13 @@ int CmdStatus(bool asJson, const std::optional<double>& timeout) {
                                       : testenv->sz)
                      : std::string("(absent=enforced)")));
     OutLine(std::string("COM 组件注册: ") +
-            (comRegistered ? "已就绪" : "未注册"));
+            (comRegistered
+                 ? (comPathCurrent
+                        ? "已就绪"
+                        : "已注册但指向旧路径（附加/修复时自动改注册）")
+                 : "未注册"));
+    if (registeredPath)
+        OutLine("  注册路径: " + WideToUtf8(*registeredPath));
     OutLine(std::string("实时音频心跳: ") +
             // 全面复审 S6（APO-9)：心跳存活只证明 APO 实例在跑、
             // 不证明引擎在处理（第五轮面板同口径教训）——文案对齐
@@ -1837,26 +1888,16 @@ int CmdDoctor(bool fix, bool asJson) {
         }
         checks.push_back(c);
     }
-    // 2. COM 注册（注册项齐全 + 注册路径 DLL 存在）
+    // 2. COM 注册（注册项齐全 + 注册路径指向随包 DLL；只验「路径
+    // DLL 存在」会被旧版残留注册蒙混——第八轮项 2 定罪，见
+    // ComRegistrationCurrent 注）。
     {
         DoctorCheck c;
         c.name = "com_registration";
-        auto probe = [&] {
-            const auto a = RegRead(
-                HKEY_CLASSES_ROOT,
-                std::wstring(L"AudioEngine\\AudioProcessingObjects\\") +
-                    kOurClsid,
-                L"FriendlyName");
-            const auto p = RegRead(
-                HKEY_CLASSES_ROOT,
-                std::wstring(L"CLSID\\") + kOurClsid + L"\\InprocServer32",
-                L"");
-            return a.has_value() && p.has_value() &&
-                   p->type == REG_SZ && FileExists(p->sz);
-        };
+        auto probe = [&] { return ComRegistrationCurrent(); };
         c.ok = probe();
-        c.detail = c.ok ? "APO 注册项齐全且注册路径 DLL 存在"
-                        : "APO 未注册或注册路径 DLL 缺失";
+        c.detail = c.ok ? "APO 注册项齐全且指向随包 DLL"
+                        : "APO 未注册或注册指向旧路径/DLL 缺失";
         if (!c.ok && fix) {
             const std::wstring dll = FindDll();
             if (FileExists(dll)) RunCmd({L"regsvr32", L"/s", dll});
