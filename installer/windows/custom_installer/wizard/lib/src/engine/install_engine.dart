@@ -3,6 +3,7 @@
 /// 驱动改调随包自包含脚本、测试签名风险告知。
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -117,6 +118,15 @@ class InstallEngine {
       if (!args.hasPayload) throw StateError('缺少载荷定位参数（应经 Setup 引导壳启动）');
       final session = args.sessionDir ?? Directory.systemTemp.path;
       final zipPath = p.join(session, 'payload.zip');
+
+      // 1.5) 覆盖升级先分离旧版可能附加的 System APO：audiodg
+      //      锁着旧 AuraApo.dll 时备份读取与载荷覆盖都会撞锁
+      //      （资源计划 Stage 0 / §8.1）。
+      if (overwrite) {
+        sink(const ProgressEvent('apo', 'detach', 0.03));
+        await _cleanupApo(o.installDir,
+            elevated: elevated, warnings: warnings);
+      }
 
       // 2) 覆盖升级前备份将被替换的旧程序文件（用户数据不备份、不覆盖）
       if (overwrite) {
@@ -323,6 +333,47 @@ class InstallEngine {
     return p.isWithin(r, p.normalize(p.join(r, rel)));
   }
 
+  /// APO 清理（资源计划 Stage 0 / §8.1）：卸载/覆盖升级动文件
+  /// 之前，把 System APO 从所有端点分离——否则 audiodg 继续按
+  /// FX 链加载并锁定安装目录的 AuraApo.dll（卸载后仍附加、更
+  /// 新覆盖失败，业主实测）。apo_config uninstall 无 target 时
+  /// 卸全部端点、清单清空后自动收 testenv；工具内部含音频服
+  /// 务重启，锁随之释放。失败按向导既有口径记警告并继续（文
+  /// 件步对锁定文件有重试 + 具名报告，不会静默丢失）；未提权
+  /// 时 FX 键（HKLM）写不动，给手动指引（与 VAIO 步同口径）。
+  Future<void> _cleanupApo(
+    String installDir, {
+    required bool elevated,
+    required List<String> warnings,
+  }) async {
+    final tool = p.join(installDir, kDriverManualDirRel, 'apo_config.exe');
+    if (!await File(tool).exists()) return;
+    if (!elevated) {
+      warnings.add('未以管理员运行：System APO 未分离。'
+          '请先在 AuraDSP 设置中点「一键卸载」分离 APO，'
+          '或以管理员重新运行本向导；已附加端点会继续占用 AuraApo.dll');
+      return;
+    }
+    try {
+      final r = await Process.run(
+        tool,
+        const ['uninstall', '--yes', '--json'],
+        stdoutEncoding: utf8,
+      ).timeout(const Duration(minutes: 2), onTimeout: () {
+        throw StateError('APO 分离超时');
+      });
+      if (r.exitCode != 0) {
+        final out = r.stdout.toString().trim();
+        final tail = out.length > 200 ? out.substring(out.length - 200) : out;
+        warnings.add('System APO 分离返回 ${r.exitCode}'
+            '${tail.isEmpty ? '' : '：$tail'}'
+            '（可手动以管理员运行 driver\\apo_config.exe uninstall --yes）');
+      }
+    } catch (e) {
+      warnings.add('System APO 分离失败: $e');
+    }
+  }
+
   Future<void> _restoreBackup(String backupDir, String installDir) async {
     final dir = Directory(backupDir);
     if (!await dir.exists()) return;
@@ -398,7 +449,15 @@ $s.Save()
       await closeGuardedProcesses(installDir: manifest.installDir);
       final elevated = isElevated();
 
-      // 1) ASIO：只要 DLL 在就反注册（含用户事后手动注册的情况），幂等。
+      // 1) APO：先分离 System APO（全端点），否则 audiodg 按 FX
+      //    链继续加载并锁定 AuraApo.dll，文件步必留残留且端点
+      //    保持附加（资源计划 Stage 0 / §8.1 定罪：此前向导全
+      //    程无 apo 处理，卸载后 APO 仍附加、更新覆盖写失败）。
+      sink(const ProgressEvent('apo', 'detach', 0.10));
+      await _cleanupApo(manifest.installDir,
+          elevated: elevated, warnings: warnings);
+
+      // 2) ASIO：只要 DLL 在就反注册（含用户事后手动注册的情况），幂等。
       sink(const ProgressEvent('asio', 'unregister', 0.20));
       final dll = asioDllPath(manifest.installDir);
       if (await File(dll).exists()) {
@@ -412,7 +471,7 @@ $s.Save()
         }
       }
 
-      // 2) VAIO：卸设备节点 + DriverStore 包 + 测试证书；先于删文件，
+      // 3) VAIO：卸设备节点 + DriverStore 包 + 测试证书；先于删文件，
       //    否则已加载的 .sys 会占用导致删除失败。
       final driverDir = p.join(manifest.installDir, kDriverManualDirRel);
       final script = p.join(driverDir, 'install_vaio.ps1');
@@ -437,7 +496,7 @@ $s.Save()
         }
       }
 
-      // 3) 快捷方式：清单 + 常见落点幂等补删，再回收空程序组目录。
+      // 4) 快捷方式：清单 + 常见落点幂等补删，再回收空程序组目录。
       sink(const ProgressEvent('cleanup', 'shortcuts', 0.45));
       final linkDirs = <String>[];
       for (final key in const ['USERPROFILE', 'ProgramData', 'APPDATA']) {
@@ -473,7 +532,7 @@ $s.Save()
         } catch (_) {}
       }
 
-      // 4) 注册表：两个 hive 都清（避免 allUsers 判定漂移），Run 自启两处都删。
+      // 5) 注册表：两个 hive 都清（避免 allUsers 判定漂移），Run 自启两处都删。
       sink(const ProgressEvent('registry', 'clean', 0.55));
       for (final hive in const [kHkeyCurrentUser, kHkeyLocalMachine]) {
         registryDeleteTree(
@@ -487,7 +546,7 @@ $s.Save()
             '建议以管理员重新运行卸载');
       }
 
-      // 5) 文件：按清单分类逐文件删除，不再整目录 delete(recursive)。
+      // 6) 文件：按清单分类逐文件删除，不再整目录 delete(recursive)。
       //    清单内 = 随包程序文件（删）；清单外 = 用户数据（keepData 时保留）。
       sink(const ProgressEvent('cleanup', 'files', 0.65));
       // 删文件前再清一次守卫进程：安装后扫描插件可能拉起 plugin_host_x64，
@@ -525,7 +584,7 @@ $s.Save()
       }
       if (keepData && await dir.exists()) keptPaths.add(manifest.installDir);
 
-      // 6) 用户数据根（%APPDATA%\AuraDSP / %LOCALAPPDATA%\AuraDSP）。
+      // 7) 用户数据根（%APPDATA%\AuraDSP / %LOCALAPPDATA%\AuraDSP）。
       final dataRoots = <String>{};
       for (final key in const ['APPDATA', 'LOCALAPPDATA']) {
         final v = env(key);
@@ -547,7 +606,7 @@ $s.Save()
         }
       }
 
-      // 7) 临时日志
+      // 8) 临时日志
       try {
         final t = env('TEMP');
         if (t.isNotEmpty) {
