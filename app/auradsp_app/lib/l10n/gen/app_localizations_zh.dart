@@ -523,6 +523,16 @@ class AppLocalizationsZh extends AppLocalizations {
       '当前由 VAIO 桥链驱动，输入选择不生效；请将播放器输出指向 AuraVAIO 端点';
 
   @override
+  String get ioOutputOverriddenByVaio =>
+      '当前由 VAIO 桥链驱动，此输出设备选择不生效；物理落点请将输出类型切换为 VAIO 后设置';
+
+  @override
+  String get ioOutputOverriddenByAsio => '当前由 ASIO 桥链驱动，此输出选择不生效；输出由 ASIO 驱动决定';
+
+  @override
+  String get ioOnlyVirtualOutputs => '仅有虚拟输出端点（无物理声卡）';
+
+  @override
   String get ioPhysicalOutput => '物理输出';
 
   @override

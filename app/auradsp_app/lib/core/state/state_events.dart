@@ -66,7 +66,8 @@ extension StateEvents on AppModel {
         // 就绪后加载并下发 close 名单；同时检查上一进程崩溃日志做自动登记。
         pluginManager.loadPluginTables();
         // 持久化的是 ASIO 模式：就绪后自动进桥（isolate 内部自带 detect）。
-        if (audioMode == 'asio') {
+        // 第七轮 S2：开关总闸同样压过就绪恢复（见 _pipelineIoSuppressed）。
+        if (audioMode == 'asio' && !_pipelineIoSuppressed) {
           _toIso?.send({
             'cmd': 'asiomode',
             'on': true,
@@ -82,6 +83,7 @@ extension StateEvents on AppModel {
         // 非正常结束时，本次跳过自动起桥一次并通知，防崩溃
         // 循环把软件锁死；用户手动选 VAIO 即解除（setAudioMode）。
         if (audioMode == 'vaio' &&
+            !_pipelineIoSuppressed &&
             pipelineChain != PipelineChain.capture &&
             pipelineChain != PipelineChain.asio) {
           if (vaioBootGuardTripped) {

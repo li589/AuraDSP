@@ -565,6 +565,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'Driven by the VAIO bridge chain — this input selection has no effect. Point the player\'s output at the AuraVAIO endpoint';
 
   @override
+  String get ioOutputOverriddenByVaio =>
+      'Driven by the VAIO bridge chain — this output device selection has no effect. Switch the output type to VAIO to set the physical landing point';
+
+  @override
+  String get ioOutputOverriddenByAsio =>
+      'Driven by the ASIO bridge chain — this output selection has no effect; the ASIO driver decides the output';
+
+  @override
+  String get ioOnlyVirtualOutputs =>
+      'Only virtual output endpoints (no physical sound card)';
+
+  @override
   String get ioPhysicalOutput => 'Physical output';
 
   @override

@@ -324,6 +324,15 @@ class AppModel extends ChangeNotifier {
   bool get pipelineOutputEnabled => config.pipelineOutputEnabled;
   List<AudioDeviceItem> wasapiDevices = [];
 
+  /// 系统默认端点身份（第七轮 S2 地基）：apo_inspect 报告的
+  /// defaultRender/defaultCapture（eConsole 口径端点 id）。解析层
+  /// 此前只消费 endpoints、把这两个字段丢弃，模型层不知道
+  /// 「默认」是谁——反馈守卫只能符号比较 ''、下拉互斥也撤不掉
+  /// 默认端点的具名别名（项 3 定罪）。刷新成功后由
+  /// refreshAudioDevices 写入；尚未刷新时为空（守卫退回旧口径）。
+  String defaultRenderId = '';
+  String defaultCaptureId = '';
+
   List<AudioDeviceItem> get filteredWasapiInputs {
     final list = <AudioDeviceItem>[];
     for (final d in wasapiDevices) {
@@ -403,7 +412,16 @@ class AppModel extends ChangeNotifier {
     final outs = filteredWasapiOutputs;
     if (config.pipelineInput != AudioModes.inputWasapi) return outs;
     final capItem = _resolveWasapiDevice(config.pipelineInputDevice);
-    if (capItem == null || !capItem.isRender) return outs;
+    if (capItem == null) {
+      // 输入为 ''（默认回录）时解析不到具名项——默认端点本人的
+      // 具名项是同一端点的别名，同须撤下（第七轮 S2 项 3；撤后
+      // 只剩它时下拉即呈「无可用声卡」，与第四轮规格一致）。
+      if (config.pipelineInputDevice.isEmpty && defaultRenderId.isNotEmpty) {
+        return outs.where((d) => d.id != defaultRenderId).toList();
+      }
+      return outs;
+    }
+    if (!capItem.isRender) return outs;
     if (capItem.id.isNotEmpty) {
       return outs.where((d) => d.id != capItem.id).toList();
     }

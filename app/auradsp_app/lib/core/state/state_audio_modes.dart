@@ -6,6 +6,20 @@ part of '../state.dart';
 /// 方法体逐字保留自 AppModel 类体（notifyListeners() 按 P2 约定改调
 /// _notifyUi()）。
 
+/// 解析默认别名后的自激判定（纯函数，第七轮 S2；置于 extension 外
+/// 是因为 extension 不能挂可按类名调用的 static）：'' 是系统默认
+/// 渲染端点的别名，先解析为 defaultRenderId 再比——「默认回录 vs
+/// 默认端点的具名输出」与双默认（细审 R-A H1）是同一自激对
+/// （项 3 定罪：旧实现只符号比较、两者皆空才冲突，具名别名直接
+/// 漏网，实测处理与可视化照常有效）。默认身份未知（尚未刷新
+/// 成功）时保留旧口径：双默认仍拦。
+bool idsConflictResolved(String capId, String outId, String defaultRenderId) {
+  final cap = capId.isEmpty ? defaultRenderId : capId;
+  final out = outId.isEmpty ? defaultRenderId : outId;
+  if (cap.isNotEmpty && out.isNotEmpty) return cap == out;
+  return capId.isEmpty && outId.isEmpty;
+}
+
 extension AudioModesState on AppModel {
 
   // ---- 模式与管线 ----
@@ -89,13 +103,16 @@ extension AudioModesState on AppModel {
     }
     if (wasAsio != isAsio) {
       // asiomode 内部自带 detect（无论能否启动都回 asiodrivers 事件给设置页）。
-      _toIso?.send({
-        'cmd': 'asiomode',
-        'on': isAsio,
-        'driver': config.asioDriver,
-        'bufSize': config.asioBufSize,
-        'outPair': config.asioOutPair,
-      });
+      // 第七轮 S2：开关总闸压过模式直发起桥（见 _pipelineIoSuppressed）。
+      if (!(isAsio && _pipelineIoSuppressed)) {
+        _toIso?.send({
+          'cmd': 'asiomode',
+          'on': isAsio,
+          'driver': config.asioDriver,
+          'bufSize': config.asioBufSize,
+          'outPair': config.asioOutPair,
+        });
+      }
       if (!isAsio) {
         asioActive = false;
         asioInfo = {};
@@ -109,7 +126,7 @@ extension AudioModesState on AppModel {
       final chainBlocksVaio = isVaio &&
           PlatformProfile.supportsBridges &&
           config.modeCategory == AudioModes.categoryPipeline &&
-          pipelineChain != PipelineChain.vaio;
+          (pipelineChain != PipelineChain.vaio || _pipelineIoSuppressed);
       if (!chainBlocksVaio) {
         _toIso?.send({
           'cmd': 'vaiomode',
@@ -255,6 +272,12 @@ extension AudioModesState on AppModel {
     }
   }
 
+  /// 输入/输出开关总闸（第七轮 S2 项 5）：管线类别内任一开关
+  /// 关闭即压过一切起链路径（分发器对账、模式直发、就绪恢复）。
+  bool get _pipelineIoSuppressed =>
+      config.modeCategory == AudioModes.categoryPipeline &&
+      (!config.pipelineInputEnabled || !config.pipelineOutputEnabled);
+
   /// 当前管线链路（仅管线类别内有意义；其余类别返回 null）。
   PipelineChain? get pipelineChain =>
       config.modeCategory == AudioModes.categoryPipeline
@@ -281,12 +304,8 @@ extension AudioModesState on AppModel {
     return (item != null && item.id.isNotEmpty) ? item.id : v;
   }
 
-  /// 规范 id 层面的自激判定：双默认（细审 R-A H1——空值在
-  /// isolate 侧都解为系统默认渲染端点，捕获它又写回它必反馈，
-  /// 恰是零配置路径）或两 id 相等。
   bool _idsConflict(String capId, String outId) =>
-      (capId.isEmpty && outId.isEmpty) ||
-      (capId.isNotEmpty && outId.isNotEmpty && capId == outId);
+      idsConflictResolved(capId, outId, defaultRenderId);
 
   /// 输入/输出设备存值是否构成自激对（下拉互斥规格与起链守卫
   /// 共用同一口径，避免两处判定漂移）。
@@ -342,6 +361,41 @@ extension AudioModesState on AppModel {
 
   void applyPipelineChain() {
     if (!PlatformProfile.supportsBridges) return;
+    // 第七轮 S2（项 5）：开关总闸——任一关闭，合成链不下发，在跑
+    // 的捕获/桥链按模式切换的同口径拆干净。此前两标志只被面板
+    // 读取（收起子面板），分发器从不看（项 5 定罪：开关纯装饰、
+    // 链路照跑；面板文案却早已承诺「采集暂停/输出静音」）。
+    if (_pipelineIoSuppressed) {
+      if (captureActive) {
+        _toIso?.send({'cmd': 'capturemode', 'on': false});
+        captureActive = false;
+        dbgLog('pipeline.chain: capturemode off (io switch)');
+      }
+      if (vaioActive) {
+        _toIso?.send({
+          'cmd': 'vaiomode',
+          'on': false,
+          'outputEndpoint': config.vaioOutputEndpoint,
+        });
+        vaioActive = false;
+        vaioInfo = {};
+        _disarmVaioGuard();
+        dbgLog('pipeline.chain: vaiomode off (io switch)');
+      }
+      if (asioActive) {
+        _toIso?.send({
+          'cmd': 'asiomode',
+          'on': false,
+          'driver': config.asioDriver,
+          'bufSize': config.asioBufSize,
+          'outPair': config.asioOutPair,
+        });
+        asioActive = false;
+        asioInfo = {};
+        dbgLog('pipeline.chain: asiomode off (io switch)');
+      }
+      return;
+    }
     final chain = pipelineChain;
     if (chain == PipelineChain.capture) {
       final payload = _captureCommand('capturemode');
@@ -480,12 +534,15 @@ extension AudioModesState on AppModel {
 
   void setPipelineInputEnabled(bool enabled) {
     config.pipelineInputEnabled = enabled;
+    // 第七轮 S2（项 5）：开关接线分发器——关即拆链、开即对账恢复。
+    applyPipelineChain();
     persistRoutingChange();
     _notifyUi();
   }
 
   void setPipelineOutputEnabled(bool enabled) {
     config.pipelineOutputEnabled = enabled;
+    applyPipelineChain();
     persistRoutingChange();
     _notifyUi();
   }
@@ -530,6 +587,9 @@ extension AudioModesState on AppModel {
           final lastLine = lines.isNotEmpty ? lines.last.trim() : '';
           if (lastLine.isNotEmpty) {
             final json = jsonDecode(lastLine) as Map<String, dynamic>;
+            // 第七轮 S2 地基：默认端点身份（此前被解析层丢弃）。
+            defaultRenderId = (json['defaultRender'] as String?) ?? '';
+            defaultCaptureId = (json['defaultCapture'] as String?) ?? '';
             final eps = (json['endpoints'] as List?) ?? [];
             final items = <AudioDeviceItem>[];
             for (final ep in eps) {
@@ -553,6 +613,21 @@ extension AudioModesState on AppModel {
             if (items.isNotEmpty) {
               wasapiDevices = items;
               lastAudioError = null;
+              // 第七轮 S2（项 4）：默认身份刷新后重估在跑捕获链的
+              // 自激面——用户中途在系统里把默认输出改成回录源端点
+              // 时，原本合法的链会变成自激对：停链 + 提醒。只停
+              // 不起（刷新动作不许意外起链）。
+              if (captureActive &&
+                  _isFeedbackPair(config.pipelineInputDevice,
+                      config.pipelineOutputDevice)) {
+                _toIso?.send({'cmd': 'capturemode', 'on': false});
+                captureActive = false;
+                postNotice(
+                    '系统默认设备已变更，输入与输出变为同一端点，已停止捕获链以防自激',
+                    level: NoticeLevel.warning);
+                dbgLog(
+                    'pipeline.capture: stopped after refresh (feedback pair)');
+              }
               dbgLog('devices.refresh: done n=${items.length}', sync: true);
               _notifyUi();
               dbgLog('devices.refresh: notified', sync: true);

@@ -533,6 +533,17 @@ class AppLocalizationsJa extends AppLocalizations {
       'VAIOブリッジチェーンで駆動中です。この入力の選択は無効です。プレーヤーの出力を AuraVAIO エンドポイントに向けてください';
 
   @override
+  String get ioOutputOverriddenByVaio =>
+      'VAIOブリッジチェーンで駆動中です。この出力デバイスの選択は無効です。物理的な出力先は出力タイプを VAIO に切り替えて設定してください';
+
+  @override
+  String get ioOutputOverriddenByAsio =>
+      'ASIOブリッジチェーンで駆動中です。この出力の選択は無効です。出力は ASIO ドライバーが決定します';
+
+  @override
+  String get ioOnlyVirtualOutputs => '仮想出力エンドポイントのみ（物理サウンドカードなし）';
+
+  @override
   String get ioPhysicalOutput => '物理出力';
 
   @override
