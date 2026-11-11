@@ -40,6 +40,7 @@ import '../platform/port/registry.dart';
 import '../platform/port/window.dart';
 import '../platform/port/windows_system.dart';
 import 'config.dart';
+import 'io/builtin_dirs.dart';
 import 'notice.dart';
 import 'audio_modes.dart';
 import 'eel_slider_parser.dart';
@@ -1156,6 +1157,16 @@ class AppModel extends ChangeNotifier {
   int _lastEditAt = 0;
 
   late final PluginManager pluginManager;
+
+  /// 安装内置目录登记（资源计划 P2）：打包期 builtin_dirs.json
+  /// 的运行时视图；无登记（开发/测试）时为空，全链回退旧口径。
+  final BuiltinDirs builtinDirs = BuiltinDirs.load();
+
+  /// 内置目录可用性（ensureBuiltinDirs 启动检查后填充）：
+  /// 绝对路径 → 目录是否存在（含创建尝试后的结果）。UI 失效
+  /// 标记优先读此表，缺项时按实时存在性判断。
+  final Map<String, bool> builtinDirStatus = {};
+
   String? savedPluginPath;
   String savedPluginId = '';
   bool savedPluginBypass = false;
@@ -1280,6 +1291,9 @@ class AppModel extends ChangeNotifier {
     pluginManager
         .setApoShadow(modeCaps.pluginProcessing == PluginProcessing.apo);
     pluginManager.addListener(notifyListeners);
+    // 资源计划 P2：先做内置目录启动检查/创建，再归一插件扫描
+    // 目录（其两级内置条目依赖登记与状态）。
+    ensureBuiltinDirs();
     // 2026-10-28：扫描目录单源在 config.pluginScanDirs；该方法同时
     // 补内置条目、首次播种平台目录并同步参与扫描的目录集。
     ensurePluginScanDirs();

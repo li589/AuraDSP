@@ -7,10 +7,14 @@ import 'dart:io';
 import '../../platform/platform_profile.dart';
 import '../config.dart';
 import '../error_sink.dart';
+import 'builtin_dirs.dart';
 
 abstract final class ResourceLocator {
   /// `resources/{subFolder}` 的候选目录（按优先级）：
-  /// exe 旁 resources → exe 旁 assets → 配置中心 resources → 配置中心子目录
+  /// builtin_dirs.json 登记的安装内置目录（资源计划 P2，有登记时
+  /// 居首——它与下一项 exe 旁 resources 通常同址，登记优先让未
+  /// 来登记指向别处时口径仍以打包期为准）→ exe 旁 resources →
+  /// exe 旁 assets → 配置中心 resources → 配置中心子目录
   /// → 数据中心 resources → 数据中心子目录 → 工程 assets → 仓库 assets。
   /// 数据中心两项是 S5b XDG 拆分的补项：Linux 用户投放的 IR/DDC 资源
   /// 按规范应落在 $XDG_DATA_HOME，排在配置中心之后不改变既有优先级。
@@ -20,7 +24,9 @@ abstract final class ResourceLocator {
     final exeDir = PlatformProfile.executableDir;
     final resources = ['resources', subFolder].join(sep);
     final assets = ['assets', subFolder].join(sep);
+    final registered = BuiltinDirs.load()[subFolder];
     return [
+      ?registered,
       '$exeDir$sep$resources',
       '$exeDir$sep$assets',
       ConfigManager.path(resources),

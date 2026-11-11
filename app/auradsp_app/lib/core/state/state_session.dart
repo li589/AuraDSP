@@ -15,24 +15,67 @@ extension StateSession on AppModel {
   /// 内置插件目录（未来自带开源/自研插件）。subDir 顺手完成创建。
   String get bundledPluginDir => ConfigManager.dataSubDir('plugins').path;
 
+  /// 安装内置目录（打包期 builtin_dirs.json 登记；无登记为 null）。
+  String? installBuiltinDir(String kind) => builtinDirs[kind];
+
+  /// 用户级内置目录（运行时数据根下按类子目录）。
+  String userBuiltinDir(String kind) => ConfigManager.dataSubDir(kind).path;
+
+  /// 内置目录启动检查（资源计划 P2 / Part B3）：用户级四类目录
+  /// 访问即创建（dataSubDir 语义）；安装级登记目录缺失时尝试创
+  /// 建一次（便携/用户目录安装通常可写，只读安装则失败留痕），
+  /// 结果记入 builtinDirStatus，供各 UI 的失效标记消费。创建不
+  /// 了不报错——「内置 + 失效」正是设计内的呈现态。
+  void ensureBuiltinDirs() {
+    builtinDirStatus.clear();
+    for (final kind in BuiltinDirs.kinds) {
+      final p = userBuiltinDir(kind);
+      builtinDirStatus[p] = Directory(p).existsSync();
+    }
+    for (final kind in BuiltinDirs.kinds) {
+      final p = builtinDirs[kind];
+      if (p == null) continue;
+      var ok = Directory(p).existsSync();
+      if (!ok) {
+        try {
+          Directory(p).createSync(recursive: true);
+          ok = Directory(p).existsSync();
+        } catch (e, st) {
+          swallow(e, st);
+        }
+      }
+      builtinDirStatus[p] = ok;
+      dbgLog('builtin dir [$kind] install: $p -> ${ok ? "ok" : "INVALID"}');
+    }
+  }
+
   /// 启动时调用一次：保证内置条目存在（保留其勾选态）+ 平台目录首次播种
   /// + 同步扫描集。内置目录只禁止删除，是否参与扫描由用户勾选决定。
   void ensurePluginScanDirs() {
     final dirs = config.pluginScanDirs;
-    final builtinPath = bundledPluginDir;
 
-    // 内置条目归一：只允许一条、builtin 标记不可被配置篡改；
-    // enabled 尊重用户勾选（2026-10-28：只禁止删除，不禁止取消勾选，
-    // 否则「全选/清除」在存在内置项时无法表达真实全选语义）。
-    dirs.removeWhere((e) => e.builtin && e.path != builtinPath);
-    final idx = dirs.indexWhere((e) => e.path == builtinPath);
-    if (idx >= 0) {
-      dirs[idx] = dirs[idx].copyWith(builtin: true);
-    } else {
-      dirs.insert(
-        0,
-        PluginScanDirEntry(path: builtinPath, enabled: true, builtin: true),
-      );
+    // 两级内置归一（资源计划 P2）：安装内置（登记的
+    // resources/plugins，随包插件）+ 用户内置（数据根 plugins，
+    // 2026-10-28 既有口径）。builtin 条目只允许这两条路径，其
+    // 余 builtin 标记一律清除（防配置篡改/旧残留）；缺失则补入
+    // 头部（安装内置在前），enabled 尊重用户勾选（只禁止删除，
+    // 不禁止取消勾选，否则「全选/清除」无法表达真实语义）。
+    final canonical = <String>[];
+    final installBuiltin = builtinDirs['plugins'];
+    if (installBuiltin != null) canonical.add(installBuiltin);
+    canonical.add(bundledPluginDir);
+    dirs.removeWhere((e) => e.builtin && !canonical.contains(e.path));
+    for (var i = canonical.length - 1; i >= 0; i--) {
+      final path = canonical[i];
+      final idx = dirs.indexWhere((e) => e.path == path);
+      if (idx >= 0) {
+        dirs[idx] = dirs[idx].copyWith(builtin: true);
+      } else {
+        dirs.insert(
+          0,
+          PluginScanDirEntry(path: path, enabled: true, builtin: true),
+        );
+      }
     }
 
     // 平台预置目录：仅首次播种（目录必须真实存在，见 platform/plugins）。
