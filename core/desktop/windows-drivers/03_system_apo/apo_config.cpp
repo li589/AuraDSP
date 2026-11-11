@@ -2090,7 +2090,7 @@ bool DaclAllowsAudiodgRead(PACL dacl) {
             const auto* ace = reinterpret_cast<ACCESS_ALLOWED_ACE*>(hdr);
             if ((ace->Mask & kReadBits) == 0) continue;
             const PSID sid = reinterpret_cast<PSID>(
-                const_cast<BYTE*>(&ace->SidStart));
+                const_cast<DWORD*>(&ace->SidStart));
             for (PSID s : sids) {
                 if (s && EqualSid(sid, s)) allowed = true;
             }
@@ -2098,7 +2098,7 @@ bool DaclAllowsAudiodgRead(PACL dacl) {
             const auto* ace = reinterpret_cast<ACCESS_DENIED_ACE*>(hdr);
             if ((ace->Mask & kReadBits) == 0) continue;
             const PSID sid = reinterpret_cast<PSID>(
-                const_cast<BYTE*>(&ace->SidStart));
+                const_cast<DWORD*>(&ace->SidStart));
             for (PSID s : sids) {
                 if (s && EqualSid(sid, s)) allowed = false;
             }
