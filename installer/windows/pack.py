@@ -436,6 +436,18 @@ def apply_resources(work_staging: Path, kind: str, packs_dir: Path,
     if kind in ("full", "addons", "light") and not packs:
         raise die(f"--resources {kind} 需要资源包，但 {packs_dir} 下没有找到"
                   "（先跑 build_packages.py 或加 --rebuild-resource-packs）")
+    if packs and kind in ("full", "light") and not what_if:
+        # 档位确定性：full/light 的 zip 组合是自足的完整内容集，
+        # 先清 staging 自带的 convolver/ddc/liveprog 再解包——否则
+        # 构建机工作树里若躺着未入库的全量 IR 库（CMake 全量安装
+        # 会原样带入），light 档会被底料撑成 full 大小、档位失去
+        # 意义（2026-11-12 开发机实证 light≈full≈175MB）。addons
+        # 档是增量叠加（core 底料 + 附加包），不在此列。
+        for sub in ("convolver", "ddc", "liveprog"):
+            d = res_dir / sub
+            if d.exists():
+                shutil.rmtree(d)
+        log("resources: 已清 staging 自带内容目录（档位以 zip 为准）")
     expected_sums = load_sha256sums(packs_dir)
     for pack in packs:
         sha = hashlib.sha256(pack.read_bytes()).hexdigest()
