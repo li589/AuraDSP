@@ -325,3 +325,15 @@ pnputil /delete-driver auravaiodriver.inf /uninstall /force
 > ASIO 仍固定 2 进 2 出；AuraApo v1 仍为透传/心跳。因此
 > 「驱动能出 5.1/7.1」≠「引擎已对 5.1/7.1 逐声道做空间化」——空间音效
 > 目前只消费前置立体声，5.1/7.1 耳机虚拟环绕尚未实现。
+
+## 独立诊断工具（`tools/`，不进 CMake，cl 单文件构建）
+
+| 工具 | 用途 | 构建 |
+|------|------|------|
+| `vaio_bridge_test.cpp` | VAIO 桥冒烟：`ab_*` 导出齐全性、detect/start/status、参数下发、测试音、viz 轮询、bypass、stop 后 running:false 断言。2026-11-12 已从废弃的 `vaio_*` 前缀迁移到统一桥 ABI（契约见 `bridge/common/aurabridge.h`） | `cl /utf-8 /EHsc /O2 vaio_bridge_test.cpp /link ole32.lib` |
+| `vaio_bridge_loopback_check.cpp` | VAIO 桥取证探针（第十七轮归位）：向 AuraVAIO 送 1 kHz 正弦/桥内测试音，WASAPI 环回录制落点混音落盘 raw；含 steps 参数阶梯二分、aged 空转、chopplay 切歌模拟、caponly/playonly 配合真实 App 分进程取证 | `cl /utf-8 /EHsc /O2 vaio_bridge_loopback_check.cpp /link ole32.lib uuid.lib avrt.lib` |
+| `vaio_bridge_loopback_analyze.py` | 上条 raw 的频谱判读（Goertzel 频点 + 自相关 + RMS 总览），纯 stdlib | `python vaio_bridge_loopback_analyze.py <raw>` |
+| `vaio_multichannel_probe.cpp` | VAIO 多声道格式与扬声器配置向导属性的端到端探测（KS 拓扑/WASAPI，不经桥 DLL） | `cl /utf-8 /EHsc /O2 vaio_multichannel_probe.cpp /link ole32.lib setupapi.lib` |
+
+环回类工具必须在交互会话运行（会话 0 无音频端点）；判读口径见
+`vaio_bridge_loopback_analyze.py` 文件头与第十七轮收口文档。
