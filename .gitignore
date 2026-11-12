@@ -94,6 +94,10 @@ test/clap/
 test/vst/
 test/plugins/
 test/smoke/*.clap
+# 插件宿主二进制：Linux 测试运行时同步到 test/ 根（与被 *.so 规则覆盖的
+# test/libauradsp_engine.so 同为引擎工件旁置产物），构建产物勿入库
+/test/plugin_host_x64
+/test/plugin_host_x86
 core/desktop/windows/build-x86/
 
 # --- 日期任务目录（test/date/2026-XX-XX/<task>/）的过程产物 ---
