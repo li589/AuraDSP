@@ -486,9 +486,31 @@ abstract final class ConfigManager {
     return cfg;
   }
 
+  static Map<String, dynamic>? _codeDefaultsJson;
+
   static bool save(AppConfig config) {
     try {
-      return writeJsonFile(configPath, config.toJson());
+      // 稀疏落盘（资源计划 Part D 后置步，2026-11-12 落地）：
+      // 用户档只写与基线不同的键。基线 = load 时会垫在用户档
+      // 之下的同一张表——默认层在场用默认层（发行口径可能与
+      // 代码默认不同），缺失时用代码默认（进程内缓存一次）。
+      // 收益：用户文件瘦身；默认层随版本升级时，未被用户改过
+      // 的键自动跟随新默认（全量落盘会把旧默认冻在用户档里
+      // 永远盖住新默认）。version 强制落盘：load 的迁移判定
+      // 读用户原始档的 version，稀疏掉会误判远古档、重复执行
+      // 已完成的迁移（如 asioOutPair 二次换算 = 数据损坏）。
+      // 等价性（merge(baseline, sparse) ≡ 全量）由
+      // test/config_sparse_save_test.dart 的回归电池钉死。
+      final layer = DefaultsLayer.configDefaults();
+      final baseline = layer.isNotEmpty
+          ? layer
+          : (_codeDefaultsJson ??= AppConfig().toJson());
+      final sparse = DefaultsLayer.sparseDiff(
+        baseline,
+        config.toJson(),
+        forceKeep: const {'version'},
+      );
+      return writeJsonFile(configPath, sparse);
     } catch (e, st) {
       swallow(e, st);
       return false;

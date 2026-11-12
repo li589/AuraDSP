@@ -9,10 +9,11 @@
 //   presets/*.json        出厂预设分发面（与 Flutter 资产同源）
 //   manifest.json         {version, defaultsVersion, files}
 //
-// 解析口径：有效值 = 用户值 ?? 默认层值 ?? 代码默认。本模块只
-// 提供默认层读取与深合并；用户落盘仍为全量（稀疏落盘为后续步
-// 骤，需 save→reload 等价性回归后再动）。默认层缺失/损坏 → 空
-// 层，全链行为与分层前完全一致。
+// 解析口径：有效值 = 用户值 ?? 默认层值 ?? 代码默认。本模块
+// 提供默认层读取、深合并与稀疏差分（用户落盘只写与基线不同
+// 的键，2026-11-12 落地，等价性由 config_sparse_save_test 的
+// save→reload 回归钉死）。默认层缺失/损坏 → 空层，基线回落
+// 代码默认，全链行为与分层前完全一致。
 
 import 'dart:convert';
 import 'dart:io';
@@ -105,6 +106,66 @@ abstract final class DefaultsLayer {
       if (value is Map<String, dynamic> && baseValue is Map<String, dynamic>) {
         out[key] = deepMergeUnder(baseValue, value);
       } else {
+        out[key] = value;
+      }
+    });
+    return out;
+  }
+
+  /// JSON 值域深相等：Map 按键集递归比对，List 按序比对，num
+  /// 跨 int/double 按值比（Dart num == 本就如此，如 1 == 1.0）。
+  static bool jsonDeepEqual(Object? a, Object? b) {
+    if (a is Map && b is Map) {
+      if (a.length != b.length) return false;
+      for (final key in a.keys) {
+        if (!b.containsKey(key) || !jsonDeepEqual(a[key], b[key])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (a is List && b is List) {
+      if (a.length != b.length) return false;
+      for (var i = 0; i < a.length; i++) {
+        if (!jsonDeepEqual(a[i], b[i])) return false;
+      }
+      return true;
+    }
+    return a == b;
+  }
+
+  /// 稀疏差分：求最小 overlay，使 deepMergeUnder(baseline,
+  /// overlay) 与 [full] 深相等。规则与合并语义严格对偶：
+  /// - 与基线深相等的叶子/子树整体省略（重读时由基线供给，
+  ///   这正是「未改过的键自动跟随默认层升级」的机制）；
+  /// - 两侧同为 Map 时逐键递归，只收有差异的键；
+  /// - List/标量/null 任一侧类型不同或值不同 → 整值收录
+  ///   （合并对 List 是整体替换，无法部分表达）；
+  /// - 仅 full 有的键整值收录；仅基线有的键省略。
+  /// [forceKeep] 的顶层键无条件收录（如 version：load 的迁移
+  /// 判定读用户原始档，稀疏掉会被误判远古档而重复迁移）。
+  ///
+  /// 前置不变量：[full] 须是 load 可产生的有效配置（每个 Map
+  /// 层的键集 ⊇ 基线同层键集）——AppConfig.toJson 恒全量发键、
+  /// load 又以合并为起点，该不变量由构造保证；合并语义无法
+  /// 表达「删掉基线的某个键」，此类状态本就不可达。
+  static Map<String, dynamic> sparseDiff(
+    Map<String, dynamic> baseline,
+    Map<String, dynamic> full, {
+    Set<String> forceKeep = const {},
+  }) {
+    final out = <String, dynamic>{};
+    full.forEach((key, value) {
+      if (forceKeep.contains(key) || !baseline.containsKey(key)) {
+        out[key] = value;
+        return;
+      }
+      final baseValue = baseline[key];
+      if (value is Map<String, dynamic> &&
+          baseValue is Map<String, dynamic>) {
+        final sub = sparseDiff(baseValue, value);
+        if (sub.isNotEmpty) out[key] = sub;
+      } else if (!jsonDeepEqual(baseValue, value)) {
         out[key] = value;
       }
     });
