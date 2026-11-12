@@ -119,6 +119,18 @@ class _WasapiOutputSubpanel extends StatelessWidget {
     // （实测：输入 VAIO 时切「系统默认渲染」无事发生且无提示）。
     final overriddenByBridge = model.pipelineChain == PipelineChain.vaio ||
         model.pipelineChain == PipelineChain.asio;
+    // 桥落点形态（业主 2026-11-12 裁定）：VAIO 桥链 + WASAPI
+    // 输出时下方紧接着落点面板（物理输出下拉/采样率/已处理帧/
+    // 输出端点俱全），本块只保留标题行——原先的桥链说明行、置
+    // 灰的设备下拉、采样率与缓冲区四行与落点面板重复，全删。
+    if (model.pipelineChain == PipelineChain.vaio) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _InfoRow(l.outputWasapi, l.ioWasapiRenderDesc),
+        ],
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
