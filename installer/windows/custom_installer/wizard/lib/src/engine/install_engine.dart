@@ -101,6 +101,7 @@ class InstallEngine {
     final warnings = <String>[];
     final createdFiles = <ManifestFile>[];
     final createdShortcuts = <String>[];
+    final backupFailed = <String>{};
     final elevated = isElevated();
     final overwrite = plan?.isOverwrite ?? false;
     final hasOldManifest = plan?.previous?.hasManifest ?? false;
@@ -126,6 +127,13 @@ class InstallEngine {
         sink(const ProgressEvent('apo', 'detach', 0.03));
         await _cleanupApo(o.installDir,
             elevated: elevated, warnings: warnings);
+        // 1.6) 分离后等 audiodg 真正解除 DLL 映射再动文件：
+        //      服务重启返回与映射释放之间存在排空窗口，裸跑到
+        //      备份/覆盖步会撞 errno 32（2026-11-12 业主实测）。
+        sink(const ProgressEvent('apo', 'unlock', 0.035));
+        await _sweepAsideFiles(o.installDir);
+        await _ensureApoUnlocked(o.installDir,
+            elevated: elevated, warnings: warnings);
       }
 
       // 2) 覆盖升级前备份将被替换的旧程序文件（用户数据不备份、不覆盖）
@@ -138,7 +146,16 @@ class InstallEngine {
           if (!await src.exists()) continue;
           final dst = File(p.join(backupDir, f.path));
           await dst.parent.create(recursive: true);
-          await src.copy(dst.path);
+          try {
+            await _copyWithRetry(src, dst);
+          } on FileSystemException catch (e) {
+            // 备份单个文件失败不再整单陪葬：登记 backupFailed，
+            // 回滚时保留该文件的新版而非删成缺失（见 catch）。
+            backupFailed.add(f.path);
+            warnings.add('备份跳过被占用文件 ${f.path}'
+                '（${e.osError?.message ?? e.message}）；'
+                '若安装失败，该文件将保留新版不回滚');
+          }
         }
       }
 
@@ -152,6 +169,7 @@ class InstallEngine {
         include: componentFilter(ddcPresets: o.ddcPresets),
         onFile: (rel, done, total) => sink(ProgressEvent('extract', rel,
             total == 0 ? null : 0.05 + 0.70 * done / total)),
+        onWarning: warnings.add,
       );
       createdFiles.addAll(files);
 
@@ -299,6 +317,9 @@ class InstallEngine {
         for (final f in createdFiles.reversed) {
           if (isUserPath(f.path)) continue;
           if (!_withinDir(o.installDir, f.path)) continue;
+          // 备份失败的文件没有旧版可恢复：删掉只会留成缺失，
+          // 保留新版（备份步已记警告）。
+          if (backupFailed.contains(f.path)) continue;
           try {
             await File(p.join(o.installDir, f.path)).delete();
           } catch (_) {}
@@ -321,7 +342,15 @@ class InstallEngine {
           await File(s).delete();
         } catch (_) {}
       }
-      return EngineResult(ok: false, error: '$e', warnings: warnings);
+      // 文件占用类错误给可行动的人话（2026-11-12 业主实测：错误
+      // 页曾直接展示裸 PathAccessException，用户无从下手）。
+      final errorText = e is FileSystemException
+          ? '文件被其他进程占用或无法访问：${e.path ?? ''}\n'
+              '请关闭正在播放音频的程序、退出 AuraDSP 后重试。\n'
+              '（技术详情：${e.osError?.message ?? e.message}'
+              '${e.osError != null ? '，errno ${e.osError!.errorCode}' : ''}）'
+          : '$e';
+      return EngineResult(ok: false, error: errorText, warnings: warnings);
     }
   }
 
@@ -338,9 +367,11 @@ class InstallEngine {
   /// FX 链加载并锁定安装目录的 AuraApo.dll（卸载后仍附加、更
   /// 新覆盖失败，业主实测）。apo_config uninstall 无 target 时
   /// 卸全部端点、清单清空后自动收 testenv；工具内部含音频服
-  /// 务重启，锁随之释放。失败按向导既有口径记警告并继续（文
-  /// 件步对锁定文件有重试 + 具名报告，不会静默丢失）；未提权
-  /// 时 FX 键（HKLM）写不动，给手动指引（与 VAIO 步同口径）。
+  /// 务重启。注意：服务重启返回 ≠ audiodg 已解除映射（排空窗
+  /// 口），调用方须在本步后接 _ensureApoUnlocked 等锁释放；
+  /// 写路径另有短重试 + 改名让位兜底（payload.dart）。分离失
+  /// 败按向导既有口径记警告并继续；未提权时 FX 键（HKLM）写
+  /// 不动，给手动指引（与 VAIO 步同口径）。
   Future<void> _cleanupApo(
     String installDir, {
     required bool elevated,
@@ -371,6 +402,95 @@ class InstallEngine {
       }
     } catch (e) {
       warnings.add('System APO 分离失败: $e');
+    }
+  }
+
+  /// 等待 APO 相关 DLL 从 audiodg 镜像映射中释放（2026-11-12
+  /// 业主实测补强）：_cleanupApo 的分离会重启音频服务，但服务
+  /// 重启返回 ≠ audiodg 已解除映射——有音频流在播时排空更慢，
+  /// 紧接着的备份/覆盖写入会撞 errno 32 整单失败。此处先轮询
+  /// 等锁释放；仍不释放且已提权则显式重启一次音频服务再等；
+  /// 最终仍锁也只记警告——写路径有改名让位兜底（payload.dart）。
+  Future<void> _ensureApoUnlocked(
+    String installDir, {
+    required bool elevated,
+    required List<String> warnings,
+  }) async {
+    final candidates = <String>[
+      p.join(installDir, kDriverManualDirRel, 'AuraApo.dll'),
+      p.join(installDir, kDriverManualDirRel, 'auradsp_engine_apo.dll'),
+    ];
+    Future<bool> anyLocked() async {
+      for (final path in candidates) {
+        if (!await probeFileWritable(path)) return true;
+      }
+      return false;
+    }
+
+    Future<bool> waitUnlocked(Duration budget) async {
+      final deadline = DateTime.now().add(budget);
+      while (DateTime.now().isBefore(deadline)) {
+        if (!await anyLocked()) return true;
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+      return !await anyLocked();
+    }
+
+    if (!await anyLocked()) return;
+    if (await waitUnlocked(const Duration(seconds: 8))) return;
+    if (elevated && await _restartAudioService()) {
+      if (await waitUnlocked(const Duration(seconds: 8))) return;
+    }
+    warnings.add('AuraApo.dll 仍被音频服务占用：写入时将自动改名'
+        '让位旧文件，新版可正常安装（让位文件下次安装/卸载时清理）');
+  }
+
+  /// 重启 Windows 音频服务（audiodg 随之回收，镜像锁释放）。
+  /// 全程尽力而为：任一步失败返回 false，不阻塞安装。
+  Future<bool> _restartAudioService() async {
+    try {
+      await Process.run('sc.exe', ['stop', 'Audiosrv'])
+          .timeout(const Duration(seconds: 30));
+      for (var i = 0; i < 30; i++) {
+        final q = await Process.run('sc.exe', ['query', 'Audiosrv']);
+        if (q.stdout.toString().contains('STOPPED')) break;
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+      final r = await Process.run('sc.exe', ['start', 'Audiosrv'])
+          .timeout(const Duration(seconds: 30));
+      return r.exitCode == 0 || r.exitCode == 1056; // 已在运行
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 扫除上次改名让位遗留的 `.aside-*` 文件（此时多已解锁）。
+  Future<void> _sweepAsideFiles(String installDir,
+      {List<String>? failed}) async {
+    final driverDir =
+        Directory(p.join(installDir, kDriverManualDirRel));
+    if (!await driverDir.exists()) return;
+    await for (final e in driverDir.list()) {
+      if (e is! File || !e.path.contains('.aside-')) continue;
+      try {
+        await e.delete();
+      } catch (_) {
+        failed?.add(p.relative(e.path, from: installDir));
+      }
+    }
+  }
+
+  /// 拷贝单个文件，对占用错误短重试（备份步用：源 DLL 在
+  /// audiodg 排空期可能短暂不可读）。最终失败抛回调用方。
+  Future<void> _copyWithRetry(File src, File dst) async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        await src.copy(dst.path);
+        return;
+      } on FileSystemException {
+        if (attempt == 2) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
     }
   }
 
@@ -456,6 +576,11 @@ $s.Save()
       sink(const ProgressEvent('apo', 'detach', 0.10));
       await _cleanupApo(manifest.installDir,
           elevated: elevated, warnings: warnings);
+      // 1.1) 等 audiodg 解除映射再删文件，并扫除历史让位文件
+      //      （删不掉的进 failed，走退出后清理脚本既有通道）。
+      await _ensureApoUnlocked(manifest.installDir,
+          elevated: elevated, warnings: warnings);
+      await _sweepAsideFiles(manifest.installDir, failed: failed);
 
       // 2) ASIO：只要 DLL 在就反注册（含用户事后手动注册的情况），幂等。
       sink(const ProgressEvent('asio', 'unregister', 0.20));

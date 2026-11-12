@@ -438,6 +438,87 @@ void main() {
       }
     });
 
+    test('isLockError 只认 32/33 占用码', () {
+      expect(
+          isLockError(const FileSystemException(
+              'm', 'p', OSError('sharing', 32))),
+          isTrue);
+      expect(
+          isLockError(
+              const FileSystemException('m', 'p', OSError('lock', 33))),
+          isTrue);
+      expect(
+          isLockError(const FileSystemException(
+              'm', 'p', OSError('denied', 5))),
+          isFalse);
+      expect(isLockError(StateError('x')), isFalse);
+    });
+
+    test('probeFileWritable：存在文件可写、缺失视为可写', () async {
+      final tmp = await Directory.systemTemp.createTemp('auradsp-wiz-');
+      try {
+        final f = File('${tmp.path}/a.dll')..writeAsStringSync('x');
+        expect(await probeFileWritable(f.path), isTrue);
+        expect(await probeFileWritable('${tmp.path}/none.dll'), isTrue);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('writeEntryResilient：持续占用时改名让位并回调', () async {
+      final tmp = await Directory.systemTemp.createTemp('auradsp-wiz-');
+      try {
+        final target = File('${tmp.path}/AuraApo.dll')
+          ..writeAsStringSync('OLD');
+        final entry = ArchiveFile('AuraApo.dll', 3, 'NEW'.codeUnits);
+        String? aside;
+        var attempts = 0;
+        await writeEntryResilient(
+          entry,
+          target,
+          sleep: (_) async {},
+          onAside: (p) => aside = p,
+          writeAttempt: () async {
+            attempts++;
+            if (attempts <= 3) {
+              throw const FileSystemException(
+                  'm', 'p', OSError('sharing', 32));
+            }
+            // 让位后的写：模拟真实落盘
+            await target.writeAsString('NEW');
+          },
+        );
+        expect(attempts, 4, reason: '3 次重试 + 让位后 1 次');
+        expect(aside, isNotNull);
+        expect(File(aside!).readAsStringSync(), 'OLD',
+            reason: '旧文件被改名保留，未被覆盖');
+        expect(target.readAsStringSync(), 'NEW');
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('writeEntryResilient：非占用错误立即抛出不让位', () async {
+      final tmp = await Directory.systemTemp.createTemp('auradsp-wiz-');
+      try {
+        final target = File('${tmp.path}/x.dll')..writeAsStringSync('OLD');
+        final entry = ArchiveFile('x.dll', 3, 'NEW'.codeUnits);
+        await expectLater(
+          writeEntryResilient(
+            entry,
+            target,
+            sleep: (_) async {},
+            writeAttempt: () async => throw const FileSystemException(
+                'm', 'p', OSError('denied', 5)),
+          ),
+          throwsA(isA<FileSystemException>()),
+        );
+        expect(target.readAsStringSync(), 'OLD');
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
     test('正常条目解压 + payload/ 前缀剥离', () async {
       final tmp = await Directory.systemTemp.createTemp('auradsp-wiz-');
       try {

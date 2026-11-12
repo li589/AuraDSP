@@ -15,6 +15,67 @@ import 'models.dart';
 const _kMaxPayloadEntries = 100000;
 const _kMaxPayloadBytes = 4 * 1024 * 1024 * 1024; // 4 GiB
 
+/// 是否为「文件被其他进程占用」类错误（ERROR_SHARING_VIOLATION
+/// = 32 / ERROR_LOCK_VIOLATION = 33）：audiodg 把 AuraApo.dll
+/// 映射为镜像时，任何写打开都以 32 拒绝。
+bool isLockError(Object e) =>
+    e is FileSystemException &&
+    (e.osError?.errorCode == 32 || e.osError?.errorCode == 33);
+
+/// 探针：目标文件当前是否可写。append 打开不截断、不改内容，
+/// 只验证写打开能否成功；被镜像映射的文件会以 errno 32 被
+/// 拒。文件不存在视为可写（写路径会创建它）。
+Future<bool> probeFileWritable(String path) async {
+  final f = File(path);
+  if (!await f.exists()) return true;
+  RandomAccessFile? raf;
+  try {
+    raf = await f.open(mode: FileMode.append);
+    return true;
+  } on FileSystemException {
+    return false;
+  } finally {
+    await raf?.close();
+  }
+}
+
+/// 写一个载荷条目到目标文件，对被占用文件做「短重试 → 改名
+/// 让位 → 再写」（2026-11-12 业主实测：覆盖安装时 AuraApo.dll
+/// 仍被 audiodg 占用，裸写抛 PathAccessException 致整单失败
+/// 回滚）。镜像映射的文件可改名、不可覆盖——改名让位是不依
+/// 赖对方进程退出的唯一解。让位文件以 `.aside-<毫秒>` 后缀
+/// 留在原地，经 [onAside] 报告；安装启动时由向导扫除。
+Future<void> writeEntryResilient(
+  ArchiveFile entry,
+  File target, {
+  void Function(String asidePath)? onAside,
+  Future<void> Function(Duration)? sleep,
+  Future<void> Function()? writeAttempt,
+}) async {
+  final doSleep = sleep ?? Future.delayed;
+  Future<void> attempt() async {
+    if (writeAttempt != null) return writeAttempt();
+    final out = OutputFileStream(target.path);
+    entry.writeContent(out);
+    await out.close();
+  }
+
+  for (var i = 0; i < 3; i++) {
+    try {
+      await attempt();
+      return;
+    } on FileSystemException catch (e) {
+      if (!isLockError(e)) rethrow;
+      if (i < 2) await doSleep(const Duration(milliseconds: 400));
+    }
+  }
+  final asidePath =
+      '${target.path}.aside-${DateTime.now().millisecondsSinceEpoch}';
+  await target.rename(asidePath);
+  onAside?.call(asidePath);
+  await attempt();
+}
+
 /// 把 setupExe 中 [off, off+len) 的字节段写到 destFile（分块拷贝）。
 Future<void> slicePayloadToFile(
     String setupExe, int off, int len, String destFile) async {
@@ -54,6 +115,7 @@ Future<List<ManifestFile>> extractPayload(
   String destDir, {
   required bool Function(String rel) include,
   void Function(String rel, int done, int total)? onFile,
+  void Function(String warning)? onWarning,
 }) async {
   final input = InputFileStream(zipPath);
   final archive = ZipDecoder().decodeStream(input);
@@ -87,9 +149,14 @@ Future<List<ManifestFile>> extractPayload(
       }
       final target = File(targetPath);
       await target.parent.create(recursive: true);
-      final out = OutputFileStream(target.path);
-      entry.writeContent(out);
-      await out.close();
+      await writeEntryResilient(
+        entry,
+        target,
+        onAside: (asidePath) => onWarning?.call(
+            '$rel 仍被其他进程占用，已将旧文件改名让位'
+            '（${p.basename(asidePath)}），新版已写入；'
+            '让位文件将在下次安装/卸载时清理'),
+      );
       final bytes = await target.readAsBytes();
       written.add(ManifestFile(
         path: rel,
