@@ -40,6 +40,14 @@ int main(int argc, char* argv[])
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
     printf("=== AuraVAIO Bridge Smoke Test (ab_* ABI) ===\n");
+    // 白噪声专项 S2 附带（2026-11-12）：桥/引擎按裸名加载只搜 exe
+    // 所在目录，与 argv[1] 给的 bridgeDir 无关——测试 exe 不与桥
+    // 同目录时恒 126 误报（guest 实测）。有目录参数先设 DLL 搜索
+    // 目录，裸名加载与桥自身依赖解析都落到该目录。
+    if (argc > 1 && argv[1] && argv[1][0])
+    {
+        SetDllDirectoryA(argv[1]);
+    }
     HMODULE hBridge = LoadLibraryA("auravaio_bridge.dll");
     if (!hBridge)
     {
