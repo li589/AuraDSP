@@ -19,6 +19,7 @@
 #include <windows.h>
 #include <mmdeviceapi.h>
 #include <functiondiscoverykeys_devpkey.h>
+#include <ks.h>
 #include <ksmedia.h>
 #include <cstdio>
 #include <cstring>
