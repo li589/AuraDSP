@@ -75,6 +75,40 @@ CMiniportWaveRTStream::QueryInterface(
 }
 
 //=============================================================================
+// 格式升级一期（2026-11-12）：从协商格式提取格式类别与有效位深，供
+// AuraControlDevice_OnFormatChange 发布到共享头——桥按类别+有效位深
+// 转换样本（24-in-32 的容器位深 32 无法单独区分 float/int/24 有效）。
+//=============================================================================
+static void
+AuraExtractFormatKind(
+    _In_  PWAVEFORMATEX Wfx,
+    _Out_ ULONG *       FormatKind,
+    _Out_ ULONG *       ValidBitsPerSample
+    )
+{
+    *FormatKind         = AURA_VAIO_FMT_PCM;
+    *ValidBitsPerSample = Wfx->wBitsPerSample;
+
+    if (Wfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
+    {
+        PWAVEFORMATEXTENSIBLE wfe = reinterpret_cast<PWAVEFORMATEXTENSIBLE>(Wfx);
+        if (IsEqualGUIDAligned(wfe->SubFormat, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT))
+        {
+            *FormatKind = AURA_VAIO_FMT_FLOAT;
+        }
+        if (wfe->Samples.wValidBitsPerSample > 0 &&
+            wfe->Samples.wValidBitsPerSample <= Wfx->wBitsPerSample)
+        {
+            *ValidBitsPerSample = wfe->Samples.wValidBitsPerSample;
+        }
+    }
+    else if (Wfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT)
+    {
+        *FormatKind = AURA_VAIO_FMT_FLOAT;
+    }
+}
+
+//=============================================================================
 // Init
 //=============================================================================
 
@@ -112,7 +146,9 @@ CMiniportWaveRTStream::Init(
         m_ulBlockAlign      = wfx->nBlockAlign;
         m_ulBytesPerSecond  = wfx->nAvgBytesPerSec;
 
-        AuraControlDevice_OnFormatChange(Capture, wfx->nSamplesPerSec, wfx->nChannels, wfx->wBitsPerSample);
+        ULONG fmtKind, validBits;
+        AuraExtractFormatKind(wfx, &fmtKind, &validBits);
+        AuraControlDevice_OnFormatChange(Capture, wfx->nSamplesPerSec, wfx->nChannels, wfx->wBitsPerSample, fmtKind, validBits);
     }
 
     m_pMiniport   = Miniport;
@@ -182,7 +218,9 @@ CMiniportWaveRTStream::SetFormat(
         // 量由 AdvanceAndCopyLocked 贴帧保证。旧格式尾部数据由
         // 桥的几何重同步丢弃，不在此处理。
 
-        AuraControlDevice_OnFormatChange(m_bCapture, wfx->nSamplesPerSec, wfx->nChannels, wfx->wBitsPerSample);
+        ULONG fmtKind, validBits;
+        AuraExtractFormatKind(wfx, &fmtKind, &validBits);
+        AuraControlDevice_OnFormatChange(m_bCapture, wfx->nSamplesPerSec, wfx->nChannels, wfx->wBitsPerSample, fmtKind, validBits);
     }
 
     return STATUS_SUCCESS;

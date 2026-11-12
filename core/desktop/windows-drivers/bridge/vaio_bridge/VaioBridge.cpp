@@ -7,6 +7,7 @@
 // - RT 铁律：音频泵循环内严格零动态内存分配、零内核锁、零文件 I/O。
 // - 控制面（detect/start/stop/set_param/status/viz）在 Dart isolate 或控制线程执行。
 #include "VaioBridge.h"
+#include "VaioSampleConvert.h"
 
 #include <windows.h>
 #include <winioctl.h>
@@ -185,12 +186,17 @@ struct VaioBridgeCtl {
     ULONG ringSampleRate = 48000;
     ULONG ringBlockAlign = 8;
     ULONG ringBits = 32;
+    // 格式升级一期：格式类别与有效位深（0 = 旧驱动未给，转换层推断）。
+    ULONG ringFmtKind = 0;
+    ULONG ringValidBits = 0;
     // 共享头几何旁观值（第四轮项 3 取证）：工作几何改以 MAP 应答
     // 的内核真值为准（DRV-03 口径），头字段仅留档对照——status
     // 同时输出两份，噪声复现时一招分辨几何来源分歧。
     ULONG hdrChannels = 0;
     ULONG hdrSampleRate = 0;
     ULONG hdrBits = 0;
+    ULONG hdrFmtKind = 0;
+    ULONG hdrValidBits = 0;
 
     // 第五轮 S4 白噪取证：每次 start 采集一次——起始写计数/消费
     // 指针/环几何 + 首个真实数据块的原始字节与双口径统计（正位
@@ -571,21 +577,13 @@ void RemapInterleavedAudio(const float* src, int srcCh, float* dst, int dstCh, i
     }
 }
 
-// 环数据格式归一（2026-11-09 真机报告 §1.2）：驱动引脚表契约——
-// 32 位恒为 IEEE float、16 位恒为 PCM int16（AuraVaoTables.h 的
-// data ranges）。历史上泵把环字节无条件当 float32 消费：端点协商
-// 出 PCM16 时 int16 样本对被拼成 float 位型，幅度近均匀散布至极
-// 大值——电平全红、输出破碎、旁路近静音（真机症状逐项吻合）。
-// 此处按共享头 BitsPerSample 归一后再进峰值/门控/引擎链。
-void ConvertRingToFloat(const BYTE* raw, float* dst, int frames, int channels, ULONG bits) {
-    const int n = frames * channels;
-    if (bits == 16) {
-        const int16_t* s = reinterpret_cast<const int16_t*>(raw);
-        for (int i = 0; i < n; ++i) dst[i] = (float)s[i] * (1.0f / 32768.0f);
-    } else {
-        memcpy(dst, raw, (size_t)n * sizeof(float));
-    }
-}
+// 环数据格式归一：实现已抽到 VaioSampleConvert.h（格式升级一期，
+// 2026-11-12），按（格式类别， 容器位深， 有效位深）分发，宿主门禁
+// 与泵共用同一实现。历史背景（2026-11-09 真机报告 §1.2）：泵曾把环
+// 字节无条件当 float32 消费，端点协商出 PCM16 时 int16 样本对被拼
+// 成 float 位型——电平全红、输出破碎、旁路近静音；一期之前靠引脚
+// 表「32 位恒 float、16 位恒 PCM」的隐含契约按位深分发，24 位起该
+// 契约由共享头 FormatKind/ValidBitsPerSample 显式承载。
 
 // 线性插值重采样（环速率 → 输出速率，同 §1.2）：两端格式各自
 // 独立协商（引脚表 44100–192000），泵历史上 1:1 逐帧消费、无重
@@ -709,6 +707,8 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
     // 格式在 start 时已定稿。inRatio = 环率/输出率（每输出帧消耗
     // 的环帧数），fracPhase 为重采样的跨块分数相位。
     ULONG ringBits = g_vaio.ringBits > 0 ? g_vaio.ringBits : 32;
+    ULONG ringFmtKind = g_vaio.ringFmtKind;      // 0 = 旧驱动，转换层推断
+    ULONG ringValidBits = g_vaio.ringValidBits;  // 0 = 与容器位深相同
     ULONG ringRate = g_vaio.ringSampleRate > 0 ? g_vaio.ringSampleRate : 48000;
     const ULONG outRate = g_vaio.wasapiSampleRate > 0 ? g_vaio.wasapiSampleRate : 48000;
     const bool outIsFloat = g_vaio.wasapiIsFloat;
@@ -829,15 +829,25 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             const ULONG snapBits = pHeader->BitsPerSample;
             const ULONG snapRate = pHeader->SampleRate;
             const ULONG snapAlign = pHeader->BlockAlign;
+            // 格式升级一期：类别/有效位深入元组——float32 与 int32-PCM
+            // 率/声道/位深/帧宽全同，不入元组则同形切换无人察觉、转换
+            // 会静默用错口径。snapKind==0 是旧驱动（恒 0），不采纳、
+            // 不触发重同步。
+            const ULONG snapKind = pHeader->FormatKind;
+            const ULONG snapValid = pHeader->ValidBitsPerSample;
             const bool snapConsistent =
                 snapCh == pHeader->Channels &&
                 snapBits == pHeader->BitsPerSample &&
                 snapRate == pHeader->SampleRate &&
-                snapAlign == pHeader->BlockAlign;
+                snapAlign == pHeader->BlockAlign &&
+                snapKind == pHeader->FormatKind &&
+                snapValid == pHeader->ValidBitsPerSample;
             if (snapConsistent) {
                 const bool frameShapeChanged =
                     (snapCh > 0 && snapCh != ringChannels) ||
-                    (snapBits > 0 && snapBits != ringBits);
+                    (snapBits > 0 && snapBits != ringBits) ||
+                    (snapKind != 0 && snapKind != ringFmtKind) ||
+                    (snapKind != 0 && snapValid != ringValidBits);
                 if (snapCh > 0 && snapCh != ringChannels) {
                     ringChannels = snapCh;
                     g_vaio.ringChannels = ringChannels;
@@ -849,11 +859,18 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                     ringBits = snapBits;
                     g_vaio.ringBits = ringBits;
                 }
+                if (snapKind != 0 && snapKind != ringFmtKind) {
+                    ringFmtKind = snapKind;
+                    g_vaio.ringFmtKind = ringFmtKind;
+                }
+                if (snapKind != 0 && snapValid != ringValidBits) {
+                    ringValidBits = snapValid;
+                    g_vaio.ringValidBits = ringValidBits;
+                }
                 if (frameShapeChanged) {
                     blockAlign = snapAlign > 0
                         ? snapAlign
-                        : (ringChannels *
-                           (ringBits == 16 ? sizeof(int16_t) : sizeof(float)));
+                        : (ringChannels * (ringBits / 8));
                     g_vaio.ringBlockAlign = blockAlign;
                     // 弃旧格式尾巴：游标对齐到此刻的写入位置，模
                     // 偏移与旧尾巴一并清零；重采样相位同步清零。
@@ -967,7 +984,8 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             // S3b：帧相位自愈的读偏移附加（检测段在转换后）。消费
             // 字节计数不受影响——读的字节数不变，仅起始相位移
             // 1 字节，尾部由既有 +1 帧前视兜底，环读恒在界内。
-            if (ringBits == 16 && g_vaio.ringPhaseShift != 0) {
+            if (ringBits == 16 && ringFmtKind != AURA_VAIO_FMT_FLOAT &&
+                g_vaio.ringPhaseShift != 0) {
                 readOffset += 1;
                 if (readOffset >= dataSize) readOffset -= dataSize;
             }
@@ -979,9 +997,10 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                 memcpy(g_vaio.scratchRaw, pPayload + readOffset, chunk1);
                 memcpy(g_vaio.scratchRaw + chunk1, pPayload, chunk2);
             }
-            if (ringBits == 16 || ringBits == 32) {
-                ConvertRingToFloat(g_vaio.scratchRaw, g_vaio.scratchRing,
-                                   (int)readInFrames, (int)ringChannels, ringBits);
+            if (VaioRingFormatSupported(ringFmtKind, ringBits, ringValidBits)) {
+                VaioConvertRingToFloat(g_vaio.scratchRaw, g_vaio.scratchRing,
+                                       (int)readInFrames, (int)ringChannels,
+                                       ringFmtKind, ringBits, ringValidBits);
                 // S3b 帧相位检测（仅 PCM16）：scratchRaw 已按当前
                 // 相位读出，本地偏移 0 成帧 = 当前成帧，偏移 1 =
                 // 另一成帧。逐帧取等距 int16 样本比较一阶差分均
@@ -991,7 +1010,8 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                 // 时投票，连续 3 块翻转 ringPhaseShift（下一块
                 // 起生效）；任一不满足即清票，噪声类素材两成帧
                 // 同样粗糙、比值近 1，不会误触发。
-                if (ringBits == 16 && readInFrames >= 64 && blockAlign >= 2) {
+                if (ringBits == 16 && ringFmtKind != AURA_VAIO_FMT_FLOAT &&
+                    readInFrames >= 64 && blockAlign >= 2) {
                     const int probeFrames =
                         readInFrames < 256 ? (int)readInFrames : 256;
                     double diffSum[2] = {0.0, 0.0};
@@ -1074,14 +1094,15 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                                    (int)ringChannels, fracPhase, inRatio);
                 }
             } else {
-                // 位深契约外（细审 R-B 6）：现行驱动引脚表只有
-                // float32/PCM16；未知位深绝不按 float 误读
-                // （§1.2 同型事故），整块静音、一次性落 note，
-                // 环消费照常推进（数据格式不可用但时序要维持）。
+                // 格式契约外（细审 R-B 6；格式升级一期改按格式模型
+                // 判定）：VaioRingFormatSupported 之外的组合绝不猜
+                // 测转换（§1.2 同型事故），整块静音、一次性落
+                // note，环消费照常推进（数据格式不可用但时序要维持）。
                 if (!bitsNoteWritten) {
                     bitsNoteWritten = true;
                     snprintf(g_vaio.note, sizeof(g_vaio.note),
-                             "ring-bits-unsupported: %lu", ringBits);
+                             "ring-format-unsupported: kind=%lu bits=%lu valid=%lu",
+                             ringFmtKind, ringBits, ringValidBits);
                 }
                 memset(g_vaio.scratchIn, 0,
                        (size_t)framesToProcess * ringChannels * sizeof(float));
@@ -1465,6 +1486,8 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.hdrChannels = g_vaio.pRingHeader->Channels;
     g_vaio.hdrSampleRate = g_vaio.pRingHeader->SampleRate;
     g_vaio.hdrBits = g_vaio.pRingHeader->BitsPerSample;
+    g_vaio.hdrFmtKind = g_vaio.pRingHeader->FormatKind;
+    g_vaio.hdrValidBits = g_vaio.pRingHeader->ValidBitsPerSample;
     g_vaio.ringDataSize = mapResp.DataSizeBytes ? mapResp.DataSizeBytes
                                                  : g_vaio.pRingHeader->DataSizeBytes;
     g_vaio.ringChannels = mapResp.Channels ? mapResp.Channels
@@ -1475,11 +1498,20 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.ringBits = mapResp.BitsPerSample
                           ? mapResp.BitsPerSample
                           : (g_vaio.hdrBits ? g_vaio.hdrBits : 32);
+    // 格式升级一期：MAP 应答尾部追加的类别/有效位深仅当返回字节数
+    // 覆盖新结构时才采信（旧驱动回短应答）；缺失则回落共享头字段，
+    // 再缺（旧驱动）为 0 = 转换层按位深推断。
+    const bool mapHasFmt = bytesRet >= sizeof(AURA_VAIO_MAP_RESPONSE);
+    g_vaio.ringFmtKind = (mapHasFmt && mapResp.FormatKind != 0)
+                             ? mapResp.FormatKind
+                             : g_vaio.hdrFmtKind;
+    g_vaio.ringValidBits = mapHasFmt ? mapResp.ValidBitsPerSample
+                                     : g_vaio.hdrValidBits;
     g_vaio.ringBlockAlign = mapResp.BlockAlign
                                 ? mapResp.BlockAlign
                                 : (g_vaio.pRingHeader->BlockAlign
                                        ? g_vaio.pRingHeader->BlockAlign
-                                       : (g_vaio.ringChannels * (g_vaio.ringBits == 16 ? sizeof(int16_t) : sizeof(float))));
+                                       : (g_vaio.ringChannels * (g_vaio.ringBits >= 8 ? g_vaio.ringBits / 8 : sizeof(float))));
 
     // 3. 动态加载 auradsp_engine.dll
     std::wstring used;
@@ -1966,6 +1998,17 @@ int vaio_status(char* out, int cap) {
             InterlockedCompareExchange(&g_vaio.phaseResyncs, 0, 0),
             InterlockedCompareExchange(&g_vaio.phaseSkew, 0, 0),
             InterlockedCompareExchange(&g_vaio.phaseFlips, 0, 0));
+        if (m < 0) return -1;
+        total += m;
+    }
+    // 格式升级一期：环格式类别与有效位深（恒输出，供格式矩阵取证；
+    // ringFmtKind 0 = 旧驱动未给、转换层按位深推断）。
+    {
+        const int m = _snprintf_s(
+            out + total, (size_t)(cap - total), _TRUNCATE,
+            ",\"ringFmtKind\":%lu,\"ringValidBits\":%lu,\"hdrFmtKind\":%lu,\"hdrValidBits\":%lu",
+            g_vaio.ringFmtKind, g_vaio.ringValidBits,
+            g_vaio.hdrFmtKind, g_vaio.hdrValidBits);
         if (m < 0) return -1;
         total += m;
     }

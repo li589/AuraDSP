@@ -199,6 +199,122 @@ KSDATARANGE_AUDIO AuraWavePinDataRangesStream[] =
         8,                                                  // MaximumChannels (8)
         16, 16,
         44100, 192000
+    },
+    // 格式升级一期（2026-11-12）：24 位支持。每声道数两条 PCM 范围——
+    // 24 紧密（3 字节/样本）与 32 容器（24-in-32 与真 int32 都落此条，
+    // 由协商格式的 ValidBitsPerSample 区分，范围层不区分）。交集处理
+    // 器按容器位深校验、按有效位深回写 resultant（MiniportWaveRT.cpp）。
+    {   // 8 : 24-bit PCM packed (stereo, 2 channels)
+        {
+            sizeof(KSDATARANGE_AUDIO),
+            0,
+            0,
+            0,
+            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
+            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+        },
+        AURA_DEFAULT_CHANNELS,                              // 2
+        24, 24,
+        44100, 192000
+    },
+    {   // 9 : 32-bit PCM container (stereo, 2 channels; incl. 24-in-32)
+        {
+            sizeof(KSDATARANGE_AUDIO),
+            0,
+            0,
+            0,
+            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
+            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+        },
+        AURA_DEFAULT_CHANNELS,                              // 2
+        32, 32,
+        44100, 192000
+    },
+    {   // 10 : 24-bit PCM packed (Quad, 4 channels)
+        {
+            sizeof(KSDATARANGE_AUDIO),
+            0,
+            0,
+            0,
+            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
+            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+        },
+        4,                                                  // MaximumChannels (4)
+        24, 24,
+        44100, 192000
+    },
+    {   // 11 : 32-bit PCM container (Quad, 4 channels; incl. 24-in-32)
+        {
+            sizeof(KSDATARANGE_AUDIO),
+            0,
+            0,
+            0,
+            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
+            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+        },
+        4,                                                  // MaximumChannels (4)
+        32, 32,
+        44100, 192000
+    },
+    {   // 12 : 24-bit PCM packed (5.1 surround, 6 channels)
+        {
+            sizeof(KSDATARANGE_AUDIO),
+            0,
+            0,
+            0,
+            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
+            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+        },
+        6,                                                  // MaximumChannels (6)
+        24, 24,
+        44100, 192000
+    },
+    {   // 13 : 32-bit PCM container (5.1 surround, 6 channels; incl. 24-in-32)
+        {
+            sizeof(KSDATARANGE_AUDIO),
+            0,
+            0,
+            0,
+            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
+            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+        },
+        6,                                                  // MaximumChannels (6)
+        32, 32,
+        44100, 192000
+    },
+    {   // 14 : 24-bit PCM packed (7.1 surround, 8 channels)
+        {
+            sizeof(KSDATARANGE_AUDIO),
+            0,
+            0,
+            0,
+            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
+            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+        },
+        8,                                                  // MaximumChannels (8)
+        24, 24,
+        44100, 192000
+    },
+    {   // 15 : 32-bit PCM container (7.1 surround, 8 channels; incl. 24-in-32)
+        {
+            sizeof(KSDATARANGE_AUDIO),
+            0,
+            0,
+            0,
+            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
+            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+        },
+        8,                                                  // MaximumChannels (8)
+        32, 32,
+        44100, 192000
     }
 };
 
@@ -212,7 +328,15 @@ PKSDATARANGE AuraWavePinDataRangePointersStream[] =
     PKSDATARANGE(&AuraWavePinDataRangesStream[4]),
     PKSDATARANGE(&AuraWavePinDataRangesStream[5]),
     PKSDATARANGE(&AuraWavePinDataRangesStream[6]),
-    PKSDATARANGE(&AuraWavePinDataRangesStream[7])
+    PKSDATARANGE(&AuraWavePinDataRangesStream[7]),
+    PKSDATARANGE(&AuraWavePinDataRangesStream[8]),
+    PKSDATARANGE(&AuraWavePinDataRangesStream[9]),
+    PKSDATARANGE(&AuraWavePinDataRangesStream[10]),
+    PKSDATARANGE(&AuraWavePinDataRangesStream[11]),
+    PKSDATARANGE(&AuraWavePinDataRangesStream[12]),
+    PKSDATARANGE(&AuraWavePinDataRangesStream[13]),
+    PKSDATARANGE(&AuraWavePinDataRangesStream[14]),
+    PKSDATARANGE(&AuraWavePinDataRangesStream[15])
 };
 
 //=============================================================================

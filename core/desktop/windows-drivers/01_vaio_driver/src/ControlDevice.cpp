@@ -44,6 +44,14 @@ static LONG                     g_lActiveCaptureStreams = 0;
 static ULONG                    g_ulCurrentSampleRate   = AURA_DEFAULT_SAMPLE_RATE;
 static ULONG                    g_ulCurrentChannels     = AURA_DEFAULT_CHANNELS;
 static ULONG                    g_ulCurrentBitsPerSample= AURA_DEFAULT_BITS_PER_SAMPLE;
+// 格式升级一期（2026-11-12）：格式类别与有效位深（默认值与默认几何
+// 一致——32 位 IEEE float，有效位深=容器位深）。
+static ULONG                    g_ulCurrentFormatKind   = AURA_VAIO_FMT_FLOAT;
+static ULONG                    g_ulCurrentValidBits    = AURA_DEFAULT_BITS_PER_SAMPLE;
+// 环数据区有效尺寸（内核真值）：（总尺寸−头）向下取整到
+// AURA_VAIO_RING_DATA_ALIGNMENT(288) 的倍数，见 AuraVaioIpc.h 的说明。
+// 头 DataSizeBytes、MAP 应答与读写路径一律用它，不再各自现算。
+static ULONG                    g_ulRingDataSize        = 0;
 static ULONGLONG                g_ullTotalFramesWritten = 0;
 static ULONGLONG                g_ullTotalFramesRead    = 0;
 
@@ -124,6 +132,9 @@ AuraControlDevice_Create(
 
     RtlZeroMemory(g_pRingBuffer, allocSize);
     g_ulRingTotalSize = allocSize;
+    // 格式升级一期：数据区尺寸贴 288 帧格对齐（尾部不足一格的字节闲置）。
+    g_ulRingDataSize = (allocSize - sizeof(AURA_VAIO_SHARED_HEADER)) /
+                       AURA_VAIO_RING_DATA_ALIGNMENT * AURA_VAIO_RING_DATA_ALIGNMENT;
 
     //
     // Allocate and build the MDL so user processes can map this memory.
@@ -151,11 +162,13 @@ AuraControlDevice_Create(
     pHeader->HeaderSizeBytes        = sizeof(AURA_VAIO_SHARED_HEADER);
     pHeader->TotalBufferSizeBytes   = allocSize;
     pHeader->DataOffsetBytes        = sizeof(AURA_VAIO_SHARED_HEADER);
-    pHeader->DataSizeBytes          = allocSize - sizeof(AURA_VAIO_SHARED_HEADER);
+    pHeader->DataSizeBytes          = g_ulRingDataSize;
     pHeader->SampleRate             = g_ulCurrentSampleRate;
     pHeader->Channels               = g_ulCurrentChannels;
     pHeader->BitsPerSample          = g_ulCurrentBitsPerSample;
     pHeader->BlockAlign             = g_ulCurrentChannels * (g_ulCurrentBitsPerSample / 8);
+    pHeader->FormatKind             = g_ulCurrentFormatKind;
+    pHeader->ValidBitsPerSample     = g_ulCurrentValidBits;
     pHeader->WriteOffset            = 0;
     pHeader->ReadOffset             = 0;
     pHeader->TotalBytesWritten      = 0;
@@ -211,6 +224,7 @@ AuraControlDevice_Destroy(
         ExFreePoolWithTag(g_pRingBuffer, AURA_POOLTAG);
         g_pRingBuffer = NULL;
         g_ulRingTotalSize = 0;
+        g_ulRingDataSize = 0;
     }
 
     if (g_pControlDeviceObject != NULL)
@@ -464,11 +478,13 @@ AuraControlDevice_DispatchDeviceControl(
                 pResp->UserAddress          = userVa;
                 pResp->TotalMappedSizeBytes = g_ulRingTotalSize;
                 pResp->HeaderSizeBytes      = sizeof(AURA_VAIO_SHARED_HEADER);
-                pResp->DataSizeBytes        = g_ulRingTotalSize - sizeof(AURA_VAIO_SHARED_HEADER);
+                pResp->DataSizeBytes        = g_ulRingDataSize;
                 pResp->SampleRate           = g_ulCurrentSampleRate;
                 pResp->Channels             = g_ulCurrentChannels;
                 pResp->BitsPerSample        = g_ulCurrentBitsPerSample;
                 pResp->BlockAlign           = g_ulCurrentChannels * (g_ulCurrentBitsPerSample / 8);
+                pResp->FormatKind           = g_ulCurrentFormatKind;
+                pResp->ValidBitsPerSample   = g_ulCurrentValidBits;
 
                 bytesReturned = sizeof(AURA_VAIO_MAP_RESPONSE);
                 ntStatus = STATUS_SUCCESS;
@@ -651,7 +667,9 @@ AuraControlDevice_OnFormatChange(
     _In_ BOOLEAN Capture,
     _In_ ULONG SampleRate,
     _In_ ULONG Channels,
-    _In_ ULONG BitsPerSample
+    _In_ ULONG BitsPerSample,
+    _In_ ULONG FormatKind,
+    _In_ ULONG ValidBitsPerSample
     )
 {
     KIRQL oldIrql;
@@ -671,11 +689,15 @@ AuraControlDevice_OnFormatChange(
     g_ulCurrentSampleRate    = SampleRate;
     g_ulCurrentChannels      = Channels;
     g_ulCurrentBitsPerSample = BitsPerSample;
+    g_ulCurrentFormatKind    = FormatKind;
+    g_ulCurrentValidBits     = ValidBitsPerSample;
 
     pHeader->SampleRate      = SampleRate;
     pHeader->Channels        = Channels;
     pHeader->BitsPerSample   = BitsPerSample;
     pHeader->BlockAlign      = Channels * (BitsPerSample / 8);
+    pHeader->FormatKind      = FormatKind;
+    pHeader->ValidBitsPerSample = ValidBitsPerSample;
     KeReleaseSpinLock(&g_RingLock, oldIrql);
 }
 
@@ -702,7 +724,7 @@ AuraControlDevice_WriteRenderSamples(
      * dataSize 取模/钳制，影响面被关进环内。 */
     if (g_ulRingTotalSize <= sizeof(AURA_VAIO_SHARED_HEADER)) return;
     pPayload = g_pRingBuffer + sizeof(AURA_VAIO_SHARED_HEADER);
-    dataSize = g_ulRingTotalSize - sizeof(AURA_VAIO_SHARED_HEADER);
+    dataSize = g_ulRingDataSize;   // 格式升级一期：288 贴格后的内核真值
 
     if (dataSize == 0) return;
 
@@ -773,7 +795,7 @@ AuraControlDevice_ReadCaptureSamples(
         return;
     }
     pPayload = g_pRingBuffer + sizeof(AURA_VAIO_SHARED_HEADER);
-    dataSize = g_ulRingTotalSize - sizeof(AURA_VAIO_SHARED_HEADER);
+    dataSize = g_ulRingDataSize;   // 格式升级一期：288 贴格后的内核真值
 
     if (dataSize == 0)
     {

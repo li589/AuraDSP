@@ -201,6 +201,7 @@ CMiniportWaveRT::DataRangeIntersection(
     GUID clientSubFormat = ClientDataRange->SubFormat;
     ULONG reqChannels = 0;
     ULONG reqBits = 0;
+    ULONG reqValidBits = 0;   // 格式升级一期：有效位深（24-in-32 时为 24）
     ULONG reqSampleRate = 0;
     DWORD reqChannelMask = 0;
     BOOLEAN isExtensible = FALSE;
@@ -210,6 +211,11 @@ CMiniportWaveRT::DataRangeIntersection(
         PKSDATAFORMAT_WAVEFORMATEXTENSIBLE clientWfe = (PKSDATAFORMAT_WAVEFORMATEXTENSIBLE)ClientDataRange;
         reqChannels = clientWfe->WaveFormatExt.Format.nChannels;
         reqBits = clientWfe->WaveFormatExt.Format.wBitsPerSample;
+        // 格式升级一期：有效位深单独保留——24-in-32 的容器位深是 32、
+        // 有效位深 24，范围校验用容器位深、resultant 回写用有效位深。
+        // 客户端给 0 时按容器位深（无填充位）处理。
+        reqValidBits = clientWfe->WaveFormatExt.Samples.wValidBitsPerSample;
+        if (reqValidBits == 0 || reqValidBits > reqBits) reqValidBits = reqBits;
         reqSampleRate = clientWfe->WaveFormatExt.Format.nSamplesPerSec;
         reqChannelMask = clientWfe->WaveFormatExt.dwChannelMask;
 
@@ -238,6 +244,7 @@ CMiniportWaveRT::DataRangeIntersection(
         PKSDATAFORMAT_WAVEFORMATEX clientWfx = (PKSDATAFORMAT_WAVEFORMATEX)ClientDataRange;
         reqChannels = clientWfx->WaveFormatEx.nChannels;
         reqBits = clientWfx->WaveFormatEx.wBitsPerSample;
+        reqValidBits = reqBits;   // 非扩展格式没有填充位概念
         reqSampleRate = clientWfx->WaveFormatEx.nSamplesPerSec;
         if (clientWfx->WaveFormatEx.wFormatTag == WAVE_FORMAT_PCM)
         {
@@ -280,6 +287,7 @@ CMiniportWaveRT::DataRangeIntersection(
             RETURN_STATUS(STATUS_NO_MATCH);
         }
         reqBits = myAudioRange->MaximumBitsPerSample;
+        reqValidBits = reqBits;   // 纯范围探询无具体格式，有效=容器
         isExtensible = (reqChannels > 2);
     }
     else
@@ -367,7 +375,9 @@ CMiniportWaveRT::DataRangeIntersection(
         pWfe->WaveFormatExt.Format.nBlockAlign = (WORD)((reqChannels * reqBits) / 8);
         pWfe->WaveFormatExt.Format.nAvgBytesPerSec = reqSampleRate * pWfe->WaveFormatExt.Format.nBlockAlign;
         pWfe->WaveFormatExt.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
-        pWfe->WaveFormatExt.Samples.wValidBitsPerSample = (WORD)reqBits;
+        // 格式升级一期：回写客户端的有效位深（旧实现硬写容器位深，
+        // 会把 24-in-32 谎报成 32 位有效，桥据此会按 int32 误转换）。
+        pWfe->WaveFormatExt.Samples.wValidBitsPerSample = (WORD)reqValidBits;
         pWfe->WaveFormatExt.dwChannelMask = reqChannelMask;
         pWfe->WaveFormatExt.SubFormat = myAudioRange->DataRange.SubFormat;
     }

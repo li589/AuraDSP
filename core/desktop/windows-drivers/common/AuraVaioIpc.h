@@ -42,7 +42,20 @@ Abstract:
 // Constants
 #define AURA_VAIO_MAGIC_RING            ((ULONG)('A' | ('U' << 8) | ('R' << 16) | ('B' << 24))) // 'AURB'
 #define AURA_VAIO_IPC_VERSION           1
-#define AURA_VAIO_DEFAULT_RING_SIZE     (64 * 1024) // 64 KB ring payload (4096 stereo float frames)
+// 格式升级一期（2026-11-12）：环有效载荷 64KB → 1MiB。8 声道 float
+// @192k 下旧环只有约 11ms 深度；1MiB 给到约 170ms 抖动容错。环只是
+// conduit（桥按 TW/WO 相对锚消费），变大不增加链路延迟。
+#define AURA_VAIO_DEFAULT_RING_SIZE     (1024 * 1024) // 1 MiB ring payload
+// 环数据区尺寸必须向下取整到 288 的倍数：288 = 全部可达 BlockAlign
+// {4,6,8,12,16,18,24,32}（声道 2/4/6/8 × 每样本 2/3/4 字节，含新增的
+// 24 位紧密格式 align 6/12/18/24）的最小公倍数，保证捕获 snap 距离
+// 与钳制丢弃量恒为帧倍数（白噪声专项 S1/S3a 的帧格不变量）。
+#define AURA_VAIO_RING_DATA_ALIGNMENT   288
+// 样本格式类别（共享头 FormatKind / MAP 响应同名字段）：
+// BitsPerSample 恒为容器位深，类型由此字段判别，不再靠位深猜。
+#define AURA_VAIO_FMT_UNSPEC            0   // 旧驱动未填（消费方走位深推断）
+#define AURA_VAIO_FMT_PCM               1   // PCM 整数（16 / 24 紧密 / 容器内整数）
+#define AURA_VAIO_FMT_FLOAT             2   // IEEE float32
 
 //=============================================================================
 // IOCTL Codes (FILE_DEVICE_UNKNOWN = 0x22, Custom function range 0x800-0x8FF)
@@ -110,8 +123,12 @@ typedef struct _AURA_VAIO_MAP_RESPONSE {
     ULONG   DataSizeBytes;          // Payload circular buffer size
     ULONG   SampleRate;             // Audio stream sample rate
     ULONG   Channels;               // Audio channels
-    ULONG   BitsPerSample;          // Bits per sample
+    ULONG   BitsPerSample;          // Bits per sample (container)
     ULONG   BlockAlign;             // Block align
+    // 格式升级一期（2026-11-12）尾部追加：旧驱动不会写这两字段，
+    // 消费方仅当 IOCTL 返回字节数覆盖到此处时才采信，否则降级推断。
+    ULONG   FormatKind;             // AURA_VAIO_FMT_PCM / AURA_VAIO_FMT_FLOAT
+    ULONG   ValidBitsPerSample;     // 有效位深（0 = 与容器位深相同）
 } AURA_VAIO_MAP_RESPONSE, *PAURA_VAIO_MAP_RESPONSE;
 
 typedef struct _AURA_VAIO_UNMAP_REQUEST {
@@ -138,7 +155,12 @@ typedef struct _AURA_VAIO_SHARED_HEADER {
     volatile ULONGLONG  TotalBytesWritten;      // Monotonic total bytes written by kernel
     volatile ULONGLONG  TotalBytesRead;         // Monotonic total bytes read by consumer
     volatile ULONG      StreamState;            // 0=STOP, 1=ACQUIRE, 2=PAUSE, 3=RUN
-    ULONG               Reserved[15];           // Future expansion
+    // 格式升级一期（2026-11-12）：原 Reserved[0]/[1] 转正。旧驱动整头
+    // 零初始化，两字段读到 0 = UNSPEC/同容器位深，消费方据此降级推断，
+    // 结构尺寸与 IPC 版本号都不变。
+    ULONG               FormatKind;             // AURA_VAIO_FMT_*
+    ULONG               ValidBitsPerSample;     // 0 = 与 BitsPerSample 相同
+    ULONG               Reserved[13];           // Future expansion
 } AURA_VAIO_SHARED_HEADER, *PAURA_VAIO_SHARED_HEADER;
 
 typedef struct _AURA_INTERSECTION_LOG_ENTRY {

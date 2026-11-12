@@ -101,7 +101,9 @@ AuraControlDevice_OnFormatChange(
     _In_ BOOLEAN Capture,
     _In_ ULONG SampleRate,
     _In_ ULONG Channels,
-    _In_ ULONG BitsPerSample
+    _In_ ULONG BitsPerSample,
+    _In_ ULONG FormatKind,
+    _In_ ULONG ValidBitsPerSample
     );
 
 VOID
