@@ -479,10 +479,11 @@ void main() {
       );
 
       TextStyle styleOf(String text) => tester
-          .widget<AnimatedDefaultTextStyle>(find.ancestor(
+          .widgetList<AnimatedDefaultTextStyle>(find.ancestor(
             of: find.text(text),
             matching: find.byType(AnimatedDefaultTextStyle),
           ))
+          .first
           .style;
 
       expect(styleOf('Welcome to AuraDSP').color, auraLight.text);
