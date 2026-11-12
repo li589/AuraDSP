@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../../../../core/design.dart';
 import '../../../../core/theme.dart';
 import '../../../../core/ui_helpers.dart';
 import '../models/lyric_models.dart';
@@ -233,7 +234,12 @@ class _LyricViewState extends State<LyricView> {
 
   @override
   Widget build(BuildContext context) {
-    final p = Theme.of(context).extension<AuraPalette>() ?? auraDark;
+    // palette 必须走 paletteOf（注册的扩展类型是 _Aura 包装类）：
+    // 曾误写 extension<AuraPalette>() —— 该类型从未注册、恒返回
+    // null 恒回退 auraDark，导致浅色主题下歌词恒用深色主题的近
+    // 白文字、压在浅色遮罩上看不清（2026-11-12 定罪，第十一轮
+    // 的对比度调整因此从未生效）。_LyricLineTile 同处已同步。
+    final p = paletteOf(context);
 
     if (widget.document.isEmpty) {
       return Center(
@@ -354,7 +360,7 @@ class _LyricLineTileState extends State<_LyricLineTile> {
 
   @override
   Widget build(BuildContext context) {
-    final p = Theme.of(context).extension<AuraPalette>() ?? auraDark;
+    final p = paletteOf(context);
     // 对比度（2026-10-31）：浅色主题下 textDim(#6E6A60) 再叠低透明度会
     // 与米色底融成一片。改为深色主题用低透明度、浅色主题用深色正文的
     // 高不透明度，保证“主次分明但清楚可读”。

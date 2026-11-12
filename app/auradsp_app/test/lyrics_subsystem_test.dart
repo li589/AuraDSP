@@ -443,8 +443,9 @@ void main() {
   group('LyricView Widget Tests', () {
     testWidgets('Renders empty state when document is empty', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
+        MaterialApp(
+          theme: withAuraExtension(ThemeData.dark(), auraDark),
+          home: const Scaffold(
             body: LyricView(
               document: LyricDocument.empty,
               activeIndex: -1,
@@ -456,6 +457,39 @@ void main() {
       expect(find.text('No lyrics loaded'), findsOneWidget);
     });
 
+    // 回归（2026-11-12 定罪）：LyricView 曾误用 extension<AuraPalette>()
+    // 取 palette —— 注册的扩展类型是 design.dart 的 _Aura 包装类，
+    // 该查找恒为 null、恒回退 auraDark，浅色主题下歌词恒为近白
+    // 文字压浅色遮罩。本用例钉死：浅色主题下当前行必须用浅色
+    // palette 的正文色、非当前行用其 0.88 透明度。
+    testWidgets('Lyric colors follow the LIGHT palette (no dark fallback)',
+        (tester) async {
+      final doc = LrcParser.parse('''
+[00:01.00]Hello world
+[00:05.00]Welcome to AuraDSP
+''');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: withAuraExtension(ThemeData.light(), auraLight),
+          home: Scaffold(
+            body: LyricView(document: doc, activeIndex: 1),
+          ),
+        ),
+      );
+
+      TextStyle styleOf(String text) => tester
+          .widget<AnimatedDefaultTextStyle>(find.ancestor(
+            of: find.text(text),
+            matching: find.byType(AnimatedDefaultTextStyle),
+          ))
+          .style;
+
+      expect(styleOf('Welcome to AuraDSP').color, auraLight.text);
+      expect(styleOf('Hello world').color,
+          auraLight.text.withValues(alpha: 0.88));
+    });
+
     testWidgets('Renders lines and highlights active line', (tester) async {
       final doc = LrcParser.parse('''
 [00:01.00]Hello world
@@ -464,6 +498,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          theme: withAuraExtension(ThemeData.dark(), auraDark),
           home: Scaffold(
             body: LyricView(
               document: doc,
