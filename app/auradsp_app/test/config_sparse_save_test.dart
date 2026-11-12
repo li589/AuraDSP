@@ -104,8 +104,11 @@ void main() {
   group('等价性电池：merge(baseline, sparse(full)) ≡ full', () {
     final codeBase = AppConfig().toJson();
     // 模拟发行默认层：与代码默认有若干处不同（含嵌套叶与列表）。
+    // 注意覆盖必须用 toJson 的真实键位（themeId 在 ui 节内）：
+    // 注入模式外键的基线不是合法默认层（生成层恒由 toJson 导出，
+    // 不可能含 fromJson 不认的键）——2026-11-12 首跑即栽在此。
     final distroBase = merge(codeBase, {
-      'themeId': 'aurora',
+      'ui': {'themeId': 'distro-theme'},
       'audio': {'asioBufSize': 256},
       'visualizer': _tweakFirstNumLeaf(codeBase['visualizer'] as Map),
     });
@@ -124,8 +127,7 @@ void main() {
           'vizFps': 24,
         }),
         '列表与字符串': producible(baseline, {
-          'themeId': 'custom-x',
-          'locale': 'en',
+          'ui': {'themeId': 'custom-x', 'locale': 'en'},
           'customScriptDirs': ['/tmp/scripts'],
           'audio': {'apoTargetEndpoint': '{dead-beef}'},
         }),
@@ -188,7 +190,7 @@ void main() {
 
     test('改过的键落盘、未改的不落盘，回读全等', () {
       final cfg = AppConfig()
-        ..themeId = 'aurora'
+        ..themeId = 'sparse-test-theme'
         ..closeToTray = false;
       cfg.asioBufSize = 512;
       cfg.pluginScanDirs = const [
@@ -198,8 +200,8 @@ void main() {
       final raw = jsonDecode(
           File(ConfigManager.configPath).readAsStringSync()) as Map;
       expect(raw['version'], 4);
-      expect(raw['themeId'], 'aurora');
-      expect(raw['closeToTray'], false);
+      expect((raw['ui'] as Map)['themeId'], 'sparse-test-theme');
+      expect((raw['ui'] as Map)['closeToTray'], false);
       expect((raw['audio'] as Map)['asioBufSize'], 512);
       expect((raw['audio'] as Map).length, 1,
           reason: 'audio 节只应落被改的 asioBufSize');
