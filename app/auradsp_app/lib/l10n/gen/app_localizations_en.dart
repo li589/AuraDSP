@@ -185,6 +185,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Switching modes only selects the attach target; use Attach / Detach below to actually apply or remove the APO.';
 
   @override
+  String get apoSwitchDetachTitle => 'Uninstalling System APO';
+
+  @override
+  String get apoSwitchDetachHint =>
+      'The mode switch first uninstalls the APO. Mode options stay locked until it finishes; the switch then applies automatically.';
+
+  @override
   String get apoEngineNoteActive =>
       'APO engine active: audio through this endpoint is processed by the AuraDSP engine in real time (the plugin chain does not run in APO mode).';
 

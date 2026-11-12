@@ -535,6 +535,13 @@ class AppModel extends ChangeNotifier {
   bool apoAttached = false;
   bool apoAnyAttached = false;
   String apoAttachedName = '';
+  // 切离 sysapo 的自动卸载（业主 2026-11-12）：在途旗标（UI
+  // 据此禁选模式卡 + 显示等待动画）、落定后续行的目标模式、
+  // 单测缝（真实卸载依赖提权工具与注册表，单测以此替代，
+  // 与 ConfigManager.baseDirOverride 同例）。
+  bool apoDetachBlocking = false;
+  String? _pendingModeAfterDetach;
+  Future<bool> Function()? apoDetachRunnerOverride;
   // status 枚举到的全部端点（第十二轮 B1）：自动附加的「目标仍
   // 存在」真值源；条目键为工具 status JSON 的 id/name 形状。
   List<Map<String, dynamic>> apoKnownEndpoints = [];

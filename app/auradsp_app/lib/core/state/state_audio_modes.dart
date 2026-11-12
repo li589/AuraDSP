@@ -50,8 +50,25 @@ extension AudioModesState on AppModel {
   /// 音频处理模式切换：非法 id 直接忽略；合法即落盘 + 通知。
   /// vbcallback/asio 切入/切出时联动 isolate 启停对应桥（WASAPI 路径随之
   /// 暂停/恢复）；其余模式当前仅持久化选择（引擎接线待后续版本，重启生效）。
+  ///
+  /// 离开 sysapo 的前置（业主 2026-11-12）：仍有端点附加时先把
+  /// APO 全部卸载再切换——卸载是提权异步操作，本函数在此拦截：
+  /// 置 apoDetachBlocking（UI 禁选 + 等待动画）、吞掉等待期间的
+  /// 一切切换请求，卸载成功后以原目标续行本函数；失败则留在
+  /// sysapo 并回滚各 setter 预写的范式/附加字段 + 错误通知。
+  /// 无端点附加时（从未附加/已手动卸载）不等待、直接切换。
   void setAudioMode(String id) {
     final valid = AudioModes.normalize(id);
+    if (audioMode == 'sysapo' && valid != 'sysapo') {
+      if (apoDetachBlocking) return; // 卸载在途：吞掉反复切换
+      if (apoAnyAttached || apoInstalledEndpoints.isNotEmpty) {
+        apoDetachBlocking = true;
+        _pendingModeAfterDetach = valid;
+        _notifyUi();
+        _runApoDetachThenMode();
+        return;
+      }
+    }
     config.modeCategory = AudioModes.categoryForMode(valid);
     if (config.modeCategory == AudioModes.categoryAttachment) {
       config.attachmentMode = (valid == 'vbcallback')
@@ -180,6 +197,43 @@ extension AudioModesState on AppModel {
         isolateSpawnSampleRate != config.sampleRate) {
       _pendingRestartPush = true;
       _restartIsolate();
+    }
+  }
+
+  /// 切离 sysapo 的卸载续行：先等面板侧可能在途的 detach 落定
+  /// （避免两个 apo_config 卸载进程并发），再执行全端点卸载。
+  /// 成功 → 以挂起目标重入 setAudioMode（此刻端点已空、门直
+  /// 通）；失败 → 回滚 setter 预写字段、留在 sysapo 并通知。
+  Future<void> _runApoDetachThenMode() async {
+    final target = _pendingModeAfterDetach;
+    _pendingModeAfterDetach = null;
+    var ok = false;
+    try {
+      var guard = 0;
+      while (isApoOperating && guard++ < 60) {
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+      if (apoInstalledEndpoints.isEmpty && !apoAnyAttached) {
+        ok = true; // 等待期间面板已卸净，无需再跑一遍
+      } else {
+        final runner = apoDetachRunnerOverride;
+        ok = runner != null ? await runner() : await detachSystemApo();
+      }
+    } catch (e, st) {
+      swallow(e, st);
+      ok = false;
+    }
+    apoDetachBlocking = false;
+    if (ok && target != null) {
+      setAudioMode(target);
+    } else {
+      config.modeCategory = AudioModes.categoryAttachment;
+      config.attachmentMode = AudioModes.attachSysApo;
+      postNotice(
+          '切换模式前卸载 System APO 失败，已保持 System APO 模式'
+          '${lastApoError != null ? '：$lastApoError' : ''}',
+          level: NoticeLevel.error);
+      _notifyUi();
     }
   }
 

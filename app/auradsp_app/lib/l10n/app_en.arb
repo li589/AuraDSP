@@ -70,6 +70,8 @@
   "setRefreshStatus": "Refresh status",
   "setApoSafetyNote": "Registry safety: all changes are atomically protected via HKLM\\SOFTWARE\\AuraDSP\\Child APOs plus a dual-layer disk snapshot; the original driver config is 100% restored on uninstall.",
   "apoModeHint": "Switching modes only selects the attach target; use Attach / Detach below to actually apply or remove the APO.",
+  "apoSwitchDetachTitle": "Uninstalling System APO",
+  "apoSwitchDetachHint": "The mode switch first uninstalls the APO. Mode options stay locked until it finishes; the switch then applies automatically.",
   "apoEngineNoteActive": "APO engine active: audio through this endpoint is processed by the AuraDSP engine in real time (the plugin chain does not run in APO mode).",
   "apoEngineDetail": "Engine actual: {rate} Hz · {ch} ch · {n} params applied",
   "@apoEngineDetail": {

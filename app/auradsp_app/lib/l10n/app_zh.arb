@@ -84,6 +84,8 @@
   "setRefreshStatus": "刷新状态",
   "setApoSafetyNote": "注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。",
   "apoModeHint": "模式切换仅选择附加目标；实际附加 / 卸载由下方「一键附加」「一键卸载」执行。",
+  "apoSwitchDetachTitle": "正在卸载 System APO",
+  "apoSwitchDetachHint": "模式切换需先完成卸载，期间模式选项暂时锁定；卸载完成后将自动切换，请勿重复操作。",
   "apoEngineNoteActive": "APO 引擎处理中：经过此端点的声音由 AuraDSP 引擎实时处理（插件链在 APO 模式下不生效）。",
   "apoEngineDetail": "引擎实测：{rate} Hz · {ch} 声道 · 已应用 {n} 个参数",
   "@apoEngineDetail": {

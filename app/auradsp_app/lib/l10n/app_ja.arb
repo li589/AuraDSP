@@ -70,6 +70,8 @@
   "setRefreshStatus": "状態を更新",
   "setApoSafetyNote": "レジストリ保護：すべての変更は HKLM\\SOFTWARE\\AuraDSP\\Child APOs とディスク二層スナップショットで原子的に保護され、アンインストール時に元のドライバー構成を 100% 復元します。",
   "apoModeHint": "モード切替は附加先の選択のみです。実際の附加 / 解除は下の「一括附加」「一括解除」で実行します。",
+  "apoSwitchDetachTitle": "System APO をアンインストール中",
+  "apoSwitchDetachHint": "モード切替の前に APO のアンインストールが必要です。完了するまでモード選択はロックされ、完了後に自動で切り替わります。",
   "apoEngineNoteActive": "APO エンジン処理中：このエンドポイントを通る音声は AuraDSP エンジンでリアルタイム処理されます（プラグインチェーンは APO モードでは動作しません）。",
   "apoEngineDetail": "エンジン実測：{rate} Hz · {ch} チャンネル · {n} パラメータ適用済",
   "@apoEngineDetail": {

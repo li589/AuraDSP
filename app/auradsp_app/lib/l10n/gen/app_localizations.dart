@@ -418,6 +418,18 @@ abstract class AppLocalizations {
   /// **'模式切换仅选择附加目标；实际附加 / 卸载由下方「一键附加」「一键卸载」执行。'**
   String get apoModeHint;
 
+  /// No description provided for @apoSwitchDetachTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在卸载 System APO'**
+  String get apoSwitchDetachTitle;
+
+  /// No description provided for @apoSwitchDetachHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'模式切换需先完成卸载，期间模式选项暂时锁定；卸载完成后将自动切换，请勿重复操作。'**
+  String get apoSwitchDetachHint;
+
   /// No description provided for @apoEngineNoteActive.
   ///
   /// In zh, this message translates to:

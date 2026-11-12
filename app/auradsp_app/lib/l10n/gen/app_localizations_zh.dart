@@ -179,6 +179,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get apoModeHint => '模式切换仅选择附加目标；实际附加 / 卸载由下方「一键附加」「一键卸载」执行。';
 
   @override
+  String get apoSwitchDetachTitle => '正在卸载 System APO';
+
+  @override
+  String get apoSwitchDetachHint => '模式切换需先完成卸载，期间模式选项暂时锁定；卸载完成后将自动切换，请勿重复操作。';
+
+  @override
   String get apoEngineNoteActive =>
       'APO 引擎处理中：经过此端点的声音由 AuraDSP 引擎实时处理（插件链在 APO 模式下不生效）。';
 

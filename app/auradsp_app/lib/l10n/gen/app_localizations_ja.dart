@@ -180,6 +180,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get apoModeHint => 'モード切替は附加先の選択のみです。実際の附加 / 解除は下の「一括附加」「一括解除」で実行します。';
 
   @override
+  String get apoSwitchDetachTitle => 'System APO をアンインストール中';
+
+  @override
+  String get apoSwitchDetachHint =>
+      'モード切替の前に APO のアンインストールが必要です。完了するまでモード選択はロックされ、完了後に自動で切り替わります。';
+
+  @override
   String get apoEngineNoteActive =>
       'APO エンジン処理中：このエンドポイントを通る音声は AuraDSP エンジンでリアルタイム処理されます（プラグインチェーンは APO モードでは動作しません）。';
 

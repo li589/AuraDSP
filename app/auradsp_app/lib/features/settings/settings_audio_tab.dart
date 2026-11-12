@@ -21,14 +21,17 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 第一级：两大范式选择
+          // 第一级：两大范式选择（切离 APO 的自动卸载在途时全卡
+          // 禁选——业主 2026-11-12：等待落定前如何点都不生效）
           AuraSegmented<String>(
             segments: [
               AuraSegment(AudioModes.categoryAttachment, l.paradigmAttachment),
               AuraSegment(AudioModes.categoryPipeline, l.paradigmPipeline),
             ],
             selected: model.modeCategory,
-            onChanged: (v) => model.setModeCategory(v),
+            onChanged: model.apoDetachBlocking
+                ? null
+                : (v) => model.setModeCategory(v),
           ),
           const SizedBox(height: AuraSpace.sm),
           // 第二级：细分形态
@@ -41,7 +44,9 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
                 AuraSegment(AudioModes.attachVoicemeeterApi, l.modeVoicemeeterApi),
               ],
               selected: model.attachmentMode,
-              onChanged: (v) => model.setAttachmentMode(v),
+              onChanged: model.apoDetachBlocking
+                  ? null
+                  : (v) => model.setAttachmentMode(v),
             ),
           ] else ...[
             // 管线模式：输入端 + 输出端（上下文字对齐，帮助提示统一由 InfoBadge 承担）
@@ -64,7 +69,9 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
                     tooltip: l.tooltipInputAsioDriver),
               ],
               selected: model.pipelineInput,
-              onChanged: (v) => model.setPipelineInput(v),
+              onChanged: model.apoDetachBlocking
+                  ? null
+                  : (v) => model.setPipelineInput(v),
             ),
             const SizedBox(height: AuraSpace.sm),
             Row(
@@ -86,12 +93,42 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
                     tooltip: l.tooltipOutputAsioClient),
               ],
               selected: model.pipelineOutput,
-              onChanged: (v) => model.setPipelineOutput(v),
+              onChanged: model.apoDetachBlocking
+                  ? null
+                  : (v) => model.setPipelineOutput(v),
             ),
           ],
         ],
       ),
     ),
+
+    // 1.5 切离 APO 自动卸载的等待区（业主 2026-11-12）：卸载在途
+    // 时在模式卡下方出大动画，模式卡全部选项已禁选，落定后自动
+    // 续行切换（成功）或留在 sysapo 并报错（失败）。
+    if (model.apoDetachBlocking)
+      SectionCard(
+        title: l.apoSwitchDetachTitle,
+        child: Column(
+          children: [
+            const SizedBox(height: AuraSpace.md),
+            SizedBox(
+              width: 56,
+              height: 56,
+              child: CircularProgressIndicator(
+                strokeWidth: 5,
+                color: p.accent,
+              ),
+            ),
+            const SizedBox(height: AuraSpace.md),
+            Text(
+              l.apoSwitchDetachHint,
+              textAlign: TextAlign.center,
+              style: labelOf(p, size: 12.5, color: p.textDim),
+            ),
+            const SizedBox(height: AuraSpace.sm),
+          ],
+        ),
+      ),
 
     // 2. 设备与精细化调节（根据当前范式与配置动态展示）
     SectionCard(
