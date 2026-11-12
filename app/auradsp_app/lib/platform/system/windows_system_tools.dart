@@ -108,12 +108,19 @@ final class WindowsSystemTools implements WindowsSystemPort {
       final resultFile = _asioResultFile();
       _deleteQuietly(resultFile);
       if (elevated) {
-        final tail = register
-            ? ", '-ResultFile', '\"${resultFile.path}\"'"
-            : ", '-Unregister', '-ResultFile', '\"${resultFile.path}\"'";
+        // ArgumentList 必须给单个预拼接字符串（2026-11-12 定罪）：
+        // 数组形态下 Start-Process 拼接不保内嵌引号，子进程又
+        // 是 powershell.exe（自有命令行解析）时，含空格路径的
+        // -File 参数被拆断、碎片被当命令名执行 → 弹窗报脚本
+        // 「无法识别为 cmdlet/函数/脚本文件」。开发机含空格路
+        // 径实测：数组形态脚本根本不执行、单字符串形态参数完
+        // 整到达。目标为 exe 的 apo_config 走 CommandLineToArgvW
+        // 解析、不受影响，故 APO 侧数组形态不改。
+        final argsLine = '-ExecutionPolicy Bypass -File "$scriptPath"'
+            '${register ? '' : ' -Unregister'}'
+            ' -ResultFile "${resultFile.path}"';
         final cmd =
-            'Start-Process powershell -Verb RunAs -Wait -ArgumentList '
-            '\'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"$scriptPath"\'$tail';
+            "Start-Process powershell -Verb RunAs -Wait -ArgumentList '$argsLine'";
         final res = await Process.run('powershell', ['-Command', cmd]);
         return _apoResultFromFile(res.exitCode, resultFile);
       }
@@ -133,10 +140,12 @@ final class WindowsSystemTools implements WindowsSystemPort {
     }
     final action = register ? 'register' : 'unregister';
     if (elevated) {
+      // 同 bundled 分支：单字符串 ArgumentList（数组形态在子
+      // powershell + 含空格路径下拆断 -File 参数，2026-11-12）。
+      final argsLine =
+          '-ExecutionPolicy Bypass -File "$scriptPath" -Action $action';
       final cmd =
-          'Start-Process powershell -Verb RunAs -Wait -ArgumentList '
-          '\'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"$scriptPath"\', '
-          '\'-Action\', \'$action\'';
+          "Start-Process powershell -Verb RunAs -Wait -ArgumentList '$argsLine'";
       final res = await Process.run('powershell', ['-Command', cmd]);
       return ApoRunResult(exitCode: res.exitCode);
     }
