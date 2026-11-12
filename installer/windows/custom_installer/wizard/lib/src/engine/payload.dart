@@ -157,11 +157,15 @@ Future<List<ManifestFile>> extractPayload(
             '（${p.basename(asidePath)}），新版已写入；'
             '让位文件将在下次安装/卸载时清理'),
       );
-      final bytes = await target.readAsBytes();
+      // 流式算 SHA + 长度（2026-11-12 内存治理）：旧实现把每个
+      // 落盘文件整份 readAsBytes 回内存只为算哈希，大文件（数十
+      // MB 级 DLL/资源）逐个制造同等大小的内存峰值；改 1MB 分块
+      // 流式摘要后峰值与文件大小脱钩。
+      final digest = await sha256.bind(target.openRead()).single;
       written.add(ManifestFile(
         path: rel,
-        size: bytes.length,
-        sha256: sha256.convert(bytes).toString(),
+        size: await target.length(),
+        sha256: digest.toString(),
       ));
       done++;
       onFile?.call(rel, done, total);

@@ -140,8 +140,15 @@ class InstallEngine {
       if (overwrite) {
         sink(const ProgressEvent('backup', 'snapshot', 0.04));
         backupDir = p.join(session, 'update-backup-${DateTime.now().millisecondsSinceEpoch}');
-        for (final f in plan!.previous?.manifest?.files ?? <ManifestFile>[]) {
+        final backupFiles =
+            plan!.previous?.manifest?.files ?? <ManifestFile>[];
+        for (var bi = 0; bi < backupFiles.length; bi++) {
+          final f = backupFiles[bi];
           if (isUserPath(f.path)) continue;
+          // 逐文件报进度分数：备份可达数千文件，此前全程无分数、
+          // 进度条长时间停在不确定态（2026-11-12 降载配套）。
+          sink(ProgressEvent('backup', f.path,
+              0.04 + 0.009 * (bi + 1) / backupFiles.length));
           final src = File(p.join(o.installDir, f.path));
           if (!await src.exists()) continue;
           final dst = File(p.join(backupDir, f.path));

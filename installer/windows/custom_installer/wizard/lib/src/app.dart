@@ -67,6 +67,14 @@ class _SetupShellState extends State<SetupShell> {
   bool _finishDesktopShortcut = true;
   DateTime _lastProgressPaint = DateTime.fromMillisecondsSinceEpoch(0);
 
+  /// 每次状态变更后同步背景冻结：安装/卸载运行中或等待提权时
+  /// 冻结极光步进（重活期间不做全窗渐变重绘，2026-11-12 降载）。
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    auroraFrozen.value = _running || _awaitingElevation;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -500,7 +508,7 @@ class _SetupShellState extends State<SetupShell> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const CircularProgressIndicator(),
+                      const SteppedSpinner(),
                       const SizedBox(height: 16),
                       Text(l.awaitingElevation,
                           style: const TextStyle(
@@ -923,11 +931,9 @@ class _SetupShellState extends State<SetupShell> {
         const SizedBox(height: 26),
         ClipRRect(
           borderRadius: BorderRadius.circular(6),
-          child: LinearProgressIndicator(
+          child: SteppedProgressBar(
             value: _running ? (_fraction <= 0 ? null : _fraction) : 1,
-            minHeight: 10,
-            backgroundColor: Aurora.panelRaised,
-            valueColor: const AlwaysStoppedAnimation(Aurora.accent),
+            height: 10,
           ),
         ),
         const SizedBox(height: 14),
