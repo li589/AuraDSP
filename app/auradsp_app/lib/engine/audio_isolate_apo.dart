@@ -562,6 +562,17 @@ class ApoTelemetryReader {
     // telemetry v2 起带真实分级回传（处理流显示）；v1 块保持静默
     // 占位（旧 APO DLL 与新 App 混跑的过渡形态）。
     final hasStage = u32[1] >= 2;
+    // 输入门控卡 IN/OUT 电平（2026-11-12 补漏）：进程内事件由
+    // FFI 帧 stageLevels[12]/[13] 派生（gate 输入/输出级），
+    // APO 事件此前未带这四键 → 状态层恒不更新、卡上电平恒空。
+    // telemetry 的 stageLevels 与引擎同一布局，直接同口径派生。
+    // 必须先落局部变量再进事件字面量：内联三元 f32[...] 写法
+    // 会触发 Dart AOT 编译器崩溃（flow_graph untagged->tagged，
+    // 开发机二分定位 2026-11-12）。
+    final inputInL = hasStage ? f32[80 + 12] : -120.0;
+    final inputInR = hasStage ? f32[112 + 12] : -120.0;
+    final inputOutL = hasStage ? f32[80 + 13] : -120.0;
+    final inputOutR = hasStage ? f32[112 + 13] : -120.0;
     _send?.call({
       'evt': 'viz',
       'backend': 'sysapo',
@@ -577,14 +588,10 @@ class ApoTelemetryReader {
       'stageR': hasStage
           ? List<double>.generate(32, (i) => f32[112 + i])
           : List<double>.filled(32, -90.0),
-      // 输入门控卡 IN/OUT 电平（2026-11-12 补漏）：进程内事件由
-      // FFI 帧 stageLevels[12]/[13] 派生（gate 输入/输出级），
-      // APO 事件此前未带这四键 → 状态层恒不更新、卡上电平恒空。
-      // telemetry 的 stageLevels 与引擎同一布局，直接同口径派生。
-      'inputInL': hasStage ? f32[80 + 12] : -120.0,
-      'inputInR': hasStage ? f32[112 + 12] : -120.0,
-      'inputOutL': hasStage ? f32[80 + 13] : -120.0,
-      'inputOutR': hasStage ? f32[112 + 13] : -120.0,
+      'inputInL': inputInL,
+      'inputInR': inputInR,
+      'inputOutL': inputOutL,
+      'inputOutR': inputOutR,
       'chCount': chCount,
       'chLevels': List<double>.generate(
           chCount, (i) => i == 0 ? levelL : (i == 1 ? levelR : -90.0)),
