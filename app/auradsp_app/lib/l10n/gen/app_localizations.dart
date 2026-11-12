@@ -484,6 +484,18 @@ abstract class AppLocalizations {
   /// **'未检测到 AuraVAIO 虚拟声卡驱动'**
   String get setVaioMissing;
 
+  /// No description provided for @setVaioGuardPaused.
+  ///
+  /// In zh, this message translates to:
+  /// **'上次会话异常结束，VAIO 桥自动启动已暂停（崩溃保护）'**
+  String get setVaioGuardPaused;
+
+  /// No description provided for @setVaioStartAnyway.
+  ///
+  /// In zh, this message translates to:
+  /// **'仍然启动'**
+  String get setVaioStartAnyway;
+
   /// No description provided for @setVaioUnknown.
   ///
   /// In zh, this message translates to:

@@ -99,6 +99,8 @@
   "setVaioReady": "auravaio kmdf {track} ドライバー準備完了（sysvad）",
   "@setVaioReady": {"placeholders": {"track": {"type": "String"}}},
   "setVaioMissing": "AuraVAIO 仮想サウンドカードドライバーが見つかりません",
+  "setVaioGuardPaused": "前回のセッションが異常終了したため、VAIO ブリッジの自動起動を停止しています（クラッシュ保護）",
+  "setVaioStartAnyway": "それでも起動",
   "setVaioUnknown": "AuraVAIO ドライバーの状態は未検出です",
   "setInstallDriverUac": "ドライバーをインストール（UAC）",
   "setInstallDriverUacPrompt": "管理者権限をリクエストしています。システムのプロンプトでドライバーコンポーネントのインストールを許可してください…",

@@ -223,6 +223,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setVaioMissing => '未检测到 AuraVAIO 虚拟声卡驱动';
 
   @override
+  String get setVaioGuardPaused => '上次会话异常结束，VAIO 桥自动启动已暂停（崩溃保护）';
+
+  @override
+  String get setVaioStartAnyway => '仍然启动';
+
+  @override
   String get setVaioUnknown => 'AuraVAIO 驱动状态未检测';
 
   @override

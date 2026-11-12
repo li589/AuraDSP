@@ -99,6 +99,8 @@
   "setVaioReady": "auravaio kmdf {track} driver ready (sysvad)",
   "@setVaioReady": {"placeholders": {"track": {"type": "String"}}},
   "setVaioMissing": "AuraVAIO virtual sound card driver not detected",
+  "setVaioGuardPaused": "Previous session ended unexpectedly; VAIO bridge autostart is paused (crash protection)",
+  "setVaioStartAnyway": "Start anyway",
   "setVaioUnknown": "AuraVAIO driver status not checked yet",
   "setInstallDriverUac": "Install driver (UAC)",
   "setInstallDriverUacPrompt": "Requesting administrator permission; please approve the system prompt to install audio driver components...",

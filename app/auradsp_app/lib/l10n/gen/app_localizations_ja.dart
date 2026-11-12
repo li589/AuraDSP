@@ -225,6 +225,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setVaioMissing => 'AuraVAIO 仮想サウンドカードドライバーが見つかりません';
 
   @override
+  String get setVaioGuardPaused =>
+      '前回のセッションが異常終了したため、VAIO ブリッジの自動起動を停止しています（クラッシュ保護）';
+
+  @override
+  String get setVaioStartAnyway => 'それでも起動';
+
+  @override
   String get setVaioUnknown => 'AuraVAIO ドライバーの状態は未検出です';
 
   @override

@@ -120,6 +120,8 @@
   "setVaioReady": "auravaio kmdf {track} 驱动已就绪（sysvad）",
   "@setVaioReady": {"placeholders": {"track": {"type": "String"}}},
   "setVaioMissing": "未检测到 AuraVAIO 虚拟声卡驱动",
+  "setVaioGuardPaused": "上次会话异常结束，VAIO 桥自动启动已暂停（崩溃保护）",
+  "setVaioStartAnyway": "仍然启动",
   "setVaioUnknown": "AuraVAIO 驱动状态未检测",
   "setInstallDriverUac": "UAC提权安装驱动",
   "setInstallDriverUacPrompt": "正在唤起系统管理员授权，请在系统提示中点击允许安装驱动组件...",

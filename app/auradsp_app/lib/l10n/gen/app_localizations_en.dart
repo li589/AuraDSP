@@ -232,6 +232,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'AuraVAIO virtual sound card driver not detected';
 
   @override
+  String get setVaioGuardPaused =>
+      'Previous session ended unexpectedly; VAIO bridge autostart is paused (crash protection)';
+
+  @override
+  String get setVaioStartAnyway => 'Start anyway';
+
+  @override
   String get setVaioUnknown => 'AuraVAIO driver status not checked yet';
 
   @override

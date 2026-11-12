@@ -359,6 +359,52 @@ class _ErrorBanner extends StatelessWidget {
   }
 }
 
+/// 断路器暂停横幅（第二十一轮用户裁定）：崩溃断路器跳过
+/// VAIO 自动起桥后，设备页必须有常驻显式状态与一键出口，
+/// 不能只靠一条易错过的通知（真机实证：用户误判为驱动
+/// 损坏并反复卸载驱动）。按钮即知情接管，与手动重选
+/// VAIO 模式同语义（AppModel.startVaioDespiteGuard）。
+class _VaioGuardBanner extends StatelessWidget {
+  final AppModel model;
+  const _VaioGuardBanner({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+    return Container(
+      margin: const EdgeInsets.only(top: AuraSpace.xs + 2),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AuraSpace.sm + 2, vertical: AuraSpace.xs + 2),
+      decoration: BoxDecoration(
+        color: p.warning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        border: Border.all(color: p.warning.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.pause_circle_outline_rounded,
+              size: 16, color: p.warning),
+          const SizedBox(width: AuraSpace.sm),
+          Expanded(
+            child: Text(
+              l.setVaioGuardPaused,
+              style: TextStyle(fontSize: 11.5, color: p.warning),
+            ),
+          ),
+          const SizedBox(width: AuraSpace.sm),
+          AuraChip(
+            l.setVaioStartAnyway,
+            icon: Icons.play_arrow_rounded,
+            selected: true,
+            onTap: () => model.startVaioDespiteGuard(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _VaioDriverRow extends StatelessWidget {
   final AppModel model;
   const _VaioDriverRow({required this.model});
@@ -433,12 +479,25 @@ class _VaioDriverRow extends StatelessWidget {
           onTap: () => model.refreshVaioDetect(),
         ),
       ],
-      below: model.lastVaioError == null
-          ? null
-          : _ErrorBanner(
-              message: model.lastVaioError!,
-              onDismiss: () => model.clearVaioError(),
-            ),
+      below: _below(),
+    );
+  }
+
+  /// 尾随区：断路器暂停横幅（在时恒显）+ 驱动动作错误条
+  /// （在时其后）。两者皆无时返回 null，保持块版式紧凑。
+  Widget? _below() {
+    final showGuard = model.vaioGuardBlocksCurrentMode;
+    if (!showGuard && model.lastVaioError == null) return null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (showGuard) _VaioGuardBanner(model: model),
+        if (model.lastVaioError != null)
+          _ErrorBanner(
+            message: model.lastVaioError!,
+            onDismiss: () => model.clearVaioError(),
+          ),
+      ],
     );
   }
 }

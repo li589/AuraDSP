@@ -423,6 +423,40 @@ extension AudioModesState on AppModel {
     VaioBootGuard.disarm(ConfigManager.dataDir);
   }
 
+  /// 断路器暂停是否正挡着当前模式的 VAIO 桥（设备页横幅的显
+  /// 示条件）：已跳过且当前模式/合成链确实要走 VAIO 桥时才
+  /// 为真——切到无关模式后横幅自然消失（tripped 本身仍留待
+  /// 手动接管或下次构造消费，语义不变）。
+  bool get vaioGuardBlocksCurrentMode =>
+      vaioBootGuardTripped &&
+      (audioMode == 'vaio' || pipelineChain == PipelineChain.vaio);
+
+  /// 设备页「仍然启动 VAIO」（第二十一轮用户裁定）：断路器
+  /// 跳过自动起桥后，用户在设备页知情接管——等同手动重选
+  /// VAIO 模式的接管语义（清跳过态、重新布防），起桥走与
+  /// ready 恢复相同的直发口径；管线类别下合成链非 vaio 时
+  /// 交由对账按当前链收口（门已清除，对账不再被挡）。
+  void startVaioDespiteGuard() {
+    if (!vaioBootGuardTripped) return;
+    vaioBootGuardTripped = false;
+    dbgLog('vaio-guard: user started VAIO anyway from device panel; '
+        'breaker cleared');
+    if (audioMode == 'vaio' &&
+        !_pipelineIoSuppressed &&
+        pipelineChain != PipelineChain.capture &&
+        pipelineChain != PipelineChain.asio) {
+      _toIso?.send({
+        'cmd': 'vaiomode',
+        'on': true,
+        'outputEndpoint': config.vaioOutputEndpoint,
+      });
+      _armVaioGuard();
+    } else {
+      applyPipelineChain();
+    }
+    _notifyUi();
+  }
+
   void applyPipelineChain() {
     if (!PlatformProfile.supportsBridges) return;
     // 第七轮 S2（项 5）：开关总闸——任一关闭，合成链不下发，在跑

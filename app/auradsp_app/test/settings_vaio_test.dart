@@ -55,5 +55,42 @@ void main() {
       await tester.pumpAndSettle();
       expect(model.config.vaioOutputEndpoint, 'Realtek High Definition Audio');
     });
+
+    // 第二十一轮：断路器跳过态必须在设备页 VAIO 块有常驻横幅
+    // 与一键「仍然启动」；跳过态在进入 VAIO 之后置位（手动进入
+    // 本身会清除它，故以字段直注复现 ready 跳过的会话内状态）。
+    testWidgets('guard tripped in vaio mode shows banner; start-anyway clears',
+        (tester) async {
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+      await tester.pumpWidget(_app(model));
+      await tester.pumpAndSettle();
+      model.setAudioMode('vaio');
+      model.setPipelineInput('vaio');
+      model.vaioBootGuardTripped = true;
+      model.notifyListeners();
+      await tester.pumpAndSettle();
+      expect(model.vaioGuardBlocksCurrentMode, isTrue);
+      expect(find.text('仍然启动'), findsOneWidget);
+      await tester.tap(find.text('仍然启动'));
+      await tester.pumpAndSettle();
+      expect(model.vaioBootGuardTripped, isFalse);
+      expect(find.text('仍然启动'), findsNothing);
+    });
+
+    testWidgets('guard tripped without vaio chain shows no banner',
+        (tester) async {
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+      await tester.pumpWidget(_app(model));
+      await tester.pumpAndSettle();
+      model.setPipelineInput('wasapi');
+      model.setPipelineOutput('wasapi');
+      model.vaioBootGuardTripped = true;
+      model.notifyListeners();
+      await tester.pumpAndSettle();
+      expect(model.vaioGuardBlocksCurrentMode, isFalse);
+      expect(find.text('仍然启动'), findsNothing);
+    });
   }, skip: !PlatformProfile.isWindows ? 'VAIO settings panel is Windows only' : null);
 }
