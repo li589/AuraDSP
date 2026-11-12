@@ -4,6 +4,7 @@ import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
 import 'package:auradsp_app/features/settings_page.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
+import 'package:auradsp_app/ui/chrome.dart';
 import 'package:auradsp_app/platform/platform_profile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -71,8 +72,14 @@ void main() {
       model.notifyListeners();
       await tester.pumpAndSettle();
       expect(model.vaioGuardBlocksCurrentMode, isTrue);
-      expect(find.text('仍然启动'), findsOneWidget);
-      await tester.tap(find.text('仍然启动'));
+      // 点 chip 本体（内层 Text 的中心点落在壳层 Stack 的命中
+      // 链外，首跑实证 tap 落空）：先滚入视口再点。
+      final chip = find.byWidgetPredicate(
+          (w) => w is AuraChip && w.label == '仍然启动');
+      expect(chip, findsOneWidget);
+      await tester.ensureVisible(chip);
+      await tester.pumpAndSettle();
+      await tester.tap(chip);
       await tester.pumpAndSettle();
       expect(model.vaioBootGuardTripped, isFalse);
       expect(find.text('仍然启动'), findsNothing);
