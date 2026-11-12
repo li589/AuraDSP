@@ -500,11 +500,17 @@ class _SystemApoPanel extends StatelessWidget {
         ),
         // APO 引擎状态行（立项 P3，撤下第四轮的透传止损标注）：
         // sysapo 模式且已附加时按 telemetry 回传呈现真实状态——
-        // 处理中（accent）/ 故障已退回直通（warning）/ 等待就绪
-        // （dim）。状态来自 audiodg 内座位实例的回传块，非推测。
-        // 全面复审 S2（APO-7）的实测明细（rate/channels/params）
-        // 第十二轮 D 起收进本行的悬停气泡，不再单独占一行。
-        if (model.audioMode == 'sysapo' && model.apoAnyAttached)
+        // 故障已退回直通（warning）/ 等待就绪（dim）。状态来自
+        // audiodg 内座位实例的回传块，非推测。全面复审 S2
+        // （APO-7）的实测明细（rate/channels/params）第十二轮 D
+        // 起收进本行的悬停气泡，不再单独占一行。
+        // 「处理中」绿字行已按业主 2026-11-12 裁定移除：正常处
+        // 理是常态、不需要一行常驻文案；故障/加载失败/等待仍显。
+        if (model.audioMode == 'sysapo' &&
+            model.apoAnyAttached &&
+            !(model.apoEngineActive &&
+                !model.apoEngineFault &&
+                !apoLoadFailed))
           Padding(
             padding: const EdgeInsets.only(top: 2, bottom: 2),
             child: model.apoEngineRate > 0
