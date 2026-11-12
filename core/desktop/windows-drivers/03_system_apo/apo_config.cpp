@@ -1740,7 +1740,38 @@ RestoreResult StripOursFromFx(const Endpoint& ep) {
 // 自报的真实成败与原因，而不是猜测失败层。
 std::wstring g_resultFile;
 
-void Out(const std::string& utf8) { fwrite(utf8.data(), 1, utf8.size(), stdout); }
+void Out(const std::string& utf8) {
+    // 控制台直写 UTF-16（2026-11-12 用户实测修复）：本工具的字节
+    // 流恒为 UTF-8——重定向到管道/文件时原样写出（App 按 UTF-8
+    // 解码 JSON，结果文件同口径）；但交互控制台按代码页解码字
+    // 节流，默认 936 必乱码，chcp 65001 下 conhost 对分段写入的
+    // UTF-8 解码同样不可靠（仍乱码）。真控制台改为转宽字符走
+    // WriteConsoleW，与代码页彻底无关。
+    static const bool isConsole = [] {
+        DWORD mode = 0;
+        HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+        return h != nullptr && h != INVALID_HANDLE_VALUE &&
+               GetFileType(h) == FILE_TYPE_CHAR &&
+               GetConsoleMode(h, &mode) != 0;
+    }();
+    if (isConsole) {
+        const int n = MultiByteToWideChar(
+            CP_UTF8, 0, utf8.data(), static_cast<int>(utf8.size()),
+            nullptr, 0);
+        if (n > 0) {
+            std::wstring w(static_cast<size_t>(n), L'\0');
+            MultiByteToWideChar(CP_UTF8, 0, utf8.data(),
+                                static_cast<int>(utf8.size()), w.data(),
+                                n);
+            DWORD written = 0;
+            WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), w.data(),
+                          static_cast<DWORD>(w.size()), &written,
+                          nullptr);
+            return;
+        }
+    }
+    fwrite(utf8.data(), 1, utf8.size(), stdout);
+}
 void OutLine(const std::string& utf8) {
     Out(utf8);
     Out("\n");
