@@ -220,6 +220,16 @@ struct VaioBridgeCtl {
     volatile LONG phaseResyncs = 0;
     volatile LONG phaseSkew = 0;
 
+    // 白噪声专项 S3b（2026-11-12）：PCM16 环帧相位自愈。驱动侧
+    // 帧量化（S3a）是根治；此处为桥侧防御纵深，覆盖旧驱动：环
+    // 字节流被旋转出帧格奇数个字节时，每块按双候选成帧的平滑
+    // 度投票，连续 3 块决定性胜出即把读偏移 +1 字节换相位，使
+    // 毒性字节序错位在约 30 ms 内自愈。ringPhaseShift/phaseVote
+    // 仅泵线程读写；phaseFlips 经 Interlocked 递增供 status 读。
+    int ringPhaseShift = 0;  // 0/1：当前附加的读相位（字节）
+    int phaseVote = 0;       // 换相位连续投票计数
+    volatile LONG phaseFlips = 0;  // 已执行换相位次数（status 输出）
+
     // 驱动版本缓存（start 时经同一控制句柄查一次）：detect 在桥
     // 运行期不得再开控制设备（第六轮项 1 定罪，见 vaio_detect），
     // 其版本/状态输出改由本缓存与环几何合成。
@@ -954,6 +964,13 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             phys %= (LONGLONG)dataSize;
             if (phys < 0) phys += dataSize;
             ULONG readOffset = (ULONG)phys;
+            // S3b：帧相位自愈的读偏移附加（检测段在转换后）。消费
+            // 字节计数不受影响——读的字节数不变，仅起始相位移
+            // 1 字节，尾部由既有 +1 帧前视兜底，环读恒在界内。
+            if (ringBits == 16 && g_vaio.ringPhaseShift != 0) {
+                readOffset += 1;
+                if (readOffset >= dataSize) readOffset -= dataSize;
+            }
             ULONG chunk1 = dataSize - readOffset;
             if (chunk1 >= rawBytes) {
                 memcpy(g_vaio.scratchRaw, pPayload + readOffset, rawBytes);
@@ -965,6 +982,47 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             if (ringBits == 16 || ringBits == 32) {
                 ConvertRingToFloat(g_vaio.scratchRaw, g_vaio.scratchRing,
                                    (int)readInFrames, (int)ringChannels, ringBits);
+                // S3b 帧相位检测（仅 PCM16）：scratchRaw 已按当前
+                // 相位读出，本地偏移 0 成帧 = 当前成帧，偏移 1 =
+                // 另一成帧。逐帧取等距 int16 样本比较一阶差分均
+                // 值——正确成帧的音频平滑（差分小），字节序错位
+                // 成帧呈低字节锯齿（差分大）。另一成帧以 <0.45 倍
+                // 决定性胜出、且当前成帧非近静音（均值 >0.02）
+                // 时投票，连续 3 块翻转 ringPhaseShift（下一块
+                // 起生效）；任一不满足即清票，噪声类素材两成帧
+                // 同样粗糙、比值近 1，不会误触发。
+                if (ringBits == 16 && readInFrames >= 64 && blockAlign >= 2) {
+                    const int probeFrames =
+                        readInFrames < 256 ? (int)readInFrames : 256;
+                    double diffSum[2] = {0.0, 0.0};
+                    for (int s = 0; s < 2; ++s) {
+                        int prev = 0;
+                        for (int j = 0; j < probeFrames; ++j) {
+                            const BYTE* p = g_vaio.scratchRaw +
+                                            (size_t)j * blockAlign + s;
+                            const int v = (int)(int16_t)(p[0] | (p[1] << 8));
+                            if (j > 0) {
+                                diffSum[s] += v >= prev
+                                                  ? (double)(v - prev)
+                                                  : (double)(prev - v);
+                            }
+                            prev = v;
+                        }
+                    }
+                    const double cur =
+                        diffSum[0] / (probeFrames - 1) / 32768.0;
+                    const double alt =
+                        diffSum[1] / (probeFrames - 1) / 32768.0;
+                    if (cur > 0.02 && alt < cur * 0.45) {
+                        if (++g_vaio.phaseVote >= 3) {
+                            g_vaio.ringPhaseShift ^= 1;
+                            g_vaio.phaseVote = 0;
+                            InterlockedIncrement(&g_vaio.phaseFlips);
+                        }
+                    } else {
+                        g_vaio.phaseVote = 0;
+                    }
+                }
                 // S4 取证：首个真实数据块采集一次（每 start 一次，
                 // 不在持续热路径上）。错位统计把同一批字节按 +1
                 // 字节重释为 int16——若错位口径反而呈低峰/结构化，
@@ -1333,6 +1391,10 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     InterlockedExchange(&g_vaio.fmtResyncs, 0);
     InterlockedExchange(&g_vaio.phaseResyncs, 0);
     InterlockedExchange(&g_vaio.phaseSkew, 0);
+    // S3b 帧相位自愈复位（每 start 从未换相位状态开始）。
+    InterlockedExchange(&g_vaio.phaseFlips, 0);
+    g_vaio.ringPhaseShift = 0;
+    g_vaio.phaseVote = 0;
     g_vaio.fxPeak = 0;
     g_vaio.fxMeanAbs = 0;
     g_vaio.fxPeakShift = -1;
@@ -1900,9 +1962,10 @@ int vaio_status(char* out, int cap) {
     {
         const int m = _snprintf_s(
             out + total, (size_t)(cap - total), _TRUNCATE,
-            ",\"phaseResyncs\":%ld,\"phaseSkew\":%ld",
+            ",\"phaseResyncs\":%ld,\"phaseSkew\":%ld,\"phaseFlips\":%ld",
             InterlockedCompareExchange(&g_vaio.phaseResyncs, 0, 0),
-            InterlockedCompareExchange(&g_vaio.phaseSkew, 0, 0));
+            InterlockedCompareExchange(&g_vaio.phaseSkew, 0, 0),
+            InterlockedCompareExchange(&g_vaio.phaseFlips, 0, 0));
         if (m < 0) return -1;
         total += m;
     }
