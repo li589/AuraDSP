@@ -683,42 +683,9 @@ class _ActivePluginHero extends StatelessWidget {
         ),
         child: Column(
           children: [
-            // 槽级加载/卸载动画（2026-10-22 用户需求）：进度条 + 动作文案，
-            // per-slot busy 驱动——切到别的槽不受影响。大插件 5-6s 加载
-            // 期间全按钮禁用（过分操作防护），音频侧旧插件已卸/新插件
-            // 未就绪时链路直通不断音。
-            // 卸载不显示此大动画（用户：多余）——trailing 小标已够。
-            if (isBusy && manager.slotBusyAction(slot) == 'load') ...[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(2),
-                child: LinearProgressIndicator(
-                  minHeight: 3,
-                  color: p.accent,
-                  backgroundColor: p.hairline,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: p.accent,
-                    ),
-                  ),
-                  const SizedBox(width: AuraSpace.xs),
-                  Text(
-                    manager.slotBusyAction(slot) == 'unload'
-                        ? l10nOf(context).plugUnloading
-                        : l10nOf(context).plugLoading,
-                    style: labelOf(p, size: 11, color: p.textDim),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AuraSpace.sm),
-            ],
+            // 槽级加载动画（标题行下方）已按业主 2026-11-12 裁定
+            // 移除：替换插件时与标题行 trailing 的「加载中」重复，
+            // 只保留标题行那一处。
             // 三动作临时入口（业主 2026-11-12 立项）：sysapo 下编
             // 辑器打开时显示——调音不必关窗才在 APO 生效。编辑器
             // 窗口内原生浮条是后续大项，本行先行可用，动作引擎
