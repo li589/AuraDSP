@@ -103,6 +103,28 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // 第十八轮定罪（vm-win10 2026-11-12 17:06 dump 全内存解析，
+  // 与第十/十二轮的修法互补）：退出崩溃的致命投递不是 OnDestroy
+  // 期间的重入——它发生在 OnDestroy 之前。引擎在自身关闭流程中
+  // 销毁子视图 HWND 时，父窗口收到 WM_PARENTNOTIFY(wparam=
+  // WM_DESTROY, lparam=子视图 HWND)；此刻 flutter_controller_
+  // 仍完整登记、destroying_ 仍为 false，MessageHandler 照常把
+  // 消息委托给 HandleTopLevelWindowProc，而引擎内部视图指针
+  // 已在销毁中置空——读 [null+0x10] 触发 c0000005
+  // （flutter_windows+0x1e220，异常参数 [0, 0x10]），异常逃出
+  // 窗口回调再被系统以 c000041d 二次抛出，故一次退出落两个
+  // dump。此前三轮守卫（移空/闩锁/撤销关联）都布防在 OnDestroy
+  // 路径上，拦不住这条先行投递。故：销毁类通知一律不委托——
+  // 子视图销毁通知（引擎自己拆的，无插件语义）、本窗口的
+  // WM_DESTROY / WM_NCDESTROY（委托它正是让引擎在拆解中自伤
+  // 的入口；控制器的有序拆除由 OnDestroy 的 reset 完成）。
+  // WM_CLOSE 不在此列：window_manager 的 preventClose 拦截
+  // 依赖它被委托（第十二轮 A2 口径不动）。
+  if (message == WM_DESTROY || message == WM_NCDESTROY ||
+      (message == WM_PARENTNOTIFY && LOWORD(wparam) == WM_DESTROY)) {
+    destroying_ = true;
+    return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+  }
   // 第十轮项 1：销毁开始后不再把任何消息交给控制器 proc
   // （与 OnDestroy 的分发关联撤销双保险）。
   if (destroying_) {
