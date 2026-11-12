@@ -56,6 +56,10 @@ PLATFORM_ANY = {
     "smoke_apo_plugin_layout.py",
     "smoke_round5_forensics.py",
     "smoke_round6_vaio_unmap.py",
+    # VAIO 时钟帧格门（2026-11-12，白噪声专项 S3）：宿主编译真实
+    # VirtualClock 实跑帧格不变量 + 量化/钳制源码断言，两平台可跑
+    # （无宿主编译器时 SKIP）。
+    "smoke_vaio_clock_grid.py",
     # win_env_sanitize 环境块截断门（2026-11-11）：合成缓冲实测
     # parse_block 在双 NUL 终止符处截断（幻影条目不得入净化结果），
     # 纯 Python，两平台可跑。
@@ -364,6 +368,7 @@ def run_smoke_tests():
     "smoke_apo_plugin_layout.py",
     "smoke_round5_forensics.py",
     "smoke_round6_vaio_unmap.py",
+    "smoke_vaio_clock_grid.py",
     "smoke_win_env_sanitize.py",
     "smoke_ps1_bom.py",
     "smoke_round7_vaio_fmt.py",

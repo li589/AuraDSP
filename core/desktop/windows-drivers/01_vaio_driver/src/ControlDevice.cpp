@@ -361,7 +361,7 @@ AuraControlDevice_DispatchDeviceControl(
             // 语义是「驱动源码版本日期」，随驱动源码变更手工同步；
             // BuildTime 在可复现构建下不跟踪钟点，恒 00:00:00。
             // 精确构建时刻看 INF 的 DriverVer（打包时由 MSBuild 盖戳）。
-            RtlStringCchCopyA(pVer->BuildDate, sizeof(pVer->BuildDate), "2026-11-11");
+            RtlStringCchCopyA(pVer->BuildDate, sizeof(pVer->BuildDate), "2026-11-12");
             RtlStringCchCopyA(pVer->BuildTime, sizeof(pVer->BuildTime), "00:00:00");
 
             bytesReturned = sizeof(AURA_VAIO_VERSION_INFO);

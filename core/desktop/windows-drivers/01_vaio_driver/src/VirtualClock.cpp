@@ -76,7 +76,8 @@ CAuraVirtualClock::Stop(
 ULONG
 CAuraVirtualClock::Advance(
     _In_ ULONGLONG QpcNow,
-    _In_ ULONG     BytesPerSecond
+    _In_ ULONG     BytesPerSecond,
+    _In_ ULONG     BlockAlign
     )
 {
     ULONGLONG   Accum;
@@ -103,7 +104,23 @@ CAuraVirtualClock::Advance(
     m_ullLastQpc = QpcNow;
 
     BytesAdvanced  = Accum / m_ullQpcFrequency;
-    m_ullRemainder = Accum % m_ullQpcFrequency;
+
+    //
+    // Frame quantization (white-noise project S3, 2026-11-12): only whole
+    // frames may move the cursors.  The sub-frame part is NOT discarded --
+    // it folds back into the remainder below (still in byte*tick units),
+    // so the long-run rate is exact; only the cursor phase is pinned to
+    // the frame grid.  Without this, any later drop of a non-frame-multiple
+    // byte count (stall clamp in AdvanceAndCopyLocked, ring overflow trim
+    // in WriteRenderSamples) rotates the ring byte stream against the
+    // frame grid and int16 samples read back byte-swapped indefinitely.
+    //
+    if (BlockAlign > 1)
+    {
+        BytesAdvanced -= BytesAdvanced % BlockAlign;
+    }
+
+    m_ullRemainder = Accum - (BytesAdvanced * m_ullQpcFrequency);
 
     m_ullPlayOffset  += BytesAdvanced;
     m_ullWriteOffset += BytesAdvanced;

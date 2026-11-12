@@ -175,6 +175,13 @@ CMiniportWaveRTStream::SetFormat(
         m_ulBlockAlign      = wfx->nBlockAlign;
         m_ulBytesPerSecond  = wfx->nAvgBytesPerSec;
 
+        // 白噪声专项 S3（2026-11-12）：换格式不重置时钟偏移——
+        // 偏移的绝对相位无意义（桥按 WO/TW 锚相对读取、引擎按
+        // 上报位置重同步），毒性只来自非帧倍数的丢弃/重复；此后
+        // Advance 按新帧格量化推进、拷贝窗口保持连续，钳制丢弃
+        // 量由 AdvanceAndCopyLocked 贴帧保证。旧格式尾部数据由
+        // 桥的几何重同步丢弃，不在此处理。
+
         AuraControlDevice_OnFormatChange(m_bCapture, wfx->nSamplesPerSec, wfx->nChannels, wfx->wBitsPerSample);
     }
 
@@ -265,7 +272,7 @@ CMiniportWaveRTStream::AdvanceAndCopyLocked(
     )
 {
     ULONGLONG oldPlay = m_Clock.PlayOffset();
-    ULONG bytesAdvanced = m_Clock.Advance(QpcNow, m_ulBytesPerSecond);
+    ULONG bytesAdvanced = m_Clock.Advance(QpcNow, m_ulBytesPerSecond, m_ulBlockAlign);
 
     if (bytesAdvanced == 0 || m_pDmaBuffer == NULL || m_ulBufferSize == 0)
     {
@@ -280,8 +287,22 @@ CMiniportWaveRTStream::AdvanceAndCopyLocked(
         // 的内容，起点须随之前移 (oldPlay + advanced - size)——
         // 此前仍从 oldPlay 起搬，窗口与播放位置错位 (advanced -
         // size) 字节且永不自愈（与第七轮桥侧模偏移同类病）。
+        // 白噪声专项 S3（2026-11-12）：丢弃量 = advanced - toProcess
+        // 必须为帧倍数，否则环字节流被旋转出帧格（见 VirtualClock
+        // 帧量化注释）。时钟量化后 advanced 已是帧倍数；此处再把
+        // toProcess 向下贴到帧倍数，使钳制不依赖缓冲大小的来源
+        // （缓冲按分配时点的 BlockAlign 取整，运行中换格式后
+        // 未必仍是现行帧格的倍数）。
         bytesToProcess = m_ulBufferSize;
-        startPlay = oldPlay + (bytesAdvanced - m_ulBufferSize);
+        if (m_ulBlockAlign > 1)
+        {
+            bytesToProcess -= bytesToProcess % m_ulBlockAlign;
+            if (bytesToProcess == 0)
+            {
+                return;
+            }
+        }
+        startPlay = oldPlay + (bytesAdvanced - bytesToProcess);
     }
     ULONG startOffset = (ULONG)(startPlay % m_ulBufferSize);
     ULONG chunk1 = m_ulBufferSize - startOffset;
