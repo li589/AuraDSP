@@ -99,6 +99,21 @@ void main() {
       expect(m.tubeOn, isTrue);
     });
 
+    test('输入声道增益 L/R 与 3–8 声道同口径可达 200%（2026-11-12 回归）', () {
+      // 引擎 indexed 处理对 input.balance.1–8 一律钳 [0,2]；Dart
+      // spec 曾把 .1/.2 写成 max 1.0，L/R 被 App 侧钳死在 100%。
+      final m = AppModel(testing: true);
+      expect(ParamRegistry.inputBalanceL.max, 2.0);
+      expect(ParamRegistry.inputBalanceR.max, 2.0);
+      m.setParam(ParamRegistry.inputBalanceL, 1.5);
+      m.setParam(ParamRegistry.inputBalanceR, 2.0);
+      expect(m.getParam(ParamRegistry.inputBalanceL), closeTo(1.5, 1e-6));
+      expect(m.getParam(ParamRegistry.inputBalanceR), closeTo(2.0, 1e-6));
+      // 上限之外仍钳位
+      m.setParam(ParamRegistry.inputBalanceL, 3.0);
+      expect(m.getParam(ParamRegistry.inputBalanceL), closeTo(2.0, 1e-6));
+    });
+
     test('Dyneq 三段 Attack/Release setter 各写各的字段', () {
       final m = AppModel(testing: true);
       final pairs = <(ParamSpec<double>, double, double Function(AppModel))>[

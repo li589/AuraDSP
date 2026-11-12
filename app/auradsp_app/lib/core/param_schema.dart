@@ -164,7 +164,10 @@ abstract final class ParamRegistry {
   static final inputBalanceL = ParamSpec<double>(
     id: 'input.balance.1', section: 'input', key: 'balanceL',
     type: ParamType.float, defaultValue: ParamDefaults.inputBalanceL,
-    min: 0.0, max: 1.0, step: 0.01, unit: '%',
+    // 上限 2.0 与引擎 indexed 处理一致（input_ch_gain 全 8 声道
+    // 同口径 [0,2]）：曾误写 1.0 使 L/R 被 App 侧钳在 100%、而
+    // 无 spec 的 3–8 声道可达 200%（2026-11-12 用户实报）。
+    min: 0.0, max: 2.0, step: 0.01, unit: '%',
     formatter: (v) => (v * 100).toStringAsFixed(0),
     getter: (m) => m.inputBalanceL,
     setter: (m, v) => m.setInputBalanceL(v),
@@ -172,7 +175,7 @@ abstract final class ParamRegistry {
   static final inputBalanceR = ParamSpec<double>(
     id: 'input.balance.2', section: 'input', key: 'balanceR',
     type: ParamType.float, defaultValue: ParamDefaults.inputBalanceR,
-    min: 0.0, max: 1.0, step: 0.01, unit: '%',
+    min: 0.0, max: 2.0, step: 0.01, unit: '%',
     formatter: (v) => (v * 100).toStringAsFixed(0),
     getter: (m) => m.inputBalanceR,
     setter: (m, v) => m.setInputBalanceR(v),
