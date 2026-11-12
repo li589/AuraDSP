@@ -335,6 +335,7 @@ pnputil /delete-driver auravaiodriver.inf /uninstall /force
 | `vaio_bridge_loopback_analyze.py` | 上条 raw 的频谱判读（Goertzel 频点 + 自相关 + RMS 总览），纯 stdlib | `python vaio_bridge_loopback_analyze.py <raw>` |
 | `vaio_multichannel_probe.cpp` | VAIO 多声道格式与扬声器配置向导属性的端到端探测（KS 拓扑/WASAPI，不经桥 DLL） | `cl /utf-8 /EHsc /O2 vaio_multichannel_probe.cpp /link ole32.lib setupapi.lib` |
 | `vaio_set_format.cpp` | 格式升级一期验证工具：经 IPolicyConfig 查看/设置任意渲染端点的设备格式（采样率/声道/容器位深/有效位深/类型），供 24 位与多声道格式矩阵真机验证；仅开发验证用 | `cl /utf-8 /EHsc /O2 vaio_set_format.cpp /link ole32.lib uuid.lib` |
+| `vaio_fmt_probe.cpp` | 格式升级一期验证工具：对 AuraVAIO 端点批量询问 IAudioClient::IsFormatSupported（独占/共享），覆盖 24 位打包、24-in-32、真 int32、valid-20 与对照格式；仅开发验证用 | `cl /utf-8 /EHsc /O2 vaio_fmt_probe.cpp /link ole32.lib uuid.lib` |
 
 环回类工具必须在交互会话运行（会话 0 无音频端点）；判读口径见
 `vaio_bridge_loopback_analyze.py` 文件头与第十七轮收口文档。
