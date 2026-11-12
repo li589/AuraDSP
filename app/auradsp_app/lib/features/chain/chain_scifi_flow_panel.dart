@@ -17,6 +17,7 @@ import '../../core/state.dart';
 import '../../core/theme.dart';
 import '../../core/ui_helpers.dart';
 import '../../l10n/gen/app_localizations.dart';
+import '../../platform/adapters.dart';
 import '../chain_page.dart' show stageLabelOf, stageCategoryLabelOf;
 
 /// 科幻全局信号流全景展开面板
@@ -62,6 +63,18 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
     );
 
     _transCtrl.addListener(_onTransformChanged);
+    // 窗口可见性门控：展开态的电流脉冲在托盘/最小化时停转，
+    // 恢复可见且仍展开时续转（2026-11-12 优化指令）。
+    PlatformAdapters.instance.window.visibleListenable
+        .addListener(_onVisibilityChanged);
+  }
+
+  void _onVisibilityChanged() {
+    if (!PlatformAdapters.instance.window.isVisible) {
+      if (_circuitPulseCtrl.isAnimating) _circuitPulseCtrl.stop();
+    } else if (_isExpanded && !_circuitPulseCtrl.isAnimating) {
+      _circuitPulseCtrl.repeat();
+    }
   }
 
   void _onTransformChanged() {
@@ -75,6 +88,8 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
 
   @override
   void dispose() {
+    PlatformAdapters.instance.window.visibleListenable
+        .removeListener(_onVisibilityChanged);
     _transCtrl.removeListener(_onTransformChanged);
     _expandCtrl.dispose();
     _circuitPulseCtrl.dispose();

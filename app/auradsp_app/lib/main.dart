@@ -18,6 +18,7 @@ import 'platform/adapters.dart';
 import 'engine/debug_log.dart';
 import 'features/debug/debug_hud.dart';
 import 'features/notice_host.dart';
+import 'features/visualizer/styles/visualizer_sprite_atlas.dart';
 import 'features/shell.dart';
 import 'features/widgets.dart';
 import 'l10n/gen/app_localizations.dart';
@@ -99,6 +100,10 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
         widget.args.contains('--minimized');
     await adapters.window.init(startInTray: startInTray);
     if (!mounted) return;
+    // 隐藏期图像内存释放（2026-11-12 优化指令）：窗口转入不可见
+    // （托盘/最小化）时清图片缓存（含驻留图集），恢复可见后各
+    // 图像按需重新解码——用一点恢复延迟换隐藏期的内存与显存。
+    adapters.window.visibleListenable.addListener(_onWindowVisibility);
     // 平台端口在组合根注入：core 不 import 具体平台实现（门禁 F11）。
     setState(
       () => _model ??= AppModel(
@@ -110,8 +115,20 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
     );
   }
 
+  /// 窗口可见性变化：仅在转入不可见时释放图像内存（转入可见
+  /// 无需动作，图像在下一次绘制时按需重新解码/回填）。
+  void _onWindowVisibility() {
+    if (PlatformAdapters.instance.window.isVisible) return;
+    final cache = PaintingBinding.instance.imageCache;
+    cache.clear();
+    cache.clearLiveImages();
+    VisualizerSpriteAtlas.instance.releaseImage();
+  }
+
   @override
   void dispose() {
+    PlatformAdapters.instance.window.visibleListenable
+        .removeListener(_onWindowVisibility);
     WidgetsBinding.instance.removeObserver(this);
     _model?.dispose();
     PlatformAdapters.instance.window.dispose();

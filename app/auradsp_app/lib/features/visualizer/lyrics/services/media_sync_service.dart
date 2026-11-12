@@ -195,6 +195,10 @@ class MediaSyncService {
 
   void _tick() {
     if (!_isPlaying || _lastSyncTime == null) return;
+    // 窗口隐藏（托盘/最小化）时跳过行同步：定位走单调时钟推算，
+    // 恢复后下一 tick 即按真实位置续上，不丢拍、不回跳；而隐藏
+    // 期间的逐行通知只会白白驱动歌词视图重建（2026-11-12）。
+    if (!PlatformAdapters.instance.window.isVisible) return;
 
     final doc = currentLyrics.value;
     if (doc.isEmpty) return;

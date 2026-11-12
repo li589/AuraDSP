@@ -1121,6 +1121,11 @@ class _AuraChipState extends State<AuraChip>
   @override
   void initState() {
     super.initState();
+    // 窗口可见性门控（与 PulseDot 同型）：托盘/最小化时呼吸必须
+    // 停转——隐藏窗口里持续产帧纯属浪费 GPU/CPU（2026-11-12
+    // 业主优化指令）。恢复可见且仍处于故障脉冲态时自动续转。
+    PlatformAdapters.instance.window.visibleListenable
+        .addListener(_syncPulse);
     if (widget.pulse) _ensurePulse();
   }
 
@@ -1131,7 +1136,17 @@ class _AuraChipState extends State<AuraChip>
     )..addListener(() {
         if (mounted) setState(() {});
       });
-    if (!_pulseCtl!.isAnimating) _pulseCtl!.repeat(reverse: true);
+    _syncPulse();
+  }
+
+  void _syncPulse() {
+    final ctl = _pulseCtl;
+    if (ctl == null) return;
+    if (widget.pulse && PlatformAdapters.instance.window.isVisible) {
+      if (!ctl.isAnimating) ctl.repeat(reverse: true);
+    } else if (ctl.isAnimating) {
+      ctl.stop();
+    }
   }
 
   @override
@@ -1146,6 +1161,8 @@ class _AuraChipState extends State<AuraChip>
 
   @override
   void dispose() {
+    PlatformAdapters.instance.window.visibleListenable
+        .removeListener(_syncPulse);
     _pulseCtl?.dispose();
     super.dispose();
   }

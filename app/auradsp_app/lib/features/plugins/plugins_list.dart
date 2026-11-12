@@ -347,10 +347,24 @@ class _ScanningPlaceholderState extends State<_ScanningPlaceholder>
       vsync: this,
       duration: const Duration(milliseconds: 1100),
     )..repeat(reverse: true);
+    // 窗口隐藏（托盘/最小化）时停转，恢复后续转（2026-11-12）。
+    PlatformAdapters.instance.window.visibleListenable
+        .addListener(_onVisibilityChanged);
+    _onVisibilityChanged();
+  }
+
+  void _onVisibilityChanged() {
+    if (!PlatformAdapters.instance.window.isVisible) {
+      if (_ctrl.isAnimating) _ctrl.stop();
+    } else if (!_ctrl.isAnimating) {
+      _ctrl.repeat(reverse: true);
+    }
   }
 
   @override
   void dispose() {
+    PlatformAdapters.instance.window.visibleListenable
+        .removeListener(_onVisibilityChanged);
     _ctrl.dispose();
     super.dispose();
   }

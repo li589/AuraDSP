@@ -32,7 +32,8 @@ export 'visualizer_atlas_bake.dart' show SpriteSlice;
 /// 全进程只有这一张图集，不按主题 / 亮度档 / 密度 / 窗口尺寸分桶；
 /// `FilterQuality.low` 是双线性、不生成 mipmap，因此没有额外 mip 链。
 ///
-/// 生命周期：`_image` 只解码一次、**永不替换**。首帧发起异步解码，未完成时
+/// 生命周期：`_image` 解码后常驻，但窗口隐藏时可经 releaseImage()
+/// 释放、恢复后由 ensureImage() 重新解码（2026-11-12 修订）。首帧发起异步解码，未完成时
 /// `imageOrNull == null`，调用方跳过精灵批次（静态背景照常绘制）。
 /// 解码失败时同样保持 `imageOrNull == null`，且**不会每帧重试**：失败标记
 /// 一旦置位，本进程后续 `ensureImage()` 直接返回，精灵层永久关闭，
@@ -91,10 +92,26 @@ class VisualizerSpriteAtlas {
     _loading = _loadAsset();
   }
 
+  /// 释放已解码图集（窗口隐藏/进托盘时由组合根调用，2026-11-12
+  /// 优化指令：隐藏期不保留图像节点内存）。释放后精灵层暂时
+  /// 关闭，恢复显示后下一帧 paint 的 ensureImage() 会重新解码
+  /// ——本方法只动图像本体，不动失败标记与切片布局。解码在飞
+  /// 时以代次号作废其结果（落地即释放，不回填）。
+  int _generation = 0;
+
+  void releaseImage() {
+    _generation++;
+    final img = _image;
+    _image = null;
+    _loading = null;
+    img?.dispose();
+  }
+
   /// 加载构建期生成的图集 PNG：只解码一次，绝不退回同步烘焙。
   ///
   /// 失败时只置位 [_failed]，精灵层永久跳过（静态背景不受影响）。
   Future<void> _loadAsset() async {
+    final gen = _generation;
     try {
       final data = await rootBundle.load(assetPath);
       final codec = await ui.instantiateImageCodec(
@@ -102,6 +119,11 @@ class VisualizerSpriteAtlas {
       );
       final frame = await codec.getNextFrame();
       codec.dispose();
+      if (gen != _generation) {
+        // 解码期间发生 releaseImage：结果直接释放，不回填。
+        frame.image.dispose();
+        return;
+      }
       _image = frame.image;
     } catch (e, st) {
       // D4-b 口径（2026-11-08 全修轮次顺带修复）：匿名丢弃异常是
