@@ -79,14 +79,18 @@ def main():
           f"块已用字节 Dart == {used}")
     check(used <= 2105344, "used <= mapping")
 
-    # telemetry v4（v3 插件段不变 + v4 加载诊断尾段）：版本与
+    # telemetry v5（v4 段不变 + v5 逐声道电平尾段）：版本与
     # 插件段偏移/槽尺寸在 C 侧以 static_assert 钉死
-    check((c_define(h, "APO_TELEMETRY_VERSION") or "").rstrip("uU") == "4",
-          "APO_TELEMETRY_VERSION == 4")
+    check((c_define(h, "APO_TELEMETRY_VERSION") or "").rstrip("uU") == "5",
+          "APO_TELEMETRY_VERSION == 5")
     check("offsetof(ApoTelemetryBlock, plugins) == 608" in h,
           "C 侧钉死 plugins offset 608")
-    check("sizeof(ApoTelemetryBlock) == 744" in h,
-          "C 侧钉死 telemetry 总长 744（v4 尾段 +8）")
+    check("sizeof(ApoTelemetryBlock) == 1452" in h,
+          "C 侧钉死 telemetry 总长 1452（v5 逐声道尾段 +708）")
+    check("offsetof(ApoTelemetryBlock, channelCount) == 744" in h,
+          "C 侧钉死 channelCount offset 744")
+    check("offsetof(ApoTelemetryBlock, stageChLevels) == 780" in h,
+          "C 侧钉死 stageChLevels offset 780")
     check("offsetof(ApoTelemetryBlock, loadStage) == 736" in h,
           "C 侧钉死 loadStage offset 736")
     check(dart_const(d, "kApoTelemetryLoadDiagU32") == "184",

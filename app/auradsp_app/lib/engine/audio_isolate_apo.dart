@@ -550,12 +550,17 @@ class ApoTelemetryReader {
     final seq = u32[9];
     if (seq == _lastSeq) return;
     _lastSeq = seq;
-    // 全面复审 S2（APO-11）：telemetry 逐声道数据只有 L/R 两路；
-    // 此前按流真实声道数合成 chLevels（ch3+ 恒 -90 假静音）与
-    // stageCh 全 -90 表，多声道端点下主页电平排呈假数据。viz 按
-    // 立体声口径上报（chCount=2），待 telemetry 块带逐声道电平
-    // 后再展开。
-    const chCount = 2;
+    // 全面复审 S2（APO-11）：telemetry v4 及以前逐声道数据只有 L/R
+    // 两路——按立体声口径上报（chCount=2），不得按流声道数合成假
+    // 逐声道数据（旧行为 ch3+ 恒 -90 假静音，已废）。
+    // 多声道计划 W3（telemetry v5）：块尾（u32[186] 起）带帧
+    // channelCount / channelLevels / stageChLevels[21][8]，按真实
+    // 声道数展开，口径与进程内 FFI 帧一致（stageCh 21×chCount）。
+    final rawChCount = u32[1] >= 5 ? u32[186] : 0;
+    final chCount =
+        (rawChCount == 4 || rawChCount == 6 || rawChCount == 8)
+            ? rawChCount
+            : 2;
     final levelL = f32[14];
     final levelR = f32[15];
     final spectrum = List<double>.generate(32, (i) => f32[16 + i]);
@@ -573,6 +578,19 @@ class ApoTelemetryReader {
     final inputInR = hasStage ? f32[112 + 12] : -120.0;
     final inputOutL = hasStage ? f32[80 + 13] : -120.0;
     final inputOutR = hasStage ? f32[112 + 13] : -120.0;
+    // v5 逐声道表先落局部变量再进事件字面量（同上 AOT 纪律）：
+    // channelLevels 在 f32[187..]、stageChLevels 在 f32[195..]
+    // （[21][8] 行主序，取前 chCount 列拼 21×chCount stage-major）。
+    final chLevels = chCount == 2
+        ? <double>[levelL, levelR]
+        : List<double>.generate(chCount, (i) => f32[187 + i]);
+    final stageCh = chCount == 2
+        ? List<double>.filled(32 * 2, -90.0)
+        : List<double>.generate(21 * chCount, (idx) {
+            final s = idx ~/ chCount;
+            final c = idx % chCount;
+            return f32[195 + s * 8 + c];
+          });
     _send?.call({
       'evt': 'viz',
       'backend': 'sysapo',
@@ -593,9 +611,8 @@ class ApoTelemetryReader {
       'inputOutL': inputOutL,
       'inputOutR': inputOutR,
       'chCount': chCount,
-      'chLevels': List<double>.generate(
-          chCount, (i) => i == 0 ? levelL : (i == 1 ? levelR : -90.0)),
-      'stageCh': List<double>.filled(32 * chCount, -90.0),
+      'chLevels': chLevels,
+      'stageCh': stageCh,
       'ts': DateTime.now().millisecondsSinceEpoch,
     });
   }

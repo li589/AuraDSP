@@ -527,6 +527,17 @@ void ApoEngineHost::WorkerLoop() {
                        sizeof(tele_->stageLevelsL));
                 memcpy(tele_->stageLevelsR, f.stage_levels_r,
                        sizeof(tele_->stageLevelsR));
+                // v5（多声道计划 W3）：逐声道电平同帧带出——帧自带
+                // channel_count/channel_levels/stage_ch_levels，口径
+                // 见 auradsp_engine.h；App 据此展开主页与输入门控的
+                // 多声道电平（v4 及以前只有 L/R，App 按立体声上报）。
+                tele_->channelCount = f.channel_count;
+                memcpy(tele_->channelLevels, f.channel_levels,
+                       sizeof(tele_->channelLevels));
+                for (int s = 0; s < 21; ++s) {
+                    memcpy(tele_->stageChLevels[s], f.stage_ch_levels[s],
+                           sizeof(tele_->stageChLevels[s]));
+                }
                 tele_->updateSeq++;
             }
         }

@@ -93,7 +93,10 @@ inline const wchar_t* AuraApoPluginsName() {
 // 用）；既有字段偏移一律不变，读者按 version 分级取用。
 // v3（2026-11-10，Part I Q2）：尾部再追加插件段（每槽 32B×4）；
 // v1/v2 字段偏移仍不变，读者按 version>=3 取插件段。
-#define APO_TELEMETRY_VERSION 4u
+// v5（2026-11-13，多声道计划 W3）：尾部再追加逐声道电平段
+// （channelCount/channelLevels/stageChLevels）；v4 及以前字段偏移
+// 仍不变，读者按 version>=5 取逐声道段，否则按立体声口径上报。
+#define APO_TELEMETRY_VERSION 5u
 #define APO_TELEMETRY_BYTES 4096u
 
 struct ApoTelemetryBlock {
@@ -141,6 +144,18 @@ struct ApoTelemetryBlock {
     // 错误码（stage=LOAD_FAILED 时为首候选的 GetLastError）。
     uint32_t loadStage;
     uint32_t loadErr;
+    // ---- v5 追加（offset 744 起；v4 读者止步于此）----
+    // 多声道电平回传（多声道计划 W3）：座位引擎最近一帧 viz 的逐
+    // 声道数据，由 ApoEngineHost 的 viz 泵与 L/R 段同帧写入。
+    // channelCount 为帧来源块声道数（2/4/6/8；0 = 尚无帧）；channelLevels
+    // 为最终输出 per-channel 峰值 dBFS（未用路 -120）；stageChLevels
+    // 为 stage 0..20（遥测子集，与 Dart kVizStageTelemetry 对齐）
+    // × 8 声道的 per-stage per-channel 峰值，有效性口径与引擎 viz
+    // 帧 stage_ch_levels 完全一致（矩阵模式仅 [0]/[1] 有效、离散
+    // 模式按各效果器真实作用域，见 auradsp_engine.h 的限定说明）。
+    uint32_t channelCount;
+    float channelLevels[8];
+    float stageChLevels[21][8];
 };
 
 // loadStage 取值（ApoTelemetryBlock.loadStage）。
@@ -153,13 +168,17 @@ struct ApoTelemetryBlock {
 // v2 布局钉死：既有字段偏移与 v1 完全一致，追加段自 192 起。
 // v3：插件段自 608 起，块总 736B（映射仍 4096B 整页口径）。
 // v4：加载诊断自 736 起，块总 744B。
-static_assert(sizeof(ApoTelemetryBlock) == 744, "telemetry block layout");
+// v5：逐声道段自 744 起，块总 1452B。
+static_assert(sizeof(ApoTelemetryBlock) == 1452, "telemetry block layout");
 static_assert(offsetof(ApoTelemetryBlock, spectrum) == 64, "telemetry v1 offsets");
 static_assert(offsetof(ApoTelemetryBlock, eqInSpectrum) == 192, "telemetry v2 offsets");
 static_assert(offsetof(ApoTelemetryBlock, stageLevelsL) == 320, "telemetry v2 offsets");
 static_assert(offsetof(ApoTelemetryBlock, stageLevelsR) == 448, "telemetry v2 offsets");
 static_assert(offsetof(ApoTelemetryBlock, plugins) == 608, "telemetry v3 offsets");
 static_assert(offsetof(ApoTelemetryBlock, loadStage) == 736, "telemetry v4 offsets");
+static_assert(offsetof(ApoTelemetryBlock, channelCount) == 744, "telemetry v5 offsets");
+static_assert(offsetof(ApoTelemetryBlock, channelLevels) == 748, "telemetry v5 offsets");
+static_assert(offsetof(ApoTelemetryBlock, stageChLevels) == 780, "telemetry v5 offsets");
 static_assert(sizeof(ApoTelemetryBlock::PluginSlot) == 32, "telemetry plugin slot");
 
 // ---- 插件块（App → APO，Part I Q2 / 计划书 D2/D3、Q0-3） ----
