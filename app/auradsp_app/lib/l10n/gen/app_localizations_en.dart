@@ -2929,6 +2929,19 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get plugApoEditHint =>
+      'In APO mode, editor changes normally apply when the editor closes. Apply them right away:';
+
+  @override
+  String get plugApplyNow => 'Apply now';
+
+  @override
+  String get plugAutoApply => 'Auto apply';
+
+  @override
+  String get plugRestoreOpen => 'Restore as opened';
+
+  @override
   String get plugOpenGuiBtn => 'Open UI (GUI)';
 
   @override

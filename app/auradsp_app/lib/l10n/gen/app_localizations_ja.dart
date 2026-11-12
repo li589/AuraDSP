@@ -2788,6 +2788,18 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get plugApoEditHint => 'APO モードではエディタの変更は閉じたときに反映されます。今すぐ反映するには：';
+
+  @override
+  String get plugApplyNow => '今すぐ適用';
+
+  @override
+  String get plugAutoApply => '自動適用';
+
+  @override
+  String get plugRestoreOpen => '開いた時点に戻す';
+
+  @override
   String get plugOpenGuiBtn => 'UIを開く (GUI)';
 
   @override

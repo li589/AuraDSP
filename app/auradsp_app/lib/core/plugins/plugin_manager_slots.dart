@@ -119,6 +119,90 @@ extension PluginManagerSlots on PluginManager {
     _commandSender?.call({'cmd': 'apoHarvestState', 'slot': slot});
   }
 
+  // ---- 三动作引擎（2026-11-12）：编辑器不关窗也能让调音在
+  // APO 生效。原生浮条为后续大项，本轮动作先行、插件页有临
+  // 时入口。三动作都只在 sysapo 影子模式有意义（其余模式编
+  // 辑器改的就是在跑的引擎，天然实时生效）。
+
+  /// 立即应用：把影子当前状态立刻收获并发布到 APO。
+  void applyEditorStateNow({int? slot}) {
+    final s = slot ?? _selectedSlot;
+    _harvestShadowState(s);
+  }
+
+  /// 自动应用开关（会话级）：开启后 300ms 轮询收获，isolate
+  /// 侧按字节去重——参数没变就不发布、不推进状态代次。
+  bool isEditorAutoApply(int slot) =>
+      slot >= 0 && slot < PluginManager.kMaxSlots && _editorAutoApply[slot];
+
+  void setEditorAutoApply(bool on, {int? slot}) {
+    final s = slot ?? _selectedSlot;
+    if (s < 0 || s >= PluginManager.kMaxSlots) return;
+    if (_editorAutoApply[s] == on) return;
+    _editorAutoApply[s] = on;
+    _syncEditorAutoApplyTimer();
+    _notify();
+  }
+
+  /// 恢复基线是否可用（编辑器打开时的快照已就绪）。
+  bool isEditorBaselineReady(int slot) =>
+      slot >= 0 && slot < PluginManager.kMaxSlots && _editorBaselineReady[slot];
+
+  /// 恢复：回到本次编辑器打开时的状态（isolate 灌回影子 +
+  /// 强制发布，编辑器与听感同时复原）。
+  void restoreEditorBaseline({int? slot}) {
+    final s = slot ?? _selectedSlot;
+    if (!_apoShadow || !isEditorBaselineReady(s)) return;
+    _commandSender?.call({'cmd': 'apoRestoreBaseline', 'slot': s});
+  }
+
+  /// 基线快照回执（isolate 路由）：就绪后恢复动作才可用。
+  void onApoBaselineResult(int slot, bool ok) {
+    if (slot < 0 || slot >= PluginManager.kMaxSlots) return;
+    if (_editorBaselineReady[slot] == ok) return;
+    _editorBaselineReady[slot] = ok;
+    _notify();
+  }
+
+  /// 恢复回执：失败（尤其基线丢失）要让用户知道，不静默。
+  void onApoRestoreResult(int slot, bool ok, bool noBaseline) {
+    if (ok) return;
+    if (noBaseline) {
+      _editorBaselineReady[slot] = false;
+    }
+    _lastNotice = noBaseline
+        ? '恢复失败：本次编辑的基线快照不可用（插件可能已被更换）。'
+        : '恢复失败：影子插件未能载入基线状态。';
+    _notify();
+  }
+
+  void _syncEditorAutoApplyTimer() {
+    final any = _apoShadow &&
+        List.generate(PluginManager.kMaxSlots, (s) => s)
+            .any((s) => _slotEditorOpen[s] && _editorAutoApply[s]);
+    if (any) {
+      _editorAutoApplyTimer ??=
+          Timer.periodic(const Duration(milliseconds: 300), (_) {
+        for (var s = 0; s < PluginManager.kMaxSlots; s++) {
+          if (_slotEditorOpen[s] && _editorAutoApply[s] && _apoShadow) {
+            _commandSender
+                ?.call({'cmd': 'apoHarvestState', 'slot': s, 'auto': true});
+          }
+        }
+      });
+    } else {
+      _editorAutoApplyTimer?.cancel();
+      _editorAutoApplyTimer = null;
+    }
+  }
+
+  /// 编辑器会话收尾（关闭/模式切换）：自动应用复位、基线作废。
+  void _resetEditorSession(int slot) {
+    _editorAutoApply[slot] = false;
+    _editorBaselineReady[slot] = false;
+    _syncEditorAutoApplyTimer();
+  }
+
   void setPdc(bool enable) {
     _pdcEnabled = enable;
     _notify();
@@ -210,6 +294,11 @@ extension PluginManagerSlots on PluginManager {
     if (slot < 0 || slot >= PluginManager.kMaxSlots) return;
     if (action == 'show') {
       _slotEditorOpen[slot] = ok;
+      // 三动作引擎：影子模式下编辑器一打开就快照基线（恢复
+      // 动作的锚点）；快照回执经 onApoBaselineResult 置就绪。
+      if (ok && _apoShadow) {
+        _commandSender?.call({'cmd': 'apoSnapshotBaseline', 'slot': slot});
+      }
     } else if (action == 'close' && ok) {
       _slotEditorOpen[slot] = false;
       final r = _editorRoute[slot];
@@ -218,6 +307,7 @@ extension PluginManagerSlots on PluginManager {
       autoSaveAb(slot, group: r >= 0 ? r : -1);
       // sysapo：影子调音同步收获到 APO（D3）。
       _harvestShadowState(slot);
+      _resetEditorSession(slot);
       _notify();
       return;
     }
@@ -242,6 +332,7 @@ extension PluginManagerSlots on PluginManager {
         _editorRoute[slot] = -1;
         // sysapo：影子调音同步收获到 APO（D3）。
         _harvestShadowState(slot);
+        _resetEditorSession(slot);
       }
       _notify();
     }
@@ -267,6 +358,7 @@ extension PluginManagerSlots on PluginManager {
       }
       _slotEditorOpen[s] = false;
       _editorRoute[s] = -1;
+      _resetEditorSession(s);
     }
     _notify();
   }

@@ -1468,11 +1468,17 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             // Part I Q3/D3：影子链状态收获——影子 savePreset 到
             // 本进程临时文件，读回字节经发布器进插件块状态区
             // （取代 Q2 的 base64 命令口径：全程不出 isolate）。
+            // 三动作引擎（2026-11-12）：auto=true 为自动应用轮
+            // 询——发布走去重（无变化不落块、不推进 stateGen），
+            // 回执 changed 标注本轮是否真的发布；手动（立即应
+            // 用/关窗收获）仍强制发布。
             final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final auto = m['auto'] == true;
             final l = lib;
             final h = handle;
             var ok = false;
             var tooLarge = false;
+            var changed = false;
             if (l != null && h != null && apoPluginPublisher.active) {
               try {
                 final tmp = File('${Directory.systemTemp.path}'
@@ -1483,7 +1489,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                   final bytes = tmp.readAsBytesSync();
                   tooLarge = bytes.length > kApoPluginStateBytes;
                   if (!tooLarge) {
-                    ok = apoPluginPublisher.publishSlotState(slot, bytes);
+                    if (auto) {
+                      changed = apoPluginPublisher
+                          .publishSlotStateIfChanged(slot, bytes);
+                      ok = true;
+                    } else {
+                      ok = apoPluginPublisher.publishSlotState(slot, bytes);
+                      changed = ok;
+                    }
                   }
                 }
               } catch (e) {
@@ -1495,6 +1508,79 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               'slot': slot,
               'ok': ok,
               'tooLarge': tooLarge,
+              'changed': changed,
+              'auto': auto,
+            });
+            break;
+          }
+        case 'apoSnapshotBaseline':
+          {
+            // 三动作引擎：编辑器打开时快照基线（恢复动作用）。
+            // 与收获同导管（savePreset→字节），只存发布器内存。
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final l = lib;
+            final h = handle;
+            var ok = false;
+            if (l != null && h != null && apoPluginPublisher.active) {
+              try {
+                final tmp = File('${Directory.systemTemp.path}'
+                    '/auradsp_apo_baseline_$slot.bin');
+                final rc = AuraDspLib.pluginSlotSavePresetWrap(
+                    l, h, slot, tmp.path);
+                if (rc == 1 && tmp.existsSync()) {
+                  final bytes = tmp.readAsBytesSync();
+                  if (bytes.length <= kApoPluginStateBytes) {
+                    apoPluginPublisher.setBaseline(slot, bytes);
+                    ok = true;
+                  }
+                }
+              } catch (e) {
+                dbgLog('apo baseline snapshot failed slot=$slot: $e');
+              }
+            }
+            send({
+              'evt': 'apoBaselineResult',
+              'slot': slot,
+              'ok': ok,
+            });
+            break;
+          }
+        case 'apoRestoreBaseline':
+          {
+            // 三动作引擎：恢复到编辑器打开时的状态——基线字节
+            // 写临时文件经 loadPreset 灌回影子（编辑器参数随之
+            // 复原），同时强制发布到 APO（听感即刻复原）。无基
+            // 线（快照失败/插件已换）时明确回失败，不静默。
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final l = lib;
+            final h = handle;
+            var ok = false;
+            var noBaseline = false;
+            if (l != null && h != null && apoPluginPublisher.active) {
+              final baseline = apoPluginPublisher.baselineOf(slot);
+              if (baseline == null) {
+                noBaseline = true;
+              } else {
+                try {
+                  final tmp = File('${Directory.systemTemp.path}'
+                      '/auradsp_apo_baseline_$slot.bin');
+                  tmp.writeAsBytesSync(baseline, flush: true);
+                  final rc = AuraDspLib.pluginSlotLoadPresetWrap(
+                      l, h, slot, tmp.path);
+                  if (rc == 1) {
+                    ok = apoPluginPublisher.publishSlotState(
+                        slot, baseline);
+                  }
+                } catch (e) {
+                  dbgLog('apo baseline restore failed slot=$slot: $e');
+                }
+              }
+            }
+            send({
+              'evt': 'apoRestoreResult',
+              'slot': slot,
+              'ok': ok,
+              'noBaseline': noBaseline,
             });
             break;
           }

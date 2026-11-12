@@ -2759,6 +2759,18 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get plugApoEditHint => 'APO 模式下编辑器调音默认关窗才生效，可用右侧动作即时生效：';
+
+  @override
+  String get plugApplyNow => '立即应用';
+
+  @override
+  String get plugAutoApply => '自动应用';
+
+  @override
+  String get plugRestoreOpen => '恢复到打开时';
+
+  @override
   String get plugOpenGuiBtn => '打开界面 (GUI)';
 
   @override

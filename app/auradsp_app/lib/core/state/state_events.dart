@@ -1291,6 +1291,21 @@ extension StateEvents on AppModel {
               level: NoticeLevel.warning);
         }
         break;
+      case 'apoBaselineResult':
+        // 三动作引擎：基线快照就绪回执（恢复动作可用性）。
+        pluginManager.onApoBaselineResult(
+          (raw['slot'] as num).toInt(),
+          raw['ok'] == true,
+        );
+        break;
+      case 'apoRestoreResult':
+        // 三动作引擎：恢复回执（失败由管理器出提示）。
+        pluginManager.onApoRestoreResult(
+          (raw['slot'] as num).toInt(),
+          raw['ok'] == true,
+          raw['noBaseline'] == true,
+        );
+        break;
       case 'pluginSlotInsertStage':
         pluginManager.onPluginSlotInsertStage(
           raw['slot'] as int,

@@ -1307,6 +1307,10 @@
       }
     }
   },
+  "plugApoEditHint": "APO 模式下编辑器调音默认关窗才生效，可用右侧动作即时生效：",
+  "plugApplyNow": "立即应用",
+  "plugAutoApply": "自动应用",
+  "plugRestoreOpen": "恢复到打开时",
   "plugOpenGuiBtn": "打开界面 (GUI)",
   "plugRouteBypassed": "旁路",
   "abSlotA": "A 预设",

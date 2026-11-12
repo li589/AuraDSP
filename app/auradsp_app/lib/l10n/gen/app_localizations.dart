@@ -5260,6 +5260,30 @@ abstract class AppLocalizations {
   /// **'{name}（插槽 {n}）'**
   String plugEditorTitleNamed(int n, String name);
 
+  /// No description provided for @plugApoEditHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'APO 模式下编辑器调音默认关窗才生效，可用右侧动作即时生效：'**
+  String get plugApoEditHint;
+
+  /// No description provided for @plugApplyNow.
+  ///
+  /// In zh, this message translates to:
+  /// **'立即应用'**
+  String get plugApplyNow;
+
+  /// No description provided for @plugAutoApply.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动应用'**
+  String get plugAutoApply;
+
+  /// No description provided for @plugRestoreOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复到打开时'**
+  String get plugRestoreOpen;
+
   /// No description provided for @plugOpenGuiBtn.
   ///
   /// In zh, this message translates to:

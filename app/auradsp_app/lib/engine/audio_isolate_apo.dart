@@ -791,6 +791,8 @@ class ApoPluginPublisher {
         p.format = format;
         p.loadGen += 1;
         p.stateBytes = 0;
+        p.lastState = null;
+        p.baseline = null;
         final base = apoPluginSlotOffset(slot);
         _writeUtf8Region(base + kApoPluginSlotPathOffset,
             kApoPluginPathBytes, path);
@@ -856,12 +858,45 @@ class ApoPluginPublisher {
     final p = _pub[slot];
     p.stateBytes = bytes.length;
     p.stateGen += 1;
+    p.lastState = List<int>.of(bytes);
     _writeSlotHeader(slot);
     _endWrite();
     dbgLog('apo plugin publisher: state slot=$slot '
         'bytes=${bytes.length} gen=${p.stateGen}');
     return true;
   }
+
+  /// 自动应用去重发布（三动作引擎，2026-11-12）：与最近一次
+  /// 已发布字节完全一致时不落块、不推进 stateGen 并返回
+  /// false（无变化）；有变化则照常发布并返回 true。没有这层
+  /// 去重，300ms 轮询会让 APO 侧以同等频率反复重载同一状态。
+  bool publishSlotStateIfChanged(int slot, List<int> bytes) {
+    if (!active || slot < 0 || slot >= kApoPluginSlots) return false;
+    if (bytes.length > kApoPluginStateBytes) return false;
+    final last = _pub[slot].lastState;
+    if (last != null && last.length == bytes.length) {
+      var same = true;
+      for (var i = 0; i < bytes.length; i++) {
+        if (last[i] != bytes[i]) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return false;
+    }
+    return publishSlotState(slot, bytes);
+  }
+
+  /// 编辑器会话基线（恢复动作）：编辑器打开时由 isolate 快照
+  /// 当前影子状态；恢复时灌回影子并强制发布。仅存发布器内存，
+  /// 不落盘；插件身份变化即作废（syncFromMirror）。
+  void setBaseline(int slot, List<int> bytes) {
+    if (slot < 0 || slot >= kApoPluginSlots) return;
+    _pub[slot].baseline = List<int>.of(bytes);
+  }
+
+  List<int>? baselineOf(int slot) =>
+      (slot < 0 || slot >= kApoPluginSlots) ? null : _pub[slot].baseline;
 }
 
 class _ApoPluginSlotPub {
@@ -876,4 +911,9 @@ class _ApoPluginSlotPub {
   int stateGen = 0;
   int pathBytes = 0;
   int stateBytes = 0;
+  // 三动作引擎（2026-11-12）：最近一次已发布状态字节（自动
+  // 应用去重比对用）与编辑器会话基线（恢复动作用）。槽位身
+  // 份变化时一并作废（见 syncFromMirror 的 identityChanged）。
+  List<int>? lastState;
+  List<int>? baseline;
 }

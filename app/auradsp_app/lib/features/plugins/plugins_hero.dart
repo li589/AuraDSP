@@ -719,6 +719,57 @@ class _ActivePluginHero extends StatelessWidget {
               ),
               const SizedBox(height: AuraSpace.sm),
             ],
+            // 三动作临时入口（业主 2026-11-12 立项）：sysapo 下编
+            // 辑器打开时显示——调音不必关窗才在 APO 生效。编辑器
+            // 窗口内原生浮条是后续大项，本行先行可用，动作引擎
+            // 与浮条共用（立即应用/自动应用 300ms/恢复到打开时）。
+            if (manager.isSlotEditorOpen(slot) && manager.apoShadow) ...[
+              Row(
+                children: [
+                  Icon(Icons.bolt_rounded, size: 14, color: p.accent),
+                  const SizedBox(width: AuraSpace.xs),
+                  Expanded(
+                    child: Text(
+                      l10nOf(context).plugApoEditHint,
+                      style: labelOf(p, size: 11.5, color: p.textDim),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () =>
+                        manager.applyEditorStateNow(slot: slot),
+                    icon: const Icon(Icons.check_rounded, size: 14),
+                    label: Text(l10nOf(context).plugApplyNow),
+                    style: TextButton.styleFrom(
+                      foregroundColor: p.accent,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                  const SizedBox(width: AuraSpace.sm),
+                  Text(
+                    l10nOf(context).plugAutoApply,
+                    style: labelOf(p, size: 12, color: p.textDim),
+                  ),
+                  const SizedBox(width: AuraSpace.xs),
+                  AuraSwitch(
+                    value: manager.isEditorAutoApply(slot),
+                    onChanged: (v) =>
+                        manager.setEditorAutoApply(v, slot: slot),
+                  ),
+                  const SizedBox(width: AuraSpace.sm),
+                  OutlinedButton.icon(
+                    onPressed: manager.isEditorBaselineReady(slot)
+                        ? () => manager.restoreEditorBaseline(slot: slot)
+                        : null,
+                    icon: const Icon(Icons.restore_rounded, size: 14),
+                    label: Text(l10nOf(context).plugRestoreOpen),
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AuraSpace.sm),
+            ],
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

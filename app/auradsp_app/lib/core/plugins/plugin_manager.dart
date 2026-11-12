@@ -111,6 +111,25 @@ class PluginManager extends ChangeNotifier {
   /// 编辑器当前所在路由（-1=非 VB 单路；>=0=组号），用于关闭时记录来源。
   final List<int> _editorRoute = List.filled(kMaxSlots, -1, growable: true);
 
+  // ---- 三动作引擎（2026-11-12，sysapo 影子编辑器会话） ----
+  /// 自动应用开关（per slot，会话级：编辑器关闭即复位）。
+  final List<bool> _editorAutoApply = List.filled(
+    kMaxSlots,
+    false,
+    growable: true,
+  );
+
+  /// 本次编辑器会话的基线快照是否就绪（恢复动作可用性）。
+  final List<bool> _editorBaselineReady = List.filled(
+    kMaxSlots,
+    false,
+    growable: true,
+  );
+
+  /// 自动应用轮询（300ms）：任一槽满足「编辑器开 + 自动应用
+  /// 开 + 影子模式」时运行，无满足者即停表。
+  Timer? _editorAutoApplyTimer;
+
   int _selectedSlot = 0;
 
   List<String> _scanDirs = [];
@@ -412,6 +431,8 @@ class PluginManager extends ChangeNotifier {
 
   @override
   void dispose() {
+    _editorAutoApplyTimer?.cancel();
+    _editorAutoApplyTimer = null;
     _journalTimer?.cancel();
     _journalTimer = null;
     for (final t in _bypassPendingTimers.values) {

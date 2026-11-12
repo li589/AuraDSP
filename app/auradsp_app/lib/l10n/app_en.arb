@@ -1188,6 +1188,10 @@
       }
     }
   },
+  "plugApoEditHint": "In APO mode, editor changes normally apply when the editor closes. Apply them right away:",
+  "plugApplyNow": "Apply now",
+  "plugAutoApply": "Auto apply",
+  "plugRestoreOpen": "Restore as opened",
   "plugOpenGuiBtn": "Open UI (GUI)",
   "plugRouteBypassed": "Bypass",
   "abSlotA": "Preset A",
