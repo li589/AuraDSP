@@ -215,16 +215,15 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get setVaioReady => 'AuraVAIO KMDF 驱动已就绪 (Sysvad 虚拟声卡)';
+  String setVaioReady(String track) {
+    return 'auravaio kmdf $track 驱动已就绪（sysvad）';
+  }
 
   @override
   String get setVaioMissing => '未检测到 AuraVAIO 虚拟声卡驱动';
 
   @override
   String get setVaioUnknown => 'AuraVAIO 驱动状态未检测';
-
-  @override
-  String get setVaioDesc => 'KMDF 内核模式虚拟音频驱动，提供全双工虚拟音频线缆通道';
 
   @override
   String get setInstallDriverUac => 'UAC提权安装驱动';

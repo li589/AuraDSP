@@ -372,6 +372,14 @@ class _VaioDriverRow extends StatelessWidget {
     // 未发现」混为一谈——旧实现空 map 恒判 missing 是真机误报的显示面。
     final detected = det.isNotEmpty;
     final found = det['found'] == true;
+    // 第十九轮（user 裁定）：VAIO 块只留标题 + 一行状态。已就绪行
+    // 按 user 口径内嵌 track（auravaio kmdf modern/legacy 驱动已
+    // 就绪（sysvad））；原说明行与版本/track/KMDF 明细行删除——
+    // track 信息已并入状态行，版本数值排障走 detect 日志。
+    final track = det['track'] is String &&
+            (det['track'] as String).isNotEmpty
+        ? det['track'] as String
+        : 'modern';
 
     return _DriverBlock(
       title: l.vaioDriverCardTitle,
@@ -379,15 +387,9 @@ class _VaioDriverRow extends StatelessWidget {
         _DriverStatus(
           !detected
               ? l.setVaioUnknown
-              : (found ? l.setVaioReady : l.setVaioMissing),
+              : (found ? l.setVaioReady(track) : l.setVaioMissing),
           !detected ? p.textDim : (found ? p.success : p.warning),
         ),
-        _DriverDetail(l.setVaioDesc),
-        // 全面复审 S2（VAIO-8）：驱动版本/track/KMDF 上屏——detect
-        // 早已回传，此前无呈现点，装机版本排障只能靠日志。
-        if (found && det['driverVersion'] is String)
-          _DriverDetail(
-              'v${det['driverVersion']} · ${det['track']} · KMDF ${det['kmdf']}'),
       ],
       actions: [
         if (detected && !found)

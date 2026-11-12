@@ -223,8 +223,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get setVaioReady =>
-      'AuraVAIO KMDF driver ready (Sysvad virtual sound card)';
+  String setVaioReady(String track) {
+    return 'auravaio kmdf $track driver ready (sysvad)';
+  }
 
   @override
   String get setVaioMissing =>
@@ -232,10 +233,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get setVaioUnknown => 'AuraVAIO driver status not checked yet';
-
-  @override
-  String get setVaioDesc =>
-      'KMDF kernel-mode virtual audio driver providing a full-duplex virtual audio cable';
 
   @override
   String get setInstallDriverUac => 'Install driver (UAC)';

@@ -475,8 +475,8 @@ abstract class AppLocalizations {
   /// No description provided for @setVaioReady.
   ///
   /// In zh, this message translates to:
-  /// **'AuraVAIO KMDF 驱动已就绪 (Sysvad 虚拟声卡)'**
-  String get setVaioReady;
+  /// **'auravaio kmdf {track} 驱动已就绪（sysvad）'**
+  String setVaioReady(String track);
 
   /// No description provided for @setVaioMissing.
   ///
@@ -489,12 +489,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'AuraVAIO 驱动状态未检测'**
   String get setVaioUnknown;
-
-  /// No description provided for @setVaioDesc.
-  ///
-  /// In zh, this message translates to:
-  /// **'KMDF 内核模式虚拟音频驱动，提供全双工虚拟音频线缆通道'**
-  String get setVaioDesc;
 
   /// No description provided for @setInstallDriverUac.
   ///

@@ -96,10 +96,10 @@
     }
   },
   "setDriverOffline": "{name} [未検出/オフライン]",
-  "setVaioReady": "AuraVAIO KMDF ドライバー準備完了（Sysvad 仮想サウンドカード）",
+  "setVaioReady": "auravaio kmdf {track} ドライバー準備完了（sysvad）",
+  "@setVaioReady": {"placeholders": {"track": {"type": "String"}}},
   "setVaioMissing": "AuraVAIO 仮想サウンドカードドライバーが見つかりません",
   "setVaioUnknown": "AuraVAIO ドライバーの状態は未検出です",
-  "setVaioDesc": "KMDF カーネルモード仮想オーディオドライバー。全二重の仮想オーディオケーブルを提供",
   "setInstallDriverUac": "ドライバーをインストール（UAC）",
   "setInstallDriverUacPrompt": "管理者権限をリクエストしています。システムのプロンプトでドライバーコンポーネントのインストールを許可してください…",
   "setVaioInstallOk": "AuraVAIO ドライバーのインストールと検証が完了しました！",
