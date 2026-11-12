@@ -85,14 +85,17 @@ void main() {
       expect(find.text('仍然启动'), findsNothing);
     });
 
+    // 无关模式（附加范式 sysapo：pipelineChain 为 null、audioMode
+    // 非 vaio）下跳过态不挡任何链路，横幅不得出现。注意管线范式
+    // 内 wasapi 输出也合成 vaio 模式（composeMode 口径），不算
+    // 「无关模式」——首跑以此误设前提失败后按此口径修正。
     testWidgets('guard tripped without vaio chain shows no banner',
         (tester) async {
       final model = AppModel(testing: true);
       addTearDown(model.dispose);
       await tester.pumpWidget(_app(model));
       await tester.pumpAndSettle();
-      model.setPipelineInput('wasapi');
-      model.setPipelineOutput('wasapi');
+      model.setAudioMode('sysapo');
       model.vaioBootGuardTripped = true;
       model.notifyListeners();
       await tester.pumpAndSettle();
