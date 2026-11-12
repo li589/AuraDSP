@@ -19,6 +19,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
+import '../platform/port/windows_system.dart';
 import 'debug_log.dart';
 
 abstract final class ApoTransit {
@@ -40,17 +41,19 @@ abstract final class ApoTransit {
   }
 
   /// 确保中转根存在且 LocalService 可读：目录创建走当前用户
-  /// 身份（ProgramData 下用户可建目录）；ACL 用 icacls 按 SID
-  /// 授予 LocalService 读 + 继承（语言无关）。每进程只做一次。
+  /// 身份（ProgramData 下用户可建目录）；ACL 授予走平台层端口
+  /// （WindowsSystemPort.grantDirReadToLocalService——icacls 按
+  /// SID 授予，语言无关；第十八轮 CI 附带项：原先在此直连进程
+  /// 调用触 F9/F10 平台隔离门，收回平台层。本类运行于音频隔
+  /// 离体、无 AppModel 装配，经端口工厂 createWindowsSystemPort
+  /// 取实现，与隔离体直调 createAudioOut 工厂同例。）每进程只做一次。
   static void _ensureRoot() {
     if (_rootReady) return;
     _rootReady = true;
     try {
       final d = Directory(root);
       if (!d.existsSync()) d.createSync(recursive: true);
-      // *S-1-5-19 = LocalService；(OI)(CI) 对象/容器继承，(R) 读。
-      Process.runSync('icacls', [root, '/grant', '*S-1-5-19:(OI)(CI)R'],
-          runInShell: false);
+      createWindowsSystemPort().grantDirReadToLocalService(root);
     } catch (e) {
       dbgLog('apo transit: root prepare failed: $e');
     }

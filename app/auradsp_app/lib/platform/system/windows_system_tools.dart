@@ -234,6 +234,23 @@ final class WindowsSystemTools implements WindowsSystemPort {
     return _apoResultFromStdout(res);
   }
 
+  @override
+  bool grantDirReadToLocalService(String dirPath) {
+    if (!available) return false;
+    try {
+      // *S-1-5-19 = LocalService；(OI)(CI) 对象/容器继承，(R) 读。
+      // 逐字保留自原 ApoTransit._ensureRoot 的 icacls 调用
+      // （第十八轮 CI 附带项：Process 直连须收回平台层）。
+      final res = Process.runSync(
+          'icacls', [dirPath, '/grant', r'*S-1-5-19:(OI)(CI)R'],
+          runInShell: false);
+      return res.exitCode == 0;
+    } catch (e, st) {
+      swallow(e, st);
+      return false;
+    }
+  }
+
   // ---- APO 结果通道（--result-file）----
 
   File _apoResultFile() =>

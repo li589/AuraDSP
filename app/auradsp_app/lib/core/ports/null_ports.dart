@@ -148,6 +148,9 @@ final class NullWindowsSystem implements WindowsSystemPort {
     required bool elevated,
   }) async =>
       const ApoRunResult(exitCode: 1);
+
+  @override
+  bool grantDirReadToLocalService(String dirPath) => false;
 }
 
 final class NullWindowPort implements WindowPort {

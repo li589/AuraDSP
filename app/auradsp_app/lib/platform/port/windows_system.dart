@@ -5,6 +5,14 @@
 // 业务层（core/state）只消费语义化方法，不再拼命令、不再找脚本。
 import 'dart:io';
 
+import '../system/windows_system_tools.dart';
+
+/// 无装配环境的调用方（音频隔离体等）取端口实现。UI 侧走
+/// PlatformAdapters / AppModel 注入（含测试替身），不经此；
+/// 实现本身无状态且各方法以 available 自守，非 Windows 上
+/// 行为与 Null 实现等价（失败即 false / 空结果）。
+WindowsSystemPort createWindowsSystemPort() => const WindowsSystemTools();
+
 abstract interface class WindowsSystemPort {
   /// 当前平台是否具备这套 Windows 系统工具。
   bool get available;
@@ -58,6 +66,11 @@ abstract interface class WindowsSystemPort {
     required String target,
     required bool elevated,
   });
+
+  /// 给目录授予 LocalService 读权限（icacls 按 SID 授予，语言
+  /// 无关）：APO 文件中转根的 ACL 准备。同步执行；平台不支持
+  /// 或失败返回 false（调用方 best-effort，不因之阻断主流程）。
+  bool grantDirReadToLocalService(String dirPath);
 }
 
 /// apo_config.exe install/uninstall 的运行结果。

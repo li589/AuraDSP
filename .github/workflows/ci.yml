@@ -230,6 +230,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # 必须钉版本（与开发机/VM 一致）：只写 channel 会装最新
+          # stable，其 Dart 移除实验 API 后锁定的 nativeapi 编译
+          # 不过（2026-11-12 J6/J8 全红定罪，第十八轮附带项）。
+          flutter-version: '3.47.9'
       - name: Pub get
         working-directory: app/auradsp_app
         run: flutter pub get
@@ -279,6 +283,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # 同 J6：钉 3.47.9，勿随 stable 漂移（nativeapi 实验 API）。
+          flutter-version: '3.47.9'
       - name: Pub get
         working-directory: app/auradsp_app
         run: flutter pub get
