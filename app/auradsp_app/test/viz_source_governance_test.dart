@@ -6,6 +6,9 @@
 //   来源的帧（切换后旧源的迟到帧/断流补帧）一律丢弃；
 // - 预期来源变化即清零显示面（_syncVizSourceOnSwitch），新源
 //   无帧时旧谱不得残留。
+// 平台注记：sysapo/vb/asio/vaio 是 Windows 域模式，Linux 上不存在
+// （CI J6 首跑实证），涉 Windows 模式的三例标 testOn: windows；
+// capture/local 一例与平台无关，两边都跑。
 import 'package:auradsp_app/core/audio_modes.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,7 +54,7 @@ void main() {
       model.setPipelineOutput(AudioModes.outputWasapi);
       expect(model.pipelineChain, PipelineChain.capture);
       expect(model.expectedVizBackend, 'local');
-    });
+    }, testOn: 'windows');
 
     test('frames from a non-expected source are dropped', () {
       final model = AppModel(testing: true);
@@ -63,7 +66,7 @@ void main() {
       model.handleMessageForTesting(_viz(backend: 'sysapo'));
       expect(_spectrumHot(model), isTrue);
       expect(model.vizSource, 'sysapo');
-    });
+    }, testOn: 'windows');
 
     test('switching mode clears the display immediately', () {
       final model = AppModel(testing: true);
@@ -86,7 +89,7 @@ void main() {
       model.handleMessageForTesting(_viz(backend: 'vaio'));
       expect(_spectrumHot(model), isTrue);
       expect(model.vizSource, 'vaio');
-    });
+    }, testOn: 'windows');
 
     test('capture chain accepts untagged (local) frames only', () {
       final model = AppModel(testing: true);
