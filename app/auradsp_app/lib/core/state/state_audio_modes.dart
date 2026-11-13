@@ -354,18 +354,26 @@ extension AudioModesState on AppModel {
   /// 当前模式下 viz 数据的预期来源（生产者标签口径，第二十三轮
   /// 按数据来源治理）：桥帧由 isolate 泵打标 'vaio'/'vb'/'asio'，
   /// APO 合成帧带 'sysapo'，进程内泵帧无标签按 'local' 记。
-  /// 判定顺序：附加模式（sysapo/vbcallback）由 audioMode 直接
-  /// 分发喂数者，先判——存量/默认配置的 modeCategory 可能暂为
-  /// pipeline（'auto' 派生），此时 pipelineChain 是陈值不得抢判；
-  /// 管线模式再按合成链判（capture 链的喂数者是进程内泵而非
-  /// 任何桥，其 audioMode 合成值仍为 'vaio'，故链判先于直判）。
+  /// 判定顺序（第二十四轮修正）：**范式类别优先**——喂数者由
+  /// isolate 的实际分发决定，而分发看的是 modeCategory：类别为
+  /// pipeline 时跑管线链（桥/进程内泵），audioMode 只是合成值，
+  /// 可以滞后于管线选择（鲜装默认即如此：原始 'auto' 派生
+  /// category=pipeline，audioMode 归一为 'sysapo' 而从未重派；
+  /// 只点管线选择器时 setPipelineInput 也不改写 audioMode）。
+  /// 第二十三轮曾以「附加优先」判此混合态，把管线帧全数误杀
+  /// （vm-win10 鲜装实证：处理正常、可视化全黑，日志
+  /// `viz: dropped local frame (expected sysapo)`），已定罪改判。
+  /// 类别为 attachment 时才由 audioMode 直接分发（sysapo 读
+  /// APO 遥测、vbcallback 走 VM 桥）；其余直连模式按 audioMode。
   String get expectedVizBackend {
+    if (modeCategory == AudioModes.categoryPipeline) {
+      final chain = pipelineChain;
+      if (chain == PipelineChain.asio) return 'asio';
+      if (chain == PipelineChain.vaio) return 'vaio';
+      if (chain == PipelineChain.capture) return 'local';
+    }
     if (audioMode == 'sysapo') return 'sysapo';
     if (audioMode == 'vbcallback') return 'vb';
-    final chain = pipelineChain;
-    if (chain == PipelineChain.asio) return 'asio';
-    if (chain == PipelineChain.vaio) return 'vaio';
-    if (chain == PipelineChain.capture) return 'local';
     if (audioMode == 'asio') return 'asio';
     if (audioMode == 'vaio') return 'vaio';
     return 'local';

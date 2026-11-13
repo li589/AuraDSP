@@ -91,6 +91,42 @@ void main() {
       expect(model.vizSource, 'vaio');
     }, testOn: 'windows');
 
+    // 第二十四轮回归（vm-win10 鲜装实证）：audioMode 滞后为
+    // sysapo、范式类别却是 pipeline 时，喂数者是管线而非 APO——
+    // 第二十三轮「附加优先」判据把管线帧全数误杀（处理正常、
+    // 可视化全黑）。事故态用 config 直写复刻（鲜装归一/会话恢复
+    // 的真实成因），判据必须按范式类别先行。
+    test('stale sysapo audioMode over a vaio chain still expects vaio',
+        () {
+      final model = AppModel(testing: true);
+      model.setAudioMode('vaio');
+      model.setPipelineInput(AudioModes.inputVaio);
+      model.config.audioMode = 'sysapo';
+      expect(model.modeCategory, AudioModes.categoryPipeline);
+      expect(model.expectedVizBackend, 'vaio');
+      model.handleMessageForTesting(_viz(backend: 'vaio'));
+      expect(_spectrumHot(model), isTrue);
+      expect(model.vizSource, 'vaio');
+      model.handleMessageForTesting(_viz(backend: 'sysapo'));
+      expect(model.vizSource, 'vaio', reason: 'apo frame is foreign here');
+    }, testOn: 'windows');
+
+    test('stale sysapo audioMode over a capture chain still expects local',
+        () {
+      final model = AppModel(testing: true);
+      model.setAudioMode('vaio');
+      model.setPipelineInput(AudioModes.inputWasapi);
+      model.setPipelineOutput(AudioModes.outputWasapi);
+      expect(model.pipelineChain, PipelineChain.capture);
+      model.config.audioMode = 'sysapo';
+      expect(model.expectedVizBackend, 'local');
+      model.handleMessageForTesting(_viz(backend: 'sysapo'));
+      expect(_spectrumZero(model), isTrue, reason: 'apo frame dropped');
+      model.handleMessageForTesting(_viz());
+      expect(_spectrumHot(model), isTrue);
+      expect(model.vizSource, 'local');
+    }, testOn: 'windows');
+
     test('capture chain accepts untagged (local) frames only', () {
       final model = AppModel(testing: true);
       model.setAudioMode('vaio');
