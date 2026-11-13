@@ -34,7 +34,9 @@ void main() {
   group('viz source governance (round 23)', () {
     test('expected backend follows mode and pipeline chain', () {
       final model = AppModel(testing: true);
-      // Windows 默认：auto → sysapo（构造期 normalize）。
+      // 起始模式显式设定：同文件内前序测试的落盘会污染后续构造
+      // 的配置默认值，不依赖机器存量配置。
+      model.setAudioMode('sysapo');
       expect(model.expectedVizBackend, 'sysapo');
       model.setAudioMode('vbcallback');
       expect(model.expectedVizBackend, 'vb');
@@ -53,6 +55,7 @@ void main() {
 
     test('frames from a non-expected source are dropped', () {
       final model = AppModel(testing: true);
+      model.setAudioMode('sysapo');
       expect(model.expectedVizBackend, 'sysapo');
       model.handleMessageForTesting(_viz(backend: 'vaio'));
       expect(_spectrumZero(model), isTrue, reason: 'foreign frame dropped');
@@ -64,6 +67,7 @@ void main() {
 
     test('switching mode clears the display immediately', () {
       final model = AppModel(testing: true);
+      model.setAudioMode('sysapo');
       model.handleMessageForTesting(_viz(backend: 'sysapo', chCount: 8));
       expect(_spectrumHot(model), isTrue);
       expect(model.vizChannelCount.value, 8);
