@@ -1068,6 +1068,18 @@ class AppModel extends ChangeNotifier {
     List.filled(kVizStageTelemetry * kVizChannelMax, -120.0),
   );
 
+  /// 当前 viz 帧的实际来源（生产者标签：'local'/'vaio'/'vb'/
+  /// 'asio'/'sysapo'）；尚无帧或刚切换待新源首帧时为 null。
+  /// 第二十三轮按数据来源治理频谱残留的状态面。
+  String? vizSource;
+
+  /// 上次「切换清零」时的预期来源基线（见 state_audio_modes 的
+  /// expectedVizBackend / _syncVizSourceOnSwitch）。
+  String? _vizSourceBaseline;
+
+  /// 最近一次被来源过滤丢弃的帧标签（丢弃日志去重用）。
+  String? _lastDroppedVizBackend;
+
   // 动态衰减量计量 (Gain Reduction, dB, 负值或 0.0)
   final grLimiter = ValueNotifier<double>(0.0);
   final grComp = ValueNotifier<double>(0.0);

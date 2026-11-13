@@ -351,6 +351,36 @@ extension AudioModesState on AppModel {
             )
           : null;
 
+  /// 当前模式下 viz 数据的预期来源（生产者标签口径，第二十三轮
+  /// 按数据来源治理）：桥帧由 isolate 泵打标 'vaio'/'vb'/'asio'，
+  /// APO 合成帧带 'sysapo'，进程内泵帧无标签按 'local' 记。
+  /// 管线类别内合成链优先于 audioMode 直判——capture 链的喂数者
+  /// 是进程内泵而非任何桥（其 audioMode 合成值仍为 'vaio'）。
+  String get expectedVizBackend {
+    final chain = pipelineChain;
+    if (chain == PipelineChain.asio) return 'asio';
+    if (chain == PipelineChain.vaio) return 'vaio';
+    if (chain == PipelineChain.capture) return 'local';
+    if (audioMode == 'sysapo') return 'sysapo';
+    if (audioMode == 'vbcallback') return 'vb';
+    if (audioMode == 'asio') return 'asio';
+    if (audioMode == 'vaio') return 'vaio';
+    return 'local';
+  }
+
+  /// 数据源切换即清零（第二十三轮）：新源尚未产帧、或切到的
+  /// 选项根本无声（无帧的驱动选项/断路器拦下桥未起）时，旧源的
+  /// 最后一帧不得残留。基线与当前预期一致则不动——重复调用
+  /// 幂等；由 applyPipelineChain 入口与 setAudioMode 各调用点
+  /// 汇合触发（setAudioMode 末尾必经 applyPipelineChain）。
+  void _syncVizSourceOnSwitch() {
+    final expected = expectedVizBackend;
+    if (_vizSourceBaseline == expected) return;
+    _vizSourceBaseline = expected;
+    vizSource = null;
+    _clearVizState();
+  }
+
   /// 在枚举结果里按 id 或名称找端点（config 里存的设备值是
   /// 「id 优先、缺失时名称」的下拉 value，两种形态都要认）。
   AudioDeviceItem? _resolveWasapiDevice(String v) {
@@ -459,6 +489,10 @@ extension AudioModesState on AppModel {
 
   void applyPipelineChain() {
     if (!PlatformProfile.supportsBridges) return;
+    // 第二十三轮：链路对账前先按数据来源对齐显示面——本函数的
+    // 全部调用点（模式切换/管线改选/就绪对账）config 已持新值，
+    // 预期来源变化即清零（幂等，见 _syncVizSourceOnSwitch）。
+    _syncVizSourceOnSwitch();
     // 第七轮 S2（项 5）：开关总闸——任一关闭，合成链不下发，在跑
     // 的捕获/桥链按模式切换的同口径拆干净。此前两标志只被面板
     // 读取（收起子面板），分发器从不看（项 5 定罪：开关纯装饰、

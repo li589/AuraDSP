@@ -13,6 +13,37 @@ part of '../state.dart';
 const int _kEventDedupWindowMs = 5000;
 
 extension StateEvents on AppModel {
+  /// viz 显示面全清零：频谱/输入谱/双声道电平/分级电平/GR 四表/
+  /// 输入门控四表/逐声道规范形一并回落。第二十三轮抽出统一实现
+  /// ——桥上升沿清零与数据源切换清零共用；旧实现三处上升沿口径
+  /// 不一（VAIO 漏清 GR、三处都漏清逐声道与输入门控表），本次
+  /// 一并补齐。电平地板与旧上升沿一致（-90），逐声道回「无帧」
+  /// 态（count=0，UI 回退 L/R 两柱）。
+  void _clearVizState() {
+    spectrum.value = List<double>.filled(32, 0.0);
+    eqInSpectrum.value = List<double>.filled(32, 0.0);
+    levelL.value = -90.0;
+    levelR.value = -90.0;
+    grLimiter.value = 0.0;
+    grComp.value = 0.0;
+    grGate.value = 0.0;
+    grDyneqLow.value = 0.0;
+    grDyneqMid.value = 0.0;
+    grDyneqHigh.value = 0.0;
+    // 长度必须与声明一致（kEngineStageCount；_StageStereoMeter
+    // 按 0..18 索引，越界回退 -120 会造成 LED 恒灭）。
+    stageLevelsL.value = List<double>.filled(kEngineStageCount, -90.0);
+    stageLevelsR.value = List<double>.filled(kEngineStageCount, -90.0);
+    inputMeterInL.value = -120.0;
+    inputMeterInR.value = -120.0;
+    inputMeterOutL.value = -120.0;
+    inputMeterOutR.value = -120.0;
+    vizChannelCount.value = 0;
+    vizChannelLevels.value = List<double>.filled(kVizChannelMax, -120.0);
+    vizStageChLevels.value =
+        List<double>.filled(kVizStageTelemetry * kVizChannelMax, -120.0);
+  }
+
   void _onMessage(dynamic raw) {
     if (raw is! Map) return;
     switch (raw['evt'] as String) {
@@ -876,6 +907,19 @@ extension StateEvents on AppModel {
         break;
       case 'viz':
         if (!window.isVisible) break;
+        // 第二十三轮（按数据来源治理）：只收当前模式预期来源的
+        // 帧。切换后旧源的迟到帧（含其断流补帧）不得把已清零的
+        // 显示面重新涂回；进程内泵帧无 backend 键，按 'local'。
+        final vizBackend = raw['backend'] as String? ?? 'local';
+        if (vizBackend != expectedVizBackend) {
+          if (_lastDroppedVizBackend != vizBackend) {
+            _lastDroppedVizBackend = vizBackend;
+            dbgLog('viz: dropped $vizBackend frame '
+                '(expected $expectedVizBackend)');
+          }
+          break;
+        }
+        vizSource = vizBackend;
         spectrum.value = (raw['spectrum'] as List).cast<double>();
         if (raw['eqIn'] != null) {
           eqInSpectrum.value = (raw['eqIn'] as List).cast<double>();
@@ -979,20 +1023,7 @@ extension StateEvents on AppModel {
           // 的 -2 哨兵或已失效路——回落最低有效路，避免插件页落入
           // 「无路可操作」态（A/B 与 Ch 曾被 group=-1 拖活）。
           _fallbackVbPluginEditorGroup();
-          spectrum.value = List<double>.filled(32, 0.0);
-          eqInSpectrum.value = List<double>.filled(32, 0.0);
-          levelL.value = -90.0;
-          levelR.value = -90.0;
-          grLimiter.value = 0.0;
-          grComp.value = 0.0;
-          grGate.value = 0.0;
-          grDyneqLow.value = 0.0;
-          grDyneqMid.value = 0.0;
-          grDyneqHigh.value = 0.0;
-          // 长度必须与声明一致（kEngineStageCount=12；此前误写 5，
-          // _StageStereoMeter 按 0..18 索引，越界回退 -120 造成 LED 恒灭）。
-          stageLevelsL.value = List<double>.filled(kEngineStageCount, -90.0);
-          stageLevelsR.value = List<double>.filled(kEngineStageCount, -90.0);
+          _clearVizState();
         }
         // P0-2：1s 心跳只推 hbTick（高频读数组件），粗通知仅在 running
         // 翻转等结构变化时发——避免 IndexedStack 保活后离屏页每秒重建。
@@ -1017,19 +1048,8 @@ extension StateEvents on AppModel {
           lastAsioFailNote = '';
         }
         if (asioActive && !wasA) {
-          // ASIO 上升沿：同 VB——清残留帧，基线归零（长度同上，12）。
-          spectrum.value = List<double>.filled(32, 0.0);
-          eqInSpectrum.value = List<double>.filled(32, 0.0);
-          levelL.value = -90.0;
-          levelR.value = -90.0;
-          grLimiter.value = 0.0;
-          grComp.value = 0.0;
-          grGate.value = 0.0;
-          grDyneqLow.value = 0.0;
-          grDyneqMid.value = 0.0;
-          grDyneqHigh.value = 0.0;
-          stageLevelsL.value = List<double>.filled(kEngineStageCount, -90.0);
-          stageLevelsR.value = List<double>.filled(kEngineStageCount, -90.0);
+          // ASIO 上升沿：同 VB——清残留帧，基线归零。
+          _clearVizState();
         }
         // Phase 4：驱动请求重置（kAsioResetRequest，采样率/设备变化等）→
         // 复用热切换（stop→start 新参数；C++ 侧 start 时清标志，不会循环）。
@@ -1095,12 +1115,9 @@ extension StateEvents on AppModel {
           }
         }
         if (vaioActive && !wasV) {
-          spectrum.value = List<double>.filled(32, 0.0);
-          eqInSpectrum.value = List<double>.filled(32, 0.0);
-          levelL.value = -90.0;
-          levelR.value = -90.0;
-          stageLevelsL.value = List<double>.filled(kEngineStageCount, -90.0);
-          stageLevelsR.value = List<double>.filled(kEngineStageCount, -90.0);
+          // VAIO 上升沿：清残留帧，基线归零（统一实现另含 GR/
+          // 逐声道/输入门控——旧 VAIO 块漏清 GR，本次补齐）。
+          _clearVizState();
         }
         hbTick.value++;
         if (wasV != vaioActive) _notifyUi();
