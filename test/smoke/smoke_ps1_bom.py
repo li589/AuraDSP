@@ -60,8 +60,28 @@ for rel in SHIPPED_PS1:
 
 pack_src = open(os.path.join(ROOT, "installer/windows/pack.py"),
                 encoding="utf-8").read()
-check('b"\\xef\\xbb\\xbf" + REGISTER_ASIO_PS1.encode("utf-8")' in pack_src,
+check('b"\\xef\\xbb\\xbf" + _asio_ps1_bytes' in pack_src,
       "pack.py: register_asio.ps1 字节级补 BOM 落盘")
+# 第二十二轮（2026-11-13）：BOM 完好也救不了 \r 转义事故——模板
+# 是普通 Python 字符串，用法注释 .\register 与路径 \regsvr32 的
+# 单反斜杠 + r 被转义成真 CR 字节，注释行被从中劈开、后半截被
+# PowerShell 当命令执行，随包脚本整体失效（开发机实测复现，
+# 与上方 BOM 事故是两个独立病灶）。直接求值模板常量钉死三件：
+# 无 CR、用法行反斜杠在位、regsvr32 路径完整。
+import ast as _ast
+_asio_tpl = None
+for _node in _ast.parse(pack_src).body:
+    if isinstance(_node, _ast.Assign) and \
+            getattr(_node.targets[0], "id", "") == "REGISTER_ASIO_PS1":
+        _asio_tpl = _ast.literal_eval(_node.value)
+check(_asio_tpl is not None, "pack.py: REGISTER_ASIO_PS1 常量可求值")
+if _asio_tpl is not None:
+    check("\r" not in _asio_tpl,
+          "pack.py: register_asio 模板无 CR 字节（\\\\r 转义事故门）")
+    check(_asio_tpl.count("." + chr(92) + "register_asio.ps1") == 2,
+          "pack.py: register_asio 用法行反斜杠在位")
+    check("System32" + chr(92) + "regsvr32.exe" in _asio_tpl,
+          "pack.py: regsvr32 路径完整")
 check('name.lower().endswith(".ps1")' in pack_src,
       "pack.py: 模板 .ps1 拷贝路径含 BOM 补齐分支")
 

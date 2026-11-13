@@ -355,6 +355,9 @@ class ApoTelemetryReader {
   Timer? _timer;
   void Function(Map<String, dynamic>)? _send;
   int _lastSeq = -1;
+  int _staleTicks = 0;
+  bool _staleZeroSent = false;
+  int _lastChCount = 2;
   int _lastSeat = -1;
   int _lastFault = -1;
   int _lastLoadStage = -1;
@@ -385,6 +388,9 @@ class ApoTelemetryReader {
     _view = null;
     _mapping = null;
     _lastSeq = -1;
+    _staleTicks = 0;
+    _staleZeroSent = false;
+    _lastChCount = 2;
     _lastSeat = -1;
     _lastFault = -1;
     _lastLoadStage = -1;
@@ -548,8 +554,22 @@ class ApoTelemetryReader {
       }
     }
     final seq = u32[9];
-    if (seq == _lastSeq) return;
+    if (seq == _lastSeq) {
+      // 第二十二轮：流停止后 APO worker 不再推进 updateSeq
+      // （telemetry 是状态面非流，worker 只在有新 viz 帧时写块），
+      // 读者若随之沉默，状态层永远停在最后一帧——主页频谱残留
+      // 热谱、活动门的无声迟滞只能由新帧武装（2026-11-13 开发机
+      // 实测）。冻结满 500ms 补发一帧清零 viz（每冻结周期一
+      // 次），让状态层按无声口径收口；seq 恢复推进即复位。
+      if (_lastSeq >= 0 && !_staleZeroSent && ++_staleTicks >= 5) {
+        _staleZeroSent = true;
+        _emitStaleZeroViz();
+      }
+      return;
+    }
     _lastSeq = seq;
+    _staleTicks = 0;
+    _staleZeroSent = false;
     // 全面复审 S2（APO-11）：telemetry v4 及以前逐声道数据只有 L/R
     // 两路——按立体声口径上报（chCount=2），不得按流声道数合成假
     // 逐声道数据（旧行为 ch3+ 恒 -90 假静音，已废）。
@@ -591,6 +611,7 @@ class ApoTelemetryReader {
             final c = idx % chCount;
             return f32[195 + s * 8 + c];
           });
+    _lastChCount = chCount;
     _send?.call({
       'evt': 'viz',
       'backend': 'sysapo',
@@ -615,6 +636,36 @@ class ApoTelemetryReader {
       'stageCh': stageCh,
       'ts': DateTime.now().millisecondsSinceEpoch,
     });
+  }
+
+  /// 冻结补帧：与正常 viz 事件同形状、全部电平/频谱归零（动机见
+  /// _tick 的 seq 门注记）。列表先落局部变量再进字面量（AOT
+  /// 纪律，同正常帧路径）；声道数沿用最后一帧真值，形状不断裂。
+  void _emitStaleZeroViz() {
+    final chCount = _lastChCount;
+    final chLevels = List<double>.filled(chCount, -120.0);
+    final stageCh = chCount == 2
+        ? List<double>.filled(32 * 2, -90.0)
+        : List<double>.filled(21 * chCount, -120.0);
+    _send?.call({
+      'evt': 'viz',
+      'backend': 'sysapo',
+      'spectrum': List<double>.filled(32, 0.0),
+      'eqIn': List<double>.filled(32, 0.0),
+      'l': -120.0,
+      'r': -120.0,
+      'stageL': List<double>.filled(32, -90.0),
+      'stageR': List<double>.filled(32, -90.0),
+      'inputInL': -120.0,
+      'inputInR': -120.0,
+      'inputOutL': -120.0,
+      'inputOutR': -120.0,
+      'chCount': chCount,
+      'chLevels': chLevels,
+      'stageCh': stageCh,
+      'ts': DateTime.now().millisecondsSinceEpoch,
+    });
+    dbgLog('apo telemetry: seq frozen, emitted zeroed viz frame');
   }
 }
 

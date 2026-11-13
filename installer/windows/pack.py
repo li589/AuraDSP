@@ -580,8 +580,8 @@ def refresh_build_info(staging_copy: Path, extra: dict[str, str]) -> None:
 REGISTER_ASIO_PS1 = """\
 # AuraDSP ASIO 驱动注册/反注册（pack.py 生成，随驱动包分发）
 # 用法（管理员 PowerShell）：
-#   .\register_asio.ps1            注册 auraasio_driver.dll
-#   .\register_asio.ps1 -Unregister 反注册
+#   .\\register_asio.ps1            注册 auraasio_driver.dll
+#   .\\register_asio.ps1 -Unregister 反注册
 # -ResultFile：把成败 JSON 写回指定文件（提权进程的输出
 # 跨不过 UAC 边界，App 靠此文件读真实失败原因）。
 param([switch]$Unregister, [string]$ResultFile = "")
@@ -599,7 +599,7 @@ try {
     if (Test-Path $alt) { $dll = $alt }
   }
   if (-not (Test-Path $dll)) { throw "auraasio_driver.dll 不在脚本目录或其上级目录" }
-  $regsvr = "$env:SystemRoot\System32\regsvr32.exe"
+  $regsvr = "$env:SystemRoot\System32\\regsvr32.exe"
   # DLL 路径必须带引号（第六轮项 2 实证）：Start-Process 的
   # -ArgumentList 数组以空格拼接、不自动加引号，安装路径含
   # 空格（默认 Program Files）时路径被拆断、regsvr32 必败。
@@ -686,8 +686,17 @@ def stage_driver_files(
     # = GBK）解码，脚本内中文字符串字节错位可吞掉引号导致解析
     # 期 ParserError、脚本永不执行（register_asio.ps1 实测中
     # 招：注册/反注册双向恒失败）。一律字节级补 BOM，正文不动。
+    # 第二十二轮纵深断言：模板是普通（非 raw）Python 字符串，注释/
+    # 路径里的单反斜杠 + r 会被转义成真 CR 字节（0x0D），把注释行
+    # 从中间劈开、后半截被 PS 当命令执行（2026-11-13 开发机实测：
+    # 随包脚本三处 \r 事故——两处用法注释 + regsvr32 路径——脚本
+    # 再次整体失效而 BOM 完好）。模板通篇 LF，发射字节里出现 CR
+    # 即转义事故，拒绝打包，不许带病出厂。
+    _asio_ps1_bytes = REGISTER_ASIO_PS1.encode("utf-8")
+    if b"\r" in _asio_ps1_bytes:
+        raise die("register_asio.ps1 模板含 CR 字节（\\r 转义事故），拒绝打包")
     (dest / "register_asio.ps1").write_bytes(
-        b"\xef\xbb\xbf" + REGISTER_ASIO_PS1.encode("utf-8"))
+        b"\xef\xbb\xbf" + _asio_ps1_bytes)
     for name in DRIVER_TEMPLATE_FILES:
         src = DRIVER_TEMPLATE_DIR / name
         if not src.is_file():
