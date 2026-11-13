@@ -79,6 +79,9 @@ engine/_scan_cache.json
 # 素材源 test/data/ab_gate_voice.wav / ab_limiter_drums.wav 正常入库）
 test/data/*.A.wav
 test/data/*.B.wav
+# 本地多声道测试素材（5.1/7.1/立体声 24 位测试文件，单件 12–15MB，
+# 2026-11-12 生成供本机实测，文件保留在开发机 test/data 下，不入库）
+test/data/*测试文件.wav
 
 # --- 取证原始日志 / tombstone / logcat：一次性运行产物，体积大，不进版本控制 ---
 # 2026-10-31 清理：docs/forensics/2026-10-08_crash1/ 整目录（5 文件 / 36.05MB）
