@@ -20,7 +20,7 @@ Map<String, dynamic> _viz({
 }) =>
     {
       'evt': 'viz',
-      if (backend != null) 'backend': backend,
+      ?'backend': backend,
       'spectrum': List<double>.filled(32, fill),
       'eqIn': List<double>.filled(32, fill),
       'l': -6.0,
