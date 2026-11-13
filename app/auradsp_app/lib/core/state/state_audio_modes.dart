@@ -354,15 +354,18 @@ extension AudioModesState on AppModel {
   /// 当前模式下 viz 数据的预期来源（生产者标签口径，第二十三轮
   /// 按数据来源治理）：桥帧由 isolate 泵打标 'vaio'/'vb'/'asio'，
   /// APO 合成帧带 'sysapo'，进程内泵帧无标签按 'local' 记。
-  /// 管线类别内合成链优先于 audioMode 直判——capture 链的喂数者
-  /// 是进程内泵而非任何桥（其 audioMode 合成值仍为 'vaio'）。
+  /// 判定顺序：附加模式（sysapo/vbcallback）由 audioMode 直接
+  /// 分发喂数者，先判——存量/默认配置的 modeCategory 可能暂为
+  /// pipeline（'auto' 派生），此时 pipelineChain 是陈值不得抢判；
+  /// 管线模式再按合成链判（capture 链的喂数者是进程内泵而非
+  /// 任何桥，其 audioMode 合成值仍为 'vaio'，故链判先于直判）。
   String get expectedVizBackend {
+    if (audioMode == 'sysapo') return 'sysapo';
+    if (audioMode == 'vbcallback') return 'vb';
     final chain = pipelineChain;
     if (chain == PipelineChain.asio) return 'asio';
     if (chain == PipelineChain.vaio) return 'vaio';
     if (chain == PipelineChain.capture) return 'local';
-    if (audioMode == 'sysapo') return 'sysapo';
-    if (audioMode == 'vbcallback') return 'vb';
     if (audioMode == 'asio') return 'asio';
     if (audioMode == 'vaio') return 'vaio';
     return 'local';

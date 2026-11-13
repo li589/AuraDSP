@@ -41,6 +41,7 @@ void main() {
       model.setAudioMode('asio');
       expect(model.expectedVizBackend, 'asio');
       model.setAudioMode('vaio');
+      model.setPipelineInput(AudioModes.inputVaio);
       expect(model.expectedVizBackend, 'vaio');
       // 管线内改选捕获链（wasapi 进 + wasapi 出）：喂数者是进程内
       // 泵而非 VAIO 桥——合成链优先于 audioMode 直判。
@@ -66,7 +67,10 @@ void main() {
       model.handleMessageForTesting(_viz(backend: 'sysapo', chCount: 8));
       expect(_spectrumHot(model), isTrue);
       expect(model.vizChannelCount.value, 8);
+      // 切到 VAIO 链（模式 + 管线输入，与面板操作同路径）。
       model.setAudioMode('vaio');
+      model.setPipelineInput(AudioModes.inputVaio);
+      expect(model.expectedVizBackend, 'vaio');
       expect(_spectrumZero(model), isTrue, reason: 'switch clears spectrum');
       expect(model.levelL.value, -90.0);
       expect(model.vizSource, isNull);
