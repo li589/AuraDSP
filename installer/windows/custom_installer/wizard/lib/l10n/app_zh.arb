@@ -96,5 +96,16 @@
   "keepDataHint": "将保留 %APPDATA%\\AuraDSP（配置 / 预设 / 校准 / 会话）与安装目录内你自己添加的文件；驱动、注册表项、快捷方式仍会清理。",
   "uninstallDeleteAllHint": "将同时删除上述用户数据，且不可恢复。",
   "uninstallKeptTitle": "已保留的用户数据：",
-  "uninstallCleanNote": "程序文件、驱动、注册表项与快捷方式已清理。"
+  "uninstallCleanNote": "程序文件、驱动、注册表项与快捷方式已清理。",
+  "fileErrorTitle": "写入文件失败",
+  "fileErrorBody": "安装程序无法写入以下文件：\n{path}\n\n错误详情（原文）：",
+  "@fileErrorBody": {
+    "placeholders": {
+      "path": {"type": "String"}
+    }
+  },
+  "fileErrorCriticalNote": "这是关键文件，不能跳过。请处理占用或权限问题后重试，或取消安装（将回滚已完成的部分）。",
+  "fileErrorRetry": "重试",
+  "fileErrorSkip": "跳过",
+  "fileErrorCancel": "取消安装"
 }

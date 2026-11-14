@@ -538,4 +538,195 @@ void main() {
       }
     });
   });
+
+  group('关键文件分类与不可写文案（S2/S3\'）', () {
+    test('isCriticalPayloadPath：resources/ 可跳过、其余关键', () {
+      expect(isCriticalPayloadPath('resources/ir/a.irs'), isFalse);
+      expect(isCriticalPayloadPath(r'resources\ddc\b.vdc'), isFalse);
+      expect(isCriticalPayloadPath('RESOURCES/x.bin'), isFalse);
+      expect(isCriticalPayloadPath('auradsp_app.exe'), isTrue);
+      expect(isCriticalPayloadPath('driver/install_vaio.ps1'), isTrue);
+      expect(isCriticalPayloadPath('data/flutter_assets/app.so'), isTrue);
+    });
+
+    test('writabilityFailureMessage：未提权拒绝访问给提权/改目录指引', () {
+      final m = writabilityFailureMessage(
+          dir: r'C:\Program Files\AuraDSP',
+          errorCode: 5,
+          rawError: 'denied-raw',
+          elevated: false);
+      expect(m, contains('管理员'));
+      expect(m, contains('改选'));
+      expect(m, contains('denied-raw'));
+    });
+
+    test('writabilityFailureMessage：已提权拒绝访问指引查权限', () {
+      final m = writabilityFailureMessage(
+          dir: r'D:\Apps\AuraDSP',
+          errorCode: 5,
+          rawError: 'denied-raw',
+          elevated: true);
+      expect(m, contains('安全软件'));
+    });
+
+    test('writabilityFailureMessage：其它错误通用文案带原文', () {
+      final m = writabilityFailureMessage(
+          dir: r'D:\Apps\AuraDSP',
+          errorCode: 112,
+          rawError: 'disk-full-raw',
+          elevated: false);
+      expect(m, contains(r'D:\Apps\AuraDSP'));
+      expect(m, contains('disk-full-raw'));
+    });
+
+    test('staleUpgradePaths：被跳过保留的文件不算遗留', () {
+      final prev = InstallManifest(
+        version: '0.1.0',
+        fullVersion: '0.1.0',
+        installDir: r'C:\X',
+        allUsers: false,
+        components: const ['app'],
+        files: const [
+          ManifestFile(path: 'a.dll', size: 1, sha256: 'x'),
+          ManifestFile(path: 'b.dll', size: 1, sha256: 'y'),
+        ],
+        shortcuts: const [],
+        installedAtIso: '2026-01-01T00:00:00',
+      );
+      expect(staleUpgradePaths(prev, const [], alsoPresent: {'a.dll'}),
+          {'b.dll'});
+      expect(staleUpgradePaths(prev, const []), {'a.dll', 'b.dll'});
+    });
+  });
+
+  group('extractPayload 失败决策（重试/跳过/取消，S3\'）', () {
+    Future<File> writeZip(
+        Directory dir, List<MapEntry<String, String>> entries) async {
+      final archive = Archive();
+      for (final e in entries) {
+        archive.addFile(ArchiveFile(e.key, e.value.length, e.value.codeUnits));
+      }
+      final zipFile = File('${dir.path}/payload.zip');
+      await zipFile.writeAsBytes(ZipEncoder().encode(archive));
+      return zipFile;
+    }
+
+    // 失败构造：先落盘一个文件 blob.bin，再放它的「子条目」——
+    // 父路径已是文件，建目录必然抛 FileSystemException，与平台
+    // 无关、可重复。其余条目正常。
+    List<MapEntry<String, String>> fixture(String base) => [
+          MapEntry('payload/$base/blob.bin', 'file-not-dir'),
+          MapEntry('payload/$base/blob.bin/inner.dat', 'boom'),
+          const MapEntry('payload/ok.txt', 'fine'),
+        ];
+
+    test('跳过：失败条目不进清单、进跳过名单（resources 非关键）', () async {
+      final tmp = await Directory.systemTemp.createTemp('auradsp-wiz-');
+      try {
+        final dest = Directory('${tmp.path}/AuraDSP');
+        final zip = await writeZip(tmp, fixture('resources'));
+        final prompts = <FileErrorPrompt>[];
+        final skipped = <String>[];
+        final written = await extractPayload(
+          zip.path,
+          dest.path,
+          include: (_) => true,
+          skippedSink: skipped,
+          onFileError: (pr) async {
+            prompts.add(pr);
+            return FileErrorDecision.skip;
+          },
+        );
+        expect(written.map((f) => f.path),
+            ['resources/blob.bin', 'ok.txt']);
+        expect(skipped, ['resources/blob.bin/inner.dat']);
+        expect(prompts, hasLength(1));
+        expect(prompts.single.critical, isFalse);
+        expect(prompts.single.relPath, 'resources/blob.bin/inner.dat');
+        expect(prompts.single.errorText, isNotEmpty);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('关键文件：根目录条目的 prompt 标记 critical', () async {
+      final tmp = await Directory.systemTemp.createTemp('auradsp-wiz-');
+      try {
+        final dest = Directory('${tmp.path}/AuraDSP');
+        final zip = await writeZip(tmp, fixture('driver'));
+        final prompts = <FileErrorPrompt>[];
+        await extractPayload(
+          zip.path,
+          dest.path,
+          include: (_) => true,
+          onFileError: (pr) async {
+            prompts.add(pr);
+            return FileErrorDecision.skip;
+          },
+        );
+        expect(prompts.single.critical, isTrue);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('重试：先重试再跳过，handler 被调用两次', () async {
+      final tmp = await Directory.systemTemp.createTemp('auradsp-wiz-');
+      try {
+        final dest = Directory('${tmp.path}/AuraDSP');
+        final zip = await writeZip(tmp, fixture('resources'));
+        var calls = 0;
+        final skipped = <String>[];
+        await extractPayload(
+          zip.path,
+          dest.path,
+          include: (_) => true,
+          skippedSink: skipped,
+          onFileError: (pr) async {
+            calls++;
+            return calls == 1
+                ? FileErrorDecision.retry
+                : FileErrorDecision.skip;
+          },
+        );
+        expect(calls, 2, reason: '结构性失败重试后仍失败，应再次询问');
+        expect(skipped, ['resources/blob.bin/inner.dat']);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('取消：抛 InstallCancelled', () async {
+      final tmp = await Directory.systemTemp.createTemp('auradsp-wiz-');
+      try {
+        final dest = Directory('${tmp.path}/AuraDSP');
+        final zip = await writeZip(tmp, fixture('resources'));
+        await expectLater(
+          extractPayload(
+            zip.path,
+            dest.path,
+            include: (_) => true,
+            onFileError: (pr) async => FileErrorDecision.cancel,
+          ),
+          throwsA(isA<InstallCancelled>()),
+        );
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('无回调（静默语义）：失败直接抛出，不吞', () async {
+      final tmp = await Directory.systemTemp.createTemp('auradsp-wiz-');
+      try {
+        final dest = Directory('${tmp.path}/AuraDSP');
+        final zip = await writeZip(tmp, fixture('resources'));
+        await expectLater(
+          extractPayload(zip.path, dest.path, include: (_) => true),
+          throwsA(isA<FileSystemException>()),
+        );
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
 }

@@ -244,4 +244,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get uninstallCleanNote => '程序文件、驱动、注册表项与快捷方式已清理。';
+
+  @override
+  String get fileErrorTitle => '写入文件失败';
+
+  @override
+  String fileErrorBody(String path) {
+    return '安装程序无法写入以下文件：\n$path\n\n错误详情（原文）：';
+  }
+
+  @override
+  String get fileErrorCriticalNote =>
+      '这是关键文件，不能跳过。请处理占用或权限问题后重试，或取消安装（将回滚已完成的部分）。';
+
+  @override
+  String get fileErrorRetry => '重试';
+
+  @override
+  String get fileErrorSkip => '跳过';
+
+  @override
+  String get fileErrorCancel => '取消安装';
 }

@@ -96,5 +96,16 @@
   "keepDataHint": "%APPDATA%\\AuraDSP（設定 / プリセット / キャリブレーション / セッション）と、インストール先に自分で追加したファイルを保持します。ドライバー・レジストリ・ショートカットは削除されます。",
   "uninstallDeleteAllHint": "上記のユーザーデータも削除されます。元に戻せません。",
   "uninstallKeptTitle": "保持したユーザーデータ：",
-  "uninstallCleanNote": "プログラムファイル・ドライバー・レジストリ・ショートカットを削除しました。"
+  "uninstallCleanNote": "プログラムファイル・ドライバー・レジストリ・ショートカットを削除しました。",
+  "fileErrorTitle": "ファイルの書き込みに失敗",
+  "fileErrorBody": "次のファイルに書き込めませんでした：\n{path}\n\nエラー詳細（原文）：",
+  "@fileErrorBody": {
+    "placeholders": {
+      "path": {"type": "String"}
+    }
+  },
+  "fileErrorCriticalNote": "これは重要なファイルのためスキップできません。ロックまたは権限の問題を解消して再試行するか、セットアップをキャンセルしてください（完了したステップはロールバックされます）。",
+  "fileErrorRetry": "再試行",
+  "fileErrorSkip": "スキップ",
+  "fileErrorCancel": "キャンセル"
 }

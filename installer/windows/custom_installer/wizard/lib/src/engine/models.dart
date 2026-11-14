@@ -162,6 +162,44 @@ class ProgressEvent {
 
 typedef ProgressSink = void Function(ProgressEvent e);
 
+/// 文件写入失败时的用户决策（仿 Windows Installer 的
+/// 重试 / 跳过 / 取消）。由 UI 层经回调提供；静默模式不提供
+/// 回调，文件失败直接终止整单（与 /quiet 下的 MSI 一致）。
+enum FileErrorDecision { retry, skip, cancel }
+
+/// 一次文件写入失败的现场（errorText 为异常原文、原样展示）。
+class FileErrorPrompt {
+  const FileErrorPrompt({
+    required this.step,
+    required this.relPath,
+    required this.errorText,
+    required this.critical,
+  });
+
+  /// 出错环节（如 extract）。
+  final String step;
+
+  /// 出错文件（相对安装目录）。
+  final String relPath;
+
+  /// 错误原文（含 errno 与路径），不做翻译/截断。
+  final String errorText;
+
+  /// 关键文件：不允许跳过，UI 禁用「跳过」按钮。
+  final bool critical;
+}
+
+typedef FileErrorHandler =
+    Future<FileErrorDecision> Function(FileErrorPrompt prompt);
+
+/// 用户在失败弹窗选择「取消」：终止安装并走既有回滚。
+class InstallCancelled implements Exception {
+  const InstallCancelled();
+
+  @override
+  String toString() => 'InstallCancelled';
+}
+
 class EngineResult {
   const EngineResult({
     required this.ok,

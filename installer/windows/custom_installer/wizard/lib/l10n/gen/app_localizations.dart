@@ -543,6 +543,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Program files, drivers, registry entries and shortcuts were removed.'**
   String get uninstallCleanNote;
+
+  /// No description provided for @fileErrorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to write a file'**
+  String get fileErrorTitle;
+
+  /// No description provided for @fileErrorBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Setup could not write the following file:\n{path}\n\nError details (verbatim):'**
+  String fileErrorBody(String path);
+
+  /// No description provided for @fileErrorCriticalNote.
+  ///
+  /// In en, this message translates to:
+  /// **'This is a critical file and cannot be skipped. Resolve the lock or permission issue and retry, or cancel setup (completed steps will be rolled back).'**
+  String get fileErrorCriticalNote;
+
+  /// No description provided for @fileErrorRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get fileErrorRetry;
+
+  /// No description provided for @fileErrorSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get fileErrorSkip;
+
+  /// No description provided for @fileErrorCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel setup'**
+  String get fileErrorCancel;
 }
 
 class _AppLocalizationsDelegate

@@ -257,4 +257,25 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get uninstallCleanNote =>
       'Program files, drivers, registry entries and shortcuts were removed.';
+
+  @override
+  String get fileErrorTitle => 'Failed to write a file';
+
+  @override
+  String fileErrorBody(String path) {
+    return 'Setup could not write the following file:\n$path\n\nError details (verbatim):';
+  }
+
+  @override
+  String get fileErrorCriticalNote =>
+      'This is a critical file and cannot be skipped. Resolve the lock or permission issue and retry, or cancel setup (completed steps will be rolled back).';
+
+  @override
+  String get fileErrorRetry => 'Retry';
+
+  @override
+  String get fileErrorSkip => 'Skip';
+
+  @override
+  String get fileErrorCancel => 'Cancel setup';
 }

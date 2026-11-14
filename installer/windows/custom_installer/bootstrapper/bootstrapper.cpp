@@ -299,6 +299,33 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
         return Fail(L"Cannot resolve the setup executable path.");
     std::wstring self(selfPath);
 
+    // Fast single-instance pre-check: the wizard holds this mutex
+    // for its whole lifetime (see the wizard runner). Advisory
+    // only -- two shells can both pass before either wizard starts,
+    // so the wizard re-checks authoritatively. Skips the expensive
+    // payload hash + extraction when an instance is already up.
+    {
+        HANDLE existing =
+            OpenMutexW(SYNCHRONIZE, FALSE, L"AuraDSP-Setup-Instance");
+        if (existing) {
+            CloseHandle(existing);
+            std::wstring tail0 = CommandLineTail(GetCommandLineW());
+            bool silent =
+                tail0.find(L"/silent") != std::wstring::npos ||
+                tail0.find(L"--silent") != std::wstring::npos ||
+                tail0.find(L"/S") != std::wstring::npos;
+            if (!silent) {
+                MessageBoxW(
+                    nullptr,
+                    L"AuraDSP 安装程序已在运行，请切换到已打开的安装窗口继续。\n\n"
+                    L"Another AuraDSP Setup is already running. "
+                    L"Switch to the open Setup window to continue.",
+                    L"AuraDSP Setup", MB_OK | MB_ICONINFORMATION);
+            }
+            return 1;
+        }
+    }
+
     HANDLE file = CreateFileW(self.c_str(), GENERIC_READ, FILE_SHARE_READ,
                               nullptr, OPEN_EXISTING, 0, nullptr);
     if (file == INVALID_HANDLE_VALUE)

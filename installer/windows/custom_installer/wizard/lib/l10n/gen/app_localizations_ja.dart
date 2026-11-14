@@ -248,4 +248,25 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get uninstallCleanNote => 'プログラムファイル・ドライバー・レジストリ・ショートカットを削除しました。';
+
+  @override
+  String get fileErrorTitle => 'ファイルの書き込みに失敗';
+
+  @override
+  String fileErrorBody(String path) {
+    return '次のファイルに書き込めませんでした：\n$path\n\nエラー詳細（原文）：';
+  }
+
+  @override
+  String get fileErrorCriticalNote =>
+      'これは重要なファイルのためスキップできません。ロックまたは権限の問題を解消して再試行するか、セットアップをキャンセルしてください（完了したステップはロールバックされます）。';
+
+  @override
+  String get fileErrorRetry => '再試行';
+
+  @override
+  String get fileErrorSkip => 'スキップ';
+
+  @override
+  String get fileErrorCancel => 'キャンセル';
 }

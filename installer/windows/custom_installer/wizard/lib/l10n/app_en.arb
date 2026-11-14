@@ -96,5 +96,16 @@
   "keepDataHint": "Keeps %APPDATA%\\AuraDSP (settings / presets / calibration / session) and any files you added to the install folder. Drivers, registry entries and shortcuts are still removed.",
   "uninstallDeleteAllHint": "The user data above will also be deleted. This cannot be undone.",
   "uninstallKeptTitle": "User data kept:",
-  "uninstallCleanNote": "Program files, drivers, registry entries and shortcuts were removed."
+  "uninstallCleanNote": "Program files, drivers, registry entries and shortcuts were removed.",
+  "fileErrorTitle": "Failed to write a file",
+  "fileErrorBody": "Setup could not write the following file:\n{path}\n\nError details (verbatim):",
+  "@fileErrorBody": {
+    "placeholders": {
+      "path": {"type": "String"}
+    }
+  },
+  "fileErrorCriticalNote": "This is a critical file and cannot be skipped. Resolve the lock or permission issue and retry, or cancel setup (completed steps will be rolled back).",
+  "fileErrorRetry": "Retry",
+  "fileErrorSkip": "Skip",
+  "fileErrorCancel": "Cancel setup"
 }

@@ -9,6 +9,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import 'models.dart';
+import 'update_policy.dart';
 
 /// 解压上限（2026-11-08 审计 F4）：条目数与解压总量设顶，防高膨胀
 /// 比载荷写满安装盘（引导壳侧对段长有硬顶，向导侧此前无对应约束）。
@@ -110,12 +111,20 @@ bool Function(String rel) componentFilter({required bool ddcPresets}) {
 
 /// 解压载荷 zip 到 destDir（含 payload/ 前缀剥离与路径穿越防护）。
 /// onFile 每完成一个文件回调一次（进度与日志）。
+///
+/// [onFileError] 是单文件写入失败时的决策回调（重试 / 跳过 /
+/// 取消，仿 Windows Installer）：未提供（静默模式）时失败直接
+/// 抛出、整单终止。被跳过的文件进 [skippedSink]、不进返回清单；
+/// 改名让位产生的文件进 [asideSink]，由调用方收尾清理。
 Future<List<ManifestFile>> extractPayload(
   String zipPath,
   String destDir, {
   required bool Function(String rel) include,
   void Function(String rel, int done, int total)? onFile,
   void Function(String warning)? onWarning,
+  FileErrorHandler? onFileError,
+  List<String>? skippedSink,
+  List<String>? asideSink,
 }) async {
   final input = InputFileStream(zipPath);
   final archive = ZipDecoder().decodeStream(input);
@@ -148,25 +157,67 @@ Future<List<ManifestFile>> extractPayload(
         throw StateError('载荷含越界路径: ${entry.name}');
       }
       final target = File(targetPath);
-      await target.parent.create(recursive: true);
-      await writeEntryResilient(
-        entry,
-        target,
-        onAside: (asidePath) => onWarning?.call(
-            '$rel 仍被其他进程占用，已将旧文件改名让位'
-            '（${p.basename(asidePath)}），新版已写入；'
-            '让位文件将在下次安装/卸载时清理'),
-      );
-      // 流式算 SHA + 长度（2026-11-12 内存治理）：旧实现把每个
-      // 落盘文件整份 readAsBytes 回内存只为算哈希，大文件（数十
-      // MB 级 DLL/资源）逐个制造同等大小的内存峰值；改 1MB 分块
-      // 流式摘要后峰值与文件大小脱钩。
-      final digest = await sha256.bind(target.openRead()).single;
-      written.add(ManifestFile(
-        path: rel,
-        size: await target.length(),
-        sha256: digest.toString(),
-      ));
+      String? asidePath;
+      var skippedFile = false;
+      // 单文件的「写 + 校验」是一段可重试的活：硬失败（非占用、
+      // 或让位也救不了）时把现场交给 onFileError 决策。重试就
+      // 整段重来（写是截断式重写，部分写无残留问题）；跳过时
+      // 若让位已发生而目标缺失，尽力把旧文件改名恢复，使覆盖
+      // 安装的「跳过 = 保留旧版」成立。
+      while (true) {
+        try {
+          await target.parent.create(recursive: true);
+          await writeEntryResilient(
+            entry,
+            target,
+            onAside: (ap) {
+              asidePath = ap;
+              asideSink?.add(ap);
+              onWarning?.call(
+                  '$rel 仍被其他进程占用，已将旧文件改名让位'
+                  '（${p.basename(ap)}），新版已写入；'
+                  '让位文件将在下次安装/卸载时清理');
+            },
+          );
+          // 流式算 SHA + 长度（2026-11-12 内存治理）：旧实现把每个
+          // 落盘文件整份 readAsBytes 回内存只为算哈希，大文件（数十
+          // MB 级 DLL/资源）逐个制造同等大小的内存峰值；改 1MB 分块
+          // 流式摘要后峰值与文件大小脱钩。
+          final digest = await sha256.bind(target.openRead()).single;
+          written.add(ManifestFile(
+            path: rel,
+            size: await target.length(),
+            sha256: digest.toString(),
+          ));
+          break;
+        } catch (e) {
+          if (onFileError == null || e is InstallCancelled) rethrow;
+          final decision = await onFileError(FileErrorPrompt(
+            step: 'extract',
+            relPath: rel,
+            errorText: '$e',
+            critical: isCriticalPayloadPath(rel),
+          ));
+          if (decision == FileErrorDecision.retry) continue;
+          if (decision == FileErrorDecision.cancel) {
+            throw const InstallCancelled();
+          }
+          if (asidePath != null && !await target.exists()) {
+            try {
+              await File(asidePath!).rename(target.path);
+            } catch (_) {}
+          }
+          skippedSink?.add(rel);
+          skippedFile = true;
+          break;
+        }
+      }
+      if (skippedFile) {
+        // 跳过的条目也算已处理（进度分母含它），只是不进清单。
+        done++;
+        onFile?.call(rel, done, total);
+        continue;
+      }
       done++;
       onFile?.call(rel, done, total);
     }

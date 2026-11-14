@@ -96,18 +96,28 @@ class InstallEngine {
     InstallOptions o,
     ProgressSink sink, {
     UpdatePlan? plan,
+    FileErrorHandler? onFileError,
   }) async {
     _allUsers = o.allUsers;
     final warnings = <String>[];
     final createdFiles = <ManifestFile>[];
     final createdShortcuts = <String>[];
     final backupFailed = <String>{};
+    final installAsides = <String>[];
+    final skippedFiles = <String>[];
     final elevated = isElevated();
     final overwrite = plan?.isOverwrite ?? false;
     final hasOldManifest = plan?.previous?.hasManifest ?? false;
     String? backupDir;
 
     try {
+      // 0) 安装目录可写性预检：在进程守卫 / APO 分离 / 备份等
+      //    一切有副作用的步骤之前，先确认目标目录可建可写。
+      //    否则选了 Program Files 等系统目录又未提权时，会一路
+      //    走到解压中途才撞墙（且可能已写了一半）。
+      sink(const ProgressEvent('guard', 'probe', 0.01));
+      await _probeWritable(o.installDir, elevated: elevated);
+
       // 1) 进程守卫
       sink(const ProgressEvent('guard', 'check', 0.02));
       if (o.closeRunningApps) {
@@ -177,8 +187,16 @@ class InstallEngine {
         onFile: (rel, done, total) => sink(ProgressEvent('extract', rel,
             total == 0 ? null : 0.05 + 0.70 * done / total)),
         onWarning: warnings.add,
+        onFileError: onFileError,
+        skippedSink: skippedFiles,
+        asideSink: installAsides,
       );
       createdFiles.addAll(files);
+      if (skippedFiles.isNotEmpty) {
+        warnings.add('已跳过 ${skippedFiles.length} 个写入失败的文件'
+            '（可能缺失或仍为旧版）：${skippedFiles.take(5).join('、')}'
+            '${skippedFiles.length > 5 ? ' …' : ''}');
+      }
 
       // 4) ASIO 注册（用户态 COM，不受内核驱动签名限制；降级警告）
       if (o.asio) {
@@ -304,7 +322,8 @@ class InstallEngine {
       // 8) 升级成功：清理旧版遗留（旧清单有、新清单没有的随包文件），
       //    再删备份快照。这些旧文件都在备份里，若此步抛错仍可回滚恢复。
       if (overwrite && hasOldManifest) {
-        final stale = staleUpgradePaths(plan!.previous!.manifest, createdFiles);
+        final stale = staleUpgradePaths(plan!.previous!.manifest, createdFiles,
+            alsoPresent: skippedFiles.toSet());
         for (final rel in stale) {
           // 删除守卫（2026-11-08 审计 F2）：上一版清单是磁盘数据，
           // 其相对路径拼安装目录后必须仍在目录内才可删。
@@ -317,8 +336,17 @@ class InstallEngine {
         }
       }
       if (backupDir != null) await _deleteBackup(backupDir);
+      // 本次改名让位的文件即时收尾：占用多已解除的直接删掉，
+      // 仍锁着的交给完成页的退出后清理脚本（leftoverPaths 通道），
+      // 不再等下次安装/卸载才扫。
+      final leftovers = await _retireAsides(installAsides);
+      if (leftovers.isNotEmpty) {
+        warnings.add('有 ${leftovers.length} 个被占用的旧文件已改名让位，'
+            '将在向导退出后自动清理');
+      }
       sink(const ProgressEvent('done', '', 1.0));
-      return EngineResult(ok: true, warnings: warnings);
+      return EngineResult(
+          ok: true, warnings: warnings, leftoverPaths: leftovers);
     } catch (e) {
       // 回滚：覆盖升级先恢复旧程序文件，再删本次新增文件；用户数据一律不动。
       if (overwrite && hasOldManifest && backupDir != null) {
@@ -353,13 +381,21 @@ class InstallEngine {
       }
       // 文件占用类错误给可行动的人话（2026-11-12 业主实测：错误
       // 页曾直接展示裸 PathAccessException，用户无从下手）。
-      final errorText = e is FileSystemException
-          ? '文件被其他进程占用或无法访问：${e.path ?? ''}\n'
-              '请关闭正在播放音频的程序、退出 AuraDSP 后重试。\n'
-              '（技术详情：${e.osError?.message ?? e.message}'
-              '${e.osError != null ? '，errno ${e.osError!.errorCode}' : ''}）'
-          : '$e';
-      return EngineResult(ok: false, error: errorText, warnings: warnings);
+      final errorText = e is InstallCancelled
+          ? (overwrite
+              ? '安装已被取消，已回滚到安装前的状态。'
+              : '安装已被取消，已清除本次写入的文件。')
+          : e is FileSystemException
+              ? '文件被其他进程占用或无法访问：${e.path ?? ''}\n'
+                  '请关闭正在播放音频的程序、退出 AuraDSP 后重试。\n'
+                  '（技术详情：${e.osError?.message ?? e.message}'
+                  '${e.osError != null ? '，errno ${e.osError!.errorCode}' : ''}）'
+              : '$e';
+      return EngineResult(
+          ok: false,
+          error: errorText,
+          warnings: warnings,
+          leftoverPaths: installAsides);
     }
   }
 
@@ -487,6 +523,52 @@ class InstallEngine {
         failed?.add(p.relative(e.path, from: installDir));
       }
     }
+  }
+
+  /// 安装目录可写性预检：建目录（递归）+ 写删一个探针文件。
+  /// 失败时把裸异常翻译成可行动文案（见 writabilityFailureMessage）。
+  Future<void> _probeWritable(String dir, {required bool elevated}) async {
+    String rawOf(FileSystemException e) =>
+        '${e.osError?.message ?? e.message}'
+        '${e.osError != null ? ' (errno ${e.osError!.errorCode})' : ''}';
+    try {
+      await Directory(dir).create(recursive: true);
+    } on FileSystemException catch (e) {
+      throw StateError(writabilityFailureMessage(
+        dir: dir,
+        errorCode: e.osError?.errorCode,
+        rawError: rawOf(e),
+        elevated: elevated,
+      ));
+    }
+    final probe = File(p.join(dir, '.auradsp-write-probe'));
+    try {
+      await probe.writeAsBytes(const <int>[0], flush: true);
+    } on FileSystemException catch (e) {
+      throw StateError(writabilityFailureMessage(
+        dir: dir,
+        errorCode: e.osError?.errorCode,
+        rawError: rawOf(e),
+        elevated: elevated,
+      ));
+    } finally {
+      try {
+        await probe.delete();
+      } catch (_) {}
+    }
+  }
+
+  /// 即时删除改名让位文件，返回仍删不掉（多半仍被占用）的清单。
+  Future<List<String>> _retireAsides(List<String> asides) async {
+    final survivors = <String>[];
+    for (final path in asides) {
+      try {
+        await File(path).delete();
+      } catch (_) {
+        survivors.add(path);
+      }
+    }
+    return survivors;
   }
 
   /// 拷贝单个文件，对占用错误短重试（备份步用：源 DLL 在

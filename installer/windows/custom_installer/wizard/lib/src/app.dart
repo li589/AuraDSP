@@ -407,7 +407,9 @@ class _SetupShellState extends State<SetupShell> {
       _events.clear();
       _fraction = 0;
     });
-    final r = await _engine.install(_options, _onProgress, plan: _plan);
+    final r = await _engine.install(_options, _onProgress,
+        plan: _plan,
+        onFileError: widget.args.silent ? null : _promptFileError);
     if (!mounted) return;
     setState(() {
       _running = false;
@@ -415,6 +417,58 @@ class _SetupShellState extends State<SetupShell> {
       _page = r.ok ? _Page.finish : _Page.error;
     });
     if (widget.args.silent) await _closeWindow();
+  }
+
+  /// 单文件写入失败弹窗（仿 Windows Installer）：错误原文
+  /// 原样展示；关键文件禁用「跳过」。引擎在进度页后台运行，
+  /// 弹窗经本 State 的 context 呈现，决策回传引擎继续。
+  Future<FileErrorDecision> _promptFileError(FileErrorPrompt prompt) async {
+    final l = AppLocalizations.of(context);
+    final v = await showDialog<FileErrorDecision>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(l.fileErrorTitle),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l.fileErrorBody(prompt.relPath)),
+                const SizedBox(height: 8),
+                SelectableText(
+                  prompt.errorText,
+                  style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
+                ),
+                if (prompt.critical) ...[
+                  const SizedBox(height: 8),
+                  Text(l.fileErrorCriticalNote),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(FileErrorDecision.cancel),
+            child: Text(l.fileErrorCancel),
+          ),
+          TextButton(
+            onPressed: prompt.critical
+                ? null
+                : () => Navigator.of(ctx).pop(FileErrorDecision.skip),
+            child: Text(l.fileErrorSkip),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(FileErrorDecision.retry),
+            child: Text(l.fileErrorRetry),
+          ),
+        ],
+      ),
+    );
+    return v ?? FileErrorDecision.cancel;
   }
 
   Future<void> _runUninstall() async {

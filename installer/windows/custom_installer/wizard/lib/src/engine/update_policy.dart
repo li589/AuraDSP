@@ -162,14 +162,50 @@ UninstallAction classifyUninstallPath(
 
 /// 覆盖升级后需要清理的旧版遗留：旧清单有、新清单没有，且不是用户数据
 /// 或生成物。成功升级后执行，避免这些文件永久残留在安装目录。
+/// [alsoPresent] 是本次仍留在盘上的路径（如写入失败被用户跳过、
+/// 保留了旧版的文件），同样不得当遗留删除。
 Set<String> staleUpgradePaths(
-    InstallManifest? previous, List<ManifestFile> currentFiles) {
+    InstallManifest? previous, List<ManifestFile> currentFiles,
+    {Set<String> alsoPresent = const <String>{}}) {
   if (previous == null) return <String>{};
   final current = currentFiles.map((f) => f.path).toSet();
   return previous.files
       .map((f) => f.path)
-      .where((rel) => !current.contains(rel))
+      .where((rel) => !current.contains(rel) && !alsoPresent.contains(rel))
       .where((rel) => !isUserPath(rel))
       .where((rel) => !kUninstallGeneratedFiles.contains(rel.toLowerCase()))
       .toSet();
+}
+
+/// 关键文件分类（纯函数，可单测）：resources/ 下是资源内容
+/// （卷积 IR、DDC、预设、脚本等 bulk 内容），写入失败可跳过；
+/// 其余（程序本体、驱动、Flutter 数据、默认层）是关键文件，
+/// 失败时只许重试或取消，不许跳过。
+bool isCriticalPayloadPath(String rel) {
+  final s = rel.replaceAll(r'\', '/').toLowerCase();
+  return !s.startsWith('resources/');
+}
+
+/// 安装目录不可写时的可行动文案（纯函数，可单测）：把裸异常
+/// 翻译成用户能执行的下一步，而不是让安装走到解压中途才失败。
+String writabilityFailureMessage({
+  required String dir,
+  required int? errorCode,
+  required String rawError,
+  required bool elevated,
+}) {
+  if (errorCode == 5) {
+    // ERROR_ACCESS_DENIED
+    return elevated
+        ? '安装目录不可写（拒绝访问）：$dir\n'
+            '请检查该目录的权限设置或安全软件拦截，处理后重试。\n'
+            '（技术详情：$rawError）'
+        : '安装目录不可写（拒绝访问）：$dir\n'
+            '该目录需要管理员权限。请以管理员身份重新运行安装程序，'
+            '或改选当前用户目录（例如“本地应用数据\\Programs\\AuraDSP”）。\n'
+            '（技术详情：$rawError）';
+  }
+  return '无法写入安装目录：$dir\n'
+      '请确认目录可写，或换一个目录后重试。\n'
+      '（技术详情：$rawError）';
 }
