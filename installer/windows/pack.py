@@ -638,6 +638,16 @@ def _copy2_overwrite(src: Path, dst: Path) -> None:
     shutil.copy2(src, dst)
 
 
+def _find_wdk_devcon() -> Path | None:
+    """WDK 的 x64 devcon.exe（版本目录取最高）：随包 driver/ 创建
+    VAIO 设备节点的必需工具。找不到返回 None（调用方 die）。"""
+    kits = Path(r"C:\Program Files (x86)\Windows Kits\10\Tools")
+    if not kits.is_dir():
+        return None
+    candidates = sorted(kits.glob("*/x64/devcon.exe"), reverse=True)
+    return candidates[0] if candidates else None
+
+
 def stage_driver_files(
     dest: Path,
     driver_dir: Path,
@@ -670,6 +680,19 @@ def stage_driver_files(
             copied += 1
     if copied == 0:
         raise die(f"驱动目录没有任何 .sys/.inf/.cat/.cer: {driver_dir}")
+    if not (dest / "devcon.exe").exists():
+        # devcon.exe 不是驱动构建产物（WDK 工具），历史上靠手工放进
+        # 构建目录随包；构建树一旦干净重编即丢失，且丢失时 pack 不
+        # 报错、装机时 install_vaio.ps1 才以退出码 7 失败（2026-11-14
+        # 宾机实测抓到：r31/r32 两批包均缺）。改为显式从 WDK Tools
+        # 补齐，再缺失直接 die，不许产出装不了 VAIO 的包。
+        wdk_devcon = _find_wdk_devcon()
+        if wdk_devcon is None:
+            raise die("随包 driver/ 缺 devcon.exe：驱动构建目录与 WDK Tools "
+                      "均未找到，VAIO 安装将无法创建设备节点（退出码 7）；"
+                      "请安装 WDK，或将 x64 devcon.exe 放进驱动构建目录后重打")
+        _copy2_overwrite(wdk_devcon, dest / "devcon.exe")
+        log(f"driver: devcon.exe 自 WDK 补齐（{wdk_devcon}）")
     _copy2_overwrite(install_ps1, dest / install_ps1.name)
     # APO 运维资产：app 侧附加/状态工具 apo_config.exe（原生版，
     # 已替代 python 脚本）+ APO 本体 AuraApo.dll + 设备端点刷新
