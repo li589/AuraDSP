@@ -922,9 +922,12 @@ extension StateEvents on AppModel {
         Map<String, int>? pick(String key) {
           final m = raw[key];
           if (m is! Map) return null;
+          // 值由本机 isolate 自产（恒为 int），仍按防御口径取：
+          // 非 num 一律记 -1（未知），不让一条坏值打断事件分发
+          // （第三十六轮代码审查 F2）。
           return {
             for (final e in m.entries)
-              e.key.toString(): (e.value as num).toInt(),
+              e.key.toString(): e.value is num ? (e.value as num).toInt() : -1,
           };
         }
 

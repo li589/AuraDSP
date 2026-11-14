@@ -117,5 +117,28 @@ void main() {
       expect(m.config.pipelineOutputDevice, '');
       expect(m.config.vaioOutputEndpoint, '');
     });
+
+    test('VAIO 落点是子串（字段本义）→ 子串命中即在场，永不误清', () {
+      final m = AppModel(testing: true);
+      // 存量值只存了部分名（vaioOutputEndpoint 语义 = 端点子串）。
+      m.config.vaioOutputEndpoint = 'High Definition Audio Device';
+      final t0 = DateTime(2026, 11, 14, 12, 0, 0);
+      const present = {'hda-id', '扬声器 (High Definition Audio Device)'};
+      m.reconcileDeviceSelections(present, now: t0);
+      m.reconcileDeviceSelections(present,
+          now: t0.add(const Duration(seconds: 60)));
+      expect(m.config.vaioOutputEndpoint, 'High Definition Audio Device');
+    });
+
+    test('VAIO 子串在任何端点名中都不出现 → 满宽限后照常修复', () {
+      final m = AppModel(testing: true);
+      m.config.vaioOutputEndpoint = 'No Such Device Partial';
+      final t0 = DateTime(2026, 11, 14, 12, 0, 0);
+      const present = {'hda-id', '扬声器 (High Definition Audio Device)'};
+      m.reconcileDeviceSelections(present, now: t0);
+      m.reconcileDeviceSelections(present,
+          now: t0.add(const Duration(seconds: 21)));
+      expect(m.config.vaioOutputEndpoint, '');
+    });
   });
 }

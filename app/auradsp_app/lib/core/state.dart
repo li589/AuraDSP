@@ -578,7 +578,7 @@ class AppModel extends ChangeNotifier {
   int apoLoadErr = 0;
   // APO 引擎生效值回读（telemetry v6，第三十五轮）：座位引擎经
   // auradsp_get_param 回读的真实值；-1 = 未知（旧版 APO 或引擎
-  // 未就绪），面板据此显「—」而非误报 0。
+  // 未就绪），面板据此显「未运行」语义文案而非误报 0（S8）。
   int apoEffMode = -1;
   int apoEffFill = -1;
   // 本机/桥引擎生效值（isolate 'enginevalues' 应答，第三十五轮）：

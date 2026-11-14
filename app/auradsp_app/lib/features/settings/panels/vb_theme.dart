@@ -6,24 +6,46 @@ class _EngineInfo extends StatelessWidget {
   final AppModel model;
   const _EngineInfo({required this.model});
 
+  /// 当前模式的短名（与音频页分段控件同口径）：Linux 直选三模式；
+  /// Windows 附加范式显形态名，管线范式显范式名。
+  String _modeLabel(AppLocalizations l) {
+    if (PlatformProfile.isLinux) {
+      return switch (model.audioMode) {
+        'system' => l.linuxModeSystem,
+        'virtual' => l.linuxModeVirtual,
+        'driver' => l.linuxModeDriver,
+        _ => model.audioMode,
+      };
+    }
+    if (model.modeCategory == AudioModes.categoryAttachment) {
+      return model.attachmentMode == AudioModes.attachSysApo
+          ? l.modeSysApo
+          : l.modeVoicemeeterApi;
+    }
+    return l.paradigmPipeline;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final p = paletteOf(context);
     final l = l10nOf(context);
     final info = model.info;
+    // 状态行与主页徽标同口径（engineDisplay 四态），随模型通知
+    // 即时刷新；原先嵌在本卡的「关于」正文与关于页重复，第三
+    // 十六轮去除——关于信息只在关于页维护一份。
+    final stateText = switch (model.engineDisplay) {
+      EngineDisplay.processing => l.stateProcessing,
+      EngineDisplay.bypass => l.stateBypass,
+      EngineDisplay.error => l.stateError,
+      EngineDisplay.idle => l.stateIdle,
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (info != null) ...[
-          _InfoRow('ABI', 'v${info.abi} · ${info.version}'),
-        ],
-        _InfoRow('Latency', LatencyPresenter.format(model.latencyMs)),
-        const SizedBox(height: AuraSpace.md),
-        Container(height: 1, color: p.hairline),
-        const SizedBox(height: AuraSpace.md),
-        Text(l.about, style: sectionOf(p)),
-        const SizedBox(height: AuraSpace.sm),
-        Text(l.aboutBody, style: captionOf(p)),
+        _InfoRow(l.statusLabel, stateText),
+        _InfoRow(l.audioMode, _modeLabel(l)),
+        _InfoRow(l.sampleRate, '${model.engineRate} Hz'),
+        _InfoRow(l.latencyLabel, LatencyPresenter.format(model.latencyMs)),
+        if (info != null) _InfoRow('ABI', 'v${info.abi} · ${info.version}'),
       ],
     );
   }

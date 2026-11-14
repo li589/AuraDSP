@@ -2292,14 +2292,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dlgUnload => 'Unload';
 
   @override
-  String get memTitle => 'Persistent Memory & External Config';
+  String get memTitle => 'Session & Config';
 
   @override
-  String get memHint =>
-      'Automatically records all effect settings and restores them seamlessly on next launch.';
+  String get memHint => 'Session state and config files are stored locally.';
 
   @override
-  String get memAutoRestore => 'Auto-save and restore session on exit';
+  String get memAutoRestore => 'Restore last session at startup';
 
   @override
   String memDir(String path) {
@@ -2315,32 +2314,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get memClear => 'Clear Session Memory';
 
   @override
-  String get memCleared =>
-      'Persistent session memory cleared; next launch starts from clean defaults';
+  String get memCleared => 'Session memory cleared; next launch uses defaults';
 
   @override
-  String get memReset => 'Reset External Config to Defaults';
+  String get memReset => 'Restore default config';
 
   @override
-  String get memResetDone =>
-      'config.json has been reset to the standard template';
+  String get memResetDone => 'Config restored to defaults';
 
   @override
   String get sysTitle => 'System';
 
   @override
-  String get sysHint => 'System tray residency and launch at startup';
+  String get sysHint => 'Changes apply immediately';
 
   @override
-  String get sysTray => 'Minimize to tray';
+  String get sysTray => 'Hide to tray on close';
 
   @override
-  String get sysTrayHint =>
-      'Closing the window hides to the system tray while audio keeps playing; quit via the tray menu';
+  String get sysTrayHint => 'Audio keeps playing; quit from the tray menu';
 
   @override
-  String get sysTrayHintOff =>
-      'Closing the window quits the app directly (no hiding to the system tray)';
+  String get sysTrayHintOff => 'The close button quits the app directly';
 
   @override
   String get sysAutostart => 'Launch at login';
@@ -2353,7 +2348,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sysAutostartHint =>
-      'Start AuraDSP automatically when signing in to the system';
+      'Starts automatically at sign-in and stays in the tray';
 
   @override
   String get sysAutostartFailed => 'Failed to change the autostart setting';

@@ -2151,13 +2151,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dlgUnload => '卸载';
 
   @override
-  String get memTitle => '持久化记忆与配置外置';
+  String get memTitle => '会话与配置';
 
   @override
-  String get memHint => '自动记录当前所有效果调音状态，并在应用下次启动时无缝恢复。';
+  String get memHint => '会话状态与配置文件都保存在本地。';
 
   @override
-  String get memAutoRestore => '退出时自动保存并恢复会话记忆';
+  String get memAutoRestore => '启动时恢复上次会话';
 
   @override
   String memDir(String path) {
@@ -2173,28 +2173,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memClear => '清除会话记忆';
 
   @override
-  String get memCleared => '已清除持久化会话记忆，下次启动将使用纯净默认值';
+  String get memCleared => '已清除会话记忆，下次启动使用默认设置';
 
   @override
-  String get memReset => '重置外置配置为默认';
+  String get memReset => '恢复默认配置';
 
   @override
-  String get memResetDone => '已重置 config.json 为标准配置模板';
+  String get memResetDone => '配置已恢复默认';
 
   @override
   String get sysTitle => '系统';
 
   @override
-  String get sysHint => '系统托盘常驻与开机自启动';
+  String get sysHint => '修改后立即生效';
 
   @override
-  String get sysTray => '最小化到托盘';
+  String get sysTray => '关闭时隐藏到托盘';
 
   @override
-  String get sysTrayHint => '关闭窗口时隐藏到系统托盘，音频继续播放；退出请用托盘菜单';
+  String get sysTrayHint => '音频继续播放；退出请用托盘菜单';
 
   @override
-  String get sysTrayHintOff => '关闭窗口时直接退出应用（不隐藏到系统托盘）';
+  String get sysTrayHintOff => '点关闭按钮直接退出应用';
 
   @override
   String get sysAutostart => '开机自启';
@@ -2206,7 +2206,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trayQuit => '退出';
 
   @override
-  String get sysAutostartHint => '登录系统时自动启动并后台运行 AuraDSP';
+  String get sysAutostartHint => '登录后自动启动，驻留在系统托盘';
 
   @override
   String get sysAutostartFailed => '开机自启设置失败';

@@ -4135,19 +4135,19 @@ abstract class AppLocalizations {
   /// No description provided for @memTitle.
   ///
   /// In zh, this message translates to:
-  /// **'持久化记忆与配置外置'**
+  /// **'会话与配置'**
   String get memTitle;
 
   /// No description provided for @memHint.
   ///
   /// In zh, this message translates to:
-  /// **'自动记录当前所有效果调音状态，并在应用下次启动时无缝恢复。'**
+  /// **'会话状态与配置文件都保存在本地。'**
   String get memHint;
 
   /// No description provided for @memAutoRestore.
   ///
   /// In zh, this message translates to:
-  /// **'退出时自动保存并恢复会话记忆'**
+  /// **'启动时恢复上次会话'**
   String get memAutoRestore;
 
   /// No description provided for @memDir.
@@ -4171,19 +4171,19 @@ abstract class AppLocalizations {
   /// No description provided for @memCleared.
   ///
   /// In zh, this message translates to:
-  /// **'已清除持久化会话记忆，下次启动将使用纯净默认值'**
+  /// **'已清除会话记忆，下次启动使用默认设置'**
   String get memCleared;
 
   /// No description provided for @memReset.
   ///
   /// In zh, this message translates to:
-  /// **'重置外置配置为默认'**
+  /// **'恢复默认配置'**
   String get memReset;
 
   /// No description provided for @memResetDone.
   ///
   /// In zh, this message translates to:
-  /// **'已重置 config.json 为标准配置模板'**
+  /// **'配置已恢复默认'**
   String get memResetDone;
 
   /// No description provided for @sysTitle.
@@ -4195,25 +4195,25 @@ abstract class AppLocalizations {
   /// No description provided for @sysHint.
   ///
   /// In zh, this message translates to:
-  /// **'系统托盘常驻与开机自启动'**
+  /// **'修改后立即生效'**
   String get sysHint;
 
   /// No description provided for @sysTray.
   ///
   /// In zh, this message translates to:
-  /// **'最小化到托盘'**
+  /// **'关闭时隐藏到托盘'**
   String get sysTray;
 
   /// No description provided for @sysTrayHint.
   ///
   /// In zh, this message translates to:
-  /// **'关闭窗口时隐藏到系统托盘，音频继续播放；退出请用托盘菜单'**
+  /// **'音频继续播放；退出请用托盘菜单'**
   String get sysTrayHint;
 
   /// No description provided for @sysTrayHintOff.
   ///
   /// In zh, this message translates to:
-  /// **'关闭窗口时直接退出应用（不隐藏到系统托盘）'**
+  /// **'点关闭按钮直接退出应用'**
   String get sysTrayHintOff;
 
   /// No description provided for @sysAutostart.
@@ -4237,7 +4237,7 @@ abstract class AppLocalizations {
   /// No description provided for @sysAutostartHint.
   ///
   /// In zh, this message translates to:
-  /// **'登录系统时自动启动并后台运行 AuraDSP'**
+  /// **'登录后自动启动，驻留在系统托盘'**
   String get sysAutostartHint;
 
   /// No description provided for @sysAutostartFailed.

@@ -2,7 +2,9 @@ part of '../settings_page.dart';
 
 /*
  * settings_system_tab.dart — 系统设置页
- * 包含：引擎信息、持久化记忆与配置管理、系统服务（托盘常驻与开机自启动）
+ * 包含：引擎状态（即时值）、会话与配置、系统（托盘与开机自启）
+ * 第三十六轮版式与文案收口：引擎卡去掉与关于页重复的关于正文、
+ * 改出状态/模式/采样率即时行；各卡标题与提示改短句口语口径。
  */
 
 List<Widget> buildSystemTab(BuildContext context, AppModel model) {
@@ -10,13 +12,13 @@ List<Widget> buildSystemTab(BuildContext context, AppModel model) {
   final p = paletteOf(context);
 
   return [
-    // 1. 引擎信息
+    // 1. 引擎状态（状态/模式/采样率/延迟/ABI，均为即时值）
     SectionCard(
       title: l.engineInfo,
       child: _EngineInfo(model: model),
     ),
 
-    // 2. 持久化记忆与外置配置
+    // 2. 会话与配置
     SectionCard(
       title: l.memTitle,
       hint: l.memHint,
@@ -26,7 +28,7 @@ List<Widget> buildSystemTab(BuildContext context, AppModel model) {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(l.memAutoRestore, style: labelOf(p)),
+              Text(l.memAutoRestore, style: labelOf(p, size: 12)),
               AuraSwitch(
                 value: model.config.autoRestoreSession,
                 onChanged: model.setAutoRestoreSession,
@@ -46,7 +48,7 @@ List<Widget> buildSystemTab(BuildContext context, AppModel model) {
               style: monoOf(p, size: 10, color: p.textDim),
             ),
           ],
-          const SizedBox(height: AuraSpace.sm),
+          const SizedBox(height: AuraSpace.md),
           Row(
             children: [
               AuraChip(

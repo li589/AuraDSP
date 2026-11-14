@@ -2178,13 +2178,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get dlgUnload => 'アンロード';
 
   @override
-  String get memTitle => '永続メモリと外部設定';
+  String get memTitle => 'セッションと設定';
 
   @override
-  String get memHint => '全エフェクト設定を自動記録し、次回起動時にシームレスに復元します。';
+  String get memHint => 'セッション状態と設定ファイルはローカルに保存されます。';
 
   @override
-  String get memAutoRestore => '終了時にセッションを自動保存・復元';
+  String get memAutoRestore => '起動時に前回のセッションを復元';
 
   @override
   String memDir(String path) {
@@ -2200,28 +2200,28 @@ class AppLocalizationsJa extends AppLocalizations {
   String get memClear => 'セッションメモリをクリア';
 
   @override
-  String get memCleared => '永続セッションメモリをクリアしました。次回はクリーンデフォルトで起動します';
+  String get memCleared => 'セッションメモリをクリアしました。次回はデフォルトで起動します';
 
   @override
-  String get memReset => '外部設定をデフォルトにリセット';
+  String get memReset => '設定をデフォルトに戻す';
 
   @override
-  String get memResetDone => 'config.json を標準テンプレートにリセットしました';
+  String get memResetDone => '設定をデフォルトに戻しました';
 
   @override
   String get sysTitle => 'システム';
 
   @override
-  String get sysHint => 'トレイ常駐とシステム起動時自動開始';
+  String get sysHint => '変更はすぐに反映されます';
 
   @override
-  String get sysTray => 'トレイに最小化';
+  String get sysTray => '閉じるとトレイに隠す';
 
   @override
-  String get sysTrayHint => 'ウィンドウを閉じるとシステムトレイに隠れ、音声は再生継続。終了はトレイメニューから';
+  String get sysTrayHint => '音声は再生を続けます。終了はトレイメニューから';
 
   @override
-  String get sysTrayHintOff => 'ウィンドウを閉じるとアプリを直接終了します（システムトレイに隠しません）';
+  String get sysTrayHintOff => '閉じるボタンでアプリを終了します';
 
   @override
   String get sysAutostart => 'ログイン時起動';
@@ -2233,7 +2233,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get trayQuit => '終了';
 
   @override
-  String get sysAutostartHint => 'システムログイン時に AuraDSP を自動起動';
+  String get sysAutostartHint => 'ログイン時に自動起動し、トレイに常駐します';
 
   @override
   String get sysAutostartFailed => '自動起動の設定に失敗しました';

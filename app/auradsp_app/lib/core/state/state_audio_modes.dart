@@ -862,9 +862,13 @@ extension AudioModesState on AppModel {
     final t = now ?? DateTime.now();
     final repaired = <String>[];
     // 返回 true = 本轮应修复（持续缺席已满宽限期）；在场/空值
-    // 清记录；首次缺席只记录起始时刻。
-    bool absentLongEnough(String field, String value) {
-      if (value.isEmpty || presentKeys.contains(value)) {
+    // 清记录；首次缺席只记录起始时刻。[present] 由调用方按字段
+    // 语义判：在场键精确命中，或（仅 VAIO 落点）子串命中——
+    // vaioOutputEndpoint 的字段语义本就是「端点名子串」
+    // （config.dart），存量值可能是部分名，精确判会把合法的
+    // 子串落点误判消失（第三十六轮代码审查 F1）。
+    bool absentLongEnough(String field, String value, bool present) {
+      if (value.isEmpty || present) {
         _reconcileAbsentSince.remove(field);
         return false;
       }
@@ -876,7 +880,13 @@ extension AudioModesState on AppModel {
       return t.difference(since) >= const Duration(seconds: 20);
     }
 
-    if (absentLongEnough('in', config.pipelineInputDevice)) {
+    bool presentExact(String v) => presentKeys.contains(v);
+    bool presentVaio(String v) =>
+        presentKeys.contains(v) ||
+        presentKeys.any((k) => k.contains(v));
+
+    if (absentLongEnough(
+        'in', config.pipelineInputDevice, presentExact(config.pipelineInputDevice))) {
       config.pipelineInputDevice = '';
       _reconcileAbsentSince.remove('in');
       repaired.add('输入设备');
@@ -886,12 +896,14 @@ extension AudioModesState on AppModel {
         dbgLog('pipeline.capture: stopped after reconcile (input gone)');
       }
     }
-    if (absentLongEnough('out', config.pipelineOutputDevice)) {
+    if (absentLongEnough('out', config.pipelineOutputDevice,
+        presentExact(config.pipelineOutputDevice))) {
       config.pipelineOutputDevice = '';
       _reconcileAbsentSince.remove('out');
       repaired.add('输出设备');
     }
-    if (absentLongEnough('vaio', config.vaioOutputEndpoint)) {
+    if (absentLongEnough('vaio', config.vaioOutputEndpoint,
+        presentVaio(config.vaioOutputEndpoint))) {
       config.vaioOutputEndpoint = '';
       _reconcileAbsentSince.remove('vaio');
       repaired.add('VAIO 物理输出');
