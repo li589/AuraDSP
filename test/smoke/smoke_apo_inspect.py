@@ -5,6 +5,9 @@
   2. 端点为空（无头 CI）→ 记 note 即 PASS。
   3. 有端点 → 每项含 id/direction/name/state/fx 五槽/readable；
      readable 的项 fx 恰 5 个槽；protectedAudioDG ∈ {-1,0,1}。
+  4. 格式字段（2026-11-14 驱动刷新及时性轮）：每项含 rate/ch/bits
+     且为非负整数；ACTIVE 端点至少一项读到非零格式（真实声卡的
+     mix format 必可读，全零说明 GetMixFormat 路径坏了）。
 """
 import json
 import os
@@ -59,6 +62,16 @@ if d is not None:
         else:
             check('endpoint schema', True)
             print('NOTE endpoints=%d readable=%d' % (len(eps), n_readable))
+        fmt_ok = all(
+            isinstance(e.get(k), int) and e.get(k) >= 0
+            for e in eps for k in ('rate', 'ch', 'bits'))
+        check('format fields rate/ch/bits non-negative ints', fmt_ok)
+        active = [e for e in eps if e.get('state') == 1]
+        if active:
+            any_fmt = any(e.get('rate', 0) > 0 and e.get('ch', 0) > 0
+                          for e in active)
+            check('some ACTIVE endpoint has nonzero mix format', any_fmt,
+                  'active=%d all-zero formats' % len(active))
     check('protectedAudioDG in {-1,0,1}', d.get('protectedAudioDG') in (-1, 0, 1),
           str(d.get('protectedAudioDG')))
 
