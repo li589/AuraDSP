@@ -3,7 +3,9 @@ import 'package:auradsp_app/core/audio_modes.dart';
 import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
+import 'package:auradsp_app/core/ui_helpers.dart';
 import 'package:auradsp_app/features/settings_page.dart';
+import 'package:auradsp_app/ui/chrome.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 import 'package:auradsp_app/platform/platform_profile.dart';
 import 'package:flutter/material.dart';
@@ -85,12 +87,21 @@ void main() {
       expect(find.text('缓冲档'), findsOneWidget);
       expect(find.text('输出起始声道对'), findsOneWidget);
 
-      // 切到 AuraVAIO 输出端：出现虚拟声卡提示与耳机监听镜像开关
+      // 切到 AuraVAIO 输出端：耳机监听镜像开关在场；虚拟声卡说明
+      // 自 2026-11-14（业主裁定）起收进问号气泡——旧的常显提示
+      // 文本不得再以正文出现，气泡载体 InfoBadge 须在镜像行内。
       model.setPipelineOutput(AudioModes.outputVaio);
       await tester.pumpAndSettle();
-      expect(find.text('提示：AuraVAIO 为虚拟声卡输出，需在 OBS 或录音软件中选择 AuraVAIO 才能听到声音。'),
-          findsOneWidget);
+      expect(find.textContaining('为虚拟声卡输出'), findsNothing);
       expect(find.text('本地耳机监听镜像'), findsOneWidget);
+      final mirrorBadge = find.ancestor(
+        of: find.text('本地耳机监听镜像'),
+        matching: find.byWidgetPredicate((w) =>
+            w is Row &&
+            w.children.any((c) => c is InfoBadge) &&
+            w.children.any((c) => c is AuraSwitch)),
+      );
+      expect(mirrorBadge, findsOneWidget);
       // 「物理输出」两处同名是设计内（第七轮 S2）：本用例输入为
       // ASIO 驱动（合成链 = asio），VAIO 输出子面板除物理输出
       // 字段行外，另有一条同名标签的「被 ASIO 接管」说明行。
