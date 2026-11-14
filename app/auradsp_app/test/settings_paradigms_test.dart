@@ -94,14 +94,26 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('为虚拟声卡输出'), findsNothing);
       expect(find.text('本地耳机监听镜像'), findsOneWidget);
-      final mirrorBadge = find.ancestor(
-        of: find.text('本地耳机监听镜像'),
-        matching: find.byWidgetPredicate((w) =>
-            w is Row &&
-            w.children.any((c) => c is InfoBadge) &&
-            w.children.any((c) => c is AuraSwitch)),
-      );
-      expect(mirrorBadge, findsOneWidget);
+      // 镜像行（标签的某个 Row 祖先）子树内须同时含气泡与开关——
+      // 版式为外 Row[内 Row[标签+InfoBadge], AuraSwitch] 嵌套，
+      // 故按子树判定而非直子。
+      var mirrorRowFound = false;
+      for (final e in find
+          .ancestor(
+              of: find.text('本地耳机监听镜像'), matching: find.byType(Row))
+          .evaluate()) {
+        final row = find.byWidget(e.widget);
+        final hasBadge = find
+            .descendant(of: row, matching: find.byType(InfoBadge))
+            .evaluate()
+            .isNotEmpty;
+        final hasSwitch = find
+            .descendant(of: row, matching: find.byType(AuraSwitch))
+            .evaluate()
+            .isNotEmpty;
+        if (hasBadge && hasSwitch) mirrorRowFound = true;
+      }
+      expect(mirrorRowFound, isTrue);
       // 「物理输出」两处同名是设计内（第七轮 S2）：本用例输入为
       // ASIO 驱动（合成链 = asio），VAIO 输出子面板除物理输出
       // 字段行外，另有一条同名标签的「被 ASIO 接管」说明行。
