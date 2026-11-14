@@ -7,31 +7,42 @@ import 'package:auradsp_app/core/state.dart';
 
 void main() {
   group('reconcileDeviceSelections', () {
-    test('输入/输出/VAIO 落点全消失 → 连续两次缺席后三项改回默认', () {
+    test('输入/输出/VAIO 落点全消失 → 持续缺席满 20 秒后三项改回默认', () {
       final m = AppModel(testing: true);
       m.config.pipelineInputDevice = 'gone-in';
       m.config.pipelineOutputDevice = 'gone-out';
       m.config.vaioOutputEndpoint = 'Gone Speakers';
-      // 两次确认防抖：第一次缺席只计数，不修。
-      m.reconcileDeviceSelections({'other-id', 'Other Name'});
+      final t0 = DateTime(2026, 11, 14, 12, 0, 0);
+      const absent = {'other-id', 'Other Name'};
+      // 宽限防抖：首次缺席只记起始时刻；未满 20 秒不修。
+      m.reconcileDeviceSelections(absent, now: t0);
+      expect(m.config.pipelineInputDevice, 'gone-in');
+      m.reconcileDeviceSelections(absent,
+          now: t0.add(const Duration(seconds: 19)));
       expect(m.config.pipelineInputDevice, 'gone-in');
       expect(m.config.pipelineOutputDevice, 'gone-out');
       expect(m.config.vaioOutputEndpoint, 'Gone Speakers');
-      m.reconcileDeviceSelections({'other-id', 'Other Name'});
+      m.reconcileDeviceSelections(absent,
+          now: t0.add(const Duration(seconds: 21)));
       expect(m.config.pipelineInputDevice, '');
       expect(m.config.pipelineOutputDevice, '');
       expect(m.config.vaioOutputEndpoint, '');
     });
 
-    test('瞬态抖动：缺席一次后复现 → 计数清零，永不误清', () {
+    test('瞬态抖动：缺席后复现 → 记录清除，宽限期重新起算', () {
       final m = AppModel(testing: true);
       m.config.pipelineOutputDevice = 'hda-id';
-      m.reconcileDeviceSelections({'other'}); // 缺席 1 次（服务重启瞬间）
+      final t0 = DateTime(2026, 11, 14, 12, 0, 0);
+      m.reconcileDeviceSelections({'other'}, now: t0); // 缺席（服务重启瞬间）
+      m.reconcileDeviceSelections({'hda-id'},
+          now: t0.add(const Duration(seconds: 5))); // 复现 → 清除
+      m.reconcileDeviceSelections({'other'},
+          now: t0.add(const Duration(seconds: 6))); // 再缺席（重新起算）
+      m.reconcileDeviceSelections({'other'},
+          now: t0.add(const Duration(seconds: 25))); // 仅 19 秒 → 不修
       expect(m.config.pipelineOutputDevice, 'hda-id');
-      m.reconcileDeviceSelections({'hda-id'}); // 复现 → 清零
-      m.reconcileDeviceSelections({'other'}); // 又缺席 1 次（重新计数）
-      expect(m.config.pipelineOutputDevice, 'hda-id');
-      m.reconcileDeviceSelections({'other'}); // 连续第 2 次 → 修复
+      m.reconcileDeviceSelections({'other'},
+          now: t0.add(const Duration(seconds: 27))); // 满 21 秒 → 修复
       expect(m.config.pipelineOutputDevice, '');
     });
 
@@ -82,14 +93,16 @@ void main() {
       expect(m.config.vaioOutputEndpoint, 'Z');
     });
 
-    test('捕获腿在跑且输入消失 → 两次确认后停腿并清输入选择', () {
+    test('捕获腿在跑且输入消失 → 宽限期满后停腿并清输入选择', () {
       final m = AppModel(testing: true);
       m.config.pipelineInputDevice = 'gone-in';
       m.captureActive = true;
-      m.reconcileDeviceSelections({'something-else'});
+      final t0 = DateTime(2026, 11, 14, 12, 0, 0);
+      m.reconcileDeviceSelections({'something-else'}, now: t0);
       expect(m.config.pipelineInputDevice, 'gone-in');
       expect(m.captureActive, isTrue);
-      m.reconcileDeviceSelections({'something-else'});
+      m.reconcileDeviceSelections({'something-else'},
+          now: t0.add(const Duration(seconds: 21)));
       expect(m.config.pipelineInputDevice, '');
       expect(m.captureActive, isFalse);
     });

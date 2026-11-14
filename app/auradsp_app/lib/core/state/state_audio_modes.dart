@@ -850,27 +850,35 @@ extension AudioModesState on AppModel {
   /// 已打开的落点不受影响，修复值只决定下次起链。
   /// 两次确认防抖（S5，宾机 E2E 定罪）：单次扫描缺席不修——音频
   /// 服务重启/驱动安装后的重枚举瞬间端点会短暂消失（实测装机后
-  /// 首扫 HDA 端点不在场，合法 VAIO 落点险被误清）；连续两次
-  /// 应用扫描都缺席才判真消失（真实拔除约 8 秒内落定）。计数待
-  /// 确认期间看守即使签名未变也再应用一轮凑满确认（S6：否则
-  /// 首扫落定签名后第二击永不来）。在场即清零，重启计数自清。
-  void reconcileDeviceSelections(Set<String> presentKeys) {
+  /// 首扫 HDA 端点不在场，合法 VAIO 落点险被误清）；其后改两击
+  /// 确认仍不够（S7 定罪：装机后音频栈重枚举可超过 8 秒，合法
+  /// 落点在两击窗口内仍被误清）——现行口径为**持续缺席满 20
+  /// 秒**才判真消失：首扫缺席只记起始时刻，其后每轮扫描复核，
+  /// 满 20 秒仍缺席才修复（真实拔除约 20 秒落定）。缺席待确认
+  /// 期间看守即使签名未变也持续应用扫描复核（S6）。在场即清
+  /// 记录，App 重启记录自清。[now] 供单测注入时钟。
+  void reconcileDeviceSelections(Set<String> presentKeys, {DateTime? now}) {
     if (presentKeys.isEmpty) return;
+    final t = now ?? DateTime.now();
     final repaired = <String>[];
-    // 返回 true = 本轮应修复（已连续两次缺席）；在场/空值清零。
-    bool absentTwice(String field, String value) {
+    // 返回 true = 本轮应修复（持续缺席已满宽限期）；在场/空值
+    // 清记录；首次缺席只记录起始时刻。
+    bool absentLongEnough(String field, String value) {
       if (value.isEmpty || presentKeys.contains(value)) {
-        _reconcileStrikes.remove(field);
+        _reconcileAbsentSince.remove(field);
         return false;
       }
-      final n = (_reconcileStrikes[field] ?? 0) + 1;
-      _reconcileStrikes[field] = n;
-      return n >= 2;
+      final since = _reconcileAbsentSince[field];
+      if (since == null) {
+        _reconcileAbsentSince[field] = t;
+        return false;
+      }
+      return t.difference(since) >= const Duration(seconds: 20);
     }
 
-    if (absentTwice('in', config.pipelineInputDevice)) {
+    if (absentLongEnough('in', config.pipelineInputDevice)) {
       config.pipelineInputDevice = '';
-      _reconcileStrikes.remove('in');
+      _reconcileAbsentSince.remove('in');
       repaired.add('输入设备');
       if (captureActive) {
         _toIso?.send({'cmd': 'capturemode', 'on': false});
@@ -878,14 +886,14 @@ extension AudioModesState on AppModel {
         dbgLog('pipeline.capture: stopped after reconcile (input gone)');
       }
     }
-    if (absentTwice('out', config.pipelineOutputDevice)) {
+    if (absentLongEnough('out', config.pipelineOutputDevice)) {
       config.pipelineOutputDevice = '';
-      _reconcileStrikes.remove('out');
+      _reconcileAbsentSince.remove('out');
       repaired.add('输出设备');
     }
-    if (absentTwice('vaio', config.vaioOutputEndpoint)) {
+    if (absentLongEnough('vaio', config.vaioOutputEndpoint)) {
       config.vaioOutputEndpoint = '';
-      _reconcileStrikes.remove('vaio');
+      _reconcileAbsentSince.remove('vaio');
       repaired.add('VAIO 物理输出');
     }
     if (repaired.isNotEmpty) {
@@ -933,16 +941,16 @@ extension AudioModesState on AppModel {
       final lastLine = stdout.split('\n').last.trim();
       if (lastLine.isEmpty) return;
       final json = jsonDecode(lastLine) as Map<String, dynamic>;
-      // 签名未变通常直接跳过；例外（S5 复验定罪）：调和有待确认
-      // 的缺席计数时必须再应用一轮凑满两次确认——否则首扫的
-      // 签名落定后看守永不再应用，消失设备的修复永不落定。
-      final strikesPending = _reconcileStrikes.isNotEmpty;
+      // 签名未变通常直接跳过；例外（S6）：调和有缺席待确认记录
+      // 时必须持续应用扫描复核缺席时长——否则首扫落定签名后
+      // 看守永不再应用，消失设备的修复永不落定。
+      final absentPending = _reconcileAbsentSince.isNotEmpty;
       if (_deviceSignatureOf(json) == _deviceScanSignature &&
-          !strikesPending) {
+          !absentPending) {
         return;
       }
-      dbgLog(strikesPending && _deviceSignatureOf(json) == _deviceScanSignature
-          ? 'devices.watch: confirming pending reconcile strikes'
+      dbgLog(absentPending && _deviceSignatureOf(json) == _deviceScanSignature
+          ? 'devices.watch: confirming pending reconcile absence'
           : 'devices.watch: change detected, applying refresh');
       try {
         refreshVaioDetect();
