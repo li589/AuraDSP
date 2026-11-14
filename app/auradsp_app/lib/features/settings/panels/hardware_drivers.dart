@@ -196,7 +196,7 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
     if (ch != null && ch > 0) parts.add('$ch ${l.effChannelsUnit}');
     if (rate != null && rate > 0) parts.add('$rate Hz');
     if (applied != null) parts.add('${l.effApplied} $applied');
-    return parts.isEmpty ? '—' : parts.join(' · ');
+    return parts.isEmpty ? l.effNotRunning : parts.join(' · ');
   }
 
   /// 收起态摘要：当前模式的主引擎回读一行。
@@ -219,7 +219,9 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
     if (lo != null) {
       return _fmt(l, mode: lo['mode'], fill: lo['fill'], rate: lo['rate']);
     }
-    return '—';
+    // 无任何回读时给语义文案，不用裸占位符（裸 '—' 会与驱动行
+    // 的值占位符撞文本，settings_asio 用例钉住全局唯一）。
+    return l.effNotRunning;
   }
 
   @override
