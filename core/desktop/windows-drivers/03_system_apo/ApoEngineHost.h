@@ -52,6 +52,8 @@ class ApoEngineHost {
     using FnDestroy = void (*)(auradsp_handle);
     using FnProcess = void (*)(auradsp_handle, const float*, float*, int);
     using FnSetParam = auradsp_status (*)(auradsp_handle, const char*, const void*, uint32_t);
+    // 生效值回读（第三十五轮）：可选符号，缺失则 v6 段不写。
+    using FnGetParam = auradsp_status (*)(auradsp_handle, const char*, void*, uint32_t);
     using FnGetLatencyMs = double (*)(auradsp_handle);
     using FnVizRead = uint32_t (*)(auradsp_handle, auradsp_viz_frame*, uint32_t);
     // Part I Q2 插件通道（可选解析：旧/stub 引擎缺符号时整通道
@@ -70,6 +72,7 @@ class ApoEngineHost {
     static DWORD WINAPI WorkerMain(LPVOID ctx);
     void WorkerLoop();
     void ApplySnapshot(const uint8_t* snap, const uint32_t* hdr);
+    void ReadbackEffective();
     // Part I Q2：插件块 diff 应用 + telemetry v3 插件段回填
     // （worker 线程内调用；通道不可用时自跳过）。
     void ApplyPlugins();
@@ -89,6 +92,7 @@ class ApoEngineHost {
     FnDestroy fnDestroy_ = nullptr;
     FnProcess fnProcess_ = nullptr;
     FnSetParam fnSetParam_ = nullptr;
+    FnGetParam fnGetParam_ = nullptr;
     FnGetLatencyMs fnLatency_ = nullptr;
     FnVizRead fnVizRead_ = nullptr;
     FnPluginSlotLoad fnSlotLoad_ = nullptr;
@@ -151,6 +155,10 @@ class ApoEngineHost {
     uint32_t appliedNum_[APO_NUM_PARAM_COUNT];
     std::string appliedStr_[APO_STR_SLOT_COUNT];
     bool snapshotValid_ = false;
+    // 生效值回读节流（worker 独占）：应用计数变化即读、另每
+    // 20 轮（约 1s）兜底读一次。
+    uint32_t effReadbackApplied_ = 0xFFFFFFFFu;
+    int effReadbackTick_ = 0;
     uint32_t appliedTotal_ = 0;
     auradsp_viz_frame vizFrames_[4];
 };

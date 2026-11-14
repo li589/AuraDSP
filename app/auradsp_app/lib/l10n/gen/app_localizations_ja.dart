@@ -1286,6 +1286,48 @@ class AppLocalizationsJa extends AppLocalizations {
   String get asioDriverActionUnregister => 'ドライバー登録を解除';
 
   @override
+  String get engineEffectiveTitle => 'エンジン実効値';
+
+  @override
+  String get engineEffectiveHint => 'エンジンから読み戻した実際の値です。設定と異なる場合はこちらが正です。';
+
+  @override
+  String get effEngineLocal => 'ローカルエンジン';
+
+  @override
+  String get effEngineBridge => 'ブリッジエンジン';
+
+  @override
+  String get effEngineApo => 'System APO エンジン';
+
+  @override
+  String get effModeMatrix => 'マトリクスダウンミックス';
+
+  @override
+  String get effModeDiscrete => 'ディスクリート（チャンネル別）';
+
+  @override
+  String get effFillLabel => '未使用チャンネルのフィル';
+
+  @override
+  String get effOn => 'オン';
+
+  @override
+  String get effOff => 'オフ';
+
+  @override
+  String get effNotRunning => '未実行';
+
+  @override
+  String get effNoBridge => 'ブリッジエンジン未実行';
+
+  @override
+  String get effApplied => '適用済みパラメータ';
+
+  @override
+  String get effChannelsUnit => 'ch';
+
+  @override
   String get asioDawStatus => 'DAW 接続状態';
 
   @override

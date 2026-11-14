@@ -1262,6 +1262,48 @@ class AppLocalizationsZh extends AppLocalizations {
   String get asioDriverActionUnregister => '注销驱动';
 
   @override
+  String get engineEffectiveTitle => '引擎生效值';
+
+  @override
+  String get engineEffectiveHint => '引擎回读的实际生效值，与设置不一致时以此为准。';
+
+  @override
+  String get effEngineLocal => '本机引擎';
+
+  @override
+  String get effEngineBridge => '桥引擎';
+
+  @override
+  String get effEngineApo => 'System APO 引擎';
+
+  @override
+  String get effModeMatrix => '矩阵下混';
+
+  @override
+  String get effModeDiscrete => '离散逐声道';
+
+  @override
+  String get effFillLabel => '未用声道铺满';
+
+  @override
+  String get effOn => '开';
+
+  @override
+  String get effOff => '关';
+
+  @override
+  String get effNotRunning => '未运行';
+
+  @override
+  String get effNoBridge => '无桥引擎运行';
+
+  @override
+  String get effApplied => '已应用参数';
+
+  @override
+  String get effChannelsUnit => '声道';
+
+  @override
   String get asioDawStatus => 'DAW 状态';
 
   @override

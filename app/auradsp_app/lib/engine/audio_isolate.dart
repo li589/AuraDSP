@@ -1461,6 +1461,38 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             apoPluginPublisher.active = false;
           }
           break;
+        case 'enginevalues':
+          {
+            // 引擎生效值回读（第三十五轮）：本机引擎 + 当前桥引擎
+            // 经 get_param 回读声道模式/铺满，面板展示引擎真实
+            // 生效值（非设置镜像）；未建/未开的段缺席，状态层显
+            // 「—」。APO 行走 telemetry v6，不经此路。
+            final resp = <String, dynamic>{'evt': 'enginevalues'};
+            final libNow = lib;
+            if (libNow != null && handle != null) {
+              final mode =
+                  AuraDspLib.getInt(libNow, handle, 'channels.mode');
+              final fill =
+                  AuraDspLib.getInt(libNow, handle, 'channels.upmix_fill');
+              resp['local'] = {
+                'mode': mode == -999999 ? -1 : mode,
+                'fill': fill == -999999 ? -1 : fill,
+                'rate': requestedRate,
+              };
+            }
+            final ab = bridgeManager.active;
+            final bst = ab?.status();
+            if (ab != null && bst != null && bst['running'] == true) {
+              resp['bridge'] = {
+                'mode': ab.getIntParam('channels.mode') ?? -1,
+                'fill': ab.getIntParam('channels.upmix_fill') ?? -1,
+                'rate': (bst['sr'] as num?)?.toInt() ?? 0,
+                'ch': (bst['outCh'] as num?)?.toInt() ?? 0,
+              };
+            }
+            send(resp);
+          }
+          break;
         case 'apoPluginReload':
           {
             // Part I Q3：故障槽点击重试——发布器推进 loadGen，

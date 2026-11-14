@@ -576,6 +576,16 @@ class AppModel extends ChangeNotifier {
   // 3 ABI 不符 / 4 create 失败 / 5 就绪；loadErr 为 Win32 错误码。
   int apoLoadStage = 0;
   int apoLoadErr = 0;
+  // APO 引擎生效值回读（telemetry v6，第三十五轮）：座位引擎经
+  // auradsp_get_param 回读的真实值；-1 = 未知（旧版 APO 或引擎
+  // 未就绪），面板据此显「—」而非误报 0。
+  int apoEffMode = -1;
+  int apoEffFill = -1;
+  // 本机/桥引擎生效值（isolate 'enginevalues' 应答，第三十五轮）：
+  // {'mode': int, 'fill': int, 'rate': int, 'ch': int}；null = 未查。
+  Map<String, int>? localEffValues;
+  Map<String, int>? bridgeEffValues;
+  DateTime? effValuesAt;
   bool apoHeartbeatAlive = false;
   int apoHeartbeatSeq = 0;
   int apoHeartbeatSr = 0;

@@ -851,8 +851,9 @@ extension AudioModesState on AppModel {
   /// 两次确认防抖（S5，宾机 E2E 定罪）：单次扫描缺席不修——音频
   /// 服务重启/驱动安装后的重枚举瞬间端点会短暂消失（实测装机后
   /// 首扫 HDA 端点不在场，合法 VAIO 落点险被误清）；连续两次
-  /// 应用扫描都缺席才判真消失（看守 4 秒一轮，真实拔除 ~8 秒
-  /// 内落定）。在场即清零计数，App 重启计数自清。
+  /// 应用扫描都缺席才判真消失（真实拔除约 8 秒内落定）。计数待
+  /// 确认期间看守即使签名未变也再应用一轮凑满确认（S6：否则
+  /// 首扫落定签名后第二击永不来）。在场即清零，重启计数自清。
   void reconcileDeviceSelections(Set<String> presentKeys) {
     if (presentKeys.isEmpty) return;
     final repaired = <String>[];
@@ -895,6 +896,14 @@ extension AudioModesState on AppModel {
     }
   }
 
+  /// 请求本机/桥引擎生效值回读（第三十五轮）：「引擎生效值」
+  /// 面板展开时调用，应答经 'enginevalues' 事件回填
+  /// localEffValues/bridgeEffValues。APO 行走 telemetry v6
+  /// （apoEffMode/apoEffFill），不经此路。
+  void requestEngineValues() {
+    _toIso?.send({'cmd': 'enginevalues'});
+  }
+
   /// 签名看守启动（ready 恢复点调用；幂等）。4 秒一轮轻量扫描，
   /// 签名未变时零状态写入——系统里改默认/插拔/改格式数秒内自动
   /// 跟上，不再依赖手动刷新（登记 C5 的进程内替代实现：不新增
@@ -924,8 +933,17 @@ extension AudioModesState on AppModel {
       final lastLine = stdout.split('\n').last.trim();
       if (lastLine.isEmpty) return;
       final json = jsonDecode(lastLine) as Map<String, dynamic>;
-      if (_deviceSignatureOf(json) == _deviceScanSignature) return;
-      dbgLog('devices.watch: change detected, applying refresh');
+      // 签名未变通常直接跳过；例外（S5 复验定罪）：调和有待确认
+      // 的缺席计数时必须再应用一轮凑满两次确认——否则首扫的
+      // 签名落定后看守永不再应用，消失设备的修复永不落定。
+      final strikesPending = _reconcileStrikes.isNotEmpty;
+      if (_deviceSignatureOf(json) == _deviceScanSignature &&
+          !strikesPending) {
+        return;
+      }
+      dbgLog(strikesPending && _deviceSignatureOf(json) == _deviceScanSignature
+          ? 'devices.watch: confirming pending reconcile strikes'
+          : 'devices.watch: change detected, applying refresh');
       try {
         refreshVaioDetect();
       } catch (e, st) {

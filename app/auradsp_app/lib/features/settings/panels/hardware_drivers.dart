@@ -46,6 +46,8 @@ class _DriverLayer extends StatelessWidget {
         _VirtualAsioDriverCard(model: model),
         const SizedBox(height: AuraSpace.sm),
         _WasapiDriverRow(model: model),
+        const SizedBox(height: AuraSpace.sm),
+        _EngineEffectiveBlock(model: model),
         const SizedBox(height: AuraSpace.xs),
         _InfoRow(l.osVersionLabel, PlatformProfile.osVersion),
       ],
@@ -134,6 +136,171 @@ class _DriverDetail extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     return Text(text, style: monoOf(p, size: 10, color: p.textDim));
+  }
+}
+
+/* ---- 引擎生效值回读（第三十五轮，业主立项） ----
+ * 可展开/收回的状态块：收起时一行摘要（当前主引擎的回读值），
+ * 展开时三引擎（本机/桥/System APO）逐行列出声道模式、未用
+ * 声道铺满、声道数、采样率（APO 另带已应用参数数）。数据全部
+ * 来自引擎回读——本机/桥经 isolate get_param、APO 经 telemetry
+ * v6 的 auradsp_get_param 回读段——不是设置镜像：设置与回读
+ * 不一致时以回读为准（第三十四轮 VAIO/APO 下混分歧的教训：
+ * 光看设置值无法判定哪个引擎在跑什么）。展开期间 2 秒轮询，
+ * 收起即停；首次构建时单发一次让摘要有值。 */
+class _EngineEffectiveBlock extends StatefulWidget {
+  final AppModel model;
+  const _EngineEffectiveBlock({required this.model});
+
+  @override
+  State<_EngineEffectiveBlock> createState() => _EngineEffectiveBlockState();
+}
+
+class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
+  bool _expanded = false;
+  Timer? _poll;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.model.requestEngineValues();
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  void _toggle() {
+    setState(() => _expanded = !_expanded);
+    if (_expanded) {
+      widget.model.requestEngineValues();
+      _poll = Timer.periodic(
+          const Duration(seconds: 2), (_) => widget.model.requestEngineValues());
+    } else {
+      _poll?.cancel();
+      _poll = null;
+    }
+  }
+
+  String _fmt(AppLocalizations l,
+      {int? mode, int? fill, int? rate, int? ch, int? applied}) {
+    final parts = <String>[];
+    if (mode != null && mode >= 0) {
+      parts.add(mode == 1 ? l.effModeDiscrete : l.effModeMatrix);
+    }
+    if (fill != null && fill >= 0) {
+      parts.add('${l.effFillLabel} ${fill == 1 ? l.effOn : l.effOff}');
+    }
+    if (ch != null && ch > 0) parts.add('$ch ${l.effChannelsUnit}');
+    if (rate != null && rate > 0) parts.add('$rate Hz');
+    if (applied != null) parts.add('${l.effApplied} $applied');
+    return parts.isEmpty ? '—' : parts.join(' · ');
+  }
+
+  /// 收起态摘要：当前模式的主引擎回读一行。
+  String _summary(AppLocalizations l) {
+    final m = widget.model;
+    if (m.audioMode == 'sysapo') {
+      if (!m.apoEngineActive) return l.effNotRunning;
+      return _fmt(l,
+          mode: m.apoEffMode,
+          fill: m.apoEffFill,
+          rate: m.apoEngineRate,
+          ch: m.apoEngineChannels,
+          applied: m.apoParamsApplied);
+    }
+    final b = m.bridgeEffValues;
+    if (b != null) {
+      return _fmt(l, mode: b['mode'], fill: b['fill'], rate: b['rate'], ch: b['ch']);
+    }
+    final lo = m.localEffValues;
+    if (lo != null) {
+      return _fmt(l, mode: lo['mode'], fill: lo['fill'], rate: lo['rate']);
+    }
+    return '—';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+    final m = widget.model;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: _toggle,
+          borderRadius: BorderRadius.circular(6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(_expanded ? Icons.expand_less : Icons.expand_more,
+                  size: 15, color: p.textDim),
+              const SizedBox(width: AuraSpace.xs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(l.engineEffectiveTitle,
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: p.text)),
+                    const SizedBox(height: 2),
+                    _DriverStatus(_summary(l), p.textDim),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_expanded) ...[
+          const SizedBox(height: AuraSpace.xs),
+          Padding(
+            padding: const EdgeInsets.only(left: 23),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _DriverKv(
+                    l.effEngineLocal,
+                    m.localEffValues == null
+                        ? l.effNotRunning
+                        : _fmt(l,
+                            mode: m.localEffValues!['mode'],
+                            fill: m.localEffValues!['fill'],
+                            rate: m.localEffValues!['rate'])),
+                const SizedBox(height: 2),
+                _DriverKv(
+                    l.effEngineBridge,
+                    m.bridgeEffValues == null
+                        ? l.effNoBridge
+                        : _fmt(l,
+                            mode: m.bridgeEffValues!['mode'],
+                            fill: m.bridgeEffValues!['fill'],
+                            rate: m.bridgeEffValues!['rate'],
+                            ch: m.bridgeEffValues!['ch'])),
+                const SizedBox(height: 2),
+                _DriverKv(
+                    l.effEngineApo,
+                    !m.apoEngineActive
+                        ? l.effNotRunning
+                        : _fmt(l,
+                            mode: m.apoEffMode,
+                            fill: m.apoEffFill,
+                            rate: m.apoEngineRate,
+                            ch: m.apoEngineChannels,
+                            applied: m.apoParamsApplied)),
+                const SizedBox(height: AuraSpace.xs),
+                Text(l.engineEffectiveHint,
+                    style: labelOf(p, size: 11, color: p.textDim)),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }
 

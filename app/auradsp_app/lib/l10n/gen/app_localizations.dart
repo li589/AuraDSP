@@ -2422,6 +2422,90 @@ abstract class AppLocalizations {
   /// **'注销驱动'**
   String get asioDriverActionUnregister;
 
+  /// No description provided for @engineEffectiveTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'引擎生效值'**
+  String get engineEffectiveTitle;
+
+  /// No description provided for @engineEffectiveHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'引擎回读的实际生效值，与设置不一致时以此为准。'**
+  String get engineEffectiveHint;
+
+  /// No description provided for @effEngineLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机引擎'**
+  String get effEngineLocal;
+
+  /// No description provided for @effEngineBridge.
+  ///
+  /// In zh, this message translates to:
+  /// **'桥引擎'**
+  String get effEngineBridge;
+
+  /// No description provided for @effEngineApo.
+  ///
+  /// In zh, this message translates to:
+  /// **'System APO 引擎'**
+  String get effEngineApo;
+
+  /// No description provided for @effModeMatrix.
+  ///
+  /// In zh, this message translates to:
+  /// **'矩阵下混'**
+  String get effModeMatrix;
+
+  /// No description provided for @effModeDiscrete.
+  ///
+  /// In zh, this message translates to:
+  /// **'离散逐声道'**
+  String get effModeDiscrete;
+
+  /// No description provided for @effFillLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'未用声道铺满'**
+  String get effFillLabel;
+
+  /// No description provided for @effOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'开'**
+  String get effOn;
+
+  /// No description provided for @effOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'关'**
+  String get effOff;
+
+  /// No description provided for @effNotRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'未运行'**
+  String get effNotRunning;
+
+  /// No description provided for @effNoBridge.
+  ///
+  /// In zh, this message translates to:
+  /// **'无桥引擎运行'**
+  String get effNoBridge;
+
+  /// No description provided for @effApplied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已应用参数'**
+  String get effApplied;
+
+  /// No description provided for @effChannelsUnit.
+  ///
+  /// In zh, this message translates to:
+  /// **'声道'**
+  String get effChannelsUnit;
+
   /// No description provided for @asioDawStatus.
   ///
   /// In zh, this message translates to:

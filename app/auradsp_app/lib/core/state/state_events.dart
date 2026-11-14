@@ -880,10 +880,14 @@ extension StateEvents on AppModel {
         final appliedN = (raw['applied'] as num?)?.toInt() ?? 0;
         final loadStageN = (raw['loadStage'] as num?)?.toInt() ?? 0;
         final loadErrN = (raw['loadErr'] as num?)?.toInt() ?? 0;
+        final effModeN = (raw['effMode'] as num?)?.toInt() ?? -1;
+        final effFillN = (raw['effFill'] as num?)?.toInt() ?? -1;
         if (apoEngineActive != seatOn ||
             apoEngineFault != faultOn ||
             apoParamsApplied != appliedN ||
             apoLoadStage != loadStageN ||
+            apoEffMode != effModeN ||
+            apoEffFill != effFillN ||
             apoLoadErr != loadErrN) {
           // 全面复审 S1（APO-4）：引擎故障闩锁/加载失败此前只有设
           // 置面板一行小字，不在设置页完全无感——边沿各通知一次
@@ -907,8 +911,27 @@ extension StateEvents on AppModel {
           apoParamsApplied = appliedN;
           apoLoadStage = loadStageN;
           apoLoadErr = loadErrN;
+          apoEffMode = effModeN;
+          apoEffFill = effFillN;
           _notifyUi();
         }
+        break;
+      case 'enginevalues':
+        // 本机/桥引擎生效值应答（第三十五轮）：面板展开时由
+        // requestEngineValues 触发，值经 isolate 回读引擎。
+        Map<String, int>? pick(String key) {
+          final m = raw[key];
+          if (m is! Map) return null;
+          return {
+            for (final e in m.entries)
+              e.key.toString(): (e.value as num).toInt(),
+          };
+        }
+
+        localEffValues = pick('local');
+        bridgeEffValues = pick('bridge');
+        effValuesAt = DateTime.now();
+        _notifyUi();
         break;
       case 'viz':
         if (!window.isVisible) break;

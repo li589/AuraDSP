@@ -96,7 +96,9 @@ inline const wchar_t* AuraApoPluginsName() {
 // v5（2026-11-13，多声道计划 W3）：尾部再追加逐声道电平段
 // （channelCount/channelLevels/stageChLevels）；v4 及以前字段偏移
 // 仍不变，读者按 version>=5 取逐声道段，否则按立体声口径上报。
-#define APO_TELEMETRY_VERSION 5u
+// v6（2026-11-14，第三十五轮）：尾部追加引擎生效值回读段
+// （effChannelsMode/effUpmixFill/effValid）；读者按 version>=6 取。
+#define APO_TELEMETRY_VERSION 6u
 #define APO_TELEMETRY_BYTES 4096u
 
 struct ApoTelemetryBlock {
@@ -156,6 +158,13 @@ struct ApoTelemetryBlock {
     uint32_t channelCount;
     float channelLevels[8];
     float stageChLevels[21][8];
+    // ---- v6 追加（offset 1452 起；v5 读者止步于此）----
+    // 引擎生效值回读（第三十五轮）：座位 worker 应用参数后经
+    // auradsp_get_param 回读引擎真实值（非 App 下发镜像），供
+    // App「引擎生效值」面板展示。effValid=1 后两值才可信。
+    uint32_t effChannelsMode;  // channels.mode 回读（0=矩阵 1=离散）
+    uint32_t effUpmixFill;     // channels.upmix_fill 回读（0/1）
+    uint32_t effValid;         // 1=已至少成功回读一次
 };
 
 // loadStage 取值（ApoTelemetryBlock.loadStage）。
@@ -169,13 +178,15 @@ struct ApoTelemetryBlock {
 // v3：插件段自 608 起，块总 736B（映射仍 4096B 整页口径）。
 // v4：加载诊断自 736 起，块总 744B。
 // v5：逐声道段自 744 起，块总 1452B。
-static_assert(sizeof(ApoTelemetryBlock) == 1452, "telemetry block layout");
+// v6：生效值回读段自 1452 起，块总 1464B。
+static_assert(sizeof(ApoTelemetryBlock) == 1464, "telemetry block layout");
 static_assert(offsetof(ApoTelemetryBlock, spectrum) == 64, "telemetry v1 offsets");
 static_assert(offsetof(ApoTelemetryBlock, eqInSpectrum) == 192, "telemetry v2 offsets");
 static_assert(offsetof(ApoTelemetryBlock, stageLevelsL) == 320, "telemetry v2 offsets");
 static_assert(offsetof(ApoTelemetryBlock, stageLevelsR) == 448, "telemetry v2 offsets");
 static_assert(offsetof(ApoTelemetryBlock, plugins) == 608, "telemetry v3 offsets");
 static_assert(offsetof(ApoTelemetryBlock, loadStage) == 736, "telemetry v4 offsets");
+static_assert(offsetof(ApoTelemetryBlock, effChannelsMode) == 1452, "telemetry v6 offsets");
 static_assert(offsetof(ApoTelemetryBlock, channelCount) == 744, "telemetry v5 offsets");
 static_assert(offsetof(ApoTelemetryBlock, channelLevels) == 748, "telemetry v5 offsets");
 static_assert(offsetof(ApoTelemetryBlock, stageChLevels) == 780, "telemetry v5 offsets");

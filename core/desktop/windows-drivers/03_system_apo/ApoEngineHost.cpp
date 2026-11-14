@@ -201,6 +201,7 @@ bool ApoEngineHost::LoadEngine() {
         fnSetParam_ = (FnSetParam)GetProcAddress(h, "auradsp_set_param");
         fnLatency_ = (FnGetLatencyMs)GetProcAddress(h, "auradsp_get_latency_ms");
         fnVizRead_ = (FnVizRead)GetProcAddress(h, "auradsp_viz_read");
+        fnGetParam_ = (FnGetParam)GetProcAddress(h, "auradsp_get_param");
         auto pSlotLoad = (FnPluginSlotLoad)GetProcAddress(h, "auradsp_plugin_slot_load");
         auto pSlotUnload = (FnPluginSlot)GetProcAddress(h, "auradsp_plugin_slot_unload");
         auto pSlotBypass = (FnPluginSlotInt)GetProcAddress(h, "auradsp_plugin_slot_set_bypass");
@@ -235,6 +236,7 @@ bool ApoEngineHost::LoadEngine() {
         fnDestroy_ = nullptr;
         fnProcess_ = nullptr;
         fnSetParam_ = nullptr;
+        fnGetParam_ = nullptr;
         fnLatency_ = nullptr;
         fnVizRead_ = nullptr;
         FreeLibrary(h);
@@ -592,6 +594,31 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
     if (applied > 0) {
         appliedTotal_ += applied;
         if (tele_) tele_->paramsApplied = appliedTotal_;
+    }
+    ReadbackEffective();
+}
+
+// 引擎生效值回读（第三十五轮，telemetry v6）：应用计数变化时
+// （另每 ~1s 兜底）经 auradsp_get_param 回读座位引擎的声道模式
+// 与铺满开关，写入 telemetry 尾段。App 面板据此展示引擎真实
+// 生效值，与「设置里选了什么」分开——两者不一致时以回读为准。
+// fnGetParam_ 为可选符号（旧引擎 DLL 无此导出时整段不写，
+// effValid 恒 0，读者据此显示「未知」而非误报 0 值）。
+void ApoEngineHost::ReadbackEffective() {
+    if (!tele_ || !fnGetParam_ || !engine_) return;
+    if (appliedTotal_ == effReadbackApplied_ && ++effReadbackTick_ < 20)
+        return;
+    effReadbackTick_ = 0;
+    effReadbackApplied_ = appliedTotal_;
+    int32_t mode = 0, fill = 0;
+    const bool okMode =
+        fnGetParam_(engine_, "channels.mode", &mode, sizeof(mode)) == 0;
+    const bool okFill = fnGetParam_(engine_, "channels.upmix_fill", &fill,
+                                    sizeof(fill)) == 0;
+    if (okMode && okFill) {
+        tele_->effChannelsMode = (uint32_t)mode;
+        tele_->effUpmixFill = (uint32_t)fill;
+        tele_->effValid = 1;
     }
 }
 

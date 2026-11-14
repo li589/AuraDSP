@@ -1364,6 +1364,49 @@ class AppLocalizationsEn extends AppLocalizations {
   String get asioDriverActionUnregister => 'Unregister Driver';
 
   @override
+  String get engineEffectiveTitle => 'Engine effective values';
+
+  @override
+  String get engineEffectiveHint =>
+      'Values read back from the engines themselves. If they differ from the settings, trust these.';
+
+  @override
+  String get effEngineLocal => 'Local engine';
+
+  @override
+  String get effEngineBridge => 'Bridge engine';
+
+  @override
+  String get effEngineApo => 'System APO engine';
+
+  @override
+  String get effModeMatrix => 'Matrix downmix';
+
+  @override
+  String get effModeDiscrete => 'Discrete per-channel';
+
+  @override
+  String get effFillLabel => 'Fill unused channels';
+
+  @override
+  String get effOn => 'On';
+
+  @override
+  String get effOff => 'Off';
+
+  @override
+  String get effNotRunning => 'Not running';
+
+  @override
+  String get effNoBridge => 'No bridge engine running';
+
+  @override
+  String get effApplied => 'parameters applied';
+
+  @override
+  String get effChannelsUnit => 'ch';
+
+  @override
   String get asioDawStatus => 'DAW Status';
 
   @override

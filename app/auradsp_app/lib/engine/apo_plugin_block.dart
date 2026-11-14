@@ -61,3 +61,8 @@ const int kApoTelemetryPluginSlotU32 = 8;
 /// loadStage（0 未试 / 1 自目录失败 / 2 三候选加载失败 / 3 ABI
 /// 不符 / 4 create 失败 / 5 就绪），u32[185] = loadErr（Win32 码）。
 const int kApoTelemetryLoadDiagU32 = 184;
+
+/// telemetry v6 引擎生效值回读（offset 1452 起，第三十五轮）：
+/// u32[363] = effChannelsMode、u32[364] = effUpmixFill、
+/// u32[365] = effValid（1 后前两值可信）。v6 以前整段不存在。
+const int kApoTelemetryEffU32 = 363;

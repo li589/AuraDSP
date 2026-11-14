@@ -487,6 +487,11 @@ class ApoTelemetryReader {
       if (loadStage != _lastLoadStage) {
         dbgLog('apo telemetry: loadStage=$loadStage err=$loadErr');
       }
+      // telemetry v6 生效值回读（第三十五轮）：先落局部变量再进
+      // 事件字面量（AOT 纪律，同段下方注记）。
+      final effOk = u32[1] >= 6 && u32[kApoTelemetryEffU32 + 2] == 1;
+      final effMode = effOk ? u32[kApoTelemetryEffU32] : -1;
+      final effFill = effOk ? u32[kApoTelemetryEffU32 + 1] : -1;
       _send?.call({
         'evt': 'apotelemetry',
         'seat': seat == 1,
@@ -497,6 +502,8 @@ class ApoTelemetryReader {
         'taken': u32[8],
         'loadStage': loadStage,
         'loadErr': loadErr,
+        'effMode': effMode,
+        'effFill': effFill,
       });
       _lastSeat = seat;
       _lastFault = faultNow;
