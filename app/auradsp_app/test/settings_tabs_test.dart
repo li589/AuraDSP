@@ -55,8 +55,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('引擎'), findsOneWidget);
-    expect(find.text('持久化记忆与配置外置'), findsOneWidget);
-    expect(find.text('采样率'), findsNothing);
+    expect(find.text('会话与配置'), findsOneWidget);
+    // 第三十六轮：引擎卡改出即时状态行，含一行只读「采样率」
+    // （协商真值）；采样率设置卡本体仍只在音频页（声道数量/
+    // 声道模式等设置项不出现在系统页）。
+    expect(find.text('采样率'), findsOneWidget);
+    expect(find.text('声道数量'), findsNothing);
     expect(find.text('测试音频源'), findsNothing);
 
     // 5. 切换到“测试”页 (tab 3)
