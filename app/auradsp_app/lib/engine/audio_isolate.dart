@@ -141,6 +141,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // AuraVAIO 虚拟声卡模式面（Mode 1 桥）：与 VB/ASIO/WASAPI 互斥。
   AuraVaioBridge? vaio;
   String vaioOutputEndpointInUse = '';
+  bool vaioMirrorInUse = false;
   // 桥模式共用诊断/节流状态（P1：同一时刻只有一个后端出声，不再按后端各一份）。
   bool bridgeVizNullLogged = false;
   bool bridgeNoCbLogged = false;
@@ -649,17 +650,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     send({'evt': 'vaiodetect', ...?info});
   }
 
-  void startVaioBridge({String outputEndpointSubstr = ''}) {
+  void startVaioBridge({String outputEndpointSubstr = '', bool monitorMirror = false}) {
     windowsCapture.detach(restoreSaved: false);
     if (bridgeManager.isActive('vaio')) return;
-    dbgLog('vaiomode: start requested output="$outputEndpointSubstr"');
+    dbgLog('vaiomode: start requested output="$outputEndpointSubstr" mirror=$monitorMirror');
     try {
       vaio ??= bridgeManager.load<AuraVaioBridge>('vaio');
     } catch (e) {
       send({'evt': 'vaiostatus', 'running': false, 'note': 'bridge-missing: $e'});
       return;
     }
-    final rc = vaio!.start(AuraDspLib.loadedPath ?? '', '', outputEndpointSubstr: outputEndpointSubstr);
+    final rc = vaio!.start(AuraDspLib.loadedPath ?? '', '',
+        outputEndpointSubstr: outputEndpointSubstr, monitorMirror: monitorMirror);
     dbgLog('vaiomode: start rc=$rc');
     lastVaioGeo = ''; // 每次桥启动必落一条几何快照（噪声态取证）
     lastVaioFx = ''; // S4：取证对象同口径，每 start 必落一次
@@ -704,6 +706,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     source = null;
     bridgeManager.switchTo('vaio', vaio!);
     vaioOutputEndpointInUse = outputEndpointSubstr;
+    vaioMirrorInUse = monitorMirror;
     bridgeManager.replayPluginMirror(vaio!, pluginMirror, send);
     unloadLocalSlotsWhileBridged();
     bridgeVizNullLogged = false;
@@ -727,6 +730,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     } catch (e, st) { swallow(e, st); }
     bridgeManager.clearActive(vaio!);
     vaioOutputEndpointInUse = '';
+    vaioMirrorInUse = false;
     final resumeErr = resumeWasapi('vaiomode');
     unawaited(syncPluginMirrorToLocal(lib, handle));
     send({
@@ -1417,6 +1421,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             stopOtherBridges('vaio');
             startVaioBridge(
               outputEndpointSubstr: (m['outputEndpoint'] as String?) ?? '',
+              monitorMirror: (m['monitorMirror'] as bool?) ?? false,
             );
           } else {
             stopVaioBridge();
@@ -1427,6 +1432,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           stopVaioBridge();
           startVaioBridge(
             outputEndpointSubstr: (m['outputEndpoint'] as String?) ?? '',
+            monitorMirror: (m['monitorMirror'] as bool?) ?? false,
           );
           break;
         case 'vaiodetect':
@@ -2319,6 +2325,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 // 也是请求值而非桥核实值。
                 if (backend == 'vaio')
                   'requestedEndpoint': vaioOutputEndpointInUse,
+                if (backend == 'vaio') 'requestedMirror': vaioMirrorInUse,
               });
               bridgeGated = ((st['gated'] as num?)?.toInt() ?? 0) == 1;
               // VAIO 几何快照（2026-11-09）：格式/声道几何元组变化

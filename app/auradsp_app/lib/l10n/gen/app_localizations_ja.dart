@@ -1299,14 +1299,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get virtualSinkNotice =>
-      '注：AuraVAIO は仮想シンクです。OBS や録音アプリを開いて出力をモニターしてください。';
+      'AuraVAIO は仮想出力で、本機では聞こえません。OBS や録音アプリで AuraVAIO を選ぶとモニターできます。モニターミラーリングを有効にすると、処理後の音声が既定のヘッドホン/スピーカーにも分岐します。';
 
   @override
   String get monitorMirroring => 'ヘッドホンモニターミラーリング';
-
-  @override
-  String get monitorMirroringHint =>
-      '未実装：モニターミラーリング（処理後の音声を物理ヘッドホンへ分岐）は開発中です。このスイッチは現在どの音声経路も変更しません';
 
   @override
   String get audioDevice => 'デバイス';

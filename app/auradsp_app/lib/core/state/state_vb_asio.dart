@@ -224,6 +224,7 @@ extension VbAsioState on AppModel {
       _toIso?.send({
         'cmd': 'vaiorestart',
         'outputEndpoint': config.vaioOutputEndpoint,
+        'monitorMirror': config.monitorMirroring,
       });
     }
     _notifyUi();

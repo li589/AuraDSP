@@ -132,6 +132,7 @@ extension StateEvents on AppModel {
               'cmd': 'vaiomode',
               'on': true,
               'outputEndpoint': config.vaioOutputEndpoint,
+              'monitorMirror': config.monitorMirroring,
             });
             _armVaioGuard();
           }

@@ -45,6 +45,39 @@ void main() {
       expect(find.text('自动选择（非VAIO扬声器）'), findsOneWidget);
     });
 
+    // ASIO-2 补全（2026-11-14）：监听镜像开关接真值可切换，
+    // 「尚未实现」整行与常显提示框均已删除（说明收进问号气泡）。
+    testWidgets('monitor mirroring switch is live; stale hints gone',
+        (tester) async {
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+      await tester.pumpWidget(_app(model));
+      await tester.pumpAndSettle();
+      model.setAudioMode('vaio');
+      model.setPipelineOutput('vaio');
+      await tester.pumpAndSettle();
+      expect(find.text('本地耳机监听镜像'), findsOneWidget);
+      expect(find.textContaining('尚未实现'), findsNothing);
+      // 虚拟端点说明只在 InfoBadge 气泡里，不再常显为正文。
+      expect(find.textContaining('是虚拟输出'), findsNothing);
+      final mirrorRow = find.ancestor(
+        of: find.text('本地耳机监听镜像'),
+        matching: find.byWidgetPredicate(
+            (w) => w is Row && w.children.any((c) => c is AuraSwitch)),
+      );
+      expect(mirrorRow, findsOneWidget);
+      final mirrorSwitch =
+          find.descendant(of: mirrorRow, matching: find.byType(AuraSwitch));
+      expect(mirrorSwitch, findsOneWidget);
+      expect(tester.widget<AuraSwitch>(mirrorSwitch).value, isFalse);
+      expect(tester.widget<AuraSwitch>(mirrorSwitch).onChanged, isNotNull);
+      await tester.ensureVisible(mirrorSwitch);
+      await tester.tap(mirrorSwitch);
+      await tester.pumpAndSettle();
+      expect(model.config.monitorMirroring, isTrue);
+      expect(tester.widget<AuraSwitch>(mirrorSwitch).value, isTrue);
+    });
+
     testWidgets('vaio output selection persists', (tester) async {
       final model = AppModel(testing: true);
       addTearDown(model.dispose);

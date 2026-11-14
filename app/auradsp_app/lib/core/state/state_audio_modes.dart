@@ -149,6 +149,7 @@ extension AudioModesState on AppModel {
           'cmd': 'vaiomode',
           'on': isVaio,
           'outputEndpoint': config.vaioOutputEndpoint,
+          'monitorMirror': config.monitorMirroring,
         });
         // 崩溃断路器联动：手动进入 VAIO = 知情接管，解除跳过
         // 并重新布防；离开 VAIO（桥干净停）= 解除布防。
@@ -490,6 +491,7 @@ extension AudioModesState on AppModel {
         'cmd': 'vaiomode',
         'on': true,
         'outputEndpoint': config.vaioOutputEndpoint,
+        'monitorMirror': config.monitorMirroring,
       });
       _armVaioGuard();
     } else {
@@ -576,6 +578,7 @@ extension AudioModesState on AppModel {
         'cmd': 'vaiomode',
         'on': true,
         'outputEndpoint': config.vaioOutputEndpoint,
+        'monitorMirror': config.monitorMirroring,
       });
       _armVaioGuard();
     } else if (chain == PipelineChain.asio && !asioActive) {
@@ -948,11 +951,21 @@ extension AudioModesState on AppModel {
   }
 
   void setMonitorMirroring(bool enabled) {
-    // 全面复审 S3（ASIO-2）：全仓无消费端（仅持久化）——面板开关
-    // 已置灰明示未实现；本 setter 仅供存量配置/预设回放兼容保留，
-    // 真镜像（第二路渲染泵）属新功能，待业主裁定（遗留登记）。
+    // ASIO-2 补全（2026-11-14，业主裁定）：监听镜像已落地——
+    // VAIO 桥内第二路 WASAPI 渲染把处理后音频分路到系统默认
+    // 物理端点。值经 vaiomode/vaiorestart 载荷下发 isolate →
+    // 桥 config 的 mirror 键消费；桥在跑则热重启生效（与
+    // setVaioOutputEndpoint 同口径）。
+    if (config.monitorMirroring == enabled) return;
     config.monitorMirroring = enabled;
     persistRoutingChange();
+    if (vaioActive) {
+      _toIso?.send({
+        'cmd': 'vaiorestart',
+        'outputEndpoint': config.vaioOutputEndpoint,
+        'monitorMirror': enabled,
+      });
+    }
     _notifyUi();
   }
 

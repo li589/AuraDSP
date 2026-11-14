@@ -1275,14 +1275,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get virtualSinkNotice =>
-      '提示：AuraVAIO 为虚拟声卡输出，需在 OBS 或录音软件中选择 AuraVAIO 才能听到声音。';
+      'AuraVAIO 是虚拟输出，本机听不到；在 OBS 或录音软件中选择 AuraVAIO 即可监听。开启监听镜像可把处理后音频分路一份到默认耳机/扬声器。';
 
   @override
   String get monitorMirroring => '本地耳机监听镜像';
-
-  @override
-  String get monitorMirroringHint =>
-      '尚未实现：监听镜像（向物理耳机分路一份处理后音频）仍在开发中，此开关暂不改变任何音频路径';
 
   @override
   String get audioDevice => '设备';

@@ -1377,14 +1377,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get virtualSinkNotice =>
-      'Note: AuraVAIO is a virtual sink. Open OBS or a recording app to listen to output.';
+      'AuraVAIO is a virtual output — silent locally. Select AuraVAIO in OBS or a recording app to monitor it, or enable monitor mirroring to split the processed audio to your default headphones/speakers.';
 
   @override
   String get monitorMirroring => 'Headphone Monitor Mirroring';
-
-  @override
-  String get monitorMirroringHint =>
-      'Not implemented yet: monitor mirroring (splitting the processed audio to your physical headphones) is still in development; this switch currently changes no audio path';
 
   @override
   String get audioDevice => 'Device';

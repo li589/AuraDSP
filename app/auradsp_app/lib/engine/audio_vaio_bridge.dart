@@ -56,10 +56,18 @@ class AuraVaioBridge implements AudioBridgeCommon {
   Map<String, dynamic>? detect() => core.detectJson(32768);
 
   /// 启动常驻泵。engineDll 传引擎绝对路径；outputEndpointSubstr 为目标物理输出设备子串。
-  int start(String engineDll, String params, {String outputEndpointSubstr = ''}) =>
+  /// monitorMirror（ASIO-2 补全）：开启桥内第二路渲染（监听镜像，
+  /// 分路到系统默认物理端点），经 config 的 mirror 键下发。
+  int start(String engineDll, String params,
+          {String outputEndpointSubstr = '', bool monitorMirror = false}) =>
       // 端点子串经 config_json 归一，三桥共用 ab_start。
-      core.start(engineDll, params,
-          jsonEncode({'endpoint': outputEndpointSubstr}));
+      core.start(
+          engineDll,
+          params,
+          jsonEncode({
+            'endpoint': outputEndpointSubstr,
+            if (monitorMirror) 'mirror': 1,
+          }));
 
   @override
   int stop() => core.stop();

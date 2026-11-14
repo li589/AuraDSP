@@ -317,42 +317,26 @@ class _VaioOutputSubpanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!asBridgeLanding) ...[
-          Container(
-            padding: const EdgeInsets.all(AuraSpace.sm),
-            decoration: BoxDecoration(
-              color: p.panelRaised,
-              borderRadius: BorderRadius.circular(AuraRadius.sm),
-              border: Border.all(color: p.warning.withValues(alpha: 0.4)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.info_outline, size: 16, color: p.warning),
-                    const SizedBox(width: AuraSpace.xs),
-                    Expanded(
-                      child: Text(l.virtualSinkNotice,
-                          style: captionOf(p, color: p.warning)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AuraSpace.sm),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(l.monitorMirroring, style: labelOf(p, size: 12)),
-                    // 全面复审 S3（ASIO-2）：监听镜像全仓无消费端
-                    // （桥内 g_mirror 是参数镜像、非音频分路），真
-                    // 实现需第二路渲染泵、属新功能——开关置灰并在
-                    // hint 明示未实现，待业主裁定（遗留登记）。
-                    const AuraSwitch(value: false, onChanged: null),
-                  ],
-                ),
-                Text(l.monitorMirroringHint,
-                    style: monoOf(p, size: 10, color: p.textDim)),
-              ],
-            ),
+          // 业主 2026-11-14 裁定：虚拟端点说明整框常显太占版面，
+          // 收进监听镜像行尾的问号气泡（InfoBadge，与第十二轮 D
+          // 的 APO 范式说明同形态）；监听镜像开关接真值——ASIO-2
+          // 补全后由 VAIO 桥第二路渲染消费，「尚未实现」整行删除。
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(l.monitorMirroring, style: labelOf(p, size: 12)),
+                  const SizedBox(width: AuraSpace.xs),
+                  InfoBadge(message: l.virtualSinkNotice),
+                ],
+              ),
+              AuraSwitch(
+                value: model.monitorMirroring,
+                onChanged: (v) => model.setMonitorMirroring(v),
+              ),
+            ],
           ),
           const SizedBox(height: AuraSpace.sm),
           ],

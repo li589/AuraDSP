@@ -143,6 +143,7 @@ PLATFORM_WINDOWS = {
     "smoke_dll_dirs.py",
     "smoke_d2_rt_drain.py",
     "smoke_d3_vaio_pump_wait.py",
+    "smoke_vaio_mirror_feed.py",
     "smoke_b1d_comp_startup.py",
     "smoke_d1_latency_sr.py",
     "smoke_d7_asrc_consistency.py",
@@ -343,6 +344,10 @@ def run_smoke_tests():
         # guard+排空单测 / ASIO 实测 test_stop 不再是固定 50ms。
         "smoke_d2_rt_drain.py",
         "smoke_d3_vaio_pump_wait.py",
+        # 监听镜像门禁（ASIO-2 补全，2026-11-14）：VAIO 桥第二路渲染
+        # 真接线（config mirror 键 → vaio_start → 泵内分路）+ 喂流规划
+        # 守恒/钳制单测。防「开关只落盘无消费端」的装饰实现回潮。
+        "smoke_vaio_mirror_feed.py",
         # B1-d 门禁（2026-10-24）：comp 启动段原声直通。旧实现的抽干循环在
         # 管线首块产出前不执行，输出缓冲里仍是未处理输入（调用方 in==out）；
         # 块长不整除 hop 时还会周期性复发。改为显式启动缺额 D（吐静音）+
