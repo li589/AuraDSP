@@ -21,6 +21,12 @@ struct ApoEndpoint {
     std::string direction;   // "render" / "capture"
     std::string name;        // UTF-8 friendly name
     unsigned long state = 0;  // DEVICE_STATE_*（1=active）
+    // 共享模式 mix format（IAudioClient::GetMixFormat；仅 ACTIVE 端点
+    // 读取，失败/未读置 0）。2026-11-14 驱动刷新及时性轮新增：App 侧
+    // 设备签名看守据此感知系统内改声道数/采样率/位深的变化。
+    int fmtRate = 0;
+    int fmtCh = 0;
+    int fmtBits = 0;
     bool enhancementsDisabled = false;  // {1da5d803},5 == 1（系统级 bypass）
     std::vector<ApoSlot> fx;  // LFX/GFX/SFX/MFX/EFX 五槽
     std::string friendlyName;  // FxFriendlyName（装了谁的 APO 常写这里）

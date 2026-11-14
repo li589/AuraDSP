@@ -26,8 +26,10 @@ int main() {
         if (!first) printf(",");
         first = false;
         printf("{\"id\":\"%s\",\"direction\":\"%s\",\"name\":\"%s\",\"state\":%lu,"
+               "\"rate\":%d,\"ch\":%d,\"bits\":%d,"
                "\"enhancementsDisabled\":%s,\"readable\":%s,\"friendlyName\":\"%s\",\"fx\":[",
                JsonEscape(e.id).c_str(), e.direction.c_str(), JsonEscape(e.name).c_str(), e.state,
+               e.fmtRate, e.fmtCh, e.fmtBits,
                e.enhancementsDisabled ? "true" : "false", e.readable ? "true" : "false",
                JsonEscape(e.friendlyName).c_str());
         bool f2 = true;

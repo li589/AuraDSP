@@ -169,6 +169,10 @@ extension StateEvents on AppModel {
         if (PlatformProfile.supportsBridges) {
           refreshVaioDetect();
         }
+        // 设备签名看守（2026-11-14）：就绪后启动，系统侧设备变化
+        // （改默认/插拔/改格式）数秒内自动刷新+调和，不再依赖
+        // 手动刷新按钮。幂等，isolate 重启再 ready 不重复建表。
+        startDeviceWatch();
         // 会话回放必须落在音频后端就绪之后：VB/ASIO/VAIO 模式下桥引擎才是
         // 真正的处理路径，提前回放会把插件装到本地引擎、随后建桥时镜像为空
         // （表现为重启后插件未挂载）。

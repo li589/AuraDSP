@@ -62,6 +62,24 @@ ApoEndpoint ReadEndpoint(IMMDevice* dev, const std::string& dir) {
     }
     DWORD state = 0;
     if (dev->GetState(&state) == S_OK) e.state = (unsigned long)state;
+    // 设备格式（2026-11-14）：仅 ACTIVE 端点激活 IAudioClient 读 mix
+    // format——禁用/拔出端点不唤醒；任何失败置 0（消费者按「未知」
+    // 处理，不判 FAIL）。系统里改声道数/采样率/位深即改此值。
+    if (e.state & DEVICE_STATE_ACTIVE) {
+        IAudioClient* ac = nullptr;
+        if (dev->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
+                          (void**)&ac) == S_OK &&
+            ac) {
+            WAVEFORMATEX* wf = nullptr;
+            if (ac->GetMixFormat(&wf) == S_OK && wf) {
+                e.fmtRate = (int)wf->nSamplesPerSec;
+                e.fmtCh = (int)wf->nChannels;
+                e.fmtBits = (int)wf->wBitsPerSample;
+                CoTaskMemFree(wf);
+            }
+            ac->Release();
+        }
+    }
     // 友好名。
     IPropertyStore* ps = nullptr;
     if (dev->OpenPropertyStore(STGM_READ, &ps) == S_OK && ps) {

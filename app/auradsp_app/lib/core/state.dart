@@ -353,6 +353,16 @@ class AppModel extends ChangeNotifier {
   String defaultRenderId = '';
   String defaultCaptureId = '';
 
+  // 设备签名看守（2026-11-14 驱动刷新及时性轮）：周期性轻量扫描
+  // apo_inspect，仅当设备集/默认端点/端点格式的签名变化时才应用
+  // 完整刷新+选择调和，静默时零状态写入、不扰动 UI。字段在此，
+  // 逻辑在 state_audio_modes.dart 的设备枚举段。
+  Timer? _deviceWatchTimer;
+  String? _deviceScanSignature;
+  bool _deviceRefreshInFlight = false;
+  bool _deviceWatchBusy = false;
+  DateTime? _lastDeviceRefreshAt;
+
   List<AudioDeviceItem> get filteredWasapiInputs {
     final list = <AudioDeviceItem>[];
     for (final d in wasapiDevices) {
@@ -1576,6 +1586,8 @@ class AppModel extends ChangeNotifier {
     _trayVisibilitySubscribed = false;
     _debounceSaveTimer?.cancel();
     _lpCodeReloadTimer?.cancel();
+    _deviceWatchTimer?.cancel();
+    _deviceWatchTimer = null;
     _eqCurveTimer?.cancel();
     _eqResponseTimer?.cancel();
     // 可视化 config 写盘防抖：退出前补一次同步落盘，避免最后一次改动丢失

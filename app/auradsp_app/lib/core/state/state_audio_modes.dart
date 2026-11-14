@@ -506,6 +506,9 @@ extension AudioModesState on AppModel {
     // 全部调用点（模式切换/管线改选/就绪对账）config 已持新值，
     // 预期来源变化即清零（幂等，见 _syncVizSourceOnSwitch）。
     _syncVizSourceOnSwitch();
+    // 驱动刷新及时性（2026-11-14）：模式刚切换完即异步补刷设备
+    // 并调和已存选择，下拉当前项与默认确认不等人手动刷新。
+    _requestDeviceRefreshAfterChain();
     // 第七轮 S2（项 5）：开关总闸——任一关闭，合成链不下发，在跑
     // 的捕获/桥链按模式切换的同口径拆干净。此前两标志只被面板
     // 读取（收起子面板），分发器从不看（项 5 定罪：开关纯装饰、
@@ -703,26 +706,28 @@ extension AudioModesState on AppModel {
   /// 用户点刷新毫无反馈）；关键节点写 dbgLog 埋点，真机再现闪退时
   /// 可凭日志尾迹定位死在哪一段。
   Future<void> refreshAudioDevices() async {
-    dbgLog('devices.refresh: start', sync: true);
+    // 在飞合并（2026-11-14）：看守/链路对账/手动按钮可能并发触发，
+    // 同一时刻只跑一份扫描，后到者直接返回（其关心的应用阶段由
+    // 在飞的那份完成，签名与调和都是全量口径，不丢更新）。
+    if (_deviceRefreshInFlight) return;
+    _deviceRefreshInFlight = true;
     try {
-      refreshVaioDetect();
-    } catch (e, st) {
-      swallow(e, st);
-    }
-    if (_testing || !PlatformProfile.supportsBridges) return;
-    try {
-      final exePath = _findApoInspectExe();
-      if (exePath == null) {
-        dbgLog('devices.refresh: apo_inspect unavailable', sync: true);
-        lastAudioError = '端点探测工具不可用（apo_inspect.exe 缺失）';
-        _notifyUi();
-        return;
+      dbgLog('devices.refresh: start', sync: true);
+      try {
+        refreshVaioDetect();
+      } catch (e, st) {
+        swallow(e, st);
       }
-      {
-        final res =
-            await windowsSystem.inspectAudioDevices(
-          exePath,
-        );
+      if (_testing || !PlatformProfile.supportsBridges) return;
+      try {
+        final exePath = _findApoInspectExe();
+        if (exePath == null) {
+          dbgLog('devices.refresh: apo_inspect unavailable', sync: true);
+          lastAudioError = '端点探测工具不可用（apo_inspect.exe 缺失）';
+          _notifyUi();
+          return;
+        }
+        final res = await windowsSystem.inspectAudioDevices(exePath);
         // 细分埋点（真机报告 2026-11-09 §1.1b：驱动区刷新闪退新点）：
         // 与 I/O 区刷新共用本方法且后者正常，故把 inspect 返回、
         // 解析空集、通知后三段分开记日志尾，下次复现凭尾迹定段。
@@ -733,53 +738,7 @@ extension AudioModesState on AppModel {
           final lastLine = lines.isNotEmpty ? lines.last.trim() : '';
           if (lastLine.isNotEmpty) {
             final json = jsonDecode(lastLine) as Map<String, dynamic>;
-            // 第七轮 S2 地基：默认端点身份（此前被解析层丢弃）。
-            defaultRenderId = (json['defaultRender'] as String?) ?? '';
-            defaultCaptureId = (json['defaultCapture'] as String?) ?? '';
-            final eps = (json['endpoints'] as List?) ?? [];
-            final items = <AudioDeviceItem>[];
-            for (final ep in eps) {
-              if (ep is Map) {
-                final name = (ep['name'] as String?) ?? '';
-                final dir = (ep['direction'] as String?) ?? 'render';
-                final id = (ep['id'] as String?) ?? '';
-                final state = (ep['state'] as num?)?.toInt() ?? 1;
-                if (name.isNotEmpty && state == 1) {
-                  items.add(
-                    AudioDeviceItem(
-                      id: id,
-                      name: name,
-                      isRender: dir == 'render',
-                      active: true,
-                    ),
-                  );
-                }
-              }
-            }
-            if (items.isNotEmpty) {
-              wasapiDevices = items;
-              lastAudioError = null;
-              // 第七轮 S2（项 4）：默认身份刷新后重估在跑捕获链的
-              // 自激面——用户中途在系统里把默认输出改成回录源端点
-              // 时，原本合法的链会变成自激对：停链 + 提醒。只停
-              // 不起（刷新动作不许意外起链）。
-              if (captureActive &&
-                  _isFeedbackPair(config.pipelineInputDevice,
-                      config.pipelineOutputDevice)) {
-                _toIso?.send({'cmd': 'capturemode', 'on': false});
-                captureActive = false;
-                postNotice(
-                    '系统默认设备已变更，输入与输出变为同一端点，已停止捕获链以防自激',
-                    level: NoticeLevel.warning);
-                dbgLog(
-                    'pipeline.capture: stopped after refresh (feedback pair)');
-              }
-              dbgLog('devices.refresh: done n=${items.length}', sync: true);
-              _notifyUi();
-              dbgLog('devices.refresh: notified', sync: true);
-            } else {
-              dbgLog('devices.refresh: no endpoints parsed', sync: true);
-            }
+            _applyDeviceScan(json);
           } else {
             dbgLog('devices.refresh: empty stdout', sync: true);
           }
@@ -788,12 +747,203 @@ extension AudioModesState on AppModel {
           lastAudioError = '端点探测工具退出异常 (代码: ${res.exitCode})';
           _notifyUi();
         }
+      } catch (e) {
+        dbgLog('devices.refresh: error $e', sync: true);
+        lastAudioError = '刷新音频设备失败: $e';
+        _notifyUi();
+      }
+    } finally {
+      _deviceRefreshInFlight = false;
+      _lastDeviceRefreshAt = DateTime.now();
+    }
+  }
+
+  /// 设备签名：默认端点身份 + 全部 ACTIVE 端点的 id 与 mix format
+  /// （率/声道/位深）。系统里改默认、插拔、改声道数/采样率/位深
+  /// 都会改变签名；纯粹改名不纳入（名称是显示面，不是可用性面）。
+  String _deviceSignatureOf(Map<String, dynamic> json) {
+    final eps = (json['endpoints'] as List?) ?? const [];
+    final rows = <String>[];
+    for (final ep in eps) {
+      if (ep is Map) {
+        final state = (ep['state'] as num?)?.toInt() ?? 1;
+        if (state != 1) continue;
+        rows.add('${ep['id']}|${ep['rate'] ?? 0}|${ep['ch'] ?? 0}'
+            '|${ep['bits'] ?? 0}');
+      }
+    }
+    rows.sort();
+    return <String>[
+      (json['defaultRender'] as String?) ?? '',
+      (json['defaultCapture'] as String?) ?? '',
+      ...rows,
+    ].join('\n');
+  }
+
+  /// 扫描结果应用（手动刷新与签名看守共用）：写默认身份/设备表/
+  /// 签名，跑自激守卫与选择调和，最后统一通知 UI。
+  void _applyDeviceScan(Map<String, dynamic> json) {
+    // 第七轮 S2 地基：默认端点身份（此前被解析层丢弃）。
+    defaultRenderId = (json['defaultRender'] as String?) ?? '';
+    defaultCaptureId = (json['defaultCapture'] as String?) ?? '';
+    final eps = (json['endpoints'] as List?) ?? const [];
+    final items = <AudioDeviceItem>[];
+    // 在场键集（id 与名称，含非 ACTIVE 端点）：调和的「设备还在
+    // 不在」按它判——被禁用 ≠ 被拔走，禁用设备的已存选择要保住，
+    // 等其重新启用后自动恢复（下拉幽灵项口径不变）。
+    final presentKeys = <String>{};
+    for (final ep in eps) {
+      if (ep is Map) {
+        final name = (ep['name'] as String?) ?? '';
+        final dir = (ep['direction'] as String?) ?? 'render';
+        final id = (ep['id'] as String?) ?? '';
+        final state = (ep['state'] as num?)?.toInt() ?? 1;
+        if (id.isNotEmpty) presentKeys.add(id);
+        if (name.isNotEmpty) presentKeys.add(name);
+        if (name.isNotEmpty && state == 1) {
+          items.add(
+            AudioDeviceItem(
+              id: id,
+              name: name,
+              isRender: dir == 'render',
+              active: true,
+              rate: (ep['rate'] as num?)?.toInt() ?? 0,
+              ch: (ep['ch'] as num?)?.toInt() ?? 0,
+              bits: (ep['bits'] as num?)?.toInt() ?? 0,
+            ),
+          );
+        }
+      }
+    }
+    _deviceScanSignature = _deviceSignatureOf(json);
+    if (items.isEmpty) {
+      dbgLog('devices.refresh: no endpoints parsed', sync: true);
+      return;
+    }
+    wasapiDevices = items;
+    lastAudioError = null;
+    // 第七轮 S2（项 4）：默认身份刷新后重估在跑捕获链的自激面——
+    // 用户中途在系统里把默认输出改成回录源端点时，原本合法的链
+    // 会变成自激对：停链 + 提醒。只停不起（刷新不许意外起链）。
+    if (captureActive &&
+        _isFeedbackPair(config.pipelineInputDevice,
+            config.pipelineOutputDevice)) {
+      _toIso?.send({'cmd': 'capturemode', 'on': false});
+      captureActive = false;
+      postNotice('系统默认设备已变更，输入与输出变为同一端点，已停止捕获链以防自激',
+          level: NoticeLevel.warning);
+      dbgLog('pipeline.capture: stopped after refresh (feedback pair)');
+    }
+    reconcileDeviceSelections(presentKeys);
+    dbgLog('devices.refresh: done n=${items.length}', sync: true);
+    _notifyUi();
+    dbgLog('devices.refresh: notified', sync: true);
+  }
+
+  /// 选择调和（2026-11-14 驱动刷新及时性轮，业主裁定）：已存的
+  /// 设备选择若其端点已从系统消失（presentKeys 不含其 id/名称），
+  /// 自动改回默认（''）并落盘 + 通知——免去用户手动点开下拉再选
+  /// 一次默认设备。存在性只按原始枚举判：下拉的互斥筛选
+  /// （wasapiOutputsExcludingInput 等）是呈现/起链守卫，绝不能
+  /// 成为「设备不存在」的判据，否则输入占用的输出会被误清
+  /// （业主明示避让筛选不受本功能影响）。
+  /// 在跑链路不热换：捕获腿输入消失时沿用第七轮先例停腿；桥链
+  /// 已打开的落点不受影响，修复值只决定下次起链。
+  void reconcileDeviceSelections(Set<String> presentKeys) {
+    if (presentKeys.isEmpty) return;
+    final repaired = <String>[];
+    final inDev = config.pipelineInputDevice;
+    if (inDev.isNotEmpty && !presentKeys.contains(inDev)) {
+      config.pipelineInputDevice = '';
+      repaired.add('输入设备');
+      if (captureActive) {
+        _toIso?.send({'cmd': 'capturemode', 'on': false});
+        captureActive = false;
+        dbgLog('pipeline.capture: stopped after reconcile (input gone)');
+      }
+    }
+    final outDev = config.pipelineOutputDevice;
+    if (outDev.isNotEmpty && !presentKeys.contains(outDev)) {
+      config.pipelineOutputDevice = '';
+      repaired.add('输出设备');
+    }
+    final vep = config.vaioOutputEndpoint;
+    if (vep.isNotEmpty && !presentKeys.contains(vep)) {
+      config.vaioOutputEndpoint = '';
+      repaired.add('VAIO 物理输出');
+    }
+    if (repaired.isNotEmpty) {
+      persistRoutingChange();
+      postNotice('已移除的设备（${repaired.join('、')}）已自动改回默认设备',
+          level: NoticeLevel.warning);
+      dbgLog('devices.reconcile: reset to default: ${repaired.join(',')}');
+    }
+  }
+
+  /// 签名看守启动（ready 恢复点调用；幂等）。4 秒一轮轻量扫描，
+  /// 签名未变时零状态写入——系统里改默认/插拔/改格式数秒内自动
+  /// 跟上，不再依赖手动刷新（登记 C5 的进程内替代实现：不新增
+  /// 常驻原生监听进程，复用 apo_inspect 一次性扫描 + 签名比对）。
+  void startDeviceWatch() {
+    if (_testing || !PlatformProfile.supportsBridges) return;
+    if (_deviceWatchTimer != null) return;
+    _deviceWatchTimer = Timer.periodic(
+      const Duration(seconds: 4),
+      (_) => _watchDeviceScan(),
+    );
+    dbgLog('devices.watch: started');
+  }
+
+  Future<void> _watchDeviceScan() async {
+    if (_deviceWatchBusy || _deviceRefreshInFlight || apoDetachBlocking) {
+      return;
+    }
+    _deviceWatchBusy = true;
+    try {
+      final exePath = _findApoInspectExe();
+      if (exePath == null) return;
+      final res = await windowsSystem.inspectAudioDevices(exePath);
+      if (res.exitCode != 0) return;
+      final stdout = (res.stdout as String).trim();
+      if (stdout.isEmpty) return;
+      final lastLine = stdout.split('\n').last.trim();
+      if (lastLine.isEmpty) return;
+      final json = jsonDecode(lastLine) as Map<String, dynamic>;
+      if (_deviceSignatureOf(json) == _deviceScanSignature) return;
+      dbgLog('devices.watch: change detected, applying refresh');
+      try {
+        refreshVaioDetect();
+      } catch (e, st) {
+        swallow(e, st);
+      }
+      _deviceRefreshInFlight = true;
+      try {
+        _applyDeviceScan(json);
+      } finally {
+        _deviceRefreshInFlight = false;
+        _lastDeviceRefreshAt = DateTime.now();
       }
     } catch (e) {
-      dbgLog('devices.refresh: error $e', sync: true);
-      lastAudioError = '刷新音频设备失败: $e';
-      _notifyUi();
+      dbgLog('devices.watch: error $e');
+    } finally {
+      _deviceWatchBusy = false;
     }
+  }
+
+  /// 链路对账后的设备刷新请求（2026-11-14）：applyPipelineChain
+  /// 是模式/管线应用的唯一收口，在此异步补一次刷新+调和，刚切
+  /// 完模式时下拉与默认确认即为最新真值。在飞/1.5 秒内刚刷过
+  /// 则合并跳过，避免对账高频调用打爆 apo_inspect 子进程。
+  void _requestDeviceRefreshAfterChain() {
+    if (_testing || !PlatformProfile.supportsBridges) return;
+    if (_deviceRefreshInFlight) return;
+    final last = _lastDeviceRefreshAt;
+    if (last != null &&
+        DateTime.now().difference(last) <
+            const Duration(milliseconds: 1500)) {
+      return;
+    }
+    refreshAudioDevices();
   }
 
   // ---- 辅助可执行文件查找（统一走 WindowsSystemPort）----

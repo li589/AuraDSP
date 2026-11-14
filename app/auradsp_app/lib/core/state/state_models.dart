@@ -45,11 +45,19 @@ class AudioDeviceItem {
   final String name;
   final bool isRender; // true: 播放端点 (内录/环回)；false: 录音端点 (麦克风/输入录制)
   final bool active;
+  // 共享模式 mix format（apo_inspect 2026-11-14 起输出；未知/未读
+  // 为 0）。设备签名看守据此感知系统内改声道数/采样率/位深。
+  final int rate;
+  final int ch;
+  final int bits;
   const AudioDeviceItem({
     required this.id,
     required this.name,
     required this.isRender,
     this.active = true,
+    this.rate = 0,
+    this.ch = 0,
+    this.bits = 0,
   });
 
   /// 正常人可读的友好显示名称（清理调试残余、原始 Map toString 字符串、去除裸 GUID）
