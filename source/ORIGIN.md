@@ -2,7 +2,7 @@
 
 > 统一剥除嵌套 .git（铁律风格：参考区只读快照，禁止就地升级/推送）。
 > 更新来源需重新克隆后再次登记。depth/commit 以登记为准。
-> 详尽审理分析与算法对照见 `docs/10-架构/source-参考项目审理报告.md` (v2.5)。
+> 详尽审理分析与算法对照见 `docs/10-架构/source-参考项目审理报告.md` (v2.9)。
 
 | 目录 | origin | HEAD（剥离时） | 许可证 | 实测占用 | 状态 / 备注 |
 |---|---|---|---|---|---|
@@ -21,6 +21,8 @@
 | **clap** | https://github.com/free-audio/clap.git | main@a47f6ba (v1.2.10) | MIT | 3.7 MB | stripped；CLAP 标准头文件正典上游。引擎内置 `vendor/plugin-api/clap` 现为 1.2.6（自 lsp-plugins 副本提取），本仓为其可升级来源 |
 | **tympan-apo** | https://github.com/penta2himajin/tympan-apo.git | main@e85f7a4 | MIT OR Apache-2.0 | 654 KB | stripped；Rust Windows APO 框架（IUnknown/IClassFactory/IAudioProcessingObject/IAudioSystemEffects v1-v3，SFX/MFX/EFX 类；含 Win11 AEC APO 与 lock-free ring）；Windows APO 模式（sysapo/VAIO）研发参考。含 CLAUDE.md 与 docs/* 研发手记 |
 | **virtual-surround-sound** | https://github.com/nnyj/virtual-surround-sound.git | main@b67d037 | GPL-3.0（含 NIRSOFT SoundVolumeView.exe 专有工具，注意） | 410 KB | stripped；C++ APO 转发器（VB-Cable 7.1→HeSuVi binaural→WASAPI 物理设备，~10ms 延迟）；lock-free SPSC ring + 注册表监听设备切换；Windows APO RT 线程转发范式 + COM 聚合陷阱实录参考 |
+| **Virtual-Audio-Driver** | https://github.com/VirtualDrivers/Virtual-Audio-Driver.git | main@bb34fba | MIT（**驱动代码派生自微软 WDK Sysvad 示例，该部分为 MS-PL**，见仓内 `THIRD_PARTY_NOTICES.md`） | 717 KB (53 文件) | stripped；**PortCls/WaveRT 虚拟音频驱动：虚拟扬声器(render) + 虚拟麦克风(capture) 双端点**，支持 Windows Sonic 空间音效、独占模式、应用优先级与音量控制。本仓 VAIO 驱动目前**只有 render 端点** → capture 侧能力、空间音效挂载与独占模式为直接补齐参考。**MS-PL 与 GPL-3.0 不兼容 → 仅阅读参考，禁并入主库** |
+| **SynchronousAudioRouter** | https://github.com/eiz/SynchronousAudioRouter.git | master@494ed9a | GPL-3.0（另附 `COPYING-V2.txt` = GPL-2.0 文本） | 1.4 MB (129 文件) | stripped；**SAR**（eiz）——虚拟流**同步到物理音频接口**（主时钟跟随硬件，消除时钟漂移/缓冲欠载）、动态创建无限多个自定义命名虚拟设备、按应用正则匹配覆盖默认设备、**多路虚拟流映射为单一多声道 ASIO 接口**（含物理设备全部通道）、WaveRT 低延迟（USB 2.0 接口上 1–2 ms 可用）。是本仓 `auravm_bridge`/`auraasio_bridge`（虚拟设备↔ASIO↔物理接口）**时钟同步与多设备编排的正典参考**；树内 `SarAsio/glog` 为 Google logging 库副本。**GPL-3.0 → 仅阅读参考，禁并入主库** |
 | **LiveprogIDE** | https://github.com/timschneeb/LiveprogIDE.git | master@b2f3924 | **未见 LICENSE 文件（All Rights Reserved，默认保留所有权利；timschneeb 作者，与 RootlessJamesDSP 同主）** | 12.0 MB (424 文件) | stripped；Qt6 EEL2/Liveprog 脚本 IDE（QCodeEditor 语法高亮 + Qt-Advanced-Docking-System 停靠），`src/definitions/demo.eel` 为样例；**根无 LICENSE → 禁并入 GPL-3.0 主库，仅作阅读参考**；子依赖 `QCodeEditor`(MIT)、`3rdparty/docking-system`(LGPL-2.1) 已各自带许可并去嵌套 git |
 | **PeaceTXT-to-EEL-converter** | https://github.com/nanbeimerco/PeaceTXT-to-EEL-converter.git | main@5de0462 | README 声明 **MIT**，但**无 LICENSE 文件**（保守记为未确认；MIT 与 GPL-3.0 兼容） | 168 KB (5 文件) | stripped；纯前端 Equalizer APO / Peace `.txt` 预设 → RootlessJamesDSP LiveProg EEL2 `.eel` 转换工具（RBJ Biquad PK/LSC/HSC，L/R 独立 EQ + 前级 + 声道交换 + 极性反转）；`jszip.min.js` 为 JSZip v3.10.1（MIT/GPLv3 双许可，随仓分发）；**README 声明 MIT 但缺 LICENSE 文件 → 参考无碍，若要并入代码须先向上游确权或按 RBJ 公式自研重写** |
 | **vst2sdk** | https://github.com/Xaymar/vst2sdk.git | root@339d4f3 | BSD-3-Clause | 245 KB (10 文件) | stripped；**Clean-Room 净室逆向 VST 2.x C/C++ 单头文件 SDK**（include/vst.h, vst.hpp）。规避 Steinberg 专有协议法律限制，为 plugin_host_x64 / plugin_host_x86 宿主 VST2 驱动实现的合法代码真相源（未来可提取至 vendor/plugin-api/vst2/） |

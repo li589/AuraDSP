@@ -1,14 +1,14 @@
 # source/ 参考项目审理报告
 
-> 版本：**v2.8**（2026-11-02，新增 VST2 双轨参考资产：Xaymar Clean-Room vst2sdk 与 Steinberg 官方归档 vstsdk2.4，扩充 §1 / §2.11 / §3 / §4 / §5）
-> 范围：`source/` 下全部 19 个第三方参考克隆/归档的实测结构、源码完整性、磁盘占用、许可证与算法价值。
+> 版本：**v2.9**（2026-11-14，新增 Windows 驱动双参考：MikeTheTech `Virtual-Audio-Driver` 与 eiz `SynchronousAudioRouter`，扩充 §1 / §2.12 / §4）
+> 范围：`source/` 下全部 21 个第三方参考克隆/归档（19 个顶层目录，含 `ViPER4Windows/ViPERDSP` 与 `vst2sdk/vstsdk2.4` 两个嵌套项）的实测结构、源码完整性、磁盘占用、许可证与算法价值。
 > 定位：只读参考区（.gitignore 排除，不入主库）；本报告为 M1 插件宿主 / Phase 5~8 / 算法对照（M5 细化）提供完整决策依据。
 
 ---
 
 ## 1. 资产总览（实测基线）
 
-截至 2026-11-02，`source/` 下全部 19 个参考项目/归档均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 整体 gitignore，仅 `ORIGIN.md` 白名单入库；从参考仓提取进主库的第三方资产登记见 [`vendor/ORIGIN.md`](../../vendor/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
+截至 2026-11-14，`source/` 下全部 21 个参考项目/归档均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 整体 gitignore，仅 `ORIGIN.md` 白名单入库；从参考仓提取进主库的第三方资产登记见 [`vendor/ORIGIN.md`](../../vendor/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
 
 | # | 目录 | 对应上游仓库 | 平台 / 技术栈 | 许可证 | 实测体积 / 文件数 | 对 AuraDSP 的参考价值与对齐里程碑 |
 |---|---|---|---|---|---|---|
@@ -31,8 +31,10 @@
 | 17 | **PeaceTXT-to-EEL-converter** | `nanbeimerco/PeaceTXT-to-EEL-converter` (main@5de0462) | 跨平台 / 纯前端 Web (HTML+JS+CSS) | README 声明 **MIT**，但**无 LICENSE 文件**（未确认；MIT 与 GPL-3.0 兼容） | 168 KB (5 文件) | ★★ **Equalizer APO / Peace 预设 → LiveProg EEL2 脚本转换参考**（RBJ Biquad Peaking/Low-Shelf/High-Shelf 系数生成、L/R 独立 EQ、前级/声道交换/极性反转，`app.js` 的 `generateEel` 为代码生成主体）。对齐引擎 `engine/legacy/` liveprog 级与 `assets/liveprog/*.eel`，可为 AuraDSP「导入 EqualizerAPO 预设」功能提供格式与算法蓝本；与既有的 `equalizerAPO64`(#8) 构成预设格式与宿主的闭环。**README 声明 MIT 但缺 LICENSE 文件，并入前须向上游确权** |
 | 18 | **vst2sdk** | `Xaymar/vst2sdk` (root@339d4f3) | 跨平台 / C99, C++20 单头文件 | BSD-3-Clause | 245 KB (10 文件) | ★★★ **Clean-Room 逆向 VST 2.x SDK 头号代码来源**（规避 Steinberg 法律风险，为 plugin_host_x64/x86 宿主提供合法 VST2 C-ABI 结构体与操作码定义） |
 | 19 | **vstsdk2.4** | archive.org vstsdk2_4.zip (v2.4 官方归档) | 跨平台 / C++ 官方 SDK | Steinberg Proprietary（**严禁并入主库**） | 21.18 MB (609 文件) | ★★★ **VST 2.4 原厂金标准对照**（官方 doc 详述结构体内存对齐、MIDI 事件、时钟与 Dispatcher 语义，为排查第三方老插件兼容性问题的权威真相源） |
+| 20 | **Virtual-Audio-Driver** | `VirtualDrivers/Virtual-Audio-Driver` (main@bb34fba) | Windows / C++, WDK PortCls+WaveRT | MIT（驱动代码派生自 WDK Sysvad 示例 → 该部分 **MS-PL**） | 717 KB (53 文件) | ★★★ **VAIO 驱动 Capture 侧与空间音效的直接补齐参考**。与本仓 `01_vaio_driver/src/` 同源（皆源自 WDK Sysvad），文件结构几乎一一对应：`Source/Main/minwavert*.cpp` ↔ 本仓 `MiniportWaveRT*.cpp`、`Source/Filters/speakertopo.cpp` ↔ `Topology.cpp`、`Source/Filters/micarraytopo.cpp` + `micarraywavtable.h` ↔ 本仓**缺失的 capture/麦克风阵列端点**、`Source/Inc/endpoints.h` ↔ `AuraVaoTables.h`。另含 Windows Sonic 空间音效挂载、独占模式、应用优先级的驱动侧实现 |
+| 21 | **SynchronousAudioRouter** | `eiz/SynchronousAudioRouter` (master@494ed9a) | Windows / C++, PortCls + ASIO + COM | GPL-3.0（另附 GPL-2.0 文本） | 1.4 MB (129 文件) | ★★★ **「虚拟设备↔ASIO↔物理接口」主时钟同步与多设备编排的正典参考**。`SynchronousAudioRouter/SarWaveFilterDescriptor.cpp` 为 PortCls 过滤器描述符式驱动；`SarAsio/` 是配套 ASIO 驱动（`wrapper.cpp` COM 包装、`mmwrapper.cpp` MMDevice 代理、`sarclient.cpp` 客户端、`ActivateAudioInterfaceWorker.idl` 音频接口激活 worker）—— 对应本仓 `auraasio_bridge`；`SarCtl`/`SarConfigure` 为控制面板；`RioPing`/`nm_ping` 为往返延迟测量工具。核心价值：虚拟流**统一同步到物理接口时钟**以消除漂移与欠载 |
 
-总计占用：**~801 MB**，约 **14,724** 个源文件与资源。
+总计占用：**~835 MB**，约 **14,953** 个源文件与资源（2026-11-14 复测；较 v2.8 的 801 MB 增加约 34 MB，其中本轮新增两仓净增 2.1 MB）。
 
 ---
 
@@ -224,6 +226,68 @@
 
 ---
 
+### 2.12 Virtual-Audio-Driver 与 SynchronousAudioRouter（Windows 虚拟音频驱动的两个正交切面，2026-11-14 新增）
+
+**背景与定位**：本仓 VAIO 驱动（`core/desktop/windows-drivers/01_vaio_driver/`）是 PortCls/WaveRT 内核驱动，同样源自 WDK Sysvad 示例，但当前**只实现了 render（扬声器）端点**。本期两个新参考仓恰好补上两个正交维度的空白：
+
+- **Virtual-Audio-Driver = 端点维度**（同源代码对照，补齐 capture 侧与空间音效）；
+- **SynchronousAudioRouter = 时序维度**（主时钟同步、多设备动态创建、虚拟流↔ASIO 聚合编排）。
+
+#### A. Virtual-Audio-Driver（端点维度：render + capture 双端点）
+
+技术特征（上游 README 实证）：提供**虚拟扬声器输出 + 虚拟麦克风输入两个设备**；支持 Windows Sonic（Spatial Sound）、独占模式、应用优先级与音量控制；面向 Win10/11，需开启 testsigning（与本仓部署前提一致）。
+
+与本仓源文件的**一一对应关系**（两侧同源 WDK Sysvad，可直接对读）：
+
+| 本仓 `01_vaio_driver/src/` | 参考仓 `Source/` | 说明 |
+|---|---|---|
+| `MiniportWaveRT.cpp` / `MiniportWaveRTStream.cpp` | `Main/minwavert.cpp` / `minwavertstream.cpp` | WaveRT 微端口与流对象，两侧同构 |
+| `Topology.cpp` | `Filters/speakertopo.cpp` | 扬声器侧拓扑 |
+| `AuraVaoTables.h`（VAO/波表） | `Filters/speakertoptable.h` + `speakerwavtable.h` | 拓扑表与波表 |
+| `AdapterCommon.cpp` | `Main/adapter.cpp` | 适配器公共对象 |
+| —（**本仓缺失**） | `Filters/micarraytopo.cpp` + `micarraywavtable.h` + `Inc/mintopo.h` | **麦克风阵列 capture 端点的完整实现** |
+
+**可借鉴点**：
+1. **capture 端点补齐**：`micarraytopo.cpp` / `micarraywavtable.h` 给出多声道麦克风阵列的引脚-节点拓扑与波表写法。本仓若要做"虚拟麦克风"（把 DSP 处理后的流回灌给会议/直播软件），这是最短路径——比从 Sysvad 原始示例逆向更快，因为它已是可编译可运行的成品。
+2. **端点定义与拓扑表分离**：`Source/Inc/endpoints.h` 把端点声明抽出集中管理，便于一处声明多端点；本仓 `AuraVaoTables.h` 目前偏单端点组织。
+3. **空间音效与独占模式的驱动侧挂载点**：对照其 data-range / KSPROPERTY 属性集暴露方式，判断本仓是否需要为 Sonic 与独占模式补属性。
+
+**许可红线**：项目本体为 MIT（Copyright 2025 MikeTheTech），**但驱动代码派生自微软 WDK Sysvad 示例，该部分为 MS-PL**（仓内 `THIRD_PARTY_NOTICES.md` 明示并附许可证全文）。**MS-PL 与 GPL-3.0 不兼容** → 只能"读懂后自行重写"，**禁止直接复制文件进主库**。
+
+#### B. SynchronousAudioRouter（时序维度：主时钟同步 + 多设备 + ASIO 聚合）
+
+技术特征是它相对普通虚拟声卡的根本差异（上游 README 实证）：
+
+1. **所有虚拟音频流同步到物理音频接口**——缓解时钟漂移与缓冲欠载；
+2. 动态创建**无限多个自定义命名**的虚拟设备（不产生 "Line 6" 式冗余端点）；
+3. **按应用正则匹配覆盖默认设备**（对无法自选设备的程序同样生效）；
+4. 多路虚拟流**映射为单一多声道 ASIO 接口**，且该接口同时包含物理设备的全部通道；
+5. WaveRT 传输，USB 2.0 接口上 1–2 ms 缓冲即可用。
+
+源码构成（完整四件套）：
+
+- **驱动**：`SynchronousAudioRouter/SarWaveFilterDescriptor.cpp` + `SarTopologyFilterDescriptor.cpp` + `.inf`（过滤器描述符式 PortCls 驱动，与本仓的 miniport 式写法风格不同，可作第二种驱动组织范式对照）；
+- **ASIO 驱动**：`SarAsio/`——`wrapper.cpp`（COM 包装）、`mmwrapper.cpp`（MMDevice 代理）、`sarclient.cpp`（客户端协议）、`tinyasio.cpp`（ASIO 入口）、`ActivateAudioInterfaceWorker.idl`（音频接口激活 worker）、`config.cpp`/`configui.cpp`（配置与 UI）、`picojson.h`；
+- **控制与安装**：`SarCtl/`、`SarConfigure/`、`SarInstaller/`、`SarInstallerActions/`；
+- **测量工具**：`RioPing/`、`nm_ping/`（往返延迟 / 命名管道 ping）；
+- **第三方**：`SarAsio/glog`（Google logging 库副本）。
+
+**对本仓的直接价值**：
+1. **主时钟同步策略（最高价值）**：本仓 `auravm_bridge`（Voicemeeter 虚拟设备）+ `auraasio_bridge`（ASIO）+ `01_vaio_driver`（自有虚拟设备）三者并存，**时钟域不一致是天生风险**（VAIO 侧实测 PDC 在 74.7 ms 量级）。SAR"虚拟流统一跟随物理接口时钟"正是正解方向，其 ASIO 侧时钟与 v-bl 处理可对照 `SarAsio/wrapper.cpp`。
+2. **单一多声道 ASIO 聚合**：把 N 路虚拟流扇出/聚合成一个多声道 ASIO 接口并与物理设备通道合并——正是 AuraDSP"多路 + ASIO"的产品形态所需。
+3. **按应用路由**：正则匹配覆盖默认设备的做法，可作为应用级路由功能（本仓尚未实现）的实现参考，含其规则持久化与匹配时机。
+4. **`RioPing`/`nm_ping` 延迟测量范式**：可用于端到端往返延迟的独立验证——本仓现有 `tools/windows/perf_regression.py` 侧重引擎处理耗时，不覆盖"应用→虚拟设备→ASIO→物理设备"的整链往返。
+
+**许可**：GPL-3.0（仓内另附 `COPYING-V2.txt` 为 GPL-2.0 文本，双许可措辞以上游为准）。与本仓同为 GPL-3.0，但仍是**独立作品** → 仅作阅读参考，**禁止复制文件进主库**（避免版权归属与来源混淆）。
+
+#### C. 两仓对照后的工程判断
+
+- 本仓 VAIO 驱动的**结构是对的、覆盖是窄的**：render-only，无 capture、无多设备动态创建、无应用级路由、无主时钟同步。
+- 若推进"虚拟麦克风"与"多设备/ASIO 时钟统一"两件事，这两个仓分别提供**可编译的代码骨架**（前者）与**系统级方案**（后者），且都在 testsigning 前提下与本仓部署方式兼容。
+- 两者均不入主库、不作编译依赖；任何借鉴均按"读懂→按本仓规范重写→独立实现"的净室路径处理。
+
+---
+
 ## 3. 算法与系统能力对照矩阵
 
 | 功能 / 算法需求 | AuraDSP 当前状态 | `source/` 中最佳参考仓库 | 具体参考源码路径 / 说明 |
@@ -247,6 +311,10 @@
 | **Liveprog（EEL2）脚本编辑器 / IDE** | app/ Liveprog 编辑页（规划/待强化） | `LiveprogIDE`（新增 #16） | `src/eeleditor.{cpp,h,ui}`（Qt6 EEL2 语法高亮 + 停靠式多文档 IDE）+ `src/definitions/demo.eel`（样例脚本）；对齐引擎 `engine/legacy/` 的 liveprog 可编程级；**根无 LICENSE（ARR），仅阅读参考、禁搬运** |
 | **Equalizer APO / Peace 预设 → EEL2（liveprog）转换** | assets/liveprog 现有 47 个 .eel，无外部预设导入 | `PeaceTXT-to-EEL-converter`（新增 #17） | `app.js` 的 `parseTxt()`（Peace `.txt` 段解析）+ `generateEel()`（RBJ Biquad PK/LSC/HSC 系数 → EEL2 `calc_peak` / `calc_lshelf` / `calc_hshelf`；L/R 独立 EQ、前级、声道交换、极性反转）；为「导入 EqualizerAPO 预设」功能提供蓝本。**README 声明 MIT，缺 LICENSE 文件，并入前确权** |
 | **VST2 插件宿主与 32位位桥** | 规划支持 64 位与 32 位 VST2（双宿主 plugin_host_x64 / plugin_host_x86） | `vst2sdk` (Xaymar) / `vstsdk2.4` (Steinberg)（新增 #18 / #19） | `vst2sdk/include/vst.h`（Clean-Room 逆向头文件，合规编译源）；`vstsdk2.4/doc/`（原厂金标准规范与 Dispatcher 语义对照） |
+| **虚拟音频设备 capture 端点（虚拟麦克风）** | **未实现**——VAIO 驱动当前仅 render（扬声器）端点 | `Virtual-Audio-Driver`（新增 #20） | `Source/Filters/micarraytopo.cpp` + `micarraywavtable.h` + `Inc/mintopo.h`（麦克风阵列拓扑与波表）；`Source/Inc/endpoints.h`（端点集中声明） |
+| **虚拟流主时钟同步 / 时钟漂移消除** | 未实现——`auravm_bridge`/`auraasio_bridge`/VAIO 三套时钟域并存，PDC 实测 74.7 ms 量级 | `SynchronousAudioRouter`（新增 #21） | `SynchronousAudioRouter/SarWaveFilterDescriptor.cpp`（PortCls 过滤器描述符式驱动）；`SarAsio/wrapper.cpp`（ASIO 侧时钟与 v-bl 处理） |
+| **多路虚拟流 ↔ 单一多声道 ASIO 聚合** | `auraasio_bridge` 单接口，未做多虚拟流聚合 | `SynchronousAudioRouter`（新增 #21） | `SarAsio/sarclient.cpp`（客户端协议）+ `SarAsio/wrapper.cpp`；通道合并含物理设备全通道 |
+| **应用级音频路由（按进程覆盖默认设备）** | **未实现** | `SynchronousAudioRouter`（新增 #21） | `SarAsio/mmwrapper.cpp`（MMDevice 代理）+ `config.cpp`（正则规则持久化）；`SarCtl/` 控制面板 |
 
 ---
 
@@ -258,6 +326,7 @@
    - **v2.6 更新（2026-10-24）**：新增 `LiveprogIDE/` 克隆（master@b2f3924）在登记前已剥除嵌套 `.git`（约 9.8 MB）；剥除后递归复核仍为 **0**，铁律持续有效。
    - **v2.7 更新（2026-10-25）**：新增 `PeaceTXT-to-EEL-converter/` 克隆（main@5de0462）在登记前已剥除嵌套 `.git`（约 129 KB）；剥除后递归复核仍为 **0**，铁律持续有效。
    - **v2.8 更新（2026-11-02）**：新增 `source/vst2sdk/`，内部包含 Xaymar clean-room 逆向库（vst2sdk）与 Steinberg 官方 2.4 归档（vstsdk2.4）。已彻底剥除 `vst2sdk/vst2sdk/.git` 目录（剥除前约 1.6 MB，剥除后净体积仅 245 KB）；递归复核 `source/` 下 `.git` 数量严格维持为 **0**。已确立法律隔离红线：官方 SDK 仅驻留 `source/` 作只读参考，严禁并入主库；净室库准许作为编译依赖。
+   - **v2.9 更新（2026-11-14）**：新增 `source/Virtual-Audio-Driver/`（main@bb34fba）与 `source/SynchronousAudioRouter/`（master@494ed9a）两个克隆。两者在登记前均已剥除嵌套 `.git`：前者剥除前 63 MB（含 `.git`）→ 剥离后 **717 KB / 53 文件**；后者剥除前 6.5 MB → 剥离后 **1.4 MB / 129 文件**。剥除后递归复核 `source/` 下 `.git` 数量严格维持为 **0**，铁律持续有效。附带记录：前者驱动代码派生自微软 WDK Sysvad 示例，仓内自带 `THIRD_PARTY_NOTICES.md` 声明 **MS-PL** 部分；后者树内 `SarAsio/glog` 为 Google logging 库副本（BSD 系），二者均随参考区只读保留，不入主库。
 2. **构建缓存审计**：
    - `source/RootJamesDSP/` 与 `source/RootlessJamesDSP/` 下存在由构建/导入自动生成的 `.gradle/` 目录。该目录仅为本地临时索引，建议后续可选择性清理或保留在本地。
 3. **大文件与二进制包审计**：
@@ -295,4 +364,5 @@
 5. **ViPER4Windows / ViPERDSP 后续**：APO 层与 `viper_params_layout.dart` 可作为 Phase 7b 蓝本阅读；ViPERDSP 为 All Rights Reserved（仅限个人使用），**代码不得并入 GPL 分发**——若需落地 ViPER 系效果（VHE / 动态系统 / 心理声学低音等），按 §2.6 算法对照清单自研重写；若要走商品化，唯一正途是向听觉工坊 / 酷狗蝰蛇声学体系取得授权（§2.7）。
 6. **Windows APO 路线四维对照（tympan-apo / virtual-surround-sound / equalizerAPO64 / ViPER4Windows）**：Phase 7b 立项时，以 `equalizerAPO64` 为工程主蓝本、`ViPER4Windows` 为轻量闭环对照；`tympan-apo` 用于评估"Rust 重写 APO 层"可行性与 `IAudioSystemEffects v3` / AEC 槽位契约；`virtual-surround-sound` 的 `apo-forwarder-internals.md` 与 SPSC ring 范式作为"RT 线程内转发 + 设备热切换"的实战参考。所有参考维持只读、禁搬运（§2.8）。
 7. **virtual-surround-sound 专有二进制隔离**：将 `tools/SoundVolumeView.exe`（NIRSOFT 专有闭源）纳入本地不入库清单，避免随参考区误提交或分发；该工具仅用于本地端点调试，不参与 AuraDSP 任何构建或分发。
+8. **VAIO 驱动能力扩展（v2.9 新增：capture 端点 / 时钟同步）**：若要推进"虚拟麦克风"与"多路虚拟流时钟统一"两件事——前者以 `source/Virtual-Audio-Driver` 的 `Source/Filters/micarraytopo.cpp` + `micarraywavtable.h` 对照本仓缺失的 capture 端点结构（两仓同源 WDK Sysvad，可直接对读；**其驱动代码含 MS-PL 派生部分，禁复制、只能读懂后重写**）；后者以 `source/SynchronousAudioRouter` 的 `SarAsio/wrapper.cpp`（ASIO 侧时钟与 v-bl 处理）与 `SarWaveFilterDescriptor.cpp`（过滤器描述符式驱动组织）作为主时钟同步与多虚拟流聚合的方案参考。两者均属只读参考区，任何借鉴按"读懂→按本仓规范独立实现"的净室路径处理。
 
