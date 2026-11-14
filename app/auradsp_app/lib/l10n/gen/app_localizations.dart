@@ -2419,7 +2419,7 @@ abstract class AppLocalizations {
   /// No description provided for @asioDriverActionUnregister.
   ///
   /// In zh, this message translates to:
-  /// **'一键注销驱动'**
+  /// **'注销驱动'**
   String get asioDriverActionUnregister;
 
   /// No description provided for @asioDawStatus.

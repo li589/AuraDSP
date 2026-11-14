@@ -1259,7 +1259,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get asioDriverNotRegistered => '未注册';
 
   @override
-  String get asioDriverActionUnregister => '一键注销驱动';
+  String get asioDriverActionUnregister => '注销驱动';
 
   @override
   String get asioDawStatus => 'DAW 状态';

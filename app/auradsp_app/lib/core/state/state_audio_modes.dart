@@ -506,8 +506,7 @@ extension AudioModesState on AppModel {
     // 全部调用点（模式切换/管线改选/就绪对账）config 已持新值，
     // 预期来源变化即清零（幂等，见 _syncVizSourceOnSwitch）。
     _syncVizSourceOnSwitch();
-    // 驱动刷新及时性（2026-11-14）：模式刚切换完即异步补刷设备
-    // 并调和已存选择，下拉当前项与默认确认不等人手动刷新。
+    // 模式切换后异步补刷设备+调和（第三十四轮）。
     _requestDeviceRefreshAfterChain();
     // 第七轮 S2（项 5）：开关总闸——任一关闭，合成链不下发，在跑
     // 的捕获/桥链按模式切换的同口径拆干净。此前两标志只被面板

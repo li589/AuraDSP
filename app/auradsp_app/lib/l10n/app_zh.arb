@@ -593,7 +593,7 @@
   "asioDriverStatus": "驱动状态",
   "asioDriverRegistered": "已在系统注册",
   "asioDriverNotRegistered": "未注册",
-  "asioDriverActionUnregister": "一键注销驱动",
+  "asioDriverActionUnregister": "注销驱动",
   "asioDawStatus": "DAW 状态",
   "asioDawConnected": "活跃连接中",
   "asioDawIdle": "空闲（等待 DAW 接入）",
