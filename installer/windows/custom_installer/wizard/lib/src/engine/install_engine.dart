@@ -223,7 +223,9 @@ class InstallEngine {
           if (r.exitCode == kDriverSigningRequired) {
             warnings.add(kDriverSigningNotice);
           } else {
-            if (r.exitCode != 0) {
+            if (r.exitCode == kDriverRebootRequired) {
+              warnings.add('VAIO 驱动已安装；旧驱动尚在内存中，重启电脑后新驱动完全生效');
+            } else if (r.exitCode != 0) {
               warnings.add('VAIO 驱动安装失败（退出码 ${r.exitCode}），应用本体不受影响；'
                   '可查看 %TEMP%\\auradsp-vaio-install.log 后手动重试');
             }

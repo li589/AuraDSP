@@ -15,6 +15,9 @@
     5  pnputil failed
     6  devcon failed
     7  devcon.exe missing (DriverStore staged, device node not created)
+    8  installed, reboot required for the new driver to take effect
+       (devcon exits 1 when the previous driver image is still loaded
+       and cannot unload until reboot; the install itself succeeded)
 
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File .\install_vaio.ps1 -Action status
@@ -78,10 +81,41 @@ function Install-TestCertificate {
     Write-Log 'Test certificate imported into Root + TrustedPublisher stores.'
 }
 
+function Get-VaioDevices {
+    # Root-enumerated instance IDs are ROOT\MEDIA\<n> -- they do NOT
+    # contain the hardware ID, so matching InstanceId against 'AuraVAIO'
+    # never matches (status used to always report 0 devices). Match
+    # the friendly name / hardware IDs instead.
+    $found = @()
+    $cands = @(Get-PnpDevice -ErrorAction SilentlyContinue |
+               Where-Object { $_.InstanceId -like 'ROOT\*' -or $_.Class -eq 'MEDIA' })
+    foreach ($d in $cands) {
+        $hit = $false
+        if ($d.FriendlyName -match 'AuraVAIO') { $hit = $true }
+        if (-not $hit) {
+            try {
+                $hw = (Get-PnpDeviceProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_HardwareIds' -ErrorAction Stop).Data
+                foreach ($h in @($hw)) { if ($h -match 'AuraVAIO|AuraVaioDriver') { $hit = $true; break } }
+            } catch { }
+        }
+        if ($hit) { $found += $d }
+    }
+    return $found
+}
+
+$script:VaioRemovePended = $false
 function Remove-DevconDevices {
     if (-not (Test-Path $Devcon)) { return }
     foreach ($id in @($HwId, $HwIdAlt)) {
-        & $Devcon remove $id 2>&1 | ForEach-Object { Write-Log "  devcon: $_" }
+        $rmOut = & $Devcon remove $id 2>&1
+        $rmOut | ForEach-Object { Write-Log "  devcon: $_" }
+        # "Removed on reboot" / "ready to be removed ... reboot":
+        # the device (and the loaded driver image) only actually
+        # goes away at reboot. This is the ONLY userspace-visible
+        # signal -- after package deletion the service entry and
+        # the device both vanish from enumeration while the image
+        # stays loaded in the kernel.
+        if ($rmOut | Select-String -Pattern 'reboot') { $script:VaioRemovePended = $true }
     }
 }
 
@@ -102,8 +136,7 @@ if ($Action -eq 'status') {
     Write-Log "  devcon.exe present  : $(Test-Path $Devcon)"
     Write-Log "  administrator       : $(Test-Admin)"
     Write-Log "  testsigning         : $(Get-TestSigning)"
-    $devs = @(Get-PnpDevice -ErrorAction SilentlyContinue |
-              Where-Object { $_.InstanceId -match 'AuraVAIO|AuraVaioDriver' })
+    $devs = @(Get-VaioDevices)
     Write-Log "  installed devices   : $($devs.Count)"
     exit 0
 }
@@ -134,9 +167,28 @@ if ($Action -eq 'install') {
         Write-Log '      devcon.exe into this folder and re-run -Action install.'
         exit 7
     }
-    & $Devcon install $Inf $HwId 2>&1 | ForEach-Object { Write-Log "  devcon: $_" }
-    if ($LASTEXITCODE -ne 0) {
-        Write-Log "ERROR: devcon install failed (exit $LASTEXITCODE)."
+    $devconOut = & $Devcon install $Inf $HwId 2>&1
+    $devconCode = $LASTEXITCODE
+    $devconOut | ForEach-Object { Write-Log "  devcon: $_" }
+    if ($devconCode -ne 0) {
+        # devcon exits 1 when the install succeeded but a reboot is
+        # required -- classically because the previously installed
+        # driver image is still loaded (pended for deletion after
+        # uninstall) and cannot unload until reboot. setupapi then
+        # reports ERROR_SUCCESS_REBOOT_REQUIRED while devcon itself
+        # prints "Drivers installed successfully" yet returns 1.
+        # Judge by the resulting system state, not the exit code
+        # alone (same approach as the dev script install_driver.ps1,
+        # which counts device nodes after devcon).
+        $devconOk = [bool]($devconOut | Select-String -SimpleMatch 'Drivers installed successfully')
+        $devsNow = @(Get-VaioDevices)
+        if ($devconOk -and $devsNow.Count -gt 0) {
+            Write-Log 'Installed. NOTE: the previous driver is still loaded in memory,'
+            Write-Log '      so a REBOOT is required before the new driver takes effect.'
+            Write-Log '      (devcon exit 1 here means reboot-required, not failure.)'
+            exit 8
+        }
+        Write-Log "ERROR: devcon install failed (exit $devconCode)."
         exit 6
     }
     Write-Log 'Done. Check Device Manager / Windows Sound settings for AuraVAIO.'
@@ -202,6 +254,18 @@ if ($Action -eq 'uninstall') {
             Write-Log 'WARN: no certificate thumbprint available; skipped cert cleanup.'
         }
     }
+    # If the service entry survives package deletion, the loaded
+    # driver image is pended for deletion and stays in memory until
+    # reboot; a reinstall before that reboot lands in the
+    # reboot-required state (install exit 8). Say so in the log.
+    $svcLeft = Get-CimInstance Win32_SystemDriver -Filter "Name='AuraVaioDriver'" -ErrorAction SilentlyContinue
+    $devsLeft = @(Get-VaioDevices)
+    if ($svcLeft -or $devsLeft.Count -gt 0 -or $script:VaioRemovePended) {
+        Write-Log 'NOTE: the loaded AuraVaioDriver is still in memory (pended for deletion).'
+        Write-Log '      It unloads on REBOOT; reinstalling before a reboot will report'
+        Write-Log '      "installed, reboot required" (exit 8) instead of a plain success.'
+    }
+
     if ($pkgDeleteFailed) {
         Write-Log 'Done with warnings: device node removed, but one or more DriverStore packages could not be deleted (see WARN lines above).'
     } else {

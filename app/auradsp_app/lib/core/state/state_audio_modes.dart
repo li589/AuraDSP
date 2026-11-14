@@ -848,7 +848,8 @@ extension AudioModesState on AppModel {
       );
       final gotDetect = await awaitVaioDetect();
       await refreshAudioDevices();
-      final scriptOk = res.exitCode == 0;
+      final rebootRequired = res.exitCode == 8;
+      final scriptOk = res.exitCode == 0 || rebootRequired;
       final found = vaioDetectInfo['found'] == true;
       final ok = scriptOk && gotDetect && found;
       vaioActionUnverified = scriptOk && !ok;
@@ -868,6 +869,15 @@ extension AudioModesState on AppModel {
         };
       } else {
         lastVaioError = null;
+        if (rebootRequired) {
+          // 退出码 8（随包 install_vaio.ps1）：驱动已装好，但旧
+          // 驱动镜像尚在内存中（卸载时挂起删除、重启才卸载），
+          // 新驱动重启后才生效——不是失败，不写 lastVaioError。
+          dbgLog('vaio install: installed; reboot required for the '
+              'new driver to take effect (exit 8)');
+          postNotice('AuraVAIO 驱动已安装；旧驱动尚在内存中，请重启电脑使新驱动完全生效',
+              level: NoticeLevel.warning);
+        }
       }
       _notifyUi();
       return ok;

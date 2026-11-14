@@ -15,6 +15,11 @@ library;
 /// 随包脚本在「需要测试签名模式」时返回的专用退出码。
 const int kDriverSigningRequired = 3;
 
+/// 随包脚本在「已安装、需重启才完全生效」时返回的专用退出码：
+/// 旧驱动镜像尚在内存中（卸载时挂起删除），devcon 以 1 退出，
+/// 脚本按装后系统状态判为已安装并返回此码——不是安装失败。
+const int kDriverRebootRequired = 8;
+
 const String kDriverReadmeRel = r'driver\README.txt';
 const String kDriverManualDirRel = 'driver';
 
