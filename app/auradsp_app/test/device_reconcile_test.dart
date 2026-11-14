@@ -7,15 +7,32 @@ import 'package:auradsp_app/core/state.dart';
 
 void main() {
   group('reconcileDeviceSelections', () {
-    test('输入/输出/VAIO 落点全消失 → 三项自动改回默认', () {
+    test('输入/输出/VAIO 落点全消失 → 连续两次缺席后三项改回默认', () {
       final m = AppModel(testing: true);
       m.config.pipelineInputDevice = 'gone-in';
       m.config.pipelineOutputDevice = 'gone-out';
       m.config.vaioOutputEndpoint = 'Gone Speakers';
+      // 两次确认防抖：第一次缺席只计数，不修。
+      m.reconcileDeviceSelections({'other-id', 'Other Name'});
+      expect(m.config.pipelineInputDevice, 'gone-in');
+      expect(m.config.pipelineOutputDevice, 'gone-out');
+      expect(m.config.vaioOutputEndpoint, 'Gone Speakers');
       m.reconcileDeviceSelections({'other-id', 'Other Name'});
       expect(m.config.pipelineInputDevice, '');
       expect(m.config.pipelineOutputDevice, '');
       expect(m.config.vaioOutputEndpoint, '');
+    });
+
+    test('瞬态抖动：缺席一次后复现 → 计数清零，永不误清', () {
+      final m = AppModel(testing: true);
+      m.config.pipelineOutputDevice = 'hda-id';
+      m.reconcileDeviceSelections({'other'}); // 缺席 1 次（服务重启瞬间）
+      expect(m.config.pipelineOutputDevice, 'hda-id');
+      m.reconcileDeviceSelections({'hda-id'}); // 复现 → 清零
+      m.reconcileDeviceSelections({'other'}); // 又缺席 1 次（重新计数）
+      expect(m.config.pipelineOutputDevice, 'hda-id');
+      m.reconcileDeviceSelections({'other'}); // 连续第 2 次 → 修复
+      expect(m.config.pipelineOutputDevice, '');
     });
 
     test('端点仍在场（按 id 或名称）→ 全部保留', () {
@@ -65,10 +82,13 @@ void main() {
       expect(m.config.vaioOutputEndpoint, 'Z');
     });
 
-    test('捕获腿在跑且输入消失 → 停腿并清输入选择', () {
+    test('捕获腿在跑且输入消失 → 两次确认后停腿并清输入选择', () {
       final m = AppModel(testing: true);
       m.config.pipelineInputDevice = 'gone-in';
       m.captureActive = true;
+      m.reconcileDeviceSelections({'something-else'});
+      expect(m.config.pipelineInputDevice, 'gone-in');
+      expect(m.captureActive, isTrue);
       m.reconcileDeviceSelections({'something-else'});
       expect(m.config.pipelineInputDevice, '');
       expect(m.captureActive, isFalse);

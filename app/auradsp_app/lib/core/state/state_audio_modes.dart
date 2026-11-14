@@ -848,12 +848,28 @@ extension AudioModesState on AppModel {
   /// （业主明示避让筛选不受本功能影响）。
   /// 在跑链路不热换：捕获腿输入消失时沿用第七轮先例停腿；桥链
   /// 已打开的落点不受影响，修复值只决定下次起链。
+  /// 两次确认防抖（S5，宾机 E2E 定罪）：单次扫描缺席不修——音频
+  /// 服务重启/驱动安装后的重枚举瞬间端点会短暂消失（实测装机后
+  /// 首扫 HDA 端点不在场，合法 VAIO 落点险被误清）；连续两次
+  /// 应用扫描都缺席才判真消失（看守 4 秒一轮，真实拔除 ~8 秒
+  /// 内落定）。在场即清零计数，App 重启计数自清。
   void reconcileDeviceSelections(Set<String> presentKeys) {
     if (presentKeys.isEmpty) return;
     final repaired = <String>[];
-    final inDev = config.pipelineInputDevice;
-    if (inDev.isNotEmpty && !presentKeys.contains(inDev)) {
+    // 返回 true = 本轮应修复（已连续两次缺席）；在场/空值清零。
+    bool absentTwice(String field, String value) {
+      if (value.isEmpty || presentKeys.contains(value)) {
+        _reconcileStrikes.remove(field);
+        return false;
+      }
+      final n = (_reconcileStrikes[field] ?? 0) + 1;
+      _reconcileStrikes[field] = n;
+      return n >= 2;
+    }
+
+    if (absentTwice('in', config.pipelineInputDevice)) {
       config.pipelineInputDevice = '';
+      _reconcileStrikes.remove('in');
       repaired.add('输入设备');
       if (captureActive) {
         _toIso?.send({'cmd': 'capturemode', 'on': false});
@@ -861,14 +877,14 @@ extension AudioModesState on AppModel {
         dbgLog('pipeline.capture: stopped after reconcile (input gone)');
       }
     }
-    final outDev = config.pipelineOutputDevice;
-    if (outDev.isNotEmpty && !presentKeys.contains(outDev)) {
+    if (absentTwice('out', config.pipelineOutputDevice)) {
       config.pipelineOutputDevice = '';
+      _reconcileStrikes.remove('out');
       repaired.add('输出设备');
     }
-    final vep = config.vaioOutputEndpoint;
-    if (vep.isNotEmpty && !presentKeys.contains(vep)) {
+    if (absentTwice('vaio', config.vaioOutputEndpoint)) {
       config.vaioOutputEndpoint = '';
+      _reconcileStrikes.remove('vaio');
       repaired.add('VAIO 物理输出');
     }
     if (repaired.isNotEmpty) {

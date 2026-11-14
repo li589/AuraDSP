@@ -362,6 +362,9 @@ class AppModel extends ChangeNotifier {
   bool _deviceRefreshInFlight = false;
   bool _deviceWatchBusy = false;
   DateTime? _lastDeviceRefreshAt;
+  // 调和两次确认计数（键 in/out/vaio）：连续缺席次数，见
+  // state_audio_modes.dart 的 reconcileDeviceSelections。
+  final Map<String, int> _reconcileStrikes = {};
 
   List<AudioDeviceItem> get filteredWasapiInputs {
     final list = <AudioDeviceItem>[];
