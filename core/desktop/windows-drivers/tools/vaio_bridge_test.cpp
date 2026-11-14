@@ -118,8 +118,13 @@ int main(int argc, char* argv[])
         printf("[WARN] ab_detect failed, start may fail\n");
     }
 
-    printf("[STEP] Starting ab_start (auto engine, no params, default endpoint)...\n");
-    int src = p_start("", "", "");
+    char enginePath[MAX_PATH] = "";
+    if (argc > 1 && argv[1] && argv[1][0])
+    {
+        snprintf(enginePath, sizeof(enginePath), "%s\\auradsp_engine.dll", argv[1]);
+    }
+    printf("[STEP] Starting ab_start (engine=%s, no params, default endpoint)...\n", enginePath);
+    int src = p_start(enginePath, "", "");
     printf("[INFO] ab_start rc=%d\n", src);
 
     memset(buf, 0, sizeof(buf));

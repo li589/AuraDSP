@@ -123,7 +123,9 @@
     <ClInclude Include="..\..\common\AuraVaioIpc.h" />
   </ItemGroup>
   <ItemGroup>
-    <Inf Include="..\src\AuraVaioDriver.inf" />
+    <Inf Include="..\src\AuraVaioDriver.inf">
+      <DateStamp Condition="'$(DriverDateStamp)' != ''">$(DriverDateStamp)</DateStamp>
+    </Inf>
     <!-- The WDK does not auto-add the linked .sys to the driver package folder;
          Inf2Cat scans $(PackageDir) and needs the .sys there.  FilesToPackage is
          a registered ProjectTools item type -> this is the supported way. -->

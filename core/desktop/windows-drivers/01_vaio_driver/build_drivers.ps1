@@ -56,7 +56,10 @@ switch ($Track) {
         # DDKPlatform=x64 is passed as a GLOBAL property so WindowsDriver.Shared.Props
         # resolves the ApiValidator universalDDIs\x64 path correctly (the WDK VS
         # integration normally sets DDKPlatform; we supply it for the hand-authored toolset).
-        & $msb $proj /p:Configuration=$Config /p:Platform=$Platform /p:DDKPlatform=x64 /p:SkipPackageVerification=true
+        # UTC Date: stampinf -d "*" 默认取本地时间，在东八区午夜 00:00-08:00 本地日期比 UTC
+        # 大一天，Inf2Cat 按 UTC 判定 DriverVer 会报 22.9.7 postdated DriverVer 错。统一传 UTC 日期。
+        $utcDate = (Get-Date).ToUniversalTime().ToString("MM/dd/yyyy")
+        & $msb $proj /p:Configuration=$Config /p:Platform=$Platform /p:DDKPlatform=x64 /p:SkipPackageVerification=true /p:DriverDateStamp=$utcDate
         # 全面复审 S5b：必须把 MSBuild 退出码传出去——`powershell -File`
         # 默认以 0 退出，pack.py 的 check=True 曾因此对编译失败视而不见，
         # 签名步骤又刷新了旧 .sys 的 mtime，新鲜度门随之被洗绿。

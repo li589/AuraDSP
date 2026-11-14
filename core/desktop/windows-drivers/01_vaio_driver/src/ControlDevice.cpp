@@ -38,6 +38,11 @@ static PFILE_OBJECT             g_pMappedFileObject     = NULL;
 // MAP 的进程。解映射时**不清**（校验要覆盖解映射后的窗口），持有者
 // 进程退出时由 Cleanup 路径清除。受 g_RingLock 保护。
 static PEPROCESS                g_pDebugLogHolder       = NULL;
+// 映射同步互斥体（PASSIVE_LEVEL / APC_LEVEL）：
+// MmMapLockedPagesSpecifyCache (UserMode) 与 MmUnmapLockedPages 严禁在
+// DISPATCH_LEVEL 自旋锁内调用，否则引发 0x7A (1, D0000006) 页面错误蓝屏。
+// 映射与解映射操作由 g_MappingMutex 串行化，保持在 APC_LEVEL。
+static FAST_MUTEX               g_MappingMutex;
 static KSPIN_LOCK               g_RingLock;
 static LONG                     g_lActiveRenderStreams  = 0;
 static LONG                     g_lActiveCaptureStreams = 0;
@@ -77,6 +82,7 @@ AuraControlDevice_Create(
 
     KeInitializeSpinLock(&g_RingLock);
     KeInitializeSpinLock(&g_DebugLock);
+    ExInitializeFastMutex(&g_MappingMutex);
     RtlZeroMemory(&g_DebugLog, sizeof(g_DebugLog));
 
     RtlInitUnicodeString(&ntDeviceName, AURA_VAIO_DEVICE_NAME_NT);
@@ -190,13 +196,12 @@ AuraControlDevice_Destroy(
     )
 {
     UNICODE_STRING dosDeviceName;
-    KIRQL oldIrql;
 
     UNREFERENCED_PARAMETER(DriverObject);
 
     AURA_TRACE("AuraControlDevice_Destroy\n");
 
-    KeAcquireSpinLock(&g_RingLock, &oldIrql);
+    ExAcquireFastMutex(&g_MappingMutex);
     if (g_pMappedUserAddress != NULL && g_pRingMdl != NULL)
     {
         __try
@@ -211,7 +216,7 @@ AuraControlDevice_Destroy(
         g_pMappedProcess = NULL;
         g_pMappedFileObject = NULL;
     }
-    KeReleaseSpinLock(&g_RingLock, oldIrql);
+    ExReleaseFastMutex(&g_MappingMutex);
 
     if (g_pRingMdl != NULL)
     {
@@ -284,14 +289,13 @@ AuraControlDevice_DispatchCleanup(
     _Inout_ PIRP        Irp
     )
 {
-    KIRQL oldIrql;
     PEPROCESS currentProc = PsGetCurrentProcess();
     PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(Irp);
 
     UNREFERENCED_PARAMETER(DeviceObject);
     AURA_TRACE("ControlDevice Cleanup (proc=%p)\n", currentProc);
 
-    KeAcquireSpinLock(&g_RingLock, &oldIrql);
+    ExAcquireFastMutex(&g_MappingMutex);
     // 只拆建立映射的文件对象本身的 cleanup（第六轮项 1 定罪）：
     // 同进程其他句柄（detect 探测等）的关闭不得拆在用映射。
     if (g_pMappedUserAddress != NULL && g_pMappedProcess == currentProc &&
@@ -316,7 +320,7 @@ AuraControlDevice_DispatchCleanup(
     {
         g_pDebugLogHolder = NULL;
     }
-    KeReleaseSpinLock(&g_RingLock, oldIrql);
+    ExReleaseFastMutex(&g_MappingMutex);
 
     Irp->IoStatus.Status = STATUS_SUCCESS;
     Irp->IoStatus.Information = 0;
@@ -429,7 +433,7 @@ AuraControlDevice_DispatchDeviceControl(
             PEPROCESS currentProc = PsGetCurrentProcess();
             PVOID userVa = NULL;
 
-            KeAcquireSpinLock(&g_RingLock, &oldIrql);
+            ExAcquireFastMutex(&g_MappingMutex);
 
             // If already mapped to this process, return existing user address
             if (g_pMappedUserAddress != NULL && g_pMappedProcess == currentProc)
@@ -440,7 +444,7 @@ AuraControlDevice_DispatchDeviceControl(
             {
                 // DRV-04: Ring buffer is exclusively held by another process.
                 // Reject hijack attempts with STATUS_DEVICE_BUSY instead of unmapping the owner.
-                KeReleaseSpinLock(&g_RingLock, oldIrql);
+                ExReleaseFastMutex(&g_MappingMutex);
                 ntStatus = STATUS_DEVICE_BUSY;
                 break;
             }
@@ -491,7 +495,7 @@ AuraControlDevice_DispatchDeviceControl(
                 AURA_TRACE("MAP_SHARED_RING: userVa=%p, dataSize=%u\n", userVa, pResp->DataSizeBytes);
             }
 
-            KeReleaseSpinLock(&g_RingLock, oldIrql);
+            ExReleaseFastMutex(&g_MappingMutex);
         }
         break;
 
@@ -505,20 +509,20 @@ AuraControlDevice_DispatchDeviceControl(
             }
 
             PEPROCESS currentProc = PsGetCurrentProcess();
-            KeAcquireSpinLock(&g_RingLock, &oldIrql);
+            ExAcquireFastMutex(&g_MappingMutex);
             if (g_pMappedUserAddress != NULL)
             {
                 if (g_pMappedProcess != NULL && g_pMappedProcess != currentProc)
                 {
                     // DRV-04: Non-owning process cannot unmap another process's mapping
-                    KeReleaseSpinLock(&g_RingLock, oldIrql);
+                    ExReleaseFastMutex(&g_MappingMutex);
                     ntStatus = STATUS_ACCESS_DENIED;
                     break;
                 }
 
                 if (reqAddress != NULL && reqAddress != g_pMappedUserAddress)
                 {
-                    KeReleaseSpinLock(&g_RingLock, oldIrql);
+                    ExReleaseFastMutex(&g_MappingMutex);
                     ntStatus = STATUS_INVALID_PARAMETER;
                     break;
                 }
@@ -544,7 +548,7 @@ AuraControlDevice_DispatchDeviceControl(
             {
                 ntStatus = STATUS_SUCCESS;
             }
-            KeReleaseSpinLock(&g_RingLock, oldIrql);
+            ExReleaseFastMutex(&g_MappingMutex);
         }
         break;
 
@@ -562,7 +566,7 @@ AuraControlDevice_DispatchDeviceControl(
         {
             PEPROCESS currentProc = PsGetCurrentProcess();
             BOOLEAN denied = FALSE;
-            KeAcquireSpinLock(&g_RingLock, &oldIrql);
+            ExAcquireFastMutex(&g_MappingMutex);
             // 审计·调试低6：校验不能只在映射期生效——解映射后旧实现
             // 任意本地进程都能读走并清掉日志。映射中以当前持有者为
             // 准；解映射后以 g_pDebugLogHolder（最近一次成功 MAP 的
@@ -578,7 +582,7 @@ AuraControlDevice_DispatchDeviceControl(
                     denied = TRUE;
                 }
             }
-            KeReleaseSpinLock(&g_RingLock, oldIrql);
+            ExReleaseFastMutex(&g_MappingMutex);
             if (denied)
             {
                 ntStatus = STATUS_ACCESS_DENIED;

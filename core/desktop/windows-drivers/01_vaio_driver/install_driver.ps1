@@ -94,10 +94,10 @@ function Find-Devcon {
         (Join-Path $PackageDir 'devcon.exe'),
         (Join-Path $Root 'devcon.exe'),
         "E:\Program Files\Windows Kits\10\Tools\x64\devcon.exe",
-        "$env:ProgramFiles(x86)\Windows Kits\10\Tools\10.0.28000.0\x64\devcon.exe",
-        "$env:ProgramFiles(x86)\Windows Kits\10\Tools\x64\devcon.exe",
-        "$env:ProgramFiles(x86)\Windows Kits\10\Tools\amd64\devcon.exe",
-        "$env:ProgramFiles(x86)\Windows Kits\10\Tools\10.0.26100.0\x64\devcon.exe"
+        "${env:ProgramFiles(x86)}\Windows Kits\10\Tools\10.0.28000.0\x64\devcon.exe",
+        "${env:ProgramFiles(x86)}\Windows Kits\10\Tools\x64\devcon.exe",
+        "${env:ProgramFiles(x86)}\Windows Kits\10\Tools\amd64\devcon.exe",
+        "${env:ProgramFiles(x86)}\Windows Kits\10\Tools\10.0.26100.0\x64\devcon.exe"
     )
     foreach ($c in $candidates) { if ($c -and (Test-Path $c)) { return $c } }
     $cmd = Get-Command devcon.exe -ErrorAction SilentlyContinue
@@ -112,7 +112,7 @@ function Find-Devcon {
 }
 
 function Find-SignTool {
-    $binRoot = "$env:ProgramFiles(x86)\Windows Kits\10\bin"
+    $binRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
     if (-not (Test-Path $binRoot)) { return $null }
     $hit = Get-ChildItem $binRoot -Filter 'signtool.exe' -Recurse -ErrorAction SilentlyContinue |
            Where-Object { $_.FullName -match '\\x64\\' } |
