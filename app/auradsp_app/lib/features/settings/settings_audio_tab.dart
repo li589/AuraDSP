@@ -102,33 +102,9 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
       ),
     ),
 
-    // 1.5 切离 APO 自动卸载的等待区（业主 2026-11-12）：卸载在途
-    // 时在模式卡下方出大动画，模式卡全部选项已禁选，落定后自动
-    // 续行切换（成功）或留在 sysapo 并报错（失败）。
-    if (model.apoDetachBlocking)
-      SectionCard(
-        title: l.apoSwitchDetachTitle,
-        child: Column(
-          children: [
-            const SizedBox(height: AuraSpace.md),
-            SizedBox(
-              width: 56,
-              height: 56,
-              child: CircularProgressIndicator(
-                strokeWidth: 5,
-                color: p.accent,
-              ),
-            ),
-            const SizedBox(height: AuraSpace.md),
-            Text(
-              l.apoSwitchDetachHint,
-              textAlign: TextAlign.center,
-              style: labelOf(p, size: 12.5, color: p.textDim),
-            ),
-            const SizedBox(height: AuraSpace.sm),
-          ],
-        ),
-      ),
+    // 1.5 切离 APO 的等待呈现已改为设置页级全覆盖层（第三十五
+    // 轮，业主裁定全覆盖）：见 settings_page.dart 的 detachCover
+    // 盖层——本页所有区块（含下方设备区）统一被盖，不再在此出卡。
 
     // 2. 设备与精细化调节（根据当前范式与配置动态展示）
     SectionCard(

@@ -9,6 +9,7 @@
  *  - settings_test_tab.dart       (测试：音频测试源注入)
  *  - settings_about_tab.dart      (关于：版本、开源地址/协议、参考项目)
  */
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -85,6 +86,12 @@ class _SettingsPageState extends State<SettingsPage> {
         }
 
         final shown = [...tabContent, const SizedBox(height: 84)];
+        final p = paletteOf(context);
+        // 切离 APO 全覆盖等待层（第三十五轮，业主裁定）：卸载在途
+        // 时整页音频设置（含输入/输出设备区）一律被等待层盖住，
+        // 不再只禁选模式卡——盖层本身吃掉全部触摸，下层控件既
+        // 点不动也滚不动；分类栏保留可用（切走再回来盖层仍在）。
+        final detachCover = _cat == 1 && model.apoDetachBlocking;
 
         return Stack(
           children: [
@@ -93,6 +100,44 @@ class _SettingsPageState extends State<SettingsPage> {
               title: l.pageSettingsTitle,
               children: shown,
             ),
+            if (detachCover)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: p.bg.withValues(alpha: 0.78),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 56,
+                            height: 56,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 5,
+                              color: p.accent,
+                            ),
+                          ),
+                          const SizedBox(height: AuraSpace.lg),
+                          Text(
+                            l.apoSwitchDetachTitle,
+                            textAlign: TextAlign.center,
+                            style:
+                                labelOf(p, size: 15, color: p.text),
+                          ),
+                          const SizedBox(height: AuraSpace.sm),
+                          Text(
+                            l.apoSwitchDetachHint,
+                            textAlign: TextAlign.center,
+                            style:
+                                labelOf(p, size: 12.5, color: p.textDim),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             Positioned(
               left: 0,
               right: 0,
