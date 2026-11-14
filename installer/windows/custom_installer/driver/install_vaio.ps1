@@ -158,8 +158,23 @@ if ($Action -eq 'install') {
 
     & $PnpUtil /add-driver $Inf /install 2>&1 | ForEach-Object { Write-Log "  pnputil: $_" }
     if ($LASTEXITCODE -ne 0) {
-        Write-Log "ERROR: pnputil failed (exit $LASTEXITCODE)."
-        exit 5
+        # pnputil exits 259 (ERROR_NO_MORE_ITEMS) when the package
+        # is already staged and no device needs (re)installing --
+        # the normal state on a repair install with the driver
+        # already current (hit on vm-win10 2026-11-14: pnputil had
+        # published the INF and updated the device, yet exited 259
+        # and the wizard reported "VAIO driver install failed").
+        # Judge by the resulting system state (device present), not
+        # the exit code alone; same doctrine as the devcon verdict
+        # below.
+        if ($LASTEXITCODE -eq 259 -and @(Get-VaioDevices).Count -gt 0) {
+            Write-Log 'pnputil reported nothing to do (exit 259) and the VAIO'
+            Write-Log '      device is present: the current driver is already'
+            Write-Log '      installed. Continuing.'
+        } else {
+            Write-Log "ERROR: pnputil failed (exit $LASTEXITCODE)."
+            exit 5
+        }
     }
     if (-not (Test-Path $Devcon)) {
         Write-Log 'WARN: devcon.exe missing. The package is in DriverStore but the'
