@@ -348,6 +348,17 @@ target_compile_options(vaio_pump_wait_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET vaio_pump_wait_test PROPERTY CXX_STANDARD 20)
 set_property(TARGET vaio_pump_wait_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
+# 监听镜像喂流规划验收（ASIO-2 补全）：驱动无关，只包含纯逻辑头
+# VaioMirrorFeed.h，不链 auravaio_bridge —— 采样率归一守恒与缓冲
+# 钳制丢弃计数在无声卡环境也可验。
+add_executable(vaio_mirror_feed_test
+    "${VAIOBRIDGE}/vaio_mirror_feed_test.cpp"
+)
+target_include_directories(vaio_mirror_feed_test PRIVATE "${VAIOBRIDGE}")
+target_compile_options(vaio_mirror_feed_test PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET vaio_mirror_feed_test PROPERTY CXX_STANDARD 20)
+set_property(TARGET vaio_mirror_feed_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
 add_executable(vaio_multichannel_probe
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/vaio_multichannel_probe.cpp"
 )
