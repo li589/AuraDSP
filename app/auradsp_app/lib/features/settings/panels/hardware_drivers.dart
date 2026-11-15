@@ -146,7 +146,7 @@ class _DriverDetail extends StatelessWidget {
  * （第三十七轮移位）。收起时只有标题行 + 右侧指示灯（绿 =
  * 当前主引擎有回读，暗 = 无；第三十七轮业主裁定：撤下
  * 「未运行」等状态文字与收起摘要行）；展开时三引擎（本机/
- * 桥/System APO）逐行列出声道模式、未用声道铺满（仅开启
+ * 桥/System APO）逐行列出声道模式、声道填充（仅开启
  * 时在场）、声道数、采样率（APO 另带已应用参数数），无回读
  * 的引擎只留标签。数据全部来自引擎回读——本机/桥经 isolate
  * get_param、APO 经 telemetry v6 的 auradsp_get_param 回读

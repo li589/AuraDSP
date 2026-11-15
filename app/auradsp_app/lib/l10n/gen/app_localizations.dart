@@ -2095,7 +2095,7 @@ abstract class AppLocalizations {
   /// No description provided for @upmixFill.
   ///
   /// In zh, this message translates to:
-  /// **'未使用声道填充'**
+  /// **'声道填充'**
   String get upmixFill;
 
   /// No description provided for @upmixFillHint.
@@ -2467,7 +2467,7 @@ abstract class AppLocalizations {
   /// No description provided for @effFillLabel.
   ///
   /// In zh, this message translates to:
-  /// **'未用声道铺满'**
+  /// **'声道填充'**
   String get effFillLabel;
 
   /// No description provided for @effOn.

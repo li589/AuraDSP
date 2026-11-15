@@ -1180,7 +1180,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'DSP strategy when input or output device is multi-channel (4.0 / 5.1 / 7.1): Discrete = all channels independently pass through DSP with per-effect masks and upmixing plugin support; Matrix = folded to stereo for DSP and upmixed back to surround (LFE passthrough). Binaural Virtual Surround takes highest priority when enabled.';
 
   @override
-  String get upmixFill => 'Fill unused channels';
+  String get upmixFill => 'Channel fill';
 
   @override
   String get upmixFillHint =>
@@ -1386,7 +1386,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get effModeDiscrete => 'Discrete per-channel';
 
   @override
-  String get effFillLabel => 'Fill unused channels';
+  String get effFillLabel => 'Channel fill';
 
   @override
   String get effOn => 'On';

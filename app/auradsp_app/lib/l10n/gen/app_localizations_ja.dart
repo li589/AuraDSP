@@ -1106,7 +1106,7 @@ class AppLocalizationsJa extends AppLocalizations {
       '入力またはデバイスがマルチチャンネル（4.0 / 5.1 / 7.1）時のDSP方針：ディスクリート＝全チャンネルが独立してDSPを通過、エフェクターごとのマスク設定やアップミックスに対応；マトリックス＝ステレオに畳み込んでDSP処理後に再展開（LFE直通）。バイノーラル仮想サラウンド有効時はそちらが最優先されます。';
 
   @override
-  String get upmixFill => '未使用チャンネルの充填';
+  String get upmixFill => 'チャンネル充填';
 
   @override
   String get upmixFillHint =>
@@ -1307,7 +1307,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get effModeDiscrete => 'ディスクリート（チャンネル別）';
 
   @override
-  String get effFillLabel => '未使用チャンネルのフィル';
+  String get effFillLabel => 'チャンネル充填';
 
   @override
   String get effOn => 'オン';
