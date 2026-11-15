@@ -31,6 +31,7 @@ import 'audio_abridge.dart';
 import 'audio_vaio_bridge.dart';
 import 'backend_switch.dart';
 import 'bridge_manager.dart';
+import 'bridge_death_gate.dart';
 import 'bridge_plugin_ffi.dart';
 import 'apo_param_index.dart';
 import 'apo_plugin_block.dart';
@@ -150,6 +151,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   int bridgeStatusPollAt = 0; // 上次 status 轮询（1s 节流）
   // P4 静音门控：桥上报 gated=1 时泵降到 50ms；gated=0 下一轮即回落 10ms。
   bool bridgeGated = false;
+  // 桥非计划死亡自动重启闸门（2026-11-15 无声事件）：轮询发现桥
+  // 自报已停而管理器仍记账在跑时走 stop→start 回收，本闸门限速。
+  final bridgeDeathGate = BridgeDeathGate();
     String lastVaioGeo = '';
     String lastVaioFx = ''; // S4 取证对象的上次落盘内容（每 start 一次）
   // 参数镜像：每次 setParam 记录，vb_start 后全量回放，保证两边一致。
@@ -361,9 +365,36 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     }
   }
 
+  void stopVbBridge() {
+    if (!bridgeManager.isActive('vm')) return;
+    dbgLog('vbmode: stop requested');
+    try {
+      vb?.testStop();
+    } catch (e, st) { swallow(e, st); }
+    try {
+      vb?.stop();
+    } catch (e, st) { swallow(e, st); }
+    bridgeManager.clearActive(vb!);
+    final resumeErr = resumeWasapi('vbmode');
+    unawaited(syncPluginMirrorToLocal(lib, handle));
+    send({
+      'evt': 'vbstatus',
+      'running': false,
+      if (resumeErr != null) 'note': 'wasapi-resume-failed: $resumeErr',
+    });
+  }
+
   void startVbBridge() {
     windowsCapture.detach(restoreSaved: false);
-    if (bridgeManager.isActive('vm')) return;
+    if (bridgeManager.isActive('vm')) {
+      // 记账在跑但原生桥已自报死亡（泵自退）：先走正式 stop 全
+      // 拆解再落入下方真启动，不再静默吞掉启动请求（2026-11-15
+      // 无声事件楔死口径，startVaioBridge 同）。
+      final st = vb?.status();
+      if (st == null || st['running'] == true) return;
+      dbgLog('vbmode: start preempted by dead bridge - recycling first');
+      stopVbBridge();
+    }
     dbgLog('vbmode: start requested');
     try {
       vb ??= bridgeManager.load<AuraVmBridge>('vm');
@@ -447,25 +478,6 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     send({'evt': 'vbstatus', ...?st, 'running': true});
   }
 
-  void stopVbBridge() {
-    if (!bridgeManager.isActive('vm')) return;
-    dbgLog('vbmode: stop requested');
-    try {
-      vb?.testStop();
-    } catch (e, st) { swallow(e, st); }
-    try {
-      vb?.stop();
-    } catch (e, st) { swallow(e, st); }
-    bridgeManager.clearActive(vb!);
-    final resumeErr = resumeWasapi('vbmode');
-    unawaited(syncPluginMirrorToLocal(lib, handle));
-    send({
-      'evt': 'vbstatus',
-      'running': false,
-      if (resumeErr != null) 'note': 'wasapi-resume-failed: $resumeErr',
-    });
-  }
-
   /* ---- ASIO 模式面（04 桥；与 VB/WASAPI 互斥） ---- */
 
   /// 驱动清单回执：无论后续能否启动，都先把 detect 结果发给设置页。
@@ -501,6 +513,26 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     return 2;
   }
 
+  void stopAsioBridge() {
+    if (!bridgeManager.isActive('asio')) return;
+    dbgLog('asiomode: stop requested');
+    try {
+      ab?.testStop();
+    } catch (e, st) { swallow(e, st); }
+    try {
+      ab?.stop();
+    } catch (e, st) { swallow(e, st); }
+    bridgeManager.clearActive(ab!);
+    asioDriverInUse = '';
+    final resumeErr = resumeWasapi('asiomode');
+    unawaited(syncPluginMirrorToLocal(lib, handle));
+    send({
+      'evt': 'asiostatus',
+      'running': false,
+      if (resumeErr != null) 'note': 'wasapi-resume-failed: $resumeErr',
+    });
+  }
+
   /// driver/bufSize/outPair/channels 由主 isolate 随命令带参（config 真相源在主侧）。
   /// driver 为空则取清单第一个（零配置可用；清单也空则报 no-drivers）。
   /// [channels] ∈ {2,4,6,8} 为 io 声道数（B2c）；桥按驱动能力自动降级。
@@ -510,7 +542,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       required int outPair,
       int channels = 2}) {
     windowsCapture.detach(restoreSaved: false);
-    if (bridgeManager.isActive('asio')) return;
+    if (bridgeManager.isActive('asio')) {
+      // 同 startVbBridge：记账在跑但桥已死时先回收再真启动。
+      final st = ab?.status();
+      if (st == null || st['running'] == true) return;
+      dbgLog('asiomode: start preempted by dead bridge - recycling first');
+      stopAsioBridge();
+    }
     dbgLog('asiomode: start requested driver="$driver" '
         'buf=$bufSize pair=$outPair ch=$channels');
     try {
@@ -605,26 +643,6 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     send({'evt': 'asiostatus', ...?st, 'running': true, 'driverInUse': drv});
   }
 
-  void stopAsioBridge() {
-    if (!bridgeManager.isActive('asio')) return;
-    dbgLog('asiomode: stop requested');
-    try {
-      ab?.testStop();
-    } catch (e, st) { swallow(e, st); }
-    try {
-      ab?.stop();
-    } catch (e, st) { swallow(e, st); }
-    bridgeManager.clearActive(ab!);
-    asioDriverInUse = '';
-    final resumeErr = resumeWasapi('asiomode');
-    unawaited(syncPluginMirrorToLocal(lib, handle));
-    send({
-      'evt': 'asiostatus',
-      'running': false,
-      if (resumeErr != null) 'note': 'wasapi-resume-failed: $resumeErr',
-    });
-  }
-
   /* ---- AuraVAIO 虚拟声卡模式面（Mode 1 桥；与 VB/ASIO/WASAPI 互斥） ---- */
 
   void detectVaio() {
@@ -650,9 +668,36 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     send({'evt': 'vaiodetect', ...?info});
   }
 
+  void stopVaioBridge() {
+    if (!bridgeManager.isActive('vaio')) return;
+    dbgLog('vaiomode: stop requested');
+    try {
+      vaio?.testStop();
+    } catch (e, st) { swallow(e, st); }
+    try {
+      vaio?.stop();
+    } catch (e, st) { swallow(e, st); }
+    bridgeManager.clearActive(vaio!);
+    vaioOutputEndpointInUse = '';
+    vaioMirrorInUse = false;
+    final resumeErr = resumeWasapi('vaiomode');
+    unawaited(syncPluginMirrorToLocal(lib, handle));
+    send({
+      'evt': 'vaiostatus',
+      'running': false,
+      if (resumeErr != null) 'note': 'wasapi-resume-failed: $resumeErr',
+    });
+  }
+
   void startVaioBridge({String outputEndpointSubstr = '', bool monitorMirror = false}) {
     windowsCapture.detach(restoreSaved: false);
-    if (bridgeManager.isActive('vaio')) return;
+    if (bridgeManager.isActive('vaio')) {
+      // 同 startVbBridge：记账在跑但桥已死时先回收再真启动。
+      final st = vaio?.status();
+      if (st == null || st['running'] == true) return;
+      dbgLog('vaiomode: start preempted by dead bridge - recycling first');
+      stopVaioBridge();
+    }
     dbgLog('vaiomode: start requested output="$outputEndpointSubstr" mirror=$monitorMirror');
     try {
       vaio ??= bridgeManager.load<AuraVaioBridge>('vaio');
@@ -719,27 +764,6 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     send({'evt': 'vaiostatus', ...?st, 'running': true});
   }
 
-  void stopVaioBridge() {
-    if (!bridgeManager.isActive('vaio')) return;
-    dbgLog('vaiomode: stop requested');
-    try {
-      vaio?.testStop();
-    } catch (e, st) { swallow(e, st); }
-    try {
-      vaio?.stop();
-    } catch (e, st) { swallow(e, st); }
-    bridgeManager.clearActive(vaio!);
-    vaioOutputEndpointInUse = '';
-    vaioMirrorInUse = false;
-    final resumeErr = resumeWasapi('vaiomode');
-    unawaited(syncPluginMirrorToLocal(lib, handle));
-    send({
-      'evt': 'vaiostatus',
-      'running': false,
-      if (resumeErr != null) 'note': 'wasapi-resume-failed: $resumeErr',
-    });
-  }
-
   /// 停掉除 [keep] 之外的其余桥（互斥切换唯一入口）。
   /// 当前后端唯一真相源是 BridgeManager.activeId；不另存三份 bool。
   /// D4-a（WASAPI 回升）由各 stop*Bridge 内部承担，不在切换层另写一份。
@@ -754,6 +778,52 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       stopVaioBridge();
     } else {
       dbgLog('stopOtherBridges: unknown active=$cur');
+    }
+  }
+
+  /// 桥非计划死亡回收（2026-11-15 无声事件）：状态轮询发现当前
+  /// 后端自报 running=false（原生泵自判死亡退出，如输出端点被
+  /// 系统重建后 WASAPI 客户端失效）而 BridgeManager 仍记账在跑
+  /// 时调用。计划内停止都在消息处理内同步清账，轮询看不到中间
+  /// 态，故此处命中必为非计划死亡。回收走正式 stop→start（原生
+  /// stop 对泵自死形态有全拆解口径，第四轮项 3）；重启参数用死
+  /// 前的在用会话值（stop 会清掉 in-use 字段，先快照）。自动重
+  /// 启由 BridgeDeathGate 限速：超限只拆不启并回明确状态，防
+  /// 端点真死时无限打转。
+  void recycleDeadBridge(String backend, Map<String, dynamic> st) {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    dbgLog('$backend: unplanned death (note=${st['note']}) - recycling');
+    final mayRestart = bridgeDeathGate.recordDeath(backend, nowMs);
+    final evt = backend == 'vm'
+        ? 'vbstatus'
+        : (backend == 'asio' ? 'asiostatus' : 'vaiostatus');
+    if (backend == 'vaio') {
+      final ep = vaioOutputEndpointInUse;
+      final mir = vaioMirrorInUse;
+      stopVaioBridge();
+      if (mayRestart) {
+        startVaioBridge(outputEndpointSubstr: ep, monitorMirror: mir);
+      }
+    } else if (backend == 'vm') {
+      stopVbBridge();
+      if (mayRestart) startVbBridge();
+    } else if (backend == 'asio') {
+      final drv = asioDriverInUse;
+      final bs = asioBufSize;
+      final op = asioOutPair;
+      stopAsioBridge();
+      if (mayRestart) {
+        startAsioBridge(
+            driver: drv,
+            bufSize: bs,
+            outPair: op,
+            channels: asioChannelsFromSource());
+      }
+    }
+    if (!mayRestart) {
+      dbgLog('$backend: auto-restart suspended '
+          '(deaths=${bridgeDeathGate.deathCount(backend, nowMs)} in window)');
+      send({'evt': evt, 'running': false, 'note': 'bridge-died-repeatedly'});
     }
   }
 
@@ -1381,6 +1451,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           break;
         case 'vbmode':
           if (m['on'] as bool) {
+            bridgeDeathGate.reset('vm'); // 显式指令：死亡限速重新布防
             stopOtherBridges('vm');
             startVbBridge();
           } else {
@@ -1389,6 +1460,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           break;
         case 'asiomode':
           if (m['on'] as bool) {
+            bridgeDeathGate.reset('asio');
             // 三桥互斥由 stopOtherBridges 统一收口（主 isolate 的 setAudioMode
             // 已保证一次只选一个模式，这里防御性再压一遍）。
             stopOtherBridges('asio');
@@ -1404,6 +1476,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           break;
         case 'asiorestart':
           // 驱动/缓冲/声道数变更：热切换（stop → start 新参数）。
+          bridgeDeathGate.reset('asio');
           if (!bridgeManager.isActive('asio')) break;
           stopAsioBridge();
           startAsioBridge(
@@ -1418,6 +1491,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           break;
         case 'vaiomode':
           if (m['on'] as bool) {
+            bridgeDeathGate.reset('vaio');
             stopOtherBridges('vaio');
             startVaioBridge(
               outputEndpointSubstr: (m['outputEndpoint'] as String?) ?? '',
@@ -1428,6 +1502,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
           break;
         case 'vaiorestart':
+          bridgeDeathGate.reset('vaio');
           if (!bridgeManager.isActive('vaio')) break;
           stopVaioBridge();
           startVaioBridge(
@@ -2387,6 +2462,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                     dbgLog('vaio-forensics: $fxs');
                   }
                 }
+              }
+              // 桥非计划死亡对账（2026-11-15 无声事件）：管理器记
+              // 账在跑而桥自报已停（泵自判死亡）→ 回收重启；计划
+              // 内停止同步清账、轮询看不到此态，命中必为非计划。
+              if (st['running'] == false) {
+                recycleDeadBridge(backend, st);
               }
             }
           }
