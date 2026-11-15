@@ -214,6 +214,13 @@ struct VaioBridgeCtl {
     double fxPeakShift = -1, fxMeanAbsShift = -1; // 错位统计（仅 PCM16）
     volatile LONG fxDone = 0;  // 0 未采集 1 已采集（泵写、status 读）
 
+    // 第三十九轮取证：引擎入/出逐声道峰值保持（start 清零，泵在
+    // 引擎路径逐块累积，status 读）。与 status 侧 fnGetParam 回读
+    // 的 engFill/engMode/engCount 同行输出，一次判清「喂给引擎的
+    // 数据已填」与「引擎在填」——矩阵下混填充门控差异定位用。
+    double fxChInPk[8] = {};
+    double fxChOutPk[8] = {};
+
     // 第七轮 S3：格式切换重同步计数（帧长相关几何变化时泵把消费
     // 游标重对齐到最新写入位置、弃旧格式尾巴；status 恒输出，
     // 切歌白噪声复现时凭它判「重同步是否发生过」）。
@@ -1338,6 +1345,15 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                 // 1. 将驱动环输入重映射至引擎工作声道数（消除声道步进错位）
                 RemapInterleavedAudio(g_vaio.scratchIn, (int)ringChannels, g_vaio.scratchProcIn, safeEngineCh, (int)framesToProcess);
 
+                // 第三十九轮取证：引擎输入逐声道峰值保持（start 起算）。
+                for (int f = 0; f < (int)framesToProcess; ++f) {
+                    const float* spk = g_vaio.scratchProcIn + (size_t)f * safeEngineCh;
+                    for (int c = 0; c < safeEngineCh && c < 8; ++c) {
+                        const double a = fabs((double)spk[c]);
+                        if (a > g_vaio.fxChInPk[c]) g_vaio.fxChInPk[c] = a;
+                    }
+                }
+
                 // 2. 21 项音效链处理（交织 float32，严格按 safeEngineCh 步进）
                 g_vaio.fnProcess(g_vaio.pEngine, g_vaio.scratchProcIn, g_vaio.scratchProcOut, (int)framesToProcess);
 
@@ -1351,6 +1367,15 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                 g_vaio.peakOut = (double)curPeakOut;
                 // P3：记录引擎实际输出峰值，供下一块「尾音已衰完」判据（gated 时 0）。
                 if (g_vaio.gate.enabled) g_vaio.gate.NoteOutput(curPeakOut);
+
+                // 第三十九轮取证：引擎输出逐声道峰值保持（start 起算）。
+                for (int f = 0; f < (int)framesToProcess; ++f) {
+                    const float* spk = g_vaio.scratchProcOut + (size_t)f * safeEngineCh;
+                    for (int c = 0; c < safeEngineCh && c < 8; ++c) {
+                        const double a = fabs((double)spk[c]);
+                        if (a > g_vaio.fxChOutPk[c]) g_vaio.fxChOutPk[c] = a;
+                    }
+                }
 
                 // 4. 将引擎输出重映射至 WASAPI 物理设备声道数
                 RemapInterleavedAudio(g_vaio.scratchProcOut, safeEngineCh, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
@@ -2000,6 +2025,11 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     memset(g_vaio.scratchRaw, 0, scratchBytes);
     memset(g_vaio.scratchMirror, 0, scratchBytes);
     memset(g_vaio.scratchMirrorRs, 0, scratchBytes);
+    // 第三十九轮取证：逐声道峰值保持随 start 清零（单次起桥一轮观测）。
+    for (int c = 0; c < 8; ++c) {
+        g_vaio.fxChInPk[c] = 0;
+        g_vaio.fxChOutPk[c] = 0;
+    }
 
     // 7. 应用初始参数
     ApplyParamsString(params_json);
@@ -2269,19 +2299,37 @@ int vaio_status(char* out, int cap) {
     int total = n;
     // S4 取证对象（采集完成后才出现；键缺席即未采集，消费者勿猜）。
     if (InterlockedCompareExchange(&g_vaio.fxDone, 0, 0) == 1) {
+        // 第三十九轮取证：status 侧回读引擎三值（与泵侧峰值保持同行）。
+        int32_t engFill = -1, engMode = -1, engCount = -1;
+        if (g_vaio.pEngine && g_vaio.fnGetParam) {
+            int32_t v = 0;
+            if (g_vaio.fnGetParam(g_vaio.pEngine, "channels.upmix_fill", &v, 4) == 0) engFill = v;
+            if (g_vaio.fnGetParam(g_vaio.pEngine, "channels.mode", &v, 4) == 0) engMode = v;
+            if (g_vaio.fnGetParam(g_vaio.pEngine, "channels.count", &v, 4) == 0) engCount = v;
+        }
         const int m = _snprintf_s(
             out + total, (size_t)(cap - total), _TRUNCATE,
             ",\"forensics\":{\"tw0\":%llu,\"cur0\":%llu,\"dataSize\":%lu,"
             "\"align\":%lu,\"bits\":%lu,\"rate\":%lu,\"ch\":%lu,"
             "\"raw\":\"%s\",\"peak\":%.4f,\"meanAbs\":%.4f,"
-            "\"peakShift\":%.4f,\"meanAbsShift\":%.4f}",
+            "\"peakShift\":%.4f,\"meanAbsShift\":%.4f,"
+            "\"chInPk\":\"%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\","
+            "\"chOutPk\":\"%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\","
+            "\"engFill\":%ld,\"engMode\":%ld,\"engCount\":%ld}",
             (unsigned long long)g_vaio.fxTw0,
             (unsigned long long)g_vaio.fxCur0,
             g_vaio.fxDataSize, g_vaio.fxBlockAlign,
             g_vaio.fxBits, g_vaio.fxRate, g_vaio.fxCh,
             g_vaio.fxRawHex,
             g_vaio.fxPeak, g_vaio.fxMeanAbs,
-            g_vaio.fxPeakShift, g_vaio.fxMeanAbsShift);
+            g_vaio.fxPeakShift, g_vaio.fxMeanAbsShift,
+            g_vaio.fxChInPk[0], g_vaio.fxChInPk[1], g_vaio.fxChInPk[2],
+            g_vaio.fxChInPk[3], g_vaio.fxChInPk[4], g_vaio.fxChInPk[5],
+            g_vaio.fxChInPk[6], g_vaio.fxChInPk[7],
+            g_vaio.fxChOutPk[0], g_vaio.fxChOutPk[1], g_vaio.fxChOutPk[2],
+            g_vaio.fxChOutPk[3], g_vaio.fxChOutPk[4], g_vaio.fxChOutPk[5],
+            g_vaio.fxChOutPk[6], g_vaio.fxChOutPk[7],
+            (long)engFill, (long)engMode, (long)engCount);
         if (m < 0) return -1;
         total += m;
     }
