@@ -21,8 +21,8 @@ void main() {
       expect(gate.recordDeath('vaio', 1000), isTrue);
       expect(gate.recordDeath('vaio', 2000), isTrue);
       expect(gate.recordDeath('vaio', 3000), isFalse);
-      // 距首次死亡超过 120s 窗口：旧计数滚出，重新放行。
-      expect(gate.recordDeath('vaio', 121000), isTrue);
+      // 全部旧死亡滚出 120s 窗口后：重新计数，重新放行。
+      expect(gate.recordDeath('vaio', 124000), isTrue);
     });
 
     test('reset 后重新布防', () {
