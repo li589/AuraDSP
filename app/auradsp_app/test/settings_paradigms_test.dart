@@ -81,7 +81,9 @@ void main() {
       // Virtual ASIO driver management card visible in driver layer
       expect(find.text('AuraDSP 虚拟 ASIO 驱动'), findsOneWidget);
       expect(find.text('驱动状态'), findsOneWidget);
-      expect(find.text('DAW 状态'), findsOneWidget);
+      // 第三十七轮（业主目检裁定）：DAW 状态仅在活跃连接时显示，
+      // 本例 DAW 空闲——该行不得出现。
+      expect(find.text('DAW 状态'), findsNothing);
 
       // External ASIO client controls visible
       expect(find.text('缓冲档'), findsOneWidget);
