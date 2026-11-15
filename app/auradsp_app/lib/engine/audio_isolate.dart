@@ -2456,7 +2456,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                       'bits=${fx['bits']} raw=${fx['raw']} '
                       'peak=${fx['peak']} meanAbs=${fx['meanAbs']} '
                       'peakShift=${fx['peakShift']} '
-                      'meanAbsShift=${fx['meanAbsShift']}';
+                      'meanAbsShift=${fx['meanAbsShift']} '
+                      // 第三十九轮取证：逐声道峰值保持变化即落盘，
+                      // 形成逐段时序（旧桥无此三键、恒 null 不误触）。
+                      'chInPk=${fx['chInPk']} chOutPk=${fx['chOutPk']} '
+                      'engFill=${fx['engFill']} engMode=${fx['engMode']} '
+                      'engCount=${fx['engCount']}';
                   if (fxs != lastVaioFx) {
                     lastVaioFx = fxs;
                     dbgLog('vaio-forensics: $fxs');
