@@ -1274,7 +1274,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get effEngineBridge => '桥引擎';
 
   @override
-  String get effEngineApo => 'System APO 引擎';
+  String get effEngineApo => 'System APO';
 
   @override
   String get effModeMatrix => '矩阵下混';

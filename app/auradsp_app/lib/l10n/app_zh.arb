@@ -598,7 +598,7 @@
   "engineEffectiveHint": "引擎回读的实际生效值，与设置不一致时以此为准。",
   "effEngineLocal": "本机引擎",
   "effEngineBridge": "桥引擎",
-  "effEngineApo": "System APO 引擎",
+  "effEngineApo": "System APO",
   "effModeMatrix": "矩阵下混",
   "effModeDiscrete": "离散逐声道",
   "effFillLabel": "未用声道铺满",

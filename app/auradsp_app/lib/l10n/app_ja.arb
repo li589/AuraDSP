@@ -482,7 +482,7 @@
   "engineEffectiveHint": "エンジンから読み戻した実際の値です。設定と異なる場合はこちらが正です。",
   "effEngineLocal": "ローカルエンジン",
   "effEngineBridge": "ブリッジエンジン",
-  "effEngineApo": "System APO エンジン",
+  "effEngineApo": "System APO",
   "effModeMatrix": "マトリクスダウンミックス",
   "effModeDiscrete": "ディスクリート（チャンネル別）",
   "effFillLabel": "未使用チャンネルのフィル",

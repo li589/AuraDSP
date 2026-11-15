@@ -355,7 +355,7 @@ int asio_start_ex(const char* driver_name, const char* engine_dll,
     //    主窗口句柄（AsioHost::open 已支持任意 sysRef）。
     std::string why;
     if (!g_b.host.open(chosen->name.c_str(), (void*)GetConsoleWindow(), why)) {
-        snprintf(g_b.note, sizeof(g_b.note), "open-failed: %.80s", why.c_str());
+        snprintf(g_b.note, sizeof(g_b.note), "open-failed: %.108s", why.c_str());
         DestroyEngine();
         g_b.startRc = -2;
         return -2;
@@ -410,7 +410,7 @@ int asio_start_ex(const char* driver_name, const char* engine_dll,
 
     // 6) 创建 nCh 声道输入（ch0..nCh-1）+ 输出（out_pair..out_pair+nCh-1）缓冲
     if (!g_b.host.create_io(nCh, buf_size, out_pair, why)) {
-        snprintf(g_b.note, sizeof(g_b.note), "buffers-failed: %.80s", why.c_str());
+        snprintf(g_b.note, sizeof(g_b.note), "buffers-failed: %.108s", why.c_str());
         DestroyEngine();
         g_b.host.close();
         g_b.startRc = -4;

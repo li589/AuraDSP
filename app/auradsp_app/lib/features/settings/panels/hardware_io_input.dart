@@ -242,11 +242,9 @@ class _WasapiInputSubpanel extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 4),
-        Text(
-          curDev.isEmpty ? l.ioLoopbackDesc : l.ioExclusiveDesc,
-          style: monoOf(p, size: 10, color: p.textDim),
-        ),
+        // 第三十七轮（业主目检裁定）：末行模式说明文字删除
+        // （原「默认内录/环回模式：实时…」与独占说明）——下拉
+        // 项上的环回/录音标签已表意。
       ],
     );
   }

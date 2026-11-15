@@ -482,7 +482,7 @@
   "engineEffectiveHint": "Values read back from the engines themselves. If they differ from the settings, trust these.",
   "effEngineLocal": "Local engine",
   "effEngineBridge": "Bridge engine",
-  "effEngineApo": "System APO engine",
+  "effEngineApo": "System APO",
   "effModeMatrix": "Matrix downmix",
   "effModeDiscrete": "Discrete per-channel",
   "effFillLabel": "Fill unused channels",

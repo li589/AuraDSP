@@ -47,9 +47,11 @@ class _DriverLayer extends StatelessWidget {
         const SizedBox(height: AuraSpace.sm),
         _WasapiDriverRow(model: model),
         const SizedBox(height: AuraSpace.sm),
-        _EngineEffectiveBlock(model: model),
-        const SizedBox(height: AuraSpace.xs),
         _InfoRow(l.osVersionLabel, PlatformProfile.osVersion),
+        const SizedBox(height: AuraSpace.xs),
+        // 第三十七轮（业主目检裁定）：引擎生效值移至操作系统行
+        // 之下，作为本层收尾块。
+        _EngineEffectiveBlock(model: model),
       ],
     );
   }
@@ -140,14 +142,18 @@ class _DriverDetail extends StatelessWidget {
 }
 
 /* ---- 引擎生效值回读（第三十五轮，业主立项） ----
- * 可展开/收回的状态块：收起时一行摘要（当前主引擎的回读值），
- * 展开时三引擎（本机/桥/System APO）逐行列出声道模式、未用
- * 声道铺满、声道数、采样率（APO 另带已应用参数数）。数据全部
- * 来自引擎回读——本机/桥经 isolate get_param、APO 经 telemetry
- * v6 的 auradsp_get_param 回读段——不是设置镜像：设置与回读
- * 不一致时以回读为准（第三十四轮 VAIO/APO 下混分歧的教训：
- * 光看设置值无法判定哪个引擎在跑什么）。展开期间 2 秒轮询，
- * 收起即停；首次构建时单发一次让摘要有值。 */
+ * 可展开/收回的状态块，位于驱动层末尾、操作系统行之下
+ * （第三十七轮移位）。收起时只有标题行 + 右侧指示灯（绿 =
+ * 当前主引擎有回读，暗 = 无；第三十七轮业主裁定：撤下
+ * 「未运行」等状态文字与收起摘要行）；展开时三引擎（本机/
+ * 桥/System APO）逐行列出声道模式、未用声道铺满（仅开启
+ * 时在场）、声道数、采样率（APO 另带已应用参数数），无回读
+ * 的引擎只留标签。数据全部来自引擎回读——本机/桥经 isolate
+ * get_param、APO 经 telemetry v6 的 auradsp_get_param 回读
+ * 段——不是设置镜像：设置与回读不一致时以回读为准（第三
+ * 十四轮 VAIO/APO 下混分歧的教训：光看设置值无法判定哪个
+ * 引擎在跑什么）。展开期间 2 秒轮询，收起即停；首次构建时
+ * 单发一次请求回读。 */
 class _EngineEffectiveBlock extends StatefulWidget {
   final AppModel model;
   const _EngineEffectiveBlock({required this.model});
@@ -190,38 +196,23 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
     if (mode != null && mode >= 0) {
       parts.add(mode == 1 ? l.effModeDiscrete : l.effModeMatrix);
     }
-    if (fill != null && fill >= 0) {
-      parts.add('${l.effFillLabel} ${fill == 1 ? l.effOn : l.effOff}');
-    }
+    // 第三十七轮（业主目检裁定）：铺满只在开启时以标签在场表意，
+    // 不再缀「开/关」字样；关闭时该项不出现。
+    if (fill == 1) parts.add(l.effFillLabel);
     if (ch != null && ch > 0) parts.add('$ch ${l.effChannelsUnit}');
     if (rate != null && rate > 0) parts.add('$rate Hz');
     if (applied != null) parts.add('${l.effApplied} $applied');
-    return parts.isEmpty ? l.effNotRunning : parts.join(' · ');
+    // 无回读返回空串：状态文字（「未运行」等）已按业主裁定撤下，
+    // 有无回读由标题行右侧指示灯表意。
+    return parts.join(' · ');
   }
 
-  /// 收起态摘要：当前模式的主引擎回读一行。
-  String _summary(AppLocalizations l) {
+  /// 当前模式主引擎是否有回读（标题行指示灯口径）：sysapo 看
+  /// APO 引擎在座，其余优先桥、次本机。
+  bool get _primaryHasReadback {
     final m = widget.model;
-    if (m.audioMode == 'sysapo') {
-      if (!m.apoEngineActive) return l.effNotRunning;
-      return _fmt(l,
-          mode: m.apoEffMode,
-          fill: m.apoEffFill,
-          rate: m.apoEngineRate,
-          ch: m.apoEngineChannels,
-          applied: m.apoParamsApplied);
-    }
-    final b = m.bridgeEffValues;
-    if (b != null) {
-      return _fmt(l, mode: b['mode'], fill: b['fill'], rate: b['rate'], ch: b['ch']);
-    }
-    final lo = m.localEffValues;
-    if (lo != null) {
-      return _fmt(l, mode: lo['mode'], fill: lo['fill'], rate: lo['rate']);
-    }
-    // 无任何回读时给语义文案，不用裸占位符（裸 '—' 会与驱动行
-    // 的值占位符撞文本，settings_asio 用例钉住全局唯一）。
-    return l.effNotRunning;
+    if (m.audioMode == 'sysapo') return m.apoEngineActive;
+    return m.bridgeEffValues != null || m.localEffValues != null;
   }
 
   @override
@@ -236,23 +227,27 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
           onTap: _toggle,
           borderRadius: BorderRadius.circular(6),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(_expanded ? Icons.expand_less : Icons.expand_more,
                   size: 15, color: p.textDim),
               const SizedBox(width: AuraSpace.xs),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(l.engineEffectiveTitle,
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: p.text)),
-                    const SizedBox(height: 2),
-                    _DriverStatus(_summary(l), p.textDim),
-                  ],
+                child: Text(l.engineEffectiveTitle,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: p.text)),
+              ),
+              // 第三十七轮（业主目检裁定）：状态文字撤下，标题行
+              // 右侧只留一盏指示灯——绿 = 主引擎有回读，暗 = 无。
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _primaryHasReadback
+                      ? p.success
+                      : p.textDim.withValues(alpha: 0.35),
                 ),
               ),
             ],
@@ -268,7 +263,7 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
                 _DriverKv(
                     l.effEngineLocal,
                     m.localEffValues == null
-                        ? l.effNotRunning
+                        ? ''
                         : _fmt(l,
                             mode: m.localEffValues!['mode'],
                             fill: m.localEffValues!['fill'],
@@ -277,7 +272,7 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
                 _DriverKv(
                     l.effEngineBridge,
                     m.bridgeEffValues == null
-                        ? l.effNoBridge
+                        ? ''
                         : _fmt(l,
                             mode: m.bridgeEffValues!['mode'],
                             fill: m.bridgeEffValues!['fill'],
@@ -287,16 +282,13 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
                 _DriverKv(
                     l.effEngineApo,
                     !m.apoEngineActive
-                        ? l.effNotRunning
+                        ? ''
                         : _fmt(l,
                             mode: m.apoEffMode,
                             fill: m.apoEffFill,
                             rate: m.apoEngineRate,
                             ch: m.apoEngineChannels,
                             applied: m.apoParamsApplied)),
-                const SizedBox(height: AuraSpace.xs),
-                Text(l.engineEffectiveHint,
-                    style: labelOf(p, size: 11, color: p.textDim)),
               ],
             ),
           ),
@@ -398,6 +390,10 @@ class _AsioClientDriverRow extends StatelessWidget {
                 onTap: () => model.refreshAsioDrivers()),
           ]),
           if (note.isNotEmpty) _InfoRow('ASIO', note),
+          // 第三十七轮（业主目检裁定）：三组下拉行距统一——驱动行
+          // 与缓冲行之间补与缓冲↔声道对相同的间隔（此前驱动行
+          // 贴着下方缓冲行，视觉上更挤）。
+          const SizedBox(height: AuraSpace.xs),
           Row(children: [
             SizedBox(
                 width: 104,
@@ -713,8 +709,9 @@ class _VirtualAsioDriverCard extends StatelessWidget {
     final l = l10nOf(context);
 
     // 版式统一（2026-11-10 用户裁定）：检测/注册/注销与状态文字同行，
-    // 按钮在文字栏右侧右对齐（此前为卡底独占一行）。文字两行
-    // （驱动状态 / DAW 状态）走 _DriverKv 紧凑键值行。
+    // 按钮在文字栏右侧右对齐（此前为卡底独占一行）。文字走
+    // _DriverKv 紧凑键值行。第三十七轮（业主目检裁定）：DAW 状态
+    // 仅在有活跃连接时显示——空闲（等待 DAW 接入）不占行。
     return _DriverBlock(
       title: l.asioDriverCardTitle,
       lines: [
@@ -724,10 +721,8 @@ class _VirtualAsioDriverCard extends StatelessWidget {
               ? l.asioDriverRegistered
               : l.asioDriverNotRegistered,
         ),
-        _DriverKv(
-          l.asioDawStatus,
-          model.asioActive ? l.asioDawConnected : l.asioDawIdle,
-        ),
+        if (model.asioActive)
+          _DriverKv(l.asioDawStatus, l.asioDawConnected),
       ],
       actions: [
         if (!model.asioDriverInstalled)
@@ -815,9 +810,8 @@ class _VirtualAsioDriverCard extends StatelessWidget {
               ),
             ),
           ]),
-          Text(l.asioDriverChannelsHint,
-              style: captionOf(paletteOf(context),
-                  color: paletteOf(context).textDim)),
+          // 第三十七轮（业主目检裁定）：原「写入注册表，DAW 下次
+          // 连接时生效」提示行删除——档位行本身已自明。
         ],
       ),
     );

@@ -1298,7 +1298,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get effEngineBridge => 'ブリッジエンジン';
 
   @override
-  String get effEngineApo => 'System APO エンジン';
+  String get effEngineApo => 'System APO';
 
   @override
   String get effModeMatrix => 'マトリクスダウンミックス';

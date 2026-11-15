@@ -2449,7 +2449,7 @@ abstract class AppLocalizations {
   /// No description provided for @effEngineApo.
   ///
   /// In zh, this message translates to:
-  /// **'System APO 引擎'**
+  /// **'System APO'**
   String get effEngineApo;
 
   /// No description provided for @effModeMatrix.
