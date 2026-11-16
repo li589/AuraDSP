@@ -13,7 +13,12 @@
  * [Phase B 多声道电平] ch 参数：块的实际 stride。除历史与 L/R 峰值（仍取
  * ch0/ch1，行为不变）外，同一趟顺带记录 ch_out_peak[0..ch-1]——与 viz_lvl_l/r
  * 同源同趟，保证 channel_levels[0]/[1] 与 level_l/r_dbfs 逐位一致。
- * [ch..7] 清零：声道数动态变化时杜绝跨块残留（如 MC8→stereo 切换）。 */
+ * [ch..7] 清零：声道数动态变化时杜绝跨块残留（如 MC8→stereo 切换）。
+ * [第四十轮] 历史窗 0 槽改 peak-follow：逐帧取全声道绝对值最大者的样本
+ * 写入。旧实现 0 槽恒为 FL——compute_bands 只读 0 槽，于是 FL 无信号时
+ * （离散逐声道测 C/SL、纯 R 声道内容等）频谱恒空（user 实测坐实）。
+ * peak-follow 让频谱跟随当前主导声道；单声道有信号时写入的就是该声道
+ * 原波形，FFT 语义无损。1 槽仍写 ch1（R），布局不变。 */
 void viz_write(auradsp_handle h, const float* out, int frames, int ch) {
     const int mask = h->viz_fft_size.load(std::memory_order_relaxed) - 1;
     /* 历史写入与块峰值合并为一趟遍历：旧实现分两趟，等于把 out 多读一遍
@@ -23,7 +28,12 @@ void viz_write(auradsp_handle h, const float* out, int frames, int ch) {
     for (int i = 0; i < frames; ++i) {
         const float l = out[i * ch];
         const float r = out[i * ch + 1];
-        h->viz_hist[h->viz_hist_pos * 2]     = l;
+        float dom = l, dom_abs = fabsf(l);
+        for (int c = 1; c < ch && c < AURADSP_CH_MAX; ++c) {
+            const float ac = fabsf(out[i * ch + c]);
+            if (ac > dom_abs) { dom_abs = ac; dom = out[i * ch + c]; }
+        }
+        h->viz_hist[h->viz_hist_pos * 2]     = dom;
         h->viz_hist[h->viz_hist_pos * 2 + 1] = r;
         h->viz_hist_pos = (h->viz_hist_pos + 1) & mask;
         const float a = fabsf(l), b = fabsf(r);
@@ -52,8 +62,11 @@ void viz_write_eq_in(auradsp_handle h, const float* src, int frames) {
     if (!h->eq_in_hist) return;
     const int mask = h->viz_fft_size.load(std::memory_order_relaxed) - 1;
     for (int i = 0; i < frames; ++i) {
-        h->eq_in_hist[h->eq_in_hist_pos * 2]     = src[i * 2];
-        h->eq_in_hist[h->eq_in_hist_pos * 2 + 1] = src[i * 2 + 1];
+        /* [第四十轮] 与 viz_write 同口径 peak-follow（此 tap 恒立体声，
+         * 取 L/R 绝对值大者入 0 槽），纯 R 内容时 EQ 输入谱不再恒空。 */
+        const float l = src[i * 2], r = src[i * 2 + 1];
+        h->eq_in_hist[h->eq_in_hist_pos * 2]     = fabsf(l) >= fabsf(r) ? l : r;
+        h->eq_in_hist[h->eq_in_hist_pos * 2 + 1] = r;
         h->eq_in_hist_pos = (h->eq_in_hist_pos + 1) & mask;
     }
 }
@@ -100,7 +113,7 @@ static void compute_bands(auradsp_handle h, const float* hist, int pos, int kN,
     const int half = kN / 2;
     const int nmag = half < 2048 ? half : 2048;
 
-    /* 1) 按时间序提取整窗 + 汉宁窗（L 声道） */
+    /* 1) 按时间序提取整窗 + 汉宁窗（0 槽 = peak-follow 主导声道） */
     for (int i = 0; i < kN; ++i) {
         const int idx = (pos + i) & mask;   /* pos 即最旧帧 */
         scratch[i] = hist[idx * 2] * h->hann[i];

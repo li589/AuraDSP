@@ -545,7 +545,7 @@ struct auradsp_handle_s {
     /* 频谱工作区（RT 线程专用，create 时分配） */
     float* fft_scratch = nullptr;     /* kVizFftMax floats */
     float* hann = nullptr;            /* kVizFftMax floats */
-    float* viz_hist = nullptr;        /* kVizFftMax*2，L/R 交织环形历史窗 */
+    float* viz_hist = nullptr;        /* kVizFftMax*2，交织环形历史窗：0 槽 peak-follow 主导声道、1 槽 R（第四十轮） */
     std::atomic<int> viz_fft_size{kVizFftDefault};  /* 实际使用长度（2 的幂，<= kVizFftMax） */
     std::atomic<int> viz_interval{1600};             /* 产出间隔（帧）= fs/30，约 33ms */
     std::atomic<bool> viz_emitted{false};           /* 是否已产出过频谱帧（窗体重建的安全闸） */
