@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
-# 第四十轮回归：频谱 peak-follow——FL 无信号时频谱必须跟随有信号的声道。
+# 第四十轮回归：频谱全声道均值——FL 无信号时频谱必须反映有信号的声道。
 # 旧实现 viz 历史 0 槽恒为 FL、compute_bands 只读 0 槽，于是离散逐声道
-# 测 C/SL、纯 R 内容时频谱恒空（user 实测）。本冒烟三例同频正弦分别喂
+# 测 C/SL、纯 R 内容时频谱恒空（user 实测）。修复后 0 槽为全声道均值
+# （单声道化；选均值而非 peak-follow 是因逐帧拼接破坏 EQ tap 合成不
+# 变式，见 engine_viz.cpp 第四十轮注）。本冒烟三例同频正弦分别喂
 # R / L / 离散 SL，断言频谱均点亮且峰值带一致；静音例断言不假亮。
+# 注：均值有稀释（R-only −6 dB、8ch SL-only −18 dB），断言阈值 0.3
+# 已按稀释后量级（约 0.85 / 0.69）留足余量。
 import ctypes, math, os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -98,6 +102,6 @@ b_s = run_case(8, 1, None)
 check('静音频谱保持空', max(b_s) < 0.05, 'max=%.4f' % max(b_s))
 
 if FAILS:
-    print('VIZ PEAKFOLLOW FAILURES:', FAILS)
+    print('VIZ MULTICHANNEL FAILURES:', FAILS)
     sys.exit(1)
-print('ALL VIZ PEAKFOLLOW CHECKS PASSED')
+print('ALL VIZ MULTICHANNEL CHECKS PASSED')

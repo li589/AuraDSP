@@ -110,7 +110,7 @@ PLATFORM_WINDOWS = {
     "smoke_liveprog.py",
     "smoke_liveprog_gmem.py",
     "smoke_viz_lowfreq.py",
-    "smoke_viz_peakfollow.py",
+    "smoke_viz_multichannel.py",
     "smoke_latency_probe.py",
     "smoke_block1056.py",
     "smoke_plugin_host.py",
@@ -282,7 +282,7 @@ def run_smoke_tests():
         # 2026-10-30：gmem 区从「每 VM 内嵌 64MB」改为按需分配，防止回归
         "smoke_liveprog_gmem.py",
         "smoke_viz_lowfreq.py",
-        "smoke_viz_peakfollow.py",
+        "smoke_viz_multichannel.py",
         "smoke_latency_probe.py",
         "smoke_block1056.py",
         "smoke_plugin_host.py",
