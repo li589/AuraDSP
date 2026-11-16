@@ -28,3 +28,16 @@ int localEngineChannels({
   if (channelsMode == 0 || binauralActive) return rawCh;
   return 2;
 }
+
+/// 第四十二轮 S1：声道能力自动回退（纯函数）。用户设置的声道数
+/// 超过当前输出路径（设备/端点/桥流）的实际声道能力时，自动钳
+/// 到能力内最大的合法值 {2,4,6,8}，不需用户手动改设置；能力
+/// 恢复后随重派发自动回升。钳制只改生效值，不动用户设置值。
+///
+/// [want] 非法（非 4/6/8）按 2 处理；[cap] 先归一到合法集内
+/// 不大于它的最大值（cap>=8 → 8，6..7 → 6，4..5 → 4，其余 2）。
+int clampChannelsToCapability(int want, int cap) {
+  final w = (want == 4 || want == 6 || want == 8) ? want : 2;
+  final c = cap >= 8 ? 8 : cap >= 6 ? 6 : cap >= 4 ? 4 : 2;
+  return w <= c ? w : c;
+}

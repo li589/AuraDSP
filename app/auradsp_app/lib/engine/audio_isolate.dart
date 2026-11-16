@@ -129,6 +129,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   double? lastSentLatency;
   // B2b：本地 handle 当前 channels.count 的影子（引擎默认 2；重建后归 2）。
   int engineChCount = 2;
+  // 第四十二轮 S1 声道自动回退：userChCount = 用户设置值（参数
+  // 原值，不被钳制改写）；capabilityCh = 当前输出路径的实际声
+  // 道能力（8 = 未知/不钳）。三路派发（本地 handle / APO 发布 /
+  // 桥）的 channels.count 一律走 clampChannelsToCapability 的
+  // 生效值；能力变化时经 redispatchChannels 重派。
+  int userChCount = 2;
+  int capabilityCh = 8;
 
   // VB-Callback 模式面（05 桥）：与 WASAPI 路径互斥，一次只跑一边。
   // 当前后端唯一真相源是 BridgeManager.activeId（不再维护 vbActive 等副本）。
@@ -353,6 +360,28 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           '${e == nullptr ? "" : e.toDartString()}');
     }
     return engineChCount;
+  }
+
+  /// 第四十二轮 S1：按当前能力重派生效声道数到三路（本地 handle
+  /// 经 applyEngineChannels、APO 发布、活动桥）。本地侧同值时
+  /// applyEngineChannels 零开销短路；桥/发布侧同值重发无害。
+  void redispatchChannels() {
+    final eff = clampChannelsToCapability(userChCount, capabilityCh);
+    applyEngineChannels(eff);
+    apoPublisher.onNumeric('channels.count', eff.toDouble());
+    final b = bridgeManager.active;
+    if (b != null) {
+      b.setParam('channels.count', isFloat: false, value: eff.toDouble());
+    }
+  }
+
+  /// 第四十二轮 S1：输出路径声道能力更新（来源：状态层 chcap /
+  /// 本地渲染 devCh / 桥 viz 声道数）。变化才重派。
+  void updateCapabilityCh(int ch) {
+    if (ch == capabilityCh) return;
+    capabilityCh = ch;
+    dbgLog('channels capability -> $ch (user=$userChCount)');
+    redispatchChannels();
   }
 
   /* ---- VB-Callback 模式面（与 WASAPI 路径互斥） ---- */
@@ -852,10 +881,21 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       switch (m['cmd'] as String) {
         case 'setParam':
           final t0 = DateTime.now();
+          // 第四十二轮 S1：channels.count 的派发值按当前输出路径
+          // 能力钳制（自动回退）；用户设置值只记 userChCount 与
+          // 参数镜像，不被钳制改写，能力恢复后重派自动回升。
+          final isCount = m['id'] == 'channels.count';
+          var dispatchValue = (m['value'] as num).toDouble();
+          if (isCount) {
+            userChCount = dispatchValue.toInt();
+            dispatchValue =
+                clampChannelsToCapability(userChCount, capabilityCh)
+                    .toDouble();
+          }
           final rc = AuraDspLib.setValue(lib!, handle!, m['id'] as String,
-              isFloat: m['isFloat'] as bool, value: (m['value'] as num).toDouble());
-          if (m['id'] == 'channels.count' && rc == Status.ok) {
-            engineChCount = (m['value'] as num).toInt();
+              isFloat: m['isFloat'] as bool, value: dispatchValue);
+          if (isCount && rc == Status.ok) {
+            engineChCount = dispatchValue.toInt();
           }
           // 参数镜像 + APO 发布 + 桥同路由（字符串侧 setParamStr
           // 同口径：镜像 + onString 发布 + 桥路由，见其 case）。
@@ -863,14 +903,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             isFloat: m['isFloat'] as bool,
             value: (m['value'] as num).toDouble()
           );
-          apoPublisher.onNumeric(
-              m['id'] as String, (m['value'] as num).toDouble());
+          apoPublisher.onNumeric(m['id'] as String, dispatchValue);
           final brcBridge = bridgeManager.active;
           if (brcBridge != null) {
             final bridgeId = bridgeManager.activeId ?? '?';
             final brc = brcBridge.setParam(m['id'] as String,
                 isFloat: m['isFloat'] as bool,
-                value: (m['value'] as num).toDouble());
+                value: dispatchValue);
             // 桥 handle 为空（如 CHANGE 重建间隙）会返回 0：记一笔备查。
             if (brc == 0 || (bridgeId == 'vaio' && brc != 0)) {
               dbgLog('$bridgeId: setParam ${m['id']} rc=$brc');
@@ -1567,6 +1606,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         case 'apotarget':
           // 仅切换 telemetry 跟随端点（读者已在运行）。
           apoTelemetry.setTarget(m['endpointId']?.toString() ?? '');
+          break;
+        case 'chcap':
+          // 第四十二轮 S1：状态层告知当前输出路径声道能力
+          // （sysapo 选中端点的 mix 声道数）；能力变化重派生效
+          // 声道数（自动回退/回升）。
+          updateCapabilityCh((m['ch'] as num?)?.toInt() ?? 8);
           break;
         case 'enginevalues':
           {
@@ -2538,6 +2583,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             dbgLog('GUARD: frames=$frames > maxBlock=$maxBlock!');
           }
           final devCh = w.channels;
+          // 第四十二轮 S1：本地输出设备声道能力喂给钳制器（手动
+          // 模式下引擎声道数自动回退到设备能力内，变化才重派）。
+          updateCapabilityCh(devCh);
           final fs = source is FileSource ? source as FileSource : null;
           // 5.1 直通判定（本地渲染 only）：raw 就绪 + 用户开直通 +
           // 设备声道兜得住；任一不满足回落 fold。引擎照常跑 fold 版供 viz。

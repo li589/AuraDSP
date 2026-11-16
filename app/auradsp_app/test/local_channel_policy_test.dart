@@ -62,4 +62,33 @@ void main() {
       expect(_ch(rawCh: 6, devCh: 8, bypass: true), 2);
     });
   });
+
+  group('r42 S1 clampChannelsToCapability', () {
+    test('within capability → unchanged', () {
+      expect(clampChannelsToCapability(2, 2), 2);
+      expect(clampChannelsToCapability(4, 8), 4);
+      expect(clampChannelsToCapability(8, 8), 8);
+    });
+
+    test('over capability → largest legal value within cap', () {
+      expect(clampChannelsToCapability(8, 2), 2);
+      expect(clampChannelsToCapability(8, 4), 4);
+      expect(clampChannelsToCapability(8, 6), 6);
+      expect(clampChannelsToCapability(6, 4), 4);
+    });
+
+    test('odd capability normalizes down to the legal set', () {
+      expect(clampChannelsToCapability(8, 5), 4);
+      expect(clampChannelsToCapability(8, 7), 6);
+      expect(clampChannelsToCapability(8, 3), 2);
+      expect(clampChannelsToCapability(8, 1), 2);
+      expect(clampChannelsToCapability(8, 0), 2);
+    });
+
+    test('illegal want falls back to 2', () {
+      expect(clampChannelsToCapability(3, 8), 2);
+      expect(clampChannelsToCapability(5, 8), 2);
+      expect(clampChannelsToCapability(0, 8), 2);
+    });
+  });
 }

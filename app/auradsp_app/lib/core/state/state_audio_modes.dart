@@ -839,6 +839,9 @@ extension AudioModesState on AppModel {
       dbgLog('pipeline.capture: stopped after refresh (feedback pair)');
     }
     reconcileDeviceSelections(presentKeys);
+    // 声道能力对账（第四十二轮 S1）：扫描带来端点最新 mix 格
+    // 式（含用户在系统设置里改声道数），sysapo 时补发钳制器。
+    _sendChCap();
     dbgLog('devices.refresh: done n=${items.length}', sync: true);
     _notifyUi();
     dbgLog('devices.refresh: notified', sync: true);
@@ -1158,7 +1161,25 @@ extension AudioModesState on AppModel {
     // 跟随端点切换（第四十一轮）：telemetry 读者切到新端点的
     // 分块；解析不到全 id 时回落全局块（读者侧空目标口径）。
     _toIso?.send({'cmd': 'apotarget', 'endpointId': selectedApoEndpointId});
+    _sendChCap();
     _notifyUi();
+  }
+
+  /// 第四十二轮 S1：把当前选中 APO 端点的 mix 声道数作为输出
+  /// 路径能力发给 isolate（声道自动回退的钳制依据）。端点不在
+  /// 扫描表内（未知）时发 8 = 不钳制。设备扫描刷新（端点改格
+  /// 式）与选中切换时调用。
+  void _sendChCap() {
+    if (audioMode != 'sysapo') return;
+    final id = selectedApoEndpointId;
+    var ch = 8;
+    for (final d in wasapiDevices) {
+      if (d.id == id && d.ch > 0) {
+        ch = d.ch;
+        break;
+      }
+    }
+    _toIso?.send({'cmd': 'chcap', 'ch': ch});
   }
 
   /// 存量目标值（全 id / 友好名 / 短 GUID 三种历史形状）→ 端点
@@ -1555,6 +1576,7 @@ extension AudioModesState on AppModel {
                 apoAttached = true;
                 persistRoutingChange();
                 _toIso?.send({'cmd': 'apotarget', 'endpointId': fbId});
+                _sendChCap();
                 postNotice(
                     '所选 APO 端点已消失，已回落到已附加端点'
                     '「${fb['DeviceName']?.toString() ?? fbId}」',
@@ -1566,6 +1588,9 @@ extension AudioModesState on AppModel {
             if (audioMode == 'sysapo') {
               _toIso?.send(
                   {'cmd': 'apotarget', 'endpointId': selectedApoEndpointId});
+              // 声道能力对账（第四十二轮 S1）：端点改格式/回落
+              // 后把最新 mix 声道数补发钳制器（幂等）。
+              _sendChCap();
             }
 
             final hb = data['heartbeat'] as Map<String, dynamic>?;

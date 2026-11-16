@@ -882,6 +882,54 @@ int main() {
         storeB->Release();
     }
 
+    // ---- 第四十二轮 S1：同实例改几何重锁（系统设置改声道模式的
+    // 宿主侧等价面）——2ch 解锁后以 8ch 重锁，引擎须按新几何
+    // 重建（APO-8 决议），telemetry 声道随新几何；再回 2ch。
+    check("UnlockForProcess (pre-geometry)", cfg->UnlockForProcess() == S_OK);
+    {
+        UNCOMPRESSEDAUDIOFORMAT uf8{};
+        uf8.guidFormatType = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+        uf8.dwSamplesPerFrame = 8;
+        uf8.dwBytesPerSampleContainer = 4;
+        uf8.dwValidBitsPerSample = 32;
+        uf8.fFramesPerSecond = 48000.0f;
+        uf8.dwChannelMask = 0x63F;  // 7.1 标准掩码
+        IAudioMediaType* fmt8 = nullptr;
+        check("CreateAudioMediaType 8ch",
+              CreateAudioMediaTypeFromUncompressedAudioFormat(&uf8, &fmt8) ==
+                      S_OK &&
+                  fmt8);
+        APO_CONNECTION_DESCRIPTOR in8{}, out8{};
+        in8.pFormat = fmt8;
+        in8.u32MaxFrameCount = 512;
+        out8 = in8;
+        APO_CONNECTION_DESCRIPTOR* pins8[1] = {&in8};
+        APO_CONNECTION_DESCRIPTOR* pouts8[1] = {&out8};
+        check("LockForProcess 8ch",
+              cfg->LockForProcess(1, pins8, 1, pouts8) == S_OK);
+        Sleep(300);
+        if (tele) {
+            char d[96];
+            snprintf(d, sizeof(d), "seat=%ld ch=%lu fault=%lu",
+                     tele->seatState, (unsigned long)tele->channels,
+                     (unsigned long)tele->fault);
+            check("geometry relock: seat+8ch",
+                  tele->seatState == 1 && tele->channels == 8 &&
+                      tele->fault == 0,
+                  d);
+        }
+        check("UnlockForProcess 8ch", cfg->UnlockForProcess() == S_OK);
+        check("LockForProcess back to 2ch",
+              cfg->LockForProcess(1, pins, 1, pouts) == S_OK);
+        Sleep(300);
+        if (tele) {
+            check("geometry relock back: 2ch",
+                  tele->seatState == 1 && tele->channels == 2 &&
+                      tele->fault == 0);
+        }
+        if (fmt8) fmt8->Release();
+    }
+
     check("UnlockForProcess", cfg->UnlockForProcess() == S_OK);
     if (tele) {
         check("seat released after unlock", tele->seatState == 0);
