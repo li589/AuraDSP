@@ -112,22 +112,6 @@ STDMETHODIMP CAuraApo::GetRegistrationProperties(APO_REG_PROPERTIES** ppRegProps
     return S_OK;
 }
 
-// [S0 尖刺转储，S1 删除] 探针块布局（定义前置：Initialize 路径多处引用）。
-namespace {
-struct ApoProbeRecord {
-    wchar_t token[80];
-    unsigned long long idHash;
-    int32_t mode, fill;
-    uint32_t modeValid, fillValid;
-    wchar_t diag[256];
-};
-struct ApoProbeBlock {
-    volatile LONG next;
-    uint32_t magic;  // 'APRB' = 0x42525041
-    ApoProbeRecord recs[16];
-};
-}  // namespace
-
 STDMETHODIMP CAuraApo::Initialize(UINT32 cbDataSize, BYTE* pbyData) {
     // [第四十一轮] IAudioSystemEffects 为标记接口，系统效果初始化
     // 数据经本函数以 APOInitSystemEffects 抵达：其中
@@ -136,16 +120,13 @@ STDMETHODIMP CAuraApo::Initialize(UINT32 cbDataSize, BYTE* pbyData) {
     if (pbyData && cbDataSize >= sizeof(APOInitSystemEffects)) {
         auto* init = reinterpret_cast<APOInitSystemEffects*>(pbyData);
         if (init->APOInit.cbSize >= sizeof(APOInitBaseStruct)) {
-            // S0 尖刺修订：首轮实测 pAPOEndpointProperties 里读不到
-            // 属性集（令牌空）——FX 值可能挂在 pAPOSystemEffectsProperties
-            // （系统效果存储）而非端点存储。两处都读，探针记录来源与
-            // 两存储的键清单以定案。
+            // S0 尖刺定案（第四十一轮）：FX 属性集挂在系统效果存
+            // 储 pAPOSystemEffectsProperties；端点存储是设备属性、
+            // 不含 FX 值，仅作兜底尝试（令牌读到即止）。
             if (init->pAPOSystemEffectsProperties)
                 ReadEndpointProps(init->pAPOSystemEffectsProperties);
             if (endpoint_id_.empty() && init->pAPOEndpointProperties)
                 ReadEndpointProps(init->pAPOEndpointProperties);
-            DumpStoreDiag_(init->pAPOEndpointProperties,
-                           init->pAPOSystemEffectsProperties);
         }
     }
     return S_OK;
@@ -185,81 +166,9 @@ void CAuraApo::ReadEndpointProps(IPropertyStore* store) {
         }
         PropVariantClear(&v);
     }
-    DumpProbe_();
 }
 
-void CAuraApo::DumpStoreDiag_(IPropertyStore* epStore, IPropertyStore* fxStore) {
-    // 把两存储的键清单（fmtid+pid）拼进最近一条探针记录的 diag 区。
-    HANDLE hMap = OpenFileMappingW(FILE_MAP_WRITE, FALSE, L"Global\\AuraDSP_ApoProbe");
-    if (!hMap) return;
-    void* view = MapViewOfFile(hMap, FILE_MAP_WRITE, 0, 0, sizeof(ApoProbeBlock));
-    if (view) {
-        auto* blk = (ApoProbeBlock*)view;
-        const LONG n = blk->next;
-        if (n > 0) {
-            ApoProbeRecord& r = blk->recs[(n - 1) & 15];
-            wchar_t* d = r.diag;
-            size_t cap = sizeof(r.diag) / sizeof(wchar_t);
-            size_t used = 0;
-            auto put = [&](const wchar_t* s) {
-                while (*s && used + 1 < cap) d[used++] = *s++;
-            };
-            auto putStore = [&](const wchar_t* tag, IPropertyStore* st) {
-                put(tag);
-                if (!st) { put(L"null;"); return; }
-                DWORD cnt = 0;
-                if (FAILED(st->GetCount(&cnt))) { put(L"err;"); return; }
-                wchar_t num[24];
-                swprintf_s(num, 24, L"%lu:", (unsigned long)cnt);
-                put(num);
-                for (DWORD i = 0; i < cnt && used + 44 < cap; ++i) {
-                    PROPERTYKEY k{};
-                    if (FAILED(st->GetAt(i, &k))) continue;
-                    swprintf_s(num, 24, L"%08lx,%lu;",
-                               (unsigned long)k.fmtid.Data1,
-                               (unsigned long)k.pid);
-                    put(num);
-                }
-            };
-            putStore(L"EP=", epStore);
-            putStore(L"FX=", fxStore);
-            d[used] = 0;
-        }
-        UnmapViewOfFile(view);
-    }
-    CloseHandle(hMap);
-}
 
-void CAuraApo::DumpProbe_() {
-    PSECURITY_DESCRIPTOR sd = nullptr;
-    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            L"D:(A;;GA;;;LS)(A;;GA;;;WD)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)",
-            SDDL_REVISION_1, &sd, nullptr))
-        return;
-    SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(sa);
-    sa.lpSecurityDescriptor = sd;
-    HANDLE hMap = CreateFileMappingW(INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE, 0,
-                                     (DWORD)sizeof(ApoProbeBlock),
-                                     L"Global\\AuraDSP_ApoProbe");
-    LocalFree(sd);
-    if (!hMap) return;
-    void* view = MapViewOfFile(hMap, FILE_MAP_WRITE, 0, 0, sizeof(ApoProbeBlock));
-    if (view) {
-        auto* blk = (ApoProbeBlock*)view;
-        blk->magic = 0x42525041;
-        const LONG slot = InterlockedIncrement(&blk->next) - 1;
-        ApoProbeRecord& r = blk->recs[slot & 15];
-        wcsncpy_s(r.token, endpoint_id_.c_str(), _TRUNCATE);
-        r.idHash = AuraEndpointIdHash(endpoint_id_.c_str());
-        r.mode = ep_mode_;
-        r.fill = ep_fill_;
-        r.modeValid = ep_mode_valid_ ? 1 : 0;
-        r.fillValid = ep_fill_valid_ ? 1 : 0;
-        UnmapViewOfFile(view);
-    }
-    CloseHandle(hMap);
-}
 
 bool CAuraApo::IsFloat32Type(IAudioMediaType* type) {
     const WAVEFORMATEX* wf = type ? type->GetAudioFormat() : nullptr;
@@ -325,7 +234,14 @@ STDMETHODIMP CAuraApo::LockForProcess(UINT32 numIn, APO_CONNECTION_DESCRIPTOR** 
     locked_ = true;
     OpenHeartbeat();
     // 真处理尝试（设计 P2）：失败静默——本实例保持透传。
-    engine_.TryStart(rate_, channels_);
+    // 第四十一轮：带上 Initialize 读到的端点上下文（身份+覆写）。
+    ApoEngineHost::EndpointContext ep;
+    ep.endpointId = endpoint_id_.empty() ? nullptr : endpoint_id_.c_str();
+    ep.modeValid = ep_mode_valid_;
+    ep.mode = ep_mode_;
+    ep.fillValid = ep_fill_valid_;
+    ep.fill = ep_fill_;
+    engine_.TryStart(rate_, channels_, ep);
     return S_OK;
 }
 

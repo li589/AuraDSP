@@ -28,9 +28,21 @@ class ApoEngineHost {
     ApoEngineHost(const ApoEngineHost&) = delete;
     ApoEngineHost& operator=(const ApoEngineHost&) = delete;
 
+    // 端点上下文（第四十一轮多端点 v2）：Initialize 时自 FX 属性
+    // 存储读到的身份与声道族覆写。endpointId 为空 = 无令牌，宿主
+    // 回落 v1 全局块/全局座位；覆写无效时对应项跟随全局参数块。
+    struct EndpointContext {
+        const wchar_t* endpointId = nullptr;
+        bool modeValid = false;
+        int32_t mode = 0;
+        bool fillValid = false;
+        int32_t fill = 0;
+    };
+
     // LockForProcess 尾调用。成功（抢到座位且引擎就绪）返回 true；
     // 失败保持透传，不影响 APO 锁定结果。
-    bool TryStart(UINT32 rate, UINT32 streamChannels);
+    bool TryStart(UINT32 rate, UINT32 streamChannels,
+                  const EndpointContext& ep = EndpointContext());
     // UnlockForProcess 首调用（亦由析构兜底）：停 worker → 销毁
     // 引擎 → 卸载 DLL → 释放座位 → 关映射。幂等。
     void Stop();
@@ -125,6 +137,17 @@ class ApoEngineHost {
     HANDLE hTeleMap_ = nullptr;
     ApoTelemetryBlock* tele_ = nullptr;
     bool seatOwner_ = false;
+
+    // 端点上下文（第四十一轮）：座位/telemetry 按端点分块的键 +
+    // 声道族覆写与已应用哨兵（覆写在 ApplySnapshot 中压过参数块）。
+    std::wstring endpointId_;
+    unsigned long long endpointHash_ = 0;
+    bool epModeValid_ = false;
+    int32_t epMode_ = 0;
+    bool epFillValid_ = false;
+    int32_t epFill_ = 0;
+    int32_t appliedEpMode_ = -1;  // -1 = 尚未向引擎下发覆写
+    int32_t appliedEpFill_ = -1;
 
     // 参数块（worker 打开）
     HANDLE hParamMap_ = nullptr;

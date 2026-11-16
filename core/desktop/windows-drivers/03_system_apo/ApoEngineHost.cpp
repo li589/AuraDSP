@@ -1,6 +1,7 @@
 // ApoEngineHost.cpp — 见 ApoEngineHost.h 头注（设计 P2）。
 #include "ApoEngineHost.h"
 
+#include "ApoEndpointProps.h"
 #include <sddl.h>
 #include <cmath>
 #include <cwctype>
@@ -110,7 +111,15 @@ ApoEngineHost::~ApoEngineHost() { Stop(); }
 // ---------------------------------------------------------------------------
 bool ApoEngineHost::OpenTelemetry() {
     if (tele_) return true;
-    hTeleMap_ = CreateSharedMapping(AuraApoTelemetryName(), APO_TELEMETRY_BYTES);
+    // 第四十一轮：带令牌端点用分块（块名含端点哈希），座位随块
+    // 按端点分；无令牌回落全局块（v1 语义）。
+    wchar_t nameBuf[80];
+    const wchar_t* name = AuraApoTelemetryName();
+    if (!endpointId_.empty()) {
+        AuraApoTelemetryNameFor(endpointHash_, nameBuf, 80);
+        name = nameBuf;
+    }
+    hTeleMap_ = CreateSharedMapping(name, APO_TELEMETRY_BYTES);
     if (!hTeleMap_) return false;
     void* v = MapViewOfFile(hTeleMap_, FILE_MAP_ALL_ACCESS, 0, 0, APO_TELEMETRY_BYTES);
     if (!v) {
@@ -129,6 +138,21 @@ bool ApoEngineHost::OpenTelemetry() {
         memset(tele_, 0, sizeof(*tele_));
         tele_->magic = APO_TELEMETRY_MAGIC;
         tele_->version = APO_TELEMETRY_VERSION;
+    }
+    if (!endpointId_.empty()) {
+        // 身份自证 + 碰撞防护：块内已盖了别的端点的章（FNV 碰撞
+        // 或块名被占用）时拒绝使用本块——宁可本端点退回透传，也
+        // 不污染另一端点的 telemetry/座位。未盖章则盖上。
+        if (tele_->endpointId[0] != 0 &&
+            wcscmp(tele_->endpointId, endpointId_.c_str()) != 0) {
+            UnmapViewOfFile(tele_);
+            tele_ = nullptr;
+            CloseHandle(hTeleMap_);
+            hTeleMap_ = nullptr;
+            return false;
+        }
+        tele_->endpointHash = endpointHash_;
+        wcsncpy_s(tele_->endpointId, endpointId_.c_str(), _TRUNCATE);
     }
     return true;
 }
@@ -256,7 +280,8 @@ bool ApoEngineHost::LoadEngine() {
 // ---------------------------------------------------------------------------
 // 生命周期
 // ---------------------------------------------------------------------------
-bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels) {
+bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels,
+                             const EndpointContext& ep) {
     if (active_.load()) {
         // 全面复审 S4（APO-8）：已活跃时此前无条件 return true——
         // 同实例被以新格式（率/声道）重新 Lock 时，引擎仍按旧
@@ -268,6 +293,16 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels) {
         }
         Stop();
     }
+    // 端点上下文（第四十一轮）：身份决定座位/telemetry 分块，
+    // 覆写决定本端点声道族的有效值来源（压过全局参数块）。
+    endpointId_ = ep.endpointId ? ep.endpointId : L"";
+    endpointHash_ = AuraEndpointIdHash(endpointId_.c_str());
+    epModeValid_ = ep.modeValid;
+    epMode_ = ep.mode;
+    epFillValid_ = ep.fillValid;
+    epFill_ = ep.fill;
+    appliedEpMode_ = -1;
+    appliedEpFill_ = -1;
     rate_ = rate;
     streamCh_ = streamChannels ? streamChannels : 2;
     // 声道决议（D8）：引擎只认 {2,4,6,8}。
@@ -298,6 +333,19 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels) {
     // 在 worker diff 中跳过，见 ApplySnapshot）。
     int32_t cnt = (int32_t)engCh_;
     fnSetParam_(engine_, "channels.count", &cnt, sizeof(cnt));
+    // 声道族覆写（第四十一轮）：本端点 FX 属性集给了 mode/fill
+    // 时以覆写为准，创建即下发；其后由 ApplySnapshot 持续压过
+    // 参数块同项（块侧变化不影响本端点）。
+    if (epModeValid_) {
+        int32_t m = epMode_;
+        if (fnSetParam_(engine_, "channels.mode", &m, sizeof(m)) == 0)
+            appliedEpMode_ = epMode_;
+    }
+    if (epFillValid_) {
+        int32_t f = epFill_;
+        if (fnSetParam_(engine_, "channels.upmix_fill", &f, sizeof(f)) == 0)
+            appliedEpFill_ = epFill_;
+    }
 
     // 参数块由本进程（LocalService，有 Global 创建权）创建并
     // 持句柄保活：标准用户的 App 进程无 SeCreateGlobalPrivilege
@@ -563,9 +611,36 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
             appliedNum_[i] = values[i];
             continue;
         }
+        // 声道族覆写（第四十一轮）：本端点有覆写的项，块值仅记
+        // 账（diff 基线）、不下发引擎——覆写由循环后的对齐段独占
+        // 下发（单一路径，失败可重试）。
+        if (epModeValid_ && strcmp(id, "channels.mode") == 0) {
+            appliedNum_[i] = values[i];
+            continue;
+        }
+        if (epFillValid_ && strcmp(id, "channels.upmix_fill") == 0) {
+            appliedNum_[i] = values[i];
+            continue;
+        }
         uint32_t v = values[i];
         if (fnSetParam_(engine_, id, &v, sizeof(v)) == 0) applied++;
         appliedNum_[i] = values[i];
+    }
+    // 覆写对齐：块从未写过 mode/fill（有效位未置、上面的循环没
+    // 覆盖到）时，覆写仍须生效——与已下发哨兵比对后补下发。
+    if (epModeValid_ && appliedEpMode_ != epMode_) {
+        int32_t m = epMode_;
+        if (fnSetParam_(engine_, "channels.mode", &m, sizeof(m)) == 0) {
+            appliedEpMode_ = epMode_;
+            applied++;
+        }
+    }
+    if (epFillValid_ && appliedEpFill_ != epFill_) {
+        int32_t f = epFill_;
+        if (fnSetParam_(engine_, "channels.upmix_fill", &f, sizeof(f)) == 0) {
+            appliedEpFill_ = epFill_;
+            applied++;
+        }
     }
     for (uint32_t s = 0; s < APO_STR_SLOT_COUNT; s++) {
         if (!bitSet(APO_NUM_PARAM_COUNT + s)) continue;  // 同上，有效位门

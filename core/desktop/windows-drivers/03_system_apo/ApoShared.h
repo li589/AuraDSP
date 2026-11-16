@@ -78,16 +78,33 @@ inline const wchar_t* AuraApoTelemetryName() {
     return AuraApoChannelsLocal() ? L"Local\\AuraDSP_ApoTelemetry"
                                   : AURA_APO_TELEMETRY_NAME;
 }
+// 分端点 telemetry 块名（第四十一轮多端点 v2）：
+// Global\AuraDSP_ApoTelemetry_<端点 id 的 FNV-1a 64 十六进制>。
+// 无身份令牌的端点仍用上面的全局名（v1 回落，见 ApoEngineHost）。
+inline void AuraApoTelemetryNameFor(unsigned long long endpointHash,
+                                    wchar_t* buf, size_t cap) {
+    const wchar_t* prefix = AuraApoChannelsLocal()
+                                ? L"Local\\AuraDSP_ApoTelemetry_"
+                                : L"Global\\AuraDSP_ApoTelemetry_";
+    size_t n = 0;
+    for (const wchar_t* p = prefix; *p && n + 1 < cap; ++p) buf[n++] = *p;
+    const wchar_t* hex = L"0123456789abcdef";
+    for (int shift = 60; shift >= 0 && n + 1 < cap; shift -= 4)
+        buf[n++] = hex[(endpointHash >> shift) & 0xF];
+    buf[n] = 0;
+}
 inline const wchar_t* AuraApoPluginsName() {
     return AuraApoChannelsLocal() ? L"Local\\AuraDSP_ApoPlugins"
                                   : AURA_APO_PLUGINS_NAME;
 }
 
 // ---- 回传块（APO → App） ----
-// seatState 是全系统唯一的「引擎座位」（设计 D3）：LockForProcess
-// 时以 InterlockedCompareExchange 抢占（0→1），UnlockForProcess
-// 释放；同端点 SFX/MFX/EFX 三实例与多端点实例中只有一个跑引擎，
-// 其余透传并累加 seatTaken（供面板/诊断区分「没抢到」与「没附加」）。
+// seatState 是「引擎座位」（设计 D3）：LockForProcess 时以
+// InterlockedCompareExchange 抢占（0→1），UnlockForProcess 释放。
+// 第四十一轮多端点 v2 起座位按端点分：带身份令牌的端点各用自己
+// 的分块（块名带端点哈希），同端点三实例仍只一跑引擎、不同端点
+// 各跑各的；无令牌端点回落全局块/全局座位（v1 语义不变）。抢座
+// 失败累加 seatTaken（供面板/诊断区分「没抢到」与「没附加」）。
 #define APO_TELEMETRY_MAGIC 0x4154454Cu  // 'ATEL'
 // v2（2026-11-10）：尾部追加 eqIn/stage 分级回传（处理流显示
 // 用）；既有字段偏移一律不变，读者按 version 分级取用。
@@ -98,7 +115,11 @@ inline const wchar_t* AuraApoPluginsName() {
 // 仍不变，读者按 version>=5 取逐声道段，否则按立体声口径上报。
 // v6（2026-11-14，第三十五轮）：尾部追加引擎生效值回读段
 // （effChannelsMode/effUpmixFill/effValid）；读者按 version>=6 取。
-#define APO_TELEMETRY_VERSION 6u
+// v7（2026-11-16，第四十一轮）：尾部追加端点身份段
+// （endpointHash/endpointId）——分块后块内自证身份，读者据此防
+// 哈希碰撞串扰；读者按 version>=7 取。全局块（无令牌回落）同样
+// 升 v7，身份段恒空。
+#define APO_TELEMETRY_VERSION 7u
 #define APO_TELEMETRY_BYTES 4096u
 
 struct ApoTelemetryBlock {
@@ -165,6 +186,12 @@ struct ApoTelemetryBlock {
     uint32_t effChannelsMode;  // channels.mode 回读（0=矩阵 1=离散）
     uint32_t effUpmixFill;     // channels.upmix_fill 回读（0/1）
     uint32_t effValid;         // 1=已至少成功回读一次
+    // ---- v7 追加（offset 1464 起；v6 读者止步于此）----
+    // 端点身份段：分块发布者写入自身端点 id 与其哈希。读者校验
+    // 「块名哈希 == endpointHash 且 endpointId 与目标端点全串一
+    // 致」才消费本块（防 FNV 碰撞串扰）；全局回落块恒为 0/空。
+    uint64_t endpointHash;     // 端点 id 的 FNV-1a 64
+    wchar_t endpointId[80];    // 端点 id 全串（超长截断至 79 + NUL）
 };
 
 // loadStage 取值（ApoTelemetryBlock.loadStage）。
@@ -179,7 +206,9 @@ struct ApoTelemetryBlock {
 // v4：加载诊断自 736 起，块总 744B。
 // v5：逐声道段自 744 起，块总 1452B。
 // v6：生效值回读段自 1452 起，块总 1464B。
-static_assert(sizeof(ApoTelemetryBlock) == 1464, "telemetry block layout");
+// v7：端点身份段自 1464 起，块总 1632B（映射仍 4096B）。
+static_assert(sizeof(ApoTelemetryBlock) == 1632, "telemetry block layout");
+static_assert(offsetof(ApoTelemetryBlock, endpointHash) == 1464, "telemetry v7 offsets");
 static_assert(offsetof(ApoTelemetryBlock, spectrum) == 64, "telemetry v1 offsets");
 static_assert(offsetof(ApoTelemetryBlock, eqInSpectrum) == 192, "telemetry v2 offsets");
 static_assert(offsetof(ApoTelemetryBlock, stageLevelsL) == 320, "telemetry v2 offsets");

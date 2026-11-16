@@ -33,10 +33,12 @@ DEFINE_GUID(IID_IAudioSystemEffects,
     0x5fa00f27, 0xadd6, 0x499a, 0x8a, 0x9d, 0x6b, 0x98, 0x52, 0x1f, 0xa7, 0x5b);
 
 #include <cmath>
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 
+#include "ApoEndpointProps.h"
 #include "ApoParamIndex.h"
 #include "ApoShared.h"
 #include "AuraApoGuid.h"
@@ -626,6 +628,219 @@ int main() {
         char d[96];
         snprintf(d, sizeof(d), "inplace ratio=%.3f (expect ~1.0)", r);
         check("in-place processing", r > 0.85 && r < 1.18, d);
+    }
+
+    // ---- 第四十一轮：多端点分块/分座/覆写 ----
+    // 两个实例经伪造 FX 属性存储拿到不同端点身份与覆写：
+    // A 覆写 mode=0/fill=0，B 覆写 mode=1/fill=1。断言：
+    // (1) 两端点各有自己的 telemetry 块（v7 身份段自证）且座位
+    //     同时被占（v1 全局座位下第二个必然失败）；
+    // (2) 参数块写 mode=1/fill=1 时 A 的生效回读仍为 0/0（覆写
+    //     胜出）；参数块改写 0/0 后 B 仍为 1/1（覆写胜出）。
+    {
+        struct FakeStore : IPropertyStore {
+            std::wstring token;
+            ULONG mode = 0, fill = 0;
+            std::atomic<ULONG> refs{1};
+            HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+                if (riid == IID_IUnknown || riid == IID_IPropertyStore) {
+                    *ppv = static_cast<IPropertyStore*>(this);
+                    AddRef();
+                    return S_OK;
+                }
+                *ppv = nullptr;
+                return E_NOINTERFACE;
+            }
+            ULONG STDMETHODCALLTYPE AddRef() override { return ++refs; }
+            ULONG STDMETHODCALLTYPE Release() override {
+                ULONG r = --refs;
+                if (r == 0) delete this;
+                return r;
+            }
+            HRESULT STDMETHODCALLTYPE GetCount(DWORD* c) override {
+                *c = 4;
+                return S_OK;
+            }
+            HRESULT STDMETHODCALLTYPE GetAt(DWORD, PROPERTYKEY* k) override {
+                *k = AuraEndpointPropKey(kAuraPropPidToken);
+                return S_OK;
+            }
+            HRESULT STDMETHODCALLTYPE GetValue(REFPROPERTYKEY key, PROPVARIANT* v) override {
+                PropVariantInit(v);
+                if (key.fmtid != AuraEndpointPropsSetGuid()) return S_OK;
+                if (key.pid == kAuraPropPidToken) {
+                    const size_t bytes = (token.size() + 1) * sizeof(wchar_t);
+                    auto* buf = (wchar_t*)CoTaskMemAlloc(bytes);
+                    if (!buf) return E_OUTOFMEMORY;
+                    memcpy(buf, token.c_str(), bytes);
+                    v->vt = VT_LPWSTR;
+                    v->pwszVal = buf;
+                } else if (key.pid == kAuraPropPidFlags) {
+                    v->vt = VT_UI4;
+                    v->ulVal = kAuraOverrideModeValid | kAuraOverrideFillValid;
+                } else if (key.pid == kAuraPropPidMode) {
+                    v->vt = VT_UI4;
+                    v->ulVal = mode;
+                } else if (key.pid == kAuraPropPidFill) {
+                    v->vt = VT_UI4;
+                    v->ulVal = fill;
+                }
+                return S_OK;
+            }
+            HRESULT STDMETHODCALLTYPE SetValue(REFPROPERTYKEY, REFPROPVARIANT) override {
+                return E_NOTIMPL;
+            }
+            HRESULT STDMETHODCALLTYPE Commit() override { return E_NOTIMPL; }
+        };
+
+        const wchar_t* kIdA = L"{0.0.0.00000000}.{aaaaaaaa-0000-4000-8000-0000000000a1}";
+        const wchar_t* kIdB = L"{0.0.0.00000000}.{bbbbbbbb-0000-4000-8000-0000000000b2}";
+
+        auto makeInstance = [&](FakeStore* store, IAudioProcessingObjectConfiguration** outCfg,
+                                IUnknown** outUnk) -> bool {
+            APOInitSystemEffects init{};
+            init.APOInit.cbSize = sizeof(APOInitBaseStruct);
+            init.pAPOSystemEffectsProperties = store;
+            IClassFactory* f2 = nullptr;
+            if (!getClass || getClass(CLSID_AuraApoEfx, IID_IClassFactory, (void**)&f2) != S_OK || !f2)
+                return false;
+            IUnknown* u = nullptr;
+            HRESULT hr = f2->CreateInstance(nullptr, IID_IUnknown, (void**)&u);
+            f2->Release();
+            if (hr != S_OK || !u) return false;
+            IAudioProcessingObject* a = nullptr;
+            u->QueryInterface(IID_IAudioProcessingObject, (void**)&a);
+            IAudioProcessingObjectConfiguration* c = nullptr;
+            u->QueryInterface(IID_IAudioProcessingObjectConfiguration, (void**)&c);
+            bool ok = a && c &&
+                      a->Initialize(sizeof(init), (BYTE*)&init) == S_OK &&
+                      c->LockForProcess(1, pins, 1, pouts) == S_OK;
+            if (a) a->Release();
+            if (!ok) {
+                if (c) c->Release();
+                u->Release();
+                return false;
+            }
+            *outCfg = c;
+            *outUnk = u;
+            return true;
+        };
+
+        auto* storeA = new FakeStore();
+        storeA->token = kIdA;
+        storeA->mode = 0;
+        storeA->fill = 0;
+        auto* storeB = new FakeStore();
+        storeB->token = kIdB;
+        storeB->mode = 1;
+        storeB->fill = 1;
+        IAudioProcessingObjectConfiguration *cfgA = nullptr, *cfgB = nullptr;
+        IUnknown *unkA = nullptr, *unkB = nullptr;
+        bool okA = makeInstance(storeA, &cfgA, &unkA);
+        bool okB = makeInstance(storeB, &cfgB, &unkB);
+        check("multi-endpoint: both instances lock", okA && okB);
+        Sleep(400);
+
+        auto openTeleFor = [&](const wchar_t* id) -> const ApoTelemetryBlock* {
+            wchar_t nm[80];
+            AuraApoTelemetryNameFor(AuraEndpointIdHash(id), nm, 80);
+            HANDLE h = OpenFileMappingW(FILE_MAP_READ, FALSE, nm);
+            if (!h) return nullptr;
+            return (const ApoTelemetryBlock*)MapViewOfFile(h, FILE_MAP_READ, 0, 0,
+                                                            APO_TELEMETRY_BYTES);
+        };
+        const ApoTelemetryBlock* teleA = openTeleFor(kIdA);
+        const ApoTelemetryBlock* teleB = openTeleFor(kIdB);
+        check("multi-endpoint: per-endpoint blocks exist", teleA && teleB);
+        if (teleA && teleB) {
+            char d[160];
+            snprintf(d, sizeof(d), "A seat=%ld ver=%lu idok=%d B seat=%ld ver=%lu idok=%d",
+                     teleA->seatState, (unsigned long)teleA->version,
+                     wcscmp(teleA->endpointId, kIdA) == 0 ? 1 : 0,
+                     teleB->seatState, (unsigned long)teleB->version,
+                     wcscmp(teleB->endpointId, kIdB) == 0 ? 1 : 0);
+            check("multi-endpoint: both seats held + identity stamped",
+                  teleA->seatState == 1 && teleB->seatState == 1 &&
+                      teleA->version >= 7 && teleB->version >= 7 &&
+                      wcscmp(teleA->endpointId, kIdA) == 0 &&
+                      wcscmp(teleB->endpointId, kIdB) == 0,
+                  d);
+        }
+
+        // 参数块两相写入：先 1/1 再 0/0，覆写须恒胜出。
+        auto writeBlock = [&](uint32_t mode, uint32_t fill) {
+            HANDLE h = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, AuraApoParamsName());
+            if (!h) return;
+            auto* pb = (uint8_t*)MapViewOfFile(h, FILE_MAP_ALL_ACCESS, 0, 0,
+                                               APO_BLOCK_MAPPING_BYTES);
+            if (!pb) {
+                CloseHandle(h);
+                return;
+            }
+            auto* hdr = (ApoParamBlockHeader*)pb;
+            if (hdr->magic != APO_PARAMS_MAGIC) {
+                memset(pb, 0, APO_BLOCK_USED_BYTES);
+                hdr->magic = APO_PARAMS_MAGIC;
+                hdr->version = APO_PARAMS_VERSION;
+                hdr->numCount = APO_NUM_PARAM_COUNT;
+                hdr->writeSeq = 0;
+            }
+            const uint32_t seq = hdr->writeSeq;
+            hdr->writeSeq = seq + 1;  // 奇：写入中
+            uint8_t* mask = pb + APO_BLOCK_MASK_OFFSET;
+            uint32_t* vals = (uint32_t*)(pb + APO_BLOCK_VALUES_OFFSET);
+            auto idxOf = [&](const char* id) {
+                for (uint32_t i = 0; i < APO_NUM_PARAM_COUNT; i++)
+                    if (strcmp(kApoNumParamIds[i], id) == 0) return i;
+                return UINT32_MAX;
+            };
+            const uint32_t iMode = idxOf("channels.mode");
+            const uint32_t iFill = idxOf("channels.upmix_fill");
+            if (iMode != UINT32_MAX) {
+                mask[iMode / 8] |= (uint8_t)(1u << (iMode % 8));
+                vals[iMode] = mode;
+            }
+            if (iFill != UINT32_MAX) {
+                mask[iFill / 8] |= (uint8_t)(1u << (iFill % 8));
+                vals[iFill] = fill;
+            }
+            hdr->writeSeq = seq + 2;  // 偶：提交
+            UnmapViewOfFile(pb);
+            CloseHandle(h);
+        };
+        if (teleA && teleB) {
+            writeBlock(1, 1);
+            Sleep(600);
+            char d[128];
+            snprintf(d, sizeof(d), "A eff=%lu/%lu valid=%lu (expect 0/0/1)",
+                     (unsigned long)teleA->effChannelsMode,
+                     (unsigned long)teleA->effUpmixFill,
+                     (unsigned long)teleA->effValid);
+            check("multi-endpoint: A override beats block 1/1",
+                  teleA->effValid == 1 && teleA->effChannelsMode == 0 &&
+                      teleA->effUpmixFill == 0,
+                  d);
+            writeBlock(0, 0);
+            Sleep(600);
+            snprintf(d, sizeof(d), "B eff=%lu/%lu valid=%lu (expect 1/1/1)",
+                     (unsigned long)teleB->effChannelsMode,
+                     (unsigned long)teleB->effUpmixFill,
+                     (unsigned long)teleB->effValid);
+            check("multi-endpoint: B override beats block 0/0",
+                  teleB->effValid == 1 && teleB->effChannelsMode == 1 &&
+                      teleB->effUpmixFill == 1,
+                  d);
+        }
+        if (cfgA) cfgA->UnlockForProcess();
+        if (cfgB) cfgB->UnlockForProcess();
+        if (teleA) UnmapViewOfFile(teleA);
+        if (teleB) UnmapViewOfFile(teleB);
+        if (cfgA) cfgA->Release();
+        if (cfgB) cfgB->Release();
+        if (unkA) unkA->Release();
+        if (unkB) unkB->Release();
+        storeA->Release();
+        storeB->Release();
     }
 
     check("UnlockForProcess", cfg->UnlockForProcess() == S_OK);
