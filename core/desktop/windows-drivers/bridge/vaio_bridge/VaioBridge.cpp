@@ -2455,8 +2455,15 @@ int vaio_get_param(const char* id, int isFloat, void* out4) {
 }
 
 int vaio_get_param_str(const char* id, char* out, int cap) {
-    if (!id || !out || cap <= 0 || !g_vaio.pEngine || !g_vaio.fnGetParam) return -1;
-    return g_vaio.fnGetParam(g_vaio.pEngine, id, out, (unsigned int)cap);
+    /* 契约与 asio/vb 两桥一致：引擎 get 返回的是状态码（0=成功），
+     * 本函数须回字节数——旧实现直传状态码，成功也恒回 0，Dart 侧
+     * 按 n<=0 判失败，VAIO 模式一切字符串读回静默失效（第四十一轮
+     * smoke_vaio_bridge 坐实）。 */
+    if (!id || !out || cap <= 1 || !g_vaio.pEngine || !g_vaio.fnGetParam) return -1;
+    out[0] = 0;
+    if (g_vaio.fnGetParam(g_vaio.pEngine, id, out, (unsigned int)cap) != 0) return -2;
+    out[cap - 1] = 0;  // 引擎保证 NUL 结尾，这里再兜一层
+    return (int)strlen(out);
 }
 
 int vaio_viz_read(void* out1600, int count) {
