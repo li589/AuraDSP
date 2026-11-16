@@ -236,6 +236,20 @@ extension VbAsioState on AppModel {
     // detect 内，进程猝死会吞掉缓冲日志（真机报告
     // 2026-11-10 项 6）；入口/出口成对出现即可分层。
     dbgLog('ui.refreshVaioDetect: send', sync: true);
+    // S4 加载态：置位 + 通知（面板呈加载行）；10 秒代际看守
+    // 兜底清除（isolate 无回程时不永转；测试模式不设表，
+    // 免 fake-async 挂表）。
+    deviceScanInFlight = true;
+    final gen = ++_deviceScanGen;
+    if (!_testing) {
+      Future.delayed(const Duration(seconds: 10), () {
+        if (_deviceScanGen == gen && deviceScanInFlight) {
+          deviceScanInFlight = false;
+          _notifyUi();
+        }
+      });
+    }
+    _notifyUi();
     _toIso?.send({'cmd': 'vaiodetect'});
   }
 

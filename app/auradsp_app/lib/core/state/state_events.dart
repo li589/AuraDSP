@@ -1181,6 +1181,8 @@ extension StateEvents on AppModel {
           sync: true,
         );
         vaioDetectInfo = Map<String, dynamic>.from(raw);
+        deviceScanInFlight = false; // S4：本轮枚举已回
+        deviceScanDone = true;
         final waiter = vaioDetectWaiter;
         if (waiter != null && !waiter.isCompleted) waiter.complete();
         vaioDetectWaiter = null;

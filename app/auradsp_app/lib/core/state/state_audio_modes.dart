@@ -786,6 +786,7 @@ extension AudioModesState on AppModel {
   /// 扫描结果应用（手动刷新与签名看守共用）：写默认身份/设备表/
   /// 签名，跑自激守卫与选择调和，最后统一通知 UI。
   void _applyDeviceScan(Map<String, dynamic> json) {
+    deviceScanDone = true; // S4：一轮设备枚举已落地
     // 第七轮 S2 地基：默认端点身份（此前被解析层丢弃）。
     defaultRenderId = (json['defaultRender'] as String?) ?? '';
     defaultCaptureId = (json['defaultCapture'] as String?) ?? '';

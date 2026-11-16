@@ -345,6 +345,15 @@ class AppModel extends ChangeNotifier {
   bool get pipelineOutputEnabled => config.pipelineOutputEnabled;
   List<AudioDeviceItem> wasapiDevices = [];
 
+  // 设备枚举加载态（第四十二轮 S4）：枚举全程走 isolate 消息
+  // 不阻塞 UI，但此前没有加载呈现——首轮枚举返回前列表为空，
+  // 面板只能显示「无可用端点」（误导）。inFlight = 已发出探
+  // 测未回（refreshVaioDetect 置位、detect 事件清除，10 秒
+  // 代际看守防 isolate 死亡后永转）；done = 至少完成过一轮。
+  bool deviceScanInFlight = false;
+  bool deviceScanDone = false;
+  int _deviceScanGen = 0;
+
   /// 系统默认端点身份（第七轮 S2 地基）：apo_inspect 报告的
   /// defaultRender/defaultCapture（eConsole 口径端点 id）。解析层
   /// 此前只消费 endpoints、把这两个字段丢弃，模型层不知道

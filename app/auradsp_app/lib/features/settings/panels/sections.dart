@@ -551,17 +551,32 @@ class _SystemApoPanel extends StatelessWidget {
         ),
         const SizedBox(height: AuraSpace.xs),
         if (endpoints.isEmpty)
-          Text(l.setNoEndpoint,
-              style: captionOf(p, color: p.textDim).copyWith(fontSize: 12))
+          // S4：首轮枚举未回时呈加载行，不误报「无可用端点」；
+          // 枚举已完成且确为空才显示空文案。
+          if (model.deviceScanInFlight || !model.deviceScanDone)
+            Row(
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: p.accent),
+                ),
+                const SizedBox(width: 8),
+                Text(l.plugLoading,
+                    style: captionOf(p, color: p.textDim)
+                        .copyWith(fontSize: 12)),
+              ],
+            )
+          else
+            Text(l.setNoEndpoint,
+                style: captionOf(p, color: p.textDim).copyWith(fontSize: 12))
         else
-          for (final ep in endpoints)
-            _ApoEndpointRow(
-              model: model,
-              ep: ep,
-              selected: ep.id == selectedValue,
-              attached: model.apoEndpointAttached(ep.id),
-              checked: model.apoCheckedEndpoints.contains(ep.id),
-            ),
+          _ApoEndpointList(
+            model: model,
+            endpoints: endpoints,
+            selectedId: selectedValue,
+          ),
         if (selEndpoint.isNotEmpty && matched == null)
           // 选中端点不在当前枚举（已拔出/禁用）：保留一行离线
           // 呈现；状态层在确有已附加端点时会回落选中并明示。
@@ -765,6 +780,60 @@ class _SystemApoPanel extends StatelessWidget {
 /// 已附加行的复选锁定为勾选态——从附加集合移除只能走卸载；
 /// 行尾依次是「选中」标与「已附加」标。格式后缀（声道数/采样
 /// 率）来自 inspect 的 mix format，未知时不显示。
+/// APO 端点列表滚动区（第四十二轮 S4）：限高约 5 行，端点再多
+/// 也只在卡内纵向滚动，不再把整张卡撑高；滚动条仅溢出时显示。
+class _ApoEndpointList extends StatefulWidget {
+  final AppModel model;
+  final List<AudioDeviceItem> endpoints;
+  final String selectedId;
+  const _ApoEndpointList({
+    required this.model,
+    required this.endpoints,
+    required this.selectedId,
+  });
+
+  @override
+  State<_ApoEndpointList> createState() => _ApoEndpointListState();
+}
+
+class _ApoEndpointListState extends State<_ApoEndpointList> {
+  final ScrollController _ctrl = ScrollController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 164),
+      child: Scrollbar(
+        controller: _ctrl,
+        thumbVisibility: widget.endpoints.length > 5,
+        child: SingleChildScrollView(
+          controller: _ctrl,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final ep in widget.endpoints)
+                _ApoEndpointRow(
+                  model: widget.model,
+                  ep: ep,
+                  selected: ep.id == widget.selectedId,
+                  attached: widget.model.apoEndpointAttached(ep.id),
+                  checked:
+                      widget.model.apoCheckedEndpoints.contains(ep.id),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ApoEndpointRow extends StatelessWidget {
   final AppModel model;
   final AudioDeviceItem ep;
