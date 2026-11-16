@@ -223,6 +223,7 @@ struct ApoTelemetryBlock {
 // v7：端点身份段自 1464 起，块总 1632B（映射仍 4096B）。
 static_assert(sizeof(ApoTelemetryBlock) == 1632, "telemetry block layout");
 static_assert(offsetof(ApoTelemetryBlock, endpointHash) == 1464, "telemetry v7 offsets");
+static_assert(offsetof(ApoTelemetryBlock, endpointId) == 1472, "telemetry v7 offsets");
 static_assert(offsetof(ApoTelemetryBlock, spectrum) == 64, "telemetry v1 offsets");
 static_assert(offsetof(ApoTelemetryBlock, eqInSpectrum) == 192, "telemetry v2 offsets");
 static_assert(offsetof(ApoTelemetryBlock, stageLevelsL) == 320, "telemetry v2 offsets");
