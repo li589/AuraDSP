@@ -10,12 +10,14 @@ import 'package:auradsp_app/core/state.dart';
 
 void main() {
   group('第四十二轮 S4：设备枚举加载态', () {
-    test('新模型未完成枚举（面板呈加载而非空文案）', () {
+    test('新模型未发起枚举（面板呈空文案，加载只认在途旗）', () {
       final m = AppModel(testing: true);
       expect(m.deviceScanDone, isFalse);
       expect(m.deviceScanInFlight, isFalse);
-      // 面板判据：inFlight || !done → 加载行。
-      expect(m.deviceScanInFlight || !m.deviceScanDone, isTrue);
+      // 面板判据（收口复验修正）：只认在途旗 → 未发起过枚举
+      // 时不呈加载行（无 isolate 环境里动画永转会挂死设置页
+      // 测试的 pump；生产中枚举恒由就绪流发起）。
+      expect(m.deviceScanInFlight, isFalse);
     });
 
     test('refreshVaioDetect 置在途旗（测试模式不设看守表）', () {

@@ -58,6 +58,7 @@ extension AudioModesState on AppModel {
   /// sysapo 并回滚各 setter 预写的范式/附加字段 + 错误通知。
   /// 无端点附加时（从未附加/已手动卸载）不等待、直接切换。
   void setAudioMode(String id) {
+    _displayGen++; // S3：模式变更 → 显示合成可覆盖
     final valid = AudioModes.normalize(id);
     if (audioMode == 'sysapo' && valid != 'sysapo') {
       if (apoDetachBlocking) return; // 卸载在途：吞掉反复切换
@@ -765,6 +766,7 @@ extension AudioModesState on AppModel {
   /// 签名，跑自激守卫与选择调和，最后统一通知 UI。
   void _applyDeviceScan(Map<String, dynamic> json) {
     deviceScanDone = true; // S4：一轮设备枚举已落地
+    _displayGen++; // S3：设备表/格式变更 → 显示合成可覆盖
     // 第七轮 S2 地基：默认端点身份（此前被解析层丢弃）。
     defaultRenderId = (json['defaultRender'] as String?) ?? '';
     defaultCaptureId = (json['defaultCapture'] as String?) ?? '';
@@ -1221,6 +1223,7 @@ extension AudioModesState on AppModel {
   // ---- APO 挂载配置 ----
 
   void setApoTargetEndpoint(String endpoint) {
+    _displayGen++; // S3：目标端点变更 → 显示合成可覆盖
     config.apoTargetEndpoint = endpoint;
     // 全面复审 S2（UI-5）：切换目标端点即按已知装机真值重算
     // apoAttached——此前须手动刷新才纠正，切到未附加端点时状态
@@ -1293,10 +1296,22 @@ extension AudioModesState on AppModel {
   }
 
   /// 把合成值推入 vizChannelCount（流活跃时不推，免与真值打架）。
+  ///
+  /// 覆盖门（收口复验修正）：vizChannelCount 的现值若非零、且
+  /// 从未有过流事件、且自上次合成以来无显示相关变更，则它
+  /// 只能是外部刚写入的真值（如测试注入的流声道数），合成值
+  /// 不得覆盖——合成只接管三类情形：从未写入（0）、流已停
+  /// （有过流事件）、显示相关状态变更之后（代际递增）。
   void refreshDisplayChannelCount() {
     if (_streamChLive) return;
+    if (vizChannelCount.value != 0 &&
+        _lastVizChAt == null &&
+        _displayGen == _displayGenConsumed) {
+      return;
+    }
     final d = displayChannelCount;
     if (vizChannelCount.value != d) vizChannelCount.value = d;
+    _displayGenConsumed = _displayGen;
   }
 
   /// 存量目标值（全 id / 友好名 / 短 GUID 三种历史形状）→ 端点

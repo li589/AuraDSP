@@ -1100,6 +1100,11 @@ class AppModel extends ChangeNotifier {
   // S3 合成用的流真值登记（viz 声道事件到达时刻与值）。
   DateTime? _lastVizChAt;
   int _streamCh = 0;
+  // 显示合成代际（S3 收口复验修正）：显示相关状态（声道数/
+  // 模式/目标端点/设备表）变更时递增；refreshDisplayChannelCount
+  // 据此判断合成值是否有资格覆盖 vizChannelCount 的现值。
+  int _displayGen = 0;
+  int _displayGenConsumed = 0;
   /// 定长 kChannelMax；未用声道 -120。
   final vizChannelLevels = ValueNotifier<List<double>>(
     List.filled(kVizChannelMax, -120.0),

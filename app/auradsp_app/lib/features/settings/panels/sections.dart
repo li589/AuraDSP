@@ -551,9 +551,12 @@ class _SystemApoPanel extends StatelessWidget {
         ),
         const SizedBox(height: AuraSpace.xs),
         if (endpoints.isEmpty)
-          // S4：首轮枚举未回时呈加载行，不误报「无可用端点」；
-          // 枚举已完成且确为空才显示空文案。
-          if (model.deviceScanInFlight || !model.deviceScanDone)
+          // S4：枚举在途时呈加载行，不误报「无可用端点」；未
+          // 发起过枚举（测试装配/就绪前）与枚举完成确为空同呈
+          // 空文案——判据只认在途旗，避免无 isolate 的环境里
+          // 加载动画永转（收口复验修正：原 !done 判据使三个
+          // 设置页测试的 pump 永不 settle）。
+          if (model.deviceScanInFlight)
             Row(
               children: [
                 SizedBox(

@@ -70,6 +70,18 @@ void main() {
       expect(m.vizChannelCount.value, 0); // 未被合成值改写
     });
 
+    test('覆盖门：外部写入的真值不被合成覆盖（收口复验回归）', () {
+      final m = AppModel(testing: true);
+      m.vizChannelCount.value = 8; // 模拟流真值刚写入
+      m.refreshDisplayChannelCount();
+      expect(m.vizChannelCount.value, 8);
+      // 显示相关变更（声道数设置）后合成才接管。
+      m.setChannelsCountMode(1);
+      m.setChannelsCount(4);
+      m.refreshDisplayChannelCount();
+      expect(m.vizChannelCount.value, 4);
+    });
+
     test('非 sysapo 自动模式回落 effectiveChannelCount', () {
       final m = AppModel(testing: true);
       m.setChannelsCountMode(0);

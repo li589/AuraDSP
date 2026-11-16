@@ -923,6 +923,7 @@ extension StateCore on AppModel {
   /// 设置工作声道模式（0=自动, 1=手动）
   void setChannelsCountMode(int mode) {
     final m = mode.clamp(0, 1);
+    _displayGen++; // S3：显示合成代际（refresh 覆盖门据此放行）
     channelsCountMode = m;
     config.channelsCountMode = m;
     ConfigManager.save(config);
@@ -932,6 +933,7 @@ extension StateCore on AppModel {
   /// 设置手动工作声道数（2, 4, 6, 8）
   void setChannelsCount(int count) {
     if (count == 2 || count == 4 || count == 6 || count == 8) {
+      _displayGen++; // S3：显示合成代际
       channelsCount = count;
       config.channelsCount = count;
       ConfigManager.save(config);
