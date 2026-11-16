@@ -101,6 +101,13 @@ print('=== [4] 全静音不假亮 ===')
 b_s = run_case(8, 1, None)
 check('静音频谱保持空', max(b_s) < 0.05, 'max=%.4f' % max(b_s))
 
+print('=== [5] 8 声道矩阵模式 LFE-only 60Hz（第四十一轮） ===')
+# 矩阵模式旧口径频谱取下混立体声，而下混不折入 LFE（直通）——
+# LFE-only 时频谱恒空（user 实测）。修复后频谱走真实多声道输出。
+b_lfe = run_case(8, 0, 3, freq=60)
+check('矩阵 LFE-only 频谱点亮', max(b_lfe) > 0.3,
+      'peak band=%d val=%.3f' % (b_lfe.index(max(b_lfe)), max(b_lfe)))
+
 if FAILS:
     print('VIZ MULTICHANNEL FAILURES:', FAILS)
     sys.exit(1)

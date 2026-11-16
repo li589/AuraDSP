@@ -448,10 +448,13 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
                 process_stereo_chain(h, h->shelf_scratch, h->mx_stereo, frames);
                 mx_upmix(h, out, h->mx_stereo, frames, ch);
                 h->frames_since_viz += frames;
-                /* 频谱/历史取下混立体声（既存语义）；per-channel 电平则按
-                 * mx_upmix 后真实写进设备的 out 实测——否则 [2..N-1] 恒 -120，
-                 * 多声道默认路径上 6 根柱永久假死。 */
-                viz_write(h, h->mx_stereo, frames, 2);
+                /* 频谱/历史与 per-channel 电平同口径：按 mx_upmix 后真实
+                 * 写进设备的 out 实测。旧口径取下混立体声（mx_stereo），
+                 * 而下混公式按设计不折入 LFE（LFE 直通）——LFE-only 内容
+                 * 在频谱上恒空（第四十一轮 user 实测坐实），且与电平口径
+                 * 分裂。改走 out 全声道后与离散模式一致（viz_write 内做
+                 * 全声道均值单声道化）。 */
+                viz_write(h, out, frames, ch);
                 viz_scan_out_peak(h, out, frames, ch);
             }
         }

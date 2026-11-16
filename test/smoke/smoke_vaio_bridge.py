@@ -153,14 +153,14 @@ check("采样率有效", st1.get("sr", 0) > 0, f"sr={st1.get('sr')}")
 check("初始参数已生效", st1.get("paramsApplied", 0) >= 2, f"applied={st1.get('paramsApplied')}")
 
 # 5. 实时参数下发与回读
-f_val = ctypes.c_float(12.5)
+f_val = ctypes.c_float(10.5)  # tube.gain 上限 12.0（参数表），期望值须在范围内
 rc_p = b.vaio_set_param(b"tube.gain", 1, ctypes.byref(f_val))
 check("set_param float rc==0", rc_p == 0, f"rc={rc_p}")
 
 out_f = ctypes.c_float(0.0)
 rc_gp = b.vaio_get_param(b"tube.gain", 1, ctypes.byref(out_f))
 check("get_param float rc==0", rc_gp == 0, f"rc={rc_gp}")
-check("get_param float 读回一致", abs(out_f.value - 12.5) < 0.01, f"read={out_f.value}")
+check("get_param float 读回一致", abs(out_f.value - 10.5) < 0.01, f"read={out_f.value}")
 
 # 6. LiveProg 字符串参数通道
 LP_CODE = "/* vaio smoke */\n@init\nx = 1;\n@sample\nspl0 = spl0;\nspl1 = spl1;\n"
