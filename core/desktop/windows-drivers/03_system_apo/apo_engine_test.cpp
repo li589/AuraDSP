@@ -35,6 +35,7 @@ DEFINE_GUID(IID_IAudioSystemEffects,
 #include <cmath>
 #include <atomic>
 #include <cstdint>
+#include <string>
 #include <cstdio>
 #include <cstring>
 
