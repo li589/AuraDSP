@@ -1274,18 +1274,37 @@ RegValue SanitizeBaselineValue(const RegValue& v, bool* changed) {
 // FX 键可写打开：直开失败且为拒绝访问时，接管所有权后重试
 // 一次（FxProperties 的 ACL 连管理员直写都拒，doctor --fix 同
 // 路径）；仍失败返回 nullptr，调用方如实报错。
+// 第四十二轮扩展（2026-11-16 宾机定因）：Voicemeeter 类虚拟
+// 端点根本没有 FxProperties 键，且其父端点键 ACL 不给管理员
+// CreateSubKey——直创被拒、对不存在的键接管所有权也无从下
+// 手（vm-win10 实证 fx_write_failed）。退路再进一层：接管
+// **父端点键**（所有权归 Administrators + 授完全控制）后重试
+// 创建。父键接管与既有 Fx 键接管同级，卸载按台账
+// HadFxPropertiesKey=0 删除自建键，父键 ACL 变更保留（与
+// doctor --fix 对 Fx 键的处理口径一致）。
 HKEY OpenFxKeyWritable(const std::wstring& fxSub) {
-    HKEY k = nullptr;
-    LONG r = RegCreateKeyExW(HKEY_LOCAL_MACHINE, fxSub.c_str(), 0, nullptr,
-                             0, KEY_SET_VALUE | KEY_QUERY_VALUE, nullptr,
-                             &k, nullptr);
-    if (r == ERROR_SUCCESS) return k;
-    if (r == ERROR_ACCESS_DENIED && TakeOwnershipRepair(fxSub)) {
-        k = nullptr;
-        if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, fxSub.c_str(), 0, nullptr,
-                            0, KEY_SET_VALUE | KEY_QUERY_VALUE, nullptr,
-                            &k, nullptr) == ERROR_SUCCESS) {
-            return k;
+    LONG firstErr = ERROR_SUCCESS;
+    auto tryCreate = [&]() -> HKEY {
+        HKEY k = nullptr;
+        const LONG r = RegCreateKeyExW(
+            HKEY_LOCAL_MACHINE, fxSub.c_str(), 0, nullptr, 0,
+            KEY_SET_VALUE | KEY_QUERY_VALUE, nullptr, &k, nullptr);
+        if (r == ERROR_SUCCESS) return k;
+        firstErr = r;
+        return nullptr;
+    };
+    if (HKEY k = tryCreate()) return k;
+    if (firstErr != ERROR_ACCESS_DENIED) return nullptr;
+    // 第一层退路：键已存在但 ACL 拒绝（接管键本身）。
+    if (TakeOwnershipRepair(fxSub)) {
+        if (HKEY k = tryCreate()) return k;
+    }
+    // 第二层退路：键缺失且父键拒绝 CreateSubKey（接管父键）。
+    const size_t slash = fxSub.find_last_of(L'\\');
+    if (slash != std::wstring::npos) {
+        const std::wstring parent = fxSub.substr(0, slash);
+        if (TakeOwnershipRepair(parent)) {
+            if (HKEY k = tryCreate()) return k;
         }
     }
     return nullptr;
