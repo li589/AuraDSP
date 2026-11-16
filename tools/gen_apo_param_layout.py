@@ -94,7 +94,10 @@ def sha16(path):
 # 白名单（值类型经引擎 setter 代码核对）；新收录 id 一律**追加**在
 # 既有布局之后（存量序号 0..324 永不移位），块版本升至 2——消费端
 # 版本全等校验使旧 DLL 对新块整体拒绝（安全降级，绝不误用错位）。
-PARAMS_VERSION = 2
+# v3（第四十一轮）：布局主体不变，尾部（v2 USED_BYTES 起）追加
+# 分端点声道覆写表（8 条 × 24B：idHash u64 + mode i32 + fill i32
+# + flags u32），USED_BYTES 相应扩大；worker 接受 v2/v3（v2 无表）。
+PARAMS_VERSION = 3
 
 CSSG_TYPE = {'kFloat': 0, 'kInt32': 1, 'kBool': 2}
 
@@ -181,6 +184,7 @@ def layout(params):
 
 
 def gen_c(params, values_off, strings_off, slot_offs, total, digest):
+    total3 = total + 8 * 24  # v3 覆写表尾段
     ids = ',\n    '.join(f'"{pid}"' for pid, _ in params)
     types = ', '.join(str(t) for _, t in params)
     str_ids = ',\n    '.join(f'"{sid}"' for sid, _ in STRING_SLOTS)
@@ -219,12 +223,19 @@ static const unsigned int kApoStrSlotOffsets[APO_STR_SLOT_COUNT] = {{ {str_offs}
 #define APO_BLOCK_MASK_OFFSET {HEADER_BYTES}
 #define APO_BLOCK_VALUES_OFFSET {values_off}
 #define APO_BLOCK_STRINGS_OFFSET {strings_off}
-#define APO_BLOCK_USED_BYTES {total}
+#define APO_BLOCK_USED_BYTES {total3}
 #define APO_BLOCK_MAPPING_BYTES {MAPPING_BYTES}
+
+// v3 尾段：分端点声道覆写表（条目布局见 ApoShared.h
+// ApoEndpointOverride；flags bit0=mode 有效 bit1=fill 有效）。
+#define APO_EP_OVERRIDE_OFFSET {total}
+#define APO_EP_OVERRIDE_COUNT 8
+#define APO_EP_OVERRIDE_ENTRY_BYTES 24
 """
 
 
 def gen_dart(params, values_off, strings_off, slot_offs, total, digest):
+    total3 = total + 8 * 24  # v3 覆写表尾段
     entries = ',\n  '.join(f"'{pid}': {i}" for i, (pid, _) in enumerate(params))
     types = ', '.join(str(t) for _, t in params)
     str_entries = ',\n  '.join(
@@ -261,8 +272,13 @@ const int kApoBlockHeaderBytes = {HEADER_BYTES};
 const int kApoBlockMaskOffset = {HEADER_BYTES};
 const int kApoBlockValuesOffset = {values_off};
 const int kApoBlockStringsOffset = {strings_off};
-const int kApoBlockUsedBytes = {total};
+const int kApoBlockUsedBytes = {total3};
 const int kApoBlockMappingBytes = {MAPPING_BYTES};
+
+/// v3 尾段：分端点声道覆写表（见 ApoShared.h ApoEndpointOverride）。
+const int kApoEpOverrideOffset = {total};
+const int kApoEpOverrideCount = 8;
+const int kApoEpOverrideEntryBytes = 24;
 """
 
 

@@ -40,7 +40,7 @@
 // 的 14 个数值参数（comp.mode / channels.mode / reverb.preset 等）
 // 追加在存量序号之后，存量序号不移位。消费端版本全等校验使旧
 // DLL 对 v2 块整体拒绝（安全降级），永不按错位序号误用参数。
-#define APO_PARAMS_VERSION 2u
+#define APO_PARAMS_VERSION 3u
 
 struct ApoParamBlockHeader {
     uint32_t magic;        // APO_PARAMS_MAGIC
@@ -56,6 +56,20 @@ struct ApoParamBlockHeader {
 // 参数必须保留引擎默认值，见生成器头注）→ values[numCount]
 // （u32/槽）→ 字符串槽区（定长，偏移与容量见 ApoParamIndex.h）。
 static_assert(sizeof(ApoParamBlockHeader) == 64, "param block header must be 64B");
+
+// 参数块 v3 尾段（第四十一轮，偏移 APO_EP_OVERRIDE_OFFSET 起）：
+// 分端点声道覆写表。App 按端点 id 哈希写入期望值，APO worker 在
+// ApplySnapshot 时以本端点条目为最优先覆写（压过参数块全局值与
+// FX 属性集初值）——mode/fill 的实时变更通道（FX 覆写在实例
+// Initialize 时才读，改值不重启音频服务就靠本表）。flags:
+// bit0=mode 有效，bit1=fill 有效；idHash=0 为空条目。
+struct ApoEndpointOverride {
+    uint64_t idHash;
+    int32_t mode;
+    int32_t fill;
+    uint32_t flags;
+};
+static_assert(sizeof(ApoEndpointOverride) == 24, "ep override entry must be 24B");
 
 // 测试通道名选择（与心跳 AURAAPO_HEARTBEAT_LOCAL 同先例）：
 // 进程内宿主冒烟在无 SeCreateGlobalPrivilege 的普通 shell 中

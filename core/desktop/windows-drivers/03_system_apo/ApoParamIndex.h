@@ -364,7 +364,7 @@ static const unsigned int kApoStrSlotOffsets[APO_STR_SLOT_COUNT] = { 1484, 5580,
 
 // 参数块版本（须与 ApoShared.h 的 APO_PARAMS_VERSION 全等；
 // 消费端以版本全等为门，版本不符即整块拒绝——布局演进的安全阀）。
-#define APO_PARAM_BLOCK_VERSION 2
+#define APO_PARAM_BLOCK_VERSION 3
 
 // 块布局常量（与 ApoShared.h / Dart apo_param_index.dart 三方一致，
 // smoke_apo_param_layout 交叉断言）。
@@ -372,5 +372,11 @@ static const unsigned int kApoStrSlotOffsets[APO_STR_SLOT_COUNT] = { 1484, 5580,
 #define APO_BLOCK_MASK_OFFSET 64
 #define APO_BLOCK_VALUES_OFFSET 128
 #define APO_BLOCK_STRINGS_OFFSET 1484
-#define APO_BLOCK_USED_BYTES 27084
+#define APO_BLOCK_USED_BYTES 27276
 #define APO_BLOCK_MAPPING_BYTES 32768
+
+// v3 尾段：分端点声道覆写表（条目布局见 ApoShared.h
+// ApoEndpointOverride；flags bit0=mode 有效 bit1=fill 有效）。
+#define APO_EP_OVERRIDE_OFFSET 27084
+#define APO_EP_OVERRIDE_COUNT 8
+#define APO_EP_OVERRIDE_ENTRY_BYTES 24

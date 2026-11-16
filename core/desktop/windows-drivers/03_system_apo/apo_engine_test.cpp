@@ -832,6 +832,44 @@ int main() {
                       teleB->effUpmixFill == 1,
                   d);
         }
+        // 第三相：参数块 v3 实时覆写表——A 翻 1/1、B 翻 0/0，
+        // 实时表须压过 FX 初值（不经 Initialize 重读）。
+        if (teleA && teleB) {
+            HANDLE h = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, AuraApoParamsName());
+            if (h) {
+                auto* pb = (uint8_t*)MapViewOfFile(h, FILE_MAP_ALL_ACCESS, 0, 0,
+                                                   APO_BLOCK_MAPPING_BYTES);
+                if (pb) {
+                    auto* hdr = (ApoParamBlockHeader*)pb;
+                    const uint32_t seq = hdr->writeSeq;
+                    hdr->writeSeq = seq + 1;
+                    auto* tab = (ApoEndpointOverride*)(pb + APO_EP_OVERRIDE_OFFSET);
+                    tab[0].idHash = AuraEndpointIdHash(kIdA);
+                    tab[0].mode = 1;
+                    tab[0].fill = 1;
+                    tab[0].flags = 3;
+                    tab[1].idHash = AuraEndpointIdHash(kIdB);
+                    tab[1].mode = 0;
+                    tab[1].fill = 0;
+                    tab[1].flags = 3;
+                    hdr->writeSeq = seq + 2;
+                    UnmapViewOfFile(pb);
+                }
+                CloseHandle(h);
+            }
+            Sleep(600);
+            char d[128];
+            snprintf(d, sizeof(d), "A eff=%lu/%lu (expect 1/1 live)",
+                     (unsigned long)teleA->effChannelsMode,
+                     (unsigned long)teleA->effUpmixFill);
+            check("multi-endpoint: live table flips A over FX",
+                  teleA->effChannelsMode == 1 && teleA->effUpmixFill == 1, d);
+            snprintf(d, sizeof(d), "B eff=%lu/%lu (expect 0/0 live)",
+                     (unsigned long)teleB->effChannelsMode,
+                     (unsigned long)teleB->effUpmixFill);
+            check("multi-endpoint: live table flips B over FX",
+                  teleB->effChannelsMode == 0 && teleB->effUpmixFill == 0, d);
+        }
         if (cfgA) cfgA->UnlockForProcess();
         if (cfgB) cfgB->UnlockForProcess();
         if (teleA) UnmapViewOfFile(teleA);

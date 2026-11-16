@@ -79,6 +79,30 @@ const int _apoFileMapAllAccess = 0x000F001F;
 const int _apoFileMapRead = 0x00000004;
 const String _apoParamsName = 'Global\\AuraDSP_ApoParams';
 const String _apoTelemetryName = 'Global\\AuraDSP_ApoTelemetry';
+
+/// 端点 id 的 FNV-1a 64 哈希（与 ApoEndpointProps.h 的
+/// AuraEndpointIdHash 同算法：对 id 的 UTF-16LE 字节流逐字节
+/// FNV-1a）。分端点 telemetry 块名与参数块 v3 覆写表键共用。
+int apoEndpointHash(String id) {
+  var h = 0x14650fb0739d0383; // FNV offset basis 1469598103934665603
+  for (final cu in id.codeUnits) {
+    h ^= cu & 0xFF;
+    h = h * 1099511628211;
+    h ^= (cu >> 8) & 0xFF;
+    h = h * 1099511628211;
+  }
+  return h;
+}
+
+/// 分端点 telemetry 块名（与 ApoShared.h AuraApoTelemetryNameFor
+/// 同构：小写十六进制 16 位）。
+String apoTelemetryNameFor(String endpointId) {
+  final hex = apoEndpointHash(endpointId)
+      .toUnsigned(64)
+      .toRadixString(16)
+      .padLeft(16, '0');
+  return 'Global\\AuraDSP_ApoTelemetry_$hex';
+}
 // 与心跳/ApoShared.h 同一穿透 SDDL（LS + Everyone + LPAC 包 SID）。
 const String _apoSharedSddl =
     'D:(A;;GA;;;LS)(A;;GA;;;WD)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)';
@@ -94,6 +118,7 @@ class ApoParamPublisher {
   Map<String, ({bool isFloat, double value})>? _mirror;
   Map<String, String>? _strMirror;
   bool Function()? _bypassOf;
+  Map<String, ({int mode, int fill})> Function()? _overridesOf;
 
   Pointer<Void>? _mapping;
   Pointer<Uint8>? _view;
@@ -108,10 +133,12 @@ class ApoParamPublisher {
     required Map<String, ({bool isFloat, double value})> mirror,
     required Map<String, String> strMirror,
     required bool Function() bypassOf,
+    Map<String, ({int mode, int fill})> Function()? overridesOf,
   }) {
     _mirror = mirror;
     _strMirror = strMirror;
     _bypassOf = bypassOf;
+    _overridesOf = overridesOf;
   }
 
   Pointer<Void> _createMapping(_ApoWin32 w, Pointer<Utf16> name) {
@@ -340,9 +367,54 @@ class ApoParamPublisher {
     for (final e in strMirror.entries) {
       _writeString(e.key, e.value);
     }
+    _writeOverrideTable();
     _endWrite();
     dbgLog('apo publisher: full snapshot '
         '(${mirror.length} numeric, ${strMirror.length} strings)');
+  }
+
+  /// 参数块 v3 尾段：分端点声道覆写表（第四十一轮）。条目 =
+  /// idHash u64 LE + mode i32 + fill i32 + flags u32（恒 3=两项
+  /// 均有效）；未用条目清零。worker 按本端点哈希命中后压过参数
+  /// 块全局 mode/fill 与 FX 初值（实时变更通道）。
+  void _writeOverrideTable() {
+    final src = _overridesOf?.call() ?? const <String, ({int mode, int fill})>{};
+    var slot = 0;
+    for (final e in src.entries) {
+      if (slot >= kApoEpOverrideCount) break;
+      final off = kApoEpOverrideOffset + slot * kApoEpOverrideEntryBytes;
+      final h = apoEndpointHash(e.key);
+      for (var i = 0; i < 8; i++) {
+        _view![off + i] = (h >> (8 * i)) & 0xFF;
+      }
+      _view![off + 8] = e.value.mode & 0xFF;
+      _view![off + 9] = (e.value.mode >> 8) & 0xFF;
+      _view![off + 10] = (e.value.mode >> 16) & 0xFF;
+      _view![off + 11] = (e.value.mode >> 24) & 0xFF;
+      _view![off + 12] = e.value.fill & 0xFF;
+      _view![off + 13] = (e.value.fill >> 8) & 0xFF;
+      _view![off + 14] = (e.value.fill >> 16) & 0xFF;
+      _view![off + 15] = (e.value.fill >> 24) & 0xFF;
+      _u32![(off + 16) ~/ 4] = 3;
+      slot++;
+    }
+    for (; slot < kApoEpOverrideCount; slot++) {
+      final off = kApoEpOverrideOffset + slot * kApoEpOverrideEntryBytes;
+      for (var i = 0; i < 20; i++) {
+        _view![off + i] = 0;
+      }
+    }
+  }
+
+  /// 覆写表单独重写（端点声道设置变更点调用；全量重写走 flushAll）。
+  void writeOverrides() {
+    if (_view == null) {
+      _ensure();
+      return;
+    }
+    _beginWrite();
+    _writeOverrideTable();
+    _endWrite();
   }
 }
 

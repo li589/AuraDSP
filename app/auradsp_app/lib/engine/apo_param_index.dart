@@ -361,7 +361,7 @@ const List<int> kApoStrSlotCaps = [4096, 4096, 16384, 1024];
 const List<int> kApoStrSlotOffsets = [1484, 5580, 9676, 26060];
 
 /// 参数块版本（须与 ApoShared.h 的 APO_PARAMS_VERSION 全等）。
-const int kApoParamBlockVersion = 2;
+const int kApoParamBlockVersion = 3;
 
 /// 块布局常量（与 ApoShared.h / ApoParamIndex.h 三方一致，
 /// smoke_apo_param_layout 交叉断言）。
@@ -369,5 +369,10 @@ const int kApoBlockHeaderBytes = 64;
 const int kApoBlockMaskOffset = 64;
 const int kApoBlockValuesOffset = 128;
 const int kApoBlockStringsOffset = 1484;
-const int kApoBlockUsedBytes = 27084;
+const int kApoBlockUsedBytes = 27276;
 const int kApoBlockMappingBytes = 32768;
+
+/// v3 尾段：分端点声道覆写表（见 ApoShared.h ApoEndpointOverride）。
+const int kApoEpOverrideOffset = 27084;
+const int kApoEpOverrideCount = 8;
+const int kApoEpOverrideEntryBytes = 24;

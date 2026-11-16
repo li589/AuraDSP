@@ -148,6 +148,7 @@ class ApoEngineHost {
     int32_t epFill_ = 0;
     int32_t appliedEpMode_ = -1;  // -1 = 尚未向引擎下发覆写
     int32_t appliedEpFill_ = -1;
+    bool ovrWasActive_ = false;  // 覆写撤除沿检测（回落块值用）
 
     // 参数块（worker 打开）
     HANDLE hParamMap_ = nullptr;

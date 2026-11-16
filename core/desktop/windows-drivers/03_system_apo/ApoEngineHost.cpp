@@ -544,7 +544,7 @@ void ApoEngineHost::WorkerLoop() {
             const auto* hdr = (const ApoParamBlockHeader*)paramView_;
             uint32_t s1 = hdr->writeSeq;
             if ((s1 & 1u) == 0 && hdr->magic == APO_PARAMS_MAGIC &&
-                hdr->version == APO_PARAMS_VERSION) {
+                hdr->version >= 2 && hdr->version <= APO_PARAMS_VERSION) {
                 memcpy(snap.data(), paramView_, APO_BLOCK_USED_BYTES);
                 if (hdr->writeSeq == s1) ApplySnapshot(snap.data(), (const uint32_t*)snap.data());
             }
@@ -597,6 +597,33 @@ void ApoEngineHost::WorkerLoop() {
 void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
     const uint32_t* values = (const uint32_t*)(snap + APO_BLOCK_VALUES_OFFSET);
     const uint8_t* mask = snap + APO_BLOCK_MASK_OFFSET;
+    // 有效覆写（第四十一轮）：参数块 v3 分端点覆写表（实时）优先，
+    // FX 属性集覆写（Initialize 时读到）兜底；两者皆无则跟随参数块。
+    bool modeOvr = epModeValid_;
+    int32_t modeOvrVal = epMode_;
+    bool fillOvr = epFillValid_;
+    int32_t fillOvrVal = epFill_;
+    if (hdr[1] >= 3 && endpointHash_ != 0) {
+        const auto* tab = (const ApoEndpointOverride*)(snap + APO_EP_OVERRIDE_OFFSET);
+        for (int i = 0; i < APO_EP_OVERRIDE_COUNT; i++) {
+            if (tab[i].idHash == endpointHash_) {
+                if (tab[i].flags & 1u) {
+                    modeOvr = true;
+                    modeOvrVal = tab[i].mode;
+                }
+                if (tab[i].flags & 2u) {
+                    fillOvr = true;
+                    fillOvrVal = tab[i].fill;
+                }
+                break;
+            }
+        }
+    }
+    // 覆写撤除沿：上轮有覆写、本轮全无 → 引擎须回落参数块值；
+    // 而块值 diff 基线在覆写期间只记账未下发，须强制全量重应用
+    // 一轮（snapshotValid_ 清零），否则引擎停在旧覆写值。
+    if (ovrWasActive_ && !modeOvr && !fillOvr) snapshotValid_ = false;
+    ovrWasActive_ = modeOvr || fillOvr;
     auto bitSet = [&](uint32_t bit) { return (mask[bit / 8] >> (bit % 8)) & 1u; };
     bypass_.store(hdr[3] != 0);
     uint32_t applied = 0;
@@ -614,11 +641,11 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
         // 声道族覆写（第四十一轮）：本端点有覆写的项，块值仅记
         // 账（diff 基线）、不下发引擎——覆写由循环后的对齐段独占
         // 下发（单一路径，失败可重试）。
-        if (epModeValid_ && strcmp(id, "channels.mode") == 0) {
+        if (modeOvr && strcmp(id, "channels.mode") == 0) {
             appliedNum_[i] = values[i];
             continue;
         }
-        if (epFillValid_ && strcmp(id, "channels.upmix_fill") == 0) {
+        if (fillOvr && strcmp(id, "channels.upmix_fill") == 0) {
             appliedNum_[i] = values[i];
             continue;
         }
@@ -627,18 +654,19 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
         appliedNum_[i] = values[i];
     }
     // 覆写对齐：块从未写过 mode/fill（有效位未置、上面的循环没
-    // 覆盖到）时，覆写仍须生效——与已下发哨兵比对后补下发。
-    if (epModeValid_ && appliedEpMode_ != epMode_) {
-        int32_t m = epMode_;
+    // 覆盖到）时，覆写仍须生效——与已下发哨兵比对后补下发；覆写
+    // 值变化（实时表改值）时哨兵失配、自动重新下发。
+    if (modeOvr && appliedEpMode_ != modeOvrVal) {
+        int32_t m = modeOvrVal;
         if (fnSetParam_(engine_, "channels.mode", &m, sizeof(m)) == 0) {
-            appliedEpMode_ = epMode_;
+            appliedEpMode_ = modeOvrVal;
             applied++;
         }
     }
-    if (epFillValid_ && appliedEpFill_ != epFill_) {
-        int32_t f = epFill_;
+    if (fillOvr && appliedEpFill_ != fillOvrVal) {
+        int32_t f = fillOvrVal;
         if (fnSetParam_(engine_, "channels.upmix_fill", &f, sizeof(f)) == 0) {
-            appliedEpFill_ = epFill_;
+            appliedEpFill_ = fillOvrVal;
             applied++;
         }
     }
