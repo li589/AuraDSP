@@ -1144,6 +1144,15 @@ void lp_refresh_sliders(auradsp_handle h) {
 /* 各声道的标准 -3dB 下混/上混系数 (1 / sqrt(2) ≈ 0.70710678) */
 constexpr float kMxSqrtHalf = 0.70710678f;
 
+/* [channels.upmix_fill] 源活动门控的活动阈值（约 -80 dBFS）。严格判零
+ * 会被 int16 链路的量化抖动击穿：Windows 混音器向 int16 端点（如 VAIO
+ * 渲染端点）输出时带 ±1~2 LSB 的 dither（≈3~6e-5），「无声」声道不再
+ * 是严格 0、被误判为有源，门控随之退化成无条件铺满（2026-11-16
+ * 第三十九轮定罪；APO/VB 为 float 链路、静音严格为 0，故不受影响）。
+ * 1e-4 高于 int16 抖动上限、远低于任何可闻信号；阈值只决定回填开/关，
+ * 不影响声道本音的下混折入。 */
+constexpr float kMxActivityEps = 1.0e-4f;
+
 
 /* M→2 下混 + 旁路声道留存。返回 false 表示 scratch 不可用（应直通）。
  * 彻底修复原实现中左右环绕串扰混入 L/R 的严重 Bug。 */
@@ -1198,10 +1207,12 @@ void mx_upmix(auradsp_handle h, float* out, const float* stereo,
     const SpeakerLayout ly = layout_for(ch);
 
     /* [channels.upmix_fill] 0 = 源活动门控：只有「对应下混输入声道本块
-     * 非严格零」（或仍在 ~250ms 保持窗内）才回填；无源声道写 0，避免把
-     * 立体声源铺成 C/SL/SR/BL/BR 幻象环绕。1 = 历史行为（无条件铺满）。
-     * 判零沿用仓库严格 0 语义（极弱信号也算有声）；LFE 直通、FL/FR 恒写。
-     * 只访问 RT 独占的 h->upmix_hold，无锁无分配。 */
+     * 活动量越过 kMxActivityEps」（或仍在 ~250ms 保持窗内）才回填；无源
+     * 声道写 0，避免把立体声源铺成 C/SL/SR/BL/BR 幻象环绕。1 = 历史行为
+     * （无条件铺满）。活动判定不用严格 0：int16 链路的量化抖动会让无声
+     * 道恒带 ±1~2 LSB 噪声、严格判零等于恒有源（见 kMxActivityEps 注释，
+     * 第三十九轮定罪）。LFE 直通、FL/FR 恒写。只访问 RT 独占的
+     * h->upmix_hold，无锁无分配。 */
     const bool gated =
         h->p.upmix_fill.load(std::memory_order_relaxed) == 0 && ch > 2;
     bool fill[kMxMaxChannels] = {};
@@ -1212,7 +1223,7 @@ void mx_upmix(auradsp_handle h, float* out, const float* stereo,
         for (int i = 0; i < frames; ++i) {
             const float* sp = keep + (size_t)i * ch;
             for (int c = 0; c < ch && c < kMxMaxChannels; ++c) {
-                if (sp[c] != 0.0f) active |= (1u << c);
+                if (fabsf(sp[c]) > kMxActivityEps) active |= (1u << c);
             }
         }
         for (int c = 0; c < ch && c < kMxMaxChannels; ++c) {

@@ -318,6 +318,56 @@ check(surr < 1e-6, f"仅 LFE 有源时环绕声道保持 0 (max={surr:.2e})")
 lib.auradsp_destroy(e)
 
 
+def run_matrix8_dither():
+    """FL 有源，其余声道带 ±1 LSB 量化抖动（模拟 int16 链路：Windows
+    混音器向 int16 端点渲染时的 dither），fill=0 跑一块。"""
+    e = new_engine()
+    set_i32(e, "channels.count", 8)
+    set_i32(e, "channels.mode", 0)
+    set_i32(e, "channels.upmix_fill", 0)
+    s, d, sp_, dp_ = process(e, F3, 8)
+    lsb = 1.0 / 32768.0
+    for i in range(F3):
+        v = 0.25 * math.sin(2 * math.pi * 440.0 * i / 48000.0)
+        for c in range(8):
+            s[i * 8 + c] = v if c == 0 else (((i * 31 + c * 17) % 3) - 1) * lsb
+    lib.auradsp_process(e, sp_, dp_, F3)
+    return e, d
+
+
+# 第三十九轮定罪回归：int16 抖动不得击穿门控（严格判零时无声道被误判
+# 有源、C/SL/BL 会按铺满系数亮起，VAIO 实机即此形态）
+e, d = run_matrix8_dither()
+bad = max(abs(d[i * 8 + c]) for i in range(F3) for c in (2, 4, 5, 6, 7))
+check(bad < 1e-6,
+      f"±1 LSB 抖动下门控仍成立：C/SL/SR/BL/BR 为 0 (max={bad:.2e})")
+lib.auradsp_destroy(e)
+
+
+def run_matrix8_quiet():
+    """仅 SL 有 -54 dBFS 级真实信号（2e-3），fill=0 跑一块。"""
+    e = new_engine()
+    set_i32(e, "channels.count", 8)
+    set_i32(e, "channels.mode", 0)
+    set_i32(e, "channels.upmix_fill", 0)
+    s, d, sp_, dp_ = process(e, F3, 8)
+    for i in range(F3):
+        v = 2e-3 * math.sin(2 * math.pi * 440.0 * i / 48000.0)
+        for c in range(8):
+            s[i * 8 + c] = v if c == 4 else 0.0
+    lib.auradsp_process(e, sp_, dp_, F3)
+    return e, d
+
+
+# 阈值不得吞真实微弱信号：SL 有源 → SL 回填与 FL 下混折入都必须出现
+e, d = run_matrix8_quiet()
+sl_rms = math.sqrt(sum(d[i * 8 + 4] ** 2 for i in range(F3)) / F3)
+fl_rms = math.sqrt(sum(d[i * 8 + 0] ** 2 for i in range(F3)) / F3)
+check(sl_rms > 1e-4, f"微弱真实信号（2e-3）仍判有源：SL 回填出现 (rms={sl_rms:.2e})")
+check(fl_rms > 1e-4, f"微弱真实信号（2e-3）仍判有源：FL 折入出现 (rms={fl_rms:.2e})")
+lib.auradsp_destroy(e)
+
+
 def run_matrix51(fill):
     """5.1 全声道有源：用于逐样本回归。"""
     e = new_engine()
