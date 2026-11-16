@@ -28,7 +28,7 @@ dll.auradsp_viz_read.argtypes = [ctypes.c_void_p, ctypes.POINTER(VizFrame), ctyp
 dll.auradsp_viz_read.restype = ctypes.c_uint32
 dll.auradsp_set_param.restype = ctypes.c_int
 dll.auradsp_set_param.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
-                                  ctypes.POINTER(ctypes.c_double), ctypes.c_int]
+                                  ctypes.c_void_p, ctypes.c_int]
 
 FAILS = []
 
@@ -40,8 +40,10 @@ def check(name, ok, detail=''):
 
 
 def setp(h, pid, v):
-    val = ctypes.c_double(v)
-    rc = dll.auradsp_set_param(h, pid.encode(), ctypes.byref(val), 8)
+    # channels.count / channels.mode 为 i32 参数，须按 4 字节整型下发
+    # （与 smoke_config_and_matrix 的 set_i32 同口径；double 缓冲会被拒）。
+    val = ctypes.c_int32(int(v))
+    rc = dll.auradsp_set_param(h, pid.encode(), ctypes.byref(val), 4)
     assert rc == 0, 'set_param %s rc=%d' % (pid, rc)
 
 
