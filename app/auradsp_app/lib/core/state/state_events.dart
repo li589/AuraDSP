@@ -42,6 +42,8 @@ extension StateEvents on AppModel {
     vizChannelLevels.value = List<double>.filled(kVizChannelMax, -120.0);
     vizStageChLevels.value =
         List<double>.filled(kVizStageTelemetry * kVizChannelMax, -120.0);
+    // S3：清帧后立刻以合成值回填声道数（布局不闪空；电平已清零）。
+    refreshDisplayChannelCount();
   }
 
   void _onMessage(dynamic raw) {
@@ -1010,6 +1012,7 @@ extension StateEvents on AppModel {
         // stageCh 21×8），缺列 -120，UI 侧统一索引。
         if (raw['chCount'] != null) {
           final cc = (raw['chCount'] as num).toInt();
+          noteStreamChannelCount(cc); // S3：登记流真值与到达时刻
           vizChannelCount.value = cc;
           final cl = (raw['chLevels'] as List?)
                   ?.cast<num>()

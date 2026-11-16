@@ -1164,21 +1164,68 @@ extension AudioModesState on AppModel {
     _notifyUi();
   }
 
+  /// 选中 APO 端点在设备扫描表中的 mix 声道数（未知 = null）。
+  int? _selectedApoEndpointCh() {
+    final id = selectedApoEndpointId;
+    for (final d in wasapiDevices) {
+      if (d.id == id && d.ch > 0) return d.ch;
+    }
+    return null;
+  }
+
   /// 第四十二轮 S1：把当前选中 APO 端点的 mix 声道数作为输出
   /// 路径能力发给 isolate（声道自动回退的钳制依据）。端点不在
   /// 扫描表内（未知）时发 8 = 不钳制。设备扫描刷新（端点改格
   /// 式）与选中切换时调用。
   void _sendChCap() {
     if (audioMode != 'sysapo') return;
-    final id = selectedApoEndpointId;
-    var ch = 8;
-    for (final d in wasapiDevices) {
-      if (d.id == id && d.ch > 0) {
-        ch = d.ch;
-        break;
+    _toIso?.send({'cmd': 'chcap', 'ch': _selectedApoEndpointCh() ?? 8});
+  }
+
+  // ── 第四十二轮 S3：显示声道数即时合成 ────────────────────
+  // 主页电平布局/链输入门控等显示面只认 vizChannelCount，而它
+  // 此前仅由 viz 事件（音频流动时）更新：静默改声道设置/端点
+  // 改格式后显示纹丝不动、要等出声（user 实测）。现改为：流
+  // 活跃（2 秒内有声道事件）用流真值，其余时刻由配置 + 设备
+  // 格式 + S1 钳制即时合成，并经 _notifyUi 收敛推入。
+
+  /// viz 声道事件到达时登记流真值（state_events 调用）。
+  void noteStreamChannelCount(int cc) {
+    _streamCh = cc;
+    _lastVizChAt = DateTime.now();
+  }
+
+  bool get _streamChLive =>
+      _lastVizChAt != null &&
+      _streamCh > 0 &&
+      DateTime.now().difference(_lastVizChAt!) <
+          const Duration(seconds: 2);
+
+  static int _normCh(int ch) => ch >= 8 ? 8 : (ch >= 6 ? 6 : (ch >= 4 ? 4 : 2));
+
+  /// 显示用工作声道数（合成口径见上）。
+  int get displayChannelCount {
+    if (_streamChLive) return _streamCh;
+    if (channelsCountMode == 1) {
+      var want = channelsCount;
+      if (audioMode == 'sysapo') {
+        want = clampChannelsToCapability(
+            want, _selectedApoEndpointCh() ?? 8);
       }
+      return _normCh(want);
     }
-    _toIso?.send({'cmd': 'chcap', 'ch': ch});
+    if (audioMode == 'sysapo') {
+      final devCh = _selectedApoEndpointCh();
+      if (devCh != null) return _normCh(devCh);
+    }
+    return effectiveChannelCount;
+  }
+
+  /// 把合成值推入 vizChannelCount（流活跃时不推，免与真值打架）。
+  void refreshDisplayChannelCount() {
+    if (_streamChLive) return;
+    final d = displayChannelCount;
+    if (vizChannelCount.value != d) vizChannelCount.value = d;
   }
 
   /// 存量目标值（全 id / 友好名 / 短 GUID 三种历史形状）→ 端点

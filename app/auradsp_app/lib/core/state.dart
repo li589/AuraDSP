@@ -19,6 +19,7 @@ import 'package:flutter/material.dart' show Color, Locale;
 import 'package:flutter/scheduler.dart';
 
 import '../engine/audio_isolate.dart';
+import '../engine/local_channel_policy.dart';
 import '../engine/audio_out/alsa_ffi.dart' as alsa_ffi;
 import 'debug/debug_trace.dart';
 import 'effect_registry.dart';
@@ -1084,7 +1085,12 @@ class AppModel extends ChangeNotifier {
   // [Phase B 多声道电平] per-channel 电平（ADR-003，2026-10-24）。
   // stereo 时 [0]/[1] 与 levelL/R 同源一致；MC（5.1/7.1）为全声道。
   // vizChannelCount=0（无帧/断流）时 UI 回退 L/R 两柱行为。
+  // 第四十二轮 S3 起：静默期该值由 displayChannelCount 合成推入
+  // （配置+设备格式即时反映），流活跃时仍由 viz 事件写流真值。
   final vizChannelCount = ValueNotifier<int>(0);
+  // S3 合成用的流真值登记（viz 声道事件到达时刻与值）。
+  DateTime? _lastVizChAt;
+  int _streamCh = 0;
   /// 定长 kChannelMax；未用声道 -120。
   final vizChannelLevels = ValueNotifier<List<double>>(
     List.filled(kVizChannelMax, -120.0),
@@ -1253,6 +1259,10 @@ class AppModel extends ChangeNotifier {
   /// 测试模式（AppModel(testing:true)）保持同步通知——既有断言按
   /// 「setParam 调用后立刻可数」编写，合并属生产侧优化。
   void _notifyUi() {
+    // S3：任何状态变更顺带把显示声道数向合成值收敛（流活跃时
+    // 内部自跳过），使静默改设置/端点改格式即时反映到主页与
+    // 输入门控等只监听 vizChannelCount 的显示面。
+    refreshDisplayChannelCount();
     if (_testing) {
       if (!_disposed) notifyListeners();
       return;
