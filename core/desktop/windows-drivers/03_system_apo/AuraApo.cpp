@@ -112,6 +112,22 @@ STDMETHODIMP CAuraApo::GetRegistrationProperties(APO_REG_PROPERTIES** ppRegProps
     return S_OK;
 }
 
+// [S0 尖刺转储，S1 删除] 探针块布局（定义前置：Initialize 路径多处引用）。
+namespace {
+struct ApoProbeRecord {
+    wchar_t token[80];
+    unsigned long long idHash;
+    int32_t mode, fill;
+    uint32_t modeValid, fillValid;
+    wchar_t diag[256];
+};
+struct ApoProbeBlock {
+    volatile LONG next;
+    uint32_t magic;  // 'APRB' = 0x42525041
+    ApoProbeRecord recs[16];
+};
+}  // namespace
+
 STDMETHODIMP CAuraApo::Initialize(UINT32 cbDataSize, BYTE* pbyData) {
     // [第四十一轮] IAudioSystemEffects 为标记接口，系统效果初始化
     // 数据经本函数以 APOInitSystemEffects 抵达：其中
@@ -119,9 +135,17 @@ STDMETHODIMP CAuraApo::Initialize(UINT32 cbDataSize, BYTE* pbyData) {
     // 道覆写的来源。数据缺失/形状不符时静默跳过（v1 行为不变）。
     if (pbyData && cbDataSize >= sizeof(APOInitSystemEffects)) {
         auto* init = reinterpret_cast<APOInitSystemEffects*>(pbyData);
-        if (init->APOInit.cbSize >= sizeof(APOInitBaseStruct) &&
-            init->pAPOEndpointProperties) {
-            ReadEndpointProps(init->pAPOEndpointProperties);
+        if (init->APOInit.cbSize >= sizeof(APOInitBaseStruct)) {
+            // S0 尖刺修订：首轮实测 pAPOEndpointProperties 里读不到
+            // 属性集（令牌空）——FX 值可能挂在 pAPOSystemEffectsProperties
+            // （系统效果存储）而非端点存储。两处都读，探针记录来源与
+            // 两存储的键清单以定案。
+            if (init->pAPOSystemEffectsProperties)
+                ReadEndpointProps(init->pAPOSystemEffectsProperties);
+            if (endpoint_id_.empty() && init->pAPOEndpointProperties)
+                ReadEndpointProps(init->pAPOEndpointProperties);
+            DumpStoreDiag_(init->pAPOEndpointProperties,
+                           init->pAPOSystemEffectsProperties);
         }
     }
     return S_OK;
@@ -164,21 +188,47 @@ void CAuraApo::ReadEndpointProps(IPropertyStore* store) {
     DumpProbe_();
 }
 
-// [S0 尖刺转储，S1 删除] 把本次 Initialize 读到的端点属性写进
-// Global\AuraDSP_ApoProbe 供外部读取验证：每实例一条（环形 16 条）。
-namespace {
-struct ApoProbeRecord {
-    wchar_t token[80];
-    unsigned long long idHash;
-    int32_t mode, fill;
-    uint32_t modeValid, fillValid;
-};
-struct ApoProbeBlock {
-    volatile LONG next;
-    uint32_t magic;  // 'APRB' = 0x42525041
-    ApoProbeRecord recs[16];
-};
-}  // namespace
+void CAuraApo::DumpStoreDiag_(IPropertyStore* epStore, IPropertyStore* fxStore) {
+    // 把两存储的键清单（fmtid+pid）拼进最近一条探针记录的 diag 区。
+    HANDLE hMap = OpenFileMappingW(FILE_MAP_WRITE, FALSE, L"Global\\AuraDSP_ApoProbe");
+    if (!hMap) return;
+    void* view = MapViewOfFile(hMap, FILE_MAP_WRITE, 0, 0, sizeof(ApoProbeBlock));
+    if (view) {
+        auto* blk = (ApoProbeBlock*)view;
+        const LONG n = blk->next;
+        if (n > 0) {
+            ApoProbeRecord& r = blk->recs[(n - 1) & 15];
+            wchar_t* d = r.diag;
+            size_t cap = sizeof(r.diag) / sizeof(wchar_t);
+            size_t used = 0;
+            auto put = [&](const wchar_t* s) {
+                while (*s && used + 1 < cap) d[used++] = *s++;
+            };
+            auto putStore = [&](const wchar_t* tag, IPropertyStore* st) {
+                put(tag);
+                if (!st) { put(L"null;"); return; }
+                DWORD cnt = 0;
+                if (FAILED(st->GetCount(&cnt))) { put(L"err;"); return; }
+                wchar_t num[24];
+                _snwprintf_s(num, L"%lu:", (unsigned long)cnt);
+                put(num);
+                for (DWORD i = 0; i < cnt && used + 44 < cap; ++i) {
+                    PROPERTYKEY k{};
+                    if (FAILED(st->GetAt(i, &k))) continue;
+                    _snwprintf_s(num, L"%08lx,%lu;",
+                                 (unsigned long)k.fmtid.Data1,
+                                 (unsigned long)k.pid);
+                    put(num);
+                }
+            };
+            putStore(L"EP=", epStore);
+            putStore(L"FX=", fxStore);
+            d[used] = 0;
+        }
+        UnmapViewOfFile(view);
+    }
+    CloseHandle(hMap);
+}
 
 void CAuraApo::DumpProbe_() {
     PSECURITY_DESCRIPTOR sd = nullptr;

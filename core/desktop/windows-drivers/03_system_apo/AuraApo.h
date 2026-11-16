@@ -92,6 +92,7 @@ class CAuraApo : public IAudioProcessingObject,
     int32_t ep_fill_ = 0;
     void ReadEndpointProps(IPropertyStore* store);
     void DumpProbe_();  // S0 尖刺转储（Global\AuraDSP_ApoProbe），S1 删除
+    void DumpStoreDiag_(IPropertyStore* epStore, IPropertyStore* fxStore);
     // 心跳计数直接原子累加进共享块（全面复审 S4 / APO-2），本实例
     // 不再持本地镜像（旧 seq_/frames_ 已删）。
 
