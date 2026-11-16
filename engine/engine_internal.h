@@ -121,6 +121,33 @@ constexpr float kBandEdges[AURADSP_VIZ_BANDS + 1] = {
     630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, //
     5950, 7070, 8400, 10000, 11900, 14100, 16800, 20000};
 
+/* 频带 → FFT bin 区间 [lo, hi)（第四十二轮 S6 定案，两处显示面
+ * 共用：engine_viz 的 compute_bands 与 engine_convolver 的 IR 谱）。
+ * 归属按 bin 中心频率落入带边区间计：lo = ceil(E_lo/bin_hz)、
+ * hi = ceil(E_hi/bin_hz)。旧实现对带边截断取整，低频段每带实
+ * 际抓到的是其下界以下的 bin——纯音峰系统性记到高一带（实测
+ * 60Hz 应 band4 却落 band5、120Hz 应 band7 却落 band8）。
+ * 窄于一 bin 且无 bin 中心落入的带（band1 25–31Hz@4096）借中
+ * 心最接近带几何中心的 bin 单独成带，避免结构性丢弃。
+ * 返回 false = 整带在 nmag 之外（调用方记 0）。 */
+inline bool BandBinRange(float eLo, float eHi, float binHz, int nmag,
+                         int* outLo, int* outHi) {
+    int lo = (int)ceilf(eLo / binHz);
+    int hi = (int)ceilf(eHi / binHz);
+    if (hi <= lo) {
+        const float ctr = sqrtf(eLo * eHi);
+        int nb = (int)(ctr / binHz + 0.5f);
+        if (nb < 0) nb = 0;
+        lo = nb;
+        hi = nb + 1;
+    }
+    if (lo >= nmag) return false;
+    if (hi > nmag) hi = nmag;
+    *outLo = lo;
+    *outHi = hi;
+    return true;
+}
+
 
 struct Params {
     std::atomic<int32_t>  bass_enable{0};

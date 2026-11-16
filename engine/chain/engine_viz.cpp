@@ -162,15 +162,15 @@ static void compute_bands(auradsp_handle h, const float* hist, int pos, int kN,
     /* 4) 32 对数带：幅度归一（汉宁相干增益 0.5 × 单边 2）→ dBFS → [0,1] */
     const float amp_scale = 4.0f / (float)kN;
     for (int b = 0; b < AURADSP_VIZ_BANDS; ++b) {
-        const int lo = (int)(kBandEdges[b] / bin_hz);
-        int hi = (int)(kBandEdges[b + 1] / bin_hz);
-        /* 窄于单个 FFT bin 的频带必须至少占一个 bin，否则被结构性丢弃。
-         * 4096@48kHz 时 bin_hz≈11.72Hz，而 25–31Hz 的 band1 只有 6Hz 宽：
-         * lo==hi==2 → 原先直接判 0，白噪音下第二根柱子永远不显示、
-         * 低频整体缺频。向上取整到 lo+1 让它与相邻带共享该 bin。 */
-        if (hi <= lo) hi = lo + 1;
-        if (lo >= nmag) { out_bands[b] = 0; continue; }
-        const int hb = hi > nmag ? nmag : hi;
+        /* bin 归属按中心频率落带（BandBinRange，第四十二轮 S6）：
+         * 旧截断口径把纯音峰系统性记高一带（60Hz→band5、
+         * 120Hz→band8）；窄带借最近 bin 的旧补丁并入该函数。 */
+        int lo = 0, hb = 0;
+        if (!BandBinRange(kBandEdges[b], kBandEdges[b + 1], bin_hz, nmag,
+                          &lo, &hb)) {
+            out_bands[b] = 0;
+            continue;
+        }
         float m = 0;
         for (int i = lo; i < hb; ++i) if (mag[i] > m) m = mag[i];
         const float amp = m * amp_scale;

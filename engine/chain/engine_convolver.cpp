@@ -107,10 +107,14 @@ void compute_ir_spectrum(auradsp_handle h, const float* data, size_t frames, int
         }
 
         for (int b = 0; b < AURADSP_VIZ_BANDS; ++b) {
-            const int lo = (int)(kBandEdges[b] / bin_hz);
-            const int hi = (int)(kBandEdges[b + 1] / bin_hz);
-            if (hi <= lo || lo >= nmag) { h->ir_spectrum[c][b] = 0.0f; continue; }
-            const int hb = hi > nmag ? nmag : hi;
+            // bin 归属与频谱显示同口径（BandBinRange，第四十二轮
+            // S6）；旧截断口径下窄带直接判 0、低带峰位偏高一带。
+            int lo = 0, hb = 0;
+            if (!BandBinRange(kBandEdges[b], kBandEdges[b + 1], bin_hz,
+                              nmag, &lo, &hb)) {
+                h->ir_spectrum[c][b] = 0.0f;
+                continue;
+            }
             float m = 0.0f;
             for (int i = lo; i < hb; ++i) if (mag[i] > m) m = mag[i];
             const float rel = m / max_m;

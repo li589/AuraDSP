@@ -108,6 +108,20 @@ b_lfe = run_case(8, 0, 3, freq=60)
 check('矩阵 LFE-only 频谱点亮', max(b_lfe) > 0.3,
       'peak band=%d val=%.3f' % (b_lfe.index(max(b_lfe)), max(b_lfe)))
 
+print('=== [6] 峰值带位置（第四十二轮 S6） ===')
+# bin 归属旧截断口径把纯音峰系统性记高一带（60Hz 应 band4 落
+# band5、120Hz 应 band7 落 band8，user 报「频谱位置不对」）。
+# BandBinRange 改按 bin 中心频率落带后，峰位须回正。
+for freq, exp_band in ((60, 4), (100, 7), (120, 7)):
+    b_pos = run_case(8, 1, 3, freq=freq)
+    pk_pos = b_pos.index(max(b_pos))
+    check('LFE %dHz 峰值带 == %d' % (freq, exp_band), pk_pos == exp_band,
+          'peak band=%d val=%.3f' % (pk_pos, max(b_pos)))
+b_pos_l = run_case(8, 1, 0, freq=60)
+check('FL 60Hz 峰值带与 LFE 一致（band4）',
+      b_pos_l.index(max(b_pos_l)) == 4,
+      'peak band=%d' % b_pos_l.index(max(b_pos_l)))
+
 if FAILS:
     print('VIZ MULTICHANNEL FAILURES:', FAILS)
     sys.exit(1)
