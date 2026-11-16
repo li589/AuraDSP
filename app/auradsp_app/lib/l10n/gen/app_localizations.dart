@@ -6603,6 +6603,60 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'主页背景随音乐起伏的光晕；关闭后完全停绘，可省 GPU'**
   String get ambientHint;
+
+  /// No description provided for @apoEndpointSelectedTag.
+  ///
+  /// In zh, this message translates to:
+  /// **'选中'**
+  String get apoEndpointSelectedTag;
+
+  /// No description provided for @apoChannelsForEndpoint.
+  ///
+  /// In zh, this message translates to:
+  /// **'声道设置作用于端点「{name}」'**
+  String apoChannelsForEndpoint(String name);
+
+  /// No description provided for @apoChannelsFollowGlobal.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前跟随全局声道设置（未单独设置）'**
+  String get apoChannelsFollowGlobal;
+
+  /// No description provided for @apoChannelsResetFollow.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复跟随全局'**
+  String get apoChannelsResetFollow;
+
+  /// No description provided for @apoChannelsStereoNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'选中端点为立体声，声道模式与填充不影响其处理'**
+  String get apoChannelsStereoNote;
+
+  /// No description provided for @apoSelectedNotAttached.
+  ///
+  /// In zh, this message translates to:
+  /// **'选中端点尚未附加：声道设置已保存，附加后生效'**
+  String get apoSelectedNotAttached;
+
+  /// No description provided for @apoChannelsActual.
+  ///
+  /// In zh, this message translates to:
+  /// **'引擎实际生效：{mode} · {fill}'**
+  String apoChannelsActual(String mode, String fill);
+
+  /// No description provided for @apoFillFill.
+  ///
+  /// In zh, this message translates to:
+  /// **'铺满'**
+  String get apoFillFill;
+
+  /// No description provided for @apoFillGated.
+  ///
+  /// In zh, this message translates to:
+  /// **'门控'**
+  String get apoFillGated;
 }
 
 class _AppLocalizationsDelegate

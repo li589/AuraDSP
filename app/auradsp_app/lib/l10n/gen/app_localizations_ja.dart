@@ -3497,4 +3497,37 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get ambientHint => 'ホーム背景で音楽に反応するグロー。オフにすると描画を完全に停止し GPU を節約します';
+
+  @override
+  String get apoEndpointSelectedTag => '選択中';
+
+  @override
+  String apoChannelsForEndpoint(String name) {
+    return 'チャンネル設定はエンドポイント「$name」に適用されます';
+  }
+
+  @override
+  String get apoChannelsFollowGlobal => 'グローバルのチャンネル設定に従っています（個別設定なし）';
+
+  @override
+  String get apoChannelsResetFollow => 'グローバルに戻す';
+
+  @override
+  String get apoChannelsStereoNote =>
+      '選択中のエンドポイントはステレオです。チャンネルモードと填充は処理に影響しません';
+
+  @override
+  String get apoSelectedNotAttached =>
+      '選択中のエンドポイントは未アタッチです。チャンネル設定は保存され、アタッチ後に有効になります';
+
+  @override
+  String apoChannelsActual(String mode, String fill) {
+    return 'エンジン実効：$mode · $fill';
+  }
+
+  @override
+  String get apoFillFill => '填充';
+
+  @override
+  String get apoFillGated => 'ゲート';
 }

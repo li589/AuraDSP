@@ -53,17 +53,34 @@ abstract interface class WindowsSystemPort {
   Future<ProcessResult> apoStatus(String exePath, double timeout);
 
   /// apo_config.exe install（可选 UAC 提权 / 复合插槽）。
+  /// [propsMode]/[propsFill] 非空时同进程顺带写端点 FX 属性集
+  /// （身份令牌 + 声道覆写，第四十一轮；值域同 apoEndpointProps）。
   Future<ApoRunResult> apoInstall(
     String exePath, {
     required String target,
     required bool composite,
     required bool elevated,
+    String propsMode = '',
+    String propsFill = '',
   });
 
   /// apo_config.exe uninstall（可选 UAC 提权）。
   Future<ApoRunResult> apoUninstall(
     String exePath, {
     required String target,
+    required bool elevated,
+  });
+
+  /// apo_config.exe endpoint-props（可选 UAC 提权）：写端点 FX
+  /// 属性集——身份令牌 + 声道覆写持久层（第四十一轮 APO 多端点
+  /// v2）。[mode]/[fill] ∈ '0' | '1' | 'keep' | 'clear'；
+  /// [clear] = true 时整组清除（分离端点前调用）。
+  Future<ApoRunResult> apoEndpointProps(
+    String exePath, {
+    required String target,
+    String mode = 'keep',
+    String fill = 'keep',
+    bool clear = false,
     required bool elevated,
   });
 

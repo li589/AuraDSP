@@ -173,9 +173,14 @@ extension AudioModesState on AppModel {
     // APO 真处理通道（P1）：sysapo 生效期间让 isolate 轮询 APO
     // 回传块（电平/频谱合成 viz），并在进入时全量重发参数块；
     // 离开 sysapo 即停读。isolate 侧非 Windows 永久静默，无副作用。
-    _toIso?.send({'cmd': 'apotelemetry', 'on': valid == 'sysapo'});
+    _toIso?.send({
+      'cmd': 'apotelemetry',
+      'on': valid == 'sysapo',
+      'endpointId': selectedApoEndpointId,
+    });
     if (valid == 'sysapo') {
       applyApoFileEffectPolicy();
+      _pushApoEndpointChannels();
       _toIso?.send({'cmd': 'apopublish'});
     } else if (apoEngineActive || apoEngineFault) {
       // 离开 sysapo：引擎状态面复位（读者已停，不再有事件回填）。
@@ -1150,6 +1155,77 @@ extension AudioModesState on AppModel {
     apoAttached =
         apoInstalledEndpoints.any((e) => _apoEndpointMatches(e, endpoint));
     persistRoutingChange();
+    // 跟随端点切换（第四十一轮）：telemetry 读者切到新端点的
+    // 分块；解析不到全 id 时回落全局块（读者侧空目标口径）。
+    _toIso?.send({'cmd': 'apotarget', 'endpointId': selectedApoEndpointId});
+    _notifyUi();
+  }
+
+  /// 存量目标值（全 id / 友好名 / 短 GUID 三种历史形状）→ 端点
+  /// 全 id（第四十一轮）：先查 apo_config 枚举（id/name），再查
+  /// 已附加清单。解析不到返回 ''（消费侧回落全局口径）。
+  String resolveApoEndpointId(String stored) {
+    if (stored.isEmpty) return '';
+    final t = stored.toLowerCase();
+    for (final e in apoKnownEndpoints) {
+      final id = e['id']?.toString() ?? '';
+      final name = e['name']?.toString() ?? '';
+      if (id.toLowerCase() == t || name.toLowerCase() == t) return id;
+      if (t.length >= 8 && id.toLowerCase().contains(t)) return id;
+    }
+    for (final e in apoInstalledEndpoints) {
+      if (_apoEndpointMatches(e, stored)) {
+        return e['EndpointId']?.toString() ?? '';
+      }
+    }
+    return '';
+  }
+
+  /// 当前选中端点的全 id（解析不到为 ''）。
+  String get selectedApoEndpointId =>
+      resolveApoEndpointId(config.apoTargetEndpoint);
+
+  /// 某端点（全 id / 名 / 短 GUID 均可）当前是否已附加。
+  bool apoEndpointAttached(String target) =>
+      apoInstalledEndpoints.any((e) => _apoEndpointMatches(e, target));
+
+  /// config 的分端点声道覆写全量下发 isolate（参数块 v3 覆写
+  /// 表）。发布者未激活时 isolate 侧自跳过，无副作用。
+  void _pushApoEndpointChannels() {
+    _toIso?.send({
+      'cmd': 'apoepchannels',
+      'map': {
+        for (final e in config.apoEndpointChannels.entries)
+          e.key: {'mode': e.value.mode, 'fill': e.value.fill},
+      },
+    });
+  }
+
+  /// 设置/清除某端点的声道覆写（第四十一轮）：mode 与 fill 同
+  /// 传 = 设覆写；同为 null = 清除（回落全局）。落盘 + 实时表
+  /// 下发（引擎 50ms 内跟随）；FX 持久层在下次附加该端点时由
+  /// install --props 一并写入，不为每次微调弹 UAC。
+  void setApoEndpointChannels(String endpointId, {int? mode, int? fill}) {
+    if (endpointId.isEmpty) return;
+    if (mode == null && fill == null) {
+      if (config.apoEndpointChannels.remove(endpointId) == null) return;
+    } else {
+      if (mode == null || fill == null) return; // 覆写恒成对
+      config.apoEndpointChannels[endpointId] =
+          (mode: mode.clamp(0, 1), fill: fill.clamp(0, 1));
+    }
+    persistRoutingChange();
+    _pushApoEndpointChannels();
+    _notifyUi();
+  }
+
+  /// 一键附加复选集的勾选切换（会话级，不落盘）。
+  void toggleApoChecked(String endpointId, bool on) {
+    if (on) {
+      apoCheckedEndpoints.add(endpointId);
+    } else {
+      apoCheckedEndpoints.remove(endpointId);
+    }
     _notifyUi();
   }
 
@@ -1458,6 +1534,40 @@ extension AudioModesState on AppModel {
                   installed.any((e) => _apoEndpointMatches(e, target));
             }
 
+            // 复选集调和 + 选中回落（第四十一轮）：已附加端点与
+            // 选中端点恒入复选集；选中端点在枚举与已附加清单中
+            // 均消失、且确有已附加端点时，回落到首个已附加端点
+            // 并明示（裁定③）。枚举为空（设备抖动）时不回落。
+            for (final e in installed) {
+              final id = e['EndpointId']?.toString() ?? '';
+              if (id.isNotEmpty) apoCheckedEndpoints.add(id);
+            }
+            final selId = selectedApoEndpointId;
+            if (selId.isNotEmpty) apoCheckedEndpoints.add(selId);
+            if (target.isNotEmpty &&
+                selId.isEmpty &&
+                apoKnownEndpoints.isNotEmpty &&
+                installed.isNotEmpty) {
+              final fb = installed.first;
+              final fbId = fb['EndpointId']?.toString() ?? '';
+              if (fbId.isNotEmpty) {
+                config.apoTargetEndpoint = fbId;
+                apoAttached = true;
+                persistRoutingChange();
+                _toIso?.send({'cmd': 'apotarget', 'endpointId': fbId});
+                postNotice(
+                    '所选 APO 端点已消失，已回落到已附加端点'
+                    '「${fb['DeviceName']?.toString() ?? fbId}」',
+                    level: NoticeLevel.warning);
+              }
+            }
+            // telemetry 跟随对账：枚举到达后选中端点可能首次可
+            // 解析（启动时序），把跟随目标补发读者（幂等）。
+            if (audioMode == 'sysapo') {
+              _toIso?.send(
+                  {'cmd': 'apotarget', 'endpointId': selectedApoEndpointId});
+            }
+
             final hb = data['heartbeat'] as Map<String, dynamic>?;
             if (hb != null && hb['alive'] == true) {
               apoHeartbeatAlive = true;
@@ -1482,6 +1592,66 @@ extension AudioModesState on AppModel {
     _notifyUi();
   }
 
+  /// 单端点附加本体（第四十一轮抽取）：工具调用 + 复查裁定。
+  /// 身份令牌与该端点的声道覆写期望经 install --props 在同次
+  /// 提权内写入 FX 属性集（APO 实例 Initialize 时读回；运行中
+  /// 的实时变更另走参数块 v3 覆写表）。
+  Future<({bool ok, String? error})> _attachOneApoEndpoint(
+    String target, {
+    required bool composite,
+    bool elevated = true,
+  }) async {
+    final script = _findApoConfigTool();
+    if (script == null) {
+      return (ok: false, error: '未找到 apo_config.exe 驱动管理工具');
+    }
+    final fullId = resolveApoEndpointId(target);
+    final ovr = fullId.isEmpty ? null : config.apoEndpointChannels[fullId];
+    final res = await windowsSystem.apoInstall(
+      script,
+      target: target,
+      composite: composite,
+      elevated: elevated,
+      propsMode: ovr == null ? 'keep' : '${ovr.mode}',
+      propsFill: ovr == null ? 'keep' : '${ovr.fill}',
+    );
+    // apo 操作留痕（Stage 0 / §8.2）：此前附加/卸载在主日志
+    // 里完全无记录，真机排障只能靠结果文件残骸反推时序。
+    dbgLog('apo attach: target=$target composite=$composite '
+        'exit=${res.exitCode} toolOk=${res.toolOk} '
+        'err=${res.toolError ?? res.toolMessage ?? ""}');
+    // 工具自报失败（如端点匹配歧义/注册表写入失败）：原因
+    // 就在结果通道里，直接呈现，不再走退出码猜层。工具经
+    // --result-file 跨 UAC 边界回传 JSON 裁定（真机实证：
+    // 手动运行工具全程正常，App 路径失败却只报 UAC）。
+    if (res.toolOk == false) {
+      return (
+        ok: false,
+        error:
+            'System APO 附加失败：${res.toolMessage ?? res.toolError ?? '工具未报告原因'}'
+      );
+    }
+    await Future.delayed(const Duration(milliseconds: 600));
+    await checkApoStatus(timeout: 0.6, silent: true);
+    // 裁定 = 工具自报与状态复查合取（细审 R-C M-2 的 App
+    // 侧一半）：复查未见该端点附加时按层报未确认，不假报成功。
+    final attachedNow =
+        apoInstalledEndpoints.any((e) => _apoEndpointMatches(e, target));
+    if (!attachedNow) {
+      // 失败文案按层区分（旧版一律归咎 UAC，对真机实证的
+      // 「提权已执行但工具侧失败」毫无诊断价值）：提权进程
+      // 退出码非 0 = UAC 拒绝/拉起失败；退出码 0 但状态复查
+      // 无附加记录 = 工具已运行但未完成附加。
+      return (
+        ok: false,
+        error: res.exitCode != 0
+            ? 'System APO 附加未生效：提权执行失败（退出码 ${res.exitCode}），请确认在 UAC 提权弹窗中选择“是”以授予管理员权限'
+            : 'System APO 附加未生效：提权工具已执行，但未产生附加记录（端点匹配或注册表写入未完成）。可用管理员终端进入 driver 目录运行 apo_config.exe install 查看具体原因'
+      );
+    }
+    return (ok: true, error: null);
+  }
+
   /// 一键将 System APO 挂载到指定音频端点（支持 Windows UAC 提权授权，支持复合插槽）
   Future<bool> attachSystemApo({
     String? endpointNameOrId,
@@ -1489,81 +1659,77 @@ extension AudioModesState on AppModel {
     bool elevated = true,
   }) async {
     if (!PlatformProfile.supportsBridges) return false;
+    final target = (endpointNameOrId != null && endpointNameOrId.isNotEmpty)
+        ? endpointNameOrId
+        : config.apoTargetEndpoint;
+    if (target.isEmpty) {
+      lastApoError = '请先选择需要附加的音频端点';
+      _notifyUi();
+      return false;
+    }
     isApoOperating = true;
     lastApoError = null;
     _notifyUi();
-
     try {
-      final script = _findApoConfigTool();
-      if (script == null) {
-        lastApoError = '未找到 apo_config.exe 驱动管理工具';
-        isApoOperating = false;
-        _notifyUi();
-        return false;
-      }
-
-      final target = (endpointNameOrId != null && endpointNameOrId.isNotEmpty)
-          ? endpointNameOrId
-          : config.apoTargetEndpoint;
-      if (target.isEmpty) {
-        lastApoError = '请先选择需要附加的音频端点';
-        isApoOperating = false;
-        _notifyUi();
-        return false;
-      }
-
-      final useComposite = composite ?? apoCompositeMode;
-      final res = await windowsSystem.apoInstall(
-        script,
-        target: target,
-        composite: useComposite,
+      final r = await _attachOneApoEndpoint(
+        target,
+        composite: composite ?? apoCompositeMode,
         elevated: elevated,
       );
-      // apo 操作留痕（Stage 0 / §8.2）：此前附加/卸载在主日志
-      // 里完全无记录，真机排障只能靠结果文件残骸反推时序。
-      dbgLog('apo attach: target=$target composite=$useComposite '
-          'exit=${res.exitCode} toolOk=${res.toolOk} '
-          'err=${res.toolError ?? res.toolMessage ?? ""}');
-
-      // 工具自报失败（如端点匹配歧义/注册表写入失败）：原因
-      // 就在结果通道里，直接呈现，不再走退出码猜层。工具经
-      // --result-file 跨 UAC 边界回传 JSON 裁定（真机实证：
-      // 手动运行工具全程正常，App 路径失败却只报 UAC）。
-      if (res.toolOk == false) {
-        lastApoError =
-            'System APO 附加失败：${res.toolMessage ?? res.toolError ?? '工具未报告原因'}';
-        isApoOperating = false;
-        _notifyUi();
-        return false;
-      }
-
-      await Future.delayed(const Duration(milliseconds: 600));
-      await checkApoStatus(timeout: 0.6);
-
-      // 裁定 = 工具自报与状态复查合取（细审 R-C M-2 的 App
-      // 侧一半）：toolOk 单独为真不再短路——工具写槽已改为
-      // 成败必查后 toolOk 可信，但复查未见附加时仍走下方
-      // 分层文案报未确认，不假报成功。
-      final ok = (res.toolOk ?? (res.exitCode == 0)) && apoAttached;
-      if (!ok && lastApoError == null) {
-        // 失败文案按层区分（旧版一律归咎 UAC，对真机实证的
-        // 「提权已执行但工具侧失败」毫无诊断价值）：
-        // 提权进程退出码非 0 = UAC 拒绝/拉起失败；退出码 0 但
-        // 状态复查无附加记录 = 工具已运行但未完成附加（端点
-        // 匹配/注册表写入等），需看工具自身输出定位。
-        lastApoError = res.exitCode != 0
-            ? 'System APO 附加未生效：提权执行失败（退出码 ${res.exitCode}），请确认在 UAC 提权弹窗中选择“是”以授予管理员权限'
-            : 'System APO 附加未生效：提权工具已执行，但未产生附加记录（端点匹配或注册表写入未完成）。可用管理员终端进入 driver 目录运行 apo_config.exe install 查看具体原因';
-      }
+      if (!r.ok) lastApoError = r.error;
       isApoOperating = false;
       _notifyUi();
-      return ok;
+      return r.ok;
     } catch (e) {
       lastApoError = 'System APO 附加异常: $e';
       isApoOperating = false;
       _notifyUi();
       return false;
     }
+  }
+
+  /// 一键附加全部复选端点（第四十一轮）：逐一附加未附加者，
+  /// 单个失败不连带其余；结束统一复查并汇总通知。每个端点一
+  /// 次提权（工具按端点执行），已附加的跳过不重复弹窗。
+  Future<int> attachCheckedApoEndpoints() async {
+    if (!PlatformProfile.supportsBridges || isApoOperating) return 0;
+    final pending = apoCheckedEndpoints
+        .where((id) => !apoEndpointAttached(id))
+        .toList();
+    if (pending.isEmpty) {
+      postNotice('所勾选端点均已附加');
+      return 0;
+    }
+    isApoOperating = true;
+    lastApoError = null;
+    _notifyUi();
+    var okCount = 0;
+    var failCount = 0;
+    try {
+      for (final id in pending) {
+        final r = await _attachOneApoEndpoint(id, composite: apoCompositeMode);
+        if (r.ok) {
+          okCount++;
+        } else {
+          failCount++;
+          dbgLog('apo attach-checked: $id failed: ${r.error}');
+        }
+      }
+    } catch (e) {
+      failCount++;
+      dbgLog('apo attach-checked: exception $e');
+    }
+    await checkApoStatus(timeout: 0.6, silent: true);
+    isApoOperating = false;
+    if (failCount == 0) {
+      postNotice('已附加 $okCount 个端点');
+    } else {
+      lastApoError = '一键附加：成功 $okCount 个，失败 $failCount 个';
+      postNotice('一键附加完成：成功 $okCount 个，失败 $failCount 个',
+          level: NoticeLevel.warning);
+    }
+    _notifyUi();
+    return okCount;
   }
 
   /// 一键卸载已挂载的 System APO 并精确还原原始系统/厂商 APO

@@ -141,7 +141,12 @@ extension StateEvents on AppModel {
         // 并全量重发参数块（立项 P1/P3；非 Windows 侧静默）。
         if (audioMode == 'sysapo') {
           applyApoFileEffectPolicy();
-          _toIso?.send({'cmd': 'apotelemetry', 'on': true});
+          _toIso?.send({
+            'cmd': 'apotelemetry',
+            'on': true,
+            'endpointId': selectedApoEndpointId,
+          });
+          _pushApoEndpointChannels();
           _toIso?.send({'cmd': 'apopublish'});
         }
         // 模式恢复取证（2026-11-09）：与 isolate 侧
@@ -856,6 +861,11 @@ extension StateEvents on AppModel {
         }
         break;
       case 'apotelemetry':
+        // 分端点过滤（第四十一轮）：只消费当前选中端点的事件；
+        // 切换跟随后旧端点的迟到事件（含缺席上报）一律丢弃。
+        if ((raw['endpointId']?.toString() ?? '') != selectedApoEndpointId) {
+          break;
+        }
         // 遥测缺席监督（第十二轮 B2）：读者侧块缺席满 30s 上报。
         // 已附加却无遥测 = audiodg 内 APO 未在运行（静默无处理），
         // 每缺席周期通知一次；措辞带条件（若未播放，块本就不会
@@ -948,6 +958,12 @@ extension StateEvents on AppModel {
             dbgLog('viz: dropped $vizBackend frame '
                 '(expected $expectedVizBackend)');
           }
+          break;
+        }
+        // 分端点过滤（第四十一轮）：sysapo 帧只收当前选中端点
+        // 的（主页声道/频谱跟随选中端点）；切换后的迟到帧丢弃。
+        if (vizBackend == 'sysapo' &&
+            (raw['endpointId']?.toString() ?? '') != selectedApoEndpointId) {
           break;
         }
         vizSource = vizBackend;

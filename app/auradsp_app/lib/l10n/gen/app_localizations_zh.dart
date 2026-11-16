@@ -3459,4 +3459,35 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ambientHint => '主页背景随音乐起伏的光晕；关闭后完全停绘，可省 GPU';
+
+  @override
+  String get apoEndpointSelectedTag => '选中';
+
+  @override
+  String apoChannelsForEndpoint(String name) {
+    return '声道设置作用于端点「$name」';
+  }
+
+  @override
+  String get apoChannelsFollowGlobal => '当前跟随全局声道设置（未单独设置）';
+
+  @override
+  String get apoChannelsResetFollow => '恢复跟随全局';
+
+  @override
+  String get apoChannelsStereoNote => '选中端点为立体声，声道模式与填充不影响其处理';
+
+  @override
+  String get apoSelectedNotAttached => '选中端点尚未附加：声道设置已保存，附加后生效';
+
+  @override
+  String apoChannelsActual(String mode, String fill) {
+    return '引擎实际生效：$mode · $fill';
+  }
+
+  @override
+  String get apoFillFill => '铺满';
+
+  @override
+  String get apoFillGated => '门控';
 }

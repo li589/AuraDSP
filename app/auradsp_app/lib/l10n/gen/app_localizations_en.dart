@@ -3649,4 +3649,38 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get ambientHint =>
       'Glow behind the home page that follows the music. Turn it off to stop drawing entirely and save GPU.';
+
+  @override
+  String get apoEndpointSelectedTag => 'Selected';
+
+  @override
+  String apoChannelsForEndpoint(String name) {
+    return 'Channel settings apply to endpoint \"$name\"';
+  }
+
+  @override
+  String get apoChannelsFollowGlobal =>
+      'Following the global channel settings (no per-endpoint override)';
+
+  @override
+  String get apoChannelsResetFollow => 'Follow global';
+
+  @override
+  String get apoChannelsStereoNote =>
+      'The selected endpoint is stereo; channel mode and fill do not affect it';
+
+  @override
+  String get apoSelectedNotAttached =>
+      'Selected endpoint is not attached: channel settings are saved and apply once attached';
+
+  @override
+  String apoChannelsActual(String mode, String fill) {
+    return 'Engine in effect: $mode · $fill';
+  }
+
+  @override
+  String get apoFillFill => 'Fill';
+
+  @override
+  String get apoFillGated => 'Gated';
 }

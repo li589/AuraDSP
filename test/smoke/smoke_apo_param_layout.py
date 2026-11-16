@@ -50,10 +50,17 @@ def main():
     # 存量首槽不移位、块版本三方全等（ApoShared 手写 vs 两生成产物）。
     check("'channels.mode': 335" in dart and "'viz.fftSize': 338" in dart,
           'S3 追加段入块（channels.mode@335 … viz.fftSize@338）')
-    check('APO_PARAM_BLOCK_VERSION 2' in c_h
-          and 'const int kApoParamBlockVersion = 2;' in dart
-          and '#define APO_PARAMS_VERSION 2u' in shared,
-          '参数块版本 v2 三方全等')
+    check('APO_PARAM_BLOCK_VERSION 3' in c_h
+          and 'const int kApoParamBlockVersion = 3;' in dart
+          and '#define APO_PARAMS_VERSION 3u' in shared,
+          '参数块版本 v3 三方全等')
+    # 第四十一轮：v3 尾段分端点覆写表常量双侧一致（offset =
+    # v2 used bytes 27084；8 条 × 24B；used 扩至 27276）。
+    check('APO_EP_OVERRIDE_OFFSET 27084' in c_h
+          and 'const int kApoEpOverrideOffset = 27084;' in dart
+          and 'APO_BLOCK_USED_BYTES 27276' in c_h
+          and 'const int kApoBlockUsedBytes = 27276;' in dart,
+          'v3 覆写表尾段常量双侧一致')
     sha_c = re.search(r'sha256\[:16\]=(\w+)', c_h)
     sha_d = re.search(r'sha256\[:16\]=(\w+)', dart)
     check(sha_c and sha_d and sha_c.group(1) == sha_d.group(1),

@@ -185,15 +185,20 @@ final class WindowsSystemTools implements WindowsSystemPort {
     required String target,
     required bool composite,
     required bool elevated,
+    String propsMode = '',
+    String propsFill = '',
   }) async {
+    final withProps = propsMode.isNotEmpty;
     if (elevated) {
       final resultFile = _apoResultFile();
       _deleteQuietly(resultFile);
       final modeArg = composite ? ", '--composite'" : '';
+      final propsArg =
+          withProps ? ", '--props', '$propsMode', '$propsFill'" : '';
       final cmd =
           "Start-Process \"$exePath\" -Verb RunAs -Wait -ArgumentList "
           "'install', '\"$target\"', '--yes', '--force', "
-          "'--result-file', '\"${resultFile.path}\"'$modeArg";
+          "'--result-file', '\"${resultFile.path}\"'$modeArg$propsArg";
       final res = await Process.run('powershell', ['-Command', cmd]);
       return _apoResultFromFile(res.exitCode, resultFile);
     }
@@ -203,6 +208,7 @@ final class WindowsSystemTools implements WindowsSystemPort {
       '--yes',
       '--force',
       if (composite) '--composite',
+      if (withProps) ...['--props', propsMode, propsFill],
       '--json',
     ], stdoutEncoding: utf8);
     return _apoResultFromStdout(res);
@@ -229,6 +235,37 @@ final class WindowsSystemTools implements WindowsSystemPort {
       'uninstall',
       if (target.isNotEmpty) target,
       '--yes',
+      '--json',
+    ], stdoutEncoding: utf8);
+    return _apoResultFromStdout(res);
+  }
+
+  @override
+  Future<ApoRunResult> apoEndpointProps(
+    String exePath, {
+    required String target,
+    String mode = 'keep',
+    String fill = 'keep',
+    bool clear = false,
+    required bool elevated,
+  }) async {
+    final verb = clear ? 'endpoint-props-clear' : 'endpoint-props';
+    if (elevated) {
+      final resultFile = _apoResultFile();
+      _deleteQuietly(resultFile);
+      final tail = clear ? '' : ", '$mode', '$fill'";
+      final cmd =
+          "Start-Process \"$exePath\" -Verb RunAs -Wait -ArgumentList "
+          "'$verb', '\"$target\"'$tail, "
+          "'--result-file', '\"${resultFile.path}\"'";
+      final res = await Process.run('powershell', ['-Command', cmd]);
+      return _apoResultFromFile(res.exitCode, resultFile);
+    }
+    final res = await Process.run(exePath, [
+      verb,
+      target,
+      if (!clear) mode,
+      if (!clear) fill,
       '--json',
     ], stdoutEncoding: utf8);
     return _apoResultFromStdout(res);

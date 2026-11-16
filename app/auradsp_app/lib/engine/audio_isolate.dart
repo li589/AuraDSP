@@ -1552,7 +1552,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           break;
         case 'apotelemetry':
           // sysapo 生效期间读 APO 回传块并合成 viz 事件。
+          // endpointId（第四十一轮）：跟随的选中端点（全 id）；
+          // 缺席/空 = 旧全局块。切换目标不重启读者定时器。
           if (m['on'] == true) {
+            apoTelemetry.setTarget(m['endpointId']?.toString() ?? '');
             apoTelemetry.start(send);
             apoPluginPublisher.active = true;
             syncApoPlugins();
@@ -1560,6 +1563,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             apoTelemetry.stop();
             apoPluginPublisher.active = false;
           }
+          break;
+        case 'apotarget':
+          // 仅切换 telemetry 跟随端点（读者已在运行）。
+          apoTelemetry.setTarget(m['endpointId']?.toString() ?? '');
           break;
         case 'enginevalues':
           {

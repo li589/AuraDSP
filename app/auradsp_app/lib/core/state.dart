@@ -591,6 +591,10 @@ class AppModel extends ChangeNotifier {
   int apoHeartbeatSr = 0;
   int apoHeartbeatFrames = 0;
   List<Map<String, dynamic>> apoInstalledEndpoints = [];
+  // 一键附加的复选集（第四十一轮；会话级不落盘）：端点全 id。
+  // checkApoStatus 调和：已附加端点与选中端点恒在集内（已附加
+  // 行的复选在 UI 锁定为勾选态，取消勾选只对未附加端点有意义）。
+  final Set<String> apoCheckedEndpoints = {};
   bool isApoOperating = false;
   bool apoCompositeMode = false;
 

@@ -76,9 +76,15 @@
   "apoEngineDetail": "Engine actual: {rate} Hz · {ch} ch · {n} params applied",
   "@apoEngineDetail": {
     "placeholders": {
-      "rate": {"type": "String"},
-      "ch": {"type": "String"},
-      "n": {"type": "String"}
+      "rate": {
+        "type": "String"
+      },
+      "ch": {
+        "type": "String"
+      },
+      "n": {
+        "type": "String"
+      }
     }
   },
   "apoEngineNoteWaiting": "APO attached, waiting for the engine to become ready; audio passes through until then.",
@@ -97,7 +103,13 @@
   },
   "setDriverOffline": "{name} [not detected/offline]",
   "setVaioReady": "auravaio kmdf {track} driver ready (sysvad)",
-  "@setVaioReady": {"placeholders": {"track": {"type": "String"}}},
+  "@setVaioReady": {
+    "placeholders": {
+      "track": {
+        "type": "String"
+      }
+    }
+  },
   "setVaioMissing": "AuraVAIO virtual sound card driver not detected",
   "setVaioGuardPaused": "Previous session ended unexpectedly; VAIO bridge autostart is paused (crash protection)",
   "setVaioStartAnyway": "Start anyway",
@@ -1512,5 +1524,31 @@
   "plug32BitHint": "32-bit plugin (supported)",
   "ambient": "Ambient background",
   "ambientLabel": "Spectrum glow",
-  "ambientHint": "Glow behind the home page that follows the music. Turn it off to stop drawing entirely and save GPU."
+  "ambientHint": "Glow behind the home page that follows the music. Turn it off to stop drawing entirely and save GPU.",
+  "apoEndpointSelectedTag": "Selected",
+  "apoChannelsForEndpoint": "Channel settings apply to endpoint \"{name}\"",
+  "@apoChannelsForEndpoint": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "apoChannelsFollowGlobal": "Following the global channel settings (no per-endpoint override)",
+  "apoChannelsResetFollow": "Follow global",
+  "apoChannelsStereoNote": "The selected endpoint is stereo; channel mode and fill do not affect it",
+  "apoSelectedNotAttached": "Selected endpoint is not attached: channel settings are saved and apply once attached",
+  "apoChannelsActual": "Engine in effect: {mode} · {fill}",
+  "@apoChannelsActual": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      },
+      "fill": {
+        "type": "String"
+      }
+    }
+  },
+  "apoFillFill": "Fill",
+  "apoFillGated": "Gated"
 }

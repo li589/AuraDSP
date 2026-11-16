@@ -90,9 +90,15 @@
   "apoEngineDetail": "引擎实测：{rate} Hz · {ch} 声道 · 已应用 {n} 个参数",
   "@apoEngineDetail": {
     "placeholders": {
-      "rate": {"type": "String"},
-      "ch": {"type": "String"},
-      "n": {"type": "String"}
+      "rate": {
+        "type": "String"
+      },
+      "ch": {
+        "type": "String"
+      },
+      "n": {
+        "type": "String"
+      }
     }
   },
   "apoEngineNoteWaiting": "APO 已附加，等待引擎就绪；就绪前声音直通。",
@@ -118,7 +124,13 @@
     }
   },
   "setVaioReady": "auravaio kmdf {track} 驱动已就绪（sysvad）",
-  "@setVaioReady": {"placeholders": {"track": {"type": "String"}}},
+  "@setVaioReady": {
+    "placeholders": {
+      "track": {
+        "type": "String"
+      }
+    }
+  },
   "setVaioMissing": "未检测到 AuraVAIO 虚拟声卡驱动",
   "setVaioGuardPaused": "上次会话异常结束，VAIO 桥自动启动已暂停（崩溃保护）",
   "setVaioStartAnyway": "仍然启动",
@@ -531,8 +543,12 @@
   "meterBusScope": "{bus} · {ch} 声道",
   "@meterBusScope": {
     "placeholders": {
-      "bus": {"type": "String"},
-      "ch": {"type": "int"}
+      "bus": {
+        "type": "String"
+      },
+      "ch": {
+        "type": "int"
+      }
     }
   },
   "audioMode": "音频模式",
@@ -1631,5 +1647,31 @@
   "plug32BitHint": "32 位插件（支持加载）",
   "ambient": "氛围背景",
   "ambientLabel": "频谱光晕",
-  "ambientHint": "主页背景随音乐起伏的光晕；关闭后完全停绘，可省 GPU"
+  "ambientHint": "主页背景随音乐起伏的光晕；关闭后完全停绘，可省 GPU",
+  "apoEndpointSelectedTag": "选中",
+  "apoChannelsForEndpoint": "声道设置作用于端点「{name}」",
+  "@apoChannelsForEndpoint": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "apoChannelsFollowGlobal": "当前跟随全局声道设置（未单独设置）",
+  "apoChannelsResetFollow": "恢复跟随全局",
+  "apoChannelsStereoNote": "选中端点为立体声，声道模式与填充不影响其处理",
+  "apoSelectedNotAttached": "选中端点尚未附加：声道设置已保存，附加后生效",
+  "apoChannelsActual": "引擎实际生效：{mode} · {fill}",
+  "@apoChannelsActual": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      },
+      "fill": {
+        "type": "String"
+      }
+    }
+  },
+  "apoFillFill": "铺满",
+  "apoFillGated": "门控"
 }

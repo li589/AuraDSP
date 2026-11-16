@@ -76,9 +76,15 @@
   "apoEngineDetail": "エンジン実測：{rate} Hz · {ch} チャンネル · {n} パラメータ適用済",
   "@apoEngineDetail": {
     "placeholders": {
-      "rate": {"type": "String"},
-      "ch": {"type": "String"},
-      "n": {"type": "String"}
+      "rate": {
+        "type": "String"
+      },
+      "ch": {
+        "type": "String"
+      },
+      "n": {
+        "type": "String"
+      }
     }
   },
   "apoEngineNoteWaiting": "APO は装着済みです。エンジンの準備ができるまで音声はスルーされます。",
@@ -97,7 +103,13 @@
   },
   "setDriverOffline": "{name} [未検出/オフライン]",
   "setVaioReady": "auravaio kmdf {track} ドライバー準備完了（sysvad）",
-  "@setVaioReady": {"placeholders": {"track": {"type": "String"}}},
+  "@setVaioReady": {
+    "placeholders": {
+      "track": {
+        "type": "String"
+      }
+    }
+  },
   "setVaioMissing": "AuraVAIO 仮想サウンドカードドライバーが見つかりません",
   "setVaioGuardPaused": "前回のセッションが異常終了したため、VAIO ブリッジの自動起動を停止しています（クラッシュ保護）",
   "setVaioStartAnyway": "それでも起動",
@@ -1512,5 +1524,31 @@
   "plug32BitHint": "32ビットプラグイン（対応）",
   "ambient": "アンビエント背景",
   "ambientLabel": "スペクトルのグロー",
-  "ambientHint": "ホーム背景で音楽に反応するグロー。オフにすると描画を完全に停止し GPU を節約します"
+  "ambientHint": "ホーム背景で音楽に反応するグロー。オフにすると描画を完全に停止し GPU を節約します",
+  "apoEndpointSelectedTag": "選択中",
+  "apoChannelsForEndpoint": "チャンネル設定はエンドポイント「{name}」に適用されます",
+  "@apoChannelsForEndpoint": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "apoChannelsFollowGlobal": "グローバルのチャンネル設定に従っています（個別設定なし）",
+  "apoChannelsResetFollow": "グローバルに戻す",
+  "apoChannelsStereoNote": "選択中のエンドポイントはステレオです。チャンネルモードと填充は処理に影響しません",
+  "apoSelectedNotAttached": "選択中のエンドポイントは未アタッチです。チャンネル設定は保存され、アタッチ後に有効になります",
+  "apoChannelsActual": "エンジン実効：{mode} · {fill}",
+  "@apoChannelsActual": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      },
+      "fill": {
+        "type": "String"
+      }
+    }
+  },
+  "apoFillFill": "填充",
+  "apoFillGated": "ゲート"
 }

@@ -527,6 +527,10 @@ class _SystemApoPanel extends StatelessWidget {
                         .copyWith(fontSize: 11)),
           ),
         const SizedBox(height: AuraSpace.xs),
+        // 端点列表（第四十一轮 v2）：左复选 = 一键附加目标集；
+        // 点名称 = 选中（单选，声道设置与主页的跟随对象）。已附
+        // 加行复选锁定勾选并带「已附加」标；同名端点以 id 尾段
+        // 消歧（工具按全 id 匹配，永不歧义）。
         Row(
           children: [
             SizedBox(
@@ -534,101 +538,54 @@ class _SystemApoPanel extends StatelessWidget {
               child: Text(l.apoTargetEndpoint,
                   style: labelOf(p, size: 12, color: p.textDim)),
             ),
-            Expanded(
-              child: AuraDropdown<String>(
-                value: selectedValue,
-                items: [
-                  DropdownMenuItem<String>(
-                    value: '',
-                    child: Row(
-                      children: [
-                        Icon(Icons.auto_mode_rounded,
-                            size: 14,
-                            color: selEndpoint.isEmpty ? p.accent : p.textDim),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            l.setDefaultEndpoint,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: selEndpoint.isEmpty ? p.accent : p.text,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (selEndpoint.isNotEmpty && matched == null)
-                    DropdownMenuItem<String>(
-                      value: selEndpoint,
-                      child: Row(
-                        children: [
-                          Icon(Icons.link_off_rounded,
-                              size: 14, color: p.warning),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              l.setOfflineSuffix(
-                                  _formatOfflineDeviceName(l, selEndpoint, endpoints)),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: p.warning,
-                                fontStyle: FontStyle.italic,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  for (final ep in endpoints)
-                    DropdownMenuItem<String>(
-                      value: ep.id,
-                      child: Row(
-                        children: [
-                          Icon(
-                            _getAudioDeviceIcon(ep.name, isRender: true),
-                            size: 14,
-                            color: (ep.name == selEndpoint || ep.id == selEndpoint)
-                                ? p.accent
-                                : p.textDim,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              ep.friendlyName,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: (ep.name == selEndpoint || ep.id == selEndpoint)
-                                    ? p.accent
-                                    : p.text,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-                hint: endpoints.isEmpty ? l.setNoEndpoint : null,
-                onChanged: (v) {
-                  if (v != null) model.setApoTargetEndpoint(v);
-                },
-              ),
-            ),
-            const SizedBox(width: AuraSpace.xs),
+            const Spacer(),
             AuraChip(l.asioRefresh,
                 icon: Icons.refresh_rounded,
-                // V-03：旧实现只发 vaiodetect，对 APO 状态毫无作用，
-                // 用户感知为「点刷新没反应」。端点列表（经 detect 回
-                // vaioPhysicalEndpoints）与 APO 挂载状态一并刷新。
+                // V-03：端点列表（经 detect 回 vaioPhysicalEndpoints）
+                // 与 APO 挂载状态一并刷新。
                 onTap: () {
                   model.refreshVaioDetect();
                   model.checkApoStatus();
                 }),
           ],
         ),
+        const SizedBox(height: AuraSpace.xs),
+        if (endpoints.isEmpty)
+          Text(l.setNoEndpoint,
+              style: captionOf(p, color: p.textDim).copyWith(fontSize: 12))
+        else
+          for (final ep in endpoints)
+            _ApoEndpointRow(
+              model: model,
+              ep: ep,
+              selected: ep.id == selectedValue,
+              attached: model.apoEndpointAttached(ep.id),
+              checked: model.apoCheckedEndpoints.contains(ep.id),
+            ),
+        if (selEndpoint.isNotEmpty && matched == null)
+          // 选中端点不在当前枚举（已拔出/禁用）：保留一行离线
+          // 呈现；状态层在确有已附加端点时会回落选中并明示。
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Row(
+              children: [
+                Icon(Icons.link_off_rounded, size: 14, color: p.warning),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    l.setOfflineSuffix(
+                        _formatOfflineDeviceName(l, selEndpoint, endpoints)),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: p.warning,
+                      fontStyle: FontStyle.italic,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
         const SizedBox(height: AuraSpace.xs),
         Row(
           children: [
@@ -738,21 +695,14 @@ class _SystemApoPanel extends StatelessWidget {
             AuraChip(
               model.isApoOperating ? l.setProcessing : l.apoActionAttach,
               icon: Icons.link,
-              selected: model.apoAttached,
-              // 当前选择已附加时置灰（Stage 0 / §8.2）：重复附加
-              // 只会重走备份/写槽并刷新时间戳，让人误以为卸载
-              // 「没反应」后又被重挂；与复合钮置灰同口径。切换
-              // 到未附加端点时 apoAttached 转假、自动恢复可点。
-              onTap: (model.isApoOperating || model.apoAttached)
+              selected: model.apoAnyAttached,
+              // 一键附加（第四十一轮）：对复选集逐一附加未附加
+              // 者，单失败不连带；汇总与失败原因由状态层通知/
+              // 错误行呈现，本 chip 不再自行拼文案。
+              onTap: model.isApoOperating
                   ? null
                   : () async {
-                      final ok = await model.attachSystemApo();
-                      model.postNotice(
-                        ok
-                            ? l.setApoRegistered
-                            : (model.lastApoError ?? l.setApoAttachFailed),
-                        level: ok ? NoticeLevel.info : NoticeLevel.error,
-                      );
+                      await model.attachCheckedApoEndpoints();
                     },
             ),
             AuraChip(
@@ -782,7 +732,7 @@ class _SystemApoPanel extends StatelessWidget {
                     ? Icons.layers_rounded
                     : Icons.layers_outlined,
                 selected: model.apoCompositeMode,
-                onTap: (model.isApoOperating || model.apoAttached)
+                onTap: model.isApoOperating
                     ? null
                     : () =>
                         model.setApoCompositeMode(!model.apoCompositeMode),
@@ -810,3 +760,83 @@ class _SystemApoPanel extends StatelessWidget {
   }
 }
 
+
+/// APO 端点行（第四十一轮 v2）：复选框（左）+ 名称（点选=选中）。
+/// 已附加行的复选锁定为勾选态——从附加集合移除只能走卸载；
+/// 行尾依次是「选中」标与「已附加」标。格式后缀（声道数/采样
+/// 率）来自 inspect 的 mix format，未知时不显示。
+class _ApoEndpointRow extends StatelessWidget {
+  final AppModel model;
+  final AudioDeviceItem ep;
+  final bool selected;
+  final bool attached;
+  final bool checked;
+  const _ApoEndpointRow({
+    required this.model,
+    required this.ep,
+    required this.selected,
+    required this.attached,
+    required this.checked,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+    // 同名端点消歧：友好名相同者后缀 id 尾段（GUID 末 6 位）。
+    final dup = model.vaioPhysicalEndpoints
+            .where((e) => e.friendlyName == ep.friendlyName)
+            .length >
+        1;
+    final tail = ep.id.length > 8
+        ? ep.id.substring(ep.id.length - 7, ep.id.length - 1)
+        : ep.id;
+    final fmt = (ep.ch > 0 && ep.rate > 0) ? ' · ${ep.ch}ch ${ep.rate}Hz' : '';
+    return InkWell(
+      onTap: () => model.setApoTargetEndpoint(ep.id),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 30,
+              height: 28,
+              child: Checkbox(
+                value: attached || checked,
+                onChanged: (attached || model.isApoOperating)
+                    ? null
+                    : (v) => model.toggleApoChecked(ep.id, v ?? false),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            const SizedBox(width: AuraSpace.xs),
+            Icon(_getAudioDeviceIcon(ep.name, isRender: true),
+                size: 14, color: selected ? p.accent : p.textDim),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${ep.friendlyName}${dup ? ' ($tail)' : ''}$fmt',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: selected ? p.accent : p.text,
+                  fontWeight:
+                      selected ? FontWeight.w600 : FontWeight.normal,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (selected) ...[
+              Text(l.apoEndpointSelectedTag,
+                  style: TextStyle(fontSize: 10, color: p.accent)),
+              const SizedBox(width: 6),
+            ],
+            if (attached)
+              Text(l.apoAttached,
+                  style: TextStyle(fontSize: 10, color: p.accent)),
+          ],
+        ),
+      ),
+    );
+  }
+}

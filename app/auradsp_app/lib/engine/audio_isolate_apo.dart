@@ -426,6 +426,12 @@ class ApoTelemetryReader {
   Pointer<Float>? _f32;
   Timer? _timer;
   void Function(Map<String, dynamic>)? _send;
+  // 分端点目标（第四十一轮）：'' = 旧全局块（无令牌端点回落）；
+  // 非空 = 只读该端点的 v7 分块（块名按 id 哈希派生，开块后以
+  // 块内身份盖章复核，防哈希碰撞/陈旧块冒名）。
+  String _targetId = '';
+  bool _magicGaveUp = false;
+  bool _stampWarned = false;
   int _lastSeq = -1;
   int _staleTicks = 0;
   bool _staleZeroSent = false;
@@ -442,6 +448,22 @@ class ApoTelemetryReader {
     _send = send;
     if (_gaveUp) return;
     _timer ??= Timer.periodic(const Duration(milliseconds: 100), _tick);
+  }
+
+  /// 切换跟随端点（状态层选中端点变化时经 isolate 命令下发）。
+  /// 目标变化即关当前映射，下个 tick 按新块名重开；事件自此带
+  /// 新的 endpointId，状态层据此丢弃切换前的迟到事件。
+  void setTarget(String endpointId) {
+    if (_targetId == endpointId) return;
+    _targetId = endpointId;
+    _stampWarned = false;
+    if (_magicGaveUp) {
+      // 旧块魔数不符的放弃只针对旧目标，新目标重新尝试。
+      _gaveUp = false;
+      _magicGaveUp = false;
+    }
+    _close();
+    dbgLog('apo telemetry: target -> ${endpointId.isEmpty ? '(global)' : endpointId}');
   }
 
   void stop() {
@@ -474,7 +496,9 @@ class ApoTelemetryReader {
   bool _open() {
     try {
       final w = _apoWin32();
-      final name = _apoTelemetryName.toNativeUtf16();
+      final blockName =
+          _targetId.isEmpty ? _apoTelemetryName : apoTelemetryNameFor(_targetId);
+      final name = blockName.toNativeUtf16();
       try {
         _mapping = w.openFileMappingW(_apoFileMapRead, 0, name);
       } finally {
@@ -496,6 +520,7 @@ class ApoTelemetryReader {
         // 'ATEL' 不符：不是本协议的块（版本错位），放弃本次会话。
         dbgLog('apo telemetry: magic mismatch, reader disabled');
         _gaveUp = true;
+        _magicGaveUp = true;
         _close();
         return false;
       }
@@ -528,11 +553,35 @@ class ApoTelemetryReader {
         // 旧 DLL 类病灶）此前只有一行日志，状态层无从通知用户。
         // 每缺席周期只报一次（_absentTicks 连续计数，块打开即
         // 清零，下一周期重新计）。
-        _send?.call({'evt': 'apotelemetry', 'absent': true});
+        _send?.call({'evt': 'apotelemetry', 'absent': true, 'endpointId': _targetId});
       }
       return;
     }
     _absentTicks = 0;
+    if (_targetId.isNotEmpty) {
+      // 分端点块身份复核（v7 身份段 @字节 1472，UTF-16 80 字）：
+      // 版本不足或盖章与目标不符 → 本 tick 不消费（块名哈希碰撞
+      // 或陈旧块冒名的兜底；正常路径恒相符）。
+      final u16 = _view!.cast<Uint16>();
+      var stampOk = _u32![1] >= 7;
+      if (stampOk) {
+        final units = <int>[];
+        for (var i = 0; i < 80; i++) {
+          final cu = u16[736 + i];
+          if (cu == 0) break;
+          units.add(cu);
+        }
+        stampOk = String.fromCharCodes(units) == _targetId;
+      }
+      if (!stampOk) {
+        if (!_stampWarned) {
+          _stampWarned = true;
+          dbgLog('apo telemetry: per-endpoint block identity mismatch '
+              '(target=$_targetId ver=${_u32![1]}), not consuming');
+        }
+        return;
+      }
+    }
     final u32 = _u32!;
     final f32 = _f32!;
     // 字段序与 ApoShared.h 的 ApoTelemetryBlock 严格对应：
@@ -566,6 +615,7 @@ class ApoTelemetryReader {
       final effFill = effOk ? u32[kApoTelemetryEffU32 + 1] : -1;
       _send?.call({
         'evt': 'apotelemetry',
+        'endpointId': _targetId,
         'seat': seat == 1,
         'fault': faultNow != 0,
         'rate': u32[4],
@@ -694,6 +744,7 @@ class ApoTelemetryReader {
     _send?.call({
       'evt': 'viz',
       'backend': 'sysapo',
+      'endpointId': _targetId,
       'spectrum': spectrum,
       'eqIn': hasStage
           ? List<double>.generate(32, (i) => f32[48 + i])
@@ -729,6 +780,7 @@ class ApoTelemetryReader {
     _send?.call({
       'evt': 'viz',
       'backend': 'sysapo',
+      'endpointId': _targetId,
       'spectrum': List<double>.filled(32, 0.0),
       'eqIn': List<double>.filled(32, 0.0),
       'l': -120.0,

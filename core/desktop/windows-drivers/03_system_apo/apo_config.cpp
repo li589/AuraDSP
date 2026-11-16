@@ -1793,53 +1793,85 @@ void OutJson(const Json& j) {
 }
 
 // ---------------------------------------------------------------------------
-// [第四十一轮 S0 尖刺] 端点 FX 属性集写入/清除（APO 多端点 v2 地基）：
-// 把身份令牌（端点自身 id）+ 声道覆写（mode/fill/flags）写进端点
-// FxProperties 的 AuraDSP 属性集，供 APO 实例在 Initialize 时经
-// pAPOEndpointProperties 读回。S1 转正后由附加/设置路径接管写入。
+// [第四十一轮] 端点 FX 属性集（APO 多端点 v2）：身份令牌 + 声道覆写。
+// APO 实例在 Initialize 时经 pAPOSystemEffectsProperties 读回
+// （S0 尖刺定案）。附加后由 App 调 endpoint-props 写令牌（+已有
+// 覆写期望），声道设置变更时同 verb 更新覆写；分离前 clear。
+// mode/fill 参数：0|1=设覆写，clear=撤覆写，keep=不动（读现有
+// flags 合成）。实时生效另有参数块 v3 覆写表通道，本 verb 只管
+// 持久层（重启/重附加后仍在）。
 // ---------------------------------------------------------------------------
-int CmdProbeFx(const std::wstring& substr, bool clear, int mode, int fill) {
+// 写端点 FX 属性集本体（无 JSON 发射，供 install --props 同进程
+// 复用）：返回 0 = 全部写入成功。flagsOut 可选回带合成后 flags。
+int WriteEndpointProps(const Endpoint& ep, bool clearAll,
+                       const std::wstring& modeArg,
+                       const std::wstring& fillArg, DWORD* flagsOut) {
     const std::wstring base = L"{a5c3d21e-9b47-4f1a-8e6d-2f5b7c904e31}";
     auto propName = [&](int pid) {
         return base + L"," + std::to_wstring(pid);
     };
+    HKEY k = OpenFxKeyWritable(ep.FxSub());
+    if (!k) return 1;
+    if (clearAll) {
+        for (int pid : {2, 3, 4, 5}) RegDeleteValueW(k, propName(pid).c_str());
+        RegCloseKey(k);
+        if (flagsOut) *flagsOut = 0;
+        return 0;
+    }
+    DWORD flags = 0;
+    DWORD sz = sizeof(flags);
+    RegQueryValueExW(k, propName(5).c_str(), nullptr, nullptr, (BYTE*)&flags, &sz);
+    auto applyOne = [&](const std::wstring& arg, int pid, DWORD bit) -> LONG {
+        if (arg == L"keep") return ERROR_SUCCESS;
+        if (arg == L"clear") {
+            flags &= ~bit;
+            return RegDeleteValueW(k, propName(pid).c_str());
+        }
+        const DWORD v = (DWORD)_wtoi(arg.c_str());
+        flags |= bit;
+        return RegSetValueExW(k, propName(pid).c_str(), 0, REG_DWORD,
+                              (const BYTE*)&v, sizeof(v));
+    };
+    const std::wstring token = Utf8ToWide(ep.id);
+    LONG r1 = RegSetValueExW(k, propName(2).c_str(), 0, REG_SZ,
+                             (const BYTE*)token.c_str(),
+                             (DWORD)((token.size() + 1) * sizeof(wchar_t)));
+    LONG r2 = applyOne(modeArg, 3, 1);
+    LONG r3 = applyOne(fillArg, 4, 2);
+    LONG r4 = RegSetValueExW(k, propName(5).c_str(), 0, REG_DWORD,
+                             (const BYTE*)&flags, sizeof(flags));
+    RegCloseKey(k);
+    if (flagsOut) *flagsOut = flags;
+    return (r1 == 0 && r2 == 0 && r3 == 0 && r4 == 0) ? 0 : 1;
+}
+
+int CmdEndpointProps(const std::wstring& substr, bool clearAll,
+                     const std::wstring& modeArg, const std::wstring& fillArg) {
     auto eps = FindEndpoints(substr);
     if (eps.size() != 1) {
-        OutLine("probe-fx: endpoint matches=" + std::to_string(eps.size()) +
-                " (need exactly 1)");
-        for (auto& e : eps) OutLine("  - " + e.id);
+        OutJson(Json::Obj({{"ok", Json::Bool(false)},
+                           {"error", Json::Str("endpoint matches=" +
+                                               std::to_string(eps.size()) +
+                                               " (need exactly 1)")} }));
         return 2;
     }
-    const Endpoint& ep = eps[0];
-    HKEY k = OpenFxKeyWritable(ep.FxSub());
-    if (!k) {
-        OutLine("probe-fx: cannot open FxProperties writable (need admin; use --elevate)");
+    DWORD flags = 0;
+    const int rc = WriteEndpointProps(eps[0], clearAll, modeArg, fillArg, &flags);
+    if (rc != 0) {
+        OutJson(Json::Obj({{"ok", Json::Bool(false)},
+                           {"error", Json::Str("fx props write failed (need admin)")}}));
         return 1;
     }
-    int rc = 0;
-    if (clear) {
-        for (int pid : {2, 3, 4, 5}) RegDeleteValueW(k, propName(pid).c_str());
-        OutLine("probe-fx: cleared for " + ep.id);
+    if (clearAll) {
+        OutJson(Json::Obj({{"ok", Json::Bool(true)},
+                           {"endpoint", Json::Str(eps[0].id)},
+                           {"cleared", Json::Bool(true)}}));
     } else {
-        const std::wstring token = Utf8ToWide(ep.id);
-        const DWORD flags = 3;  // mode + fill 均有效
-        const DWORD m = (DWORD)mode, f = (DWORD)fill;
-        LONG r1 = RegSetValueExW(k, propName(2).c_str(), 0, REG_SZ,
-                                 (const BYTE*)token.c_str(),
-                                 (DWORD)((token.size() + 1) * sizeof(wchar_t)));
-        LONG r2 = RegSetValueExW(k, propName(3).c_str(), 0, REG_DWORD,
-                                 (const BYTE*)&m, sizeof(m));
-        LONG r3 = RegSetValueExW(k, propName(4).c_str(), 0, REG_DWORD,
-                                 (const BYTE*)&f, sizeof(f));
-        LONG r4 = RegSetValueExW(k, propName(5).c_str(), 0, REG_DWORD,
-                                 (const BYTE*)&flags, sizeof(flags));
-        OutLine("probe-fx: write token/mode/fill/flags rc=" +
-                std::to_string(r1) + "/" + std::to_string(r2) + "/" +
-                std::to_string(r3) + "/" + std::to_string(r4) + " for " + ep.id);
-        rc = (r1 == 0 && r2 == 0 && r3 == 0 && r4 == 0) ? 0 : 1;
+        OutJson(Json::Obj({{"ok", Json::Bool(true)},
+                           {"endpoint", Json::Str(eps[0].id)},
+                           {"flags", Json::Num((double)flags)}}));
     }
-    RegCloseKey(k);
-    return rc;
+    return 0;
 }
 
 int CmdStatus(bool asJson, const std::optional<double>& timeout) {
@@ -2511,7 +2543,9 @@ int CmdDoctor(bool fix, bool asJson) {
 }
 
 int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
-               bool asJson, apoplan::Only onlyReq) {
+               bool asJson, apoplan::Only onlyReq,
+               const std::wstring& propsMode = L"",
+               const std::wstring& propsFill = L"") {
     if (!IsAdmin()) {
         if (asJson) {
             OutJson(Json::Obj({
@@ -2849,6 +2883,29 @@ int CmdInstall(const std::wstring& substr, std::wstring mode, bool force,
         return 1;
     }
 
+    // 身份令牌 + 声道覆写（第四十一轮）：在音频服务重启之前写，
+    // 使重启后首批实例的 Initialize 即读到（同一次提权内完成，
+    // 避免附加后再弹一次 UAC）。
+    int propsRc = 0;
+    if (!propsMode.empty()) {
+        propsRc = WriteEndpointProps(ep, false, propsMode, propsFill, nullptr);
+        if (propsRc != 0) {
+            const std::string msg =
+                "端点身份/覆写属性写入失败（APO 已挂载，可重试附加以补写）";
+            if (asJson) {
+                OutJson(Json::Obj({
+                    {"ok", Json::Bool(false)},
+                    {"error", Json::Str("endpoint_props_failed")},
+                    {"message", Json::Str(msg)},
+                    {"endpoint_id", Json::Str(ep.id)},
+                }));
+            } else {
+                OutLine("FATAL: " + msg);
+            }
+            return 1;
+        }
+    }
+
     const bool restarted = RestartAudio();
 
     if (asJson) {
@@ -3091,10 +3148,12 @@ void PrintHelp() {
     OutLine("用法:");
     OutLine("  apo_config status [--timeout <秒>] [--json]");
     OutLine("  apo_config verify-heartbeat [--timeout <秒>] [--json]");
-    OutLine("  apo_config install <端点名子串> --yes [--force] [--mode sfx-efx|composite|sfx-only|win7-sapo] [--only pre|post] [--json] [--elevate] [--result-file <文件>]");
+    OutLine("  apo_config install <端点名子串> --yes [--force] [--mode sfx-efx|composite|sfx-only|win7-sapo] [--only pre|post] [--props <mode> <fill>] [--json] [--elevate] [--result-file <文件>]");
     OutLine("  apo_config uninstall [目标] --yes [--json] [--elevate] [--result-file <文件>]");
     OutLine("  apo_config testenv-on | testenv-off [--force] [--json] [--elevate]");
     OutLine("  apo_config doctor [--fix] [--json] [--elevate] [--result-file <文件>]");
+    OutLine("  apo_config endpoint-props <端点子串> <mode:0|1|keep|clear> <fill:0|1|keep|clear> [--json] [--elevate] [--result-file <文件>]");
+    OutLine("  apo_config endpoint-props-clear <端点子串> [--json] [--elevate] [--result-file <文件>]");
 }
 
 }  // namespace
@@ -3118,7 +3177,8 @@ int wmain(int argc, wchar_t* argv[]) {
     // 最终裁定（含 error/message），App 据此呈现真实原因。
     if (!g_resultFile.empty() && !args.empty() &&
         (args[0] == L"install" || args[0] == L"uninstall" ||
-         args[0] == L"doctor")) {
+         args[0] == L"doctor" || args[0] == L"endpoint-props" ||
+         args[0] == L"endpoint-props-clear")) {
         asJson = true;
     }
     if (hasElevate && !IsAdmin()) {
@@ -3235,20 +3295,19 @@ int wmain(int argc, wchar_t* argv[]) {
     if (verb == L"doctor") {
         return CmdDoctor(hasFlag(L"--fix"), asJson);
     }
-    if (verb == L"probe-fx-write") {
+    if (verb == L"endpoint-props") {
         if (args.size() < 4) {
-            OutLine("usage: apo_config probe-fx-write <endpoint-substr> <mode> <fill> [--elevate]");
+            OutLine("usage: apo_config endpoint-props <endpoint-substr> <mode:0|1|keep|clear> <fill:0|1|keep|clear> [--elevate]");
             return 2;
         }
-        return CmdProbeFx(args[1], false, _wtoi(args[2].c_str()),
-                          _wtoi(args[3].c_str()));
+        return CmdEndpointProps(args[1], false, args[2], args[3]);
     }
-    if (verb == L"probe-fx-clear") {
+    if (verb == L"endpoint-props-clear") {
         if (args.size() < 2) {
-            OutLine("usage: apo_config probe-fx-clear <endpoint-substr> [--elevate]");
+            OutLine("usage: apo_config endpoint-props-clear <endpoint-substr> [--elevate]");
             return 2;
         }
-        return CmdProbeFx(args[1], true, 0, 0);
+        return CmdEndpointProps(args[1], true, L"keep", L"keep");
     }
     if (verb == L"install") {
         if (args.size() < 2 || args[1].rfind(L"--", 0) == 0) {
@@ -3304,8 +3363,15 @@ int wmain(int argc, wchar_t* argv[]) {
                 return 2;
             }
         }
+        std::wstring propsMode, propsFill;
+        for (size_t i = 2; i + 2 < args.size(); i++) {
+            if (args[i] == L"--props") {
+                propsMode = args[i + 1];
+                propsFill = args[i + 2];
+            }
+        }
         return CmdInstall(args[1], mode, hasFlag(L"--force"), asJson,
-                          onlyReq);
+                          onlyReq, propsMode, propsFill);
     }
     if (verb == L"uninstall") {
         if (!hasFlag(L"--yes")) {

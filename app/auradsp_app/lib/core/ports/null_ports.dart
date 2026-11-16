@@ -138,6 +138,8 @@ final class NullWindowsSystem implements WindowsSystemPort {
     required String target,
     required bool composite,
     required bool elevated,
+    String propsMode = '',
+    String propsFill = '',
   }) async =>
       const ApoRunResult(exitCode: 1);
 
@@ -145,6 +147,17 @@ final class NullWindowsSystem implements WindowsSystemPort {
   Future<ApoRunResult> apoUninstall(
     String exePath, {
     required String target,
+    required bool elevated,
+  }) async =>
+      const ApoRunResult(exitCode: 1);
+
+  @override
+  Future<ApoRunResult> apoEndpointProps(
+    String exePath, {
+    required String target,
+    String mode = 'keep',
+    String fill = 'keep',
+    bool clear = false,
     required bool elevated,
   }) async =>
       const ApoRunResult(exitCode: 1);

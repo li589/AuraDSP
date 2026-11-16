@@ -114,6 +114,10 @@ void main() {
           'pipelineInputEnabled': false,
           'pipelineOutputEnabled': false,
           'apoTargetEndpoint': 'sentinel-apo',
+          'apoEndpointChannels': <String, dynamic>{
+            'sentinel-ep-a': {'mode': 1, 'fill': 0},
+            'sentinel-ep-b': {'mode': 0, 'fill': 1},
+          },
           'monitorMirroring': true,
           'asioDriver': 'Sentinel ASIO',
           'asioBufSize': 256,
@@ -382,6 +386,7 @@ void main() {
         'void setPipelineInputEnabled(bool enabled)',
         'void setPipelineOutputEnabled(bool enabled)',
         'void setApoTargetEndpoint(String endpoint)',
+        'void setApoEndpointChannels(String endpointId',
         'void setMonitorMirroring(bool enabled)',
         'void setAsioDriver(String name)',
         'void setAsioBufSize(int frames)',

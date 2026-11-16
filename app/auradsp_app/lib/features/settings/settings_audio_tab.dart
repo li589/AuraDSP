@@ -190,47 +190,137 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
     ),
 
     // 5. 声道模式（多声道 DSP 策略：矩阵下混 vs 离散多声道）
-    SectionCard(
-      title: l.channelMode,
-      // 全面复审 S2（UI-4）：同声道数卡，sysapo 下补归属说明。
-      hint: model.audioMode == 'sysapo'
-          ? '${l.channelPhaseA}\n${l.channelsFollowApo}'
-          : l.channelPhaseA,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AuraSegmented<int>(
-            segments: [
-              AuraSegment(0, l.channelsMatrix),
-              AuraSegment(1, l.channelsDiscrete),
+    // 第四十一轮：sysapo 下本卡绑「选中端点」——有该端点覆写则
+    // 编辑覆写、无则跟随全局（编辑即建覆写，可一键恢复跟随）；
+    // 引擎实际生效值由选中端点 telemetry 回读呈现。率/声道数仍
+    // 由端点流格式决定（上方两卡），本卡只管 mode/fill。
+    Builder(builder: (context) {
+      final apoBind = model.audioMode == 'sysapo' &&
+          model.selectedApoEndpointId.isNotEmpty;
+      final selEpId = model.selectedApoEndpointId;
+      final epOvr =
+          apoBind ? model.config.apoEndpointChannels[selEpId] : null;
+      final shownMode =
+          apoBind ? (epOvr?.mode ?? model.channelsMode) : model.channelsMode;
+      final shownFill = apoBind
+          ? (epOvr?.fill ?? model.channelsUpmixFill)
+          : model.channelsUpmixFill;
+      final selAttached = apoBind && model.apoEndpointAttached(selEpId);
+      // 选中端点实测立体声（telemetry 声道数=2）时 mode/fill 无
+      // 意义：置灰并说明（端点未运行则声道数未知，保持可编辑）。
+      final selStereo = selAttached && model.apoEngineChannels == 2;
+      final selName = apoBind
+          ? (model.vaioPhysicalEndpoints
+                  .cast<AudioDeviceItem?>()
+                  .firstWhere((e) => e?.id == selEpId, orElse: () => null)
+                  ?.friendlyName ??
+              selEpId)
+          : '';
+      return SectionCard(
+        title: l.channelMode,
+        // 全面复审 S2（UI-4）：同声道数卡，sysapo 下补归属说明。
+        hint: model.audioMode == 'sysapo'
+            ? (apoBind
+                ? '${l.channelPhaseA}\n${l.apoChannelsForEndpoint(selName)}'
+                : '${l.channelPhaseA}\n${l.channelsFollowApo}')
+            : l.channelPhaseA,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AuraSegmented<int>(
+              segments: [
+                AuraSegment(0, l.channelsMatrix),
+                AuraSegment(1, l.channelsDiscrete),
+              ],
+              selected: shownMode.clamp(0, 1),
+              onChanged: selStereo
+                  ? null
+                  : (v) {
+                      if (apoBind) {
+                        model.setApoEndpointChannels(selEpId,
+                            mode: v, fill: shownFill);
+                      } else {
+                        model.setInt('channels.mode', v);
+                      }
+                    },
+            ),
+            // [channels.upmix_fill] 仅矩阵模式相关：关闭后立体声源不铺满
+            // 未使用声道；环绕源（5.1/7.1 有源声道）与 LFE 直通不受影响。
+            if (shownMode == 0) ...[
+              const SizedBox(height: AuraSpace.sm),
+              Row(
+                children: [
+                  Text(l.upmixFill, style: captionOf(p, color: p.text)),
+                  const Spacer(),
+                  AuraSwitch(
+                    value: shownFill != 0,
+                    onChanged: selStereo
+                        ? null
+                        : (on) {
+                            if (apoBind) {
+                              model.setApoEndpointChannels(selEpId,
+                                  mode: shownMode, fill: on ? 1 : 0);
+                            } else {
+                              model.setInt('channels.upmix_fill', on ? 1 : 0);
+                            }
+                          },
+                  ),
+                ],
+              ),
+              const SizedBox(height: AuraSpace.xs),
+              Text(
+                l.upmixFillHint,
+                style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
+              ),
             ],
-            selected: model.channelsMode.clamp(0, 1),
-            onChanged: (v) => model.setInt('channels.mode', v),
-          ),
-          // [channels.upmix_fill] 仅矩阵模式相关：关闭后立体声源不铺满
-          // 未使用声道；环绕源（5.1/7.1 有源声道）与 LFE 直通不受影响。
-          if (model.channelsMode == 0) ...[
-            const SizedBox(height: AuraSpace.sm),
-            Row(
-              children: [
-                Text(l.upmixFill, style: captionOf(p, color: p.text)),
-                const Spacer(),
-                AuraSwitch(
-                  value: model.channelsUpmixFill != 0,
-                  onChanged: (on) =>
-                      model.setInt('channels.upmix_fill', on ? 1 : 0),
+            if (apoBind) ...[
+              const SizedBox(height: AuraSpace.sm),
+              if (epOvr == null)
+                Text(
+                  l.apoChannelsFollowGlobal,
+                  style:
+                      captionOf(p, color: p.textDim).copyWith(fontSize: 11),
+                )
+              else
+                AuraChip(
+                  l.apoChannelsResetFollow,
+                  icon: Icons.restart_alt_rounded,
+                  onTap: () => model.setApoEndpointChannels(selEpId),
+                ),
+              if (!selAttached) ...[
+                const SizedBox(height: AuraSpace.xs),
+                Text(
+                  l.apoSelectedNotAttached,
+                  style: captionOf(p, color: p.warning)
+                      .copyWith(fontSize: 11),
                 ),
               ],
-            ),
-            const SizedBox(height: AuraSpace.xs),
-            Text(
-              l.upmixFillHint,
-              style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
-            ),
+              if (selStereo) ...[
+                const SizedBox(height: AuraSpace.xs),
+                Text(
+                  l.apoChannelsStereoNote,
+                  style:
+                      captionOf(p, color: p.textDim).copyWith(fontSize: 11),
+                ),
+              ],
+              if (model.apoEffMode >= 0) ...[
+                const SizedBox(height: AuraSpace.xs),
+                Text(
+                  l.apoChannelsActual(
+                    model.apoEffMode == 1
+                        ? l.channelsDiscrete
+                        : l.channelsMatrix,
+                    model.apoEffFill == 1 ? l.apoFillFill : l.apoFillGated,
+                  ),
+                  style:
+                      captionOf(p, color: p.textDim).copyWith(fontSize: 11),
+                ),
+              ],
+            ],
           ],
-        ],
-      ),
-    ),
+        ),
+      );
+    }),
   ];
 }
 
