@@ -85,7 +85,18 @@ int main(int argc, char** argv) {
             PropVariantClear(&v);
             ps->Release();
         }
-        if (ContainsCI(nm, want)) {
+        // 端点 id 片段亦可作匹配键（同名设备的消歧手段：多个端点
+        // FriendlyName 相同如 "USB Audio Device" 时，传 id 中的 GUID
+        // 片段即可唯一命中；id 为 ASCII，不受控制台代码页影响）。
+        std::string idu;
+        {
+            LPWSTR idw = nullptr;
+            if (dev->GetId(&idw) == S_OK && idw) {
+                idu = WideToUtf8(idw);
+                CoTaskMemFree(idw);
+            }
+        }
+        if (ContainsCI(nm, want) || (!idu.empty() && ContainsCI(idu, want))) {
             ++hits;
             if (!pick) {
                 pick = dev;
