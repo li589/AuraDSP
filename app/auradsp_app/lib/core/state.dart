@@ -20,6 +20,8 @@ import 'package:flutter/scheduler.dart';
 
 import '../engine/audio_isolate.dart';
 import '../engine/local_channel_policy.dart';
+import '../platform/system/linux_system_monitor.dart' as linux_mon;
+import '../platform/system/windows_system_monitor.dart';
 import '../engine/audio_out/alsa_ffi.dart' as alsa_ffi;
 import 'debug/debug_trace.dart';
 import 'effect_registry.dart';
@@ -363,14 +365,13 @@ class AppModel extends ChangeNotifier {
   String defaultRenderId = '';
   String defaultCaptureId = '';
 
-  // 设备签名看守（2026-11-14 驱动刷新及时性轮）：周期性轻量扫描
-  // apo_inspect，仅当设备集/默认端点/端点格式的签名变化时才应用
-  // 完整刷新+选择调和，静默时零状态写入、不扰动 UI。字段在此，
-  // 逻辑在 state_audio_modes.dart 的设备枚举段。
-  Timer? _deviceWatchTimer;
-  String? _deviceScanSignature;
+  // 设备监听（2026-11-14 签名看守 → 第四十二轮 S5 收敛为平台
+  // 统一系统监听模块）：WindowsSystemMonitor / LinuxSystemMonitor
+  // 持有节拍、签名与变化分类，状态层只供探针闭包与事件处理
+  // （逻辑在 state_audio_modes.dart 的设备枚举段）。
+  WindowsSystemMonitor? _sysMonitor;
+  linux_mon.LinuxSystemMonitor? _linuxSysMonitor;
   bool _deviceRefreshInFlight = false;
-  bool _deviceWatchBusy = false;
   DateTime? _lastDeviceRefreshAt;
   // 调和缺席起始时刻（键 in/out/vaio）：持续缺席满 20 秒才
   // 修复，见 state_audio_modes.dart 的 reconcileDeviceSelections。
@@ -1622,8 +1623,10 @@ class AppModel extends ChangeNotifier {
     _trayVisibilitySubscribed = false;
     _debounceSaveTimer?.cancel();
     _lpCodeReloadTimer?.cancel();
-    _deviceWatchTimer?.cancel();
-    _deviceWatchTimer = null;
+    _sysMonitor?.stop();
+    _sysMonitor = null;
+    _linuxSysMonitor?.stop();
+    _linuxSysMonitor = null;
     _eqCurveTimer?.cancel();
     _eqResponseTimer?.cancel();
     // 可视化 config 写盘防抖：退出前补一次同步落盘，避免最后一次改动丢失

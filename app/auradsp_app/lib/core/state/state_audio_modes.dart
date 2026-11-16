@@ -761,29 +761,7 @@ extension AudioModesState on AppModel {
     }
   }
 
-  /// 设备签名：默认端点身份 + 全部 ACTIVE 端点的 id 与 mix format
-  /// （率/声道/位深）。系统里改默认、插拔、改声道数/采样率/位深
-  /// 都会改变签名；纯粹改名不纳入（名称是显示面，不是可用性面）。
-  String _deviceSignatureOf(Map<String, dynamic> json) {
-    final eps = (json['endpoints'] as List?) ?? const [];
-    final rows = <String>[];
-    for (final ep in eps) {
-      if (ep is Map) {
-        final state = (ep['state'] as num?)?.toInt() ?? 1;
-        if (state != 1) continue;
-        rows.add('${ep['id']}|${ep['rate'] ?? 0}|${ep['ch'] ?? 0}'
-            '|${ep['bits'] ?? 0}');
-      }
-    }
-    rows.sort();
-    return <String>[
-      (json['defaultRender'] as String?) ?? '',
-      (json['defaultCapture'] as String?) ?? '',
-      ...rows,
-    ].join('\n');
-  }
-
-  /// 扫描结果应用（手动刷新与签名看守共用）：写默认身份/设备表/
+  /// 扫描结果应用（手动刷新与系统监听共用）：写默认身份/设备表/
   /// 签名，跑自激守卫与选择调和，最后统一通知 UI。
   void _applyDeviceScan(Map<String, dynamic> json) {
     deviceScanDone = true; // S4：一轮设备枚举已落地
@@ -819,7 +797,7 @@ extension AudioModesState on AppModel {
         }
       }
     }
-    _deviceScanSignature = _deviceSignatureOf(json);
+    _sysMonitor?.noteExternalScan(json); // S5：监听基线同步
     if (items.isEmpty) {
       dbgLog('devices.refresh: no endpoints parsed', sync: true);
       return;
@@ -932,63 +910,153 @@ extension AudioModesState on AppModel {
     _toIso?.send({'cmd': 'enginevalues'});
   }
 
-  /// 签名看守启动（ready 恢复点调用；幂等）。4 秒一轮轻量扫描，
-  /// 签名未变时零状态写入——系统里改默认/插拔/改格式数秒内自动
-  /// 跟上，不再依赖手动刷新（登记 C5 的进程内替代实现：不新增
-  /// 常驻原生监听进程，复用 apo_inspect 一次性扫描 + 签名比对）。
+  /// 统一系统监听启动（ready 恢复点调用；幂等）。第四十二轮
+  /// S5：原 4 秒签名看守（本文件内嵌 Timer + 签名比对）收敛
+  /// 进平台层 WindowsSystemMonitor——节拍/签名/变化分类（插
+  /// 拔、默认变更、格式变更、服务重启、APO 拓扑）都在监听模
+  /// 块里，本层只供探针闭包与事件处理。签名未变时零状态写
+  /// 入、不扰动 UI（旧看守口径不变）。
   void startDeviceWatch() {
     if (_testing || !PlatformProfile.supportsBridges) return;
-    if (_deviceWatchTimer != null) return;
-    _deviceWatchTimer = Timer.periodic(
-      const Duration(seconds: 4),
-      (_) => _watchDeviceScan(),
-    );
-    dbgLog('devices.watch: started');
+    if (_sysMonitor != null) return;
+    _sysMonitor = WindowsSystemMonitor(
+      scanProbe: _probeDeviceScan,
+      apoProbe: _probeApoAttachedIds,
+      onEvent: _onSysMonEvent,
+      onTick: _onSysMonTick,
+      gate: () => !_deviceRefreshInFlight && !apoDetachBlocking,
+    )..start();
+    dbgLog('devices.watch: started (system monitor)');
   }
 
-  Future<void> _watchDeviceScan() async {
-    if (_deviceWatchBusy || _deviceRefreshInFlight || apoDetachBlocking) {
-      return;
-    }
-    _deviceWatchBusy = true;
+  /// 监听探针：一轮 apo_inspect 扫描 + 解析（任何失败 = null，
+  /// 监听模块据连续失败→恢复判音频服务重启）。
+  Future<Map<String, dynamic>?> _probeDeviceScan() async {
     try {
       final exePath = _findApoInspectExe();
-      if (exePath == null) return;
+      if (exePath == null) return null;
       final res = await windowsSystem.inspectAudioDevices(exePath);
-      if (res.exitCode != 0) return;
+      if (res.exitCode != 0) return null;
       final stdout = (res.stdout as String).trim();
-      if (stdout.isEmpty) return;
+      if (stdout.isEmpty) return null;
       final lastLine = stdout.split('\n').last.trim();
-      if (lastLine.isEmpty) return;
-      final json = jsonDecode(lastLine) as Map<String, dynamic>;
-      // 签名未变通常直接跳过；例外（S6）：调和有缺席待确认记录
-      // 时必须持续应用扫描复核缺席时长——否则首扫落定签名后
-      // 看守永不再应用，消失设备的修复永不落定。
-      final absentPending = _reconcileAbsentSince.isNotEmpty;
-      if (_deviceSignatureOf(json) == _deviceScanSignature &&
-          !absentPending) {
-        return;
-      }
-      dbgLog(absentPending && _deviceSignatureOf(json) == _deviceScanSignature
-          ? 'devices.watch: confirming pending reconcile absence'
-          : 'devices.watch: change detected, applying refresh');
-      try {
-        refreshVaioDetect();
-      } catch (e, st) {
-        swallow(e, st);
-      }
-      _deviceRefreshInFlight = true;
-      try {
-        _applyDeviceScan(json);
-      } finally {
-        _deviceRefreshInFlight = false;
-        _lastDeviceRefreshAt = DateTime.now();
-      }
-    } catch (e) {
-      dbgLog('devices.watch: error $e');
-    } finally {
-      _deviceWatchBusy = false;
+      if (lastLine.isEmpty) return null;
+      return jsonDecode(lastLine) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
     }
+  }
+
+  /// APO 拓扑探针（轻量读，不带对账副作用）：当前已附加端点
+  /// id 集；非 sysapo 时不适用（返回 null，监听模块跳过）。
+  Future<Set<String>?> _probeApoAttachedIds() async {
+    if (audioMode != 'sysapo') return null;
+    final script = _findApoConfigTool();
+    if (script == null) return null;
+    try {
+      final res = await windowsSystem.apoStatus(script, 0.4);
+      if (res.exitCode != 0) return null;
+      final lines = res.stdout
+          .toString()
+          .trim()
+          .split(RegExp(r'\r?\n'))
+          .where((l) => l.trim().startsWith('{'))
+          .toList();
+      if (lines.isEmpty) return null;
+      final data = jsonDecode(lines.last) as Map<String, dynamic>;
+      final raw = data['installed_endpoints'] as List?;
+      if (raw == null) return null;
+      return {
+        for (final e in raw)
+          if (e is Map && e['EndpointId'] != null)
+            e['EndpointId'].toString(),
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 系统监听事件处理（Windows）：设备类事件应用其携带的扫
+  /// 描（应用尾巴里 _applyDeviceScan 会连带 S1 chcap 重发与
+  /// S3 显示收敛）；服务重启与 APO 拓扑变化走完整状态对账。
+  void _onSysMonEvent(SysMonEvent e) {
+    dbgLog('sysmon: ${e.kind.name} ${e.detail}');
+    switch (e.kind) {
+      case SysMonEventKind.deviceSetChanged:
+      case SysMonEventKind.defaultDeviceChanged:
+      case SysMonEventKind.formatChanged:
+        if (e.scan != null) _applyMonitorScan(e.scan!);
+        break;
+      case SysMonEventKind.audioServiceRestarted:
+        if (e.scan != null) _applyMonitorScan(e.scan!);
+        if (audioMode == 'sysapo') checkApoStatus(silent: true);
+        break;
+      case SysMonEventKind.apoTopologyChanged:
+        // 本 App 之外的附加/分离（或状态漂移）：完整对账
+        // （含选中回落与 chcap 重发，都在 checkApoStatus 内）。
+        checkApoStatus(silent: true);
+        break;
+    }
+  }
+
+  /// 监听扫描的应用（旧看守的应用段）：VAIO detect 刷新 +
+  /// 在飞标记下应用设备扫描。
+  void _applyMonitorScan(Map<String, dynamic> json) {
+    try {
+      refreshVaioDetect();
+    } catch (err, st) {
+      swallow(err, st);
+    }
+    if (_deviceRefreshInFlight) return;
+    _deviceRefreshInFlight = true;
+    try {
+      _applyDeviceScan(json);
+    } finally {
+      _deviceRefreshInFlight = false;
+      _lastDeviceRefreshAt = DateTime.now();
+    }
+  }
+
+  /// 每轮成功扫描（含无变化轮次）：仅推进「缺席待确认」的调
+  /// 和复核（旧看守 S6 例外口径——不持续应用则消失设备的修
+  /// 复永不落定）。
+  void _onSysMonTick(Map<String, dynamic> scan) {
+    if (_reconcileAbsentSince.isEmpty) return;
+    if (_deviceRefreshInFlight) return;
+    _deviceRefreshInFlight = true;
+    try {
+      _applyDeviceScan(scan);
+    } finally {
+      _deviceRefreshInFlight = false;
+      _lastDeviceRefreshAt = DateTime.now();
+    }
+  }
+
+  /// Linux 统一系统监听启动（ready 恢复点调用；幂等）。与
+  /// Windows 侧同词汇：探针为状态层 Linux 字段快照，节拍回
+  /// 调催 isolate 回推 linuxstatus 新真值，事件只做日志与刷
+  /// 新催促（字段真值由 linuxstatus 事件回填并同步基线）。
+  void startLinuxSystemMonitor() {
+    if (_testing || !PlatformProfile.isLinux) return;
+    if (_linuxSysMonitor != null) return;
+    _linuxSysMonitor = linux_mon.LinuxSystemMonitor(
+      probe: () => linux_mon.LinuxAudioSnapshot(
+        defaultSink: linuxDefaultSink,
+        captureSource: linuxCaptureSource,
+        virtualSinkPresent: linuxVirtualSink,
+        captureActive: linuxCaptureActive,
+        driverLoaded: linuxDriverLoaded,
+      ),
+      onEvent: _onLinuxSysMonEvent,
+      onTick: () => _toIso?.send({'cmd': 'linuxstatus'}),
+    )..start();
+    dbgLog('linux sysmon: started');
+  }
+
+  void _onLinuxSysMonEvent(linux_mon.SysMonEvent e) {
+    dbgLog('linux sysmon: ${e.kind.name} ${e.detail}');
+    _toIso?.send({'cmd': 'linuxstatus'});
+    _notifyUi();
   }
 
   /// 链路对账后的设备刷新请求（2026-11-14）：applyPipelineChain
