@@ -95,13 +95,15 @@ int apoEndpointHash(String id) {
 }
 
 /// 分端点 telemetry 块名（与 ApoShared.h AuraApoTelemetryNameFor
-/// 同构：小写十六进制 16 位）。
+/// 同构：小写十六进制 16 位）。逐 nibble 提取——哈希 ≥ 2^63 时
+/// Dart int 为负，toUnsigned/toRadixString 会带符号，必须绕开。
 String apoTelemetryNameFor(String endpointId) {
-  final hex = apoEndpointHash(endpointId)
-      .toUnsigned(64)
-      .toRadixString(16)
-      .padLeft(16, '0');
-  return 'Global\\AuraDSP_ApoTelemetry_$hex';
+  final h = apoEndpointHash(endpointId);
+  final sb = StringBuffer('Global\\AuraDSP_ApoTelemetry_');
+  for (var shift = 60; shift >= 0; shift -= 4) {
+    sb.write(((h >> shift) & 0xF).toRadixString(16));
+  }
+  return sb.toString();
 }
 // 与心跳/ApoShared.h 同一穿透 SDDL（LS + Everyone + LPAC 包 SID）。
 const String _apoSharedSddl =
