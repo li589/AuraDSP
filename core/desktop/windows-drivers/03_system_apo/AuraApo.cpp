@@ -210,14 +210,14 @@ void CAuraApo::DumpStoreDiag_(IPropertyStore* epStore, IPropertyStore* fxStore) 
                 DWORD cnt = 0;
                 if (FAILED(st->GetCount(&cnt))) { put(L"err;"); return; }
                 wchar_t num[24];
-                _snwprintf_s(num, L"%lu:", (unsigned long)cnt);
+                swprintf_s(num, 24, L"%lu:", (unsigned long)cnt);
                 put(num);
                 for (DWORD i = 0; i < cnt && used + 44 < cap; ++i) {
                     PROPERTYKEY k{};
                     if (FAILED(st->GetAt(i, &k))) continue;
-                    _snwprintf_s(num, L"%08lx,%lu;",
-                                 (unsigned long)k.fmtid.Data1,
-                                 (unsigned long)k.pid);
+                    swprintf_s(num, 24, L"%08lx,%lu;",
+                               (unsigned long)k.fmtid.Data1,
+                               (unsigned long)k.pid);
                     put(num);
                 }
             };
