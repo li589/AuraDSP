@@ -1792,6 +1792,56 @@ void OutJson(const Json& j) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// [第四十一轮 S0 尖刺] 端点 FX 属性集写入/清除（APO 多端点 v2 地基）：
+// 把身份令牌（端点自身 id）+ 声道覆写（mode/fill/flags）写进端点
+// FxProperties 的 AuraDSP 属性集，供 APO 实例在 Initialize 时经
+// pAPOEndpointProperties 读回。S1 转正后由附加/设置路径接管写入。
+// ---------------------------------------------------------------------------
+int CmdProbeFx(const std::wstring& substr, bool clear, int mode, int fill) {
+    const std::wstring base = L"{a5c3d21e-9b47-4f1a-8e6d-2f5b7c904e31}";
+    auto propName = [&](int pid) {
+        return base + L"," + std::to_wstring(pid);
+    };
+    auto eps = FindEndpoints(substr);
+    if (eps.size() != 1) {
+        OutLine("probe-fx: endpoint matches=" + std::to_string(eps.size()) +
+                " (need exactly 1)");
+        for (auto& e : eps) OutLine("  - " + e.id);
+        return 2;
+    }
+    const Endpoint& ep = eps[0];
+    HKEY k = OpenFxKeyWritable(ep.FxSub());
+    if (!k) {
+        OutLine("probe-fx: cannot open FxProperties writable (need admin; use --elevate)");
+        return 1;
+    }
+    int rc = 0;
+    if (clear) {
+        for (int pid : {2, 3, 4, 5}) RegDeleteValueW(k, propName(pid).c_str());
+        OutLine("probe-fx: cleared for " + ep.id);
+    } else {
+        const std::wstring token = Utf8ToWide(ep.id);
+        const DWORD flags = 3;  // mode + fill 均有效
+        const DWORD m = (DWORD)mode, f = (DWORD)fill;
+        LONG r1 = RegSetValueExW(k, propName(2).c_str(), 0, REG_SZ,
+                                 (const BYTE*)token.c_str(),
+                                 (DWORD)((token.size() + 1) * sizeof(wchar_t)));
+        LONG r2 = RegSetValueExW(k, propName(3).c_str(), 0, REG_DWORD,
+                                 (const BYTE*)&m, sizeof(m));
+        LONG r3 = RegSetValueExW(k, propName(4).c_str(), 0, REG_DWORD,
+                                 (const BYTE*)&f, sizeof(f));
+        LONG r4 = RegSetValueExW(k, propName(5).c_str(), 0, REG_DWORD,
+                                 (const BYTE*)&flags, sizeof(flags));
+        OutLine("probe-fx: write token/mode/fill/flags rc=" +
+                std::to_string(r1) + "/" + std::to_string(r2) + "/" +
+                std::to_string(r3) + "/" + std::to_string(r4) + " for " + ep.id);
+        rc = (r1 == 0 && r2 == 0 && r3 == 0 && r4 == 0) ? 0 : 1;
+    }
+    RegCloseKey(k);
+    return rc;
+}
+
 int CmdStatus(bool asJson, const std::optional<double>& timeout) {
     const bool admin = IsAdmin();
     const auto testenv =
@@ -3184,6 +3234,21 @@ int wmain(int argc, wchar_t* argv[]) {
     }
     if (verb == L"doctor") {
         return CmdDoctor(hasFlag(L"--fix"), asJson);
+    }
+    if (verb == L"probe-fx-write") {
+        if (args.size() < 4) {
+            OutLine("usage: apo_config probe-fx-write <endpoint-substr> <mode> <fill> [--elevate]");
+            return 2;
+        }
+        return CmdProbeFx(args[1], false, _wtoi(args[2].c_str()),
+                          _wtoi(args[3].c_str()));
+    }
+    if (verb == L"probe-fx-clear") {
+        if (args.size() < 2) {
+            OutLine("usage: apo_config probe-fx-clear <endpoint-substr> [--elevate]");
+            return 2;
+        }
+        return CmdProbeFx(args[1], true, 0, 0);
     }
     if (verb == L"install") {
         if (args.size() < 2 || args[1].rfind(L"--", 0) == 0) {

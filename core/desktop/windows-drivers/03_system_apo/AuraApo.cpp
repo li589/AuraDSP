@@ -1,12 +1,14 @@
 // AuraApo.cpp — 自研 System APO（透传 + 心跳 + RT-safe；引擎接线见 ApoEngineHost）。
 #include "AuraApo.h"
 
+#include <propsys.h>
 #include <sddl.h>
 #include <cstdio>
 #include <cstring>
 
 #include "AuraApoGuid.h"
 #include "AuraHeartbeat.h"
+#include "ApoEndpointProps.h"
 
 long CAuraApo::instCount = 0;
 
@@ -110,8 +112,103 @@ STDMETHODIMP CAuraApo::GetRegistrationProperties(APO_REG_PROPERTIES** ppRegProps
     return S_OK;
 }
 
-STDMETHODIMP CAuraApo::Initialize(UINT32 /*cbDataSize*/, BYTE* /*pbyData*/) {
+STDMETHODIMP CAuraApo::Initialize(UINT32 cbDataSize, BYTE* pbyData) {
+    // [第四十一轮] IAudioSystemEffects 为标记接口，系统效果初始化
+    // 数据经本函数以 APOInitSystemEffects 抵达：其中
+    // pAPOEndpointProperties 是本端点 FX 属性存储——端点身份与声
+    // 道覆写的来源。数据缺失/形状不符时静默跳过（v1 行为不变）。
+    if (pbyData && cbDataSize >= sizeof(APOInitSystemEffects)) {
+        auto* init = reinterpret_cast<APOInitSystemEffects*>(pbyData);
+        if (init->APOInit.cbSize >= sizeof(APOInitBaseStruct) &&
+            init->pAPOEndpointProperties) {
+            ReadEndpointProps(init->pAPOEndpointProperties);
+        }
+    }
     return S_OK;
+}
+
+void CAuraApo::ReadEndpointProps(IPropertyStore* store) {
+    if (!store) return;
+    PROPVARIANT v;
+    PropVariantInit(&v);
+    if (SUCCEEDED(store->GetValue(AuraEndpointPropKey(kAuraPropPidToken), &v)) &&
+        v.vt == VT_LPWSTR && v.pwszVal) {
+        endpoint_id_ = v.pwszVal;
+    }
+    PropVariantClear(&v);
+    unsigned long flags = 0;
+    PropVariantInit(&v);
+    if (SUCCEEDED(store->GetValue(AuraEndpointPropKey(kAuraPropPidFlags), &v)) &&
+        v.vt == VT_UI4) {
+        flags = v.ulVal;
+    }
+    PropVariantClear(&v);
+    if (flags & kAuraOverrideModeValid) {
+        PropVariantInit(&v);
+        if (SUCCEEDED(store->GetValue(AuraEndpointPropKey(kAuraPropPidMode), &v)) &&
+            v.vt == VT_UI4) {
+            ep_mode_valid_ = true;
+            ep_mode_ = (int32_t)v.ulVal;
+        }
+        PropVariantClear(&v);
+    }
+    if (flags & kAuraOverrideFillValid) {
+        PropVariantInit(&v);
+        if (SUCCEEDED(store->GetValue(AuraEndpointPropKey(kAuraPropPidFill), &v)) &&
+            v.vt == VT_UI4) {
+            ep_fill_valid_ = true;
+            ep_fill_ = (int32_t)v.ulVal;
+        }
+        PropVariantClear(&v);
+    }
+    DumpProbe_();
+}
+
+// [S0 尖刺转储，S1 删除] 把本次 Initialize 读到的端点属性写进
+// Global\AuraDSP_ApoProbe 供外部读取验证：每实例一条（环形 16 条）。
+namespace {
+struct ApoProbeRecord {
+    wchar_t token[80];
+    unsigned long long idHash;
+    int32_t mode, fill;
+    uint32_t modeValid, fillValid;
+};
+struct ApoProbeBlock {
+    volatile LONG next;
+    uint32_t magic;  // 'APRB' = 0x42525041
+    ApoProbeRecord recs[16];
+};
+}  // namespace
+
+void CAuraApo::DumpProbe_() {
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            L"D:(A;;GA;;;LS)(A;;GA;;;WD)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)",
+            SDDL_REVISION_1, &sd, nullptr))
+        return;
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = sd;
+    HANDLE hMap = CreateFileMappingW(INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE, 0,
+                                     (DWORD)sizeof(ApoProbeBlock),
+                                     L"Global\\AuraDSP_ApoProbe");
+    LocalFree(sd);
+    if (!hMap) return;
+    void* view = MapViewOfFile(hMap, FILE_MAP_WRITE, 0, 0, sizeof(ApoProbeBlock));
+    if (view) {
+        auto* blk = (ApoProbeBlock*)view;
+        blk->magic = 0x42525041;
+        const LONG slot = InterlockedIncrement(&blk->next) - 1;
+        ApoProbeRecord& r = blk->recs[slot & 15];
+        wcsncpy_s(r.token, endpoint_id_.c_str(), _TRUNCATE);
+        r.idHash = AuraEndpointIdHash(endpoint_id_.c_str());
+        r.mode = ep_mode_;
+        r.fill = ep_fill_;
+        r.modeValid = ep_mode_valid_ ? 1 : 0;
+        r.fillValid = ep_fill_valid_ ? 1 : 0;
+        UnmapViewOfFile(view);
+    }
+    CloseHandle(hMap);
 }
 
 bool CAuraApo::IsFloat32Type(IAudioMediaType* type) {
