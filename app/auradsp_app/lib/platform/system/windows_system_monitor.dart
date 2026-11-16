@@ -1,5 +1,5 @@
 // windows_system_monitor.dart — 第四十二轮 S5：Windows 统一系统
-// 监听模块（单文件，平台层）。
+// 监听模块（单文件，平台层；契约与事件类型在 port/system_monitor）。
 //
 // 专责感知系统音频面的变化：硬件插拔/启停、默认设备变更、端点
 // mix 格式变更（率/声道/位深）、音频服务重启、其它 APO 的附加
@@ -19,48 +19,10 @@
 // 靠信号，属启发式，事件 detail 注明）。
 import 'dart:async';
 
-/// 系统音频事件种类（与 Linux 侧同词汇，见 linux_system_monitor）。
-enum SysMonEventKind {
-  /// 端点集合变化（插拔/启停）：endpointIds 为增减的端点集。
-  deviceSetChanged,
+import '../../core/error_sink.dart';
+import '../port/system_monitor.dart';
 
-  /// 默认渲染/采集端点变化。
-  defaultDeviceChanged,
-
-  /// 既有端点 mix 格式变化：endpointIds 为格式变了的端点集。
-  formatChanged,
-
-  /// 音频服务重启（扫描失败后恢复，启发式）。
-  audioServiceRestarted,
-
-  /// APO 附加拓扑变化（本 App 之外的附加/分离，或状态漂移）。
-  apoTopologyChanged,
-}
-
-class SysMonEvent {
-  final SysMonEventKind kind;
-  final Set<String> endpointIds;
-  final Map<String, dynamic>? scan;
-  final String detail;
-  const SysMonEvent(
-    this.kind, {
-    this.endpointIds = const {},
-    this.scan,
-    this.detail = '',
-  });
-
-  @override
-  String toString() =>
-      'SysMonEvent($kind, ids=${endpointIds.length}, $detail)';
-}
-
-/// 端点扫描探针：成功返回 apo_inspect JSON，失败返回 null。
-typedef SysMonScanProbe = Future<Map<String, dynamic>?> Function();
-
-/// APO 附加集探针：返回当前已附加端点 id 集；不适用/失败 null。
-typedef SysMonApoProbe = Future<Set<String>?> Function();
-
-class WindowsSystemMonitor {
+class WindowsSystemMonitor implements WindowsSystemMonitorPort {
   WindowsSystemMonitor({
     required this.scanProbe,
     required this.onEvent,
@@ -100,11 +62,13 @@ class WindowsSystemMonitor {
 
   bool get running => _timer != null;
 
+  @override
   void start() {
     if (_timer != null) return;
     _timer = Timer.periodic(interval, (_) => tick());
   }
 
+  @override
   void stop() {
     _timer?.cancel();
     _timer = null;
@@ -112,6 +76,7 @@ class WindowsSystemMonitor {
 
   /// 外部（如手动刷新）已应用一轮扫描时同步基线，避免下一轮
   /// 把同一变化重复分类上报。
+  @override
   void noteExternalScan(Map<String, dynamic> scan) {
     _prevScan = scan;
   }
@@ -216,7 +181,8 @@ class WindowsSystemMonitor {
       Map<String, dynamic>? scan;
       try {
         scan = await scanProbe();
-      } catch (_) {
+      } catch (e, st) {
+        swallow(e, st);
         scan = null;
       }
       if (scan == null) {
@@ -246,7 +212,8 @@ class WindowsSystemMonitor {
         Set<String>? ids;
         try {
           ids = await probe();
-        } catch (_) {
+        } catch (e, st) {
+          swallow(e, st);
           ids = null;
         }
         if (ids != null) {

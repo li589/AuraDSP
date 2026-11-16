@@ -69,7 +69,7 @@ extension StateEvents on AppModel {
         linuxDefaultSink = (raw['defaultSink'] as String?) ?? '';
         linuxCaptureSource = (raw['captureSource'] as String?) ?? '';
         // S5：新真值同步 Linux 监听基线（避免下一轮重复分类）。
-        _linuxSysMonitor?.noteExternalSnapshot(linux_mon.LinuxAudioSnapshot(
+        _linuxSysMonitor?.noteExternalSnapshot(LinuxAudioSnapshot(
           defaultSink: linuxDefaultSink,
           captureSource: linuxCaptureSource,
           virtualSinkPresent: linuxVirtualSink,

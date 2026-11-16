@@ -20,8 +20,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../engine/audio_isolate.dart';
 import '../engine/local_channel_policy.dart';
-import '../platform/system/linux_system_monitor.dart' as linux_mon;
-import '../platform/system/windows_system_monitor.dart';
+import '../platform/port/system_monitor.dart';
 import '../engine/audio_out/alsa_ffi.dart' as alsa_ffi;
 import 'debug/debug_trace.dart';
 import 'effect_registry.dart';
@@ -369,8 +368,8 @@ class AppModel extends ChangeNotifier {
   // 统一系统监听模块）：WindowsSystemMonitor / LinuxSystemMonitor
   // 持有节拍、签名与变化分类，状态层只供探针闭包与事件处理
   // （逻辑在 state_audio_modes.dart 的设备枚举段）。
-  WindowsSystemMonitor? _sysMonitor;
-  linux_mon.LinuxSystemMonitor? _linuxSysMonitor;
+  WindowsSystemMonitorPort? _sysMonitor;
+  LinuxSystemMonitorPort? _linuxSysMonitor;
   bool _deviceRefreshInFlight = false;
   DateTime? _lastDeviceRefreshAt;
   // 调和缺席起始时刻（键 in/out/vaio）：持续缺席满 20 秒才

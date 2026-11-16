@@ -4,8 +4,8 @@
 // 与 APO 拓扑（附加集差分）两类事件在此钉契约。
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:auradsp_app/platform/system/linux_system_monitor.dart'
-    as linux_mon;
+import 'package:auradsp_app/platform/port/system_monitor.dart';
+import 'package:auradsp_app/platform/system/linux_system_monitor.dart';
 import 'package:auradsp_app/platform/system/windows_system_monitor.dart';
 
 Map<String, dynamic> _scan({
@@ -139,7 +139,7 @@ void main() {
   });
 
   group('LinuxSystemMonitor 分类与服务重启', () {
-    const base = linux_mon.LinuxAudioSnapshot(
+    const base = LinuxAudioSnapshot(
       defaultSink: 'sink-a',
       captureSource: 'src-a',
       captureActive: true,
@@ -147,9 +147,9 @@ void main() {
     );
 
     test('classify：默认 sink 变更', () {
-      final evts = linux_mon.LinuxSystemMonitor.classify(
+      final evts = LinuxSystemMonitor.classify(
         base,
-        const linux_mon.LinuxAudioSnapshot(
+        const LinuxAudioSnapshot(
           defaultSink: 'sink-b',
           captureSource: 'src-a',
           captureActive: true,
@@ -157,13 +157,13 @@ void main() {
         ),
       );
       expect(evts.map((e) => e.kind),
-          contains(linux_mon.SysMonEventKind.defaultDeviceChanged));
+          contains(SysMonEventKind.defaultDeviceChanged));
     });
 
     test('classify：虚拟 sink 出现判设备集变化', () {
-      final evts = linux_mon.LinuxSystemMonitor.classify(
+      final evts = LinuxSystemMonitor.classify(
         base,
-        const linux_mon.LinuxAudioSnapshot(
+        const LinuxAudioSnapshot(
           defaultSink: 'sink-a',
           captureSource: 'src-a',
           virtualSinkPresent: true,
@@ -172,23 +172,23 @@ void main() {
         ),
       );
       expect(evts.map((e) => e.kind),
-          contains(linux_mon.SysMonEventKind.deviceSetChanged));
+          contains(SysMonEventKind.deviceSetChanged));
     });
 
     test('塌空→恢复判服务重启', () {
-      final got = <linux_mon.SysMonEvent>[];
+      final got = <SysMonEvent>[];
       var snap = base;
-      final mon = linux_mon.LinuxSystemMonitor(
+      final mon = LinuxSystemMonitor(
         probe: () => snap,
         onEvent: got.add,
       );
       mon.tick(); // 基线
-      snap = const linux_mon.LinuxAudioSnapshot(); // 塌空
+      snap = const LinuxAudioSnapshot(); // 塌空
       mon.tick();
       snap = base; // 恢复
       mon.tick();
       expect(got.map((e) => e.kind),
-          contains(linux_mon.SysMonEventKind.audioServiceRestarted));
+          contains(SysMonEventKind.audioServiceRestarted));
     });
   });
 }

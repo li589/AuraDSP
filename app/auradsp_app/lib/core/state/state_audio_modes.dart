@@ -919,7 +919,7 @@ extension AudioModesState on AppModel {
   void startDeviceWatch() {
     if (_testing || !PlatformProfile.supportsBridges) return;
     if (_sysMonitor != null) return;
-    _sysMonitor = WindowsSystemMonitor(
+    _sysMonitor = createWindowsSystemMonitor(
       scanProbe: _probeDeviceScan,
       apoProbe: _probeApoAttachedIds,
       onEvent: _onSysMonEvent,
@@ -942,7 +942,8 @@ extension AudioModesState on AppModel {
       final lastLine = stdout.split('\n').last.trim();
       if (lastLine.isEmpty) return null;
       return jsonDecode(lastLine) as Map<String, dynamic>;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return null;
     }
   }
@@ -971,7 +972,8 @@ extension AudioModesState on AppModel {
           if (e is Map && e['EndpointId'] != null)
             e['EndpointId'].toString(),
       };
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return null;
     }
   }
@@ -1039,8 +1041,8 @@ extension AudioModesState on AppModel {
   void startLinuxSystemMonitor() {
     if (_testing || !PlatformProfile.isLinux) return;
     if (_linuxSysMonitor != null) return;
-    _linuxSysMonitor = linux_mon.LinuxSystemMonitor(
-      probe: () => linux_mon.LinuxAudioSnapshot(
+    _linuxSysMonitor = createLinuxSystemMonitor(
+      probe: () => LinuxAudioSnapshot(
         defaultSink: linuxDefaultSink,
         captureSource: linuxCaptureSource,
         virtualSinkPresent: linuxVirtualSink,
@@ -1053,7 +1055,7 @@ extension AudioModesState on AppModel {
     dbgLog('linux sysmon: started');
   }
 
-  void _onLinuxSysMonEvent(linux_mon.SysMonEvent e) {
+  void _onLinuxSysMonEvent(SysMonEvent e) {
     dbgLog('linux sysmon: ${e.kind.name} ${e.detail}');
     _toIso?.send({'cmd': 'linuxstatus'});
     _notifyUi();
