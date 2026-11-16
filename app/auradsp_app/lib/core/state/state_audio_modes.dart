@@ -180,7 +180,6 @@ extension AudioModesState on AppModel {
     });
     if (valid == 'sysapo') {
       applyApoFileEffectPolicy();
-      _pushApoEndpointChannels();
       _toIso?.send({'cmd': 'apopublish'});
     } else if (apoEngineActive || apoEngineFault) {
       // 离开 sysapo：引擎状态面复位（读者已停，不再有事件回填）。
@@ -1210,36 +1209,6 @@ extension AudioModesState on AppModel {
   bool apoEndpointAttached(String target) =>
       apoInstalledEndpoints.any((e) => _apoEndpointMatches(e, target));
 
-  /// config 的分端点声道覆写全量下发 isolate（参数块 v3 覆写
-  /// 表）。发布者未激活时 isolate 侧自跳过，无副作用。
-  void _pushApoEndpointChannels() {
-    _toIso?.send({
-      'cmd': 'apoepchannels',
-      'map': {
-        for (final e in config.apoEndpointChannels.entries)
-          e.key: {'mode': e.value.mode, 'fill': e.value.fill},
-      },
-    });
-  }
-
-  /// 设置/清除某端点的声道覆写（第四十一轮）：mode 与 fill 同
-  /// 传 = 设覆写；同为 null = 清除（回落全局）。落盘 + 实时表
-  /// 下发（引擎 50ms 内跟随）；FX 持久层在下次附加该端点时由
-  /// install --props 一并写入，不为每次微调弹 UAC。
-  void setApoEndpointChannels(String endpointId, {int? mode, int? fill}) {
-    if (endpointId.isEmpty) return;
-    if (mode == null && fill == null) {
-      if (config.apoEndpointChannels.remove(endpointId) == null) return;
-    } else {
-      if (mode == null || fill == null) return; // 覆写恒成对
-      config.apoEndpointChannels[endpointId] =
-          (mode: mode.clamp(0, 1), fill: fill.clamp(0, 1));
-    }
-    persistRoutingChange();
-    _pushApoEndpointChannels();
-    _notifyUi();
-  }
-
   /// 一键附加复选集的勾选切换（会话级，不落盘）。
   void toggleApoChecked(String endpointId, bool on) {
     if (on) {
@@ -1618,9 +1587,11 @@ extension AudioModesState on AppModel {
   }
 
   /// 单端点附加本体（第四十一轮抽取）：工具调用 + 复查裁定。
-  /// 身份令牌与该端点的声道覆写期望经 install --props 在同次
-  /// 提权内写入 FX 属性集（APO 实例 Initialize 时读回；运行中
-  /// 的实时变更另走参数块 v3 覆写表）。
+  /// 身份令牌经 install --props 在同次提权内写入 FX 属性集
+  /// （APO 实例 Initialize 时读回，多端点分座/分块靠它）。
+  /// 第四十二轮 S2：声道覆写已废除（设置只剩全局一份），附加
+  /// 时 props 恒传 clear——令牌照写，同时清掉 r41 时代可能残
+  /// 留在该端点的 FX 覆写值，防其作为「初值」压过全局。
   Future<({bool ok, String? error})> _attachOneApoEndpoint(
     String target, {
     required bool composite,
@@ -1630,15 +1601,13 @@ extension AudioModesState on AppModel {
     if (script == null) {
       return (ok: false, error: '未找到 apo_config.exe 驱动管理工具');
     }
-    final fullId = resolveApoEndpointId(target);
-    final ovr = fullId.isEmpty ? null : config.apoEndpointChannels[fullId];
     final res = await windowsSystem.apoInstall(
       script,
       target: target,
       composite: composite,
       elevated: elevated,
-      propsMode: ovr == null ? 'keep' : '${ovr.mode}',
-      propsFill: ovr == null ? 'keep' : '${ovr.fill}',
+      propsMode: 'clear',
+      propsFill: 'clear',
     );
     // apo 操作留痕（Stage 0 / §8.2）：此前附加/卸载在主日志
     // 里完全无记录，真机排障只能靠结果文件残骸反推时序。

@@ -146,7 +146,6 @@ extension StateEvents on AppModel {
             'on': true,
             'endpointId': selectedApoEndpointId,
           });
-          _pushApoEndpointChannels();
           _toIso?.send({'cmd': 'apopublish'});
         }
         // 模式恢复取证（2026-11-09）：与 isolate 侧

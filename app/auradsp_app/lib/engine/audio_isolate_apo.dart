@@ -120,7 +120,6 @@ class ApoParamPublisher {
   Map<String, ({bool isFloat, double value})>? _mirror;
   Map<String, String>? _strMirror;
   bool Function()? _bypassOf;
-  Map<String, ({int mode, int fill})> Function()? _overridesOf;
 
   Pointer<Void>? _mapping;
   Pointer<Uint8>? _view;
@@ -135,12 +134,10 @@ class ApoParamPublisher {
     required Map<String, ({bool isFloat, double value})> mirror,
     required Map<String, String> strMirror,
     required bool Function() bypassOf,
-    Map<String, ({int mode, int fill})> Function()? overridesOf,
   }) {
     _mirror = mirror;
     _strMirror = strMirror;
     _bypassOf = bypassOf;
-    _overridesOf = overridesOf;
   }
 
   Pointer<Void> _createMapping(_ApoWin32 w, Pointer<Utf16> name) {
@@ -379,8 +376,10 @@ class ApoParamPublisher {
   /// idHash u64 LE + mode i32 + fill i32 + flags u32（恒 3=两项
   /// 均有效）；未用条目清零。worker 按本端点哈希命中后压过参数
   /// 块全局 mode/fill 与 FX 初值（实时变更通道）。
+  /// 第四十二轮 S2 起覆写功能废除：本表恒写全零（顺带清掉
+  /// r41 会话可能留在块里的旧表），worker 侧消费能力休眠。
   void _writeOverrideTable() {
-    final src = _overridesOf?.call() ?? const <String, ({int mode, int fill})>{};
+    const src = <String, ({int mode, int fill})>{};
     var slot = 0;
     for (final e in src.entries) {
       if (slot >= kApoEpOverrideCount) break;
@@ -408,16 +407,6 @@ class ApoParamPublisher {
     }
   }
 
-  /// 覆写表单独重写（端点声道设置变更点调用；全量重写走 flushAll）。
-  void writeOverrides() {
-    if (_view == null) {
-      _ensure();
-      return;
-    }
-    _beginWrite();
-    _writeOverrideTable();
-    _endWrite();
-  }
 }
 
 /// telemetry 读者：sysapo 生效期间轮询回传块，合成 viz 事件。

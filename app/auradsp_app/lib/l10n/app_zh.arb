@@ -1649,18 +1649,6 @@
   "ambientLabel": "频谱光晕",
   "ambientHint": "主页背景随音乐起伏的光晕；关闭后完全停绘，可省 GPU",
   "apoEndpointSelectedTag": "选中",
-  "apoChannelsForEndpoint": "声道设置作用于端点「{name}」",
-  "@apoChannelsForEndpoint": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "apoChannelsFollowGlobal": "当前跟随全局声道设置（未单独设置）",
-  "apoChannelsResetFollow": "恢复跟随全局",
-  "apoChannelsStereoNote": "选中端点为立体声，声道模式与填充不影响其处理",
-  "apoSelectedNotAttached": "选中端点尚未附加：声道设置已保存，附加后生效",
   "apoChannelsActual": "引擎实际生效：{mode} · {fill}",
   "@apoChannelsActual": {
     "placeholders": {
@@ -1672,6 +1660,7 @@
       }
     }
   },
+  "apoChannelsGlobal": "System APO 模式下同样使用这份全局声道设置（所有已附加端点一致）",
   "apoFillFill": "铺满",
   "apoFillGated": "门控"
 }

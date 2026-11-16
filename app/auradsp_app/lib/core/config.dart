@@ -59,11 +59,11 @@ class AppConfig {
   bool pipelineOutputEnabled; // 输出端启用开关
   String apoTargetEndpoint; // System APO 选中端点（UI 跟随对象；v2 起多端点可同时附加，本值只定选中）
 
-  /// 分端点声道覆写（第四十一轮，APO 多端点 v2）：端点 id →
-  /// 期望声道模式（0=矩阵 / 1=离散）与声道填充（0=门控 / 1=铺满）。
-  /// 仅 sysapo 生效：经参数块 v3 覆写表实时下发 + FX 属性集持久
-  /// 化；未列出的端点跟随全局 channels.mode / channels.upmix_fill。
-  Map<String, ({int mode, int fill})> apoEndpointChannels;
+  // 分端点声道覆写（第四十一轮）已于第四十二轮 S2 废除（user
+  // 裁定声道设置只剩全局一份）：本键不再读写，旧 config 中残留
+  // 的 apoEndpointChannels 在加载时忽略、下次保存时消失；端点
+  // FX 里 r41 写入的覆写值在下次附加时由 install --props clear
+  // 清除。引擎侧参数块 v3 覆写表保留休眠。
   bool monitorMirroring; // 虚拟端点本地耳机监听镜像
 
   // ASIO 桥选择项（audioMode=='asio' 时生效；见 AsioBridge.h 契约）
@@ -125,7 +125,6 @@ class AppConfig {
     this.pipelineInputEnabled = true,
     this.pipelineOutputEnabled = true,
     this.apoTargetEndpoint = '',
-    Map<String, ({int mode, int fill})>? apoEndpointChannels,
     this.monitorMirroring = false,
     this.asioDriver = '',
     this.asioBufSize = 0,
@@ -161,27 +160,7 @@ class AppConfig {
                 : (audioMode == 'vaio' ? AudioModes.outputVaio : AudioModes.outputWasapi)),
         pluginScanDirs = pluginScanDirs ?? [],
         customScriptDirs = customScriptDirs ?? [],
-        apoEndpointChannels = apoEndpointChannels ?? {},
         visualizerConfig = visualizerConfig ?? const VisualizerConfig();
-
-  /// 分端点声道覆写表的容错解码（fromJson 用）：条目须为
-  /// {mode: num, fill: num} 的 Map，否则整条跳过（配置文件为
-  /// 机器写出，形状不对即视为损坏）；值钳到 {0,1}。
-  static Map<String, ({int mode, int fill})> parseEndpointChannels(
-      Object? raw) {
-    final out = <String, ({int mode, int fill})>{};
-    if (raw is Map) {
-      raw.forEach((k, v) {
-        if (k is String && v is Map && v['mode'] is num && v['fill'] is num) {
-          out[k] = (
-            mode: (v['mode'] as num).toInt().clamp(0, 1),
-            fill: (v['fill'] as num).toInt().clamp(0, 1),
-          );
-        }
-      });
-    }
-    return out;
-  }
 
   factory AppConfig.fromJson(Map<String, dynamic> json) {
     final audio = (json['audio'] as Map<String, dynamic>?) ?? {};
@@ -212,7 +191,6 @@ class AppConfig {
       pipelineInputEnabled: (audio['pipelineInputEnabled'] as bool?) ?? true,
       pipelineOutputEnabled: (audio['pipelineOutputEnabled'] as bool?) ?? true,
       apoTargetEndpoint: (audio['apoTargetEndpoint'] as String?) ?? '',
-      apoEndpointChannels: parseEndpointChannels(audio['apoEndpointChannels']),
       monitorMirroring: (audio['monitorMirroring'] as bool?) ?? false,
       asioDriver: (audio['asioDriver'] as String?) ?? '',
       asioBufSize: (audio['asioBufSize'] as num?)?.toInt() ?? 0,
@@ -304,10 +282,6 @@ class AppConfig {
           'pipelineInputEnabled': pipelineInputEnabled,
           'pipelineOutputEnabled': pipelineOutputEnabled,
           'apoTargetEndpoint': apoTargetEndpoint,
-          'apoEndpointChannels': {
-            for (final e in apoEndpointChannels.entries)
-              e.key: {'mode': e.value.mode, 'fill': e.value.fill},
-          },
           'monitorMirroring': monitorMirroring,
           'asioDriver': asioDriver,
           'asioBufSize': asioBufSize,

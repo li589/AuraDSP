@@ -1526,18 +1526,6 @@
   "ambientLabel": "Spectrum glow",
   "ambientHint": "Glow behind the home page that follows the music. Turn it off to stop drawing entirely and save GPU.",
   "apoEndpointSelectedTag": "Selected",
-  "apoChannelsForEndpoint": "Channel settings apply to endpoint \"{name}\"",
-  "@apoChannelsForEndpoint": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "apoChannelsFollowGlobal": "Following the global channel settings (no per-endpoint override)",
-  "apoChannelsResetFollow": "Follow global",
-  "apoChannelsStereoNote": "The selected endpoint is stereo; channel mode and fill do not affect it",
-  "apoSelectedNotAttached": "Selected endpoint is not attached: channel settings are saved and apply once attached",
   "apoChannelsActual": "Engine in effect: {mode} · {fill}",
   "@apoChannelsActual": {
     "placeholders": {
@@ -1549,6 +1537,7 @@
       }
     }
   },
+  "apoChannelsGlobal": "System APO mode uses this same global channel setup on every attached endpoint",
   "apoFillFill": "Fill",
   "apoFillGated": "Gated"
 }

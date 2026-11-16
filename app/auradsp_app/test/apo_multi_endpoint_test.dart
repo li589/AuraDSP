@@ -2,9 +2,11 @@
 // ① 端点 id 的 FNV-1a 哈希与 C++ ApoEndpointProps.h 同算法——
 //    向量取 S0 尖刺实测（开发机 Voicemeeter AUX 端点 id 的哈希
 //    由原生侧算得 a1c76bcb09ad3503），双侧必须恒等，否则分端点
-//    telemetry 块名与参数块 v3 覆写表键全部错位。
-// ② 分端点声道覆写配置的容错解码（形状不对跳过、值钳 {0,1}）。
-// ③ 参数块 v3 布局常量（生成文件）：覆写表偏移 = v2 used bytes。
+//    telemetry 块名全部错位。
+// ② 第四十二轮 S2：分端点声道覆写已废除——旧 config 的
+//    apoEndpointChannels 键加载忽略、保存消失。
+// ③ 参数块 v3 布局常量（生成文件）：覆写表偏移 = v2 used bytes
+//    （表本体保留休眠，块版本不动）。
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:auradsp_app/core/config.dart';
@@ -27,35 +29,15 @@ void main() {
     });
   });
 
-  group('第四十一轮：分端点声道覆写配置解码', () {
-    test('正常条目原样解码', () {
-      final m = AppConfig.parseEndpointChannels({
-        'ep-a': {'mode': 1, 'fill': 0},
-        'ep-b': {'mode': 0, 'fill': 1},
-      });
-      expect(m.length, 2);
-      expect(m['ep-a'], (mode: 1, fill: 0));
-      expect(m['ep-b'], (mode: 0, fill: 1));
-    });
-    test('坏形状跳过、越界值钳制', () {
-      final m = AppConfig.parseEndpointChannels({
-        'ok': {'mode': 7, 'fill': -2},
-        'junk1': 'x',
-        'junk2': {'mode': 'a'},
-        42: {'mode': 1, 'fill': 1},
-      });
-      expect(m.keys, ['ok']);
-      expect(m['ok'], (mode: 1, fill: 0));
-    });
-    test('非 Map 输入回空表', () {
-      expect(AppConfig.parseEndpointChannels(null), isEmpty);
-      expect(AppConfig.parseEndpointChannels('nope'), isEmpty);
-    });
-    test('config 往返：toJson → fromJson 不丢覆写', () {
-      final c = AppConfig();
-      c.apoEndpointChannels['ep-x'] = (mode: 1, fill: 1);
-      final back = AppConfig.fromJson(c.toJson());
-      expect(back.apoEndpointChannels['ep-x'], (mode: 1, fill: 1));
+  group('第四十二轮 S2：覆写配置键已废除', () {
+    test('旧 config 的 apoEndpointChannels 加载忽略、保存消失', () {
+      final legacy = AppConfig().toJson();
+      (legacy['audio'] as Map<String, dynamic>)['apoEndpointChannels'] = {
+        'ep-x': {'mode': 1, 'fill': 1},
+      };
+      final back = AppConfig.fromJson(legacy);
+      final audio = back.toJson()['audio'] as Map<String, dynamic>;
+      expect(audio.containsKey('apoEndpointChannels'), isFalse);
     });
   });
 

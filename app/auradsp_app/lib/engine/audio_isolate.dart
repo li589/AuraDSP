@@ -171,16 +171,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
 
   // APO 真处理通道（P1）：参数块发布者 + telemetry 读者。两平台
   // 无条件构造、惰性激活（非 Windows 首次激活失败即永久静默）。
-  // 分端点声道覆写（第四十一轮）：端点 id → 期望 mode/fill；
-  // 状态层以 'apoepchannels' 命令全量下发，发布者写进参数块
-  // v3 尾段覆写表（APO worker 实时消费）。
-  final Map<String, ({int mode, int fill})> apoEpOverrides = {};
+  // 参数块 v3 尾段覆写表自第四十二轮 S2 起恒写空表（分端点声
+  // 道覆写已废除，worker 侧能力休眠）。
   final apoPublisher = ApoParamPublisher()
     ..bind(
         mirror: paramMirror,
         strMirror: paramStrMirror,
-        bypassOf: () => bypass,
-        overridesOf: () => apoEpOverrides);
+        bypassOf: () => bypass);
   // Part I Q2：插件块发布者（sysapo 激活时把 pluginMirror 同步进
   // AuraDSP_ApoPlugins；未激活时全部方法为空操作）。
   final apoPluginPublisher = ApoPluginPublisher();
@@ -1564,23 +1561,6 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           bypass = m['value'] as bool;
           bridgeManager.active?.setBypass(bypass);
           apoPublisher.onBypass(bypass);
-          break;
-        case 'apoepchannels':
-          // 分端点声道覆写全量下发（第四十一轮）：替换映射并把
-          // 覆写表单独落块（参数镜像未变，不必全量重发）。
-          apoEpOverrides.clear();
-          final raw = m['map'];
-          if (raw is Map) {
-            raw.forEach((k, v) {
-              if (k is String && v is Map) {
-                apoEpOverrides[k] = (
-                  mode: (v['mode'] as num?)?.toInt() ?? 0,
-                  fill: (v['fill'] as num?)?.toInt() ?? 0,
-                );
-              }
-            });
-          }
-          apoPublisher.writeOverrides();
           break;
         case 'apopublish':
           // 进 sysapo / 附加后全量重发参数块（镜像即全量真相）。

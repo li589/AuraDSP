@@ -6610,41 +6610,17 @@ abstract class AppLocalizations {
   /// **'选中'**
   String get apoEndpointSelectedTag;
 
-  /// No description provided for @apoChannelsForEndpoint.
-  ///
-  /// In zh, this message translates to:
-  /// **'声道设置作用于端点「{name}」'**
-  String apoChannelsForEndpoint(String name);
-
-  /// No description provided for @apoChannelsFollowGlobal.
-  ///
-  /// In zh, this message translates to:
-  /// **'当前跟随全局声道设置（未单独设置）'**
-  String get apoChannelsFollowGlobal;
-
-  /// No description provided for @apoChannelsResetFollow.
-  ///
-  /// In zh, this message translates to:
-  /// **'恢复跟随全局'**
-  String get apoChannelsResetFollow;
-
-  /// No description provided for @apoChannelsStereoNote.
-  ///
-  /// In zh, this message translates to:
-  /// **'选中端点为立体声，声道模式与填充不影响其处理'**
-  String get apoChannelsStereoNote;
-
-  /// No description provided for @apoSelectedNotAttached.
-  ///
-  /// In zh, this message translates to:
-  /// **'选中端点尚未附加：声道设置已保存，附加后生效'**
-  String get apoSelectedNotAttached;
-
   /// No description provided for @apoChannelsActual.
   ///
   /// In zh, this message translates to:
   /// **'引擎实际生效：{mode} · {fill}'**
   String apoChannelsActual(String mode, String fill);
+
+  /// No description provided for @apoChannelsGlobal.
+  ///
+  /// In zh, this message translates to:
+  /// **'System APO 模式下同样使用这份全局声道设置（所有已附加端点一致）'**
+  String get apoChannelsGlobal;
 
   /// No description provided for @apoFillFill.
   ///

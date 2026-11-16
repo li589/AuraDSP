@@ -1526,18 +1526,6 @@
   "ambientLabel": "スペクトルのグロー",
   "ambientHint": "ホーム背景で音楽に反応するグロー。オフにすると描画を完全に停止し GPU を節約します",
   "apoEndpointSelectedTag": "選択中",
-  "apoChannelsForEndpoint": "チャンネル設定はエンドポイント「{name}」に適用されます",
-  "@apoChannelsForEndpoint": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "apoChannelsFollowGlobal": "グローバルのチャンネル設定に従っています（個別設定なし）",
-  "apoChannelsResetFollow": "グローバルに戻す",
-  "apoChannelsStereoNote": "選択中のエンドポイントはステレオです。チャンネルモードと填充は処理に影響しません",
-  "apoSelectedNotAttached": "選択中のエンドポイントは未アタッチです。チャンネル設定は保存され、アタッチ後に有効になります",
   "apoChannelsActual": "エンジン実効：{mode} · {fill}",
   "@apoChannelsActual": {
     "placeholders": {
@@ -1549,6 +1537,7 @@
       }
     }
   },
+  "apoChannelsGlobal": "System APO モードでもこの全体設定がすべての接続先エンドポイントに適用されます",
   "apoFillFill": "填充",
   "apoFillGated": "ゲート"
 }
