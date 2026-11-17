@@ -1281,7 +1281,9 @@ RegValue SanitizeBaselineValue(const RegValue& v, bool* changed) {
 // **父端点键**（所有权归 Administrators + 授完全控制）后重试
 // 创建。父键接管与既有 Fx 键接管同级，卸载按台账
 // HadFxPropertiesKey=0 删除自建键，父键 ACL 变更保留（与
-// doctor --fix 对 Fx 键的处理口径一致）。
+// doctor --fix 对 Fx 键的处理口径一致）。接管的 DACL 授予
+// 按 TakeOwnershipRepair 的 r43 不变式与原 DACL 合并——原
+// 服务 ACE 一律保留，保留的只是合并后的授予本身。
 HKEY OpenFxKeyWritable(const std::wstring& fxSub) {
     LONG firstErr = ERROR_SUCCESS;
     auto tryCreate = [&]() -> HKEY {
@@ -1844,7 +1846,13 @@ int WriteEndpointProps(const Endpoint& ep, bool clearAll,
         if (arg == L"keep") return ERROR_SUCCESS;
         if (arg == L"clear") {
             flags &= ~bit;
-            return RegDeleteValueW(k, propName(pid).c_str());
+            // 值不存在即已是 clear 目标态，不算失败（r43：无
+            // r41 残留 props 的端点 pid3/pid4 本就不存在，
+            // ERROR_FILE_NOT_FOUND 被当失败使 r42 起恒传
+            // clear 的附加必报 endpoint_props_failed，宾机
+            // 2026-11-17 实证）。
+            const LONG dr = RegDeleteValueW(k, propName(pid).c_str());
+            return dr == ERROR_FILE_NOT_FOUND ? ERROR_SUCCESS : dr;
         }
         const DWORD v = (DWORD)_wtoi(arg.c_str());
         flags |= bit;
@@ -2119,6 +2127,12 @@ bool EnableTokenPrivilege(const wchar_t* name) {
 // FxProperties 不可写时的退路：接管所有权为 Administrators，再授
 // 予 Administrators/SYSTEM 完全控制。仅 doctor --fix 在探针失败
 // 时调用；任何一步失败即返回 false（doctor 如实报告未修复）。
+// 【r43 不变式】授 DACL 必须与原 DACL 合并（SetEntriesInAcl 传
+// 原 DACL），绝不整表替换：原 DACL 载有 Audiosrv /
+// AudioEndpointBuilder / TrustedInstaller 等服务 ACE，整表替换
+// 会把它们全部剥掉——若被接管的是系统默认端点，音频引擎读不
+// 到其端点键，GetDefault/建图全局失败、全机无声（2026-11-17
+// 宾机实证定罪）。读不到原 DACL 时宁可修复失败，也不盲替。
 bool TakeOwnershipRepair(const std::wstring& fxSub) {
     // SE_TAKE_OWNERSHIP_NAME 在 winnt.h 里是窄字符串常量，
     // 与本函数的宽字符串形参不合，直接用字面量。
@@ -2148,31 +2162,70 @@ bool TakeOwnershipRepair(const std::wstring& fxSub) {
     }
     if (ok && systemSid) {
         ok = false;
-        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, fxSub.c_str(), 0, WRITE_DAC,
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, fxSub.c_str(), 0,
+                          WRITE_DAC | READ_CONTROL,
                           &k) == ERROR_SUCCESS) {
-            EXPLICIT_ACCESSW ea[2]{};
-            for (int i = 0; i < 2; ++i) {
-                ea[i].grfAccessPermissions = KEY_ALL_ACCESS;
-                ea[i].grfAccessMode = SET_ACCESS;
-                ea[i].grfInheritance =
-                    SUB_CONTAINERS_AND_OBJECTS_INHERIT;
-                ea[i].Trustee.TrusteeForm = TRUSTEE_IS_SID;
-                ea[i].Trustee.TrusteeType = TRUSTEE_IS_GROUP;
-            }
-            ea[0].Trustee.ptstrName = reinterpret_cast<LPWSTR>(admins);
-            ea[1].Trustee.ptstrName =
-                reinterpret_cast<LPWSTR>(systemSid);
-            PACL dacl = nullptr;
-            if (SetEntriesInAclW(2, ea, nullptr, &dacl) ==
-                ERROR_SUCCESS) {
-                SECURITY_DESCRIPTOR sd{};
-                if (InitializeSecurityDescriptor(
-                        &sd, SECURITY_DESCRIPTOR_REVISION) &&
-                    SetSecurityDescriptorDacl(&sd, TRUE, dacl, FALSE)) {
-                    ok = RegSetKeySecurity(k, DACL_SECURITY_INFORMATION,
-                                           &sd) == ERROR_SUCCESS;
+            // 先读回原 DACL 与控制位（PROTECTED 决定继承是否
+            // 生效，必须原样保留）；读不到即放弃（见函数头
+            // r43 不变式）。
+            PACL oldDacl = nullptr;
+            SECURITY_DESCRIPTOR_CONTROL oldCtrl = 0;
+            std::vector<BYTE> sdBuf;
+            DWORD need = 0;
+            RegGetKeySecurity(k, DACL_SECURITY_INFORMATION, nullptr,
+                              &need);
+            if (need > 0) {
+                sdBuf.resize(need);
+                if (RegGetKeySecurity(k, DACL_SECURITY_INFORMATION,
+                                      sdBuf.data(), &need) ==
+                    ERROR_SUCCESS) {
+                    BOOL present = FALSE, dflt = FALSE;
+                    if (GetSecurityDescriptorDacl(
+                            reinterpret_cast<PSECURITY_DESCRIPTOR>(
+                                sdBuf.data()),
+                            &present, &oldDacl, &dflt) &&
+                        present && oldDacl) {
+                        DWORD rev = 0;
+                        GetSecurityDescriptorControl(
+                            reinterpret_cast<PSECURITY_DESCRIPTOR>(
+                                sdBuf.data()),
+                            &oldCtrl, &rev);
+                    } else {
+                        oldDacl = nullptr;
+                    }
                 }
-                LocalFree(dacl);
+            }
+            if (oldDacl) {
+                EXPLICIT_ACCESSW ea[2]{};
+                for (int i = 0; i < 2; ++i) {
+                    ea[i].grfAccessPermissions = KEY_ALL_ACCESS;
+                    ea[i].grfAccessMode = SET_ACCESS;
+                    ea[i].grfInheritance =
+                        SUB_CONTAINERS_AND_OBJECTS_INHERIT;
+                    ea[i].Trustee.TrusteeForm = TRUSTEE_IS_SID;
+                    ea[i].Trustee.TrusteeType = TRUSTEE_IS_GROUP;
+                }
+                ea[0].Trustee.ptstrName =
+                    reinterpret_cast<LPWSTR>(admins);
+                ea[1].Trustee.ptstrName =
+                    reinterpret_cast<LPWSTR>(systemSid);
+                PACL dacl = nullptr;
+                if (SetEntriesInAclW(2, ea, oldDacl, &dacl) ==
+                    ERROR_SUCCESS) {
+                    SECURITY_DESCRIPTOR sd{};
+                    if (InitializeSecurityDescriptor(
+                            &sd, SECURITY_DESCRIPTOR_REVISION) &&
+                        SetSecurityDescriptorDacl(&sd, TRUE, dacl,
+                                                  FALSE)) {
+                        SetSecurityDescriptorControl(
+                            &sd, SE_DACL_PROTECTED,
+                            oldCtrl & SE_DACL_PROTECTED);
+                        ok = RegSetKeySecurity(
+                                 k, DACL_SECURITY_INFORMATION,
+                                 &sd) == ERROR_SUCCESS;
+                    }
+                    LocalFree(dacl);
+                }
             }
             RegCloseKey(k);
         }
