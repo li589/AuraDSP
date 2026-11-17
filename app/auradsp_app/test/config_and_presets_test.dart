@@ -134,6 +134,8 @@ void main() {
           // 第十二轮 A1 新增键：默认 true，哨兵取非默认 false，
           // 同时防漏读（回落默认）与漏写（键缺失）。
           'closeToTray': false,
+          // 第四十四轮 S4 新增键：默认 false，哨兵取非默认 true。
+          'debugMode': true,
           'autoSaveDebounceMs': 250,
         },
         'safety': <String, dynamic>{
