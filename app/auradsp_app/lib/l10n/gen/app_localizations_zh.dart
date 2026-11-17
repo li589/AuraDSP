@@ -114,7 +114,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setConnStatus => '连接状态';
 
   @override
-  String get setConnActive => '已连接 (活跃回调)';
+  String get setConnActive => '已连接';
 
   @override
   String get setConnIdle => '未连接 (等待 Voicemeeter 启动)';

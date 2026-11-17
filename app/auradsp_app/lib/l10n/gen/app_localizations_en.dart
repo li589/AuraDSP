@@ -116,7 +116,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setConnStatus => 'Connection';
 
   @override
-  String get setConnActive => 'Connected (active callback)';
+  String get setConnActive => 'Connected';
 
   @override
   String get setConnIdle => 'Not connected (waiting for Voicemeeter)';

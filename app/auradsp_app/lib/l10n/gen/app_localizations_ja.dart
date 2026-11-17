@@ -115,7 +115,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setConnStatus => '接続状態';
 
   @override
-  String get setConnActive => '接続済み（コールバック動作中）';
+  String get setConnActive => '接続済み';
 
   @override
   String get setConnIdle => '未接続（Voicemeeter 起動待ち）';

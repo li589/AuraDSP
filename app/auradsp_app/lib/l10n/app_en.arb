@@ -50,7 +50,7 @@
     }
   },
   "setConnStatus": "Connection",
-  "setConnActive": "Connected (active callback)",
+  "setConnActive": "Connected",
   "setConnIdle": "Not connected (waiting for Voicemeeter)",
   "setVbNotEnabled": "Voicemeeter not enabled",
   "setDeviceDisconnected": "Device not connected",

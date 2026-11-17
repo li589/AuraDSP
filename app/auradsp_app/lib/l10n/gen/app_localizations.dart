@@ -301,7 +301,7 @@ abstract class AppLocalizations {
   /// No description provided for @setConnActive.
   ///
   /// In zh, this message translates to:
-  /// **'已连接 (活跃回调)'**
+  /// **'已连接'**
   String get setConnActive;
 
   /// No description provided for @setConnIdle.

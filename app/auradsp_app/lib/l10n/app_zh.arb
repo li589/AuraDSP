@@ -50,7 +50,7 @@
     }
   },
   "setConnStatus": "连接状态",
-  "setConnActive": "已连接 (活跃回调)",
+  "setConnActive": "已连接",
   "setConnIdle": "未连接 (等待 Voicemeeter 启动)",
   "setVbNotEnabled": "Voicemeeter 未启用",
   "setDeviceDisconnected": "未连接设备",
