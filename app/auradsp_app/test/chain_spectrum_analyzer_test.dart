@@ -103,7 +103,7 @@ void main() {
       }
     });
 
-    test('全链路端到端总延迟与 PDC 槽位延迟严格对齐并反哺 model.latencyMs', () {
+    test('全链路总延迟与 PDC 槽位延迟严格对齐；端到端 latencyMs = 路径 + 链路（r44 S3 定源）', () {
       final model = AppModel(testing: true);
       model.limiterOn = true; // 核心 1.5ms lookahead
       // 模拟第三方插件槽位 0 有 96 samples @ 48kHz (2.0ms)
@@ -127,8 +127,12 @@ void main() {
       expect(model.pluginChainLatencyMs, closeTo(res.pluginLatencyMs, 0.001));
       expect(model.fullChainLatencyMs, closeTo(res.totalLatencyMs, 0.001));
 
-      model.updateFullChainMeasuredLatency(res.totalLatencyMs);
+      // 第四十四轮 S3 定源：链路延迟只活在 fullChainLatencyMs
+      // 族，不再覆写状态面延迟；端到端 latencyMs 为派生值
+      // （路径延迟 + 链路延迟），路径未上报时即链路值本身。
       expect(model.latencyMs, closeTo(3.5, 0.05));
+      model.pathLatencyMs = 2.0;
+      expect(model.latencyMs, closeTo(5.5, 0.05));
     });
   });
 

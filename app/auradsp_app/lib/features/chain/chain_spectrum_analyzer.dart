@@ -592,20 +592,6 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
       ];
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _measureAndSyncLatency();
-      }
-    });
-  }
-
-  void _measureAndSyncLatency() {
-    widget.model.updateFullChainMeasuredLatency(widget.model.fullChainLatencyMs);
-  }
-
-  @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);

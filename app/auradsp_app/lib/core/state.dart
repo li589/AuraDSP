@@ -147,15 +147,18 @@ class AppModel extends ChangeNotifier {
   }
 
   int engineState = 0; // 0=bypass 1=processing 2=error
-  double latencyMs = 0;
 
-  /// 全链路端到端频响分析反哺延迟值（静音仿真测定，不向扬声器发声）
-  void updateFullChainMeasuredLatency(double ms) {
-    if ((latencyMs - ms).abs() > 0.05) {
-      latencyMs = ms;
-      _notifyUi();
-    }
-  }
+  /// 音频路径延迟（ms）：设备/缓冲段。唯一来源 = isolate 的
+  /// ready/state 事件上报（第四十四轮 S3 定源）；DSP 链路的
+  /// 算法延迟走 fullChainLatencyMs，两者不得互相覆写。
+  double pathLatencyMs = 0;
+
+  /// 端到端总延迟（ms）= 路径延迟 + 链路算法延迟（派生，无
+  /// 独立写入方）。一切状态面（系统卡/首页/状态徽标）只读
+  /// 本值——单一口径恒同源。此前 latencyMs 是普通字段、被
+  /// 路径上报与链路测定双写，显示值随最后到达的事件漂移
+  /// （user 第四十四轮质疑「延迟是诚实值吗」即此）。
+  double get latencyMs => pathLatencyMs + fullChainLatencyMs;
   bool playing = false;
   // 频谱门：进程内 playing 或 VB/ASIO/VAIO 桥活着都算 live。
   // Linux 的 virtual/driver 模式没有「播放音源」，音频来自 PA 采集

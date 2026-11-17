@@ -19,8 +19,30 @@ abstract final class PlatformProfile {
 
   /// Windows 原生组件（VAIO/ASIO 驱动、APO、桥）可用。
   /// 取代 state_audio_modes.dart 的 9 处 `Platform.isWindows` 守卫。
-  /// 操作系统版本串（设置页驱动信息区只读展示，真机报告 R3）。
-  static String get osVersion => Platform.operatingSystemVersion;
+
+  /// 操作系统显示串（设置-系统引擎卡只读展示；第四十四轮
+  /// S3）。Dart 的 operatingSystemVersion 在 Windows 上形如
+  /// `"Windows 10 IoT …" 10.0 (Build 19044)`——产品名自带
+  /// 引号，直接上屏即 user 报告的「为什么还有引号」；此处
+  /// 清洗后展示。Linux 的 Dart 串为内核版本串（无引号问题），
+  /// 原样清洗展示。
+  static String get osDisplay =>
+      cleanOsVersion(Platform.operatingSystemVersion,
+          isWindows: Platform.isWindows);
+
+  /// 纯函数（可单测）：去掉 Windows 产品名外层的引号，其余
+  /// 平台仅作兜底去引号。
+  static String cleanOsVersion(String raw, {required bool isWindows}) {
+    final s = raw.trim();
+    if (isWindows) {
+      final m = RegExp(r'^"([^"]+)"\s*(.*)$').firstMatch(s);
+      if (m != null) {
+        final rest = m.group(2)!.trim();
+        return rest.isEmpty ? m.group(1)! : '${m.group(1)} $rest';
+      }
+    }
+    return s.replaceAll('"', '');
+  }
 
   /// 界面形态标签（左栏底部 / 关于页）：桌面形态（Windows/Linux）
   /// 统一为 Desktop；Android、macOS 按平台显示（owner 口径，

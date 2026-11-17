@@ -165,7 +165,7 @@ void main() {
         _read('app/auradsp_app/lib/platform/platform_profile.dart');
 
     test('驱动层恒显示自有驱动状态，且不含设置控件（r44：OS 行移系统页）', () {
-      expect(profile, contains('get osVersion'));
+      expect(profile, contains('get osDisplay'));
       final start = hw.indexOf('class _DriverLayer');
       final end = hw.indexOf('class _AsioClientDriverRow');
       expect(start, greaterThanOrEqualTo(0));

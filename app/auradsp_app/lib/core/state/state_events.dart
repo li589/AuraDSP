@@ -89,7 +89,7 @@ extension StateEvents on AppModel {
         // 协商采样率可能与请求值不同：EQ 网格必须按实际引擎采样率重建，
         // 否则曲线、响应和生产链使用三套不同的频率假设。
         _rebuildEqGridForSampleRate(notify: false);
-        latencyMs = (raw['latencyMs'] as num).toDouble();
+        pathLatencyMs = (raw['latencyMs'] as num).toDouble();
         setConn(EngineConn.ready);
         engineState = 1;
         _fatalRetries = 0; // 活过来了，backoff 计数清零
@@ -810,7 +810,7 @@ extension StateEvents on AppModel {
         break;
       case 'state':
         engineState = raw['state'] as int;
-        latencyMs = (raw['latencyMs'] as num).toDouble();
+        pathLatencyMs = (raw['latencyMs'] as num).toDouble();
         _notifyUi();
         break;
       case 'playing':
@@ -1637,7 +1637,8 @@ extension StateEvents on AppModel {
       await refreshComponentLatency(id);
     }
 
-    // 重新测定反哺全链路总延迟（统一使用全系统唯一口径 fullChainLatencyMs）
-    updateFullChainMeasuredLatency(fullChainLatencyMs);
+    // 测定结果落在各组件的实测延迟表，fullChainLatencyMs 与
+    // 端到端 latencyMs 均为派生值、自动同源（第四十四轮 S3），
+    // 不再回写任何延迟字段。
   }
 }

@@ -46,6 +46,9 @@ class _EngineInfo extends StatelessWidget {
         _InfoRow(l.sampleRate, '${model.engineRate} Hz'),
         _InfoRow(l.latencyLabel, LatencyPresenter.format(model.latencyMs)),
         if (info != null) _InfoRow('ABI', 'v${info.abi} · ${info.version}'),
+        // 第四十四轮 S3（user 裁定）：操作系统行自音频页驱动
+        // 区移入本卡，串经平台层清洗（去 Dart 原串的引号）。
+        _InfoRow(l.osVersionLabel, PlatformProfile.osDisplay),
       ],
     );
   }

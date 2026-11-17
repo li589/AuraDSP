@@ -12,7 +12,9 @@ List<Widget> buildSystemTab(BuildContext context, AppModel model) {
   final p = paletteOf(context);
 
   return [
-    // 1. 引擎状态（状态/模式/采样率/延迟/ABI，均为即时值）
+    // 1. 引擎状态（状态/模式/采样率/延迟/ABI/操作系统，均为
+    // 即时值；延迟为端到端派生值、OS 串经平台层清洗——
+    // 第四十四轮 S3）
     SectionCard(
       title: l.engineInfo,
       child: _EngineInfo(model: model),
@@ -75,9 +77,10 @@ List<Widget> buildSystemTab(BuildContext context, AppModel model) {
     ),
 
     // 3. 系统（托盘常驻 + 开机自启；Windows/Linux 系统集成）
+    // 第四十四轮 S3（user 裁定）：卡头说明与两个开关下的解释
+    // 行全撤——开关标签自明，不再多一行废话。
     SectionCard(
       title: l.sysTitle,
-      hint: l.sysHint,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -92,11 +95,6 @@ List<Widget> buildSystemTab(BuildContext context, AppModel model) {
                 onChanged: model.setCloseToTray,
               ),
             ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            model.config.closeToTray ? l.sysTrayHint : l.sysTrayHintOff,
-            style: captionOf(p),
           ),
           const SizedBox(height: AuraSpace.md),
           ValueListenableBuilder<bool>(
@@ -125,8 +123,6 @@ List<Widget> buildSystemTab(BuildContext context, AppModel model) {
               );
             },
           ),
-          const SizedBox(height: 4),
-          Text(l.sysAutostartHint, style: captionOf(p)),
         ],
       ),
     ),
