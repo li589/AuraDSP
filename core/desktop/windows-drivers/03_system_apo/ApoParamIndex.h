@@ -5,7 +5,7 @@
 
 // APO 参数块序号表（设计 D4）：块内第 i 个 u32 数值槽恒对应
 // kApoNumParamIds[i]；类型 0=float 1=int32 2=bool（值均占 4B）。
-#define APO_NUM_PARAM_COUNT 339
+#define APO_NUM_PARAM_COUNT 340
 static const char* const kApoNumParamIds[APO_NUM_PARAM_COUNT] = {
     "tube.enable",
     "tube.gain",
@@ -342,13 +342,14 @@ static const char* const kApoNumParamIds[APO_NUM_PARAM_COUNT] = {
     "spatial.late",
     "bassmono.pairs",
     "bassmono.merge",
+    "channels.count",
     "channels.mode",
     "gate.maxIrSeconds",
     "gate.maxFileMb",
     "viz.fftSize"
 };
 static const unsigned char kApoNumParamTypes[APO_NUM_PARAM_COUNT] = {
-    2, 0, 1, 0, 0, 0, 2, 1, 1, 2, 2, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 0, 2, 1, 1, 2, 0, 0, 2, 0, 0, 1, 0, 0, 2, 2, 0, 2, 1, 1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 1, 1, 2, 0, 2, 2, 0, 0, 1, 2, 1, 0, 0, 2, 1, 0, 0, 0, 0, 2, 0, 0, 2, 0, 2, 2, 0, 2, 0, 0, 1, 1, 2, 1, 0, 0, 1, 1, 2, 0, 0, 1, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 2, 0, 0, 2, 0, 1, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 0, 0, 0, 2, 2, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 2, 0, 1, 2, 2, 0, 1, 1, 1, 0, 0, 1
+    2, 0, 1, 0, 0, 0, 2, 1, 1, 2, 2, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 0, 2, 1, 1, 2, 0, 0, 2, 0, 0, 1, 0, 0, 2, 2, 0, 2, 1, 1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 1, 1, 2, 0, 2, 2, 0, 0, 1, 2, 1, 0, 0, 2, 1, 0, 0, 0, 0, 2, 0, 0, 2, 0, 2, 2, 0, 2, 0, 0, 1, 1, 2, 1, 0, 0, 1, 1, 2, 0, 0, 1, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 2, 0, 0, 2, 0, 1, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 0, 0, 0, 2, 2, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 2, 0, 1, 2, 2, 0, 1, 1, 1, 1, 0, 0, 1
 };
 
 // 字符串定长槽（顺序即块内排列）。
@@ -360,23 +361,23 @@ static const char* const kApoStrSlotIds[APO_STR_SLOT_COUNT] = {
     "graph.order"
 };
 static const unsigned int kApoStrSlotCaps[APO_STR_SLOT_COUNT] = { 4096, 4096, 16384, 1024 };
-static const unsigned int kApoStrSlotOffsets[APO_STR_SLOT_COUNT] = { 1484, 5580, 9676, 26060 };
+static const unsigned int kApoStrSlotOffsets[APO_STR_SLOT_COUNT] = { 1488, 5584, 9680, 26064 };
 
 // 参数块版本（须与 ApoShared.h 的 APO_PARAMS_VERSION 全等；
 // 消费端以版本全等为门，版本不符即整块拒绝——布局演进的安全阀）。
-#define APO_PARAM_BLOCK_VERSION 3
+#define APO_PARAM_BLOCK_VERSION 4
 
 // 块布局常量（与 ApoShared.h / Dart apo_param_index.dart 三方一致，
 // smoke_apo_param_layout 交叉断言）。
 #define APO_BLOCK_HEADER_BYTES 64
 #define APO_BLOCK_MASK_OFFSET 64
 #define APO_BLOCK_VALUES_OFFSET 128
-#define APO_BLOCK_STRINGS_OFFSET 1484
-#define APO_BLOCK_USED_BYTES 27276
+#define APO_BLOCK_STRINGS_OFFSET 1488
+#define APO_BLOCK_USED_BYTES 27280
 #define APO_BLOCK_MAPPING_BYTES 32768
 
 // v3 尾段：分端点声道覆写表（条目布局见 ApoShared.h
 // ApoEndpointOverride；flags bit0=mode 有效 bit1=fill 有效）。
-#define APO_EP_OVERRIDE_OFFSET 27084
+#define APO_EP_OVERRIDE_OFFSET 27088
 #define APO_EP_OVERRIDE_COUNT 8
 #define APO_EP_OVERRIDE_ENTRY_BYTES 24

@@ -831,12 +831,18 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
 // fnGetParam_ 为可选符号（旧引擎 DLL 无此导出时整段不写，
 // effValid 恒 0，读者据此显示「未知」而非误报 0 值）。
 void ApoEngineHost::ReadbackEffective() {
-    if (!tele_ || !fnGetParam_ || !engine_) return;
+    if (!tele_ || !engine_) return;
+    // 声道决议回显（第四十七轮 S3）：宿主侧两值不依赖引擎
+    // 符号，每轮直写；引擎回读值在下方节流段随 mode/fill 同
+    // 步。三者对照即知设置在哪一段丢失。
+    tele_->engChHost = liveEngCh_.load();
+    tele_->userChSeen = userCh_;
+    if (!fnGetParam_) return;
     if (appliedTotal_ == effReadbackApplied_ && ++effReadbackTick_ < 20)
         return;
     effReadbackTick_ = 0;
     effReadbackApplied_ = appliedTotal_;
-    int32_t mode = 0, fill = 0;
+    int32_t mode = 0, fill = 0, count = 0;
     const bool okMode =
         fnGetParam_(engine_, "channels.mode", &mode, sizeof(mode)) == 0;
     const bool okFill = fnGetParam_(engine_, "channels.upmix_fill", &fill,
@@ -845,6 +851,9 @@ void ApoEngineHost::ReadbackEffective() {
         tele_->effChannelsMode = (uint32_t)mode;
         tele_->effUpmixFill = (uint32_t)fill;
         tele_->effValid = 1;
+    }
+    if (fnGetParam_(engine_, "channels.count", &count, sizeof(count)) == 0) {
+        tele_->engChEngine = (uint32_t)count;
     }
 }
 

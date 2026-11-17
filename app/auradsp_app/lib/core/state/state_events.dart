@@ -919,12 +919,20 @@ extension StateEvents on AppModel {
         final loadErrN = (raw['loadErr'] as num?)?.toInt() ?? 0;
         final effModeN = (raw['effMode'] as num?)?.toInt() ?? -1;
         final effFillN = (raw['effFill'] as num?)?.toInt() ?? -1;
+        // 声道决议回显（第四十七轮 S3）：引擎回读优先、宿主
+        // 决议兜底；参数块所见 count 单独留痕（断链定位）。
+        final engChEngineN = (raw['engChEngine'] as num?)?.toInt() ?? 0;
+        final engChHostN = (raw['engChHost'] as num?)?.toInt() ?? 0;
+        final effCountN = engChEngineN > 0 ? engChEngineN : engChHostN;
+        final userChSeenN = (raw['userChSeen'] as num?)?.toInt() ?? 0;
         if (apoEngineActive != seatOn ||
             apoEngineFault != faultOn ||
             apoParamsApplied != appliedN ||
             apoLoadStage != loadStageN ||
             apoEffMode != effModeN ||
             apoEffFill != effFillN ||
+            apoEffCount != effCountN ||
+            apoUserChSeen != userChSeenN ||
             apoLoadErr != loadErrN) {
           // 全面复审 S1（APO-4）：引擎故障闩锁/加载失败此前只有设
           // 置面板一行小字，不在设置页完全无感——边沿各通知一次
@@ -950,6 +958,8 @@ extension StateEvents on AppModel {
           apoLoadErr = loadErrN;
           apoEffMode = effModeN;
           apoEffFill = effFillN;
+          apoEffCount = effCountN;
+          apoUserChSeen = userChSeenN;
           _notifyUi();
         }
         break;

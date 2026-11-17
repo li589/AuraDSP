@@ -1432,13 +1432,16 @@ extension AudioModesState on AppModel {
     _notifyUi();
   }
 
-  /// 已附加端点锁定（第四十六轮 S3）：暗勾点按 → 亮叉。锁
-  /// 定后个体不可动，只能经一键卸载回空；未附加端点不接
-  /// 受锁定。锁定不提供个体解锁入口（叉的唯一出口是卸载，
-  /// 分离后调和自动遗忘）。
-  void markApoLocked(String endpointId) {
+  /// 已附加端点锁定切换（第四十六轮 S3 立、第四十七轮 S1
+  /// 改可逆）：暗勾点按 → 亮叉锁定，叉再点回暗勾（user 裁
+  /// 定——r46 的「叉单向、仅卸载可解」被推翻）。未附加端
+  /// 点不接受锁定切换；分离后锁定由调和自动遗忘。
+  void toggleApoLocked(String endpointId) {
     if (!apoEndpointAttached(endpointId)) return;
-    if (apoLockedEndpoints.add(endpointId)) _notifyUi();
+    if (!apoLockedEndpoints.remove(endpointId)) {
+      apoLockedEndpoints.add(endpointId);
+    }
+    _notifyUi();
   }
 
   void setMonitorMirroring(bool enabled) {

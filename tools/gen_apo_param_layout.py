@@ -36,7 +36,8 @@ smoke_apo_param_layout 交叉断言）：
     在数值槽总数之后；只有置位的槽会被 APO worker 应用（未置
     位 = 该参数从未被 App 写过，引擎保持其默认值，严禁以块内
     零值覆盖——首帧全量应用若不设此门会把未触碰参数清零）
-  values 区：数值槽总数 * 4B（v1=325 槽，v2=339 槽）
+  values 区：数值槽总数 * 4B（v1=325 槽，v2=339 槽，
+    v4=340 槽：channels.count 入块，追加末尾不移位）
   strings 区：各槽按上表顺序紧密排列
   映射大小：32768B（向上取整）。
 
@@ -97,7 +98,7 @@ def sha16(path):
 # v3（第四十一轮）：布局主体不变，尾部（v2 USED_BYTES 起）追加
 # 分端点声道覆写表（8 条 × 24B：idHash u64 + mode i32 + fill i32
 # + flags u32），USED_BYTES 相应扩大；worker 接受 v2/v3（v2 无表）。
-PARAMS_VERSION = 3
+PARAMS_VERSION = 4
 
 CSSG_TYPE = {'kFloat': 0, 'kInt32': 1, 'kBool': 2}
 
@@ -107,6 +108,12 @@ CUSTOM_NUMERIC = {
     'gate.maxIrSeconds': 0,  # set_gate_float_param: float
     'gate.maxFileMb': 0,     # set_gate_float_param: float
     'viz.fftSize': 1,        # set_viz_fft_size: int32
+    # set_channels_count: int32（第四十七轮 S3 自 EXEMPT 移入：
+    # 旧豁免理由「几何由音频流格式唯一决定」已被第四十六轮
+    # 生效宽口径推翻——APO 必须消费 channels.count 才能让
+    # 声道数量设置在 APO 模式生效；r46 宿主决议分支此前因
+    # 本豁免成死代码，宾机实证输出恒为流宽。）
+    'channels.count': 1,
 }
 
 # 明确豁免（不入块）及理由——分类完备性断言要求表中每个 id 必须
@@ -117,7 +124,6 @@ EXEMPT = {
     'ddc.enable': '模式策略：同 convolver.enable',
     'reverb.engine': '只读派生（getter 由 reverb.preset 计算，setter 占位）',
     'mode.latency': 'ADR-006 墓碑：setter 恒返回 E_PARAM',
-    'channels.count': '几何由音频流格式唯一决定，APO 消费端显式跳过',
     'liveprogmc.code': '字符串通道；多声道脚本由 ModeCaps.mcScript 门控，不入块',
     'convolver.ir.path': '文件路径字符串通道，不入数值块',
     'ddc.load': '文件路径字符串通道（载入命令型），不入数值块',

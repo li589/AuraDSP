@@ -46,8 +46,8 @@ check("reconcile prunes checked to unattached only",
       "apoCheckedEndpoints.removeWhere(apoEndpointAttached)" in modes)
 check("reconcile prunes locks to attached only",
       "apoLockedEndpoints" in modes and "removeWhere" in modes)
-check("markApoLocked gated on attached",
-      "void markApoLocked(String endpointId)" in modes)
+check("toggleApoLocked gated on attached (r47 S1 reversible)",
+      "void toggleApoLocked(String endpointId)" in modes)
 
 sections = read(os.path.join(
     APP, "features", "settings", "panels", "sections.dart"))

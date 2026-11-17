@@ -604,6 +604,11 @@ class ApoTelemetryReader {
       final effOk = u32[1] >= 6 && u32[kApoTelemetryEffU32 + 2] == 1;
       final effMode = effOk ? u32[kApoTelemetryEffU32] : -1;
       final effFill = effOk ? u32[kApoTelemetryEffU32 + 1] : -1;
+      // 声道决议三段回显（第四十七轮 S3，v2 预留位 144..146，
+      // 不挑版本：旧宿主恒 0 = 未知）。
+      final engChHost = u32[144];
+      final userChSeen = u32[145];
+      final engChEngine = u32[146];
       _send?.call({
         'evt': 'apotelemetry',
         'endpointId': _targetId,
@@ -617,6 +622,9 @@ class ApoTelemetryReader {
         'loadErr': loadErr,
         'effMode': effMode,
         'effFill': effFill,
+        'engChHost': engChHost,
+        'userChSeen': userChSeen,
+        'engChEngine': engChEngine,
       });
       _lastSeat = seat;
       _lastFault = faultNow;

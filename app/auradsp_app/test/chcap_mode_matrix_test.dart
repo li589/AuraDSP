@@ -170,18 +170,20 @@ void main() {
 
     test('未附加端点不接受锁定', () {
       final m = AppModel(testing: true);
-      m.markApoLocked(_out71);
+      m.toggleApoLocked(_out71);
       expect(m.apoLockedEndpoints.contains(_out71), isFalse);
     });
 
-    test('已附加端点可锁定', () {
+    test('已附加端点锁定可逆（第四十七轮 S1：叉再点回暗勾）', () {
       final m = AppModel(testing: true);
       m.apoInstalledEndpoints = [
         {'EndpointId': _out71, 'DeviceName': 'Test EP'},
       ];
       expect(m.apoEndpointAttached(_out71), isTrue);
-      m.markApoLocked(_out71);
+      m.toggleApoLocked(_out71);
       expect(m.apoLockedEndpoints.contains(_out71), isTrue);
+      m.toggleApoLocked(_out71);
+      expect(m.apoLockedEndpoints.contains(_out71), isFalse);
     });
   });
 }

@@ -40,7 +40,11 @@
 // 的 14 个数值参数（comp.mode / channels.mode / reverb.preset 等）
 // 追加在存量序号之后，存量序号不移位。消费端版本全等校验使旧
 // DLL 对 v2 块整体拒绝（安全降级），永不按错位序号误用参数。
-#define APO_PARAMS_VERSION 3u
+// v4（第四十七轮 S3）：数值槽 339→340——channels.count 自生成器
+// 豁免移入白名单（旧「几何由流格式决定」口径已被生效宽口径推
+// 翻），序号 335 插入、尾段 5 槽移位一格；版本全等校验保证新
+// 旧 App/APO 混搭时旧侧整体拒绝（透传降级），不按错位序号误用。
+#define APO_PARAMS_VERSION 4u
 
 struct ApoParamBlockHeader {
     uint32_t magic;        // APO_PARAMS_MAGIC
@@ -157,7 +161,15 @@ struct ApoTelemetryBlock {
     float eqInSpectrum[32];                      // EQ 前频谱（引擎 viz 口径）
     float stageLevelsL[32];                      // 分级电平 L（dBFS，引擎 stage 序）
     float stageLevelsR[32];                      // 分级电平 R（dBFS）
-    uint32_t reserved[8];
+    // 第四十七轮 S3：声道决议三段回显（借 v2 预留位，布局不变）：
+    // engChHost=宿主决议生效宽、userChSeen=参数块所见 count、
+    // engChEngine=引擎 channels.count 回读。三者对照定位
+    // 「设置→参数块→宿主决议→引擎」链的断点（r47 定罪即因
+    // 参数块无 channels.count 槽、四段链断在第二段）。
+    uint32_t engChHost;
+    uint32_t userChSeen;
+    uint32_t engChEngine;
+    uint32_t reserved[5];
     // ---- v3 追加（offset 608 起；v2 读者止步于此）----
     // 每槽 32B：loaded/bypass 为有效值（bypass 已含故障旁路），
     // faultCategory 取引擎 PluginFaultCategory 数值（0=none）。

@@ -302,7 +302,11 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
                             mode: m.apoEffMode,
                             fill: m.apoEffFill,
                             rate: m.apoEngineRate,
-                            ch: m.apoEngineChannels,
+                            // 声道行 = 引擎实际处理宽（第四十七
+                            // 轮 S3 回显）；未知时回落流宽。
+                            ch: m.apoEffCount > 0
+                                ? m.apoEffCount
+                                : m.apoEngineChannels,
                             applied: m.apoParamsApplied)),
               ],
             ),

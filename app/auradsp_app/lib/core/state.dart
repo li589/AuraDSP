@@ -609,6 +609,12 @@ class AppModel extends ChangeNotifier {
   // 未就绪），面板据此显「未运行」语义文案而非误报 0（S8）。
   int apoEffMode = -1;
   int apoEffFill = -1;
+  // APO 声道决议回显（第四十七轮 S3）：引擎 channels.count
+  // 回读优先、宿主决议宽兜底；0 = 未知（旧 APO 无此回显）。
+  // 与 apoEngineChannels（流宽）分开——驱动卡 APO 组声道行
+  // 显示本值，才是「引擎实际按几声道处理」。
+  int apoEffCount = 0;
+  int apoUserChSeen = 0;
   // 本机/桥引擎生效值（isolate 'enginevalues' 应答，第三十五轮）：
   // {'mode': int, 'fill': int, 'rate': int, 'ch': int}；null = 未查。
   Map<String, int>? localEffValues;
@@ -624,9 +630,10 @@ class AppModel extends ChangeNotifier {
   // 加端点——checkApoStatus 调和时已附加者一律移出（其行态
   // 由附加真值派生），故分离后回空而非以亮勾复活。
   final Set<String> apoCheckedEndpoints = {};
-  // 已附加端点的锁定集（第四十六轮 S3）：暗勾点按 → 亮叉
-  // 锁定，个体不可取消、只能经一键卸载回空；分离后由调和
-  // 自动遗忘。会话级不落盘。
+  // 已附加端点的锁定集（第四十六轮 S3 立、第四十七轮 S1
+  // 改可逆）：暗勾点按 → 亮叉锁定，叉再点回暗勾（user 裁
+  // 定）；锁定仅防误触排队逻辑，不影响卸载（分离后由调
+  // 和自动遗忘）。会话级不落盘。
   final Set<String> apoLockedEndpoints = {};
   bool isApoOperating = false;
   bool apoCompositeMode = false;

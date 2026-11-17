@@ -858,10 +858,11 @@ class _ApoEndpointListState extends State<_ApoEndpointList> {
   }
 }
 
-/// 三态复选件（第四十六轮 S3）：0 空 / 1 亮勾（排队）/
-/// 2 暗勾（已附加）/ 3 亮叉（已附加且锁定）。勾的亮暗与
-/// 文字的亮/正常共同表达附加成败——失败者留在 1（可取消），
-/// 成功者进 2；2 再点进 3；3 无个体出口（一键卸载回空）。
+/// 三态复选件（第四十六轮 S3、第四十七轮 S1 改可逆）：
+/// 0 空 / 1 亮勾（排队）/ 2 暗勾（已附加）/ 3 亮叉（已附
+/// 加且锁定）。勾的亮暗与文字的亮/正常共同表达附加成
+/// 败——失败者留在 1（可取消），成功者进 2；2 与 3 互点
+/// 切换（叉再点回暗勾，user 裁定）；回空只经一键卸载。
 class _ApoTriBox extends StatelessWidget {
   final int state;
   final VoidCallback? onTap;
@@ -938,11 +939,12 @@ class _ApoEndpointRow extends StatelessWidget {
         ? ep.id.substring(ep.id.length - 7, ep.id.length - 1)
         : ep.id;
     final fmt = (ep.ch > 0 && ep.rate > 0) ? ' · ${ep.ch}ch ${ep.rate}Hz' : '';
-    // 三态派生与点击转移（第四十六轮 S3）：已附加 > 排队 >
-    // 空；锁定（叉）无个体出口，点击无动作。
+    // 三态派生与点击转移（第四十六轮 S3、第四十七轮 S1）：
+    // 已附加 > 排队 > 空；已附加行点复选件 = 锁定切换
+    // （暗勾 ↔ 亮叉，user 裁定叉可逆）。
     final triState = attached ? (locked ? 3 : 2) : (checked ? 1 : 0);
     final VoidCallback? triTap = attached
-        ? (locked ? null : () => model.markApoLocked(ep.id))
+        ? () => model.toggleApoLocked(ep.id)
         : () => model.toggleApoChecked(ep.id, !checked);
     return InkWell(
       onTap: () => model.setApoTargetEndpoint(ep.id),
