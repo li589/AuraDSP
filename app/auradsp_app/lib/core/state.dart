@@ -186,6 +186,15 @@ class AppModel extends ChangeNotifier {
   bool bypass = false;
   String sourceKind = ''; // '' | 'tone' | 'pink' | 'file'
   String sourcePath = ''; // 文件源路径（isolate 重启后重推音源用；tone/pink 为空）
+  // 第四十四轮 S4：波形生成参数与文件传输态。sourcePath 在
+  // 切到波形源后保留（已加载文件不卸载，测试页可切回续播）；
+  // sourcePaused/sourcePosRatio 由 isolate 的 sourcepos 回执
+  // 驱动（本地真游标/桥墙钟估算），UI 只读呈现。
+  String waveShape = 'sine'; // 'sine' | 'square' | 'triangle'
+  double waveFreq = 440;
+  bool waveSweep = false;
+  bool sourcePaused = false;
+  double sourcePosRatio = 0;
   // WASAPI 输出缺失（默认端点被独占/幽灵）：isolate 降级就绪的报错原文；
   // 非空即降级态（引擎照跑，VB/ASIO 不受影响），进程内试音等重试恢复。
   String wasapiError = '';
@@ -1305,6 +1314,11 @@ class AppModel extends ChangeNotifier {
         windowsSystem = windowsSystem ?? const NullWindowsSystem(),
         window = window ?? NullWindowPort() {
     config = ConfigManager.load();
+    // 调试模式持久开（第四十四轮 S4）：配置要求开且命令行未
+    // 开时，运行时补开结构化调试流。
+    if (!_testing && config.debugMode) {
+      DebugTrace.instance.setEnabledRuntime(true);
+    }
     // 氛围背景开关的页面级订阅源：外壳用 IndexedStack 保活、页面实例缓存，
     // 模型 notifyListeners 不会让保活页重建（Settings 还是模态覆盖层，
     // visiblePage 也不变）。凡「设置里改、别的页要立刻响应」的开关都必须

@@ -2032,6 +2032,84 @@ abstract class AppLocalizations {
   /// **'测试音频源'**
   String get testSrcTitle;
 
+  /// No description provided for @testWaveTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'波形生成'**
+  String get testWaveTitle;
+
+  /// No description provided for @testUseSrcTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用源测试'**
+  String get testUseSrcTitle;
+
+  /// No description provided for @testNoSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'未选择测试音频源'**
+  String get testNoSource;
+
+  /// No description provided for @testOpenAudio.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开音频'**
+  String get testOpenAudio;
+
+  /// No description provided for @waveSine.
+  ///
+  /// In zh, this message translates to:
+  /// **'正弦波'**
+  /// No description provided for @wavePlay.
+  ///
+  /// In zh, this message translates to:
+  /// **'播放'**
+  String get wavePlay;
+
+  String get waveSine;
+
+  /// No description provided for @waveSquare.
+  ///
+  /// In zh, this message translates to:
+  /// **'方波'**
+  String get waveSquare;
+
+  /// No description provided for @waveTriangle.
+  ///
+  /// In zh, this message translates to:
+  /// **'三角波'**
+  String get waveTriangle;
+
+  /// No description provided for @waveFreq.
+  ///
+  /// In zh, this message translates to:
+  /// **'频率'**
+  String get waveFreq;
+
+  /// No description provided for @waveSweep.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动扫频'**
+  String get waveSweep;
+
+  /// No description provided for @waveSweepDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'20 Hz – 20 kHz · 20 秒循环'**
+  String get waveSweepDesc;
+
+  /// No description provided for @testDebugTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'调试'**
+  String get testDebugTitle;
+
+  /// No description provided for @testDebugMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'调试模式'**
+  String get testDebugMode;
+
   /// No description provided for @testSrcHint.
   ///
   /// In zh, this message translates to:
@@ -6003,6 +6081,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'请输入或选择 MP3 音频文件路径：'**
   String get testAudioMp3Prompt;
+
+  /// No description provided for @testAudioAnyPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入或选择测试音频 (WAV/MP3) 文件路径：'**
+  String get testAudioAnyPrompt;
 
   /// No description provided for @testAudioLoad.
   ///

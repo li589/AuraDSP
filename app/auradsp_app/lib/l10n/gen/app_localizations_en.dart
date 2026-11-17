@@ -1147,6 +1147,45 @@ class AppLocalizationsEn extends AppLocalizations {
   String get testSrcTitle => 'Test Audio Source';
 
   @override
+  String get testWaveTitle => 'Waveform';
+
+  @override
+  String get testUseSrcTitle => 'Source Test';
+
+  @override
+  String get testNoSource => 'No test audio selected';
+
+  @override
+  String get testOpenAudio => 'Open Audio';
+
+  @override
+  String get wavePlay => 'Play';
+
+  @override
+  String get waveSine => 'Sine';
+
+  @override
+  String get waveSquare => 'Square';
+
+  @override
+  String get waveTriangle => 'Triangle';
+
+  @override
+  String get waveFreq => 'Frequency';
+
+  @override
+  String get waveSweep => 'Auto Sweep';
+
+  @override
+  String get waveSweepDesc => '20 Hz – 20 kHz · 20 s loop';
+
+  @override
+  String get testDebugTitle => 'Debug';
+
+  @override
+  String get testDebugMode => 'Debug Mode';
+
+  @override
   String get testSrcHint =>
       'Signals for measurement; stopping returns to the formal source';
 
@@ -3326,6 +3365,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get testAudioMp3Prompt => 'Enter or select MP3 audio file path:';
+
+  @override
+  String get testAudioAnyPrompt => 'Enter or select a test audio (WAV/MP3) file path:';
 
   @override
   String get testAudioLoad => 'Load Audio';

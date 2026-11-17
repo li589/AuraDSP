@@ -36,6 +36,9 @@ UI_DIR = os.path.join(TEST_DIR, "ui")
 PLATFORM_ANY = {
     "smoke_platform_isolation.py",
     "smoke_dart_platform_quarantine.py",
+    # r44 S4（2026-11-17）：测试页三段化结构门禁（WaveSource/传输
+    # 协议/状态保留路径/三卡布局），纯源码扫描，任意平台可跑。
+    "smoke_dart_test_wave.py",
     # S2（2026-11-01）：Linux 源表闭包门禁，纯文本/源表扫描，任意平台可跑。
     "smoke_linux_source_table.py",
     # S1（2026-11-01）：Linux 引擎信号链功能门禁（产物缺失时自 SKIP）。
@@ -458,6 +461,10 @@ def run_smoke_tests():
         # M4 Dart 平台隔离门禁（2026-10-29）：lib/ 业务文件零 Platform.is；
         # PlatformProfile 成员齐全；AudioOut 端口/工厂/WASAPI 实现归位。
         "smoke_dart_platform_quarantine.py",
+        # r44 S4 测试页三段化结构门禁（2026-11-17）：WaveSource 取代
+        # ToneSource、isolate 传输三命令、setSource 跨源保留路径、
+        # 测试页三卡与旧芯片退役，纯源码扫描。
+        "smoke_dart_test_wave.py",
         # S2 Linux 源表门禁（2026-11-01，ADR-012 §4.3）：Linux 编译闭包不含
         # jamesdsp.c / Win32 源、gcc shim 与 stdint 前置注入在场、.map 同源。
         "smoke_linux_source_table.py",

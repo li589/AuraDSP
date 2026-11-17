@@ -137,6 +137,59 @@ class DebugTrace {
     }
   }
 
+  /// 运行时开关（第四十四轮 S4，设置页「调试模式」）：开 =
+  /// 与 initFromArgs 相同的打开流程（默认临时路径）；关 =
+  /// 刷盘、关文件、停定时器。命令行已开时关只停文件面，
+  /// enabled 一并置假（HUD 随之卸下——开关即真相）。
+  void setEnabledRuntime(bool on) {
+    if (on) {
+      if (enabled) return;
+      enabled = true;
+      _initialized = true;
+      logPath =
+          '${Directory.systemTemp.path}${Platform.pathSeparator}auradsp_debug_trace.jsonl';
+      _session = DateTime.now().toIso8601String();
+      try {
+        final f = File(logPath);
+        f.parent.createSync(recursive: true);
+        try {
+          rotateLogFileIfOversized(logPath, kLogRotateCapBytes);
+        } catch (e) {
+          debugPrint('[DebugTrace] rotate on open failed: $e');
+        }
+        _bytesWritten = 0;
+        _file = f.openSync(mode: FileMode.append);
+        _flushTimer =
+            Timer.periodic(const Duration(milliseconds: 200), (_) => flush());
+        event('debug', 'session.start', data: {
+          'session': _session,
+          'pid': pid,
+          'args': const ['<runtime-toggle>'],
+          'log': logPath,
+        });
+        debugPrint('[DebugTrace] enabled (runtime) -> $logPath');
+      } catch (e) {
+        enabled = false;
+        debugPrint('[DebugTrace] open failed: $e');
+      }
+    } else {
+      if (!enabled) return;
+      event('debug', 'session.end', data: const {'via': 'runtime-toggle'});
+      _flushTimer?.cancel();
+      _flushTimer = null;
+      flush();
+      try {
+        _file?.closeSync();
+      } catch (e) {
+        debugPrint('[DebugTrace] close failed: $e');
+      }
+      _file = null;
+      _bytesWritten = 0;
+      enabled = false;
+      debugPrint('[DebugTrace] disabled (runtime)');
+    }
+  }
+
   /// 测试用：重置单例状态，避免多个用例互相污染。
   @visibleForTesting
   void resetForTesting() {

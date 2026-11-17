@@ -7,18 +7,49 @@ abstract class Source {
   void fill(Float32List out, int frames, int deviceRate);
 }
 
-class ToneSource implements Source {
-  final double freq;
+/// 通用波形发生源（第四十四轮 S4，取代原固定 440Hz 正弦
+/// 源）：正弦/方波/三角，频率可热改（相位连续、无爆音跳
+/// 变），可选对数扫频（20→20000 Hz、20 秒循环，频响测试
+/// 用）。字段可变——isolate 的 sourceparam 命令直接改本
+/// 对象，播放中调频/换波形不重启。
+class WaveSource implements Source {
+  String shape; // 'sine' | 'square' | 'triangle'
+  double freq;
+  bool sweep;
   double _phase = 0;
-  ToneSource(this.freq);
+  double _sweepT = 0; // 扫频周期内秒数
+
+  static const double sweepSeconds = 20;
+  static const double sweepLo = 20;
+  static const double sweepHi = 20000;
+
+  WaveSource({this.shape = 'sine', this.freq = 440, this.sweep = false});
+
+  /// 当前瞬时频率（扫频时按对数律随周期推进）。
+  double get instFreq => sweep
+      ? sweepLo * math.pow(sweepHi / sweepLo, _sweepT / sweepSeconds)
+      : freq;
 
   @override
   void fill(Float32List out, int frames, int deviceRate) {
-    final d = 2 * math.pi * freq / deviceRate;
     for (var i = 0; i < frames; i++) {
-      final v = math.sin(_phase) * 0.3;
+      final d = 2 * math.pi * instFreq / deviceRate;
       _phase += d;
       if (_phase > 2 * math.pi) _phase -= 2 * math.pi;
+      if (sweep) {
+        _sweepT += 1 / deviceRate;
+        if (_sweepT >= sweepSeconds) _sweepT -= sweepSeconds;
+      }
+      final ph = _phase / (2 * math.pi); // 0..1
+      final double v;
+      switch (shape) {
+        case 'square':
+          v = ph < 0.5 ? 0.3 : -0.3;
+        case 'triangle':
+          v = (ph < 0.5 ? (4 * ph - 1) : (3 - 4 * ph)) * 0.3;
+        default:
+          v = math.sin(_phase) * 0.3;
+      }
       out[i * 2] = v;
       out[i * 2 + 1] = v;
     }
@@ -61,6 +92,25 @@ class FileSource implements Source {
 
   /// 源文件声道数（fold 后恒 2 compass；直通判断用 fileCh）。
   int fileCh = 2;
+
+  /// 播放传输面（第四十四轮 S4）：总帧数（fold 立体声口径）、
+  /// 当前位置比、按比定位（fold 与 raw 双游标同比例推进）。
+  int get totalFrames => data.length ~/ 2;
+
+  double get positionRatio {
+    final t = totalFrames;
+    if (t <= 0) return 0;
+    return (_pos / t).clamp(0.0, 1.0).toDouble();
+  }
+
+  void seekRatio(double r) {
+    final t = totalFrames;
+    if (t <= 0) return;
+    final c = r.clamp(0.0, 1.0).toDouble();
+    _pos = c * (t - 1);
+    final rt = raw == null ? 0 : raw!.length ~/ rawCh;
+    if (rt > 0) _posRaw = c * (rt - 1);
+  }
 
   @override
   void fill(Float32List out, int frames, int deviceRate) {

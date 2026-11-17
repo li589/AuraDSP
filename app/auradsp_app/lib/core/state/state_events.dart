@@ -206,6 +206,9 @@ extension StateEvents on AppModel {
               'cmd': 'source',
               'kind': sourceKind,
               'path': sourcePath.isEmpty ? null : sourcePath,
+              if (sourceKind == 'tone') 'wave': waveShape,
+              if (sourceKind == 'tone') 'freq': waveFreq,
+              if (sourceKind == 'tone') 'sweep': waveSweep,
             });
             playing = true;
           } else {
@@ -818,6 +821,16 @@ extension StateEvents on AppModel {
         if (raw['srcCh'] is int) {
           fileChannels = (raw['srcCh'] as int).clamp(1, 8);
         }
+        _notifyUi();
+        break;
+      case 'sourcepos':
+        // 测试源位置回执（第四十四轮 S4）：驱动文件进度条与
+        // 暂停态呈现（本地真游标/桥墙钟估算，isolate 侧节流）。
+        if (raw['ratio'] is num) {
+          sourcePosRatio =
+              (raw['ratio'] as num).toDouble().clamp(0.0, 1.0).toDouble();
+        }
+        if (raw['paused'] is bool) sourcePaused = raw['paused'] as bool;
         _notifyUi();
         break;
       case 'paramResult':

@@ -1055,6 +1055,45 @@ class AppLocalizationsZh extends AppLocalizations {
   String get testSrcTitle => '测试音频源';
 
   @override
+  String get testWaveTitle => '波形生成';
+
+  @override
+  String get testUseSrcTitle => '使用源测试';
+
+  @override
+  String get testNoSource => '未选择测试音频源';
+
+  @override
+  String get testOpenAudio => '打开音频';
+
+  @override
+  String get wavePlay => '播放';
+
+  @override
+  String get waveSine => '正弦波';
+
+  @override
+  String get waveSquare => '方波';
+
+  @override
+  String get waveTriangle => '三角波';
+
+  @override
+  String get waveFreq => '频率';
+
+  @override
+  String get waveSweep => '自动扫频';
+
+  @override
+  String get waveSweepDesc => '20 Hz – 20 kHz · 20 秒循环';
+
+  @override
+  String get testDebugTitle => '调试';
+
+  @override
+  String get testDebugMode => '调试模式';
+
+  @override
   String get testSrcHint => '测量用信号；停止后回到正式源';
 
   @override
@@ -3146,6 +3185,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get testAudioMp3Prompt => '请输入或选择 MP3 音频文件路径：';
+
+  @override
+  String get testAudioAnyPrompt => '请输入或选择测试音频 (WAV/MP3) 文件路径：';
 
   @override
   String get testAudioLoad => '加载音频';

@@ -117,6 +117,21 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   /// 引擎变速变调（WindowsCaptureController 消费）。
   double engineRateHz = 0;
   Source? source;
+  // 第四十四轮 S4：测试源传输状态。filePaused 本地文件暂停
+  // （泵填静音、游标冻结）；bridgeWave 桥波形参数（桥无可变
+  // 频生成器，波形经渲染注入）；bridgeFile* 桥文件缓存与播
+  // 放时钟（暂停/定位以偏移重注入实现，位置为墙钟估算）。
+  bool filePaused = false;
+  int lastSourcePosSentAt = 0;
+  Map<String, dynamic>? bridgeWave;
+  Timer? bridgeWaveDebounce;
+  Float32List? bridgeFileData;
+  int bridgeFileCh = 2;
+  int bridgeFileRate = 0;
+  int bridgeFileFrames = 0;
+  int bridgeFileBaseFrame = 0;
+  int bridgeFileStartedAtMs = 0;
+  bool bridgeFilePaused = false;
   bool bypass = false;
   // 5.1 直通（Phase 2）：file 源 raw 多声道绕开引擎直出（输出 untouched；
   // 引擎仍照常跑 fold 版供 viz/电平表，零额外开销）。设备声道不足时自动回落 fold。
@@ -379,6 +394,104 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     capabilityCh = ch;
     dbgLog('channels capability -> $ch (user=$userChCount)');
     redispatchChannels();
+  }
+
+  /* ---- 第四十四轮 S4：测试源波形/传输（桥渲染 + 文件缓存） ---- */
+
+  /// 桥波形渲染：桥内生成器只有固定 440 正弦/粉噪，波形与
+  /// 扫频在 isolate 合成立体声 PCM 环、经 kind3 文件注入播
+  /// 放（泵内 FillTestSignalN 对 kind3 无缝循环）。定频取
+  /// ≥0.5s 的整数周期长度（循环无接缝）；扫频渲染完整 20s
+  /// 对数扫。内容采样率用请求率申报（桥按 testRate 比例消费）。
+  Float32List renderBridgeWave(Map<String, dynamic> w, int rate) {
+    final shape = w['shape'] as String? ?? 'sine';
+    final freq = (w['freq'] as num?)?.toDouble() ?? 440;
+    final sweep = w['sweep'] == true;
+    final r = rate > 0 ? rate : 48000;
+    if (sweep) {
+      final frames = (WaveSource.sweepSeconds * r).round();
+      final buf = Float32List(frames * 2);
+      WaveSource(shape: shape, freq: freq, sweep: true).fill(buf, frames, r);
+      return buf;
+    }
+    final cycles = math.max(1, (0.5 * freq).round());
+    final frames = math.max(1, (cycles * r / freq).round());
+    final buf = Float32List(frames * 2);
+    WaveSource(shape: shape, freq: freq).fill(buf, frames, r);
+    return buf;
+  }
+
+  /// 桥波形注入（渲染 → kind3）。桥未活时静默（与既有测试
+  /// 注入的失败口径一致：状态层以 playing 回执缺失表意）。
+  void injectBridgeWave() {
+    final b = bridgeManager.active;
+    final w = bridgeWave;
+    if (b == null || w == null) return;
+    final rate = requestedRate > 0 ? requestedRate : 48000;
+    final pcm = renderBridgeWave(w, rate);
+    final ptr = malloc<Float>(pcm.length);
+    try {
+      ptr.asTypedList(pcm.length).setAll(0, pcm);
+      b.testStart(3, pcm: ptr, frames: pcm.length ~/ 2, ch: 2, rate: rate);
+    } finally {
+      malloc.free(ptr);
+    }
+  }
+
+  /// 桥文件当前位置估算（帧）：基点 + 墙钟流逝（桥泵按内容
+  /// 采样率消费，与 FillTestSignalN 同口径）；循环取模。桥
+  /// 状态不回测试游标，估算是桥侧传输位置的唯一来源。
+  int bridgeFilePositionFrames() {
+    if (bridgeFileFrames <= 0 || bridgeFileRate <= 0) return 0;
+    if (bridgeFilePaused) return bridgeFileBaseFrame % bridgeFileFrames;
+    final elapsedMs =
+        DateTime.now().millisecondsSinceEpoch - bridgeFileStartedAtMs;
+    final adv = (elapsedMs * bridgeFileRate) ~/ 1000;
+    return (bridgeFileBaseFrame + adv) % bridgeFileFrames;
+  }
+
+  /// 桥文件按帧偏移重注入（暂停恢复/定位共用）。
+  void injectBridgeFileAt(int fromFrame) {
+    final b = bridgeManager.active;
+    final data = bridgeFileData;
+    if (b == null || data == null || bridgeFileFrames <= 0) return;
+    final ch = bridgeFileCh;
+    final start = fromFrame.clamp(0, bridgeFileFrames - 1);
+    final frames = bridgeFileFrames - start;
+    final view =
+        Float32List.sublistView(data, start * ch, (start + frames) * ch);
+    final ptr = malloc<Float>(view.length);
+    try {
+      ptr.asTypedList(view.length).setAll(0, view);
+      b.testStart(3, pcm: ptr, frames: frames, ch: ch, rate: bridgeFileRate);
+    } finally {
+      malloc.free(ptr);
+    }
+    bridgeFileBaseFrame = start;
+    bridgeFileStartedAtMs = DateTime.now().millisecondsSinceEpoch;
+  }
+
+  /// 测试源位置回执（状态层驱动进度条与暂停态呈现）：本地
+  /// 取 FileSource 真游标，桥取墙钟估算。
+  void sendSourcePos() {
+    if (bridgeManager.active != null && bridgeFileData != null) {
+      send({
+        'evt': 'sourcepos',
+        'ratio': bridgeFileFrames <= 0
+            ? 0.0
+            : bridgeFilePositionFrames() / bridgeFileFrames,
+        'paused': bridgeFilePaused,
+      });
+      return;
+    }
+    final fs = source is FileSource ? source as FileSource : null;
+    if (fs != null) {
+      send({
+        'evt': 'sourcepos',
+        'ratio': fs.positionRatio,
+        'paused': filePaused,
+      });
+    }
   }
 
   /* ---- VB-Callback 模式面（与 WASAPI 路径互斥） ---- */
@@ -1350,6 +1463,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'source':
           final kind = m['kind'] as String;
+          // 新源命令一律自未暂停态起（第四十四轮 S4）：暂停是
+          // 独立 sourcepause 命令，不随源切换残留。
+          filePaused = false;
+          bridgeFilePaused = false;
           // 桥模式：测试源走桥注入（自动静音桥输入），isolate 本地 source 保持空。
           // P1：VB/ASIO/VAIO 同构部分收敛为一份；ASIO 多声道（B2c）与热切保留
           // 专属分支，行为与旧三份一致。
@@ -1404,14 +1521,41 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 } finally {
                   malloc.free(ptr);
                 }
+                // 第四十四轮 S4：缓存解码 PCM 供暂停/定位（偏
+                // 移重注入）；波形态清零（互斥：文件源接管）。
+                bridgeWave = null;
+                bridgeFileData = decoded.data;
+                bridgeFileCh = ch;
+                bridgeFileRate = decoded.sampleRate;
+                bridgeFileFrames = n;
+                bridgeFileBaseFrame = 0;
+                bridgeFileStartedAtMs =
+                    DateTime.now().millisecondsSinceEpoch;
+                sendSourcePos();
               }
+            } else if (tk == 1) {
+              // 第四十四轮 S4：桥内生成器只有固定 440 正弦，
+              // 波形/频率/扫频一律走 isolate 渲染注入（kind3
+              // 语义）；粉噪仍走桥原生 kind2（无参数）。
+              bridgeFileData = null;
+              bridgeWave = {
+                'shape': (m['wave'] as String?) ?? 'sine',
+                'freq': (m['freq'] as num?)?.toDouble() ?? 440,
+                'sweep': m['sweep'] == true,
+              };
+              injectBridgeWave();
             } else if (tk != 0) {
+              bridgeWave = null;
+              bridgeFileData = null;
               srcBridge.testStart(tk);
             }
             send({'evt': 'playing', 'playing': true});
             break;
           }
           if (srcBridge != null) {
+            bridgeWave = null;
+            bridgeWaveDebounce?.cancel();
+            bridgeFileData = null;
             srcBridge.testStop();
           }
           // 捕获链在跑时点测试源 = 用户显式接管本地链：先拆
@@ -1425,7 +1569,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               source = null;
               break;
             case 'tone':
-              source = ToneSource(440);
+              source = WaveSource(
+                shape: (m['wave'] as String?) ?? 'sine',
+                freq: (m['freq'] as num?)?.toDouble() ?? 440,
+                sweep: m['sweep'] == true,
+              );
               break;
             case 'pink':
               source = PinkSource();
@@ -1464,6 +1612,64 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             'playing': source != null,
             'srcCh': fs0?.fileCh ?? 2,
           });
+          break;
+        case 'sourceparam':
+          // 波形参数热改（第四十四轮 S4）：本地直接改
+          // WaveSource 字段（相位连续、无爆音）；桥侧更新
+          // bridgeWave 并 200ms 去抖重渲染注入（拖动滑杆时
+          // 不逐帧重注）。
+          if (source is WaveSource) {
+            final ws = source as WaveSource;
+            if (m['wave'] is String) ws.shape = m['wave'] as String;
+            if (m['freq'] is num) ws.freq = (m['freq'] as num).toDouble();
+            if (m['sweep'] is bool) ws.sweep = m['sweep'] as bool;
+          }
+          if (bridgeWave != null && bridgeManager.active != null) {
+            bridgeWave = {
+              'shape': (m['wave'] as String?) ?? bridgeWave!['shape'],
+              'freq': (m['freq'] as num?)?.toDouble() ?? bridgeWave!['freq'],
+              'sweep': (m['sweep'] as bool?) ?? bridgeWave!['sweep'],
+            };
+            bridgeWaveDebounce?.cancel();
+            bridgeWaveDebounce =
+                Timer(const Duration(milliseconds: 200), injectBridgeWave);
+          }
+          break;
+        case 'sourcepause':
+          {
+            final paused = m['paused'] == true;
+            if (bridgeManager.active != null && bridgeFileData != null) {
+              if (paused && !bridgeFilePaused) {
+                bridgeFileBaseFrame = bridgeFilePositionFrames();
+                bridgeFilePaused = true;
+                bridgeManager.active!.testStop();
+              } else if (!paused && bridgeFilePaused) {
+                bridgeFilePaused = false;
+                injectBridgeFileAt(bridgeFileBaseFrame);
+              }
+              sendSourcePos();
+            } else {
+              filePaused = paused;
+              sendSourcePos();
+            }
+          }
+          break;
+        case 'sourceseek':
+          {
+            final ratio = ((m['ratio'] as num?)?.toDouble() ?? 0)
+                .clamp(0.0, 1.0)
+                .toDouble();
+            if (bridgeManager.active != null && bridgeFileData != null) {
+              bridgeFileBaseFrame = (ratio * bridgeFileFrames).round();
+              if (!bridgeFilePaused) {
+                injectBridgeFileAt(bridgeFileBaseFrame);
+              }
+              sendSourcePos();
+            } else if (source is FileSource) {
+              (source as FileSource).seekRatio(ratio);
+              sendSourcePos();
+            }
+          }
           break;
         case 'linuxmode':
           // ADR-012 D-5：Linux 三模式切换（组建/拆除采集管线）。
@@ -2503,6 +2709,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 if (backend == 'vaio') 'requestedMirror': vaioMirrorInUse,
               });
               bridgeGated = ((st['gated'] as num?)?.toInt() ?? 0) == 1;
+              // 桥文件位置回执（第四十四轮 S4）：随 1s 状态轮询
+              // 附送墙钟估算位置，驱动测试页进度条。
+              if (bridgeFileData != null) sendSourcePos();
               // VAIO 几何快照（2026-11-09）：格式/声道几何元组变化
               // 时落一行日志——噪声态时用户无需操作，事后从日志尾
               // 即可读出当时的 bits/ringSr/ringCh/outCh/outBits，
@@ -2569,7 +2778,21 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         }
 
         if (source != null) {
-          source!.fill(srcBuf, frames, w.sampleRate);
+          // 文件暂停（第四十四轮 S4）：填静音、游标冻结；引擎
+          // 与 viz 照常跑（暂停态电平归零即诚实呈现）。
+          final srcPaused = filePaused && source is FileSource;
+          if (srcPaused) {
+            srcBuf.fillRange(0, frames * 2, 0);
+          } else {
+            source!.fill(srcBuf, frames, w.sampleRate);
+          }
+          if (source is FileSource && !srcPaused) {
+            final nowMs = DateTime.now().millisecondsSinceEpoch;
+            if (nowMs - lastSourcePosSentAt >= 250) {
+              lastSourcePosSentAt = nowMs;
+              sendSourcePos();
+            }
+          }
           if (frames > maxBlock) {
             dbgLog('GUARD: frames=$frames > maxBlock=$maxBlock!');
           }
@@ -2612,7 +2835,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                       channelsMode: cm,
                       binauralActive: binauralOn);
               if (fs != null && want > 2 && applyEngineChannels(want) == fs.rawCh) {
-                fs.fillRaw(inBufEng, frames, w.sampleRate);
+                if (srcPaused) {
+                  inBufEng.fillRange(0, frames * fs.rawCh, 0);
+                } else {
+                  fs.fillRaw(inBufEng, frames, w.sampleRate);
+                }
                 lib!.process(handle!, inPtrEng, outPtrEng8, frames);
                 engineMulti = true;
                 if (procRounds == 1) {
@@ -2631,7 +2858,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             } else {
               // 手动模式：保持引擎 channels.count 不变（用户/配置锁定，不调用 applyEngineChannels 覆盖）
               if (engineChCount > 2 && fs != null && fs.raw != null && fs.rawCh == engineChCount) {
-                fs.fillRaw(inBufEng, frames, w.sampleRate);
+                if (srcPaused) {
+                  inBufEng.fillRange(0, frames * fs.rawCh, 0);
+                } else {
+                  fs.fillRaw(inBufEng, frames, w.sampleRate);
+                }
                 lib!.process(handle!, inPtrEng, outPtrEng8, frames);
                 engineMulti = true;
               } else if (engineChCount > 2) {
@@ -2652,7 +2883,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
           }
           if (rawSrc != null) {
-            rawSrc.fillRaw(inBufEng, frames, w.sampleRate);
+            if (srcPaused) {
+              inBufEng.fillRange(0, frames * rawSrc.rawCh, 0);
+            } else {
+              rawSrc.fillRaw(inBufEng, frames, w.sampleRate);
+            }
             w.write(inBufEng, frames: frames, srcCh: rawSrc.rawCh);
           } else if (engineMulti) {
             // 引擎输出 Nch：devCh==2 写 L/R；devCh>=N 写全部（环绕监听）。

@@ -89,6 +89,11 @@ class AppConfig {
   /// false = 点关闭按钮直接退出。托盘不可用时恒直接退出。
   bool closeToTray;
 
+  /// 调试模式（第四十四轮 S4）：开 = 运行时启用结构化调试
+  /// 流（DebugTrace，默认临时目录路径）；关 = 停流关文件。
+  /// 与 --debug 命令行并存（命令行优先开，开关只补开/关运行时）。
+  bool debugMode;
+
   // 安全与资源参数
   double maxIrDurationSeconds;
   double maxFileSizeMb;
@@ -141,6 +146,7 @@ class AppConfig {
     this.autoRestoreSession = true,
     this.ambientSpectrum = true,
     this.closeToTray = true,
+    this.debugMode = false,
     this.autoSaveDebounceMs = 500,
     this.maxIrDurationSeconds = 30.0,
     this.maxFileSizeMb = 64.0,
@@ -209,6 +215,7 @@ class AppConfig {
       autoRestoreSession: (ui['autoRestoreSession'] as bool?) ?? true,
       ambientSpectrum: (ui['ambientSpectrum'] as bool?) ?? true,
       closeToTray: (ui['closeToTray'] as bool?) ?? true,
+      debugMode: (ui['debugMode'] as bool?) ?? false,
       autoSaveDebounceMs: (ui['autoSaveDebounceMs'] as num?)?.toInt() ?? 500,
       maxIrDurationSeconds: (safety['maxIrDurationSeconds'] as num?)?.toDouble() ?? 30.0,
       maxFileSizeMb: (safety['maxFileSizeMb'] as num?)?.toDouble() ?? 64.0,
@@ -300,6 +307,7 @@ class AppConfig {
           'autoRestoreSession': autoRestoreSession,
           'ambientSpectrum': ambientSpectrum,
           'closeToTray': closeToTray,
+          'debugMode': debugMode,
           'autoSaveDebounceMs': autoSaveDebounceMs,
         },
         'safety': {

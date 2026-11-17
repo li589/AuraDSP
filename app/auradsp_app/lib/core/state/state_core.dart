@@ -906,18 +906,115 @@ extension StateCore on AppModel {
 
   void setSource(String kind, {String? path}) {
     sourceKind = kind == 'stop' ? '' : kind;
-    sourcePath = (kind == 'file' && path != null) ? path : '';
-    // 文件源记住扩展名（mp3/wav 芯片各自高亮；isolate 侧按扩展名选解码器）。
-    sourceExt = '';
+    // 文件源记住扩展名（isolate 侧按扩展名选解码器）。
+    // 第四十四轮 S4：路径跨源保留——切到波形源/停止不卸载
+    // 已选文件（测试页可切回续播），仅新选文件才替换。
     if (kind == 'file' && path != null) {
+      sourcePath = path;
+      sourceExt = '';
       final dot = path.lastIndexOf('.');
       if (dot >= 0 && dot < path.length - 1) {
         sourceExt = path.substring(dot + 1).toLowerCase();
       }
     }
     playing = kind != 'stop';
+    sourcePaused = false;
+    if (kind != 'file') sourcePosRatio = 0;
     _notifyUi();
-    send({'cmd': 'source', 'kind': kind, 'path': path});
+    send({
+      'cmd': 'source',
+      'kind': kind,
+      'path': path,
+      if (kind == 'tone') 'wave': waveShape,
+      if (kind == 'tone') 'freq': waveFreq,
+      if (kind == 'tone') 'sweep': waveSweep,
+    });
+  }
+
+  /// 波形源是否在播（波形卡播放/停止键口径）。
+  bool get waveActive => sourceKind == 'tone' || sourceKind == 'pink';
+
+  /// 选波形（第四十四轮 S4）：粉噪与 tone 在 isolate 侧是
+  /// 不同源类型，跨类切换走整源重发；tone 内部换形走
+  /// sourceparam 热改（相位连续）。
+  void setWaveShape(String shape) {
+    final wasPink = sourceKind == 'pink';
+    final isPink = shape == 'pink';
+    waveShape = shape;
+    if (waveActive) {
+      if (wasPink != isPink) {
+        setSource(isPink ? 'pink' : 'tone');
+        return;
+      }
+      if (!isPink) send({'cmd': 'sourceparam', 'wave': shape});
+    }
+    _notifyUi();
+  }
+
+  /// 波形播放/停止。与文件源互斥——setSource 即唯一互斥点，
+  /// 任一源起播都替换当前源（isolate 同刻只有一个 source）。
+  void toggleWave() {
+    if (waveActive) {
+      setSource('stop');
+    } else {
+      setSource(waveShape == 'pink' ? 'pink' : 'tone');
+    }
+  }
+
+  /// 频率热改（20–20000 Hz）：播放中经 sourceparam 下发
+  /// （本地相位连续、桥侧去抖重渲染）；未播只存值。
+  void setWaveFreq(double hz) {
+    waveFreq = hz.clamp(20, 20000).toDouble();
+    if (sourceKind == 'tone') {
+      send({'cmd': 'sourceparam', 'freq': waveFreq});
+    }
+    _notifyUi();
+  }
+
+  /// 扫频开关（20→20k 对数扫、20 秒循环）：开时频率手调停用。
+  void setWaveSweep(bool on) {
+    waveSweep = on;
+    if (sourceKind == 'tone') {
+      send({'cmd': 'sourceparam', 'sweep': on});
+    }
+    _notifyUi();
+  }
+
+  /// 文件源播放/暂停：未装载（切走后）以保留路径重新起播；
+  /// 已装载走 sourcepause（本地游标冻结/桥偏移重注入）。
+  void toggleFilePlay() {
+    if (sourceKind != 'file') {
+      if (sourcePath.isNotEmpty) setSource('file', path: sourcePath);
+      return;
+    }
+    setSourcePaused(!sourcePaused);
+  }
+
+  void setSourcePaused(bool paused) {
+    sourcePaused = paused;
+    send({'cmd': 'sourcepause', 'paused': paused});
+    _notifyUi();
+  }
+
+  /// 文件定位（0..1，比率口径、无时间显示）：拖动结束才发
+  /// （桥侧每次定位都重注入，不逐帧打扰）。
+  void seekSource(double ratio) {
+    sourcePosRatio = ratio.clamp(0.0, 1.0).toDouble();
+    send({'cmd': 'sourceseek', 'ratio': sourcePosRatio});
+    _notifyUi();
+  }
+
+  /// 调试模式开关（第四十四轮 S4）：落盘 + 运行时启停结构化
+  /// 调试流（DebugTrace）。仅接既有设施，不动 isolate 侧
+  /// dbgLog 取证文件。
+  void setDebugMode(bool on) {
+    if (config.debugMode == on) return;
+    config.debugMode = on;
+    if (!_testing) {
+      ConfigManager.save(config);
+      DebugTrace.instance.setEnabledRuntime(on);
+    }
+    _notifyUi();
   }
 
   /// 设置工作声道模式（0=自动, 1=手动）

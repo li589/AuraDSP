@@ -1073,6 +1073,45 @@ class AppLocalizationsJa extends AppLocalizations {
   String get testSrcTitle => 'テスト音源';
 
   @override
+  String get testWaveTitle => '波形生成';
+
+  @override
+  String get testUseSrcTitle => 'ソーステスト';
+
+  @override
+  String get testNoSource => 'テスト音源が選択されていません';
+
+  @override
+  String get testOpenAudio => '音声を開く';
+
+  @override
+  String get wavePlay => '再生';
+
+  @override
+  String get waveSine => '正弦波';
+
+  @override
+  String get waveSquare => '矩形波';
+
+  @override
+  String get waveTriangle => '三角波';
+
+  @override
+  String get waveFreq => '周波数';
+
+  @override
+  String get waveSweep => '自動スイープ';
+
+  @override
+  String get waveSweepDesc => '20 Hz – 20 kHz · 20 秒ループ';
+
+  @override
+  String get testDebugTitle => 'デバッグ';
+
+  @override
+  String get testDebugMode => 'デバッグモード';
+
+  @override
   String get testSrcHint => '測定用信号；停止すると正式ソースに戻ります';
 
   @override
@@ -3181,6 +3220,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get testAudioMp3Prompt => 'MP3 オーディオファイルのパスを入力または選択してください：';
+
+  @override
+  String get testAudioAnyPrompt => 'テスト音源 (WAV/MP3) のパスを入力または選択してください：';
 
   @override
   String get testAudioLoad => 'オーディオを読み込む';
