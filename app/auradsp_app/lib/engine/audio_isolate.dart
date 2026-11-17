@@ -387,8 +387,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     }
   }
 
-  /// 第四十二轮 S1：输出路径声道能力更新（来源：状态层 chcap /
-  /// 本地渲染 devCh / 桥 viz 声道数）。变化才重派。
+  /// 输出路径声道能力更新。来源（第四十五轮 S1/S2 收敛后只剩
+  /// 设备事实三路）：状态层 chcap（分模式计算）/ 本地渲染
+  /// devCh / ASIO 起桥预置。桥 viz 声道曾在 r44 短暂喂入，因
+  /// 流几何回声棘轮已撤。变化才重派。
   void updateCapabilityCh(int ch) {
     if (ch == capabilityCh) return;
     capabilityCh = ch;
@@ -1485,20 +1487,30 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             if (tk == 3) {
               final fpath = m['path'] as String;
               final lb = lib;
-              // B2c（ASIO）：多声道文件按原始声道注入（4/6/8 才有 raw 直通；
-              // 其余回落 fold 立体声）。声道与当前桥 io 声道不符则热切桥。
-              final decoded = fpath.toLowerCase().endsWith('.mp3')
+              // 多声道文件按原始声道注入（4/6/8 才有 raw 直通；其
+              // 余回落 fold 立体声——非标准布局先以 raw 解码探声
+              // 道、再按 fold 重解，避免以 ch=2 误帧宽解释 raw
+              // 数据）。ASIO 声道与当前桥 io 声道不符则热切桥；
+              // VAIO/VB 泵宽随引擎/组宽自适应，不热切（第四十
+              // 五轮 S4；此前 VAIO/VB 恒 fold，7.1 测试文件只剩
+              // FL/FR——宾机实证）。
+              final isMp3 = fpath.toLowerCase().endsWith('.mp3');
+              var decoded = isMp3
                   ? (lb == null ? null : decodeMp3File(lb, fpath))
-                  : (isAsio
-                      ? decodeWavFile(fpath, fold: false)
-                      : decodeWavFile(fpath));
+                  : decodeWavFile(fpath, fold: false);
+              var ch = 2;
+              if (decoded != null && !isMp3) {
+                final srcCh = decoded.channels;
+                if (srcCh == 4 || srcCh == 6 || srcCh == 8) {
+                  ch = srcCh;
+                } else if (srcCh > 2) {
+                  decoded = decodeWavFile(fpath);
+                }
+              }
               if (decoded == null) {
                 send({'evt': 'error', 'msg': '$label模式文件解析失败'});
               } else {
-                var ch = 2;
                 if (isAsio) {
-                  final srcCh = decoded.channels;
-                  ch = (srcCh == 4 || srcCh == 6 || srcCh == 8) ? srcCh : 2;
                   if (ch != asioCh) {
                     final drv = asioDriverInUse;
                     final bs = asioBufSize, op = asioOutPair;
@@ -2657,14 +2669,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               bridgeStaleSent = false;
               v['backend'] = vizBackend;
               send({'evt': 'viz', ...v});
-              // 第四十四轮 S1：桥流声道数（viz 帧 channelCount =
-              // 来源块几何，设备/驱动决定、非参数回声）喂钳制器
-              // ——此前桥模式从不更新 capabilityCh，跨模式切换会
-              // 把上一路径的能力值带进桥引擎（如 WASAPI 立体声
-              // cap=2 切到 ASIO 7.1 后引擎仍被钳在 2）。变化才
-              // 重派（updateCapabilityCh 内部门控）。
-              final bCh = (v['chCount'] as num?)?.toInt() ?? 0;
-              if (bCh > 0) updateCapabilityCh(bCh);
+              // 第四十五轮 S1：桥 viz 声道**不再**喂钳制器——r44 S1
+              // 的喂入把能力绑在流几何回声上（VAIO ringCh 空闲=2、
+              // 随播放内容变），形成只能降不能升的棘轮死锁（宾机
+              // 实证：VAIO 切 7.1 回 2.0、5.1 后回不去 7.1）。能力
+              // 改由设备事实供（状态侧分模式计算经 chcap 下发 /
+              // ASIO 预置 / 本地泵 devCh），viz 回归纯显示用途。
               if (!bridgeVizOkLogged) {
                 bridgeVizOkLogged = true;
                 dbgLog('$backend: viz flowing l=${v['l']} r=${v['r']}');

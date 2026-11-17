@@ -112,6 +112,11 @@ struct PumpCtx {
     bool idle[kMaxGroups] = {};
     long sr = 0;
     long nbs = 0;
+    // 第四十五轮 S3：VB 回调协商面（BUFFER_OUT 的 nbi/nbo 总声道
+    // 指针数；每总线恒 8 宽）。RT 在有效块上变化时才写，status
+    // 读出供状态侧算 VB 声道能力（协商 = 系统监听的一路事实）。
+    volatile LONG negNbi = 0;
+    volatile LONG negNbo = 0;
     long changes = 0;             // CHANGE 到达计数（已落地重建，见主循环）
     volatile LONG pendingChange = 0;  // RT 置位，主线程轮询消费（无锁单写单读）
     volatile LONG startInfo = 0;      // STARTING 到达计数（主线程 CHANGE 重建时等新 audioInfo）
@@ -657,6 +662,9 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
         InterlockedDecrement(&c->rtInBlock);
         return 0;
     }
+    // S3 协商面记录（变化才写，两次原子写非热路径成本）。
+    if (ab->nbi != c->negNbi) InterlockedExchange(&c->negNbi, ab->nbi);
+    if (ab->nbo != c->negNbo) InterlockedExchange(&c->negNbo, ab->nbo);
     const long n = ab->nbs;
     // 组数 = min(nbi,nbo)/8（EAPO 同式），钳到预建 handle 数。
     int ng = (int)(ab->nbi < ab->nbo ? ab->nbi : ab->nbo) / 8;

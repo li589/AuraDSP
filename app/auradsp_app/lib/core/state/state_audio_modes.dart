@@ -193,6 +193,7 @@ extension AudioModesState on AppModel {
       apoLoadErr = 0;
     }
     applyPipelineChain();
+    _sendChCap(); // S2：模式变更 → 按新模式重算能力下发
     _notifyUi();
     // 全面复审 S4（ENG-2）：桥模式期间改过的采样率只落了盘，
     // isolate 仍按生成率运行——切回进程内模式（含 sysapo 影子
@@ -628,6 +629,7 @@ extension AudioModesState on AppModel {
     // 全接线：输入第一次真实驱动链路（此前只落盘——真机项
     // 4「切输入无反应、链路靠输出点击带起来」的根源）。
     applyPipelineChain();
+    _sendChCap();
     persistRoutingChange();
     _notifyUi();
   }
@@ -646,6 +648,7 @@ extension AudioModesState on AppModel {
         // 模式未变也要对账链路（输入侧合成可能已变、桥可能
         // 已漂移）：applyPipelineChain 统一承担。
         applyPipelineChain();
+        _sendChCap();
         persistRoutingChange();
         _notifyUi();
       }
@@ -674,6 +677,7 @@ extension AudioModesState on AppModel {
       }
     }
     _pipelineDeviceChanged();
+    _sendChCap();
     persistRoutingChange();
     _notifyUi();
   }
@@ -681,6 +685,7 @@ extension AudioModesState on AppModel {
   void setPipelineOutputDevice(String device) {
     config.pipelineOutputDevice = device;
     _pipelineDeviceChanged();
+    _sendChCap();
     persistRoutingChange();
     _notifyUi();
   }
@@ -1247,13 +1252,57 @@ extension AudioModesState on AppModel {
     return null;
   }
 
-  /// 第四十二轮 S1：把当前选中 APO 端点的 mix 声道数作为输出
-  /// 路径能力发给 isolate（声道自动回退的钳制依据）。端点不在
-  /// 扫描表内（未知）时发 8 = 不钳制。设备扫描刷新（端点改格
-  /// 式）与选中切换时调用。
+  /// 设备值（id 或名称）在扫描表中的 mix 声道数；未知 = null。
+  int? _scanChOf(String deviceValue) {
+    final d = _resolveWasapiDevice(deviceValue);
+    if (d == null || d.ch <= 0) return null;
+    return d.ch;
+  }
+
+  /// 第四十五轮 S2：分模式声道能力（**设备事实**，状态侧唯一
+  /// 权威计算点；user 裁定 2026-11-17）。返回 null = 状态侧无
+  /// 确知量、不下发——由 isolate 侧真源决定（ASIO 起桥预置 /
+  /// 本地泵 devCh 连续喂入）。非 Windows 恒 null（Linux 链不
+  /// 消费 chcap，泵 devCh 自行喂入）。
+  ///
+  /// - sysapo：选中端点 mix 声道（未知 → 8 不钳）；
+  /// - vbcallback：VB 协商声道（S3，未协商 → 8）；
+  /// - 管线 capture 链（WASAPI 入 + WASAPI 出）：min{入， 出}
+  ///   扫描声道，单侧未知取已知侧，全未知 → 8；
+  /// - 管线 vaio 链：VAIO 本体 8，上限 = 其 WASAPI 输出端点
+  ///   （vaioOutputEndpoint）扫描声道，未选/未知 → 8；
+  /// - 管线 asio 链 / auto：null。
+  int? _capabilityChForMode() {
+    if (!PlatformProfile.isWindows) return null;
+    if (audioMode == 'sysapo') return _selectedApoEndpointCh() ?? 8;
+    if (audioMode == 'vbcallback') return vbNegotiatedCh ?? 8;
+    if (modeCategory == AudioModes.categoryPipeline) {
+      final chain = AudioModes.composeChain(
+          input: config.pipelineInput, output: config.pipelineOutput);
+      switch (chain) {
+        case PipelineChain.capture:
+          final i = _scanChOf(config.pipelineInputDevice);
+          final o = _scanChOf(config.pipelineOutputDevice);
+          if (i != null && o != null) return i < o ? i : o;
+          return i ?? o ?? 8;
+        case PipelineChain.vaio:
+          final o = _scanChOf(config.vaioOutputEndpoint);
+          if (o == null) return 8;
+          return o < 8 ? o : 8;
+        case PipelineChain.asio:
+          return null;
+      }
+    }
+    return null;
+  }
+
+  /// 把分模式能力发给 isolate 钳制器（第四十二轮 S1 立 chcap，
+  /// 第四十五轮 S2 泛化到全模式）。触发集 = 模式/选择/扫描/
+  /// 协商变化（各 setter、设备刷新、vbstatus、isolate ready）。
   void _sendChCap() {
-    if (audioMode != 'sysapo') return;
-    _toIso?.send({'cmd': 'chcap', 'ch': _selectedApoEndpointCh() ?? 8});
+    final cap = _capabilityChForMode();
+    if (cap == null) return;
+    _toIso?.send({'cmd': 'chcap', 'ch': cap});
   }
 
   // ── 第四十二轮 S3：显示声道数即时合成 ────────────────────
@@ -1277,21 +1326,12 @@ extension AudioModesState on AppModel {
 
   static int _normCh(int ch) => ch >= 8 ? 8 : (ch >= 6 ? 6 : (ch >= 4 ? 4 : 2));
 
-  /// 第四十四轮 S1：显示侧钳制能力（状态层可确知的量，与
-  /// isolate 生效口径同源）：sysapo = 选中端点声道；管线 =
-  /// 选中输出设备（WASAPI/VAIO 端点）的扫描声道；其余（桥
-  /// 输出等无确知量）返回 null = 不钳——流活跃时 _streamCh
-  /// 真值优先于一切合成（见 displayChannelCount 首行）。
-  int? _displayCapCh() {
-    if (audioMode == 'sysapo') return _selectedApoEndpointCh();
-    if (modeCategory != AudioModes.categoryPipeline) return null;
-    final outId = _deviceIdOf(config.pipelineOutputDevice);
-    if (outId.isEmpty) return null;
-    for (final d in wasapiDevices) {
-      if (d.id == outId && d.ch > 0) return d.ch;
-    }
-    return null;
-  }
+  /// 显示侧钳制能力：与 isolate 生效口径同源——直接取 S2 的
+  /// 分模式能力计算（第四十五轮起单一真相；r44 版只覆盖
+  /// sysapo 与管线输出侧，现含管线入侧 min 与 VAIO/VB）。
+  /// 流活跃时 _streamCh 真值优先于一切合成（见
+  /// displayChannelCount 首行）。
+  int? _displayCapCh() => _capabilityChForMode();
 
   /// 显示用工作声道数（合成口径见上）。
   int get displayChannelCount {

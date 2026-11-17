@@ -219,6 +219,7 @@ extension VbAsioState on AppModel {
   void setVaioOutputEndpoint(String endpoint) {
     if (config.vaioOutputEndpoint == endpoint) return;
     config.vaioOutputEndpoint = endpoint;
+    _sendChCap(); // S2：VAIO 链能力上限 = 输出端点扫描声道
     persistRoutingChange();
     if (vaioActive) {
       _toIso?.send({

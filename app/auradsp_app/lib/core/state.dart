@@ -228,6 +228,12 @@ class AppModel extends ChangeNotifier {
   // VB-Callback 桥状态（isolate 回推；inactive 时为空）。
   bool vbActive = false;
   Map<String, dynamic> vbInfo = {};
+
+  /// 第四十五轮 S3：VB 回调协商出的每组声道能力（桥 status 的
+  /// negNbo 折算：每总线恒 8 宽 → 有整总线即 8）。null = 尚未
+  /// 协商/桥未运行。属系统监听的事实面：变化经 vbstatus 事件
+  /// 到达，与设备 formatChanged 同级触发声道能力重算。
+  int? vbNegotiatedCh;
   /// 当前可见页（shell 维护；P0-1 IndexedStack 保活后，页面定时器与高频
   /// 可视化消费点据此门控）。R2（2026-10-23）：改为 ValueNotifier——离屏页
   /// 30fps 高频消费点（频谱/电平/各级电平表）订阅它，仅在对应页可见时

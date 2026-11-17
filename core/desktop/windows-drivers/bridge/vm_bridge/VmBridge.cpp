@@ -1691,6 +1691,7 @@ int vb_status(char* out, int cap) {
     }
     int n = snprintf(out, (size_t)cap,
                      "{\"running\":%s,\"frames\":%llu,\"sr\":%ld,\"nbs\":%ld,"
+                     "\"negNbi\":%ld,\"negNbo\":%ld,"
                      "\"groups\":%d,\"handles\":%d,\"peakIn\":%.6f,"
                      "\"gated\":%d,\"idleMs\":%lld,"
                      "\"maxCbUs\":%.1f,\"startRc\":%d,\"note\":\"%s\","
@@ -1705,7 +1706,10 @@ int vb_status(char* out, int cap) {
                       InterlockedCompareExchange(&g_b.running, 0, 0) ? "true"
                                                                      : "false",
                       (unsigned long long)g_b.ctx.frames, g_b.ctx.sr,
-                      g_b.ctx.nbs, g_b.ctx.groups, g_b.ctx.nEng, g_b.ctx.peakIn,
+                      g_b.ctx.nbs,
+                      InterlockedCompareExchange(&g_b.ctx.negNbi, 0, 0),
+                      InterlockedCompareExchange(&g_b.ctx.negNbo, 0, 0),
+                      g_b.ctx.groups, g_b.ctx.nEng, g_b.ctx.peakIn,
                       gated, idleMs,
                       cbUs, g_b.startRc, g_b.note, (long)g_b.ctx.testKind,
                       (long)g_b.ctx.userBypass, vizGrp,

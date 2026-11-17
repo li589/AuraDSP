@@ -91,6 +91,9 @@ extension StateEvents on AppModel {
         _rebuildEqGridForSampleRate(notify: false);
         pathLatencyMs = (raw['latencyMs'] as num).toDouble();
         setConn(EngineConn.ready);
+        // 第四十五轮 S2：新 isolate 的钳制器从缺省 8 起步——把
+        // 当前分模式能力补发一遍（重启恢复口径，幂等）。
+        _sendChCap();
         engineState = 1;
         _fatalRetries = 0; // 活过来了，backoff 计数清零
         // 输出恢复即清除降级标记（deviceRate>0 = 真有设备）。
@@ -1082,6 +1085,20 @@ extension StateEvents on AppModel {
         final was = vbActive;
         vbActive = (raw['running'] as bool?) ?? false;
         vbInfo = Map<String, dynamic>.from(raw);
+        // 第四十五轮 S3：VB 协商面（系统监听同级事实）——桥
+        // status 的 negNbo 折算每组能力（总线恒 8 宽：有整
+        // 总线即 8；不足一总线按实数）。变化才重算能力并刷
+        // 显示合成（心跳每秒到达，不变即零成本）。
+        final negNbo = (raw['negNbo'] as num?)?.toInt() ?? 0;
+        final negCh = negNbo >= 8 ? 8 : (negNbo > 0 ? negNbo : null);
+        if (negCh != vbNegotiatedCh) {
+          vbNegotiatedCh = negCh;
+          if (audioMode == 'vbcallback') {
+            _displayGen++;
+            _sendChCap();
+            refreshDisplayChannelCount();
+          }
+        }
         // 路开关在途收尾（2026-11-07 异步化）：心跳确认目标达成才解除
         // "加载中/释放中"标注与开关禁点；桥停则直接清空，不让界面等到超时。
         if (vbActive) {

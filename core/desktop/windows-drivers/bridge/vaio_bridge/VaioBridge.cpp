@@ -1155,9 +1155,28 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         const ULONG availFrames = blockAlign > 0 ? (ULONG)(availBytes / blockAlign) : 0;
         const ULONG minAvail = wholeInFrames > 0 ? wholeInFrames : 1;
 
+        // 本块 scratchIn 的交织宽度：真实输入恒 ringChannels；
+        // kind3 测试注入按引擎宽度填（见下），下游峰值/重映射
+        // 一律按 inCh 解释。
+        int inCh = (int)ringChannels;
         // 测试信号注入面（优先覆盖真实输入）
         if (g_vaio.tc.testKind != 0) {
-            vmcore::FillTestSignalN(&g_vaio.tc, g_vaio.scratchIn, (long)framesToProcess, (int)ringChannels);
+            int injCh = (int)ringChannels;
+            if (g_vaio.tc.testKind == 3) {
+                // 第四十五轮 S4：文件/波形注入宽 = min(文件声道，
+                // 引擎声道)——旧口径按 ringChannels 填，端点流格
+                // 式为双声道时 7.1 测试文件在泵内被截断只剩
+                // FL/FR（宾机实证）。kind1/2 只写 ch0/1，维持
+                // ring 宽旧行为。scratchIn 预分配恒 8 宽，安全。
+                const int engCh0 = (int)InterlockedCompareExchange(
+                    (volatile LONG*)&g_vaio.engineChannels, 0, 0);
+                const int safe0 =
+                    (engCh0 == 4 || engCh0 == 6 || engCh0 == 8) ? engCh0 : 2;
+                const int fileCh = g_vaio.tc.testFileCh;
+                injCh = fileCh < 1 ? 1 : (fileCh > safe0 ? safe0 : fileCh);
+                inCh = injCh;
+            }
+            vmcore::FillTestSignalN(&g_vaio.tc, g_vaio.scratchIn, (long)framesToProcess, injCh);
             // 测试注入时，虚拟声卡输入的音频同步步进丢弃，保持时序不滞后
             if (availFrames >= wholeInFrames) {
                 userBytesRead += wholeInFrames * blockAlign;
@@ -1317,7 +1336,7 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
 
         // 计算输入峰值
         float curPeakIn = 0.0f;
-        const int inSampleCount = (int)(framesToProcess * ringChannels);
+        const int inSampleCount = (int)(framesToProcess * (UINT32)inCh);
         for (int s = 0; s < inSampleCount; ++s) {
             float val = fabsf(g_vaio.scratchIn[s]);
             if (val > curPeakIn) curPeakIn = val;
@@ -1330,7 +1349,7 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         bool enginePathRan = false;
         if (g_vaio.userBypass) {
             // 用户旁路：直通，不跑 DSP
-            RemapInterleavedAudio(g_vaio.scratchIn, (int)ringChannels, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
+            RemapInterleavedAudio(g_vaio.scratchIn, inCh, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
         } else if (g_vaio.pEngine && g_vaio.fnProcess) {
             enginePathRan = true;
             // P3 静音门控（单组）：GATED 时整块写零、跳过 DSP；测试注入是
@@ -1343,7 +1362,7 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                 g_vaio.peakOut = 0.0;
             } else {
                 // 1. 将驱动环输入重映射至引擎工作声道数（消除声道步进错位）
-                RemapInterleavedAudio(g_vaio.scratchIn, (int)ringChannels, g_vaio.scratchProcIn, safeEngineCh, (int)framesToProcess);
+                RemapInterleavedAudio(g_vaio.scratchIn, inCh, g_vaio.scratchProcIn, safeEngineCh, (int)framesToProcess);
 
                 // 第三十九轮取证：引擎输入逐声道峰值保持（start 起算）。
                 for (int f = 0; f < (int)framesToProcess; ++f) {
@@ -1381,7 +1400,7 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                 RemapInterleavedAudio(g_vaio.scratchProcOut, safeEngineCh, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
             }
         } else {
-            RemapInterleavedAudio(g_vaio.scratchIn, (int)ringChannels, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
+            RemapInterleavedAudio(g_vaio.scratchIn, inCh, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
         }
 
         // 旁路/无引擎路径只做了重映射：峰值与门控尾音仍须按最终输出更新，
