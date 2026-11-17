@@ -40,6 +40,10 @@ PLATFORM_ANY = {
     # 协议/状态保留路径/三卡布局），纯源码扫描，任意平台可跑。
     "smoke_dart_test_wave.py",
         "smoke_dart_chcap_authority.py",
+        "smoke_apo_engch_truncate.py",
+        "smoke_dart_r46_display_list.py",
+    "smoke_apo_engch_truncate.py",
+    "smoke_dart_r46_display_list.py",
     "smoke_dart_chcap_authority.py",
     # S2（2026-11-01）：Linux 源表闭包门禁，纯文本/源表扫描，任意平台可跑。
     "smoke_linux_source_table.py",

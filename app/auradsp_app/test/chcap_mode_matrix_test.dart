@@ -114,4 +114,74 @@ void main() {
       expect(m.displayChannelCount, 8);
     });
   });
+
+  group('第四十六轮 S1：流真值按生效宽钳制', () {
+    AppModel sysapo({required int epCh, required int mode, int count = 8}) {
+      final m = AppModel(testing: true);
+      m.audioMode = 'sysapo';
+      m.config.audioMode = 'sysapo';
+      m.apoKnownEndpoints = [
+        {'id': _out71, 'name': 'Test EP'},
+      ];
+      m.config.apoTargetEndpoint = _out71;
+      m.wasapiDevices = [
+        AudioDeviceItem(id: _out71, name: 'Test EP', isRender: true, ch: epCh),
+      ];
+      m.setChannelsCountMode(mode);
+      m.setChannelsCount(count);
+      return m;
+    }
+
+    test('APO 手动 5.1 + 7.1 端点：流报 8 显示钳到 6（反馈 2）', () {
+      final m = sysapo(epCh: 8, mode: 1, count: 6);
+      expect(m.clampStreamChForDisplay(8), 6);
+      m.noteStreamChannelCount(8);
+      expect(m.displayChannelCount, 6);
+    });
+
+    test('APO 手动 7.1：流报 8 显示 8；改数即变（反馈 1）', () {
+      final m = sysapo(epCh: 8, mode: 1, count: 8);
+      expect(m.clampStreamChForDisplay(8), 8);
+      m.setChannelsCount(4);
+      expect(m.clampStreamChForDisplay(8), 4);
+    });
+
+    test('APO 自动：流宽不超端点能力时原样', () {
+      final m = sysapo(epCh: 8, mode: 0);
+      expect(m.clampStreamChForDisplay(8), 8);
+      expect(m.clampStreamChForDisplay(6), 6);
+    });
+
+    test('VAIO 手动 5.1 未选输出：流报 8 钳到 6', () {
+      final m = _vaioModel();
+      m.setChannelsCount(6);
+      expect(m.clampStreamChForDisplay(8), 6);
+    });
+  });
+
+  group('第四十六轮 S3：APO 三态状态机（状态层）', () {
+    test('排队切换：空→勾→空', () {
+      final m = AppModel(testing: true);
+      m.toggleApoChecked(_out71, true);
+      expect(m.apoCheckedEndpoints.contains(_out71), isTrue);
+      m.toggleApoChecked(_out71, false);
+      expect(m.apoCheckedEndpoints.contains(_out71), isFalse);
+    });
+
+    test('未附加端点不接受锁定', () {
+      final m = AppModel(testing: true);
+      m.markApoLocked(_out71);
+      expect(m.apoLockedEndpoints.contains(_out71), isFalse);
+    });
+
+    test('已附加端点可锁定', () {
+      final m = AppModel(testing: true);
+      m.apoInstalledEndpoints = [
+        {'EndpointId': _out71, 'DeviceName': 'Test EP'},
+      ];
+      expect(m.apoEndpointAttached(_out71), isTrue);
+      m.markApoLocked(_out71);
+      expect(m.apoLockedEndpoints.contains(_out71), isTrue);
+    });
+  });
 }
