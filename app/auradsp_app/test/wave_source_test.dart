@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:auradsp_app/engine/audio_sources.dart';
+import 'package:auradsp_app/engine/audio_isolate.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

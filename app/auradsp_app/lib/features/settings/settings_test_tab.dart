@@ -118,7 +118,8 @@ class _WaveGenPanel extends StatelessWidget {
 
   static double _freqToRatio(double hz) =>
       (math.log(hz) - math.log(20)) / (math.log(20000) - math.log(20));
-  static double _ratioToFreq(double r) => 20 * math.pow(1000, r);
+  static double _ratioToFreq(double r) =>
+      (20 * math.pow(1000, r)).toDouble();
 
   @override
   Widget build(BuildContext context) {
