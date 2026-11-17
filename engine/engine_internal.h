@@ -631,7 +631,10 @@ struct auradsp_handle_s {
      *   stage 级只有 L/R 两列有意义）。
      * 必须与 last_block_ch 分开：矩阵模式下设备是 6/8 声道（last_block_ch=8，
      * channel_levels 经 mx_upmix 后全列有效），但 stage 链是立体声，若沿用
-     * last_block_ch 门控就会读到上一次 MC 模式的陈旧 stage_peak_ch。 */
+     * last_block_ch 门控就会读到上一次 MC 模式的陈旧 stage_peak_ch。
+     * 例外（第四十七轮 S5）：stage 12/13（链首输入门控入/出）不经本
+     * 字段门控——其逐声道峰值在处理入口按原始输入全宽采集，emit_viz
+     * 对这两级改用 last_block_ch 作有效宽。 */
     int    stage_ch_active = 2;
 
     /* Liveprog 状态 */

@@ -433,7 +433,16 @@ class _VaioOutputSubpanel extends StatelessWidget {
                 onTap: () => model.refreshVaioDetect()),
           ]),
           if (info['note'] is String && (info['note'] as String).isNotEmpty)
-            _InfoRow('AuraVAIO', '${info['note']}'),
+            // 端点被占用（0x8889000A）只给一句人话（第四十七轮
+            // S4，user 裁定：Windows 口吻，不提进程/十六进制）；
+            // 其余 note 仍为诊断原文。
+            _InfoRow(
+                'AuraVAIO',
+                (info['note'] as String)
+                        .toUpperCase()
+                        .contains('0X8889000A')
+                    ? l.vaioDeviceInUse
+                    : '${info['note']}'),
           if (model.vaioActive) ...[
             if (info['sr'] is num)
               // 全面复审 S2（VAIO-6）：声道数读桥真值，不再硬编码 2 ch。

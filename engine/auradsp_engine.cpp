@@ -389,6 +389,13 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         /* [Phase B 多声道电平] per-channel 输入峰值（增益前）→ stage 12 槽位，
          * 与 stereo 的 input_lvl_in 语义严格一致。 */
         float pk_in_ch[AURADSP_CH_MAX] = {};
+        /* 门控输出 per-channel 峰值（增益后）→ stage 13 槽位（第四
+         * 十七轮 S5）：矩阵模式下 stereo 链不写 stage_peak_ch[13]，
+         * 输入卡的输出行只能靠这里——本级输出即 mx_scratch 全宽
+         * 实测（下混之前），与 stage 12 同为链首全宽口径。离散
+         * 模式下 MC 链的 sample_stage_peak_mc(13) 会以同语义覆
+         * 写，两路一致。 */
+        float pk_out_ch[AURADSP_CH_MAX] = {};
         for (int i = 0; i < frames; ++i) {
             for (int c = 0; c < ch; ++c) {
                 const float s_raw = in[i * ch + c];
@@ -406,6 +413,7 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
                     if (a_out > pk_out_r) pk_out_r = a_out;
                 }
                 if (c < AURADSP_CH_MAX && a_in > pk_in_ch[c]) pk_in_ch[c] = a_in;
+                if (c < AURADSP_CH_MAX && a_out > pk_out_ch[c]) pk_out_ch[c] = a_out;
             }
         }
         h->input_lvl_in_l = pk_in_l > 1e-6f ? 20.0f * log10f(pk_in_l) : -120.0f;
@@ -414,6 +422,8 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         h->input_lvl_out_r = pk_out_r > 1e-6f ? 20.0f * log10f(pk_out_r) : -120.0f;
         for (int c = 0; c < ch && c < AURADSP_CH_MAX; ++c) h->stage_peak_ch[12][c] = pk_in_ch[c];
         for (int c = ch; c < AURADSP_CH_MAX; ++c) h->stage_peak_ch[12][c] = 0.0f; /* 声道数下降时清陈旧槽 */
+        for (int c = 0; c < ch && c < AURADSP_CH_MAX; ++c) h->stage_peak_ch[13][c] = pk_out_ch[c];
+        for (int c = ch; c < AURADSP_CH_MAX; ++c) h->stage_peak_ch[13][c] = 0.0f;
 
         const bool binaural =
             h->p.spatial_binaural.load(std::memory_order_relaxed) != 0 &&

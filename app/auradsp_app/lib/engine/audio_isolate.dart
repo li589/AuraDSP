@@ -165,6 +165,16 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   AuraVaioBridge? vaio;
   String vaioOutputEndpointInUse = '';
   bool vaioMirrorInUse = false;
+  // VAIO 启动失败自愈（第四十七轮 S4）：start rc!=0（如输出
+  // 端点被其它程序占用 0x8889000A）此前是终局——桥从未进入
+  // active 记账，状态轮询与死亡回收网都够不着。失败即登记
+  // 重试（保存本次启动参数），泵循环每 5s 重试一次，直到成
+  // 功或停桥（stopVaioBridge 清登记，含模式切走）。不设上
+  // 限：占用何时释放不可知，失败的 start 本身成本可忽略。
+  bool vaioRetryPending = false;
+  int vaioRetryAt = 0;
+  String vaioRetryEndpoint = '';
+  bool vaioRetryMirror = false;
   // 桥模式共用诊断/节流状态（P1：同一时刻只有一个后端出声，不再按后端各一份）。
   bool bridgeVizNullLogged = false;
   bool bridgeNoCbLogged = false;
@@ -821,6 +831,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   }
 
   void stopVaioBridge() {
+    // 自愈重试登记先清（第四十七轮 S4）：桥从未启动成功时
+    // 不在 active 记账里，下面的早退不能把重试留着。
+    vaioRetryPending = false;
     if (!bridgeManager.isActive('vaio')) return;
     dbgLog('vaiomode: stop requested');
     try {
@@ -864,6 +877,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     lastVaioFx = ''; // S4：取证对象同口径，每 start 必落一次
     if (rc != 0) {
       final st = vaio!.status();
+      // 启动失败登记自愈重试（第四十七轮 S4）：泵循环 5s 后
+      // 以同参数再 start，占用释放即自动恢复，无需用户重选
+      // 模式。状态照旧上报（面板 note + 通知去重在状态层）。
+      vaioRetryPending = true;
+      vaioRetryAt = DateTime.now().millisecondsSinceEpoch + 5000;
+      vaioRetryEndpoint = outputEndpointSubstr;
+      vaioRetryMirror = monitorMirror;
       send({
         'evt': 'vaiostatus',
         'running': false,
@@ -871,6 +891,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       });
       return;
     }
+    vaioRetryPending = false;
     // 回放参数/字符串/旁路镜像（P1：统一由 BridgeManager 执行）。
     bridgeManager.replaySession(vaio!,
         params: paramMirror, paramsStr: paramStrMirror, bypass: bypass);
@@ -2654,6 +2675,17 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       pumpRounds++;
       // 桥模式：WASAPI 泵暂停（设备已 stop），可视化与状态走当前后端。
       // P1：三桥共用一段（互斥保证只有一个 active）；P4：gated 时降载。
+      // VAIO 启动失败自愈重试（第四十七轮 S4）：失败时桥不在
+      // active 记账内，下方桥段不会跑——重试只能挂在桥段之
+      // 外、泵循环恒在处。
+      if (vaioRetryPending &&
+          DateTime.now().millisecondsSinceEpoch >= vaioRetryAt) {
+        vaioRetryPending = false;
+        dbgLog('vaiomode: retrying start (self-heal after failure)');
+        startVaioBridge(
+            outputEndpointSubstr: vaioRetryEndpoint,
+            monitorMirror: vaioRetryMirror);
+      }
       final brc = bridgeManager.active;
       if (brc != null) {
         final backend = bridgeManager.activeId ?? '?';

@@ -1202,8 +1202,15 @@ extension StateEvents on AppModel {
         if (!vaioActive && vaioNote.isNotEmpty) {
           if (vaioNote != lastVaioFailNote) {
             lastVaioFailNote = vaioNote;
+            // 端点被占用（0x8889000A）只给一句人话（第四十七
+            // 轮 S4，user 裁定）；桥在 isolate 侧有 5s 自愈重
+            // 试，占用释放后自动恢复，此通知只报一次现状。
+            final shownNote =
+                vaioNote.toUpperCase().contains('0X8889000A')
+                    ? '该设备正在被另一个人使用'
+                    : vaioNote;
             postNotice(
-                wasV ? 'VAIO 桥已停止：$vaioNote' : 'VAIO 桥启动失败：$vaioNote',
+                wasV ? 'VAIO 桥已停止：$shownNote' : 'VAIO 桥启动失败：$shownNote',
                 level: NoticeLevel.error);
           }
         } else if (vaioActive) {

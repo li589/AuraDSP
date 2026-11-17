@@ -287,7 +287,14 @@ void emit_viz(auradsp_handle h) {
             } else if (c < 2) {
                 /* 自研效果器段 L/R 列与 stage_levels_l/r 同源（stereo 逐位不变） */
                 f.stage_ch_levels[i][c] = (c == 0) ? f.stage_levels_l[i] : f.stage_levels_r[i];
-            } else if (c < h->stage_ch_active) {
+            } else if (c < ((i == 12 || i == 13) ? blkCh : h->stage_ch_active)) {
+                /* stage 12/13 例外（第四十七轮 S5）：链首输入门控
+                 * 的逐声道峰值在 auradsp_process 入口按原始输入
+                 * 全声道采集（增益前/后、下混之前），有效宽 = 本
+                 * 块声道数而非链宽——矩阵模式 stage_ch_active=2
+                 * 曾把这两级的 [2..7] 恒压 -120，输入卡多声道输
+                 * 入/输出行永不亮（r46 宾机反馈定罪）。其余自研
+                 * 级仍受 stage_ch_active 门控（链真实作用域）。 */
                 const float p = h->stage_peak_ch[i][c];
                 f.stage_ch_levels[i][c] = p > 1e-6f ? 20.0f * log10f(p) : -120.0f;
             } else {

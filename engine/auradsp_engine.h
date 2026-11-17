@@ -153,8 +153,12 @@ typedef struct auradsp_viz_frame {
      *        处理（engine_chain.cpp:919），但这些声道对的 per-channel 电平
      *        未按对回填，[2..7] 仍恒 -120 —— 已知遗留项；ADR-003 的
      *        「vendor 段只作用 FL/FR」诚实性约束对 comp/eq 并不成立；
-     *   12 gate 输入 / 13 gate 输出 / 14 dyneq / 15 filter / 18 exciter /
-     *        19 loudness：**离散模式（channels.mode=1）** 下 [0..ch-1] 有效；
+     *   12 gate 输入 / 13 gate 输出：**两模式下 [0..ch-1] 均有效**
+     *        （第四十七轮 S5 起）——这两级的逐声道峰值在处理入口
+     *        按原始输入全宽采集（增益前/后、下混之前），是链首
+     *        计量而非链内计量，有效宽 = 本块声道数；
+     *   14 dyneq / 15 filter / 18 exciter / 19 loudness：
+     *        **离散模式（channels.mode=1）** 下 [0..ch-1] 有效；
      *        矩阵模式（mode=0）走的是立体声链，仅 [0]/[1] 有效；
      *   16 bassmono / 17 haas / 20 spatial（Category B 仅作用于前置对）：
      *        仅 [0]/[1] 有效，[2..7] 恒 -120；

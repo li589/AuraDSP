@@ -689,6 +689,7 @@
   "asioDeviceChannels": "设备通道",
   "asioTransportChannels": "传输声道",
   "asioRefresh": "刷新驱动",
+  "vaioDeviceInUse": "该设备正在被另一个人使用",
   "asioSwitches": "回调帧",
   "asioSrMismatch": "驱动运行于 {sr} Hz，与全局设置 {cfg} Hz 不符（ASIO 跟随驱动）",
   "@asioSrMismatch": {
