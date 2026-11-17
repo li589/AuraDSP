@@ -313,6 +313,10 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels,
         engCh_ = 2;  // mono 复制 / 宽声道取前二，步长适配
         adapt_ = true;
     }
+    // 第四十六轮 S2：发布 RT 视图初值（参数块 channels.count
+    // 到达后由 ApplyEngChResolution 再决议封顶）。
+    liveEngCh_.store(engCh_);
+    liveTrunc_.store(false);
     if (!ClaimSeat()) return false;
     if (!LoadEngine()) {
         PublishLoadDiag();  // 失败结局先落 telemetry 再放座（S3）
@@ -329,8 +333,9 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels,
         ReleaseSeat();
         return false;
     }
-    // 流声道是几何真相，压过参数块里的 channels.count（块侧该项
-    // 在 worker diff 中跳过，见 ApplySnapshot）。
+    // 初始引擎宽 = 流宽决议（参数块 channels.count 到达后由
+    // worker 的 ApplyEngChResolution 封顶修正，第四十六轮
+    // S2；旧「流几何压过设置」决议已推翻）。
     int32_t cnt = (int32_t)engCh_;
     fnSetParam_(engine_, "channels.count", &cnt, sizeof(cnt));
     // 声道族覆写（第四十一轮）：本端点 FX 属性集给了 mode/fill
@@ -384,8 +389,10 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels,
         pluginTempDir_ = (n > 0 && n < MAX_PATH) ? tmp : L"";
     }
 
-    inBuf_ = new float[(size_t)kMaxBlock * engCh_];
-    outBuf_ = new float[(size_t)kMaxBlock * engCh_];
+    // 缓冲按流宽分配：运行中 engCh 可在 [2, streamCh_] 内
+    // 随参数块变化（第四十六轮 S2），不得按初始 engCh_ 收窄。
+    inBuf_ = new float[(size_t)kMaxBlock * (streamCh_ > 2 ? streamCh_ : 2)];
+    outBuf_ = new float[(size_t)kMaxBlock * (streamCh_ > 2 ? streamCh_ : 2)];
 
     // telemetry 座位信息（App 面板/读者据此判定引擎在位）。
     tele_->ownerPid = GetCurrentProcessId();
@@ -489,16 +496,108 @@ bool ApoEngineHost::ProcessGuarded(const float* src, float* dst, UINT32 frames) 
     }
 }
 
+UINT32 ApoEngineHost::ResolveEngCh() const {
+    // 天花板 = 流宽；参数块 channels.count 合法时再封顶。
+    // 流宽非法（mono/3/5/7）维持 stereo 决议（D8 旧口径）。
+    if (!(streamCh_ == 2 || streamCh_ == 4 || streamCh_ == 6 ||
+          streamCh_ == 8)) {
+        return 2;
+    }
+    UINT32 cap = streamCh_;
+    if ((userCh_ == 2 || userCh_ == 4 || userCh_ == 6 || userCh_ == 8) &&
+        userCh_ < cap) {
+        cap = userCh_;
+    }
+    return cap;
+}
+
+void ApoEngineHost::ApplyEngChResolution() {
+    if (!engine_ || !fnSetParam_) return;
+    const UINT32 want = ResolveEngCh();
+    if (want != engCh_) {
+        int32_t cnt = (int32_t)want;
+        if (fnSetParam_(engine_, "channels.count", &cnt, sizeof(cnt)) == 0) {
+            engCh_ = want;
+        }
+    }
+    liveEngCh_.store(engCh_);
+    liveTrunc_.store(effMode_ == 1);
+}
+
+// 矩阵模式的折叠 gather（系数与 VAIO 桥 RemapInterleavedAudio
+// 同表）：把 srcCh 宽折成 engCh 宽再喂引擎，引擎内再折到
+// 立体声处理——内容不丢。离散模式不走这里（顺序截断）。
+static void FoldGather(const float* s, float* in, UINT32 srcCh, UINT32 engCh,
+                       UINT32 n) {
+    const float k = 0.70710678f;
+    if (srcCh == 4 && engCh == 2) {
+        for (UINT32 i = 0; i < n; i++) {
+            in[i * 2 + 0] = s[i * 4 + 0] + s[i * 4 + 2] * k;
+            in[i * 2 + 1] = s[i * 4 + 1] + s[i * 4 + 3] * k;
+        }
+    } else if (srcCh == 6 && engCh == 2) {
+        for (UINT32 i = 0; i < n; i++) {
+            const float c = s[i * 6 + 2] * k;
+            in[i * 2 + 0] = s[i * 6 + 0] + c + s[i * 6 + 4] * k;
+            in[i * 2 + 1] = s[i * 6 + 1] + c + s[i * 6 + 5] * k;
+        }
+    } else if (srcCh == 6 && engCh == 4) {
+        for (UINT32 i = 0; i < n; i++) {
+            const float c = s[i * 6 + 2] * k;
+            in[i * 4 + 0] = s[i * 6 + 0] + c;
+            in[i * 4 + 1] = s[i * 6 + 1] + c;
+            in[i * 4 + 2] = s[i * 6 + 4];
+            in[i * 4 + 3] = s[i * 6 + 5];
+        }
+    } else if (srcCh == 8 && engCh == 2) {
+        for (UINT32 i = 0; i < n; i++) {
+            const float* f = s + i * 8;
+            in[i * 2 + 0] = f[0] + (f[2] + f[4] + f[6]) * k;
+            in[i * 2 + 1] = f[1] + (f[2] + f[5] + f[7]) * k;
+        }
+    } else if (srcCh == 8 && engCh == 4) {
+        for (UINT32 i = 0; i < n; i++) {
+            const float* f = s + i * 8;
+            in[i * 4 + 0] = f[0] + f[2] * k;
+            in[i * 4 + 1] = f[1] + f[2] * k;
+            in[i * 4 + 2] = f[4] + f[6] * k;
+            in[i * 4 + 3] = f[5] + f[7] * k;
+        }
+    } else if (srcCh == 8 && engCh == 6) {
+        for (UINT32 i = 0; i < n; i++) {
+            const float* f = s + i * 8;
+            float* o = in + i * 6;
+            o[0] = f[0];
+            o[1] = f[1];
+            o[2] = f[2];
+            o[3] = f[3];
+            o[4] = f[4] + f[6] * k;
+            o[5] = f[5] + f[7] * k;
+        }
+    } else {
+        // 无折叠表的组合（奇数流宽等）：顺序截断。
+        for (UINT32 i = 0; i < n; i++) {
+            for (UINT32 c = 0; c < engCh; c++) {
+                in[i * engCh + c] = s[i * srcCh + c];
+            }
+        }
+    }
+}
+
 void ApoEngineHost::ProcessDirect(const float* src, float* dst, UINT32 frames) {
+    const UINT32 eng = liveEngCh_.load();
+    const bool trunc = liveTrunc_.load();
+    const UINT32 strm = streamCh_;
     UINT32 done = 0;
     while (done < frames) {
         UINT32 n = frames - done;
         if (n > (UINT32)kMaxBlock) n = (UINT32)kMaxBlock;
-        const float* s = src + (size_t)done * streamCh_;
-        float* d = dst + (size_t)done * streamCh_;
-        if (!adapt_) {
+        const float* s = src + (size_t)done * strm;
+        float* d = dst + (size_t)done * strm;
+        if (eng == strm) {
             fnProcess_(engine_, s, d, (int)n);
-        } else if (streamCh_ == 1) {
+        } else if (strm == 1) {
+            // mono 流：复制成立体声喂引擎（eng 恒 2），回写取 L。
             for (UINT32 i = 0; i < n; i++) {
                 inBuf_[i * 2] = s[i];
                 inBuf_[i * 2 + 1] = s[i];
@@ -506,16 +605,28 @@ void ApoEngineHost::ProcessDirect(const float* src, float* dst, UINT32 frames) {
             fnProcess_(engine_, inBuf_, outBuf_, (int)n);
             for (UINT32 i = 0; i < n; i++) d[i] = outBuf_[i * 2];
         } else {
-            // 宽声道取前二：其余声道先原样落 dst，再覆盖前二。
-            memcpy(d, s, (size_t)n * streamCh_ * sizeof(float));
-            for (UINT32 i = 0; i < n; i++) {
-                inBuf_[i * 2] = s[i * streamCh_];
-                inBuf_[i * 2 + 1] = s[i * streamCh_ + 1];
+            // eng < strm（设置封顶或奇数流宽决议）：gather 到
+            // 引擎宽 → 处理 → scatter 回前 eng 声道，其余声道
+            // 清零（第四十六轮 S2：多出的声道丢弃/无声，旧
+            // stereo adapt 的原样直通已废）。离散 = 顺序截
+            // 断；矩阵 = 折叠 gather（内容先折入再喂引擎）。
+            if (trunc) {
+                for (UINT32 i = 0; i < n; i++) {
+                    for (UINT32 c = 0; c < eng; c++) {
+                        inBuf_[i * eng + c] = s[i * strm + c];
+                    }
+                }
+            } else {
+                FoldGather(s, inBuf_, strm, eng, n);
             }
             fnProcess_(engine_, inBuf_, outBuf_, (int)n);
             for (UINT32 i = 0; i < n; i++) {
-                d[i * streamCh_] = outBuf_[i * 2];
-                d[i * streamCh_ + 1] = outBuf_[i * 2 + 1];
+                for (UINT32 c = 0; c < eng; c++) {
+                    d[i * strm + c] = outBuf_[i * eng + c];
+                }
+                for (UINT32 c = eng; c < strm; c++) {
+                    d[i * strm + c] = 0.0f;
+                }
             }
         }
         done += n;
@@ -633,10 +744,17 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
         if (!bitSet(i)) continue;
         if (snapshotValid_ && appliedNum_[i] == values[i]) continue;
         const char* id = kApoNumParamIds[i];
-        // channels.count 由流几何决议（TryStart 已设），块侧跳过。
+        // channels.count（第四十六轮 S2）：不再跳过——记账后
+        // 由循环后 ApplyEngChResolution 与流宽合成生效宽并
+        // 统一对引擎下发（引擎侧的 count 只经决议路径变更）。
         if (strcmp(id, "channels.count") == 0) {
+            userCh_ = values[i];
             appliedNum_[i] = values[i];
             continue;
+        }
+        // 有效 mode 的块侧基线（覆写时以覆写为准，见循环后）。
+        if (strcmp(id, "channels.mode") == 0 && !modeOvr) {
+            lastBlockMode_ = (int32_t)values[i];
         }
         // 声道族覆写（第四十一轮）：本端点有覆写的项，块值仅记
         // 账（diff 基线）、不下发引擎——覆写由循环后的对齐段独占
@@ -670,6 +788,11 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
             applied++;
         }
     }
+    // 生效宽决议（第四十六轮 S2）：有效 mode 定 gather 风格，
+    // 块 count 与流宽定引擎宽；每轮快照后统一收敛（无变化
+    // 时仅原子发布，零引擎调用）。
+    effMode_ = modeOvr ? modeOvrVal : lastBlockMode_;
+    ApplyEngChResolution();
     for (uint32_t s = 0; s < APO_STR_SLOT_COUNT; s++) {
         if (!bitSet(APO_NUM_PARAM_COUNT + s)) continue;  // 同上，有效位门
         uint32_t used = hdr[5 + s];

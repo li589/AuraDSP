@@ -1313,9 +1313,32 @@ extension AudioModesState on AppModel {
   // 格式 + S1 钳制即时合成，并经 _notifyUi 收敛推入。
 
   /// viz 声道事件到达时登记流真值（state_events 调用）。
+  /// 登记的是经生效宽钳制后的显示宽（第四十六轮 S1），
+  /// 不是原始流宽。
   void noteStreamChannelCount(int cc) {
-    _streamCh = cc;
+    _streamCh = clampStreamChForDisplay(cc);
     _lastVizChAt = DateTime.now();
+  }
+
+  /// 第四十六轮 S1：流宽进显示前按生效宽钳制。APO 遥测的
+  /// chCount 是端点流格式宽（设 5.1 放 7.1 仍报 8），主页
+  /// 直认 vizChannelCount——不钳则显示跟着内容走，且播放
+  /// 中改声道数量会被恒活跃的流真值钉死不变（user 实测
+  /// 两例）。口径：手动 = min{流宽， clamp（设置， 能力）}；
+  /// 自动 = min{流宽， 能力（已知时）}。原始流宽仍由事件
+  /// 侧用于 stageCh 切片等来源真相用途，不经此处。
+  int clampStreamChForDisplay(int cc) {
+    if (cc <= 0) return cc;
+    var eff = cc;
+    final cap = _displayCapCh();
+    if (channelsCountMode == 1) {
+      var want = channelsCount;
+      if (cap != null) want = clampChannelsToCapability(want, cap);
+      if (eff > want) eff = want;
+    } else if (cap != null && eff > cap) {
+      eff = cap;
+    }
+    return _normCh(eff);
   }
 
   bool get _streamChLive =>

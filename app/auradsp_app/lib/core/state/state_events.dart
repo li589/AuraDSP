@@ -1039,7 +1039,9 @@ extension StateEvents on AppModel {
         if (raw['chCount'] != null) {
           final cc = (raw['chCount'] as num).toInt();
           noteStreamChannelCount(cc); // S3：登记流真值与到达时刻
-          vizChannelCount.value = cc;
+          // 第四十六轮 S1：显示宽按生效宽钳制（原始 cc 仍供
+          // 下方 stageCh 切片等来源真相用途）。
+          vizChannelCount.value = clampStreamChForDisplay(cc);
           final cl = (raw['chLevels'] as List?)
                   ?.cast<num>()
                   .map((e) => e.toDouble())

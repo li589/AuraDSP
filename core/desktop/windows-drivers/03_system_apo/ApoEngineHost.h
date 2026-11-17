@@ -130,8 +130,24 @@ class ApoEngineHost {
     UINT32 streamCh_ = 2;
     UINT32 engCh_ = 2;
     bool adapt_ = false;  // engCh_ != streamCh_：需要 gather/scatter
-    float* inBuf_ = nullptr;   // kMaxBlock * engCh_
+    float* inBuf_ = nullptr;   // kMaxBlock * max(streamCh_, 2)
     float* outBuf_ = nullptr;
+
+    // 生效宽决议（第四十六轮 S2）：推翻「流声道是几何真相、
+    // 压过 channels.count」的旧决议——引擎宽 = min{流宽，
+    // 参数块 channels.count（用户设置，合法 {2,4,6,8} 时）}，
+    // 与其它模式同义（设 5.1 放 7.1 不再全宽跑）。userCh_
+    // 为块侧最近值（0 = 未写）；effMode_ 为有效 channels.
+    // mode（端点覆写优先、否则块值），决定 gather 用折叠
+    // （矩阵）还是截断（离散）。live* 是发布给 RT 路径的
+    // 只读视图（worker 决议后原子发布，RT 只读不锁）。
+    UINT32 userCh_ = 0;
+    int32_t lastBlockMode_ = 0;
+    int32_t effMode_ = 0;
+    std::atomic<UINT32> liveEngCh_{2};
+    std::atomic<bool> liveTrunc_{false};
+    UINT32 ResolveEngCh() const;
+    void ApplyEngChResolution();
 
     // telemetry（座位与回传）
     HANDLE hTeleMap_ = nullptr;

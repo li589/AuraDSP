@@ -317,6 +317,7 @@ struct VaioBridgeCtl {
     int32_t engineChannels = 2;   // 引擎当前实际运行声道数 (2, 4, 6, 8)
     int32_t countMode = 0;        // 0 = 自动跟随驱动环 (ringChannels), 1 = 手动锁定 (manualChannels)
     int32_t manualChannels = 2;   // 手动模式下用户指定的声道数 (2, 4, 6, 8)
+    int32_t chanMode = 0;         // channels.mode 镜像（0=矩阵，1=离散）；离散时泵内适配走截断（第四十六轮 S2）
 
     // 运行态与 RT 统计
     HANDLE hPumpThread = nullptr;
@@ -640,6 +641,22 @@ void RemapInterleavedAudio(const float* src, int srcCh, float* dst, int dstCh, i
     }
 }
 
+// 离散逐声道专用适配（第四十六轮 S2）：顺序截断/补零，绝不
+// 折叠——多出的声道丢弃（user 裁定：离散模式不做声道映射）。
+// 与 RemapInterleavedAudio 的通用回退同形，但对所有宽对都
+// 绕开其折叠特例（8→6 折 BL/BR、6→2 折 C 等）。
+void TruncateRemapAudio(const float* src, int srcCh, float* dst, int dstCh, int frames) {
+    const int copyCh = srcCh < dstCh ? srcCh : dstCh;
+    for (int f = 0; f < frames; ++f) {
+        for (int c = 0; c < copyCh; ++c) {
+            dst[f * dstCh + c] = src[f * srcCh + c];
+        }
+        for (int c = copyCh; c < dstCh; ++c) {
+            dst[f * dstCh + c] = 0.0f;
+        }
+    }
+}
+
 // 环数据格式归一：实现已抽到 VaioSampleConvert.h（格式升级一期，
 // 2026-11-12），按（格式类别， 容器位深， 有效位深）分发，宿主门禁
 // 与泵共用同一实现。历史背景（2026-11-09 真机报告 §1.2）：泵曾把环
@@ -753,6 +770,10 @@ void ReplayMirroredParams() {
             if (c == 2 || c == 4 || c == 6 || c == 8) g_vaio.manualChannels = c;
             continue;
         }
+        if (strcmp(e.id, "channels.mode") == 0) {
+            // 记录供泵内适配分流；本体仍走下方通用转发（引擎需要）。
+            g_vaio.chanMode = (e.isFloat ? (int32_t)e.f : e.i) != 0 ? 1 : 0;
+        }
         const void* v = e.isFloat ? (const void*)&e.f : (const void*)&e.i;
         g_vaio.fnSetParam(g_vaio.pEngine, e.id, v, 4);
     }
@@ -778,6 +799,9 @@ void ApplyParamsString(const char* s) {
         if (strchr(vs, '.') || strchr(vs, 'e') || strchr(vs, 'E')) {
             const float f = (float)atof(vs);
             MirrorSet(id, true, &f);
+            if (strcmp(id, "channels.mode") == 0) {
+                g_vaio.chanMode = ((int)f != 0) ? 1 : 0;
+            }
             if (strcmp(id, "channels.countMode") == 0) {
                 g_vaio.countMode = ((int)f != 0) ? 1 : 0;
             } else if (strcmp(id, "channels.count") == 0) {
@@ -793,6 +817,9 @@ void ApplyParamsString(const char* s) {
         } else {
             const int32_t iv = (int32_t)atoi(vs);
             MirrorSet(id, false, &iv);
+            if (strcmp(id, "channels.mode") == 0) {
+                g_vaio.chanMode = (iv != 0) ? 1 : 0;
+            }
             if (strcmp(id, "channels.countMode") == 0) {
                 g_vaio.countMode = (iv != 0) ? 1 : 0;
             } else if (strcmp(id, "channels.count") == 0) {
@@ -1362,7 +1389,12 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                 g_vaio.peakOut = 0.0;
             } else {
                 // 1. 将驱动环输入重映射至引擎工作声道数（消除声道步进错位）
-                RemapInterleavedAudio(g_vaio.scratchIn, inCh, g_vaio.scratchProcIn, safeEngineCh, (int)framesToProcess);
+                // 离散模式走截断（不折叠，第四十六轮 S2）。
+                if (g_vaio.chanMode == 1) {
+                    TruncateRemapAudio(g_vaio.scratchIn, inCh, g_vaio.scratchProcIn, safeEngineCh, (int)framesToProcess);
+                } else {
+                    RemapInterleavedAudio(g_vaio.scratchIn, inCh, g_vaio.scratchProcIn, safeEngineCh, (int)framesToProcess);
+                }
 
                 // 第三十九轮取证：引擎输入逐声道峰值保持（start 起算）。
                 for (int f = 0; f < (int)framesToProcess; ++f) {
@@ -1397,7 +1429,12 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                 }
 
                 // 4. 将引擎输出重映射至 WASAPI 物理设备声道数
-                RemapInterleavedAudio(g_vaio.scratchProcOut, safeEngineCh, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
+                // 离散模式走截断（引擎宽大于设备宽时多余声道丢弃）。
+                if (g_vaio.chanMode == 1) {
+                    TruncateRemapAudio(g_vaio.scratchProcOut, safeEngineCh, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
+                } else {
+                    RemapInterleavedAudio(g_vaio.scratchProcOut, safeEngineCh, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
+                }
             }
         } else {
             RemapInterleavedAudio(g_vaio.scratchIn, inCh, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
