@@ -46,6 +46,10 @@ void main() {
 
     test('手动 + 管线：按选中输出设备能力钳制（r44 S1）', () {
       final m = AppModel(testing: true);
+      // testing 模型默认 audioMode=sysapo，须显式切回管线本地
+      // 模式，否则显示钳制走 sysapo 端点分支（实测教训）。
+      m.audioMode = 'auto';
+      m.config.audioMode = 'auto';
       m.config.modeCategory = 'pipeline';
       m.config.pipelineOutputDevice = _ep20;
       m.wasapiDevices = [
@@ -65,6 +69,8 @@ void main() {
 
     test('手动 + 管线：输出设备未知时不钳（r44 S1）', () {
       final m = AppModel(testing: true);
+      m.audioMode = 'auto';
+      m.config.audioMode = 'auto';
       m.config.modeCategory = 'pipeline';
       m.config.pipelineOutputDevice = _ep20;
       m.wasapiDevices = const [];
