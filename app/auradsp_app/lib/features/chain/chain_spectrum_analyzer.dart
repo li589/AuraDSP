@@ -746,7 +746,7 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
                         isSelected: _selectedChannel == ch,
                         onTap: () => setState(() {
                           _selectedChannel = ch;
-                          }),
+                        }),
                         p: p,
                       ),
                   ],
@@ -786,7 +786,7 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
                             if (val != null) {
                               setState(() {
                                 _selectedVbBus = val;
-                                      });
+                              });
                             }
                           },
                         ),
