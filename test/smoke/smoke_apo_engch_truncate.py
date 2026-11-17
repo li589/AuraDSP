@@ -41,7 +41,10 @@ check("APO live width published atomically",
 check("APO fold gather present for matrix mode",
       "FoldGather" in host)
 check("APO scatter zeroes extra channels",
-      "d[i * strm + c] = 0.0f;" in host)
+      "memset(d, 0, (size_t)n * strm * sizeof(float));" in host)
+check("APO 4ch position map present (r47 S2: quad vs C/LFE)",
+      "StreamPosForCh(eng, strm, c)" in host and
+      "if (strm == 8) return c + 4;" in host)
 check("APO old passthrough doctrine gone",
       "压过参数块里的 channels.count" not in host and
       "其余声道先原样落 dst" not in host)

@@ -712,6 +712,17 @@ void SyncWorkChFromMirror(FnEngSetParam setParam) {
         }
     }
     ApplyWorkChannels(setParam, ch);
+    // 声道模式影子同路同步（第四十七轮 S2）：重建后泵的折叠/
+    // 清零纪律必须与镜像一致，缺失按矩阵（引擎默认）。
+    int32_t mode = 0;
+    for (int i = 0; i < g_mirrorN; ++i) {
+        if (!g_mirror[i].isFloat &&
+            strcmp(g_mirror[i].id, "channels.mode") == 0) {
+            mode = g_mirror[i].i;
+            break;
+        }
+    }
+    InterlockedExchange(&g_b.ctx.chanMode, mode == 1 ? 1 : 0);
 }
 
 void MirrorReplay(FnEngSetParam setParam) {
@@ -1178,6 +1189,8 @@ void ApplyParamsString(const char* s) {
                 if (strcmp(id, "channels.count") == 0)
                     InterlockedExchange(&g_b.ctx.workCh,
                                         vmcore::NormalizeWorkCh(iv));
+                else if (strcmp(id, "channels.mode") == 0)
+                    InterlockedExchange(&g_b.ctx.chanMode, iv == 1 ? 1 : 0);
                 else if (strcmp(id, "spatial.binaural") == 0)
                     InterlockedExchange(&g_b.ctx.spatialBinaural, iv ? 1 : 0);
                 else if (strcmp(id, "spatial.enable") == 0)

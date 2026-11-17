@@ -101,6 +101,14 @@ struct PumpCtx {
     // 必须与各引擎 handle 的 channels.count 逐块一致——否则 auradsp_process
     // 按错误步长解释交织缓冲（8ch 喂 2/4/6 会分别变成 4×/2×/1.33× 速的断续）。
     volatile LONG workCh = 2;
+    // 声道模式影子（0=矩阵 1=离散）：由 vb_set_param
+    // ("channels.mode") 更新（第四十七轮 S2）。矩阵时 gather
+    // 把总线高声道折进工作声道（否则引擎只见截断信号、与
+    // 离散无异）；两模式共同纪律：引擎生效时工作声道之外
+    // 的总线槽清零，禁止原始透传（透传只属无引擎/掩码关/
+    // 用户旁路三条非处理路径）——r46 宾机实证设 5.1 时
+    // BL/BR 原样直通、输出恒 7.1，定罪于此。
+    volatile LONG chanMode = 0;
     // 双耳生效判定（与引擎同口径）：spatial.binaural && spatial.enable &&
     // workCh>=4。只用于“组内其余通道静音”；工作声道数只由 workCh 决定。
     volatile LONG spatialBinaural = 0;
@@ -215,6 +223,7 @@ struct PumpCtx {
     long curHaveEng = 0;
     long curBinaural = 0;      // 块快照：生效双耳（worker 与 RT 预填须同口径）
     long curWorkCh = 2;        // 块快照：引擎工作声道数（与 handle 的 count 同步）
+    long curChanMode = 0;      // 块快照：声道模式（第四十七轮 S2，与 procCh 同批发布）
     long curTestKind = 0;      // 块快照：testKind 翻转只影响下一块
     volatile LONG testReady = 0;      // bitmap：bit g = scratchInG[g] 已由 RT 预填测试信号
     // 共享量 per-group 中间槽：worker 写、RT fan-in 后归约。max/OR 与顺序
@@ -386,10 +395,12 @@ inline int BusChForSlot(int procCh, int slot) {
 // 多线程并发即数据竞争，且各组按 g 顺序消费同一信号流才逐位一致。
 inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
                            long mask, bool haveEng, int procCh, bool binaural,
-                           long testKind, bool testReady) {
+                           long testKind, bool testReady, long chanMode) {
     const long base = (long)g * 8;
     // v2：每组主对（base+0/1）恒进该组引擎；procCh>2 时组内前 procCh 路
-    // 一并进引擎（逐声道处理/矩阵上混后回写），其余通道 + 组外全部透传。
+    // 一并进引擎（逐声道处理/矩阵上混后回写）。组外通道不归本组管；
+    // 组内工作声道之外的槽：非处理路径透传，引擎生效路径由散射段
+    // 清零（第四十七轮 S2 通道纪律，见 PumpCtx::chanMode 注）。
     const float* inL = ab->r[base];
     const float* inR = ab->r[base + 1];
     float* outL = ab->w[base];
@@ -476,7 +487,34 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
         float* sOut = c->scratchOutG[g] ? c->scratchOutG[g] : c->scratchOut;
         if (procCh > 2) {
             // N>2：FL/FR/C/LFE/SL/SR/BL/BR 前 procCh 路按通道并行进引擎。
-            if (!testReady) {
+            if (!testReady && chanMode == 0 && procCh < 8) {
+                // 矩阵折叠 gather（第四十七轮 S2）：总线恒 8 宽
+                // 7.1 序，按引擎声道序折进工作声道（系数与 APO
+                // FoldGather 同表）——旧实现 gather 与模式无关
+                // 恒顺序截断，引擎根本收不到可折叠的全景信号，
+                // 矩阵与离散在 <8 声道时必然同形（r46 定罪）。
+                const float k = 0.70710678f;
+                for (long i = 0; i < n; ++i) {
+                    float b[8];
+                    for (int s = 0; s < 8; ++s) {
+                        const float* src = ab->r[base + s];
+                        b[s] = src ? src[i] : 0.0f;
+                    }
+                    if (procCh == 6) {
+                        sIn[i * 6 + 0] = b[0];
+                        sIn[i * 6 + 1] = b[1];
+                        sIn[i * 6 + 2] = b[2];
+                        sIn[i * 6 + 3] = b[3];
+                        sIn[i * 6 + 4] = b[4] + b[6] * k;
+                        sIn[i * 6 + 5] = b[5] + b[7] * k;
+                    } else {  // procCh == 4，引擎 Quad 序（BL/BR 为主）
+                        sIn[i * 4 + 0] = b[0] + b[2] * k;
+                        sIn[i * 4 + 1] = b[1] + b[2] * k;
+                        sIn[i * 4 + 2] = b[6] + b[4] * k;
+                        sIn[i * 4 + 3] = b[7] + b[5] * k;
+                    }
+                }
+            } else if (!testReady) {
                 for (long i = 0; i < n; ++i) {
                     for (int ch = 0; ch < procCh; ++ch) {
                         const float* src = ab->r[base + BusChForSlot(procCh, ch)];
@@ -491,6 +529,23 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
         } else if (testKind != 0) {
             // 测试注入：静音主通道 VB 输入，测试信号进同一条 DSP 链。
             if (!testReady) FillTestSignal(c, sIn, n);
+        } else if (chanMode == 0) {
+            // 矩阵 8→2 折叠 gather（第四十七轮 S2；系数与 APO
+            // FoldGather 8→2 同表，LFE 不入折）：旧实现立体声
+            // 档只取 FL/FR，高声道内容在进引擎前即丢失。
+            const float k = 0.70710678f;
+            const float* rC = ab->r[base + 2];
+            const float* rSL = ab->r[base + 4];
+            const float* rSR = ab->r[base + 5];
+            const float* rBL = ab->r[base + 6];
+            const float* rBR = ab->r[base + 7];
+            for (long i = 0; i < n; ++i) {
+                const float cc = rC ? rC[i] : 0.0f;
+                sIn[i * 2] = inL[i] + (cc + (rSL ? rSL[i] : 0.0f) +
+                                       (rBL ? rBL[i] : 0.0f)) * k;
+                sIn[i * 2 + 1] = inR[i] + (cc + (rSR ? rSR[i] : 0.0f) +
+                                           (rBR ? rBR[i] : 0.0f)) * k;
+            }
         } else {
             for (long i = 0; i < n; ++i) {
                 sIn[i * 2] = inL[i];
@@ -551,12 +606,29 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
             }
             c->maxDiffGrp[g] = grpDiff;  // Z17：maxDiff 归约中间槽
             // N>2：把引擎逐声道输出回写总线（viz 的 channel_levels 与实测
-            // 输出同源，表头不再"引擎上混有电平、总线却没写入"）；未进引擎
-            // 的通道保持上方原样透传。
+            // 输出同源，表头不再"引擎上混有电平、总线却没写入"）。
             for (int ch = 2; ch < procCh; ++ch) {
                 float* dst = ab->w[base + BusChForSlot(procCh, ch)];
                 if (!dst) continue;
                 for (long i = 0; i < n; ++i) dst[i] = sOut[i * procCh + ch];
+            }
+            // 通道纪律（第四十七轮 S2）：引擎生效路径上，工作
+            // 声道之外的总线槽一律清零——顶部预拷贝的原始透传
+            // 到此为止（设 5.1 时 BL/BR 直通、输出恒 7.1 即此
+            // 症，r46 宾机定罪）。透传只属无引擎/掩码关/用户
+            // 旁路三条非处理路径，本段均已在上方分流。
+            for (int s = 2; s < 8; ++s) {
+                bool written = false;
+                for (int ch = 2; ch < procCh; ++ch) {
+                    if (BusChForSlot(procCh, ch) == s) {
+                        written = true;
+                        break;
+                    }
+                }
+                if (!written) {
+                    float* dst = ab->w[base + s];
+                    if (dst) memset(dst, 0, (size_t)n * sizeof(float));
+                }
             }
             if (binaural) {
                 // 双耳输出只保留 FL/FR；其余置零，避免 VM 下混把原环绕混回来。
@@ -686,6 +758,7 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
         InterlockedCompareExchange(&c->spatialBinaural, 0, 0) != 0 &&
         InterlockedCompareExchange(&c->spatialEnable, 0, 0) != 0;
     const long testKind = InterlockedCompareExchange(&c->testKind, 0, 0);
+    const long chanMode = InterlockedCompareExchange(&c->chanMode, 0, 0);
     // 共享量归约槽清零（per-block；归约见尾部）。
     for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
         c->peakInGrp[g] = 0.0;
@@ -748,6 +821,7 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
         c->curHaveEng = haveEng ? 1 : 0;
         c->curBinaural = binaural ? 1 : 0;
         c->curWorkCh = procCh;
+        c->curChanMode = chanMode;
         c->curTestKind = testKind;
         InterlockedExchange(&c->testReady, testRdy);
         LONG expect = 0;
@@ -777,7 +851,7 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
             int g = 0;
             for (LONG b = bit; !(b & 1); b >>= 1) ++g;
             ProcessGroupVm(c, ab, g, n, mask, haveEng, procCh, binaural,
-                           testKind, (testRdy & bit) != 0);
+                           testKind, (testRdy & bit) != 0, chanMode);
             VmWorkComplete(c, newGen, bit);
         }
         // fan-in：音频线程禁阻塞 API，纯自旋（YieldProcessor 降耗降温）。
@@ -853,7 +927,7 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
         for (int g = 0; g < ng; ++g) {
             if (stuck & (1L << g)) continue;
             ProcessGroupVm(c, ab, g, n, mask, haveEng, procCh, binaural,
-                           testKind, false);
+                           testKind, false, chanMode);
         }
         c->curTodo = 0;  // 本块无并行发布：清账，防下一块误判 straggler
     }
@@ -919,6 +993,7 @@ static DWORD WINAPI VmWorkerMain(LPVOID param) {
         const bool haveEng = c->curHaveEng != 0;
         const int procCh = NormalizeWorkCh(c->curWorkCh);
         const bool binaural = c->curBinaural != 0;
+        const long chanMode = c->curChanMode;
         const long testKind = c->curTestKind;
         const LONG testRdy = InterlockedCompareExchange(&c->testReady, 0, 0);
         for (;;) {
@@ -936,7 +1011,7 @@ static DWORD WINAPI VmWorkerMain(LPVOID param) {
             int g = 0;
             for (LONG b = bit; !(b & 1); b >>= 1) ++g;
             ProcessGroupVm(c, ab, g, n, mask, haveEng, procCh, binaural,
-                           testKind, (testRdy & bit) != 0);
+                           testKind, (testRdy & bit) != 0, chanMode);
             VmWorkComplete(c, gen, bit);
         }
     }

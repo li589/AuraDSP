@@ -42,8 +42,10 @@ PLATFORM_ANY = {
         "smoke_dart_chcap_authority.py",
         "smoke_apo_engch_truncate.py",
         "smoke_dart_r46_display_list.py",
+        "smoke_r47_vb_channel_discipline.py",
     "smoke_apo_engch_truncate.py",
     "smoke_dart_r46_display_list.py",
+    "smoke_r47_vb_channel_discipline.py",
     "smoke_dart_chcap_authority.py",
     # S2（2026-11-01）：Linux 源表闭包门禁，纯文本/源表扫描，任意平台可跑。
     "smoke_linux_source_table.py",

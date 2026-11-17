@@ -556,12 +556,15 @@ static void FoldGather(const float* s, float* in, UINT32 srcCh, UINT32 engCh,
             in[i * 2 + 1] = f[1] + (f[2] + f[5] + f[7]) * k;
         }
     } else if (srcCh == 8 && engCh == 4) {
+        // 引擎 4ch 是 Quad（FL,FR,BL,BR）：后环绕以 BL/BR 为
+        // 主、SL/SR 折入（第四十七轮 S2 修正主次——原表以
+        // SL/SR 为主是 VAIO 端点布局口径，引擎 Quad 序不同）。
         for (UINT32 i = 0; i < n; i++) {
             const float* f = s + i * 8;
             in[i * 4 + 0] = f[0] + f[2] * k;
             in[i * 4 + 1] = f[1] + f[2] * k;
-            in[i * 4 + 2] = f[4] + f[6] * k;
-            in[i * 4 + 3] = f[5] + f[7] * k;
+            in[i * 4 + 2] = f[6] + f[4] * k;
+            in[i * 4 + 3] = f[7] + f[5] * k;
         }
     } else if (srcCh == 8 && engCh == 6) {
         for (UINT32 i = 0; i < n; i++) {
@@ -582,6 +585,20 @@ static void FoldGather(const float* s, float* in, UINT32 srcCh, UINT32 engCh,
             }
         }
     }
+}
+
+// 引擎声道 → 流内位置（第四十七轮 S2）：引擎 4ch 是 Quad
+// （FL,FR,BL,BR），而 7.1/5.1 流的第 2/3 位是 C/LFE——eng=4
+// 时引擎第 2/3 路必须对到流的后环绕位（8 宽：6/7；6 宽：
+// 4/5，SL/SR 充当后环绕）。其余宽度布局互为前缀，顺序即
+// 位置。r46 的顺序截断/回写在 eng=4 时会把引擎的 BL/BR
+// 写进流的 C/LFE 位、真 BL/BR 被清零——本映射修复之。
+static UINT32 StreamPosForCh(UINT32 eng, UINT32 strm, UINT32 c) {
+    if (eng == 4 && c >= 2) {
+        if (strm == 8) return c + 4;
+        if (strm == 6) return c + 2;
+    }
+    return c;
 }
 
 void ApoEngineHost::ProcessDirect(const float* src, float* dst, UINT32 frames) {
@@ -606,26 +623,28 @@ void ApoEngineHost::ProcessDirect(const float* src, float* dst, UINT32 frames) {
             for (UINT32 i = 0; i < n; i++) d[i] = outBuf_[i * 2];
         } else {
             // eng < strm（设置封顶或奇数流宽决议）：gather 到
-            // 引擎宽 → 处理 → scatter 回前 eng 声道，其余声道
-            // 清零（第四十六轮 S2：多出的声道丢弃/无声，旧
-            // stereo adapt 的原样直通已废）。离散 = 顺序截
-            // 断；矩阵 = 折叠 gather（内容先折入再喂引擎）。
+            // 引擎宽 → 处理 → scatter 回引擎声道对应的流位置，
+            // 其余位置清零（第四十六轮 S2：多出的声道丢弃/无
+            // 声，旧 stereo adapt 的原样直通已废；第四十七轮
+            // S2：位置经 StreamPosForCh 映射，eng=4 不再顺序
+            // 对位）。离散 = 位置截断；矩阵 = 折叠 gather（折
+            // 叠表按引擎声道序产出，scatter 同走位置映射）。
             if (trunc) {
                 for (UINT32 i = 0; i < n; i++) {
                     for (UINT32 c = 0; c < eng; c++) {
-                        inBuf_[i * eng + c] = s[i * strm + c];
+                        inBuf_[i * eng + c] =
+                            s[i * strm + StreamPosForCh(eng, strm, c)];
                     }
                 }
             } else {
                 FoldGather(s, inBuf_, strm, eng, n);
             }
             fnProcess_(engine_, inBuf_, outBuf_, (int)n);
+            memset(d, 0, (size_t)n * strm * sizeof(float));
             for (UINT32 i = 0; i < n; i++) {
                 for (UINT32 c = 0; c < eng; c++) {
-                    d[i * strm + c] = outBuf_[i * eng + c];
-                }
-                for (UINT32 c = eng; c < strm; c++) {
-                    d[i * strm + c] = 0.0f;
+                    d[i * strm + StreamPosForCh(eng, strm, c)] =
+                        outBuf_[i * eng + c];
                 }
             }
         }
