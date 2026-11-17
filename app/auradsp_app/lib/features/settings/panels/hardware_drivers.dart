@@ -3,22 +3,23 @@ part of '../../settings_page.dart';
 
 
 
-/* ---- 第一层：驱动信息（只读状态 + 安装/检查动作） ----
+/* ---- 驱动卡（只读状态 + 安装/检查动作） ----
  *
  * V-04 重设计（2026-11-09，真机报告 §5.3/R3–R6）：
  * - 本层只呈现 AuraDSP 自有驱动/引擎的客观状态（VAIO 三态、虚拟
- *   ASIO 注册与 DAW 连接、WASAPI 引擎版本、OS 版本），恒显示，
- *   不再按输入/输出组合裁剪（旧实现选 ASIO 输出时 VAIO 状态消失）；
+ *   ASIO 注册与 DAW 连接、WASAPI 引擎版本），恒显示，不再按
+ *   输入/输出组合裁剪（旧实现选 ASIO 输出时 VAIO 状态消失）；
  * - 一切【设置】控件不在本层：ASIO Client 的驱动/缓冲/声道对已
  *   下沉输出层（_AsioClientOutputSubpanel）；本层动作只有安装/
- *   卸载/注册/检查一类；
- * - 本层在管线与附加两种处理范式下都显示（_DynamicAudioPanel
- *   组合），可见性不再被范式选择裁剪。
+ *   卸载/注册/检查一类。
  *
- * 版式统一（2026-11-10 晚，用户裁定）：每个驱动一律走 _DriverBlock
- * ——左侧文字栏（驱动名 12/600 + 状态行 + 明细行，左对齐）、动作
- * 按钮同行右侧右对齐；整层最后一行恒为操作系统信息。Linux 设备
- * 面（sections.dart 的 _LinuxDevicePanel）同口径。 */
+ * 第四十四轮 S2（user 裁定）：本层自「设备」卡拆出、独立为
+ * 音频页最后一张「驱动」卡（卡标题即名称，层内标题行撤下）；
+ * 操作系统行移至设置-系统引擎卡（S3）。版式统一（2026-11-10
+ * 晚，用户裁定）：每个驱动一律走 _DriverBlock——左侧文字栏
+ * （驱动名 12/600 + 状态行 + 明细行，左对齐）、动作按钮同行
+ * 右侧右对齐。Linux 驱动块组（sections.dart 的
+ * _LinuxDriverBlocks）同口径。 */
 
 class _DriverLayer extends StatelessWidget {
   final AppModel model;
@@ -26,31 +27,16 @@ class _DriverLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l = l10nOf(context);
-    final p = paletteOf(context);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(Icons.developer_board_rounded, size: 15, color: p.accent),
-            const SizedBox(width: AuraSpace.xs),
-            Text(l.driverLayerTitle,
-                style: sectionOf(p, color: p.text)),
-          ],
-        ),
-        const SizedBox(height: AuraSpace.sm),
         _VaioDriverRow(model: model),
         const SizedBox(height: AuraSpace.sm),
         _VirtualAsioDriverCard(model: model),
         const SizedBox(height: AuraSpace.sm),
         _WasapiDriverRow(model: model),
         const SizedBox(height: AuraSpace.sm),
-        _InfoRow(l.osVersionLabel, PlatformProfile.osVersion),
-        const SizedBox(height: AuraSpace.xs),
-        // 第三十七轮（业主目检裁定）：引擎生效值移至操作系统行
-        // 之下，作为本层收尾块。
+        // 引擎生效值收尾块（第三十七轮移位裁定沿用）。
         _EngineEffectiveBlock(model: model),
       ],
     );
@@ -142,18 +128,17 @@ class _DriverDetail extends StatelessWidget {
 }
 
 /* ---- 引擎生效值回读（第三十五轮，业主立项） ----
- * 可展开/收回的状态块，位于驱动层末尾、操作系统行之下
- * （第三十七轮移位）。收起时只有标题行 + 右侧指示灯（绿 =
- * 当前主引擎有回读，暗 = 无；第三十七轮业主裁定：撤下
- * 「未运行」等状态文字与收起摘要行）；展开时三引擎（本机/
- * 桥/System APO）逐行列出声道模式、声道填充（仅开启
- * 时在场）、声道数、采样率（APO 另带已应用参数数），无回读
- * 的引擎只留标签。数据全部来自引擎回读——本机/桥经 isolate
- * get_param、APO 经 telemetry v6 的 auradsp_get_param 回读
- * 段——不是设置镜像：设置与回读不一致时以回读为准（第三
- * 十四轮 VAIO/APO 下混分歧的教训：光看设置值无法判定哪个
- * 引擎在跑什么）。展开期间 2 秒轮询，收起即停；首次构建时
- * 单发一次请求回读。 */
+ * 可展开/收回的状态块，位于驱动卡末尾。收起时只有标题行 +
+ * 右侧指示灯（绿 = 当前主引擎有回读，暗 = 无；第三十七轮
+ * 业主裁定：撤下「未运行」等状态文字与收起摘要行）；展开时
+ * 三引擎（本机/桥/System APO）各一组短键值行（模式/填充/
+ * 声道数/采样率，APO 另带已应用参数数；第四十四轮 S2 改
+ * 逐项表、撤一行拼接长串），无回读的引擎只留组名。数据全
+ * 部来自引擎回读——本机/桥经 isolate get_param、APO 经
+ * telemetry 的 auradsp_get_param 回读段——不是设置镜像：
+ * 设置与回读不一致时以回读为准（第三十四轮 VAIO/APO 下混
+ * 分歧的教训：光看设置值无法判定哪个引擎在跑什么）。展开
+ * 期间 2 秒轮询，收起即停；首次构建时单发一次请求回读。 */
 class _EngineEffectiveBlock extends StatefulWidget {
   final AppModel model;
   const _EngineEffectiveBlock({required this.model});
@@ -190,21 +175,48 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
     }
   }
 
-  String _fmt(AppLocalizations l,
+  /// 第四十四轮 S2（user 裁定）：展开内容改逐项键值表——每台
+  /// 引擎一组短标签行（模式/填充/声道/采样率[/已应用参数]），
+  /// 只列有回读的项；撤下原「· 」拼接的一行长串（AI 感文案）。
+  /// 无回读的引擎只留组名（有无回读另有标题行指示灯表意）。
+  List<Widget> _effRows(AppLocalizations l,
       {int? mode, int? fill, int? rate, int? ch, int? applied}) {
-    final parts = <String>[];
-    if (mode != null && mode >= 0) {
-      parts.add(mode == 1 ? l.effModeDiscrete : l.effModeMatrix);
+    final rows = <Widget>[];
+    void add(String k, String v) {
+      if (rows.isNotEmpty) rows.add(const SizedBox(height: 2));
+      rows.add(_DriverKv(k, v));
     }
-    // 第三十七轮（业主目检裁定）：铺满只在开启时以标签在场表意，
-    // 不再缀「开/关」字样；关闭时该项不出现。
-    if (fill == 1) parts.add(l.effFillLabel);
-    if (ch != null && ch > 0) parts.add('$ch ${l.effChannelsUnit}');
-    if (rate != null && rate > 0) parts.add('$rate Hz');
-    if (applied != null) parts.add('${l.effApplied} $applied');
-    // 无回读返回空串：状态文字（「未运行」等）已按业主裁定撤下，
-    // 有无回读由标题行右侧指示灯表意。
-    return parts.join(' · ');
+
+    if (mode != null && mode >= 0) {
+      add(l.channelMode, mode == 1 ? l.effModeDiscrete : l.effModeMatrix);
+    }
+    if (fill != null && fill >= 0) {
+      add(l.upmixFill, fill == 1 ? l.effOn : l.effOff);
+    }
+    if (ch != null && ch > 0) add(l.channelCount, '$ch ${l.effChannelsUnit}');
+    if (rate != null && rate > 0) add(l.sampleRate, '$rate Hz');
+    if (applied != null) add(l.effApplied, '$applied');
+    return rows;
+  }
+
+  Widget _effGroup(AppLocalizations l, String title, List<Widget> rows) {
+    final p = paletteOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title,
+            style: TextStyle(
+                fontSize: 11.5, fontWeight: FontWeight.w500, color: p.text)),
+        if (rows.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Padding(
+            padding: const EdgeInsets.only(left: AuraSpace.sm),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, children: rows),
+          ),
+        ],
+      ],
+    );
   }
 
   /// 当前模式主引擎是否有回读（标题行指示灯口径）：sysapo 看
@@ -260,30 +272,33 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _DriverKv(
+                _effGroup(
+                    l,
                     l.effEngineLocal,
                     m.localEffValues == null
-                        ? ''
-                        : _fmt(l,
+                        ? const []
+                        : _effRows(l,
                             mode: m.localEffValues!['mode'],
                             fill: m.localEffValues!['fill'],
                             rate: m.localEffValues!['rate'])),
-                const SizedBox(height: 2),
-                _DriverKv(
+                const SizedBox(height: AuraSpace.xs),
+                _effGroup(
+                    l,
                     l.effEngineBridge,
                     m.bridgeEffValues == null
-                        ? ''
-                        : _fmt(l,
+                        ? const []
+                        : _effRows(l,
                             mode: m.bridgeEffValues!['mode'],
                             fill: m.bridgeEffValues!['fill'],
                             rate: m.bridgeEffValues!['rate'],
                             ch: m.bridgeEffValues!['ch'])),
-                const SizedBox(height: 2),
-                _DriverKv(
+                const SizedBox(height: AuraSpace.xs),
+                _effGroup(
+                    l,
                     l.effEngineApo,
                     !m.apoEngineActive
-                        ? ''
-                        : _fmt(l,
+                        ? const []
+                        : _effRows(l,
                             mode: m.apoEffMode,
                             fill: m.apoEffFill,
                             rate: m.apoEngineRate,
@@ -679,9 +694,8 @@ class _WasapiDriverRow extends StatelessWidget {
     return _DriverBlock(
       title: l.wasapiDriverCardTitle,
       lines: [
-        _DriverDetail(info != null
-            ? 'ABI v${info.abi} · ${info.version} · ${info.deviceRate}Hz'
-            : l.setWasapiDesc),
+        // 第四十四轮 S2（user 裁定）：小字只保留 ABI 版本。
+        _DriverDetail(info != null ? 'ABI v${info.abi}' : l.setWasapiDesc),
       ],
       actions: [
         AuraChip(

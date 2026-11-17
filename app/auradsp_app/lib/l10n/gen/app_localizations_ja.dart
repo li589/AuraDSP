@@ -101,7 +101,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get channelCountHint =>
-      '動作チャンネルトポロジ。自動モードは音源とデバイスに従い、手動で2.0 / 4.0 / 5.1 / 7.1に固定も可能です。';
+      '入力ソースと出力デバイスに自動で追従します。2.0 / 4.0 / 5.1 / 7.1 に手動で固定もできます。';
 
   @override
   String get channelCountAuto => '自動';
@@ -461,8 +461,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get ioVaioReady => '準備完了（システム/アプリのストリーム待ち）';
 
   @override
-  String get ioVaioGuide =>
-      'システムのサウンド設定または再生ソフトで既定の出力を「AuraVAIO」に指定すると、音声が AuraDSP にルーティングされます。';
+  String get ioVaioGuideShort => 'システムのサウンド設定または再生ソフトで、既定の出力を AuraVAIO にしてください。';
 
   @override
   String get ioAsioChannelLabel => '入力チャンネル';
@@ -1103,7 +1102,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get channelPhaseA =>
-      '入力またはデバイスがマルチチャンネル（4.0 / 5.1 / 7.1）時のDSP方針：ディスクリート＝全チャンネルが独立してDSPを通過、エフェクターごとのマスク設定やアップミックスに対応；マトリックス＝ステレオに畳み込んでDSP処理後に再展開（LFE直通）。バイノーラル仮想サラウンド有効時はそちらが最優先されます。';
+      'マルチチャンネル処理方針：マトリックス＝ステレオに折り畳んで処理し、アップミックスで復元（LFE はスルー）。ディスクリート＝全チャンネルを独立処理。バイノーラル仮想サラウンド有効時はそちらが優先されます。';
 
   @override
   String get upmixFill => 'チャンネル充填';
@@ -1348,6 +1347,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get audioDevice => 'デバイス';
+
+  @override
+  String get ioConfigTitle => 'I/O設定';
+
+  @override
+  String get driverCardTitle => 'ドライバ';
+
+  @override
+  String get channelCardTitle => 'チャンネル';
 
   @override
   String get sampleRate => 'サンプルレート';

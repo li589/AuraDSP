@@ -102,7 +102,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get channelCountHint =>
-      'Working channel topology. Auto negotiates with source and device; or manually lock to 2.0 / 4.0 / 5.1 / 7.1.';
+      'Auto follows the input source and output device; or lock to 2.0 / 4.0 / 5.1 / 7.1 manually.';
 
   @override
   String get channelCountAuto => 'Auto';
@@ -489,8 +489,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ioVaioReady => 'Ready (waiting for system/app stream)';
 
   @override
-  String get ioVaioGuide =>
-      'In system sound settings or your media player, select \"AuraVAIO\" as the default output device to route audio through AuraDSP.';
+  String get ioVaioGuideShort =>
+      'In system sound settings or your player, set the default output to AuraVAIO.';
 
   @override
   String get ioAsioChannelLabel => 'Input channels';
@@ -1177,7 +1177,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get channelPhaseA =>
-      'DSP strategy when input or output device is multi-channel (4.0 / 5.1 / 7.1): Discrete = all channels independently pass through DSP with per-effect masks and upmixing plugin support; Matrix = folded to stereo for DSP and upmixed back to surround (LFE passthrough). Binaural Virtual Surround takes highest priority when enabled.';
+      'Multichannel strategy: Matrix folds to stereo for processing, then upmixes back (LFE passes through); Discrete processes every channel independently. Binaural virtual surround takes priority when on.';
 
   @override
   String get upmixFill => 'Channel fill';
@@ -1427,6 +1427,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get audioDevice => 'Device';
+
+  @override
+  String get ioConfigTitle => 'I/O Configuration';
+
+  @override
+  String get driverCardTitle => 'Drivers';
+
+  @override
+  String get channelCardTitle => 'Channels';
 
   @override
   String get sampleRate => 'Sample Rate';

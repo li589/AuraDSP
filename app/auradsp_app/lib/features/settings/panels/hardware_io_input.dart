@@ -29,7 +29,14 @@ class _InputLayer extends StatelessWidget {
                 Text(l.inputLayerTitle,
                     style: sectionOf(p, color: p.text)),
                 const SizedBox(width: AuraSpace.xs),
-                InfoBadge(message: l.tooltipInputWasapi),
+                // 第四十四轮 S2（user 裁定）：VAIO 输入指引（简化
+                // 版）自子面板末行移入本气泡；ASIO 指引同型移入。
+                InfoBadge(
+                    message: model.pipelineInput == AudioModes.inputVaio
+                        ? l.ioVaioGuideShort
+                        : model.pipelineInput == AudioModes.inputAsioDriver
+                            ? l.ioAsioGuide
+                            : l.tooltipInputWasapi),
               ],
             ),
             AuraSwitch(
@@ -256,7 +263,6 @@ class _VaioInputSubpanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = paletteOf(context);
     final active = model.vaioActive;
     final l = l10nOf(context);
 
@@ -265,11 +271,7 @@ class _VaioInputSubpanel extends StatelessWidget {
       children: [
         _InfoRow(l.ioInputLabel, l.ioVaioEndpointDesc),
         _InfoRow(l.ioChannelStatus, active ? l.ioVaioActive : l.ioVaioReady),
-        const SizedBox(height: 2),
-        Text(
-          l.ioVaioGuide,
-          style: monoOf(p, size: 10, color: p.textDim),
-        ),
+        // 指引文案已移至输入层标题旁气泡（第四十四轮 S2）。
       ],
     );
   }
@@ -281,7 +283,6 @@ class _VirtualAsioInputSubpanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = paletteOf(context);
     final active = model.asioActive;
     final l = l10nOf(context);
 
@@ -290,11 +291,7 @@ class _VirtualAsioInputSubpanel extends StatelessWidget {
       children: [
         _InfoRow(l.ioInputLabel, 'AuraDSP Virtual ASIO Client Stream'),
         _InfoRow(l.ioAsioChannelLabel, active ? l.ioAsioActive : l.ioAsioWait),
-        const SizedBox(height: 2),
-        Text(
-          l.ioAsioGuide,
-          style: monoOf(p, size: 10, color: p.textDim),
-        ),
+        // 指引文案已移至输入层标题旁气泡（第四十四轮 S2）。
       ],
     );
   }

@@ -100,7 +100,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get channelCountHint =>
-      '工作声道拓扑。自动模式跟随输入源与输出端点协商；亦可手动锁定 2.0 / 4.0 / 5.1 / 7.1。';
+      '自动跟随输入源与输出设备；也可手动锁定 2.0 / 4.0 / 5.1 / 7.1。';
 
   @override
   String get channelCountAuto => '自动';
@@ -450,8 +450,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ioVaioReady => '就绪 (等待系统/应用推流)';
 
   @override
-  String get ioVaioGuide =>
-      '请在系统声音设置或播放器中将默认输出设备选择为 \"AuraVAIO\"，声音将通过此虚拟输入端点送入 AuraDSP 声学处理管线。';
+  String get ioVaioGuideShort => '在系统声音设置或播放器中，将默认输出选为 AuraVAIO。';
 
   @override
   String get ioAsioChannelLabel => '输入通道';
@@ -1085,7 +1084,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get channelPhaseA =>
-      '当输入音频或输出设备为多声道（4.0 / 5.1 / 7.1）时的 DSP 策略：离散多声道＝全声道独立流经 DSP，各效果器可独立指定作用声道，支持多声道插件与上混；矩阵下混＝折叠为立体声流经 DSP 效果器后再上混回填环绕声道（超低音直接直通）。「双耳虚拟环绕」开启时优先级最高，将自动以 HRIR 渲染为耳机立体声。';
+      '多声道处理策略：矩阵下混＝折叠为立体声处理后再上混回填（LFE 直通）；离散逐声道＝全声道独立处理。双耳虚拟环绕开启时优先。';
 
   @override
   String get upmixFill => '声道填充';
@@ -1324,6 +1323,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audioDevice => '设备';
+
+  @override
+  String get ioConfigTitle => 'I/O配置';
+
+  @override
+  String get driverCardTitle => '驱动';
+
+  @override
+  String get channelCardTitle => '声道';
 
   @override
   String get sampleRate => '采样率';

@@ -916,11 +916,11 @@ abstract class AppLocalizations {
   /// **'就绪 (等待系统/应用推流)'**
   String get ioVaioReady;
 
-  /// No description provided for @ioVaioGuide.
+  /// No description provided for @ioVaioGuideShort.
   ///
   /// In zh, this message translates to:
-  /// **'请在系统声音设置或播放器中将默认输出设备选择为 \"AuraVAIO\"，声音将通过此虚拟输入端点送入 AuraDSP 声学处理管线。'**
-  String get ioVaioGuide;
+  /// **'在系统声音设置或播放器中，将默认输出选为 AuraVAIO。'**
+  String get ioVaioGuideShort;
 
   /// No description provided for @ioAsioChannelLabel.
   ///
@@ -2547,6 +2547,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'设备'**
   String get audioDevice;
+
+  /// No description provided for @ioConfigTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'I/O配置'**
+  String get ioConfigTitle;
+
+  /// No description provided for @driverCardTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'驱动'**
+  String get driverCardTitle;
+
+  /// No description provided for @channelCardTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'声道'**
+  String get channelCardTitle;
 
   /// No description provided for @sampleRate.
   ///

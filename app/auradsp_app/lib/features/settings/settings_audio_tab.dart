@@ -2,7 +2,9 @@ part of '../settings_page.dart';
 
 /*
  * settings_audio_tab.dart — 音频设置页
- * 包含：处理范式与模式、设备与精细化调节、采样率、声道配置（声道数量与多声道模式）
+ * 包含：处理范式与模式、I/O 配置、采样率、声道（数量与模式合并）、
+ * 驱动（第四十四轮 S2 重构：原「设备」卡拆 I/O 与驱动两卡、
+ * 声道数量与声道模式合一卡、驱动置页末）
  */
 
 List<Widget> buildAudioTab(BuildContext context, AppModel model) {
@@ -106,10 +108,11 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
     // 轮，业主裁定全覆盖）：见 settings_page.dart 的 detachCover
     // 盖层——本页所有区块（含下方设备区）统一被盖，不再在此出卡。
 
-    // 2. 设备与精细化调节（根据当前范式与配置动态展示）
+    // 2. I/O 配置（第四十四轮 S2：原「设备」卡拆分——本卡只剩
+    // 输入/输出配置本体，驱动信息移至页末驱动卡）
     SectionCard(
-      title: l.audioDevice,
-      child: _DynamicAudioPanel(model: model),
+      title: l.ioConfigTitle,
+      child: _IoConfigPanel(model: model),
     ),
 
     // 3. 采样率（移入音频页；VB/ASIO 等桥模式跟随驱动，此处作为软件请求值与内部回退基准）
@@ -147,65 +150,59 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
       ),
     ),
 
-    // 4. 声道数量（物理设备拓扑：0=自动协商；2/4/6/8 手动指定）
-    SectionCard(
-      title: l.channelCount,
-      // 全面复审 S2（UI-4）：sysapo 下声道由端点流格式决定。
-      hint: model.audioMode == 'sysapo'
-          ? '${l.channelCountHint}\n${l.channelsFollowApo}'
-          : l.channelCountHint,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AuraSegmented<int>(
-            segments: [
-              AuraSegment(0, l.channelCountAuto),
-              const AuraSegment(2, '2.0'),
-              const AuraSegment(4, '4.0'),
-              const AuraSegment(6, '5.1'),
-              const AuraSegment(8, '7.1'),
-            ],
-            selected: model.channelsCountMode == 0 ? 0 : model.channelsCount,
-            onChanged: (v) {
-              if (v == 0) {
-                model.setChannelsCountMode(0);
-              } else {
-                model.setChannelsCountMode(1);
-                model.setChannelsCount(v);
-              }
-            },
-          ),
-          if (model.channelsCountMode == 0) ...[
-            const SizedBox(height: AuraSpace.xs),
-            Padding(
-              padding: const EdgeInsets.only(top: 2, left: 2),
-              child: Text(
-                l.channelCountAutoDesc(model.effectiveChannelCount),
-                style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
-              ),
-            ),
-          ],
-        ],
-      ),
-    ),
-
-    // 5. 声道模式（多声道 DSP 策略：矩阵下混 vs 离散多声道）
-    // 第四十二轮 S2（user 裁定）：声道设置只剩全局一份——本卡
-    // 在所有模式下都编辑全局值；第四十一轮的端点覆写 UI（覆
-    // 写编辑/跟随全局/未附加警告/立体声置灰）整体移除，引擎
-    // 侧覆写表休眠。引擎实际生效值由 telemetry 回读呈现。
+    // 4. 声道（第四十四轮 S2 合并：数量 + 模式 + 填充同卡；
+    // 第四十二轮 S2 的全局唯一口径沿用——所有模式都编辑全局
+    // 值，引擎侧覆写表休眠；实际生效值看页末驱动卡的引擎
+    // 生效值，本卡不再另行「引擎实际生效」行）
     Builder(builder: (context) {
       final shownMode = model.channelsMode;
       final shownFill = model.channelsUpmixFill;
       return SectionCard(
-        title: l.channelMode,
-        // 全面复审 S2（UI-4）：同声道数卡，sysapo 下补归属说明。
+        title: l.channelCardTitle,
+        // 全面复审 S2（UI-4）：sysapo 下补归属说明（声道由端点
+        // 流格式决定 / 全局设置对所有已附加端点一致）。
         hint: model.audioMode == 'sysapo'
-            ? '${l.channelPhaseA}\n${l.apoChannelsGlobal}'
-            : l.channelPhaseA,
+            ? '${l.channelCountHint}\n${l.channelsFollowApo}\n'
+                '${l.channelPhaseA}\n${l.apoChannelsGlobal}'
+            : '${l.channelCountHint}\n${l.channelPhaseA}',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(l.channelCount,
+                style: labelOf(p, size: 12, color: p.textDim)),
+            const SizedBox(height: AuraSpace.xs),
+            AuraSegmented<int>(
+              segments: [
+                AuraSegment(0, l.channelCountAuto),
+                const AuraSegment(2, '2.0'),
+                const AuraSegment(4, '4.0'),
+                const AuraSegment(6, '5.1'),
+                const AuraSegment(8, '7.1'),
+              ],
+              selected: model.channelsCountMode == 0 ? 0 : model.channelsCount,
+              onChanged: (v) {
+                if (v == 0) {
+                  model.setChannelsCountMode(0);
+                } else {
+                  model.setChannelsCountMode(1);
+                  model.setChannelsCount(v);
+                }
+              },
+            ),
+            if (model.channelsCountMode == 0) ...[
+              const SizedBox(height: AuraSpace.xs),
+              Padding(
+                padding: const EdgeInsets.only(top: 2, left: 2),
+                child: Text(
+                  l.channelCountAutoDesc(model.effectiveChannelCount),
+                  style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
+                ),
+              ),
+            ],
+            const SizedBox(height: AuraSpace.md),
+            Text(l.channelMode,
+                style: labelOf(p, size: 12, color: p.textDim)),
+            const SizedBox(height: AuraSpace.xs),
             AuraSegmented<int>(
               segments: [
                 AuraSegment(0, l.channelsMatrix),
@@ -235,23 +232,19 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
                 style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
               ),
             ],
-            if (model.audioMode == 'sysapo' && model.apoEffMode >= 0) ...[
-              const SizedBox(height: AuraSpace.xs),
-              Text(
-                l.apoChannelsActual(
-                  model.apoEffMode == 1
-                      ? l.channelsDiscrete
-                      : l.channelsMatrix,
-                  model.apoEffFill == 1 ? l.apoFillFill : l.apoFillGated,
-                ),
-                style:
-                    captionOf(p, color: p.textDim).copyWith(fontSize: 11),
-              ),
-            ],
           ],
         ),
       );
     }),
+
+    // 5. 驱动（第四十四轮 S2：自原「设备」卡拆出、置页末；
+    // Linux 为驱动块组，OS 行已移至设置-系统引擎卡）
+    SectionCard(
+      title: l.driverCardTitle,
+      child: PlatformProfile.isLinux
+          ? _LinuxDriverBlocks(model: model)
+          : _DriverLayer(model: model),
+    ),
   ];
 }
 

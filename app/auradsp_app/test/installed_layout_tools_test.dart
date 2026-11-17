@@ -164,8 +164,7 @@ void main() {
     final profile =
         _read('app/auradsp_app/lib/platform/platform_profile.dart');
 
-    test('驱动层恒显示自有驱动状态 + OS 版本，且不含设置控件', () {
-      expect(hw, contains('PlatformProfile.osVersion'));
+    test('驱动层恒显示自有驱动状态，且不含设置控件（r44：OS 行移系统页）', () {
       expect(profile, contains('get osVersion'));
       final start = hw.indexOf('class _DriverLayer');
       final end = hw.indexOf('class _AsioClientDriverRow');
@@ -180,18 +179,30 @@ void main() {
       // 旧的按输入/输出组合裁剪行已消除（R3/R5）
       expect(layer, isNot(contains('pipelineInput ==')));
       expect(layer, isNot(contains('pipelineOutput ==')));
+      // 第四十四轮 S2/S3：层内标题行与 OS 行撤下（卡标题代之，
+      // OS 显示移至设置-系统引擎卡）
+      expect(layer, isNot(contains('driverLayerTitle')));
+      expect(layer, isNot(contains('osVersionLabel')));
     });
 
     test('ASIO Client 设置行落在输出层（R5）', () {
       expect(ioOut, contains('_AsioClientDriverRow(model: model)'));
     });
 
-    test('驱动层在范式分支之前组合渲染（R6）', () {
-      final di = sections.indexOf('_DriverLayer(model: model)');
-      final bi = sections.indexOf('categoryAttachment');
-      expect(di, greaterThanOrEqualTo(0));
-      expect(bi, greaterThan(di));
+    test('r44 分卡：I/O 面板不含驱动层，驱动卡在音频页最后', () {
+      final tab = _read(
+          'app/auradsp_app/lib/features/settings/settings_audio_tab.dart');
+      // I/O 面板只承输入/输出（范式分支在面板内）
+      expect(sections, contains('class _IoConfigPanel'));
+      expect(sections, isNot(contains('_DriverLayer(model: model)')));
       expect(sections, isNot(contains('_PipelineThreeLayerCard')));
+      // 音频页顺序：I/O 配置卡在前、驱动卡收尾
+      final io = tab.indexOf('_IoConfigPanel(model: model)');
+      final drv = tab.indexOf('_DriverLayer(model: model)');
+      expect(io, greaterThanOrEqualTo(0));
+      expect(drv, greaterThan(io));
+      expect(tab, contains('l.ioConfigTitle'));
+      expect(tab, contains('l.driverCardTitle'));
     });
 
     test('注册按钮同行右对齐（R1）', () {
@@ -226,15 +237,17 @@ void main() {
           greaterThan(card.indexOf('l.asioDriverActionUnregister')));
       // 统一组件本体在位
       expect(hw, contains('class _DriverBlock extends StatelessWidget'));
-      // Linux 设备面同口径：层标题 + 引擎块 + OS 行收尾
-      final lp = sections.indexOf('class _LinuxDevicePanel');
-      final le = sections.indexOf('Future<void> _editAlsaDevice', lp);
-      final linux = sections.substring(lp, le);
-      expect(linux, contains('l.driverLayerTitle'));
+      // Linux 同口径（第四十四轮 S2 拆分）：驱动块组独立为
+      // _LinuxDriverBlocks（驱动卡）、I/O 行归 _LinuxIoPanel；
+      // OS 行已移出（S3 入系统页引擎卡）
+      final lp = sections.indexOf('class _LinuxDriverBlocks');
+      expect(lp, greaterThanOrEqualTo(0));
+      final le = sections.indexOf('\nclass ', lp + 1);
+      final linux = sections.substring(lp, le < 0 ? sections.length : le);
       expect(linux, contains('_DriverBlock('));
-      expect(linux, contains('_InfoRow(l.osVersionLabel'));
-      expect(linux.lastIndexOf('_InfoRow(l.osVersionLabel'),
-          greaterThan(linux.lastIndexOf('_DriverBlock(')));
+      expect(linux, isNot(contains('osVersionLabel')));
+      expect(sections, contains('class _LinuxIoPanel'));
+      expect(sections, isNot(contains('_InfoRow(l.osVersionLabel')));
     });
   });
 

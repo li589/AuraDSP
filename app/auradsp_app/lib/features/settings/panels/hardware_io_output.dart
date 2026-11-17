@@ -440,7 +440,7 @@ class _VaioOutputSubpanel extends StatelessWidget {
               _InfoRow(l.sampleRate,
                   '${(info['sr'] as num).toInt()} Hz / ${(info['channels'] as num?)?.toInt() ?? 2} ch'),
             if (info['frames'] is num)
-              _InfoRow(l.ioProcessedFrames, '${(info['frames'] as num).toInt()} frames'),
+              _ProcessedFramesRow(model: model),
             // 全面复审 S2（VAIO-8）：格式重同步计数与参数应用失败数
             // 上屏（此前只进日志，切歌噪声排障无从看起）。
             if ((info['fmtResyncs'] as num?)?.toInt() != null &&
@@ -465,6 +465,42 @@ class _VaioOutputSubpanel extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// 已处理帧行（第四十四轮 S2，user 裁定）：独立 1 秒节流
+/// 刷新——此前随 VAIO 面板在任意模型通知时重建（高频跳动），
+/// 且原始整数无极值处理。数值格式走 formatFrameCount。
+class _ProcessedFramesRow extends StatefulWidget {
+  final AppModel model;
+  const _ProcessedFramesRow({required this.model});
+
+  @override
+  State<_ProcessedFramesRow> createState() => _ProcessedFramesRowState();
+}
+
+class _ProcessedFramesRowState extends State<_ProcessedFramesRow> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final frames = (widget.model.vaioInfo['frames'] as num?)?.toInt() ?? 0;
+    return _InfoRow(l.ioProcessedFrames, '${formatFrameCount(frames)} frames');
   }
 }
 

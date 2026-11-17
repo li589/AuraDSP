@@ -51,6 +51,33 @@ class _EngineInfo extends StatelessWidget {
   }
 }
 
+/// 已处理帧计数格式化（第四十四轮 S2）：千分位分组；极大值
+/// 按 M/B 进位，避免长串数字撑版（48kHz 连续运行一天约
+/// 4.1e9 帧）。刷新节流由 _ProcessedFramesRow 的 1 秒定时器
+/// 承担，本函数只管格式（可单测）。
+String formatFrameCount(int frames) {
+  if (frames < 0) return '0';
+  if (frames < 1000000) {
+    final s = frames.toString();
+    final b = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
+      b.write(s[i]);
+    }
+    return b.toString();
+  }
+  String scaled(double v, String unit) {
+    var t = v.toStringAsFixed(2);
+    if (t.contains('.')) {
+      t = t.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+    }
+    return '$t$unit';
+  }
+
+  if (frames < 1000000000) return scaled(frames / 1e6, 'M');
+  return scaled(frames / 1e9, 'B');
+}
+
 class _InfoRow extends StatelessWidget {
   final String k, v;
   const _InfoRow(this.k, this.v);

@@ -83,32 +83,29 @@ class _CatBar extends StatelessWidget {
 
 
 
-/* ---- 04 动态设备与精细化调节面板（ADR-009） ---- */
+/* ---- 04 I/O 配置面板（ADR-009；第四十四轮 S2 拆分） ----
+ * 第四十四轮 S2（user 裁定）：原「设备」卡拆为 I/O配置 与驱动
+ * 两卡——本面板只承输入/输出配置本体（管线 = 输入层 + 输出层；
+ * 附加 = APO 端点面板 / VB 面板；Linux = 后端与 sink/source
+ * 行），驱动信息与控制整体移至音频页末尾的驱动卡
+ * （_DriverLayer / _LinuxDriverBlocks）。 */
 
-class _DynamicAudioPanel extends StatelessWidget {
+class _IoConfigPanel extends StatelessWidget {
   final AppModel model;
-  const _DynamicAudioPanel({required this.model});
+  const _IoConfigPanel({required this.model});
 
   @override
   Widget build(BuildContext context) {
-    // Linux（ADR-012 D-5/D-6）：设备面只有 PulseAudio sink/source，不存在
-    // Windows 的 APO / VAIO / ASIO 三层管线；必须在此提前返回，否则
-    // categoryForMode('system') 会落到管线分支、把 Windows 专有设备
-    // （WASAPI 端点/VAIO/ASIO）误显示到 Linux 设置页。
+    // Linux（ADR-012 D-5/D-6）：设备面只有 PulseAudio sink/source，
+    // 提前返回 Linux 形态（理由同原 _DynamicAudioPanel 注释）。
     if (PlatformProfile.isLinux) {
-      return _LinuxDevicePanel(model: model);
+      return _LinuxIoPanel(model: model);
     }
 
-    // V-04/R6：驱动信息层恒显示，可见性不再被处理范式裁剪；
-    // 范式只决定其下是附加面板还是管线输入/输出层。
     final p = paletteOf(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _DriverLayer(model: model),
-        const SizedBox(height: AuraSpace.md),
-        Container(height: 1, color: p.hairline),
-        const SizedBox(height: AuraSpace.md),
         if (model.modeCategory == AudioModes.categoryAttachment)
           if (model.attachmentMode == AudioModes.attachVoicemeeterApi)
             HbBuilder(
@@ -128,17 +125,19 @@ class _DynamicAudioPanel extends StatelessWidget {
   }
 }
 
-/* ---- Linux 设备卡（ADR-012 D-5）：PulseAudio 输出/采集状态 ---- */
+/* ---- Linux I/O 面（ADR-012 D-5；第四十四轮 S2 拆分） ----
+ * 后端选择 + 输出 sink / ALSA 设备 + 采集源行。驱动块（引擎/
+ * 虚拟设备/内核驱动）移至 _LinuxDriverBlocks（驱动卡），OS 行
+ * 移至设置-系统引擎卡（第四十四轮 S3）。 */
 
-class _LinuxDevicePanel extends StatelessWidget {
+class _LinuxIoPanel extends StatelessWidget {
   final AppModel model;
-  const _LinuxDevicePanel({required this.model});
+  const _LinuxIoPanel({required this.model});
 
   @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     final p = paletteOf(context);
-    final info = model.info;
     final sink = model.linuxDefaultSink;
     final captureOn = model.linuxCaptureActive;
     final capSource = model.linuxCaptureSource;
@@ -149,33 +148,6 @@ class _LinuxDevicePanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 版式与 Windows 驱动层统一（2026-11-10 用户裁定）：层标题 +
-        // _DriverBlock 块组（文字左、按钮同行右）+ 操作系统行收尾。
-        Row(
-          children: [
-            Icon(Icons.developer_board_rounded, size: 15, color: p.accent),
-            const SizedBox(width: AuraSpace.xs),
-            Text(l.driverLayerTitle, style: sectionOf(p, color: p.text)),
-          ],
-        ),
-        const SizedBox(height: AuraSpace.sm),
-        _DriverBlock(
-          title: alsa ? 'ALSA (Linux)' : 'PulseAudio (Linux)',
-          lines: [
-            if (info != null) _DriverDetail('ABI v${info.abi} · ${info.version}'),
-            if (info != null)
-              _DriverDetail('${info.deviceRate} Hz · ${info.deviceCh} ch · '
-                  '${info.bufferFrames} frames'),
-          ],
-          actions: [
-            AuraChip(
-              l.setRefreshStatus,
-              icon: Icons.refresh_rounded,
-              onTap: () => model.refreshLinuxStatus(),
-            ),
-          ],
-        ),
-        const SizedBox(height: AuraSpace.sm),
         Row(children: [
           SizedBox(
               width: 104,
@@ -237,34 +209,8 @@ class _LinuxDevicePanel extends StatelessWidget {
                 ? (capSource.isEmpty ? '—' : capSource)
                 : l.linuxCaptureNone),
         const SizedBox(height: AuraSpace.xs),
-        _DriverBlock(
-          title: l.linuxVirtualDevice,
-          lines: [
-            _DriverStatus(
-              model.linuxVirtualSink
-                  ? l.linuxVirtualPresent
-                  : l.linuxVirtualAbsent,
-              model.linuxVirtualSink ? p.success : p.textDim,
-            ),
-          ],
-        ),
-        const SizedBox(height: AuraSpace.sm),
-        _DriverBlock(
-          title: l.linuxModeDriver,
-          lines: [
-            _DriverStatus(
-              model.linuxDriverLoaded
-                  ? l.linuxDriverPresent
-                  : l.linuxDriverAbsent,
-              model.linuxDriverLoaded ? p.success : p.textDim,
-            ),
-          ],
-        ),
-        const SizedBox(height: AuraSpace.xs),
         Text(alsa ? l.linuxAlsaExpertHint : l.linuxDeviceHint,
             style: captionOf(p, color: p.textDim).copyWith(fontSize: 11)),
-        const SizedBox(height: AuraSpace.xs),
-        _InfoRow(l.osVersionLabel, PlatformProfile.osVersion),
       ],
     );
   }
@@ -356,6 +302,68 @@ class _LinuxDevicePanel extends StatelessWidget {
     WidgetsBinding.instance
         .addPostFrameCallback((_) => controller.dispose());
     if (result != null) onSave(result);
+  }
+}
+
+/* ---- Linux 驱动块组（驱动卡内容；版式与 Windows 驱动层统一，
+ * 2026-11-10 用户裁定：_DriverBlock 块组，文字左、按钮同行右） ---- */
+
+class _LinuxDriverBlocks extends StatelessWidget {
+  final AppModel model;
+  const _LinuxDriverBlocks({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+    final info = model.info;
+    final alsa = model.config.linuxAudioBackend == 'alsa';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _DriverBlock(
+          title: alsa ? 'ALSA (Linux)' : 'PulseAudio (Linux)',
+          lines: [
+            if (info != null) _DriverDetail('ABI v${info.abi} · ${info.version}'),
+            if (info != null)
+              _DriverDetail('${info.deviceRate} Hz · ${info.deviceCh} ch · '
+                  '${info.bufferFrames} frames'),
+          ],
+          actions: [
+            AuraChip(
+              l.setRefreshStatus,
+              icon: Icons.refresh_rounded,
+              onTap: () => model.refreshLinuxStatus(),
+            ),
+          ],
+        ),
+        const SizedBox(height: AuraSpace.sm),
+        _DriverBlock(
+          title: l.linuxVirtualDevice,
+          lines: [
+            _DriverStatus(
+              model.linuxVirtualSink
+                  ? l.linuxVirtualPresent
+                  : l.linuxVirtualAbsent,
+              model.linuxVirtualSink ? p.success : p.textDim,
+            ),
+          ],
+        ),
+        const SizedBox(height: AuraSpace.sm),
+        _DriverBlock(
+          title: l.linuxModeDriver,
+          lines: [
+            _DriverStatus(
+              model.linuxDriverLoaded
+                  ? l.linuxDriverPresent
+                  : l.linuxDriverAbsent,
+              model.linuxDriverLoaded ? p.success : p.textDim,
+            ),
+          ],
+        ),
+      ],
+    );
   }
 }
 
