@@ -39,6 +39,8 @@ PLATFORM_ANY = {
     # r44 S4（2026-11-17）：测试页三段化结构门禁（WaveSource/传输
     # 协议/状态保留路径/三卡布局），纯源码扫描，任意平台可跑。
     "smoke_dart_test_wave.py",
+        "smoke_dart_chcap_authority.py",
+    "smoke_dart_chcap_authority.py",
     # S2（2026-11-01）：Linux 源表闭包门禁，纯文本/源表扫描，任意平台可跑。
     "smoke_linux_source_table.py",
     # S1（2026-11-01）：Linux 引擎信号链功能门禁（产物缺失时自 SKIP）。
