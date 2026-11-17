@@ -1421,7 +1421,8 @@ extension AudioModesState on AppModel {
   bool apoEndpointAttached(String target) =>
       apoInstalledEndpoints.any((e) => _apoEndpointMatches(e, target));
 
-  /// 一键附加复选集的勾选切换（会话级，不落盘）。
+  /// 一键附加排队集的勾选切换（会话级，不落盘）。只对未附
+  /// 加端点有意义：空 → 勾（排队）、勾 → 空（取消排队）。
   void toggleApoChecked(String endpointId, bool on) {
     if (on) {
       apoCheckedEndpoints.add(endpointId);
@@ -1429,6 +1430,15 @@ extension AudioModesState on AppModel {
       apoCheckedEndpoints.remove(endpointId);
     }
     _notifyUi();
+  }
+
+  /// 已附加端点锁定（第四十六轮 S3）：暗勾点按 → 亮叉。锁
+  /// 定后个体不可动，只能经一键卸载回空；未附加端点不接
+  /// 受锁定。锁定不提供个体解锁入口（叉的唯一出口是卸载，
+  /// 分离后调和自动遗忘）。
+  void markApoLocked(String endpointId) {
+    if (!apoEndpointAttached(endpointId)) return;
+    if (apoLockedEndpoints.add(endpointId)) _notifyUi();
   }
 
   void setMonitorMirroring(bool enabled) {
@@ -1736,16 +1746,17 @@ extension AudioModesState on AppModel {
                   installed.any((e) => _apoEndpointMatches(e, target));
             }
 
-            // 复选集调和 + 选中回落（第四十一轮）：已附加端点与
-            // 选中端点恒入复选集；选中端点在枚举与已附加清单中
-            // 均消失、且确有已附加端点时，回落到首个已附加端点
+            // 三态集调和 + 选中回落：排队集只存未附加端点
+            // （已附加者移出，第四十六轮 S3——旧「恒入复选集」
+            // 口径会让分离后的端点以亮勾复活、且选中即排队，
+            // 与三态状态机相悖）；锁定集只存已附加端点（分
+            // 离即遗忘）；选中端点在枚举与已附加清单中均消
+            // 失、且确有已附加端点时，回落到首个已附加端点
             // 并明示（裁定③）。枚举为空（设备抖动）时不回落。
-            for (final e in installed) {
-              final id = e['EndpointId']?.toString() ?? '';
-              if (id.isNotEmpty) apoCheckedEndpoints.add(id);
-            }
+            apoCheckedEndpoints.removeWhere(apoEndpointAttached);
+            apoLockedEndpoints
+                .removeWhere((id) => !apoEndpointAttached(id));
             final selId = selectedApoEndpointId;
-            if (selId.isNotEmpty) apoCheckedEndpoints.add(selId);
             if (target.isNotEmpty &&
                 selId.isEmpty &&
                 apoKnownEndpoints.isNotEmpty &&

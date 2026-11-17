@@ -535,10 +535,11 @@ class _SystemApoPanel extends StatelessWidget {
                         .copyWith(fontSize: 11)),
           ),
         const SizedBox(height: AuraSpace.xs),
-        // 端点列表（第四十一轮 v2）：左复选 = 一键附加目标集；
-        // 点名称 = 选中（单选，声道设置与主页的跟随对象）。已附
-        // 加行复选锁定勾选并带「已附加」标；同名端点以 id 尾段
-        // 消歧（工具按全 id 匹配，永不歧义）。
+        // 端点列表（第四十一轮 v2 立、第四十六轮 S3 改版）：
+        // 左三态复选 = 排队/已附加/锁定（见 _ApoTriBox）；
+        // 点行主体 = 选中（单选，声道设置与主页的跟随对象，
+        // 只以整行底色呈现）；同名端点以 id 尾段消歧（工具
+        // 按全 id 匹配，永不歧义）。
         Row(
           children: [
             SizedBox(
@@ -787,12 +788,15 @@ class _SystemApoPanel extends StatelessWidget {
 }
 
 
-/// APO 端点行（第四十一轮 v2）：复选框（左）+ 名称（点选=选中）。
-/// 已附加行的复选锁定为勾选态——从附加集合移除只能走卸载；
-/// 行尾依次是「选中」标与「已附加」标。格式后缀（声道数/采样
-/// 率）来自 inspect 的 mix format，未知时不显示。
+/// APO 端点行（第四十一轮 v2 立、第四十六轮 S3 改版）：
+/// 三态复选件（左）+ 名称（点行主体=选中）。选中态只以整
+/// 行遮罩样底色呈现（无「选中」标，名称/图标不因此变色）；
+/// 已附加以「亮文字 + 暗勾」呈现（无「已附加」标），暗勾
+/// 再点变亮叉锁定。格式后缀（声道数/采样率）来自 inspect
+/// 的 mix format，未知时不显示。
 /// APO 端点列表滚动区（第四十二轮 S4）：限高约 5 行，端点再多
 /// 也只在卡内纵向滚动，不再把整张卡撑高；滚动条仅溢出时显示。
+/// 操作（附加/卸载）进行中整表变暗且禁点（第四十六轮 S3）。
 class _ApoEndpointList extends StatefulWidget {
   final AppModel model;
   final List<AudioDeviceItem> endpoints;
@@ -818,27 +822,88 @@ class _ApoEndpointListState extends State<_ApoEndpointList> {
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 164),
-      child: Scrollbar(
-        controller: _ctrl,
-        thumbVisibility: widget.endpoints.length > 5,
-        child: SingleChildScrollView(
-          controller: _ctrl,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final ep in widget.endpoints)
-                _ApoEndpointRow(
-                  model: widget.model,
-                  ep: ep,
-                  selected: ep.id == widget.selectedId,
-                  attached: widget.model.apoEndpointAttached(ep.id),
-                  checked:
-                      widget.model.apoCheckedEndpoints.contains(ep.id),
-                ),
-            ],
+    final operating = widget.model.isApoOperating;
+    return Opacity(
+      opacity: operating ? 0.55 : 1.0,
+      child: IgnorePointer(
+        ignoring: operating,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 164),
+          child: Scrollbar(
+            controller: _ctrl,
+            thumbVisibility: widget.endpoints.length > 5,
+            child: SingleChildScrollView(
+              controller: _ctrl,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final ep in widget.endpoints)
+                    _ApoEndpointRow(
+                      model: widget.model,
+                      ep: ep,
+                      selected: ep.id == widget.selectedId,
+                      attached: widget.model.apoEndpointAttached(ep.id),
+                      checked:
+                          widget.model.apoCheckedEndpoints.contains(ep.id),
+                      locked:
+                          widget.model.apoLockedEndpoints.contains(ep.id),
+                    ),
+                ],
+              ),
+            ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 三态复选件（第四十六轮 S3）：0 空 / 1 亮勾（排队）/
+/// 2 暗勾（已附加）/ 3 亮叉（已附加且锁定）。勾的亮暗与
+/// 文字的亮/正常共同表达附加成败——失败者留在 1（可取消），
+/// 成功者进 2；2 再点进 3；3 无个体出口（一键卸载回空）。
+class _ApoTriBox extends StatelessWidget {
+  final int state;
+  final VoidCallback? onTap;
+  const _ApoTriBox({required this.state, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final Color border;
+    final Widget? glyph;
+    switch (state) {
+      case 1:
+        border = p.accent;
+        glyph = Icon(Icons.check_rounded, size: 13, color: p.accent);
+        break;
+      case 2:
+        border = p.textDim;
+        glyph = Icon(Icons.check_rounded, size: 13, color: p.textDim);
+        break;
+      case 3:
+        border = p.accent;
+        glyph = Icon(Icons.close_rounded, size: 13, color: p.accent);
+        break;
+      default:
+        border = p.textDim;
+        glyph = null;
+    }
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: 30,
+        height: 28,
+        alignment: Alignment.center,
+        child: Container(
+          width: 17,
+          height: 17,
+          decoration: BoxDecoration(
+            border: Border.all(color: border, width: 1.4),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: glyph,
         ),
       ),
     );
@@ -851,17 +916,18 @@ class _ApoEndpointRow extends StatelessWidget {
   final bool selected;
   final bool attached;
   final bool checked;
+  final bool locked;
   const _ApoEndpointRow({
     required this.model,
     required this.ep,
     required this.selected,
     required this.attached,
     required this.checked,
+    required this.locked,
   });
 
   @override
   Widget build(BuildContext context) {
-    final l = l10nOf(context);
     final p = paletteOf(context);
     // 同名端点消歧：友好名相同者后缀 id 尾段（GUID 末 6 位）。
     final dup = model.vaioPhysicalEndpoints
@@ -872,49 +938,44 @@ class _ApoEndpointRow extends StatelessWidget {
         ? ep.id.substring(ep.id.length - 7, ep.id.length - 1)
         : ep.id;
     final fmt = (ep.ch > 0 && ep.rate > 0) ? ' · ${ep.ch}ch ${ep.rate}Hz' : '';
+    // 三态派生与点击转移（第四十六轮 S3）：已附加 > 排队 >
+    // 空；锁定（叉）无个体出口，点击无动作。
+    final triState = attached ? (locked ? 3 : 2) : (checked ? 1 : 0);
+    final VoidCallback? triTap = attached
+        ? (locked ? null : () => model.markApoLocked(ep.id))
+        : () => model.toggleApoChecked(ep.id, !checked);
     return InkWell(
       onTap: () => model.setApoTargetEndpoint(ep.id),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 30,
-              height: 28,
-              child: Checkbox(
-                value: attached || checked,
-                onChanged: (attached || model.isApoOperating)
-                    ? null
-                    : (v) => model.toggleApoChecked(ep.id, v ?? false),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-            const SizedBox(width: AuraSpace.xs),
-            Icon(_getAudioDeviceIcon(ep.name, isRender: true),
-                size: 14, color: selected ? p.accent : p.textDim),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                '${ep.friendlyName}${dup ? ' ($tail)' : ''}$fmt',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: selected ? p.accent : p.text,
-                  fontWeight:
-                      selected ? FontWeight.w600 : FontWeight.normal,
+      child: Container(
+        // 选中态唯一呈现：整行遮罩样底色（第四十六轮 S3）。
+        decoration: BoxDecoration(
+          color: selected ? p.accent.withValues(alpha: 0.13) : null,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+          child: Row(
+            children: [
+              _ApoTriBox(state: triState, onTap: triTap),
+              const SizedBox(width: AuraSpace.xs),
+              Icon(_getAudioDeviceIcon(ep.name, isRender: true),
+                  size: 14, color: p.textDim),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${ep.friendlyName}${dup ? ' ($tail)' : ''}$fmt',
+                  style: TextStyle(
+                    fontSize: 12,
+                    // 已附加 = 亮文字（提亮 + 半粗）；其余正常。
+                    color: p.text,
+                    fontWeight:
+                        attached ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                overflow: TextOverflow.ellipsis,
               ),
-            ),
-            if (selected) ...[
-              Text(l.apoEndpointSelectedTag,
-                  style: TextStyle(fontSize: 10, color: p.accent)),
-              const SizedBox(width: 6),
             ],
-            if (attached)
-              Text(l.apoAttached,
-                  style: TextStyle(fontSize: 10, color: p.accent)),
-          ],
+          ),
         ),
       ),
     );
