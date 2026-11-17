@@ -66,8 +66,9 @@ void main() {
       expect(find.text('输入端'), findsOneWidget);
       expect(find.text('输出端'), findsOneWidget);
 
-      // Verify 3 layers
-      expect(find.text('驱动信息与控制'), findsOneWidget);
+      // Verify 3 layers（r44 起驱动卡改名「驱动」，原「驱动信息
+      // 与控制」；本断言 r44 漏改、r45 门禁复核时补正）
+      expect(find.text('驱动'), findsOneWidget);
       expect(find.text('音频输入'), findsOneWidget);
       expect(find.text('音频输出'), findsOneWidget);
 

@@ -34,12 +34,13 @@ void main() {
     expect(find.text('偏好'), findsNothing);
     expect(find.text('设置'), findsOneWidget);
 
-    // 2. 默认在“音频”页 (tab 1)
+    // 2. 默认在“音频”页 (tab 1)（r44 版式：设备卡改 I/O配置、
+    // 声道数量+声道模式合并为声道卡、驱动卡置末）
     expect(find.text('处理范式'), findsOneWidget);
-    expect(find.text('设备'), findsOneWidget);
+    expect(find.text('I/O配置'), findsOneWidget);
     expect(find.text('采样率'), findsOneWidget);
-    expect(find.text('声道数量'), findsOneWidget);
-    expect(find.text('声道模式'), findsOneWidget);
+    expect(find.text('声道'), findsOneWidget);
+    expect(find.text('驱动'), findsOneWidget);
 
     // 3. 切换到“外观”页 (tab 0)
     await tester.tap(find.text('外观'));
@@ -48,7 +49,7 @@ void main() {
     expect(find.text('配色方案'), findsOneWidget);
     expect(find.text('语言'), findsOneWidget);
     expect(find.text('采样率'), findsNothing);
-    expect(find.text('测试音频源'), findsNothing);
+    expect(find.text('波形生成'), findsNothing);
 
     // 4. 切换到“系统”页 (tab 2)
     await tester.tap(find.text('系统'));
@@ -61,16 +62,21 @@ void main() {
     // 声道模式等设置项不出现在系统页）。
     expect(find.text('采样率'), findsOneWidget);
     expect(find.text('声道数量'), findsNothing);
-    expect(find.text('测试音频源'), findsNothing);
+    expect(find.text('波形生成'), findsNothing);
 
     // 5. 切换到“测试”页 (tab 3)
     await tester.tap(find.text('测试'));
     await tester.pumpAndSettle();
 
-    // 测试音频源框完好无损地呈现在测试页
-    expect(find.text('测试音频源'), findsOneWidget);
-    expect(find.text('测试音 440Hz'), findsOneWidget);
+    // r44 测试页三段：波形生成 / 使用源测试 / 调试
+    expect(find.text('波形生成'), findsOneWidget);
+    expect(find.text('使用源测试'), findsOneWidget);
+    expect(find.text('调试'), findsOneWidget);
+    expect(find.text('正弦波'), findsOneWidget);
     expect(find.text('粉噪'), findsOneWidget);
+    expect(find.text('未选择测试音频源'), findsOneWidget);
+    expect(find.text('打开音频'), findsOneWidget);
+    expect(find.text('调试模式'), findsOneWidget);
     // 引擎信息不在测试页
     expect(find.text('引擎'), findsNothing);
 
@@ -82,6 +88,6 @@ void main() {
     expect(find.text('AuraDSP Project'), findsOneWidget);
     expect(find.text('开源协议'), findsOneWidget);
     expect(find.text('JamesDSP (libjamesdsp)'), findsOneWidget);
-    expect(find.text('测试音频源'), findsNothing);
+    expect(find.text('波形生成'), findsNothing);
   });
 }
