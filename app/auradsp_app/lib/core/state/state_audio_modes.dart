@@ -1277,14 +1277,30 @@ extension AudioModesState on AppModel {
 
   static int _normCh(int ch) => ch >= 8 ? 8 : (ch >= 6 ? 6 : (ch >= 4 ? 4 : 2));
 
+  /// 第四十四轮 S1：显示侧钳制能力（状态层可确知的量，与
+  /// isolate 生效口径同源）：sysapo = 选中端点声道；管线 =
+  /// 选中输出设备（WASAPI/VAIO 端点）的扫描声道；其余（桥
+  /// 输出等无确知量）返回 null = 不钳——流活跃时 _streamCh
+  /// 真值优先于一切合成（见 displayChannelCount 首行）。
+  int? _displayCapCh() {
+    if (audioMode == 'sysapo') return _selectedApoEndpointCh();
+    if (modeCategory != AudioModes.categoryPipeline) return null;
+    final outId = _deviceIdOf(config.pipelineOutputDevice);
+    if (outId.isEmpty) return null;
+    for (final d in wasapiDevices) {
+      if (d.id == outId && d.ch > 0) return d.ch;
+    }
+    return null;
+  }
+
   /// 显示用工作声道数（合成口径见上）。
   int get displayChannelCount {
     if (_streamChLive) return _streamCh;
     if (channelsCountMode == 1) {
       var want = channelsCount;
-      if (audioMode == 'sysapo') {
-        want = clampChannelsToCapability(
-            want, _selectedApoEndpointCh() ?? 8);
+      final cap = _displayCapCh();
+      if (cap != null) {
+        want = clampChannelsToCapability(want, cap);
       }
       return _normCh(want);
     }

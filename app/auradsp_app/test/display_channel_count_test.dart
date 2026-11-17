@@ -1,8 +1,9 @@
 // display_channel_count_test.dart — 第四十二轮 S3：显示声道数
 // 即时合成。主页电平布局/输入门控等显示面只认 vizChannelCount，
 // 而它此前仅在音频流动时由 viz 事件更新（静默改设置要等出声）。
-// 合成口径：流活跃用流真值；否则手动 = 用户设置（sysapo 按选
-// 中端点能力钳制）、自动 + sysapo = 选中端点混音格式、其余 =
+// 合成口径：流活跃用流真值；否则手动 = 用户设置（按模式能力
+// 钳制：sysapo 选中端点 / 管线选中输出设备，第四十四轮 S1 扩）、
+// 自动 + sysapo = 选中端点混音格式、其余 =
 // effectiveChannelCount；refresh 经 _notifyUi 收敛推入。
 import 'package:flutter_test/flutter_test.dart';
 
@@ -41,6 +42,35 @@ void main() {
       m.setChannelsCountMode(1);
       m.setChannelsCount(8);
       expect(m.displayChannelCount, 2);
+    });
+
+    test('手动 + 管线：按选中输出设备能力钳制（r44 S1）', () {
+      final m = AppModel(testing: true);
+      m.config.modeCategory = 'pipeline';
+      m.config.pipelineOutputDevice = _ep20;
+      m.wasapiDevices = [
+        const AudioDeviceItem(
+            id: _ep20, name: 'Stereo Out', isRender: true, ch: 2),
+      ];
+      m.setChannelsCountMode(1);
+      m.setChannelsCount(8);
+      expect(m.displayChannelCount, 2);
+      // 输出换 7.1 设备：钳制随扫描声道放开。
+      m.wasapiDevices = [
+        const AudioDeviceItem(
+            id: _ep20, name: '7.1 Out', isRender: true, ch: 8),
+      ];
+      expect(m.displayChannelCount, 8);
+    });
+
+    test('手动 + 管线：输出设备未知时不钳（r44 S1）', () {
+      final m = AppModel(testing: true);
+      m.config.modeCategory = 'pipeline';
+      m.config.pipelineOutputDevice = _ep20;
+      m.wasapiDevices = const [];
+      m.setChannelsCountMode(1);
+      m.setChannelsCount(8);
+      expect(m.displayChannelCount, 8);
     });
 
     test('自动 + sysapo：跟随选中端点混音格式（端点改格式即变）', () {

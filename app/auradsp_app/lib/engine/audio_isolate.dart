@@ -671,6 +671,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     // 供文件声道变化时的热切判断与状态展示。
     final liveCh = (st?['ioCh'] as num?)?.toInt() ?? 0;
     asioCh = liveCh > 0 ? liveCh : channels;
+    // 第四十四轮 S1：ASIO io 声道在启动时即为确知能力，先于
+    // 首帧 viz 预置钳制器（viz 流随后以同一真值持续校正）。
+    updateCapabilityCh(asioCh);
     dbgLog('asiomode: started sr=${st?['sr']} nbs=${st?['nbs']} '
         'outPair=${st?['outPair']} ioCh=${st?['ioCh']} driver=${st?['driver']} '
         'note=${st?['note']}');
@@ -2448,6 +2451,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               bridgeStaleSent = false;
               v['backend'] = vizBackend;
               send({'evt': 'viz', ...v});
+              // 第四十四轮 S1：桥流声道数（viz 帧 channelCount =
+              // 来源块几何，设备/驱动决定、非参数回声）喂钳制器
+              // ——此前桥模式从不更新 capabilityCh，跨模式切换会
+              // 把上一路径的能力值带进桥引擎（如 WASAPI 立体声
+              // cap=2 切到 ASIO 7.1 后引擎仍被钳在 2）。变化才
+              // 重派（updateCapabilityCh 内部门控）。
+              final bCh = (v['chCount'] as num?)?.toInt() ?? 0;
+              if (bCh > 0) updateCapabilityCh(bCh);
               if (!bridgeVizOkLogged) {
                 bridgeVizOkLogged = true;
                 dbgLog('$backend: viz flowing l=${v['l']} r=${v['r']}');
