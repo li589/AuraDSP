@@ -8,6 +8,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:auradsp_app/core/state.dart';
+import 'package:auradsp_app/platform/platform_profile.dart';
 
 const _ep71 = '{0.0.0.00000000}.{11111111-2222-3333-4444-555555555555}';
 const _ep20 = '{0.0.0.00000000}.{66666666-7777-8888-9999-000000000000}';
@@ -42,7 +43,15 @@ void main() {
       m.setChannelsCountMode(1);
       m.setChannelsCount(8);
       expect(m.displayChannelCount, 2);
-    });
+    },
+        // CI J6 首跑实证（r50/r51 收口 CI 双红）：能力钳制入口
+        // `_capabilityChForMode()` 首行有 `!PlatformProfile.isWindows
+        // → null` 门控——Linux 上无 sysapo/管线能力计算，断言必落空。
+        // 与 tools/bin/run_dart_tests.py 的 WINDOWS_ONLY 同口径：
+        // 显式跳过、不静默（Linux 范式的能力由 Linux 专属测试覆盖）。
+        skip: !PlatformProfile.isWindows
+            ? 'Windows 范式专属：_capabilityChForMode 有 isWindows 门控'
+            : null);
 
     test('手动 + 管线：按选中输出设备能力钳制（r44 S1）', () {
       final m = AppModel(testing: true);
@@ -65,7 +74,12 @@ void main() {
             id: _ep20, name: '7.1 Out', isRender: true, ch: 8),
       ];
       expect(m.displayChannelCount, 8);
-    });
+    },
+        // 同上：管线能力分支同在 `_capabilityChForMode()` 的
+        // isWindows 门控之内。
+        skip: !PlatformProfile.isWindows
+            ? 'Windows 范式专属：管线能力钳制有 isWindows 门控'
+            : null);
 
     test('手动 + 管线：输出设备未知时不钳（r44 S1）', () {
       final m = AppModel(testing: true);

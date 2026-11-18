@@ -1,5 +1,6 @@
 import 'package:auradsp_app/core/audio_modes.dart';
 import 'package:auradsp_app/core/state.dart';
+import 'package:auradsp_app/platform/platform_profile.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -115,6 +116,15 @@ void main() {
       expect(m.sourceKind, '', reason: '输出切 ASIO 同样停源');
       m.setSource('tone');
       expect(m.sourceKind, '', reason: '输出 ASIO 下起播被拦');
-    });
+    },
+        // CI J6 首跑实证（r50/r51 收口 CI 双红）：本用例基线
+        // `setAudioMode('vaio')` 在非 Windows 主机会被
+        // AudioModes.normalize 归一为 Linux 默认模式（'system'）——
+        // vaio/asio 不在 Linux 三模式集合内，audioMode 断言必落空。
+        // 与 WINDOWS_ONLY 同口径显式跳过，Linux 范式的 ASIO 拦截
+        // 由 Linux 专属路径覆盖。
+        skip: !PlatformProfile.isWindows
+            ? 'Windows 范式专属：vaio/asio 模式不在 Linux 选项集'
+            : null);
   });
 }
