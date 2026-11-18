@@ -224,6 +224,11 @@ void main() {
       final model = AppModel(testing: true);
       addTearDown(model.dispose);
       model.setBassShapingEnabled(true);
+      // 声道对按设置声道数渲染（第五十轮 S1）：手动 7.1
+      // 时四对全显；合并方式始终显示。
+      model.setChannelsCountMode(1);
+      model.setChannelsCount(8);
+      model.channelsMode = 1;
 
       await tester.pumpWidget(_wrap(BassShapingCard(model: model), model));
       await tester.pumpAndSettle();
@@ -237,6 +242,7 @@ void main() {
       expect(find.text('C/LFE'), findsOneWidget);
       expect(find.text('SL/SR'), findsOneWidget);
       expect(find.text('BL/BR'), findsOneWidget);
+      expect(find.text('合并方式'), findsOneWidget);
     });
 
     testWidgets('警告横幅诚实性：pairs=0 与 C/LFE 选中警告', (tester) async {
@@ -248,7 +254,8 @@ void main() {
       final model = AppModel(testing: true);
       addTearDown(model.dispose);
       model.setBassShapingEnabled(true);
-      model.vizChannelCount.value = 8;
+      model.setChannelsCountMode(1);
+      model.setChannelsCount(8);
       model.channelsMode = 1;
 
       // 1. pairs = 0 警告
@@ -270,7 +277,7 @@ void main() {
       expect(find.textContaining('C/LFE 取平均会削弱中置与超低音的分离'), findsNothing);
     });
 
-    testWidgets('4ch Quad 布局：C/LFE 和 SL/SR 禁用不可点击，BL/BR 映射可用', (tester) async {
+    testWidgets('4ch Quad 布局：设置外声道对不渲染，BL/BR 映射可用（第五十轮 S1）', (tester) async {
       tester.view.physicalSize = const Size(1280, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -279,18 +286,19 @@ void main() {
       final model = AppModel(testing: true);
       addTearDown(model.dispose);
       model.setBassShapingEnabled(true);
-      model.vizChannelCount.value = 4;
+      model.setChannelsCountMode(1);
+      model.setChannelsCount(4);
       model.channelsMode = 1;
       model.setBassmonoPairs(0x01); // 仅 FL/FR
 
       await tester.pumpWidget(_wrap(BassShapingCard(model: model), model));
       await tester.pumpAndSettle();
 
-      // 点击不可用的 C/LFE chip，不改变掩码
-      final clfeChip = find.text('C/LFE');
-      await tester.tap(clfeChip);
-      await tester.pumpAndSettle();
-      expect(model.bassmonoPairs, 0x01); // 仍为 0x01，无修改
+      // 设置声道数内不存在的声道对不渲染（不再灰置占位）
+      expect(find.text('C/LFE'), findsNothing);
+      expect(find.text('SL/SR'), findsNothing);
+      expect(find.text('FL/FR'), findsOneWidget);
+      expect(find.text('BL/BR'), findsOneWidget);
 
       // 点击可用的 BL/BR chip，成功置位 bit 3
       final blbrChip = find.text('BL/BR');
@@ -307,7 +315,8 @@ void main() {
         final model = AppModel(testing: true);
       addTearDown(model.dispose);
         model.setBassShapingEnabled(true);
-        model.vizChannelCount.value = 8;
+        model.setChannelsCountMode(1);
+        model.setChannelsCount(8);
         model.channelsMode = 1;
 
         await tester.pumpWidget(_wrap(BassShapingCard(model: model), model));
@@ -328,7 +337,8 @@ void main() {
       for (final themeId in AuraThemeId.values) {
         final model = AppModel(testing: true);
         model.setBassShapingEnabled(true);
-        model.vizChannelCount.value = 8;
+        model.setChannelsCountMode(1);
+        model.setChannelsCount(8);
         model.channelsMode = 1;
 
         await tester.pumpWidget(_wrap(BassShapingCard(model: model), model, themeId: themeId));

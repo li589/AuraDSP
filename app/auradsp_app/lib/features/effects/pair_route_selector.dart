@@ -71,6 +71,13 @@ class _PairRouteSelectorState extends State<PairRouteSelector> {
     final l = l10nOf(context);
     final mask = _mask;
 
+    // 只渲染设置声道数内存在的声道对（第五十轮 S1，
+    // user 口径）：7.1 四对全显全可选、2.0 只剩 FL/FR；
+    // 不存在的对不再灰置占位。未选中的对在效果器内直
+    // 通（掩码语义不变，DSP 不动）。
+    final visiblePairs =
+        _pairs.where((e) => _isAvailable(e.bit)).toList();
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -79,8 +86,8 @@ class _PairRouteSelectorState extends State<PairRouteSelector> {
           children: [
             Text(
               l.bassMonoPairs,
+              // 「声道选择」标签不加粗（第五十轮 S1，user 口径）。
               style: labelOf(p, size: 12).copyWith(
-                fontWeight: FontWeight.w600,
                 color: widget.enabled ? p.text : p.textDim,
               ),
             ),
@@ -98,9 +105,9 @@ class _PairRouteSelectorState extends State<PairRouteSelector> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  for (var i = 0; i < _pairs.length; i++) ...[
+                  for (var i = 0; i < visiblePairs.length; i++) ...[
                     if (i > 0) const SizedBox(width: AuraSpace.xs),
-                    _buildPairChip(context, p, l, _pairs[i], mask),
+                    _buildPairChip(context, p, l, visiblePairs[i], mask),
                   ],
                 ],
               ),
@@ -166,7 +173,9 @@ class _PairRouteSelectorState extends State<PairRouteSelector> {
       duration: AuraDur.fast,
       curve: AuraCurve.standard,
       height: AuraSize.chipH,
-      padding: const EdgeInsets.symmetric(horizontal: AuraSpace.sm),
+      // 按钮紧凑：横向内边距与内部间隔收紧，不留多余
+      // 空位（第五十轮 S1，user 口径）。
+      padding: const EdgeInsets.symmetric(horizontal: AuraSpace.xs),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(AuraRadius.sm),
@@ -176,14 +185,14 @@ class _PairRouteSelectorState extends State<PairRouteSelector> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 13, color: iconColor),
-          const SizedBox(width: AuraSpace.xs),
+          const SizedBox(width: AuraSpace.xxs),
           Text(
             code,
             style: monoOf(p, size: 11, color: textColor).copyWith(
               fontWeight: isSelected && isAvail ? FontWeight.w600 : FontWeight.w400,
             ),
           ),
-          const SizedBox(width: AuraSpace.xs),
+          const SizedBox(width: AuraSpace.xxs),
           Text(
             name,
             style: captionOf(p, color: textColor).copyWith(

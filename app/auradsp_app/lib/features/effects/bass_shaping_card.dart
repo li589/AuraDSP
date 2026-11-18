@@ -215,9 +215,15 @@ class BassShapingCard extends StatelessWidget {
     return ValueListenableBuilder<int>(
       valueListenable: model.vizChannelCount,
       builder: (context, vizCh, _) {
-        final ch = vizCh > 0 ? vizCh : 2;
-        final bool binaural = model.spatialBinaural && model.spatialOn && ch >= 4;
-        final bool stereoPath = model.channelsMode == 0 || binaural || ch == 2;
+        // 声道对可用性按设置声道数判定（第五十轮 S1，user
+        // 口径）：唯一真相 effectiveChannelCount（手动=设
+        // 置值、自动=引擎回读值），不再按实时流宽
+        // vizChannelCount——流为立体声时 7.1 设置下声道对
+        // 会被误灰、合并行随之消失（user 实测）。viz 监听
+        // 仅作重建触发保留；立体声路径判定同用模型单一
+        // 真相 isStereoPath。效果接线与 DSP 不动。
+        final ch = model.effectiveChannelCount;
+        final bool stereoPath = model.isStereoPath;
 
         bool isAvail(int bit) {
           if (stereoPath) return bit == 0;
@@ -290,12 +296,27 @@ class BassShapingCard extends StatelessWidget {
               stereoPath: stereoPath,
               enabled: model.bassmonoOn,
             ),
-            if (!stereoPath) ...[
-              const SizedBox(height: AuraSpace.sm),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isWide = constraints.maxWidth >= 420;
-                  final segmented = AuraSegmented<int>(
+            // 合并方式始终显示（第五十轮 S1，user 口径）：
+            // 不再随立体声路径出现/消失；可选对不足两对时
+            // 仅禁用（canMerge 门不变）。两按钮紧凑定宽、
+            // 右对齐，不再整行拉伸留空。
+            const SizedBox(height: AuraSpace.sm),
+            Row(
+              children: [
+                Text(
+                  l.bassMonoMerge,
+                  style: labelOf(p, size: 13).copyWith(
+                    color: model.bassmonoOn ? p.text : p.textDim,
+                  ),
+                ),
+                const SizedBox(width: AuraSpace.xs),
+                InfoBadge(
+                  message: '${l.bassMonoMergePerPair} / ${l.bassMonoMergeGlobal}',
+                ),
+                const Spacer(),
+                SizedBox(
+                  width: 196,
+                  child: AuraSegmented<int>(
                     segments: [
                       AuraSegment(0, l.bassMonoMergePerPair),
                       AuraSegment(1, l.bassMonoMergeGlobal),
@@ -304,57 +325,10 @@ class BassShapingCard extends StatelessWidget {
                     onChanged: model.bassmonoOn && canMerge
                         ? (v) => model.setBassmonoMerge(v)
                         : null,
-                  );
-
-                  if (isWide) {
-                    return Row(
-                      children: [
-                        SizedBox(
-                          width: 140,
-                          child: Row(
-                            children: [
-                              Text(
-                                l.bassMonoMerge,
-                                style: labelOf(p, size: 13).copyWith(
-                                  color: model.bassmonoOn ? p.text : p.textDim,
-                                ),
-                              ),
-                              const SizedBox(width: AuraSpace.xs),
-                              InfoBadge(
-                                message: '${l.bassMonoMergePerPair} / ${l.bassMonoMergeGlobal}',
-                              ),
-                            ],
-                          ),
-                        ),
-                        Expanded(child: segmented),
-                      ],
-                    );
-                  } else {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              l.bassMonoMerge,
-                              style: labelOf(p, size: 13).copyWith(
-                                color: model.bassmonoOn ? p.text : p.textDim,
-                              ),
-                            ),
-                            const SizedBox(width: AuraSpace.xs),
-                            InfoBadge(
-                              message: '${l.bassMonoMergePerPair} / ${l.bassMonoMergeGlobal}',
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AuraSpace.xs),
-                        segmented,
-                      ],
-                    );
-                  }
-                },
-              ),
-            ],
+                  ),
+                ),
+              ],
+            ),
 
             // 警告提示行（仅在存在声道异常/未选/LFE警告时显示）
             if (model.bassmonoOn && (activePairs == 0 || ignoredPairs > 0 || centerLfeSelected)) ...[
