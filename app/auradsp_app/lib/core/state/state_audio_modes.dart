@@ -396,10 +396,18 @@ extension AudioModesState on AppModel {
   /// 汇合触发（setAudioMode 末尾必经 applyPipelineChain）。
   void _syncVizSourceOnSwitch() {
     final expected = expectedVizBackend;
-    if (_vizSourceBaseline == expected) return;
-    _vizSourceBaseline = expected;
-    vizSource = null;
-    _clearVizState();
+    if (_vizSourceBaseline != expected) {
+      _vizSourceBaseline = expected;
+      vizSource = null;
+    }
+    // 切换即清屏（第四十九轮 S4，user 定案）：凡链路重组
+    // （模式/设备/路由切换都汇合于此）一律立刻清屏，不再只
+    // 限预期后端变化——同后端换设备时旧帧残留正是宾机所报
+    // 「切换驱动后频谱有时不归零」的一条路径。看门狗记账
+    // 一并复位，新源首帧到达前不触发断流清屏的重复通知。
+    _vizLastFrameAt = null;
+    _vizSilentSince = null;
+    if (!_vizDisplayCleared) _clearVizState();
   }
 
   /// 在枚举结果里按 id 或名称找端点（config 里存的设备值是

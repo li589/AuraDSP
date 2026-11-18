@@ -42,8 +42,27 @@ extension StateEvents on AppModel {
     vizChannelLevels.value = List<double>.filled(kVizChannelMax, -120.0);
     vizStageChLevels.value =
         List<double>.filled(kVizStageTelemetry * kVizChannelMax, -120.0);
+    _vizDisplayCleared = true;
     // S3：清帧后立刻以合成值回填声道数（布局不闪空；电平已清零）。
     refreshDisplayChannelCount();
+  }
+
+  /// 可视化清屏看门狗（第四十九轮 S4，user 定案的统一机制）：
+  /// 1 秒一拍——数据断流（>3s 无被接受的新帧）或持续全静默
+  /// （>3s 帧帧无声）即 _clearVizState 清屏，治「切换/停播后
+  /// 频谱冻在旧帧不归零」。与切换清屏（_syncVizSourceOnSwitch）
+  /// 共用同一清屏实现，全平台全后端一致。已清零态直接返回，
+  /// 不重复通知。[now] 供单测注入时钟。
+  void vizWatchdogTick([DateTime? now]) {
+    if (_vizDisplayCleared) return;
+    final t = now ?? DateTime.now();
+    final last = _vizLastFrameAt;
+    final stale =
+        last == null || t.difference(last) > const Duration(seconds: 3);
+    final silentSince = _vizSilentSince;
+    final silent = silentSince != null &&
+        t.difference(silentSince) > const Duration(seconds: 3);
+    if (stale || silent) _clearVizState();
   }
 
   void _onMessage(dynamic raw) {
@@ -1004,6 +1023,20 @@ extension StateEvents on AppModel {
           break;
         }
         vizSource = vizBackend;
+        // S4 看门狗记账：被接受帧的到达时刻与全静默连续段
+        // （电平双表低于 -89 且频谱近零 = 无声帧）。
+        _vizLastFrameAt = DateTime.now();
+        final frameSilent = (raw['l'] as num).toDouble() <= -89.0 &&
+            (raw['r'] as num).toDouble() <= -89.0 &&
+            (raw['spectrum'] as List)
+                .cast<num>()
+                .every((v) => v.toDouble() <= 0.001);
+        if (frameSilent) {
+          _vizSilentSince ??= _vizLastFrameAt;
+        } else {
+          _vizSilentSince = null;
+          _vizDisplayCleared = false;
+        }
         spectrum.value = (raw['spectrum'] as List).cast<double>();
         if (raw['eqIn'] != null) {
           eqInSpectrum.value = (raw['eqIn'] as List).cast<double>();
