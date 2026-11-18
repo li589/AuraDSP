@@ -433,6 +433,20 @@ CMiniportWaveRTStream::AllocateAudioBuffer(
         return STATUS_INVALID_DEVICE_STATE;
     }
 
+    //
+    // C2 驱动审计（2026-11-18）：同一流不得重复分配缓冲。
+    // 旧实现直接覆盖 m_pDmaBuffer——前一次的 MDL 映射既不解也不释放，
+    // 内核页泄漏且旧 MDL 指针丢失（此后 FreeAudioBuffer 只能释放新的，
+    // 旧的永久悬挂）。正常路径由端口驱动先 Free 再 Allocate，重复调用
+    // 属异常状态；显式拒绝并留痕，避免静默泄漏。
+    //
+    if (m_pDmaBuffer != NULL)
+    {
+        AURA_TRACE("AllocateAudioBuffer: already allocated (%lu bytes), refuse\n",
+                   m_ulBufferSize);
+        return STATUS_DEVICE_ALREADY_ATTACHED;
+    }
+
     if (RequestedSize < m_ulBlockAlign)
     {
         return STATUS_UNSUCCESSFUL;
@@ -488,19 +502,33 @@ CMiniportWaveRTStream::FreeAudioBuffer(
 
     UNREFERENCED_PARAMETER(BufferSize);
 
+    BOOLEAN released = FALSE;
+
     if (AudioBufferMdl != NULL && m_pPortStream != NULL)
     {
         if (m_pDmaBuffer != NULL)
         {
             m_pPortStream->UnmapAllocatedPages(m_pDmaBuffer, AudioBufferMdl);
             m_pDmaBuffer = NULL;
+            released = TRUE;
         }
 
         m_pPortStream->FreePagesFromMdl(AudioBufferMdl);
     }
 
     m_ulBufferSize = 0;
-    m_Clock.Reset();
+
+    //
+    // C2 驱动审计（2026-11-18）：只有真正卸载了本流缓冲才复位时钟。
+    // 旧实现无条件 Reset——AudioBufferMdl==NULL（端口驱动清空态）或
+    // 重复释放时也会把位置计数清零；若流此刻仍在 RUN，桥侧看到的
+    // TotalBytesWritten/WriteOffset 位移会突变（可听为跳音/丢音），
+    // 几何锚点也被误导。缓冲没了才没有位置可言，故按释放事实复位。
+    //
+    if (released)
+    {
+        m_Clock.Reset();
+    }
 }
 
 #pragma code_seg("PAGE")

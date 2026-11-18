@@ -226,6 +226,16 @@ struct VaioBridgeCtl {
     // 切歌白噪声复现时凭它判「重同步是否发生过」）。
     volatile LONG fmtResyncs = 0;
 
+    // C2 驱动审计（2026-11-18）：消费游标的两处静默钳制改可观测。
+    //   cursorResets  —— TotalBytesWritten 回退（内核重置/驱动重启）
+    //                    时把游标跟进到当前写入位置；
+    //   overrunDrops  —— 落后超过一整圈时强制跟进到最新一圈头部
+    //                    （丢弃一整圈旧数据）。
+    // 两者都会丢音频字节，旧实现无任何痕迹；status 恒输出，出现
+    // 跳音/丢音时可判「是否发生过跟进、发生了几次」。
+    volatile LONG cursorResets = 0;
+    volatile LONG overrunDrops = 0;
+
     // 第八轮项 3：相位锚校正计数与最近观测相位偏差（字节）。泵
     // 读环的物理偏移改以驱动自报 WriteOffset 为锚（见泵内注）；
     // 每当一致对算出的 skew 变化且非零，phaseResyncs++ 并更新
@@ -1066,11 +1076,17 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                 snapKind == pHeader->FormatKind &&
                 snapValid == pHeader->ValidBitsPerSample;
             if (snapConsistent) {
+                // C2 驱动审计（2026-11-18）：帧形判定补入 BlockAlign 本身。
+                // 旧口径只认声道/位深/kind/valid——若某格式的 BlockAlign
+                // 单独漂移（非常规/畸形格式，或驱动换格式路径只改了
+                // BlockAlign），桥会继续按旧块宽读环，帧内永久错位。
+                // snapAlign==0 是旧驱动的空值，不采纳、不触发。
                 const bool frameShapeChanged =
                     (snapCh > 0 && snapCh != ringChannels) ||
                     (snapBits > 0 && snapBits != ringBits) ||
                     (snapKind != 0 && snapKind != ringFmtKind) ||
-                    (snapKind != 0 && snapValid != ringValidBits);
+                    (snapKind != 0 && snapValid != ringValidBits) ||
+                    (snapAlign > 0 && snapAlign != g_vaio.ringBlockAlign);
                 if (snapCh > 0 && snapCh != ringChannels) {
                     ringChannels = snapCh;
                     g_vaio.ringChannels = ringChannels;
@@ -1169,11 +1185,15 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         ULONGLONG availBytes = 0;
         if (totalWritten < userBytesRead) {
             // 内核重置或驱动重启：跟进对齐到当前写入位置，防止死锁滞后
+            // （C2：计入 cursorResets，status 可见）
+            InterlockedIncrement(&g_vaio.cursorResets);
             userBytesRead = totalWritten;
         } else if (totalWritten > userBytesRead) {
             availBytes = totalWritten - userBytesRead;
             // 环形缓冲覆写超载处理：若落后超过一整圈，强制跟进到最新一圈头部
+            // （C2：计入 overrunDrops，status 可见）
             if (availBytes > (ULONGLONG)dataSize) {
+                InterlockedIncrement(&g_vaio.overrunDrops);
                 availBytes = (ULONGLONG)dataSize;
                 userBytesRead = totalWritten - availBytes;
             }
@@ -1680,6 +1700,8 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     // S4 取证复位（泵线程启动后重新采集本会话的首块证据）。
     InterlockedExchange(&g_vaio.fxDone, 0);
     InterlockedExchange(&g_vaio.fmtResyncs, 0);
+    InterlockedExchange(&g_vaio.cursorResets, 0);
+    InterlockedExchange(&g_vaio.overrunDrops, 0);
     InterlockedExchange(&g_vaio.phaseResyncs, 0);
     InterlockedExchange(&g_vaio.phaseSkew, 0);
     // S3b 帧相位自愈复位（每 start 从未换相位状态开始）。
@@ -2395,6 +2417,16 @@ int vaio_status(char* out, int cap) {
             out + total, (size_t)(cap - total), _TRUNCATE,
             ",\"fmtResyncs\":%ld",
             InterlockedCompareExchange(&g_vaio.fmtResyncs, 0, 0));
+        if (m < 0) return -1;
+        total += m;
+    }
+    // C2（2026-11-18）：游标静默钳制改可观测（见 g_vaio 字段注释）。
+    {
+        const int m = _snprintf_s(
+            out + total, (size_t)(cap - total), _TRUNCATE,
+            ",\"cursorResets\":%ld,\"overrunDrops\":%ld",
+            InterlockedCompareExchange(&g_vaio.cursorResets, 0, 0),
+            InterlockedCompareExchange(&g_vaio.overrunDrops, 0, 0));
         if (m < 0) return -1;
         total += m;
     }
