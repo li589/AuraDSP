@@ -270,6 +270,17 @@ class InstallEngine {
         await Directory(base).create(recursive: true);
         final lnk = p.join(base, 'AuraDSP.lnk');
         if (await _createShortcut(lnk, exe, o.installDir)) createdShortcuts.add(lnk);
+        // 开始菜单同文件夹加「卸载 AuraDSP」（第四十九轮
+        // S5，user 要求）：指向安装目录的 uninstall.exe
+        // （第 7 步才落盘，lnk 先行指向无碍）；一并记入
+        // createdShortcuts，卸载/回滚时随清单清除。
+        final unLnk = p.join(base, '卸载 AuraDSP.lnk');
+        if (await _createShortcut(
+            unLnk, p.join(o.installDir, 'uninstall.exe'), o.installDir)) {
+          createdShortcuts.add(unLnk);
+        } else {
+          warnings.add('卸载快捷方式创建失败');
+        }
       }
       if (o.autostart) {
         registryWriteValues(kHkeyCurrentUser,
