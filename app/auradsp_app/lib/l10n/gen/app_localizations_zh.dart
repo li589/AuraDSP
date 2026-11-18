@@ -2632,10 +2632,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channelRight => '右声道 (R)';
 
   @override
-  String get inputStageIn => '本级输入';
+  String get inputStageIn => 'DSP输入';
 
   @override
-  String get inputStageOut => '本级输出';
+  String get inputStageOut => 'DSP输出';
 
   @override
   String get chainStagePreDsp => 'DSP 前置';

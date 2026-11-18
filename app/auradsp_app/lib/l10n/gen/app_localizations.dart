@@ -5071,13 +5071,13 @@ abstract class AppLocalizations {
   /// No description provided for @inputStageIn.
   ///
   /// In zh, this message translates to:
-  /// **'本级输入'**
+  /// **'DSP输入'**
   String get inputStageIn;
 
   /// No description provided for @inputStageOut.
   ///
   /// In zh, this message translates to:
-  /// **'本级输出'**
+  /// **'DSP输出'**
   String get inputStageOut;
 
   /// No description provided for @chainStagePreDsp.

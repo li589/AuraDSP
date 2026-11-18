@@ -240,7 +240,7 @@ class EffectsPage extends StatelessWidget {
   }
 }
 
-/* ---- 00 Input Gate (输入门控：常驻不可关闭、总增益旋钮、本级 IN/OUT 电平对比、高级区条形声道平衡) ---- */
+/* ---- 00 Input Gate (输入门控：常驻不可关闭、总增益旋钮、DSP 输入/输出电平对比、高级区条形声道平衡) ---- */
 
 /* ---- 参数滑块 ---- */
 

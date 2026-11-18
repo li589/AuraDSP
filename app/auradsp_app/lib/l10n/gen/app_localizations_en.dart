@@ -2789,10 +2789,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get channelRight => 'Right Channel (R)';
 
   @override
-  String get inputStageIn => 'Stage In';
+  String get inputStageIn => 'DSP Input';
 
   @override
-  String get inputStageOut => 'Stage Out';
+  String get inputStageOut => 'DSP Output';
 
   @override
   String get chainStagePreDsp => 'Pre-DSP';

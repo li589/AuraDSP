@@ -302,6 +302,7 @@ class _InputStageMeterMatrix extends StatelessWidget {
           listenable: Listenable.merge([
             model.vizChannelCount,
             model.vizStageChLevels,
+            model.vizChannelLevels,
             model.inputMeterInL,
             model.inputMeterInR,
             model.inputMeterOutL,
@@ -329,14 +330,16 @@ class _InputStageMeterMatrix extends StatelessWidget {
             }
 
             double getOutDb(int i) {
-              if (ch == 2) {
-                return i == 0 ? model.inputMeterOutL.value : model.inputMeterOutR.value;
+              // DSP 输出（第四十八轮 S1，user 裁定甲）：最终
+              // 输出逐声道电平（填充后、与主页同源的一个数
+              // 据源，不另造计量）。旧口径取门控本级输出
+              // （stage 13）——采样点在下混/填充之前，被填充
+              // 声道结构上不可见（宾机 A5/C3 实证）。IN 行
+              // 仍取 stage 12 = DSP 入口原始流（DSP 输入）。
+              if (i < kVizChannelMax) {
+                return model.vizChannelLevels.value[i];
               }
-              if (grid.length >= 14 * kVizChannelMax && i < kVizChannelMax) {
-                final v = grid[13 * kVizChannelMax + i];
-                if (v > -119.0) return v;
-              }
-              return i == 0 ? model.inputMeterOutL.value : (i == 1 ? model.inputMeterOutR.value : -120.0);
+              return -120.0;
             }
 
             return Container(
@@ -350,7 +353,9 @@ class _InputStageMeterMatrix extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 顶栏：本级输入 (IN) 与 本级输出 (OUT) 胶囊标签
+              // 顶栏：DSP 输入 (IN) 与 DSP 输出 (OUT) 胶囊标签
+              // （第四十八轮 S1 改名：IN=入口原始流、OUT=最终
+              // 输出填充后，皆为全链口径，不再称本级）
               Row(
                 children: [
                   _StageBadge(

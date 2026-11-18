@@ -2662,10 +2662,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get channelRight => '右チャンネル (R)';
 
   @override
-  String get inputStageIn => '本段入力';
+  String get inputStageIn => 'DSP入力';
 
   @override
-  String get inputStageOut => '本段出力';
+  String get inputStageOut => 'DSP出力';
 
   @override
   String get chainStagePreDsp => 'DSP 前';
