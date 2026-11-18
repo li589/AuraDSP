@@ -5,82 +5,43 @@ import 'package:flutter/material.dart';
 
 import 'theme.dart';
 
-/// 全窗极光背景：3 团缓慢漂移的径向光斑 + 暗角（设计 §4.2）。
+/// 全窗极光背景：3 团径向光斑 + 暗角（设计 §4.2），静态单相位。
 ///
-/// 性能口径：不要用 AnimationController.repeat() —— 它按 vsync 60fps
-/// 全窗重绘 4 个大半径 RadialGradient（每帧新建 Shader），实测能把 GPU
-/// 推到 75%、内存推到 1G+。改为 24 档量化 + 900ms Timer（约 1.1fps），
-/// 并用 RepaintBoundary 隔离内容层，重绘成本降到原来的约 2%。
-/// 2026-11-12 再降载：安装/卸载运行中与等待提权时经 [auroraFrozen]
-/// 冻结步进（重活期间背景静止）；窗口不可见（生命周期非 resumed）
-/// 时同样停表——软件渲染环境下每次全窗渐变重绘都是整屏 shader 填充。
-class AuroraBackground extends StatefulWidget {
+/// 性能口径（两轮实测教训）：
+/// - 初版 AnimationController.repeat() 60fps 全窗重绘大半径
+///   RadialGradient：GPU 75%、内存 1G+（2026-11-12 前）。
+/// - 改 24 档量化 + 900ms 步进后仍不够：第四十九轮 S5b 在
+///   开发机（虚拟显示适配器，GPU 共享内存走系统 RAM）实测
+///   向导欢迎页空闲 Private 1.8–2.6GB，其中 GPU Shared
+///   1.9GB——每档新相位都生成一整套全窗渐变快照进光栅缓存，
+///   步进动画使缓存随相位数成倍膨胀；同机主应用空闲仅
+///   425MB。宾机（VMware 适配器同为共享内存路径）见约
+///   600MB，同源同病、规模随分辨率/DPR 变。
+/// - 安装向导不需要动背景：改静态单相位 + RepaintBoundary
+///   隔离，光栅缓存恒定一份全窗曲面（数十 MB 级），GPU
+///   占用随之回落。[auroraFrozen] 保留为兼容开关（app 层
+///   仍写它），静态实现下无实际作用。
+class AuroraBackground extends StatelessWidget {
   const AuroraBackground({super.key, required this.child});
   final Widget child;
 
   @override
-  State<AuroraBackground> createState() => _AuroraBackgroundState();
-}
-
-/// 背景冻结开关（app 层在运行安装/卸载或等待提权时置位）：
-/// 冻结期间极光停留在当前档位，不再周期重绘。
-final ValueNotifier<bool> auroraFrozen = ValueNotifier<bool>(false);
-
-class _AuroraBackgroundState extends State<AuroraBackground>
-    with WidgetsBindingObserver {
-  static const int _steps = 24;
-  Timer? _timer;
-  int _step = 0;
-  bool _lifecycleResumed = true;
-
-  bool get _shouldRun =>
-      _lifecycleResumed && !auroraFrozen.value;
-
-  void _syncTimer() {
-    if (_shouldRun) {
-      _timer ??= Timer.periodic(const Duration(milliseconds: 900), (_) {
-        if (!mounted) return;
-        setState(() => _step = (_step + 1) % _steps);
-      });
-    } else {
-      _timer?.cancel();
-      _timer = null;
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    auroraFrozen.addListener(_syncTimer);
-    _syncTimer();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    _lifecycleResumed = state == AppLifecycleState.resumed;
-    _syncTimer();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    auroraFrozen.removeListener(_syncTimer);
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _AuroraPainter(_step / _steps),
-      child: RepaintBoundary(child: widget.child),
+    return RepaintBoundary(
+      child: CustomPaint(
+        painter: const _AuroraPainter(0.3),
+        child: RepaintBoundary(child: child),
+      ),
     );
   }
 }
 
+/// 背景冻结开关（历史兼容：app 层在运行安装/卸载或等待提权
+/// 时置位；背景已静态化，置位无实际效果，保留防调用点失效）。
+final ValueNotifier<bool> auroraFrozen = ValueNotifier<bool>(false);
+
 class _AuroraPainter extends CustomPainter {
-  _AuroraPainter(this.t);
+  const _AuroraPainter(this.t);
   final double t; // 0..1
 
   @override
