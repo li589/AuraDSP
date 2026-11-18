@@ -41,10 +41,10 @@ void main() {
     });
   });
 
-  group('第四十一轮：参数块 v3 布局常量', () {
-    test('覆写表紧贴 v2 主体尾部，块版本为 3', () {
-      expect(kApoParamBlockVersion, 3);
-      expect(kApoEpOverrideOffset, 27084);
+  group('第四十一轮立项、第四十七轮升 v4：参数块布局常量', () {
+    test('覆写表紧贴主体尾部，块版本为 4', () {
+      expect(kApoParamBlockVersion, 4);
+      expect(kApoEpOverrideOffset, 27088);
       expect(kApoEpOverrideCount, 8);
       expect(kApoEpOverrideEntryBytes, 24);
       expect(kApoBlockUsedBytes,

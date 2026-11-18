@@ -311,8 +311,9 @@ if f:
 # ---------------------------------------------------------------- [8] 矩阵模式
 print("=== [8] 矩阵模式（mode=0，默认值）per-channel 诚实性 ===")
 # A4 回归：矩阵模式下 channel_levels 须反映 mx_upmix 后真实 out（全列有效），
-# stage 列只保留 L/R 两列（stage 链是立体声，stage_ch_active=2 门控）——
-# 此前缺陷：[2..7] 恒 -120（假死）且 stage 行读上一次 MC 模式残留。
+# 链内 stage 列只保留 L/R 两列（stage 链是立体声，stage_ch_active=2 门控）；
+# stage 12/13（链首输入门控入/出）自第四十七轮 S5 起为例外：逐声道峰值在
+# 处理入口按原始输入全宽采集，有效宽 = 本块声道数（见下方断言）。
 assert set_i32(h, "channels.count", 8) == 0
 assert set_i32(h, "channels.mode", 0) == 0
 feed(h, 8, amps8, blocks=8)
@@ -343,8 +344,18 @@ if f:
           f"got {f.channel_levels[2]:.2f} want {exp_c:.2f}")
     oknz = all(f.channel_levels[c] != -120.0 for c in range(4, 8))
     check(oknz, "channel_levels[4..7] 非 -120（不再假死）")
-    okst = all(ch_level(f, 13, c) == -120.0 for c in range(2, 8))
-    check(okst, "stage_ch[13][2..7] == -120（stage 链立体声，诚实）")
+    # 第四十七轮 S5：stage 12/13 是链首全宽计量（处理入口按原始
+    # 输入逐声道采集，增益前/后各一），矩阵模式下 [2..7] 不再恒
+    # -120——旧断言「stage 链立体声故 13 级高声道恒 -120」随定
+    # 罪废止（输入卡多声道输入行永不亮即此症）。本段输入增益
+    # 0dB，13 级应与输入幅值一致；链内级（15）仍受立体声链作
+    # 用域门控，诚实性断言改钉 15 级。
+    okst = all(abs(ch_level(f, 13, c) - db(amps8[c])) <= TOL for c in range(2, 8))
+    check(okst, "stage_ch[13][2..7] == 输入幅值（r47 S5 链首全宽计量）")
+    ok12 = all(abs(ch_level(f, 12, c) - db(amps8[c])) <= TOL for c in range(2, 8))
+    check(ok12, "stage_ch[12][2..7] == 输入幅值（r47 S5 链首全宽计量）")
+    okchain = all(ch_level(f, 15, c) == -120.0 for c in range(2, 8))
+    check(okchain, "stage_ch[15][2..7] == -120（链内级立体声作用域，诚实）")
     check(abs(ch_level(f, 13, 0) - f.stage_levels_l[13]) < 1e-6 and
           abs(ch_level(f, 13, 1) - f.stage_levels_r[13]) < 1e-6,
           "stage_ch[13][0]/[1] == stage_levels_l/r[13]")

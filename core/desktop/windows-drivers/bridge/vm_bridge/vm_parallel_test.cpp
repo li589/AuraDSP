@@ -198,6 +198,12 @@ ScenResult RunScenario(const char* name, int blocks, int ng, int nullGroup,
     InterlockedExchange(&par.ctx.parallelOn, 1);
     InterlockedExchange(&ser.ctx.busMask, busMask);
     InterlockedExchange(&par.ctx.busMask, busMask);
+    // 声道口径钉离散（第四十七轮 S2）：本场景族验证串/并行等价、
+    // 掩码、空组与测试信号语义，FL/FR 期望是纯进纯出；矩阵折叠
+    // gather 会把高声道折入主对，不属本族口径（折叠系数由
+    // smoke_r47_vb_channel_discipline 源码门 + 引擎侧用例覆盖）。
+    InterlockedExchange(&ser.ctx.chanMode, 1);
+    InterlockedExchange(&par.ctx.chanMode, 1);
     InterlockedExchange(&ser.ctx.testKind, testKind);
     InterlockedExchange(&par.ctx.testKind, testKind);
     ser.ab.nbi = ng * 8;
@@ -298,12 +304,16 @@ ScenResult RunScenario(const char* name, int blocks, int ng, int nullGroup,
                 break;
             }
         }
-        // 组内 2..7 透传（非双耳）
+        // 组内 2..7（非双耳）：掩码关的组整组直通（W==R）；进引擎
+        // 的组在工作声道之外一律清零（第四十七轮 S2 通道纪律——
+        // 旧「原样透传」断言随定罪废止：透传使声道数量/模式设置
+        // 在 VB 下完全失效，宾机实证输出恒 7.1）。
         for (int ch = base + 2; ch < base + 8 && r.ok; ++ch)
             for (int i = 0; i < 128; ++i)
-                if (W(ch, i) != R(ch, i)) {
+                if (W(ch, i) != (masked ? R(ch, i) : 0.0f)) {
                     r.ok = false;
-                    r.why = "inner passthrough mismatch";
+                    r.why = masked ? "inner passthrough mismatch"
+                                   : "inner slot not zeroed (r47 discipline)";
                     break;
                 }
     }
@@ -486,6 +496,10 @@ bool RunChannelScenario(int procCh, std::string& why) {
     }
     InterlockedExchange(&ser.ctx.workCh, procCh);
     InterlockedExchange(&par.ctx.workCh, procCh);
+    // 同 RunScenario：声道档位回归的期望是离散口径（引擎收纯
+    // 总线声道、非引擎槽清零），钉离散（第四十七轮 S2）。
+    InterlockedExchange(&ser.ctx.chanMode, 1);
+    InterlockedExchange(&par.ctx.chanMode, 1);
     VmParallelInit(&par.ctx);
     VmParallelInit(&ser.ctx);
     InterlockedExchange(&ser.ctx.parallelOn, 0);
@@ -539,8 +553,10 @@ bool RunChannelScenario(int procCh, std::string& why) {
         for (int ch = base; ch < base + 8 && ok; ++ch) {
             if (inSlot[ch - base]) continue;
             for (int i = 0; i < 128; ++i) {
-                if (W(ch, i) != R(ch, i)) {
-                    why = "passthrough mismatch";
+                // 非引擎槽必须清零（第四十七轮 S2 通道纪律；
+                // 旧「透传」断言随定罪废止，见 RunScenario 注）。
+                if (W(ch, i) != 0.0f) {
+                    why = "non-engine slot not zeroed (r47 discipline)";
                     ok = false;
                     break;
                 }
