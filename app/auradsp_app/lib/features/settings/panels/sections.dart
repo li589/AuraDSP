@@ -941,7 +941,7 @@ class _ApoEndpointRow extends StatelessWidget {
     // 已附加 > 排队 > 空；已附加行点复选件 = 锁定切换
     // （暗勾 ↔ 亮叉，user 裁定叉可逆）。
     final triState = attached ? (locked ? 3 : 2) : (checked ? 1 : 0);
-    final VoidCallback? triTap = attached
+    final VoidCallback triTap = attached
         ? () => model.toggleApoLocked(ep.id)
         : () => model.toggleApoChecked(ep.id, !checked);
     return InkWell(

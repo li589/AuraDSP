@@ -1164,7 +1164,8 @@ class AppModel extends ChangeNotifier {
   DateTime? _vizLastFrameAt;
   DateTime? _vizSilentSince;
   bool _vizDisplayCleared = true;
-  Timer? _vizWatchdogTimer;
+  // 看门狗 Timer 由事件循环持有（Timer.periodic 不依赖外部引用存活），
+  // App 生命周期单例无取消路径，故不留字段句柄（避免 unused_field）。
 
   // 动态衰减量计量 (Gain Reduction, dB, 负值或 0.0)
   final grLimiter = ValueNotifier<double>(0.0);
@@ -1369,9 +1370,9 @@ class AppModel extends ChangeNotifier {
     if (!testing) {
       // 可视化清屏看门狗（第四十九轮 S4）：1 秒一拍，断流或
       // 持续静默超 3 秒即统一清屏（见 state_events 的
-      // vizWatchdogTick）。App 生命周期单例，随进程存续。
-      _vizWatchdogTimer =
-          Timer.periodic(const Duration(seconds: 1), (_) => vizWatchdogTick());
+      // vizWatchdogTick）。App 生命周期单例，随进程存续；
+      // 无可取消路径，故不持句柄（见字段处注释）。
+      Timer.periodic(const Duration(seconds: 1), (_) => vizWatchdogTick());
       checkAsioDriverStatus();
       checkApoStatus(silent: true);
       // VAIO 崩溃断路器消费点：必须早于 isolate ready 的自动
