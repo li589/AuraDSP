@@ -8,7 +8,10 @@
   [2] ch=6 同上
   [3] gate 深门限 → stage_ch[13] 逐声道动态更新、stage_ch[12] 保持输入原值
   [4] filter(LP) 开 → stage_ch[15] 行被真实更新（MC 采样非 stale）
-  [5] vendor 段 → stage_ch[0..11][2..7] == -120；[0]/[1] 与 stage_levels_l/r 逐位一致
+  [5] vendor 段（第四十九轮 S1 分工口径）→ 补接 tap 的六级
+      （0/1/3/4/10/11）stage_ch[2..7] 为逐声道实测值；立体声对
+      本性的六级（2/5/6/7/8/9）[2..7] == -120（诚实暗列）；
+      全部 12 级 [0]/[1] 与 stage_levels_l/r 逐位一致
   [6] GR 槽 → stage_ch[24..29][*] == -120（单值语义）
   [7] stereo 回归（MC→stereo 切换）→ channel_levels[0]/[1] == level_l/r 逐位一致；
       stage_ch[*][0]/[1] == stage_levels_l/r；stage_ch[*][2..7] == -120（无 MC 残留泄漏）
@@ -161,6 +164,39 @@ def assert_passthrough_row(f, stage, amps, tol=TOL, label=""):
     check(ok, f"{label}stage_ch[{stage}] 逐声道 == 输入幅值 ±{tol}dB")
 
 
+# 第四十九轮 S1 分工：vendor 索引级中走自研 MC 处理的六级已补接
+# 逐声道 tap（sample_stage_mc_vendor），全关直通态下 [2..7] 应为
+# 输入幅值实测；其余六级为立体声对本性（vendor 核心只处理
+# FL/FR 对），[2..7] 恒 -120 诚实暗列。两组 [0]/[1] 均须与
+# stage_levels_l/r 逐位一致（tap 镜像同源）。
+TAPPED_VENDOR = (0, 1, 3, 4, 10, 11)
+PAIR_VENDOR = (2, 5, 6, 7, 8, 9)
+
+
+def assert_vendor_rows(f, amps):
+    ok = True
+    for i in range(12):
+        if ch_level(f, i, 0) != f.stage_levels_l[i] or \
+                ch_level(f, i, 1) != f.stage_levels_r[i]:
+            ok = False
+            print(f"      vendor[{i}] [0]/[1] 与 L/R 列不一致")
+        if i in TAPPED_VENDOR:
+            for c in range(2, len(amps)):
+                got = ch_level(f, i, c)
+                if abs(got - db(amps[c])) > TOL:
+                    ok = False
+                    print(f"      vendor[{i}] ch{c}: got {got:.2f} "
+                          f"want {db(amps[c]):.2f}（补接级应逐声道实测）")
+        else:
+            for c in range(2, 8):
+                if ch_level(f, i, c) != -120.0:
+                    ok = False
+                    print(f"      vendor[{i}] ch{c}: got {ch_level(f, i, c):.2f} "
+                          f"want -120（对级诚实暗列）")
+    check(ok, "vendor 段 r49 分工：补接级 [2..7] 逐声道实测 + "
+              "对级恒 -120；[0]/[1] 逐位一致")
+
+
 # ---------------------------------------------------------------- [0] ABI 门禁
 print("=== [0] ABI 版本门禁 ===")
 abi = lib.auradsp_abi()
@@ -196,15 +232,8 @@ if f:
         check(abs(ch_level(f, st, 0) - f.stage_levels_l[st]) < 1e-6 and
               abs(ch_level(f, st, 1) - f.stage_levels_r[st]) < 1e-6,
               f"stage_ch[{st}][0]/[1] == stage_levels_l/r[{st}]")
-    # vendor 段：仅 FL/FR 两列有效，且与 L/R 列逐位一致
-    okv = True
-    for i in range(12):
-        if ch_level(f, i, 0) != f.stage_levels_l[i] or ch_level(f, i, 1) != f.stage_levels_r[i]:
-            okv = False
-        for c in range(2, 8):
-            if ch_level(f, i, c) != -120.0:
-                okv = False
-    check(okv, "vendor 段 stage_ch[0..11]：[0]/[1] 逐位一致 + [2..7] 恒 -120")
+    # vendor 段：r49 分工口径（补接级逐声道实测 / 对级诚实暗列）
+    assert_vendor_rows(f, amps8)
     # GR 槽：全 -120
     okg = all(ch_level(f, i, c) == -120.0 for i in range(24, 30) for c in range(8))
     check(okg, "GR 槽 stage_ch[24..29][*] == -120（单值语义）")
@@ -270,14 +299,7 @@ print("=== [5][6] vendor 段 / GR 槽语义复断言（效果器动过后） ===
 feed(h, 8, amps8, blocks=8)
 f = read_last_frame(h)
 if f:
-    okv = True
-    for i in range(12):
-        if ch_level(f, i, 0) != f.stage_levels_l[i] or ch_level(f, i, 1) != f.stage_levels_r[i]:
-            okv = False
-        for c in range(2, 8):
-            if ch_level(f, i, c) != -120.0:
-                okv = False
-    check(okv, "vendor 段 stage_ch[0..11]：[0]/[1] 逐位一致 + [2..7] 恒 -120")
+    assert_vendor_rows(f, amps8)
     okg = all(ch_level(f, i, c) == -120.0 for i in range(24, 30) for c in range(8))
     check(okg, "GR 槽 stage_ch[24..29][*] == -120")
 

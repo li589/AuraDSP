@@ -1,6 +1,20 @@
 import 'package:auradsp_app/platform/platform_profile.dart';
+import 'package:auradsp_app/core/audio_modes.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// 构造确定状态的模型：捕获链（wasapi 进/出）使预期 viz
+/// 来源恒为 local（无 backend 键的帧）。不显式设定的话，
+/// 构造会读机器存量配置，预期来源随环境漂移、帧被来源
+/// 治理丢弃（r49 门首跑实证，与 viz_source_governance
+/// 同口径处理）。
+AppModel _model() {
+  final m = AppModel(testing: true);
+  m.setAudioMode('vaio');
+  m.setPipelineInput(AudioModes.inputWasapi);
+  m.setPipelineOutput(AudioModes.outputWasapi);
+  return m;
+}
 
 /// 第四十九轮 S4：统一可视化清屏机制——切换即清屏（链路
 /// 重组汇合点 applyPipelineChain）+ 看门狗断流/静默清屏。
@@ -15,7 +29,7 @@ Map<String, dynamic> _vizFrame({required double level, required double spec}) =>
 void main() {
   group('可视化清屏（第四十九轮 S4）', () {
     test('断流 >3s 看门狗清屏；3s 内不清；清后不重复清', () {
-      final m = AppModel(testing: true);
+      final m = _model();
       final t0 = DateTime.now();
       m.handleMessageForTesting(_vizFrame(level: -10, spec: 0.5));
       expect(m.levelL.value, -10);
@@ -31,7 +45,7 @@ void main() {
     });
 
     test('持续静默帧 >3s 清屏（GR/峰值残留兜底）', () {
-      final m = AppModel(testing: true);
+      final m = _model();
       m.handleMessageForTesting(_vizFrame(level: -10, spec: 0.5));
       expect(m.levelL.value, -10);
       m.handleMessageForTesting(_vizFrame(level: -120, spec: 0.0));
@@ -43,7 +57,7 @@ void main() {
     });
 
     test('有声帧持续到达时看门狗不清屏', () {
-      final m = AppModel(testing: true);
+      final m = _model();
       m.handleMessageForTesting(_vizFrame(level: -10, spec: 0.5));
       m.vizWatchdogTick(DateTime.now().add(const Duration(seconds: 1)));
       expect(m.levelL.value, -10);
@@ -51,7 +65,7 @@ void main() {
 
     test('链路重组（applyPipelineChain）即清屏', () {
       if (!PlatformProfile.supportsBridges) return; // 非桥平台该入口空转
-      final m = AppModel(testing: true);
+      final m = _model();
       m.handleMessageForTesting(_vizFrame(level: -10, spec: 0.5));
       expect(m.levelL.value, -10);
       m.applyPipelineChain();

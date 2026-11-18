@@ -90,6 +90,7 @@ EXPECT_SIZE = 1600                 # 1596 + 4 字节尾填充（结构含 uint64
 # 已知的手抄定义改导入方（验收对象：必须全部走 import，且全仓不许多出）。
 # 原 8 处是 §7-1 改造对象；smoke_e4_stage16_crossmode.py 是其后第一个新增
 # 消费方——它必须一开始就走导入，而不是再长出第 9 份手抄件。
+# smoke_r49_mc_stage_meters.py（第四十九轮 S1）为第二个新增消费方，同口径。
 KNOWN_IMPORTERS = [
     "test/smoke/smoke_block1056.py",
     "test/smoke/smoke_chain_meter.py",
@@ -103,6 +104,7 @@ KNOWN_IMPORTERS = [
     "tools/probe/probe_viz_cost.py",
     "test/smoke/smoke_e4_stage16_crossmode.py",
     "test/smoke/smoke_linux_engine_process.py",
+    "test/smoke/smoke_r49_mc_stage_meters.py",
 ]
 
 # ---------------------------------------------------------------------------
