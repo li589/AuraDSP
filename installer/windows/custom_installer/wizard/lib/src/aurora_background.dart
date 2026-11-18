@@ -1,37 +1,75 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
 import 'theme.dart';
 
-/// 全窗极光背景：3 团径向光斑 + 暗角（设计 §4.2），静态单相位。
+/// 全窗极光背景：3 团径向光斑 + 暗角（设计 §4.2）。
 ///
-/// 性能口径（两轮实测教训）：
-/// - 初版 AnimationController.repeat() 60fps 全窗重绘大半径
-///   RadialGradient：GPU 75%、内存 1G+（2026-11-12 前）。
-/// - 改 24 档量化 + 900ms 步进后仍不够：第四十九轮 S5b 在
-///   开发机（虚拟显示适配器，GPU 共享内存走系统 RAM）实测
-///   向导欢迎页空闲 Private 1.8–2.6GB，其中 GPU Shared
-///   1.9GB——每档新相位都生成一整套全窗渐变快照进光栅缓存，
-///   步进动画使缓存随相位数成倍膨胀；同机主应用空闲仅
-///   425MB。宾机（VMware 适配器同为共享内存路径）见约
-///   600MB，同源同病、规模随分辨率/DPR 变。
-/// - 安装向导不需要动背景：改静态单相位 + RepaintBoundary
-///   隔离，光栅缓存恒定一份全窗曲面（数十 MB 级），GPU
-///   占用随之回落。[auroraFrozen] 保留为兼容开关（app 层
-///   仍写它），静态实现下无实际作用。
-class AuroraBackground extends StatelessWidget {
+/// 性能口径（第四十九轮 S5b 三轮实测、二分定罪，订正此前
+/// 「步进相位撑爆缓存」的误判）：
+/// - 病灶是「全窗大半径径向渐变 CustomPaint 挂在窗口根部」
+///   本身：开发机（虚拟显示适配器，GPU 共享内存走系统
+///   RAM）实测向导欢迎页空闲 Private 1.5–2.6GB、GPU
+///   Shared 最高 1.9GB；动画版与静态单相位版同病（静态
+///   版 1.49GB/1.41GB），换软件渲染仍 1.09GB——与帧率、
+///   相位数、GPU 后端都无关，是该渐变层在共享内存型
+///   适配器上的光栅资源膨胀。同机主应用空闲仅 425MB；
+///   宾机（VMware 适配器同路径）见约 600MB。
+/// - 二分实证：同版向导仅把背景换纯色 → WS 226MB /
+///   GPU Shared 144MB。故修复不靠降帧率：启动时把极光
+///   用 PictureRecorder 预渲染成一张 512×334 的静态图
+///   （窗口固定 920×600、同宽高比；渐变本身柔和，拉伸
+///   填充无可见差异），此后只是一张小位图的合成，全窗
+///   渐变层彻底退出光栅路径。
+/// [auroraFrozen] 保留为兼容开关（app 层仍写它），静态
+/// 实现下无实际作用。
+class AuroraBackground extends StatefulWidget {
   const AuroraBackground({super.key, required this.child});
   final Widget child;
 
   @override
+  State<AuroraBackground> createState() => _AuroraBackgroundState();
+}
+
+class _AuroraBackgroundState extends State<AuroraBackground> {
+  ui.Image? _image;
+
+  @override
+  void initState() {
+    super.initState();
+    _render();
+  }
+
+  Future<void> _render() async {
+    const size = Size(512, 334);
+    final recorder = ui.PictureRecorder();
+    const _AuroraPainter(0.3).paint(Canvas(recorder), size);
+    final image = await recorder.endRecording().toImage(512, 334);
+    if (!mounted) {
+      image.dispose();
+      return;
+    }
+    setState(() => _image = image);
+  }
+
+  @override
+  void dispose() {
+    _image?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return RepaintBoundary(
-      child: CustomPaint(
-        painter: const _AuroraPainter(0.3),
-        child: RepaintBoundary(child: child),
-      ),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const ColoredBox(color: Aurora.bg),
+        if (_image != null) RawImage(image: _image, fit: BoxFit.fill),
+        RepaintBoundary(child: widget.child),
+      ],
     );
   }
 }
