@@ -1186,7 +1186,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get testDebugMode => 'Debug Mode (restart required)';
 
   @override
-  String get testAsioHint => 'Test signals (waveform and file) are unavailable whenever ASIO is in the chain on either side: ASIO paths do not accept software injection. Use an external source instead.';
+  String get testAsioHint =>
+      'Test signals (waveform and file) are unavailable whenever ASIO is in the chain on either side: ASIO paths do not accept software injection. Use an external source instead.';
 
   @override
   String get testSrcHint =>

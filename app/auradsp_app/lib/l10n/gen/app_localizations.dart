@@ -2113,7 +2113,7 @@ abstract class AppLocalizations {
   /// No description provided for @testAsioHint.
   ///
   /// In zh, this message translates to:
-  /// **'ASIO 模式下，测试信号经 ASIO 驱动输出；若无声，请先确认 ASIO 驱动的输出路由无误（正常播放能出声时测试才会出声）。'**
+  /// **'输入或输出任一端为 ASIO 时，测试信号（波形与文件）无效：ASIO 链路不接受软件注入，请改用外部信号源。'**
   String get testAsioHint;
 
   /// No description provided for @testSrcHint.
