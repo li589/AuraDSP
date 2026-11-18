@@ -509,21 +509,43 @@ CMiniportWaveRTStream::FreeAudioBuffer(
         if (m_pDmaBuffer != NULL)
         {
             m_pPortStream->UnmapAllocatedPages(m_pDmaBuffer, AudioBufferMdl);
-            m_pDmaBuffer = NULL;
             released = TRUE;
+            m_pPortStream->FreePagesFromMdl(AudioBufferMdl);
         }
-
-        m_pPortStream->FreePagesFromMdl(AudioBufferMdl);
+        else
+        {
+            //
+            // C2 复审加固：m_pDmaBuffer 已空说明是重复 Free（或调用方
+            // 传入了不属本流的 MDL）。此时不得再 FreePagesFromMdl——
+            // 旧实现会二次释放同一 MDL（内核池损坏风险）。
+            //
+            AURA_TRACE("FreeAudioBuffer: no mapping held, skip FreePages (mdl=%p)\n",
+                       AudioBufferMdl);
+        }
+    }
+    else if (m_pDmaBuffer != NULL)
+    {
+        //
+        // C2 驱动审计（2026-11-18 复审加固）：异常态（端口流已失效、
+        // 或调用方传入空 MDL）下无法完成释放，但调用方已声明本流缓冲
+        // 生命周期结束——必须让 m_pDmaBuffer 进入 NULL 态，否则随后的
+        // AllocateAudioBuffer 会被「重复分配守卫」永久拒绝、流无法重建。
+        // 代价是本块页泄漏（此态下端口流已死、流本体即将销毁，可接受）。
+        //
+        AURA_TRACE("FreeAudioBuffer: cannot release (port=%p mdl=%p), leak %u bytes\n",
+                   m_pPortStream, AudioBufferMdl, m_ulBufferSize);
+        released = TRUE;
     }
 
+    m_pDmaBuffer = NULL;
     m_ulBufferSize = 0;
 
     //
-    // C2 驱动审计（2026-11-18）：只有真正卸载了本流缓冲才复位时钟。
-    // 旧实现无条件 Reset——AudioBufferMdl==NULL（端口驱动清空态）或
-    // 重复释放时也会把位置计数清零；若流此刻仍在 RUN，桥侧看到的
+    // C2 驱动审计（2026-11-18）：只有真正结束了缓冲生命周期才复位
+    // 时钟。旧实现无条件 Reset——AudioBufferMdl==NULL（端口驱动清空态）
+    // 或重复释放时也会把位置计数清零；若流此刻仍在 RUN，桥侧看到的
     // TotalBytesWritten/WriteOffset 位移会突变（可听为跳音/丢音），
-    // 几何锚点也被误导。缓冲没了才没有位置可言，故按释放事实复位。
+    // 几何锚点也被误导。缓冲没了才没有位置可言。
     //
     if (released)
     {
