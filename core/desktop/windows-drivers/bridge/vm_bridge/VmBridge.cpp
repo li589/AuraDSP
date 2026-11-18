@@ -1850,22 +1850,26 @@ int vb_test_start(int kind, const float* pcm, int frames, int ch, int rate) {
     if (kind < 1 || kind > 3) return -2;
     FreeTestFile();
     if (kind == 3) {
-        // 文件 PCM 拷贝（交织立体声 float32；单声道铺双声道）。
+        // 文件 PCM 拷贝（交织 float32）。第四十九轮 S2：与
+        // ASIO 桥 B2c 同语义支持 1..8 声道源——旧实现恒截断
+        // 为立体声且不写 testFileCh，多声道测试文件在 VB 模
+        // 式下 3..8 声道在桥门口即丢失（B2 复测混杂因子）。
+        // 单声道铺双声道，多声道按 ch 原样存储（泵侧
+        // FillTestSignalN 按 procCh 取用/补零，本已支持）。
         if (!pcm || frames <= 0 || rate <= 0) return -3;
-        const int srcCh = (ch == 1) ? 1 : 2;
-        float* buf = (float*)malloc(sizeof(float) * (size_t)frames * 2);
+        if (ch < 1 || ch > 8) return -3;
+        const int storeCh = (ch <= 1) ? 2 : ch;
+        float* buf = (float*)malloc(sizeof(float) * (size_t)frames * (size_t)storeCh);
         if (!buf) return -4;
-        for (int i = 0; i < frames; ++i) {
-            if (srcCh == 1) {
-                buf[i * 2] = buf[i * 2 + 1] = pcm[i];
-            } else {
-                buf[i * 2] = pcm[i * 2];
-                buf[i * 2 + 1] = pcm[i * 2 + 1];
-            }
+        if (ch <= 1) {
+            for (int i = 0; i < frames; ++i) buf[i * 2] = buf[i * 2 + 1] = pcm[i];
+        } else {
+            memcpy(buf, pcm, sizeof(float) * (size_t)frames * (size_t)storeCh);
         }
         g_b.ctx.testFile = buf;
         g_b.ctx.testFrames = (uint64_t)frames;
         g_b.ctx.testRate = rate;
+        g_b.ctx.testFileCh = storeCh;
         g_b.ctx.testPos = 0;
     }
     g_b.ctx.testPhase = 0;

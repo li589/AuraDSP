@@ -177,7 +177,7 @@ struct PumpCtx {
     const float* testFile = nullptr;  // 主线程 test_start 时拷贝，stop 时先清 kind 再 Sleep 后释放
     uint64_t testFrames = 0;     // 源帧数（按 testFileCh 交织）
     int testRate = 0;
-    int testFileCh = 2;          // testFile 交织声道数（2..8；pump 恒 2，ASIO 桥 B2c 可为 4/6/8）
+    int testFileCh = 2;          // testFile 交织声道数（2..8；ASIO 桥 B2c 与 VB 桥 r49 S2 均可为 4/6/8）
     double testPos = 0.0;  // 文件播放头（源帧单位，RT 独占，循环）
     // ---- Z17 组间并行处理（2026-10-24；bridge 专用，02 泵冻结不跟进）----
     // 根因：VM 单回调内 8 组串行 process，Ozone 级插件实测 0.76ms/组 @128
