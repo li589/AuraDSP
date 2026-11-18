@@ -185,5 +185,24 @@ void main() {
       m.toggleApoLocked(_out71);
       expect(m.apoLockedEndpoints.contains(_out71), isFalse);
     });
+
+    test('一键卸载只卸带叉（第四十八轮 S2：目标集=锁定∩已附加）', () {
+      final m = AppModel(testing: true);
+      m.apoInstalledEndpoints = [
+        {'EndpointId': _out71, 'DeviceName': 'EP A'},
+        {'EndpointId': _in20, 'DeviceName': 'EP B'},
+      ];
+      // 都没标叉：目标集为空（不卸任何端点）
+      expect(m.apoDetachLockedTargets(), isEmpty);
+      // 只标 B：目标集只有 B，A 保持已附加
+      m.toggleApoLocked(_in20);
+      expect(m.apoDetachLockedTargets(), [_in20]);
+      // A 也标叉：两者都进目标集
+      m.toggleApoLocked(_out71);
+      expect(m.apoDetachLockedTargets().toSet(), {_out71, _in20});
+      // A 取消标叉：又只剩 B
+      m.toggleApoLocked(_out71);
+      expect(m.apoDetachLockedTargets(), [_in20]);
+    });
   });
 }

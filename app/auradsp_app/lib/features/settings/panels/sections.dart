@@ -736,16 +736,13 @@ class _SystemApoPanel extends StatelessWidget {
               model.isApoOperating ? l.setProcessing : l.apoActionDetach,
               icon: Icons.link_off,
               danger: true,
+              // 一键卸载只卸带叉端点（第四十八轮 S2，user 裁
+              // 定）：汇总与失败原因由状态层通知呈现，本 chip
+              // 不再自行拼文案（与一键附加同口径）。
               onTap: model.isApoOperating
                   ? null
                   : () async {
-                      final ok = await model.detachSystemApo();
-                      model.postNotice(
-                        ok
-                            ? l.setApoUnregistered
-                            : (model.lastApoError ?? l.setApoUnregisterFailed),
-                        level: ok ? NoticeLevel.info : NoticeLevel.error,
-                      );
+                      await model.detachLockedApoEndpoints();
                     },
             ),
             // 第十二轮 C：复合与否只在附加那一刻被工具消费，附加
@@ -858,11 +855,12 @@ class _ApoEndpointListState extends State<_ApoEndpointList> {
   }
 }
 
-/// 三态复选件（第四十六轮 S3、第四十七轮 S1 改可逆）：
-/// 0 空 / 1 亮勾（排队）/ 2 暗勾（已附加）/ 3 亮叉（已附
-/// 加且锁定）。勾的亮暗与文字的亮/正常共同表达附加成
-/// 败——失败者留在 1（可取消），成功者进 2；2 与 3 互点
-/// 切换（叉再点回暗勾，user 裁定）；回空只经一键卸载。
+/// 三态复选件（第四十六轮 S3、第四十七轮 S1 改可逆、
+/// 第四十八轮 S2 口径定版）：0 空 / 1 亮勾（待附加）/
+/// 2 暗勾（已附加保持）/ 3 亮叉（待卸载）。勾的亮暗与
+/// 文字的亮/正常共同表达附加成败——失败者留在 1（可取
+/// 消），成功者进 2；2 与 3 互点切换（叉再点回暗勾，
+/// user 裁定）；回空只经一键卸载且只卸 3 者（S2）。
 class _ApoTriBox extends StatelessWidget {
   final int state;
   final VoidCallback? onTap;

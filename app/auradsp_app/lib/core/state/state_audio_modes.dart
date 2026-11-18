@@ -2021,4 +2021,45 @@ extension AudioModesState on AppModel {
       return false;
     }
   }
+
+  /// 一键卸载只卸带叉端点（第四十八轮 S2，user 裁定
+  /// 2026-11-18）：三态口径定版——亮勾=待附加、暗勾=已
+  /// 附加保持、亮叉=待卸载。本方法逐一卸载锁定集 ∩ 已
+  /// 附加者，未标叉的已附加端点保持不动；单个失败不连
+  /// 带其余，结束汇总通知。与 detachSystemApo() 无参全
+  /// 卸口径分工：全卸只保留给模式切离的自动卸载（切离
+  /// sysapo 必须卸净才能离开，见 _runApoDetachThenMode）。
+  /// 一键卸载的目标集（S2）：锁定集 ∩ 已附加，纯函数供
+  /// 单测与 detachLockedApoEndpoints 共用。
+  List<String> apoDetachLockedTargets() =>
+      apoLockedEndpoints.where(apoEndpointAttached).toList();
+
+  Future<int> detachLockedApoEndpoints() async {
+    if (!PlatformProfile.supportsBridges || isApoOperating) return 0;
+    final targets = apoDetachLockedTargets();
+    if (targets.isEmpty) {
+      postNotice('没有标叉的端点可卸载：先把要卸载的已附加端点点成叉',
+          level: NoticeLevel.warning);
+      return 0;
+    }
+    var okCount = 0;
+    var failCount = 0;
+    for (final id in targets) {
+      final ok = await detachSystemApo(endpointNameOrId: id);
+      if (ok) {
+        okCount++;
+      } else {
+        failCount++;
+        dbgLog('apo detach-locked: $id failed: ${lastApoError ?? ''}');
+      }
+    }
+    if (failCount == 0) {
+      postNotice('已卸载 $okCount 个端点');
+    } else {
+      postNotice('一键卸载完成：成功 $okCount 个，失败 $failCount 个',
+          level: NoticeLevel.warning);
+    }
+    _notifyUi();
+    return okCount;
+  }
 }
