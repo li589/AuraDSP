@@ -99,8 +99,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channelCount => '声道数量';
 
   @override
-  String get channelCountHint =>
-      '自动跟随输入源与输出设备；也可手动锁定 2.0 / 4.0 / 5.1 / 7.1。';
+  String get channelCountHint => '自动跟随输入源与输出设备；也可手动锁定 2.0 / 4.0 / 5.1 / 7.1。';
 
   @override
   String get channelCountAuto => '自动';
@@ -1509,6 +1508,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get asioRefresh => '刷新驱动';
+
+  @override
+  String get vaioDeviceInUse => '该设备正在被另一个人使用';
 
   @override
   String get asioSwitches => '回调帧';

@@ -277,7 +277,7 @@ abstract class AppLocalizations {
   /// No description provided for @channelCountHint.
   ///
   /// In zh, this message translates to:
-  /// **'工作声道拓扑。自动模式跟随输入源与输出端点协商；亦可手动锁定 2.0 / 4.0 / 5.1 / 7.1。'**
+  /// **'自动跟随输入源与输出设备；也可手动锁定 2.0 / 4.0 / 5.1 / 7.1。'**
   String get channelCountHint;
 
   /// No description provided for @channelCountAuto.
@@ -2056,16 +2056,16 @@ abstract class AppLocalizations {
   /// **'打开音频'**
   String get testOpenAudio;
 
-  /// No description provided for @waveSine.
-  ///
-  /// In zh, this message translates to:
-  /// **'正弦波'**
   /// No description provided for @wavePlay.
   ///
   /// In zh, this message translates to:
   /// **'播放'**
   String get wavePlay;
 
+  /// No description provided for @waveSine.
+  ///
+  /// In zh, this message translates to:
+  /// **'正弦波'**
   String get waveSine;
 
   /// No description provided for @waveSquare.
@@ -2167,7 +2167,7 @@ abstract class AppLocalizations {
   /// No description provided for @channelPhaseA.
   ///
   /// In zh, this message translates to:
-  /// **'当输入音频或输出设备为多声道（4.0 / 5.1 / 7.1）时的 DSP 策略：离散多声道＝全声道独立流经 DSP，各效果器可独立指定作用声道，支持多声道插件与上混；矩阵下混＝折叠为立体声流经 DSP 效果器后再上混回填环绕声道（超低音直接直通）。「双耳虚拟环绕」开启时优先级最高，将自动以 HRIR 渲染为耳机立体声。'**
+  /// **'多声道处理策略：矩阵下混＝折叠为立体声处理后再上混回填（LFE 直通）；离散逐声道＝全声道独立处理。双耳虚拟环绕开启时优先。'**
   String get channelPhaseA;
 
   /// No description provided for @upmixFill.
@@ -2895,6 +2895,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'刷新驱动'**
   String get asioRefresh;
+
+  /// No description provided for @vaioDeviceInUse.
+  ///
+  /// In zh, this message translates to:
+  /// **'该设备正在被另一个人使用'**
+  String get vaioDeviceInUse;
 
   /// No description provided for @asioSwitches.
   ///

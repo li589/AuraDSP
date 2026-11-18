@@ -461,7 +461,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get ioVaioReady => '準備完了（システム/アプリのストリーム待ち）';
 
   @override
-  String get ioVaioGuideShort => 'システムのサウンド設定または再生ソフトで、既定の出力を AuraVAIO にしてください。';
+  String get ioVaioGuideShort =>
+      'システムのサウンド設定または再生ソフトで、既定の出力を AuraVAIO にしてください。';
 
   @override
   String get ioAsioChannelLabel => '入力チャンネル';
@@ -1534,6 +1535,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get asioRefresh => '更新';
+
+  @override
+  String get vaioDeviceInUse => '该设备正在被另一个人使用';
 
   @override
   String get asioSwitches => 'コールバック';

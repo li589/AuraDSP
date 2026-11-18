@@ -1616,6 +1616,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get asioRefresh => 'Refresh';
 
   @override
+  String get vaioDeviceInUse => 'This device is being used by another person';
+
+  @override
   String get asioSwitches => 'Switches';
 
   @override
@@ -3367,7 +3370,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get testAudioMp3Prompt => 'Enter or select MP3 audio file path:';
 
   @override
-  String get testAudioAnyPrompt => 'Enter or select a test audio (WAV/MP3) file path:';
+  String get testAudioAnyPrompt =>
+      'Enter or select a test audio (WAV/MP3) file path:';
 
   @override
   String get testAudioLoad => 'Load Audio';
