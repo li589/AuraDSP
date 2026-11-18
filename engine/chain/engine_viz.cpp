@@ -268,8 +268,10 @@ void emit_viz(auradsp_handle h) {
     h->input_lvl_out_r = f.stage_levels_r[13];
     /* [Phase B 多声道电平] per-channel 字段填充（ABI v2 追加段）。
      * 统一裁决点：c >= last_block_ch 一律 -120（不信任任何跨块残留），
-     * c < 2 与 stage_levels_l/r 同源（stereo 逐位不变），
-     * vendor 段 0..11 与 GR 段 24..29 仅 [0]/[1] 或全 -120（作用域语义）。 */
+     * c < 2 与 stage_levels_l/r 同源（stereo 逐位不变）；
+     * vendor 段 0..11 中真 vendor 级仅 [0]/[1]、共享索引的自研
+     * MC 级按 stage_peak_ch 全宽发列（第四十九轮 S1）；GR 段
+     * 24..29 全 -120（作用域语义）。 */
     const int blkCh = h->last_block_ch;
     f.channel_count = (uint32_t)(blkCh > 0 ? blkCh : 0);
     for (int c = 0; c < AURADSP_CH_MAX; ++c) {
@@ -279,9 +281,23 @@ void emit_viz(auradsp_handle h) {
     for (int i = 0; i < AURADSP_STAGE_MAX; ++i) {
         for (int c = 0; c < AURADSP_CH_MAX; ++c) {
             if (i < AURADSP_VENDOR_STAGES) {
-                /* vendor：MC 下只作用于 FL/FR 对（ADR-003 Category B），其余声道 -120 */
-                f.stage_ch_levels[i][c] = (c == 0) ? f.stage_levels_l[i]
-                                        : (c == 1) ? f.stage_levels_r[i] : -120.0f;
+                /* vendor 索引级分两类（第四十九轮 S1 补全）：真
+                 * vendor 处理（MC 下只作用于 FL/FR 对，
+                 * ADR-003 Category B）恒 FL/FR 两列；与之共享
+                 * 索引的自研 MC 效果（tube/comp/eq/arbmag/
+                 * reverb/output）在 MC 链有全宽 tap 写
+                 * stage_peak_ch——stage_ch_active>2 时按自研级
+                 * 同口径发 [2..] 列（无 tap 的级其槽恒 0，
+                 * 自然 -120 诚实暗，不借位）。 */
+                if (c < 2) {
+                    f.stage_ch_levels[i][c] = (c == 0) ? f.stage_levels_l[i]
+                                                           : f.stage_levels_r[i];
+                } else if (c < h->stage_ch_active) {
+                    const float p = h->stage_peak_ch[i][c];
+                    f.stage_ch_levels[i][c] = p > 1e-6f ? 20.0f * log10f(p) : -120.0f;
+                } else {
+                    f.stage_ch_levels[i][c] = -120.0f;
+                }
             } else if (i >= 24 && i <= 29) {
                 f.stage_ch_levels[i][c] = -120.0f;   /* GR 单值计量，per-channel 无意义 */
             } else if (c < 2) {

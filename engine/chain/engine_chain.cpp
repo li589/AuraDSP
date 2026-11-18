@@ -912,6 +912,21 @@ static inline void sample_stage_peak_mc(auradsp_handle h, int stage_idx,
 }
 
 
+/* [第四十九轮 S1] MC 链 vendor 索引级（0..11）采样：emit_viz 对
+ * i<12 的 L/R 只读 jdsp.stagePeakL/R（vendor 内部采样口），而 MC
+ * 模式下 tube/comp/eq/arbmag/reverb/output 走自研 *_process_mc、
+ * 不过 vendor，其 jdsp 峰值槽永不更新（陈旧/恒零——D1 离散下这
+ * 些效果器「无显示/只显假立体声」的根因）。本 helper 在自研处理
+ * 后采样并把 L/R 镜像进 jdsp 槽，与 stage_peak_ch 网格同源同值；
+ * 立体声链不走此口（vendor 自采样，逐位不变）。 */
+static inline void sample_stage_mc_vendor(auradsp_handle h, int sidx,
+                                          const float* interleaved, int frames, int ch) {
+    sample_stage_peak_mc(h, sidx, interleaved, frames, ch);
+    h->jdsp.stagePeakL[sidx] = h->stage_peak_l[sidx];
+    h->jdsp.stagePeakR[sidx] = h->stage_peak_r[sidx];
+}
+
+
 /* [PATCHED-AuraDSP P-035] eq 逐声道池（8×FFTConvolver1x1，IR 与主 mEQ.instance.coeffGen 同源但按设备采样率生成）。
  * 线程契约：alloc/free/reload 全部控制线程；RT 线程只读池指针与 loaded 标志。
  * [PATCHED-AuraDSP P-047] 双槽化（L-01）：见上方 PoolBank 注释。 */
@@ -1552,6 +1567,7 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     if (h->p.tube_enable.load(std::memory_order_relaxed)) {
         tube_process_mc(h, dst, frames, ch);
     }
+    sample_stage_mc_vendor(h, 0, dst, frames, ch);   /* Stage 0: Tube (S1 补接) */
 
     auradsp::plugin_chain_process_n(h, 1, dst, (uint32_t)frames, (uint32_t)ch);
 
@@ -1564,6 +1580,10 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
 
     /* [PATCHED-AuraDSP P-034] Step 10: comp_process_mc (全声道逐声道/成对独立压缩) */
     comp_process_mc(h, dst, frames, ch);
+    /* [第四十九轮 S1] comp 逐声道采样补接：检测器逐声道/成对
+     * 独立、无跨声道链接——低频单声道给 FR 带入的低频在此如实
+     * 入表（此前无 tap，宾机见「只显一声道」为陈旧槽假象）。 */
+    sample_stage_mc_vendor(h, 1, dst, frames, ch);   /* Stage 1: Comp (S1 补接) */
 
     // 3. Category B 跨声道/声场效果器与前置 FL/FR vendor 核心（仅作用于前置立体声对，保持环绕声场完整性）
     // Step 11: Vendor bass (前置 FL/FR 对)
@@ -1598,6 +1618,7 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
 
     /* [PATCHED-AuraDSP P-035] Step 12: eq_process_mc (全声道逐声道独立 EQ，设备采样率 IR) */
     eq_process_mc(h, dst, frames, ch);
+    sample_stage_mc_vendor(h, 3, dst, frames, ch);   /* Stage 3: EQ (S1 补接) */
 
     // Step 13: arbmag 逐声道池统一全声道处理
     /* [PATCHED-AuraDSP P-047] loaded 改读「本块快照的活动 bank」。 */
@@ -1608,7 +1629,7 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
             arbmag_pool_process_strided(h, dst, frames, ch, c);
         }
     }
-    sample_stage_peak_mc(h, 4, dst, frames, ch);
+    sample_stage_mc_vendor(h, 4, dst, frames, ch);   /* Stage 4: Arbmag 输出（S1 改镜像口：网格+L/R 同源） */
 
     // Step 14: Category B 其余 vendor 核心（仅作用于前置 FL/FR，保持环绕声场完整性）
     if (h->shelf_scratch && h->mx_stereo) {
@@ -1673,6 +1694,7 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     if (h->p.reverb_preset.load(std::memory_order_relaxed) != -1) {
         mc_reverb_process_mc(h, dst, frames, ch);
     }
+    sample_stage_mc_vendor(h, 10, dst, frames, ch);  /* Stage 10: MC Reverb (S1 补接) */
 
     auradsp::plugin_chain_process_n(h, 3, dst, (uint32_t)frames, (uint32_t)ch);
 
@@ -1683,6 +1705,7 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     /* [ADR-010] 限幅器 = 本链最后一道门：post gain / trim / loudness 全部在其之前，
      * 链内不得再有任何会抬电平的环节排到它后面。 */
     limiter_process_mc(h, dst, frames, ch);
+    sample_stage_mc_vendor(h, 11, dst, frames, ch);  /* Stage 11: Output/限幅后 (S1 补接) */
 
     // 5. 全局多声道输出样本安全卫士：过滤 NaN / Inf 异常浮点并实施 [-10.0, +10.0] 极限钳位
     const int total_samples = frames * ch;
