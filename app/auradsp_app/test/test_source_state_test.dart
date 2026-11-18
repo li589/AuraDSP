@@ -74,5 +74,25 @@ void main() {
       m.setDebugMode(false);
       expect(m.config.debugMode, isFalse);
     });
+
+    test('ASIO 链路下测试源一律无效（第四十九轮 S3）', () {
+      final m = AppModel(testing: true);
+      m.audioMode = 'asio';
+      m.setSource('tone');
+      expect(m.sourceKind, '', reason: '波形源起播被拦');
+      m.setSource('pink');
+      expect(m.sourceKind, '', reason: '粉噪起播被拦');
+      m.setSource('file', path: '/x/a.wav');
+      expect(m.sourceKind, '', reason: '文件源起播被拦');
+      m.toggleWave();
+      expect(m.sourceKind, '', reason: 'toggleWave 同样被拦');
+      // 切回非 ASIO 后恢复正常；stop 在 ASIO 下永远放行。
+      m.audioMode = 'pipeline';
+      m.setSource('tone');
+      expect(m.sourceKind, 'tone');
+      m.audioMode = 'asio';
+      m.setSource('stop');
+      expect(m.sourceKind, '', reason: 'stop 不受 ASIO 拦截影响');
+    });
   });
 }

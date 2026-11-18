@@ -1186,7 +1186,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get testDebugMode => 'Debug Mode (restart required)';
 
   @override
-  String get testAsioHint => 'In ASIO mode the test signal plays through the ASIO driver. If it is silent, first check the ASIO driver output routing — the test can only sound when normal playback does.';
+  String get testAsioHint => 'Test signals (waveform and file) are unavailable whenever ASIO is in the chain on either side: ASIO paths do not accept software injection. Use an external source instead.';
 
   @override
   String get testSrcHint =>

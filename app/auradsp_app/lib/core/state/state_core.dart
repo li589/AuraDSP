@@ -905,6 +905,15 @@ extension StateCore on AppModel {
   // ---- 测试钩子 / 音源 ----
 
   void setSource(String kind, {String? path}) {
+    // ASIO 链路下测试源一律无效（第四十九轮 S3，user 裁
+    // 定）：输入或输出任一端经 ASIO 时软件注入不被接受
+    // （实测无声且无可视化），源起播在唯一互斥点拦截，
+    // stop 永远放行。
+    if (kind != 'stop' && audioMode == 'asio') {
+      postNotice('ASIO 链路下测试信号无效：输入或输出经 ASIO 时不接受软件注入',
+          level: NoticeLevel.warning);
+      return;
+    }
     sourceKind = kind == 'stop' ? '' : kind;
     // 文件源记住扩展名（isolate 侧按扩展名选解码器）。
     // 第四十四轮 S4：路径跨源保留——切到波形源/停止不卸载

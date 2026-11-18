@@ -1093,7 +1093,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get testDebugMode => '调试模式（需重启）';
 
   @override
-  String get testAsioHint => 'ASIO 模式下，测试信号经 ASIO 驱动输出；若无声，请先确认 ASIO 驱动的输出路由无误（正常播放能出声时测试才会出声）。';
+  String get testAsioHint => '输入或输出任一端为 ASIO 时，测试信号（波形与文件）无效：ASIO 链路不接受软件注入，请改用外部信号源。';
 
   @override
   String get testSrcHint => '测量用信号；停止后回到正式源';

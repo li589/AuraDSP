@@ -111,27 +111,26 @@ class _TestSlider extends StatelessWidget {
   }
 }
 
-/// ASIO 模式测试提示（第四十八轮 S3）：测试信号经 ASIO
-/// 驱动输出，驱动路由不通时测试与正常播放同无声——加 ?
-/// 气泡先行分流（user 预批方案）。非 ASIO 模式不渲染。
-class _AsioTestHint extends StatelessWidget {
+/// ASIO 标记 + ? 气泡（第四十八轮 S3 建、第四十九轮 S3
+/// 改判）：输入或输出任一端经 ASIO 时测试一律无效，标
+/// 记放播放按钮同行右对齐（user 裁定，不再独占一行）。
+/// 非 ASIO 模式不渲染。调用方负责同行布局（Spacer 顶右）。
+class _AsioBadge extends StatelessWidget {
   final AppModel model;
-  const _AsioTestHint({required this.model});
+  const _AsioBadge({required this.model});
 
   @override
   Widget build(BuildContext context) {
     if (model.audioMode != 'asio') return const SizedBox.shrink();
     final l = l10nOf(context);
     final p = paletteOf(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AuraSpace.sm),
-      child: Row(
-        children: [
-          Text('ASIO', style: monoOf(p, size: 12, color: p.textDim)),
-          const SizedBox(width: AuraSpace.xs),
-          InfoBadge(message: l.testAsioHint),
-        ],
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('ASIO', style: monoOf(p, size: 12, color: p.textDim)),
+        const SizedBox(width: AuraSpace.xs),
+        InfoBadge(message: l.testAsioHint),
+      ],
     );
   }
 }
@@ -158,7 +157,6 @@ class _WaveGenPanel extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _AsioTestHint(model: model),
             AuraSegmented<String>(
               segments: [
                 AuraSegment('sine', l.waveSine),
@@ -210,12 +208,22 @@ class _WaveGenPanel extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AuraSpace.md),
-            AuraChip(
-              model.waveActive ? l.srcStop : l.wavePlay,
-              icon: model.waveActive ? Icons.stop_rounded : Icons.play_arrow_rounded,
-              danger: model.waveActive,
-              selected: model.waveActive,
-              onTap: () => model.toggleWave(),
+            Row(
+              children: [
+                AuraChip(
+                  model.waveActive ? l.srcStop : l.wavePlay,
+                  icon: model.waveActive ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                  danger: model.waveActive,
+                  selected: model.waveActive,
+                  // ASIO 链路下测试无效（S3 改判）：起播禁用，
+                  // 停止永远可用（状态层 setSource 另有总闸）。
+                  onTap: (model.audioMode == 'asio' && !model.waveActive)
+                      ? null
+                      : () => model.toggleWave(),
+                ),
+                const Spacer(),
+                _AsioBadge(model: model),
+              ],
             ),
           ],
         );
@@ -263,10 +271,10 @@ class _FileSourcePanelState extends State<_FileSourcePanel> {
         final hasFile = model.sourcePath.isNotEmpty;
         final filePlaying =
             model.sourceKind == 'file' && !model.sourcePaused;
+        final asioBlocked = model.audioMode == 'asio';
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _AsioTestHint(model: model),
             Row(
               children: [
                 Expanded(
@@ -278,7 +286,9 @@ class _FileSourcePanelState extends State<_FileSourcePanel> {
                       : Row(
                           children: [
                             GestureDetector(
-                              onTap: () => model.toggleFilePlay(),
+                              onTap: asioBlocked
+                                  ? null
+                                  : () => model.toggleFilePlay(),
                               child: Container(
                                 width: 32,
                                 height: 32,
@@ -302,6 +312,7 @@ class _FileSourcePanelState extends State<_FileSourcePanel> {
                                 value: _seeking
                                     ? _seekRatio
                                     : model.sourcePosRatio,
+                                enabled: !asioBlocked,
                                 onChanged: (r) => setState(() {
                                   _seeking = true;
                                   _seekRatio = r;
@@ -329,8 +340,14 @@ class _FileSourcePanelState extends State<_FileSourcePanel> {
                 AuraChip(
                   l.testOpenAudio,
                   icon: Icons.folder_open_outlined,
-                  onTap: () => _openAudio(context),
+                  onTap: asioBlocked ? null : () => _openAudio(context),
                 ),
+                // ASIO 标记与播放钮同行右对齐（S3 改判）：本行
+                // 末位即视觉右端。
+                if (asioBlocked) ...[
+                  const SizedBox(width: AuraSpace.sm),
+                  _AsioBadge(model: model),
+                ],
               ],
             ),
             if (model.sourceKind == 'file' && model.fileChannels > 2) ...[

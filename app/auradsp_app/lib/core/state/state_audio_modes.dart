@@ -120,6 +120,9 @@ extension AudioModesState on AppModel {
       }
     }
     if (wasAsio != isAsio) {
+      // 切入 ASIO 即停测试源（第四十九轮 S3）：ASIO 链路
+      // 下测试源无效，状态先清干净，不留假播放态。
+      if (isAsio && sourceKind.isNotEmpty) setSource('stop');
       // asiomode 内部自带 detect（无论能否启动都回 asiodrivers 事件给设置页）。
       // 第七轮 S2：开关总闸压过模式直发起桥（见 _pipelineIoSuppressed）。
       if (!(isAsio && _pipelineIoSuppressed)) {
