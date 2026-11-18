@@ -1183,7 +1183,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get testDebugTitle => 'Debug';
 
   @override
-  String get testDebugMode => 'Debug Mode';
+  String get testDebugMode => 'Debug Mode (restart required)';
 
   @override
   String get testSrcHint =>

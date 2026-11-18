@@ -2107,7 +2107,7 @@ abstract class AppLocalizations {
   /// No description provided for @testDebugMode.
   ///
   /// In zh, this message translates to:
-  /// **'调试模式'**
+  /// **'调试模式（需重启）'**
   String get testDebugMode;
 
   /// No description provided for @testSrcHint.

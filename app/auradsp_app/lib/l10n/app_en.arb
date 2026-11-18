@@ -430,7 +430,7 @@
   "waveSweep": "Auto Sweep",
   "waveSweepDesc": "20 Hz – 20 kHz · 20 s loop",
   "testDebugTitle": "Debug",
-  "testDebugMode": "Debug Mode",
+  "testDebugMode": "Debug Mode (restart required)",
   "testSrcHint": "Signals for measurement; stopping returns to the formal source",
   "srcMp3": "Open MP3 File",
   "bypassOn": "Bypass ON (A/B)",

@@ -165,7 +165,11 @@ class _WaveGenPanel extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(l.waveSweep, style: captionOf(p, color: p.text)),
+                    // 粉噪无频率概念：扫频开关与频率条同口径
+                    // 禁用（第四十八轮 S4，user 宾机反馈）。
+                    Text(l.waveSweep,
+                        style: captionOf(p,
+                            color: isPink ? p.textDim : p.text)),
                     Text(
                       l.waveSweepDesc,
                       style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
@@ -175,7 +179,7 @@ class _WaveGenPanel extends StatelessWidget {
                 const Spacer(),
                 AuraSwitch(
                   value: model.waveSweep,
-                  onChanged: (on) => model.setWaveSweep(on),
+                  onChanged: isPink ? null : (on) => model.setWaveSweep(on),
                 ),
               ],
             ),

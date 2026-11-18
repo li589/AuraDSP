@@ -1090,7 +1090,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get testDebugTitle => '调试';
 
   @override
-  String get testDebugMode => '调试模式';
+  String get testDebugMode => '调试模式（需重启）';
 
   @override
   String get testSrcHint => '测量用信号；停止后回到正式源';

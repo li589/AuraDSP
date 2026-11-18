@@ -540,7 +540,7 @@
   "waveSweep": "自动扫频",
   "waveSweepDesc": "20 Hz – 20 kHz · 20 秒循环",
   "testDebugTitle": "调试",
-  "testDebugMode": "调试模式",
+  "testDebugMode": "调试模式（需重启）",
   "testSrcHint": "测量用信号；停止后回到正式源",
   "srcMp3": "打开 MP3 文件",
   "bypassOn": "旁路 ON（A/B）",

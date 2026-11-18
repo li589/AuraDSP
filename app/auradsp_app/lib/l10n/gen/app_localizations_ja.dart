@@ -1110,7 +1110,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get testDebugTitle => 'デバッグ';
 
   @override
-  String get testDebugMode => 'デバッグモード';
+  String get testDebugMode => 'デバッグモード（再起動が必要）';
 
   @override
   String get testSrcHint => '測定用信号；停止すると正式ソースに戻ります';
