@@ -1,3 +1,4 @@
+import 'package:auradsp_app/core/audio_modes.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -75,9 +76,24 @@ void main() {
       expect(m.config.debugMode, isFalse);
     });
 
-    test('ASIO 链路下测试源一律无效（第四十九轮 S3）', () {
+    test('ASIO 链路下测试源一律无效：输入/输出任一端 ASIO（第五十轮 S2 订正）',
+        () {
       final m = AppModel(testing: true);
-      m.audioMode = 'asio';
+      // 管线类别基线：vaio 模式 + WASAPI 输入/输出（capture 链）。
+      m.setAudioMode('vaio');
+      m.setPipelineInput(AudioModes.inputWasapi);
+      m.setPipelineOutput(AudioModes.outputWasapi);
+      expect(m.asioInChain, isFalse);
+      m.setSource('tone');
+      expect(m.sourceKind, 'tone', reason: '非 ASIO 链正常起播');
+
+      // 输入切 ASIO 驱动：合成模式仍 vaio、合成链已是 ASIO
+      // 桥链（第四十九轮旧谓词在此落空）——在播源被汇合点
+      // 停掉，新起播全数被拦，stop 永远放行。
+      m.setPipelineInput(AudioModes.inputAsioDriver);
+      expect(m.audioMode, 'vaio', reason: '输入 ASIO 不改合成模式');
+      expect(m.asioInChain, isTrue);
+      expect(m.sourceKind, '', reason: '切入 ASIO 链即停在播源');
       m.setSource('tone');
       expect(m.sourceKind, '', reason: '波形源起播被拦');
       m.setSource('pink');
@@ -86,13 +102,19 @@ void main() {
       expect(m.sourceKind, '', reason: '文件源起播被拦');
       m.toggleWave();
       expect(m.sourceKind, '', reason: 'toggleWave 同样被拦');
-      // 切回非 ASIO 后恢复正常；stop 在 ASIO 下永远放行。
-      m.audioMode = 'pipeline';
-      m.setSource('tone');
-      expect(m.sourceKind, 'tone');
-      m.audioMode = 'asio';
       m.setSource('stop');
-      expect(m.sourceKind, '', reason: 'stop 不受 ASIO 拦截影响');
+      expect(m.sourceKind, '', reason: 'stop 永远放行');
+
+      // 输入切回 WASAPI 恢复起播；输出切 ASIO 客户端同口径。
+      m.setPipelineInput(AudioModes.inputWasapi);
+      expect(m.asioInChain, isFalse);
+      m.setSource('tone');
+      expect(m.sourceKind, 'tone', reason: '离开 ASIO 链恢复起播');
+      m.setPipelineOutput(AudioModes.outputAsioClient);
+      expect(m.asioInChain, isTrue, reason: '输出 ASIO 客户端同为 ASIO 链');
+      expect(m.sourceKind, '', reason: '输出切 ASIO 同样停源');
+      m.setSource('tone');
+      expect(m.sourceKind, '', reason: '输出 ASIO 下起播被拦');
     });
   });
 }

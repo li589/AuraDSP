@@ -908,8 +908,10 @@ extension StateCore on AppModel {
     // ASIO 链路下测试源一律无效（第四十九轮 S3，user 裁
     // 定）：输入或输出任一端经 ASIO 时软件注入不被接受
     // （实测无声且无可视化），源起播在唯一互斥点拦截，
-    // stop 永远放行。
-    if (kind != 'stop' && audioMode == 'asio') {
+    // stop 永远放行。谓词以合成链为准（asioInChain，第
+    // 五十轮 S2 订正——旧 audioMode 判定在输入 ASIO 拓
+    // 扑下合成模式仍为 vaio、拦截落空）。
+    if (kind != 'stop' && asioInChain) {
       postNotice('ASIO 链路下测试信号无效：输入或输出经 ASIO 时不接受软件注入',
           level: NoticeLevel.warning);
       return;

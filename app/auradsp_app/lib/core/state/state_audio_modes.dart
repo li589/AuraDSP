@@ -361,6 +361,15 @@ extension AudioModesState on AppModel {
             )
           : null;
 
+  /// 链路任一端经 ASIO（输入 ASIO 驱动或输出 ASIO 客户端
+  /// 任一成立，合成链即 ASIO 桥链）。测试源无效判定（拦
+  /// 截/徽标/禁用/切入停源）的唯一谓词（第五十轮 S2 订
+  /// 正）：第四十九轮曾以 audioMode == 'asio' 判定，但输
+  /// 入端切 ASIO 时 composeMode 只看输出端、合成模式仍
+  /// 为 vaio，判定全数落空（user 实测：无徽标、测试可点
+  /// 且点了无效）——一律以合成链为准。
+  bool get asioInChain => pipelineChain == PipelineChain.asio;
+
   /// 当前模式下 viz 数据的预期来源（生产者标签口径，第二十三轮
   /// 按数据来源治理）：桥帧由 isolate 泵打标 'vaio'/'vb'/'asio'，
   /// APO 合成帧带 'sysapo'，进程内泵帧无标签按 'local' 记。
@@ -519,6 +528,12 @@ extension AudioModesState on AppModel {
 
   void applyPipelineChain() {
     if (!PlatformProfile.supportsBridges) return;
+    // 链路汇合点停源（第五十轮 S2）：输入/输出改选使合成
+    // 链进入 ASIO 时，在播测试源即停——setAudioMode 的
+    // wasAsio 停源只覆盖模式直切，管线改选不经模式切换
+    // （输入 ASIO 时合成模式仍 vaio），须在此汇合点补齐
+    // （与第四十九轮 S4 清屏同汇合点口径）。
+    if (asioInChain && sourceKind.isNotEmpty) setSource('stop');
     // 第二十三轮：链路对账前先按数据来源对齐显示面——本函数的
     // 全部调用点（模式切换/管线改选/就绪对账）config 已持新值，
     // 预期来源变化即清零（幂等，见 _syncVizSourceOnSwitch）。

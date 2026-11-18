@@ -114,14 +114,16 @@ class _TestSlider extends StatelessWidget {
 /// ASIO 标记 + ? 气泡（第四十八轮 S3 建、第四十九轮 S3
 /// 改判）：输入或输出任一端经 ASIO 时测试一律无效，标
 /// 记放播放按钮同行右对齐（user 裁定，不再独占一行）。
-/// 非 ASIO 模式不渲染。调用方负责同行布局（Spacer 顶右）。
+/// 显隐以合成链谓词 asioInChain 为准（第五十轮 S2 订
+/// 正——旧 audioMode 判定在输入 ASIO 拓扑下不亮）。
+/// 调用方负责同行布局（Spacer 顶右）。
 class _AsioBadge extends StatelessWidget {
   final AppModel model;
   const _AsioBadge({required this.model});
 
   @override
   Widget build(BuildContext context) {
-    if (model.audioMode != 'asio') return const SizedBox.shrink();
+    if (!model.asioInChain) return const SizedBox.shrink();
     final l = l10nOf(context);
     final p = paletteOf(context);
     return Row(
@@ -217,7 +219,7 @@ class _WaveGenPanel extends StatelessWidget {
                   selected: model.waveActive,
                   // ASIO 链路下测试无效（S3 改判）：起播禁用，
                   // 停止永远可用（状态层 setSource 另有总闸）。
-                  onTap: (model.audioMode == 'asio' && !model.waveActive)
+                  onTap: (model.asioInChain && !model.waveActive)
                       ? null
                       : () => model.toggleWave(),
                 ),
@@ -271,7 +273,7 @@ class _FileSourcePanelState extends State<_FileSourcePanel> {
         final hasFile = model.sourcePath.isNotEmpty;
         final filePlaying =
             model.sourceKind == 'file' && !model.sourcePaused;
-        final asioBlocked = model.audioMode == 'asio';
+        final asioBlocked = model.asioInChain;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
