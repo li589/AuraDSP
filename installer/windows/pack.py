@@ -648,6 +648,96 @@ def _find_wdk_devcon() -> Path | None:
     return candidates[0] if candidates else None
 
 
+def _authenticode_info(path: Path) -> tuple[str, str]:
+    """经 PowerShell 读 Authenticode 状态与签名者指纹。
+
+    返回 (Status, 指纹)；无签名者时指纹为空串。状态/指纹均为
+    ASCII，中文 Windows 的控制台编码不影响解析。
+    """
+    ps_path = str(path).replace("'", "''")
+    ps = (
+        f"$s = Get-AuthenticodeSignature -LiteralPath '{ps_path}'; "
+        "if ($s.SignerCertificate) { Write-Output "
+        "($s.Status.ToString() + '|' + $s.SignerCertificate.Thumbprint) } "
+        "else { Write-Output ($s.Status.ToString() + '|') }"
+    )
+    r = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", ps],
+        capture_output=True, text=True, errors="replace", timeout=60)
+    out = (r.stdout or "").strip().splitlines()
+    if r.returncode != 0 or not out or "|" not in out[0]:
+        raise die(f"无法验证目录签名（Get-AuthenticodeSignature 失败）: {path}")
+    status, _, thumb = out[0].partition("|")
+    return status.strip(), thumb.strip()
+
+
+def _cert_thumbprint(path: Path) -> str:
+    """读 .cer（DER/PEM 证书文件）的指纹。"""
+    ps_path = str(path).replace("'", "''")
+    ps = (
+        "Write-Output ([System.Security.Cryptography.X509Certificates."
+        f"X509Certificate2]::new('{ps_path}').Thumbprint)"
+    )
+    r = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", ps],
+        capture_output=True, text=True, errors="replace", timeout=60)
+    out = (r.stdout or "").strip()
+    if r.returncode != 0 or not out:
+        raise die(f"无法读取随包证书指纹: {path}")
+    return out.splitlines()[0].strip()
+
+
+def check_driver_payload_signed(dest: Path, *, warn_only: bool) -> None:
+    """随包 driver/ 签名门（r52 事故，2026-11-19）。
+
+    r52 手工打包漏跑 sign_drivers.ps1：Inf2Cat 重生成的裸 .cat
+    （无签名者）随包发出，宾机 testsigning 开着仍报 Code 52、
+    VAIO 永不启动，而打包/校验全程无感。此后组装点单点断言：
+    载荷 .cat 必须 Authenticode Valid 且有签名者；随包 .cer 若
+    在场，其指纹必须与 .cat 签名者一致（装错证书等于没装）；
+    .cer 缺失只警告（与 install_vaio.ps1 的 WARN 口径一致，
+    官方 sign_drivers.ps1 本就不导出 .cer）。staging 就地补齐
+    是开发便利路径，沿新鲜度门口径只警告不拦截（warn_only）。
+    """
+    problems: list[str] = []
+    cats = sorted(f for f in dest.iterdir()
+                  if f.is_file() and f.suffix.lower() == ".cat")
+    vaio_cats = [f for f in cats if "auravaio" in f.name.lower()]
+    cat = vaio_cats[0] if vaio_cats else (cats[0] if cats else None)
+    signer_thumb = ""
+    if cat is None:
+        problems.append("随包 driver/ 缺 .cat 目录文件")
+    elif sys.platform != "win32":
+        log(f"警告: 非 Windows 平台无法验证 .cat 签名，跳过签名门: {cat}")
+        return
+    else:
+        status, signer_thumb = _authenticode_info(cat)
+        if status != "Valid" or not signer_thumb:
+            problems.append(
+                f"随包 .cat 未签名或签名无效（Status={status}）: {cat.name}"
+                "——Inf2Cat 后必须跑 sign_drivers.ps1 签名，或打包时加 "
+                "--build-driver；未签名的包在目标机报 Code 52、VAIO 不启动")
+    if not problems and signer_thumb:
+        cer = dest / "AuraDSP_TestSign.cer"
+        if cer.is_file():
+            if _cert_thumbprint(cer).upper() != signer_thumb.upper():
+                problems.append(
+                    "随包 AuraDSP_TestSign.cer 与 .cat 签名者指纹不一致，"
+                    "装机导入的证书验不了驱动签名")
+        else:
+            log("警告: 随包 driver/ 缺 AuraDSP_TestSign.cer，"
+                "装机时 PnP 可能提示发布者不受信任（install_vaio 同口径 WARN）")
+    if problems:
+        if warn_only:
+            for p in problems:
+                log(f"警告: {p}（staging 不拦截；发行打包仍会拒绝）")
+            return
+        raise die("VAIO 驱动签名门未通过，拒绝打包:\n  - "
+                  + "\n  - ".join(problems))
+    if signer_thumb:
+        log(f"驱动签名门通过: {cat.name} 签名者 {signer_thumb[:8]}…")
+
+
 def stage_driver_files(
     dest: Path,
     driver_dir: Path,
@@ -656,6 +746,7 @@ def stage_driver_files(
     apo: ApoAssets,
     *,
     include_asio_dll: bool,
+    sign_warn_only: bool = False,
 ) -> int:
     """组装随包 driver/ 目录：驱动产物 + 测试证书 + devcon + 手动脚本 + 说明。
 
@@ -693,6 +784,9 @@ def stage_driver_files(
                       "请安装 WDK，或将 x64 devcon.exe 放进驱动构建目录后重打")
         _copy2_overwrite(wdk_devcon, dest / "devcon.exe")
         log(f"driver: devcon.exe 自 WDK 补齐（{wdk_devcon}）")
+    # 签名门在组装点验实际载荷（dest 里的 .cat/.cer），不验源目录：
+    # 发出去的是 dest 的内容，源目录合格而载荷被旧文件污染时同理拦截。
+    check_driver_payload_signed(dest, warn_only=sign_warn_only)
     _copy2_overwrite(install_ps1, dest / install_ps1.name)
     # APO 运维资产：app 侧附加/状态工具 apo_config.exe（原生版，
     # 已替代 python 脚本）+ APO 本体 AuraApo.dll + 设备端点刷新
@@ -770,7 +864,7 @@ def mode_driver(args, ver: dict[str, str], out: Path) -> Path:
 
 
 
-def complete_payload_tree(work: Path, args) -> None:
+def complete_payload_tree(work: Path, args, *, sign_warn_only: bool = False) -> None:
     """把完整载荷布局落到 work：ASIO 本体进根 + driver/ 恒保留。
 
     portable / setup 的临时副本与 staging 文件夹本体共用同一
@@ -792,7 +886,8 @@ def complete_payload_tree(work: Path, args) -> None:
                   "先在 Windows 构建驱动，或用 --driver-dir 指定")
     _copy2_overwrite(asio, work / ASIO_DLL_NAME)
     stage_driver_files(work / "driver", driver_dir, asio, install_ps1,
-                       apo, include_asio_dll=True)
+                       apo, include_asio_dll=True,
+                       sign_warn_only=sign_warn_only)
 
 
 def refresh_dist_manifest(staging: Path) -> None:
@@ -814,7 +909,7 @@ def mode_staging(args, ver: dict[str, str], out: Path) -> Path:
     必须先解压便携包（用户 2026-11-10 报告）。build_windows
     .ps1 Step 5 亦调用本模式，绿色目录与绿色 zip 同样完整。
     """
-    complete_payload_tree(args.staging, args)
+    complete_payload_tree(args.staging, args, sign_warn_only=True)
     apply_defaults(args.staging, args.what_if)
     refresh_dist_manifest(args.staging)
     log(f"staging: {args.staging} 已补齐（根 ASIO + driver/），"
