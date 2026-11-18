@@ -431,6 +431,7 @@
   "waveSweepDesc": "20 Hz – 20 kHz · 20 s loop",
   "testDebugTitle": "Debug",
   "testDebugMode": "Debug Mode (restart required)",
+  "testAsioHint": "In ASIO mode the test signal plays through the ASIO driver. If it is silent, first check the ASIO driver output routing — the test can only sound when normal playback does.",
   "testSrcHint": "Signals for measurement; stopping returns to the formal source",
   "srcMp3": "Open MP3 File",
   "bypassOn": "Bypass ON (A/B)",

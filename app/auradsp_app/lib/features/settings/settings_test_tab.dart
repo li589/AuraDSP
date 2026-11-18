@@ -111,6 +111,31 @@ class _TestSlider extends StatelessWidget {
   }
 }
 
+/// ASIO 模式测试提示（第四十八轮 S3）：测试信号经 ASIO
+/// 驱动输出，驱动路由不通时测试与正常播放同无声——加 ?
+/// 气泡先行分流（user 预批方案）。非 ASIO 模式不渲染。
+class _AsioTestHint extends StatelessWidget {
+  final AppModel model;
+  const _AsioTestHint({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    if (model.audioMode != 'asio') return const SizedBox.shrink();
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AuraSpace.sm),
+      child: Row(
+        children: [
+          Text('ASIO', style: monoOf(p, size: 12, color: p.textDim)),
+          const SizedBox(width: AuraSpace.xs),
+          InfoBadge(message: l.testAsioHint),
+        ],
+      ),
+    );
+  }
+}
+
 /// 波形生成卡：波形四选一 + 对数调频 + 扫频开关 + 播放/停止。
 class _WaveGenPanel extends StatelessWidget {
   final AppModel model;
@@ -133,6 +158,7 @@ class _WaveGenPanel extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _AsioTestHint(model: model),
             AuraSegmented<String>(
               segments: [
                 AuraSegment('sine', l.waveSine),
@@ -240,6 +266,7 @@ class _FileSourcePanelState extends State<_FileSourcePanel> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _AsioTestHint(model: model),
             Row(
               children: [
                 Expanded(

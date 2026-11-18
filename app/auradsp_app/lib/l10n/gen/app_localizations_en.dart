@@ -1186,6 +1186,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get testDebugMode => 'Debug Mode (restart required)';
 
   @override
+  String get testAsioHint => 'In ASIO mode the test signal plays through the ASIO driver. If it is silent, first check the ASIO driver output routing — the test can only sound when normal playback does.';
+
+  @override
   String get testSrcHint =>
       'Signals for measurement; stopping returns to the formal source';
 

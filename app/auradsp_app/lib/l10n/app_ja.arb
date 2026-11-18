@@ -431,6 +431,7 @@
   "waveSweepDesc": "20 Hz – 20 kHz · 20 秒ループ",
   "testDebugTitle": "デバッグ",
   "testDebugMode": "デバッグモード（再起動が必要）",
+  "testAsioHint": "ASIO モードではテスト信号は ASIO ドライバー経由で出力されます。無音の場合は ASIO ドライバーの出力ルーティングを確認してください（通常再生で音が出ている必要があります）。",
   "testSrcHint": "測定用信号；停止すると正式ソースに戻ります",
   "srcMp3": "MP3 を開く",
   "bypassOn": "バイパス ON（A/B）",

@@ -2110,6 +2110,12 @@ abstract class AppLocalizations {
   /// **'调试模式（需重启）'**
   String get testDebugMode;
 
+  /// No description provided for @testAsioHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'ASIO 模式下，测试信号经 ASIO 驱动输出；若无声，请先确认 ASIO 驱动的输出路由无误（正常播放能出声时测试才会出声）。'**
+  String get testAsioHint;
+
   /// No description provided for @testSrcHint.
   ///
   /// In zh, this message translates to:

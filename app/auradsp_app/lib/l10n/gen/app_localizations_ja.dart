@@ -1113,6 +1113,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get testDebugMode => 'デバッグモード（再起動が必要）';
 
   @override
+  String get testAsioHint => 'ASIO モードではテスト信号は ASIO ドライバー経由で出力されます。無音の場合は ASIO ドライバーの出力ルーティングを確認してください（通常再生で音が出ている必要があります）。';
+
+  @override
   String get testSrcHint => '測定用信号；停止すると正式ソースに戻ります';
 
   @override
