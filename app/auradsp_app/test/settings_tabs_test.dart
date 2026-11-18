@@ -76,7 +76,7 @@ void main() {
     expect(find.text('粉噪'), findsOneWidget);
     expect(find.text('未选择测试音频源'), findsOneWidget);
     expect(find.text('打开音频'), findsOneWidget);
-    expect(find.text('调试模式'), findsOneWidget);
+    expect(find.text('调试模式（需重启）'), findsOneWidget);
     // 引擎信息不在测试页
     expect(find.text('引擎'), findsNothing);
 
