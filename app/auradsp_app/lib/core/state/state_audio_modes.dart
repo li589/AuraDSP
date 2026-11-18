@@ -528,12 +528,6 @@ extension AudioModesState on AppModel {
 
   void applyPipelineChain() {
     if (!PlatformProfile.supportsBridges) return;
-    // 链路汇合点停源（第五十轮 S2）：输入/输出改选使合成
-    // 链进入 ASIO 时，在播测试源即停——setAudioMode 的
-    // wasAsio 停源只覆盖模式直切，管线改选不经模式切换
-    // （输入 ASIO 时合成模式仍 vaio），须在此汇合点补齐
-    // （与第四十九轮 S4 清屏同汇合点口径）。
-    if (asioInChain && sourceKind.isNotEmpty) setSource('stop');
     // 第二十三轮：链路对账前先按数据来源对齐显示面——本函数的
     // 全部调用点（模式切换/管线改选/就绪对账）config 已持新值，
     // 预期来源变化即清零（幂等，见 _syncVizSourceOnSwitch）。
@@ -575,6 +569,12 @@ extension AudioModesState on AppModel {
       }
       return;
     }
+    // 链路汇合点停源（第五十轮 S2）：输入/输出改选使合成
+    // 链进入 ASIO 时，在播测试源即停——setAudioMode 的
+    // wasAsio 停源只覆盖模式直切，管线改选不经模式切换
+    // （输入 ASIO 时合成模式仍 vaio），须在此汇合点补齐
+    // （与第四十九轮 S4 清屏同汇合点口径）。
+    if (asioInChain && sourceKind.isNotEmpty) setSource('stop');
     final chain = pipelineChain;
     if (chain == PipelineChain.capture) {
       final payload = _captureCommand('capturemode');
