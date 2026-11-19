@@ -666,7 +666,7 @@ def _authenticode_info(path: Path) -> tuple[str, str]:
         capture_output=True, text=True, errors="replace", timeout=60)
     out = (r.stdout or "").strip().splitlines()
     if r.returncode != 0 or not out or "|" not in out[0]:
-        raise die(f"无法验证目录签名（Get-AuthenticodeSignature 失败）: {path}")
+        raise RuntimeError(f"Get-AuthenticodeSignature 失败: {path}")
     status, _, thumb = out[0].partition("|")
     return status.strip(), thumb.strip()
 
@@ -683,7 +683,7 @@ def _cert_thumbprint(path: Path) -> str:
         capture_output=True, text=True, errors="replace", timeout=60)
     out = (r.stdout or "").strip()
     if r.returncode != 0 or not out:
-        raise die(f"无法读取随包证书指纹: {path}")
+        raise RuntimeError(f"无法读取随包证书指纹: {path}")
     return out.splitlines()[0].strip()
 
 
@@ -697,7 +697,9 @@ def check_driver_payload_signed(dest: Path, *, warn_only: bool) -> None:
     在场，其指纹必须与 .cat 签名者一致（装错证书等于没装）；
     .cer 缺失只警告（与 install_vaio.ps1 的 WARN 口径一致，
     官方 sign_drivers.ps1 本就不导出 .cer）。staging 就地补齐
-    是开发便利路径，沿新鲜度门口径只警告不拦截（warn_only）。
+    是开发便利路径，沿新鲜度门口径只警告不拦截（warn_only）；
+    --allow-unsigned-driver 同样降级为警告，仅供 pack fixture
+    测试用假驱动，发行打包严禁使用。
     """
     problems: list[str] = []
     cats = sorted(f for f in dest.iterdir()
@@ -711,16 +713,24 @@ def check_driver_payload_signed(dest: Path, *, warn_only: bool) -> None:
         log(f"警告: 非 Windows 平台无法验证 .cat 签名，跳过签名门: {cat}")
         return
     else:
-        status, signer_thumb = _authenticode_info(cat)
-        if status != "Valid" or not signer_thumb:
-            problems.append(
-                f"随包 .cat 未签名或签名无效（Status={status}）: {cat.name}"
-                "——Inf2Cat 后必须跑 sign_drivers.ps1 签名，或打包时加 "
-                "--build-driver；未签名的包在目标机报 Code 52、VAIO 不启动")
+        try:
+            status, signer_thumb = _authenticode_info(cat)
+            if status != "Valid" or not signer_thumb:
+                problems.append(
+                    f"随包 .cat 未签名或签名无效（Status={status}）: {cat.name}"
+                    "——Inf2Cat 后必须跑 sign_drivers.ps1 签名，或打包时加 "
+                    "--build-driver；未签名的包在目标机报 Code 52、VAIO 不启动")
+        except RuntimeError as e:
+            problems.append(f"随包 .cat 签名无法验证（{e}）: {cat.name}")
     if not problems and signer_thumb:
         cer = dest / "AuraDSP_TestSign.cer"
         if cer.is_file():
-            if _cert_thumbprint(cer).upper() != signer_thumb.upper():
+            try:
+                cer_thumb = _cert_thumbprint(cer)
+            except RuntimeError as e:
+                cer_thumb = ""
+                problems.append(f"随包 AuraDSP_TestSign.cer 指纹无法读取（{e}）")
+            if cer_thumb and cer_thumb.upper() != signer_thumb.upper():
                 problems.append(
                     "随包 AuraDSP_TestSign.cer 与 .cat 签名者指纹不一致，"
                     "装机导入的证书验不了驱动签名")
@@ -857,7 +867,9 @@ def mode_driver(args, ver: dict[str, str], out: Path) -> Path:
         stage = Path(td) / "driver"
         stage_driver_files(stage, driver_dir, asio, install_ps1,
                            apo,
-                           include_asio_dll=True)
+                           include_asio_dll=True,
+                           sign_warn_only=getattr(
+                               args, "allow_unsigned_driver", False))
         n = zip_dir(stage, dest, args.zip_level)
     log(f"driver: {dest.name}（{n} 条目，{dest.stat().st_size / 1e6:.1f} MB）")
     return dest
@@ -887,7 +899,8 @@ def complete_payload_tree(work: Path, args, *, sign_warn_only: bool = False) -> 
     _copy2_overwrite(asio, work / ASIO_DLL_NAME)
     stage_driver_files(work / "driver", driver_dir, asio, install_ps1,
                        apo, include_asio_dll=True,
-                       sign_warn_only=sign_warn_only)
+                       sign_warn_only=sign_warn_only or getattr(
+                           args, "allow_unsigned_driver", False))
 
 
 def refresh_dist_manifest(staging: Path) -> None:
@@ -1185,6 +1198,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     ap.add_argument("--build-type", default="Release", choices=("Release", "Debug"))
     ap.add_argument("--skip-drivers", action="store_true",
                     help="透传 build_windows.ps1 -SkipDrivers")
+    ap.add_argument("--allow-unsigned-driver", action="store_true",
+                    help="签名门降级为警告（仅供 pack fixture 测试用假驱动；"
+                         "发行打包严禁使用）")
     ap.add_argument("--build-driver", action="store_true",
                     help="打包前重编并测试签名 VAIO 驱动（默认只做新鲜度校验）")
     ap.add_argument("--driver-dir")

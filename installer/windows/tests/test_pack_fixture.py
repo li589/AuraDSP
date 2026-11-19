@@ -118,7 +118,10 @@ def main() -> int:
                   "--apo-config", str(apo_config_exe), "--apo-dll", str(apo_dll),
                   "--apo-engine", str(apo_engine),
                   "--installer-build-dir", str(inst),
-                  "--packs-dir", str(packs), "--out", str(out)]
+                  "--packs-dir", str(packs), "--out", str(out),
+                  # fixture 驱动是假文件、无签名：签名门降级为警告
+                  # （发行打包不走本测试、门禁本体不变，第五十三轮）
+                  "--allow-unsigned-driver"]
 
         print("== driver 模式 ==")
         r = run_pack("--mode", "driver", *common)
@@ -160,6 +163,18 @@ def main() -> int:
         r = run_pack("--mode", "driver", *common, "--driver-dir", str(part))
         check("产物缺失时拒绝打包", r.returncode != 0
               and "产物缺失" in (r.stderr or r.stdout))
+
+        print("== driver 签名门（第五十三轮，r52 事故） ==")
+        if sys.platform == "win32":
+            # 不带 --allow-unsigned-driver 时，假 .cat（无签名）必须
+            # 被签名门拒绝；非 Windows 平台 pack 跳过签名验证，不测。
+            noflag = [a for a in common if a != "--allow-unsigned-driver"]
+            r = run_pack("--mode", "driver", *noflag)
+            check("未签名 .cat 拒绝打包", r.returncode != 0
+                  and "签名门" in (r.stderr or r.stdout),
+                  (r.stderr or r.stdout).strip()[-200:])
+        else:
+            print("  SKIP 签名门断言（非 Windows）")
 
         print("== staging 模式（dist 文件夹本体自包含） ==")
         check("staging 初始无 driver/", not (staging / "driver").exists())
@@ -237,7 +252,8 @@ def main() -> int:
         common2 = ["--staging", str(staging), "--driver-dir", str(drv),
                    "--asio-driver", str(asio),
                    "--installer-build-dir", str(inst),
-                   "--packs-dir", str(packs2), "--out", str(out)]
+                   "--packs-dir", str(packs2), "--out", str(out),
+                   "--allow-unsigned-driver"]
         r = run_pack("--mode", "portable", "--resources", "full", *common2)
         check("单条目超 512MiB 时拒绝合并", r.returncode != 0)
 
