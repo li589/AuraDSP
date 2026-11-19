@@ -116,43 +116,28 @@ void release_active_driver() {
     if (asioDrivers) asioDrivers->removeCurrentDriver();
 }
 
-// 第五轮 S4 取证：纯注册表预查（无 COM/SDK 副作用，不扰动
-// asioDrivers 单例）——目标名是否在 HKLM\SOFTWARE\ASIO 在册、
-// 其 CLSID 值是什么。loadAsioDriver 的失败原本不分步，靠本预查
-// 把失败定位到「注册/名称步」还是「COM 加载步」。
-bool LookupAsioRegistry(const char* driverName, std::string& clsidOut) {
-    clsidOut.clear();
-    HKEY hRoot = nullptr;
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\ASIO", 0,
-                      KEY_READ, &hRoot) != ERROR_SUCCESS) {
-        return false;
+// r57 P0 取证：loadAsioDriver 只回 bool、失败步不可见，旧实现靠注册表
+// 预查反推「COM 步/注册步」——实证误导（真因是调用线程 COM 套间不对，
+// 见 AsioBridge.cpp 控制线程注释）。改为失败后在同一线程上经单例直接
+// asioOpenDriver 取真实 rc：HRESULT 即 COM 步原码，DRVERR_*（如
+// DEVICE_ALREADY_OPEN=-5002）即 SDK 步原码。探针成功则立即
+// asioCloseDriver 还原单例状态，无残留副作用。
+// 返回 false = 名字不在单例枚举内（未注册/枚举步问题）。
+bool ProbeOpenRc(const char* driverName, long& rcOut) {
+    if (!asioDrivers) loadAsioDriver((char*)"");  // 强制单例构造（空名必不中）
+    if (!asioDrivers) return false;
+    const long n = asioDrivers->asioGetNumDev();
+    for (long i = 0; i < n; ++i) {
+        char nm[40] = {0};
+        asioDrivers->asioGetDriverName(i, nm, 32);  // 与 loadDriver 同口径（32 截断）
+        if (strcmp(nm, driverName) != 0) continue;
+        void* p = nullptr;
+        const long rc = asioDrivers->asioOpenDriver(i, &p);
+        rcOut = rc;
+        if (rc == 0) asioDrivers->asioCloseDriver(i);
+        return true;
     }
-    bool found = false;
-    char sub[256];
-    for (DWORD i = 0;; i++) {
-        DWORD len = (DWORD)sizeof(sub);
-        const LSTATUS rc = RegEnumKeyExA(hRoot, i, sub, &len, nullptr,
-                                         nullptr, nullptr, nullptr);
-        if (rc != ERROR_SUCCESS) break;
-        if (_stricmp(sub, driverName) != 0) continue;
-        found = true;
-        HKEY hSub = nullptr;
-        if (RegOpenKeyExA(hRoot, sub, 0, KEY_READ, &hSub) == ERROR_SUCCESS) {
-            char val[128];
-            DWORD vlen = (DWORD)sizeof(val) - 1;
-            DWORD type = 0;
-            if (RegQueryValueExA(hSub, "CLSID", nullptr, &type, (LPBYTE)val,
-                                 &vlen) == ERROR_SUCCESS &&
-                (type == REG_SZ || type == REG_EXPAND_SZ)) {
-                val[vlen] = 0;
-                clsidOut = val;
-            }
-            RegCloseKey(hSub);
-        }
-        break;
-    }
-    RegCloseKey(hRoot);
-    return found;
+    return false;
 }
 
 bool AsioHost::open(const char* driverName, void* sysRef, std::string& why) {
@@ -160,13 +145,23 @@ bool AsioHost::open(const char* driverName, void* sysRef, std::string& why) {
     if (!driverName || !driverName[0]) { why = "empty driver name"; return false; }
 
     if (!loadAsioDriver(const_cast<char*>(driverName))) {
-        std::string clsid;
-        if (LookupAsioRegistry(driverName, clsid)) {
-            why = "loadAsioDriver failed at COM step (registered clsid=" +
-                  clsid + ")";
+        long rc = 0;
+        if (ProbeOpenRc(driverName, rc)) {
+            char buf[192];
+            if (rc == 0) {
+                _snprintf_s(buf, sizeof(buf), _TRUNCATE,
+                            "loadAsioDriver failed (probe open ok; name/list mismatch)");
+            } else if (rc == -5002) {  // DRVERR_DEVICE_ALREADY_OPEN
+                _snprintf_s(buf, sizeof(buf), _TRUNCATE,
+                            "loadAsioDriver failed: asioOpenDriver rc=-5002 (device already open)");
+            } else {
+                _snprintf_s(buf, sizeof(buf), _TRUNCATE,
+                            "loadAsioDriver failed: asioOpenDriver rc=%ld (0x%08lX)",
+                            rc, (unsigned long)rc);
+            }
+            why = buf;
         } else {
-            why = "loadAsioDriver failed at registry step "
-                  "(name not in HKLM\\SOFTWARE\\ASIO)";
+            why = "loadAsioDriver failed: driver not in ASIO enumeration";
         }
         return false;
     }

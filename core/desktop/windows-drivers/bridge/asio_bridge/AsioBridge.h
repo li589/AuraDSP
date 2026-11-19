@@ -14,7 +14,10 @@
 // 线程模型（与 05 同款三线程，职责分离）：
 // - ASIO RT 线程：驱动 bufferSwitch → AsioHost::process_io → 本桥 sink
 //   （零锁零分配零 syscall；仅原子量 + scratch + engine process）。
-// - Dart 线程：start/stop/set_param/test/viz/status/detect（直接调，无一进 RT）。
+// - Dart 线程：set_param/test/viz/status（直接调，无一进 RT）；start/stop/
+//   detect 的 SDK/COM 控制面经桥内 STA 控制线程串行执行（r57 P0：IASIO
+//   为 Apartment 模型 COM 类，CoCreateInstance 只能在 STA 线程成功，
+//   Dart 调用线程的 COM 套间不可控——详见 AsioBridge.cpp asioctl 注释）。
 // - 无 monitor 线程：ASIO 的采样率/缓冲变化走 asioMessage/sampleRateDidChange，
 //   v1 不重建引擎（ Spec 风险 R-3：stop 幂等 + 在途等待由 close 保证）。
 //

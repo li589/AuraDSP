@@ -215,6 +215,7 @@ PLATFORM_WINDOWS = {
     "smoke_asio_driver.py",
     "smoke_asio_bridge.py",
     "smoke_asio_multichannel.py",
+    "smoke_asio_restart_threads.py",
     "smoke_vaio_bridge.py",
     # AuraVAIO 声道模式协商契约（2026-11-05）：countMode=auto/manual 下
     # channels.count 的有效档位回读与非法值拒绝。
@@ -550,6 +551,9 @@ def run_smoke_tests():
     # ASIO 多声道传输（B2c）：asio_start_ex(Nch) + 引擎 channels.count 对齐 +
     # 6ch 文件注入/bypass + 驱动能力降级；无 in/out>=6 驱动时自动 SKIP
     "smoke_asio_multichannel.py",
+    # ASIO 桥跨线程重开回归（r57 P0）：主线程 start/stop 后从新线程再启——
+    # IASIO 的 STA 套间约束；修复前二启必失败，无驱动/被占时自动让路
+    "smoke_asio_restart_threads.py",
     # AuraVAIO 虚拟声卡桥（Mode 1）：探测端点与无驱动防御 / 有驱动回环断言
     "smoke_vaio_bridge.py",
     # AuraVAIO 声道模式协商契约（2026-11-05）：auto/manual 切换下有效档位

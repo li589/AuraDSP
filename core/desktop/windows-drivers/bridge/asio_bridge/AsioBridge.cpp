@@ -8,7 +8,9 @@
 // 线程模型：
 // - ASIO RT 线程：驱动 bufferSwitch → AsioHost::process_io → BridgeSink
 //   （零锁零分配零 syscall；仅原子量 + scratch + engine process）。
-// - Dart 线程：start/stop/set_param/test/viz/status/detect（直接调，无一进 RT）。
+// - Dart 线程：set_param/test/viz/status（直接调，无一进 RT）；start/stop/
+//   detect 的 SDK/COM 控制面经桥内 STA 控制线程串行执行（r57 P0，见
+//   asioctl 定罪注释——Dart 调用线程的 COM 套间不可控）。
 // - 停止时序（防 RT 踩已释放引擎，同 05 FreeTestFile 模式）：
 //   ASIOStop → 清 testKind → 等 rtInBlock 归零（墙钟 3s 上界，超限则保留
 //   缓冲不 free）→ dispose/exit → 毁引擎。
@@ -22,6 +24,82 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
+
+// ---- ASIO 控制线程（r57 P0）----
+// 【定罪 2026-11-19】IASIO 是 Apartment 模型 COM 类且无 proxy/stub，
+// CoCreateInstance 只能在 STA 套间线程上成功。Dart FFI 调用线程不固定
+// （isolate 重建即换线程；新线程 COM 或未初始化、或已初始化为 MTA），
+// 而 SDK 单例 asioDrivers 的构造会在首个调用线程上 CoInitialize(STA)
+// ——于是每进程首次 start 侥幸在那条线程上成功，stop 后换线程重开必
+// 失败，且旧错误文案误导为「COM 步/注册表」问题（宾机日志全量时序 +
+// harness 三态对照实证：新线程 STA 成功 / MTA、未初始化均失败）。
+// 【修法】桥内专设一条 STA 控制线程：全部 SDK/COM 控制面（detect 枚举、
+// start 的 open/caps/create/start、stop 的 stop/close/release）投递到
+// 该线程串行执行，驱动对象在同一套间内生灭。RT 回调、引擎参数面、
+// status/viz 原子读不经此线程（零新增 RT 风险）。线程随进程存活
+// （与 SDK 单例同生命周期；桥 DLL 不中途卸载）。
+namespace asioctl {
+
+struct Job {
+    std::function<int()> fn;
+    int result = 0;
+    HANDLE done = nullptr;
+};
+
+HANDLE g_thread = nullptr;
+DWORD g_tid = 0;
+HANDLE g_ready = nullptr;
+INIT_ONCE g_once = INIT_ONCE_STATIC_INIT;
+constexpr UINT kJobMsg = WM_APP + 0x51;
+
+DWORD WINAPI ThreadMain(void*) {
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    MSG msg;
+    PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // 先建队列
+    SetEvent(g_ready);
+    while (GetMessage(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message == kJobMsg) {
+            Job* j = (Job*)msg.lParam;
+            j->result = j->fn();
+            SetEvent(j->done);
+        } else {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
+    CoUninitialize();
+    return 0;
+}
+
+BOOL CALLBACK InitCtl(PINIT_ONCE, PVOID, PVOID*) {
+    g_ready = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    g_thread = CreateThread(nullptr, 0, &ThreadMain, nullptr, 0, &g_tid);
+    if (g_thread && g_ready) WaitForSingleObject(g_ready, INFINITE);
+    return TRUE;
+}
+
+// 在控制线程上同步执行 f 并返回其结果。投递失败（线程未起）时退化为
+// 调用线程直接执行——保持旧行为兜底，绝不悬挂调用方。
+template <typename F>
+int Run(F&& f) {
+    InitOnceExecuteOnce(&g_once, &InitCtl, nullptr, nullptr);
+    if (!g_thread) return f();
+    Job j;
+    j.fn = std::forward<F>(f);
+    j.done = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!j.done) return j.fn();
+    if (!PostThreadMessage(g_tid, kJobMsg, 0, (LPARAM)&j)) {
+        CloseHandle(j.done);
+        return j.fn();
+    }
+    WaitForSingleObject(j.done, INFINITE);
+    CloseHandle(j.done);
+    return j.result;
+}
+
+}  // namespace asioctl
+
 
 namespace {
 
@@ -250,35 +328,37 @@ void ResetSession() {
 }  // namespace
 
 int asio_detect(char* out, int cap) {
-    if (!out || cap <= 0) return -1;
-    const auto drivers = auraasio::enumerate_drivers();
-    int n = 0;
-    // {"count":N,"drivers":[{...},...]}
-    n = _snprintf_s(out, (size_t)cap, _TRUNCATE, "{\"count\":%d,\"drivers\":[",
-                    (int)drivers.size());
-    if (n < 0) return -1;
-    for (size_t i = 0; i < drivers.size(); ++i) {
-        const auto& d = drivers[i];
-        char dll[512] = {0};
-        PathForJsonA(d.dllPath, dll, sizeof(dll));
-        char clsid[64] = {0};
-        strncpy_s(clsid, d.clsid.c_str(), sizeof(clsid) - 1);
-        // nameUtf8 为空时回退原始名（极端情况：ansi_to_utf8 失败）。
-        char nameEsc[512] = {0};
-        EscapeJsonA(d.nameUtf8.empty() ? d.name : d.nameUtf8, nameEsc,
-                    sizeof(nameEsc));
-        const char* name = nameEsc;
-        const int w = _snprintf_s(
-            out + n, (size_t)(cap - n), _TRUNCATE,
-            "%s{\"name\":\"%s\",\"dll\":\"%s\",\"clsid\":\"%s\"}",
-            (i ? "," : ""), name, dll, clsid);
+    return asioctl::Run([out, cap]() -> int {
+        if (!out || cap <= 0) return -1;
+        const auto drivers = auraasio::enumerate_drivers();
+        int n = 0;
+        // {"count":N,"drivers":[{...},...]}
+        n = _snprintf_s(out, (size_t)cap, _TRUNCATE, "{\"count\":%d,\"drivers\":[",
+                        (int)drivers.size());
+        if (n < 0) return -1;
+        for (size_t i = 0; i < drivers.size(); ++i) {
+            const auto& d = drivers[i];
+            char dll[512] = {0};
+            PathForJsonA(d.dllPath, dll, sizeof(dll));
+            char clsid[64] = {0};
+            strncpy_s(clsid, d.clsid.c_str(), sizeof(clsid) - 1);
+            // nameUtf8 为空时回退原始名（极端情况：ansi_to_utf8 失败）。
+            char nameEsc[512] = {0};
+            EscapeJsonA(d.nameUtf8.empty() ? d.name : d.nameUtf8, nameEsc,
+                        sizeof(nameEsc));
+            const char* name = nameEsc;
+            const int w = _snprintf_s(
+                out + n, (size_t)(cap - n), _TRUNCATE,
+                "%s{\"name\":\"%s\",\"dll\":\"%s\",\"clsid\":\"%s\"}",
+                (i ? "," : ""), name, dll, clsid);
+            if (w < 0 || w >= cap - n) return -1;
+            n += w;
+        }
+        const int w = _snprintf_s(out + n, (size_t)(cap - n), _TRUNCATE, "]}");
         if (w < 0 || w >= cap - n) return -1;
         n += w;
-    }
-    const int w = _snprintf_s(out + n, (size_t)(cap - n), _TRUNCATE, "]}");
-    if (w < 0 || w >= cap - n) return -1;
-    n += w;
-    return n;
+        return n;
+    });
 }
 
 int asio_start_ex(const char* driver_name, const char* engine_dll,
@@ -347,121 +427,126 @@ int asio_start_ex(const char* driver_name, const char* engine_dll,
         return -5;
     }
 
-    // 3) 打开驱动（loadAsioDriver + ASIOInit）
-    //    sysRef 传 GetConsoleWindow()：与 asio_tone 一致。FL Studio ASIO
-    //    （ilwasapi2asio，WASAPI 包装驱动）实测对 sysRef=nullptr 敏感——
-    //    会给宿主进程派发终止（2026-10-15 矩阵实验定罪；VM 驱动两种都正常）。
-    //    GUI 宿主（APP isolate）无控制台窗口时退化为 nullptr，由 P3 传入
-    //    主窗口句柄（AsioHost::open 已支持任意 sysRef）。
-    std::string why;
-    if (!g_b.host.open(chosen->name.c_str(), (void*)GetConsoleWindow(), why)) {
-        snprintf(g_b.note, sizeof(g_b.note), "open-failed: %.108s", why.c_str());
-        DestroyEngine();
-        g_b.startRc = -2;
-        return -2;
-    }
+    // 3)-8) 在 STA 控制线程上执行（r57 P0，见 asioctl 定罪注释）。
+    // 引擎 DLL 已在调用线程预加载完毕，loader lock 序不变；本 lambda
+    // 同步执行（Run 阻塞等待），引用捕获的局部量在等待期间均存活。
+    return asioctl::Run([&, buf_size, out_pair, channels]() -> int {
+        // 3) 打开驱动（loadAsioDriver + ASIOInit）
+        //    sysRef 传 GetConsoleWindow()：与 asio_tone 一致。FL Studio ASIO
+        //    （ilwasapi2asio，WASAPI 包装驱动）实测对 sysRef=nullptr 敏感——
+        //    会给宿主进程派发终止（2026-10-15 矩阵实验定罪；VM 驱动两种都正常）。
+        //    GUI 宿主（APP isolate）无控制台窗口时退化为 nullptr，由 P3 传入
+        //    主窗口句柄（AsioHost::open 已支持任意 sysRef）。
+        std::string why;
+        if (!g_b.host.open(chosen->name.c_str(), (void*)GetConsoleWindow(), why)) {
+            snprintf(g_b.note, sizeof(g_b.note), "open-failed: %.108s", why.c_str());
+            DestroyEngine();
+            g_b.startRc = -2;
+            return -2;
+        }
 
-    // 4) 能力查询（status 面 + 引擎创建参数）
-    auraasio::DriverCaps caps;
-    if (!g_b.host.query_caps(caps)) {
-        snprintf(g_b.note, sizeof(g_b.note), "caps-failed");
-        DestroyEngine();
-        g_b.host.close();
-        g_b.startRc = -3;
-        return -3;
-    }
-    g_b.inCh = caps.inChannels;
-    g_b.outCh = caps.outChannels;
-    g_b.inLat = caps.inLatency;
-    g_b.outLat = caps.outLatency;
-    g_b.sr = caps.sampleRate;
-    // io 声道数（B2c）：请求值非 {2,4,6,8} 归 2；再按驱动能力向下取档
-    //（inCh/outCh/out_pair 余量）。取不到请求档即自动降级（保音频不断）。
-    long nCh = (channels == 4 || channels == 6 || channels == 8) ? channels : 2;
-    {
-        const long ob = out_pair < 0 ? 0 : out_pair;
-        long avail = 2;
-        const long cand[4] = { 8, 6, 4, 2 };
-        for (int i = 0; i < 4; ++i) {
-            if (cand[i] <= nCh && cand[i] <= caps.inChannels &&
-                ob + cand[i] <= caps.outChannels) {
-                avail = cand[i];
-                break;
+        // 4) 能力查询（status 面 + 引擎创建参数）
+        auraasio::DriverCaps caps;
+        if (!g_b.host.query_caps(caps)) {
+            snprintf(g_b.note, sizeof(g_b.note), "caps-failed");
+            DestroyEngine();
+            g_b.host.close();
+            g_b.startRc = -3;
+            return -3;
+        }
+        g_b.inCh = caps.inChannels;
+        g_b.outCh = caps.outChannels;
+        g_b.inLat = caps.inLatency;
+        g_b.outLat = caps.outLatency;
+        g_b.sr = caps.sampleRate;
+        // io 声道数（B2c）：请求值非 {2,4,6,8} 归 2；再按驱动能力向下取档
+        //（inCh/outCh/out_pair 余量）。取不到请求档即自动降级（保音频不断）。
+        long nCh = (channels == 4 || channels == 6 || channels == 8) ? channels : 2;
+        {
+            const long ob = out_pair < 0 ? 0 : out_pair;
+            long avail = 2;
+            const long cand[4] = { 8, 6, 4, 2 };
+            for (int i = 0; i < 4; ++i) {
+                if (cand[i] <= nCh && cand[i] <= caps.inChannels &&
+                    ob + cand[i] <= caps.outChannels) {
+                    avail = cand[i];
+                    break;
+                }
             }
+            if (avail != nCh) {
+                snprintf(g_b.note, sizeof(g_b.note), "ioCh %ld->%ld (driver caps)", nCh, avail);
+            }
+            nCh = avail;
         }
-        if (avail != nCh) {
-            snprintf(g_b.note, sizeof(g_b.note), "ioCh %ld->%ld (driver caps)", nCh, avail);
-        }
-        nCh = avail;
-    }
-    g_b.ioCh = (int)nCh;
-    // 预计缓冲大小（与 create_stereo_io 同规则；创建后若驱动回值不同则重建引擎）
-    g_b.nbs = (buf_size > 0) ? buf_size : caps.prefBuf;
+        g_b.ioCh = (int)nCh;
+        // 预计缓冲大小（与 create_stereo_io 同规则；创建后若驱动回值不同则重建引擎）
+        g_b.nbs = (buf_size > 0) ? buf_size : caps.prefBuf;
 
-    // 5) 创建引擎句柄（纯分配，无 LoadLibrary，可安全位于 open 之后）
-    g_b.engine = g_b.create((float)g_b.sr, (int)g_b.nbs);
-    if (!g_b.engine) {
-        snprintf(g_b.note, sizeof(g_b.note), "engine-create-failed");
-        DestroyEngine();
-        g_b.host.close();
-        g_b.startRc = -6;
-        return -6;
-    }
-
-    // 6) 创建 nCh 声道输入（ch0..nCh-1）+ 输出（out_pair..out_pair+nCh-1）缓冲
-    if (!g_b.host.create_io(nCh, buf_size, out_pair, why)) {
-        snprintf(g_b.note, sizeof(g_b.note), "buffers-failed: %.108s", why.c_str());
-        DestroyEngine();
-        g_b.host.close();
-        g_b.startRc = -4;
-        return -4;
-    }
-    g_b.outPair = out_pair < 0 ? 0 : out_pair;
-    // 全面复审 S4（ASIO-7）：请求缓冲尺寸被驱动范围/粒度协商钳制
-    // 时在 note 如实呈现（与 ioCh 协商注同口径）。
-    if (g_b.host.buf_clamped_from() > 0) {
-        snprintf(g_b.note, sizeof(g_b.note), "bufSize %ld->%ld (driver granularity)",
-                 g_b.host.buf_clamped_from(), g_b.host.buffer_size());
-    }
-    // 驱动回值缓冲大小与预估不符（granularity 取整等）：按实际值重建引擎句柄
-    if (g_b.engine && g_b.host.buffer_size() != g_b.nbs) {
-        if (g_b.destroy) g_b.destroy(g_b.engine);
-        g_b.nbs = g_b.host.buffer_size();
+        // 5) 创建引擎句柄（纯分配，无 LoadLibrary，可安全位于 open 之后）
         g_b.engine = g_b.create((float)g_b.sr, (int)g_b.nbs);
         if (!g_b.engine) {
-            snprintf(g_b.note, sizeof(g_b.note), "engine-recreate-failed");
+            snprintf(g_b.note, sizeof(g_b.note), "engine-create-failed");
             DestroyEngine();
             g_b.host.close();
             g_b.startRc = -6;
             return -6;
         }
-    }
 
-    // 7) 挂 sink（必须在 start 前；RT 启动后不再更改指针）
-    // P3：采样率/缓冲已定稿，配置静音门控（AURADSP_GATE=0 时禁用）。
-    g_b.gate.Configure((long long)(g_b.sr > 0.0 ? g_b.sr : 48000.0));
-    g_b.host.set_process_sink(&BridgeSink, &g_b);
-
-    // 8) 预下发参数 + 启动
-    ApplyParamsString(params_json);
-    // 传输声道数与引擎处理声道数必须等宽（process 读写按 channels.count 定 stride，
-    // 不等宽会错位）。桥以 io 声道数为权威，最后覆盖 mirror 可能带来的旧值。
-    if (g_b.setParam && g_b.engine) {
-        const int32_t cc = (int32_t)nCh;
-        if (g_b.setParam(g_b.engine, "channels.count", &cc, 4) != 0) {
-            snprintf(g_b.note, sizeof(g_b.note), "channels.count set failed (%ld)", nCh);
+        // 6) 创建 nCh 声道输入（ch0..nCh-1）+ 输出（out_pair..out_pair+nCh-1）缓冲
+        if (!g_b.host.create_io(nCh, buf_size, out_pair, why)) {
+            snprintf(g_b.note, sizeof(g_b.note), "buffers-failed: %.108s", why.c_str());
+            DestroyEngine();
+            g_b.host.close();
+            g_b.startRc = -4;
+            return -4;
         }
-    }
-    if (!g_b.host.start()) {
-        snprintf(g_b.note, sizeof(g_b.note), "asio-start-failed");
-        DestroyEngine();
-        g_b.host.close();
-        g_b.startRc = -7;
-        return -7;
-    }
-    g_b.startRc = 0;
-    InterlockedExchange(&g_b.running, 1);
-    return 0;
+        g_b.outPair = out_pair < 0 ? 0 : out_pair;
+        // 全面复审 S4（ASIO-7）：请求缓冲尺寸被驱动范围/粒度协商钳制
+        // 时在 note 如实呈现（与 ioCh 协商注同口径）。
+        if (g_b.host.buf_clamped_from() > 0) {
+            snprintf(g_b.note, sizeof(g_b.note), "bufSize %ld->%ld (driver granularity)",
+                     g_b.host.buf_clamped_from(), g_b.host.buffer_size());
+        }
+        // 驱动回值缓冲大小与预估不符（granularity 取整等）：按实际值重建引擎句柄
+        if (g_b.engine && g_b.host.buffer_size() != g_b.nbs) {
+            if (g_b.destroy) g_b.destroy(g_b.engine);
+            g_b.nbs = g_b.host.buffer_size();
+            g_b.engine = g_b.create((float)g_b.sr, (int)g_b.nbs);
+            if (!g_b.engine) {
+                snprintf(g_b.note, sizeof(g_b.note), "engine-recreate-failed");
+                DestroyEngine();
+                g_b.host.close();
+                g_b.startRc = -6;
+                return -6;
+            }
+        }
+
+        // 7) 挂 sink（必须在 start 前；RT 启动后不再更改指针）
+        // P3：采样率/缓冲已定稿，配置静音门控（AURADSP_GATE=0 时禁用）。
+        g_b.gate.Configure((long long)(g_b.sr > 0.0 ? g_b.sr : 48000.0));
+        g_b.host.set_process_sink(&BridgeSink, &g_b);
+
+        // 8) 预下发参数 + 启动
+        ApplyParamsString(params_json);
+        // 传输声道数与引擎处理声道数必须等宽（process 读写按 channels.count 定 stride，
+        // 不等宽会错位）。桥以 io 声道数为权威，最后覆盖 mirror 可能带来的旧值。
+        if (g_b.setParam && g_b.engine) {
+            const int32_t cc = (int32_t)nCh;
+            if (g_b.setParam(g_b.engine, "channels.count", &cc, 4) != 0) {
+                snprintf(g_b.note, sizeof(g_b.note), "channels.count set failed (%ld)", nCh);
+            }
+        }
+        if (!g_b.host.start()) {
+            snprintf(g_b.note, sizeof(g_b.note), "asio-start-failed");
+            DestroyEngine();
+            g_b.host.close();
+            g_b.startRc = -7;
+            return -7;
+        }
+        g_b.startRc = 0;
+        InterlockedExchange(&g_b.running, 1);
+        return 0;
+    });
 }
 
 int asio_start(const char* driver_name, const char* engine_dll,
@@ -471,17 +556,19 @@ int asio_start(const char* driver_name, const char* engine_dll,
 }
 
 int asio_stop() {
-    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;  // 幂等
-    InterlockedExchange(&g_b.running, 0);
-    // 停止时序（防 RT 踩已释放引擎，同 05）：stop → 等在途回调 → dispose/exit
-    g_b.host.stop();
-    FreeTestFile();
-    g_b.host.close();
-    // 显式释放驱动 COM 对象（SDK 单例 asioDrivers 仍在，下次 start 的
-    // loadDriver 会自行 removeCurrentDriver；此处主动释放避免跨会话占着驱动）。
-    auraasio::release_active_driver();
-    DestroyEngine();
-    return 0;
+    return asioctl::Run([]() -> int {
+        if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;  // 幂等
+        InterlockedExchange(&g_b.running, 0);
+        // 停止时序（防 RT 踩已释放引擎，同 05）：stop → 等在途回调 → dispose/exit
+        g_b.host.stop();
+        FreeTestFile();
+        g_b.host.close();
+        // 显式释放驱动 COM 对象（SDK 单例 asioDrivers 仍在，下次 start 的
+        // loadDriver 会自行 removeCurrentDriver；此处主动释放避免跨会话占着驱动）。
+        auraasio::release_active_driver();
+        DestroyEngine();
+        return 0;
+    });
 }
 
 int asio_status(char* out, int cap) {
