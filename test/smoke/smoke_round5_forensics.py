@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 # 第五轮 S4 取证契约（源码级）：VAIO 桥首块取证对象 + isolate 落盘
-# 行 + ASIO 失败分步口径。桥 DLL 的真实编译覆盖在 CI J5b 的
+# 行 + ASIO 失败取证口径。桥 DLL 的真实编译覆盖在 CI J5b 的
 # ci_check 工程（VAIO 桥）；ASIO 侧依赖 Steinberg SDK 无法进 CI，
 # 本门只钉住取证面不被误删/改口径，真机日志为最终证据。
+# r57 P0 修订：ASIO 失败口径由「注册表预查分步推断」改为失败后直取
+# asioOpenDriver 真实 rc（旧口径把 STA 套间问题误报为 COM/注册表
+# 步，2026-11-19 定罪）——本门同步改钉新口径并断言旧口径已删除。
 import os
 import sys
 
@@ -40,12 +43,19 @@ def main():
     check("st['forensics']" in iso, "isolate 消费 forensics 对象在场")
 
     asio = read("core/desktop/windows-drivers/04_asio_client/AsioHost.cpp")
-    check("failed at COM step" in asio, "ASIO why 带 COM 步标记")
-    check("failed at registry step" in asio, "ASIO why 带注册步标记")
-    check("LookupAsioRegistry" in asio, "ASIO 纯注册表预查在场")
-    check("AsioDriverList" not in asio.split("LookupAsioRegistry")[1]
-          .split("bool AsioHost::open")[0],
-          "预查实现内不构造 AsioDriverList（零 COM 副作用）")
+    # r57 P0 新口径：open 失败后以 ProbeOpenRc 直取 asioOpenDriver
+    # 的真实 rc 写进 why（HRESULT/DRVERR 原码），不再靠注册表反推。
+    check("ProbeOpenRc" in asio, "ASIO 失败真实 rc 探针在场")
+    check("asioOpenDriver" in asio, "ASIO 探针直调 asioOpenDriver")
+    check("asioOpenDriver rc=" in asio, "ASIO why 带真实 rc")
+    check("device already open" in asio, "ASIO why 带 -5002 语义标记")
+    check("driver not in ASIO enumeration" in asio,
+          "ASIO why 带未枚举标记")
+    # 旧误导口径必须已删除（防复辟）：注册表预查启发式 + 分步文案。
+    check("LookupAsioRegistry" not in asio, "ASIO 注册表预查已删除")
+    check("failed at COM step" not in asio, "ASIO COM 步旧文案已删除")
+    check("failed at registry step" not in asio,
+          "ASIO 注册步旧文案已删除")
 
     if FAILS:
         print(f"FAIL  smoke_round5_forensics ({len(FAILS)} 项)")
