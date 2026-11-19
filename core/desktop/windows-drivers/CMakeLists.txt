@@ -72,7 +72,8 @@ add_library(auraasio_bridge SHARED
     "${ASIOBRIDGE}/AsioBridge.cpp"
     "${ASIOBRIDGE}/AsioBridge.def"
 )
-target_include_directories(auraasio_bridge PRIVATE "${VMCLIENT}" "${ASIODIR}" "${ASIOBRIDGE}" "${BRIDGECOMMON}")
+target_include_directories(auraasio_bridge PRIVATE "${VMCLIENT}" "${ASIODIR}" "${ASIOBRIDGE}" "${BRIDGECOMMON}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
 target_link_libraries(auraasio_bridge PRIVATE auraasio_host ole32 version)
 target_compile_options(auraasio_bridge PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET auraasio_bridge PROPERTY CXX_STANDARD 20)
@@ -110,7 +111,8 @@ set_property(TARGET vm_pump_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL
 add_executable(vm_parallel_test
     "${VMBRIDGE}/vm_parallel_test.cpp"
 )
-target_include_directories(vm_parallel_test PRIVATE "${VMCLIENT}" "${BRIDGECOMMON}")
+target_include_directories(vm_parallel_test PRIVATE "${VMCLIENT}" "${BRIDGECOMMON}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
 target_link_libraries(vm_parallel_test PRIVATE version)
 target_compile_options(vm_parallel_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET vm_parallel_test PROPERTY CXX_STANDARD 20)
@@ -314,7 +316,8 @@ add_library(auravm_bridge SHARED
     "${VMCLIENT}/VmRemoteLoader.cpp"
     "${VMBRIDGE}/VmBridge.def"
 )
-target_include_directories(auravm_bridge PRIVATE "${VMCLIENT}" "${VMBRIDGE}" "${BRIDGECOMMON}")
+target_include_directories(auravm_bridge PRIVATE "${VMCLIENT}" "${VMBRIDGE}" "${BRIDGECOMMON}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
 target_compile_options(auravm_bridge PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET auravm_bridge PROPERTY CXX_STANDARD 20)
 set_property(TARGET auravm_bridge PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
