@@ -343,7 +343,8 @@ if (-not $SkipDrivers) {
         "test_plugin_chain", "test_host_quarantine", "test_dll_dirs",
         "rt_drain_test", "vaio_pump_wait_test", "vm_detect",
         "vm_pump_test", "vm_parallel_test", "apo_inspect",
-        "silence_gate_test", "AuraApo", "apo_config"
+        "silence_gate_test", "AuraApo", "apo_config",
+        "vaio_channel_map_test"
     )
     Invoke-Clean (@("cmake", "--build", "--preset", $BuildPreset, "--target") + $TestTargets + "--", "-m:$BuildJobs") `
         -Log (Join-Path $ProjectRoot "build\reports\build_test_targets.log")
