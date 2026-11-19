@@ -45,11 +45,13 @@ check("APO live width published atomically",
       "liveEngCh_.store" in host and "liveTrunc_.store" in host)
 check("APO fold gather present for matrix mode",
       "FoldGather" in host)
-check("APO scatter zeroes extra channels",
-      "memset(d, 0, (size_t)n * strm * sizeof(float));" in host)
-check("APO 4ch position map present (r47 S2: quad vs C/LFE)",
-      "StreamPosForCh(eng, strm, c)" in host and
-      "if (strm == 8) return c + 4;" in host)
+chmap = read(os.path.join(ROOT, "engine", "chain", "channel_map.h"))
+check("APO scatter zeroes extra channels (r55: via chmap_scatter_discrete)",
+      "chmap_scatter_discrete" in host and
+      "std::memset(dst, 0," in chmap)
+check("APO 4ch position map present (r47 S2: quad vs C/LFE; r55 收编统一表)",
+      "chmap_gather_discrete" in host and "StreamPosForCh" not in host
+      and "if (streamCh == 8) return c + 4;" in chmap)
 check("APO old passthrough doctrine gone",
       "压过参数块里的 channels.count" not in host and
       "其余声道先原样落 dst" not in host)
@@ -65,9 +67,11 @@ vaio_map = read(os.path.join(
 check("VAIO truncate is position-mapped (r54: quad vs C/LFE)",
       "VaioTruncateGather" in vaio and "VaioTruncateScatter" in vaio
       and "TruncateRemapAudio" not in vaio)
-check("VAIO 4ch position map present (r54)",
-      "if (streamCh == 8) return c + 4;" in vaio_map
-      and "if (streamCh == 6) return c + 2;" in vaio_map)
+check("VAIO 4ch position map present (r55: 统一表 + 垫片委托)",
+      "if (streamCh == 8) return c + 4;" in chmap
+      and "if (streamCh == 6) return c + 2;" in chmap
+      and "chmap_gather_discrete" in vaio_map
+      and "chmap_scatter_discrete" in vaio_map)
 check("VAIO bridge records channels.mode",
       "g_vaio.chanMode" in vaio)
 check("VAIO pump engine path branches on discrete",

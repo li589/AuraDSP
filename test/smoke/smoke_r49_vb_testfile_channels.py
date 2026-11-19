@@ -50,8 +50,10 @@ def main():
     check("asio parity anchor still full width",
           "const int storeCh = (ch <= 1) ? 2 : ch;" in asio and
           "g_b.tc.testFileCh = storeCh;" in asio)
-    check("BusChForSlot: identity except quad slots 2/3 -> bus 6/7",
-          "return (procCh == 4 && slot >= 2) ? slot + 4 : slot;" in pump)
+    chmap = read("engine/chain/channel_map.h")
+    check("BusChForSlot: delegates to unified table (r55)",
+          "return chmap_stream_pos(procCh, 8, slot);" in pump
+          and "if (streamCh == 8) return c + 4;" in chmap)
     check("discrete gather uses BusChForSlot",
           "ab->r[base + BusChForSlot(procCh, ch)]" in pump)
     check("scatter uses BusChForSlot (same table both ways)",

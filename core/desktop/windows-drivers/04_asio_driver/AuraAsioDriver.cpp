@@ -1,6 +1,7 @@
 // AuraAsioDriver.cpp — AuraDSP 虚拟 ASIO 驱动实现
 #include "AuraAsioDriver.h"
 #include "AuraAsioDriverGuid.h"
+#include "chain/channel_map.h"  // 声道适配统一表（第五十五轮）
 
 #include <cmath>
 #include <cstring>
@@ -606,17 +607,15 @@ DWORD AuraAsioDriver::PumpLoop() {
                     m_foldR[i] = (ch > 1) ? m_proc[i * ch + 1] : m_proc[i * ch + 0];
                 }
             } else {
-                const float k = 0.70710678f;  // 标准 -3dB 下混系数
+                // 下混表已收编至 engine/chain/channel_map.h
+                // （第五十五轮）。旧手写表按错序索引：f[3] 实为
+                // LFE 却被折入、SL/SR 左右互换、BR 从未入折——
+                // 统一表按标准声道序折入且 LFE 不入折。
                 for (long i = 0; i < m_bufferSize; ++i) {
-                    const float* f = m_proc + i * ch;
-                    float l = f[0], r = f[1];
-                    if (ch > 2) { const float ctr = f[2] * k; l += ctr; r += ctr; }
-                    if (ch > 3) { l += f[3] * k; }
-                    if (ch > 4) { r += f[4] * k; }
-                    if (ch > 5) { l += f[5] * k; }
-                    if (ch > 6) { r += f[6] * k; }
-                    m_foldL[i] = l;
-                    m_foldR[i] = r;
+                    float lr[2];
+                    chmap_fold_frame(m_proc + i * ch, (int)ch, lr, 2);
+                    m_foldL[i] = lr[0];
+                    m_foldR[i] = lr[1];
                 }
             }
 

@@ -24,6 +24,7 @@
 #include <windows.h>
 
 #include "SilenceGate.h"
+#include "chain/channel_map.h"  // 声道适配统一表（第五十五轮）
 
 #include <cmath>
 #include <cstdint>
@@ -378,8 +379,10 @@ inline int NormalizeWorkCh(long v) {
 // VM 总线通道序固定 7.1（FL,FR,C,LFE,SL,SR,BL,BR）；引擎 4ch 是 Quad
 // （FL,FR,BL,BR，见 speaker_layout.h），所以 4ch 档位必须把 BL/BR 对到
 // 总线 6/7，不能按前四路直接取，否则上混的环绕会落到 C/LFE 总线上。
+// 第五十五轮起表体收编至 engine/chain/channel_map.h，此处只委托
+// （总线恒 8 宽，故 streamCh 恒 8）。
 inline int BusChForSlot(int procCh, int slot) {
-    return (procCh == 4 && slot >= 2) ? slot + 4 : slot;
+    return chmap_stream_pos(procCh, 8, slot);
 }
 
 // Z17：单组处理主体——串行/并行共用的唯一实现（两条路径必须逐位同义）。
@@ -489,30 +492,19 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
             // N>2：FL/FR/C/LFE/SL/SR/BL/BR 前 procCh 路按通道并行进引擎。
             if (!testReady && chanMode == 0 && procCh < 8) {
                 // 矩阵折叠 gather（第四十七轮 S2）：总线恒 8 宽
-                // 7.1 序，按引擎声道序折进工作声道（系数与 APO
-                // FoldGather 同表）——旧实现 gather 与模式无关
-                // 恒顺序截断，引擎根本收不到可折叠的全景信号，
-                // 矩阵与离散在 <8 声道时必然同形（r46 定罪）。
-                const float k = 0.70710678f;
+                // 7.1 序，按引擎声道序折进工作声道——旧实现
+                // gather 与模式无关恒顺序截断，引擎根本收不到
+                // 可折叠的全景信号，矩阵与离散在 <8 声道时必然
+                // 同形（r46 定罪）。折叠表已收编至
+                // engine/chain/channel_map.h（第五十五轮），逐帧
+                // 委托 chmap_fold_frame（平面总线先组帧）。
                 for (long i = 0; i < n; ++i) {
                     float b[8];
                     for (int s = 0; s < 8; ++s) {
                         const float* src = ab->r[base + s];
                         b[s] = src ? src[i] : 0.0f;
                     }
-                    if (procCh == 6) {
-                        sIn[i * 6 + 0] = b[0];
-                        sIn[i * 6 + 1] = b[1];
-                        sIn[i * 6 + 2] = b[2];
-                        sIn[i * 6 + 3] = b[3];
-                        sIn[i * 6 + 4] = b[4] + b[6] * k;
-                        sIn[i * 6 + 5] = b[5] + b[7] * k;
-                    } else {  // procCh == 4，引擎 Quad 序（BL/BR 为主）
-                        sIn[i * 4 + 0] = b[0] + b[2] * k;
-                        sIn[i * 4 + 1] = b[1] + b[2] * k;
-                        sIn[i * 4 + 2] = b[6] + b[4] * k;
-                        sIn[i * 4 + 3] = b[7] + b[5] * k;
-                    }
+                    chmap_fold_frame(b, 8, &sIn[i * procCh], procCh);
                 }
             } else if (!testReady) {
                 for (long i = 0; i < n; ++i) {
@@ -530,21 +522,23 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
             // 测试注入：静音主通道 VB 输入，测试信号进同一条 DSP 链。
             if (!testReady) FillTestSignal(c, sIn, n);
         } else if (chanMode == 0) {
-            // 矩阵 8→2 折叠 gather（第四十七轮 S2；系数与 APO
-            // FoldGather 8→2 同表，LFE 不入折）：旧实现立体声
-            // 档只取 FL/FR，高声道内容在进引擎前即丢失。
-            const float k = 0.70710678f;
+            // 矩阵 8→2 折叠 gather（第四十七轮 S2；LFE 不入
+            // 折）：旧实现立体声档只取 FL/FR，高声道内容在进
+            // 引擎前即丢失。折叠表已收编至 channel_map.h
+            // （第五十五轮），逐帧组帧后委托（LFE 槽填 0，
+            // →2 折叠本就不读该位）。
             const float* rC = ab->r[base + 2];
             const float* rSL = ab->r[base + 4];
             const float* rSR = ab->r[base + 5];
             const float* rBL = ab->r[base + 6];
             const float* rBR = ab->r[base + 7];
             for (long i = 0; i < n; ++i) {
-                const float cc = rC ? rC[i] : 0.0f;
-                sIn[i * 2] = inL[i] + (cc + (rSL ? rSL[i] : 0.0f) +
-                                       (rBL ? rBL[i] : 0.0f)) * k;
-                sIn[i * 2 + 1] = inR[i] + (cc + (rSR ? rSR[i] : 0.0f) +
-                                           (rBR ? rBR[i] : 0.0f)) * k;
+                const float b[8] = {
+                    inL[i], inR[i],
+                    rC ? rC[i] : 0.0f, 0.0f,
+                    rSL ? rSL[i] : 0.0f, rSR ? rSR[i] : 0.0f,
+                    rBL ? rBL[i] : 0.0f, rBR ? rBR[i] : 0.0f};
+                chmap_fold_frame(b, 8, &sIn[i * 2], 2);
             }
         } else {
             for (long i = 0; i < n; ++i) {

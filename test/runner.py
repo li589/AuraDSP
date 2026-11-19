@@ -219,7 +219,7 @@ PLATFORM_WINDOWS = {
     # AuraVAIO 声道模式协商契约（2026-11-05）：countMode=auto/manual 下
     # channels.count 的有效档位回读与非法值拒绝。
     "smoke_vaio_channel_mode.py",
-    "smoke_vaio_channel_map.py",
+    "smoke_channel_map.py",
     "smoke_crossfeed.py",
     "smoke_basspsycho.py",
     "smoke_filter.py",
@@ -555,7 +555,7 @@ def run_smoke_tests():
     # AuraVAIO 声道模式协商契约（2026-11-05）：auto/manual 切换下有效档位
     # 回读、非法值拒绝与 auto 下写 count 不改变有效档位。
     "smoke_vaio_channel_mode.py",
-    "smoke_vaio_channel_map.py",
+    "smoke_channel_map.py",
     "smoke_crossfeed.py",
     "smoke_basspsycho.py",
     "smoke_filter.py",

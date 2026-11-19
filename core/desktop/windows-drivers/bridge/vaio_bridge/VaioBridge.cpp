@@ -521,144 +521,30 @@ void SetEngineChannels(int32_t count) {
 }
 
 // 零分配交织音频重映射：安全适配驱动共享环、DSP处理链与WASAPI输出三者之间的声道拓扑差异
+// 矩阵模式宽适配（流↔引擎/设备）：折叠与放置的表已收编至
+// engine/chain/channel_map.h（第五十五轮，全宿主单一真相），
+// 本函数只按宽对分发：同宽直通、下混走 chmap_fold、上扩走
+// chmap_scatter_discrete（布局放置 + 其余清零）。历史注记：
+// 本函数原为全量手写表，其中 8→4 的主次是 r47 修正前旧表
+// （SL/SR 为主），与 APO/VB 的定案（BL/BR 为主）漂移，第五
+// 十五轮随收编一并纠正；数值由 channel_map_test 守。
 void RemapInterleavedAudio(const float* src, int srcCh, float* dst, int dstCh, int frames) {
     if (srcCh == dstCh) {
         memcpy(dst, src, (size_t)frames * dstCh * sizeof(float));
         return;
     }
-    // 4ch (Quad: FL,FR,BL,BR) -> 2ch：后置按 -3dB 折入 L/R
-    if (srcCh == 4 && dstCh == 2) {
-        for (int f = 0; f < frames; ++f) {
-            dst[f * 2 + 0] = src[f * 4 + 0] + src[f * 4 + 2] * 0.70710678f;
-            dst[f * 2 + 1] = src[f * 4 + 1] + src[f * 4 + 3] * 0.70710678f;
-        }
+    if (srcCh > dstCh) {
+        chmap_fold(src, srcCh, dst, dstCh, frames);
         return;
     }
-    // 4ch (Quad) -> 6ch (5.1)：Quad 的后置即 5.1 的 SL/SR，C/LFE 无源
-    if (srcCh == 4 && dstCh == 6) {
-        for (int f = 0; f < frames; ++f) {
-            dst[f * 6 + 0] = src[f * 4 + 0];
-            dst[f * 6 + 1] = src[f * 4 + 1];
-            dst[f * 6 + 2] = 0.0f;
-            dst[f * 6 + 3] = 0.0f;
-            dst[f * 6 + 4] = src[f * 4 + 2];
-            dst[f * 6 + 5] = src[f * 4 + 3];
-        }
-        return;
-    }
-    // 4ch (Quad) -> 8ch (7.1)：Quad 的后置对到 BL/BR，C/LFE/SL/SR 无源
-    if (srcCh == 4 && dstCh == 8) {
-        for (int f = 0; f < frames; ++f) {
-            dst[f * 8 + 0] = src[f * 4 + 0];
-            dst[f * 8 + 1] = src[f * 4 + 1];
-            dst[f * 8 + 2] = 0.0f;
-            dst[f * 8 + 3] = 0.0f;
-            dst[f * 8 + 4] = 0.0f;
-            dst[f * 8 + 5] = 0.0f;
-            dst[f * 8 + 6] = src[f * 4 + 2];
-            dst[f * 8 + 7] = src[f * 4 + 3];
-        }
-        return;
-    }
-    // 6ch (5.1) -> 2ch：C/SL/SR 按 -3dB 折入 L/R，LFE 丢弃
-    if (srcCh == 6 && dstCh == 2) {
-        for (int f = 0; f < frames; ++f) {
-            const float c = src[f * 6 + 2] * 0.70710678f;
-            dst[f * 2 + 0] =
-                src[f * 6 + 0] + c + src[f * 6 + 4] * 0.70710678f;
-            dst[f * 2 + 1] =
-                src[f * 6 + 1] + c + src[f * 6 + 5] * 0.70710678f;
-        }
-        return;
-    }
-    // 6ch (5.1) -> 4ch (Quad)：C 折入 L/R，SL/SR 落到 BL/BR，LFE 丢弃
-    if (srcCh == 6 && dstCh == 4) {
-        for (int f = 0; f < frames; ++f) {
-            const float c = src[f * 6 + 2] * 0.70710678f;
-            dst[f * 4 + 0] = src[f * 6 + 0] + c;
-            dst[f * 4 + 1] = src[f * 6 + 1] + c;
-            dst[f * 4 + 2] = src[f * 6 + 4];
-            dst[f * 4 + 3] = src[f * 6 + 5];
-        }
-        return;
-    }
-    // 8ch (7.1) -> 2ch (Stereo)
-    if (srcCh == 8 && dstCh == 2) {
-        for (int f = 0; f < frames; ++f) {
-            float l = src[f * 8 + 0];
-            float r = src[f * 8 + 1];
-            const float c  = src[f * 8 + 2];
-            const float sl = src[f * 8 + 4];
-            const float sr = src[f * 8 + 5];
-            const float bl = src[f * 8 + 6];
-            const float br = src[f * 8 + 7];
-            if (c != 0.0f) {
-                const float ch = c * 0.70710678f;
-                l += ch;
-                r += ch;
-            }
-            if (sl != 0.0f) l += sl * 0.70710678f;
-            if (sr != 0.0f) r += sr * 0.70710678f;
-            if (bl != 0.0f) l += bl * 0.70710678f;
-            if (br != 0.0f) r += br * 0.70710678f;
-            dst[f * 2 + 0] = l;
-            dst[f * 2 + 1] = r;
-        }
-        return;
-    }
-    // 8ch (7.1) -> 6ch (5.1)
-    if (srcCh == 8 && dstCh == 6) {
-        for (int f = 0; f < frames; ++f) {
-            dst[f * 6 + 0] = src[f * 8 + 0];
-            dst[f * 6 + 1] = src[f * 8 + 1];
-            dst[f * 6 + 2] = src[f * 8 + 2];
-            dst[f * 6 + 3] = src[f * 8 + 3];
-            dst[f * 6 + 4] = src[f * 8 + 4] + src[f * 8 + 6] * 0.70710678f;
-            dst[f * 6 + 5] = src[f * 8 + 5] + src[f * 8 + 7] * 0.70710678f;
-        }
-        return;
-    }
-    // 8ch (7.1) -> 4ch (Quad)：C 折入 L/R，SL/BL、SR/BR 合到 BL/BR
-    if (srcCh == 8 && dstCh == 4) {
-        for (int f = 0; f < frames; ++f) {
-            const float c = src[f * 8 + 2] * 0.70710678f;
-            dst[f * 4 + 0] = src[f * 8 + 0] + c;
-            dst[f * 4 + 1] = src[f * 8 + 1] + c;
-            dst[f * 4 + 2] = src[f * 8 + 4] + src[f * 8 + 6] * 0.70710678f;
-            dst[f * 4 + 3] = src[f * 8 + 5] + src[f * 8 + 7] * 0.70710678f;
-        }
-        return;
-    }
-    // 2ch (Stereo) -> 多声道扩展 (前两声道直通，其余静音)
-    if (srcCh == 2 && dstCh > 2) {
-        for (int f = 0; f < frames; ++f) {
-            dst[f * dstCh + 0] = src[f * 2 + 0];
-            dst[f * dstCh + 1] = src[f * 2 + 1];
-            for (int c = 2; c < dstCh; ++c) {
-                dst[f * dstCh + c] = 0.0f;
-            }
-        }
-        return;
-    }
-    // 通用回退：按公共通道数复制，目标多余通道补零
-    const int copyCh = (srcCh < dstCh) ? srcCh : dstCh;
-    for (int f = 0; f < frames; ++f) {
-        for (int c = 0; c < copyCh; ++c) {
-            dst[f * dstCh + c] = src[f * srcCh + c];
-        }
-        for (int c = copyCh; c < dstCh; ++c) {
-            dst[f * dstCh + c] = 0.0f;
-        }
-    }
+    chmap_scatter_discrete(src, srcCh, dst, dstCh, frames);
 }
 
-// 离散逐声道专用适配在 VaioChannelMap.h（第五十四轮起）：按
-// 声道布局位置映射截断/补零，绝不折叠——多出的声道丢弃
-// （r46 user 裁定）。r46 初版为顺序截断，引擎 4ch（Quad）的
-// BL/BR 被对到流的 C/LFE（第 3/4 声道）；第五十四轮按 APO
-// StreamPosForCh / VB BusChForSlot 同表改位置映射（7.1 流取
-// 第 7/8 声道、5.1 流取第 5/6 声道），数值单测
-// vaio_channel_map_test.cpp 守回归。
+// 离散逐声道专用适配在 VaioChannelMap.h：按声道布局位置
+// 映射截断/补零，绝不折叠——多出的声道丢弃（r46 user 裁
+// 定）。其表体已于第五十五轮收编至 engine/chain/
+// channel_map.h（VaioChannelMap.h 现为委托垫片），数值单测
+// channel_map_test 守回归。
 
 // 环数据格式归一：实现已抽到 VaioSampleConvert.h（格式升级一期，
 // 2026-11-12），按（格式类别， 容器位深， 有效位深）分发，宿主门禁

@@ -83,7 +83,8 @@ add_library(auravm STATIC
     "${VMCLIENT}/VmAudioCallback.cpp"
 )
 
-target_include_directories(auravm PUBLIC "${VMCLIENT}" "${BRIDGECOMMON}")
+target_include_directories(auravm PUBLIC "${VMCLIENT}" "${BRIDGECOMMON}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
 target_compile_options(auravm PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET auravm PROPERTY CXX_STANDARD 20)
 set_property(TARGET auravm PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
@@ -326,6 +327,7 @@ add_library(auravaio_bridge SHARED
     "${VAIOBRIDGE}/VaioBridge.def"
 )
 target_include_directories(auravaio_bridge PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine"
     "${VMCLIENT}"
     "${CMAKE_CURRENT_SOURCE_DIR}/01_vaio_driver/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/common"
@@ -337,15 +339,16 @@ set_property(TARGET auravaio_bridge PROPERTY CXX_STANDARD 20)
 set_property(TARGET auravaio_bridge PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(auravaio_bridge PRIVATE ole32 avrt version)
 
-# 第五十四轮：VAIO 桥离散截断位置映射数值单测（VaioChannelMap.h，
-# 驱动无关）。引擎 4ch（Quad）在 7.1/5.1 流的取位与丢弃语义。
-add_executable(vaio_channel_map_test
-    "${VAIOBRIDGE}/vaio_channel_map_test.cpp"
+# 第五十五轮：声道适配统一表数值单测（engine/chain/channel_map.h，
+# 驱动无关）。位置映射 + 离散 gather/scatter + 矩阵下混全表；
+# 前身为第五十四轮的 vaio_channel_map_test（随表收编改名扩容）。
+add_executable(channel_map_test
+    "${BRIDGECOMMON}/channel_map_test.cpp"
 )
-target_include_directories(vaio_channel_map_test PRIVATE "${VAIOBRIDGE}")
-target_compile_options(vaio_channel_map_test PRIVATE /utf-8 /W1 /EHsc)
-set_property(TARGET vaio_channel_map_test PROPERTY CXX_STANDARD 20)
-set_property(TARGET vaio_channel_map_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_include_directories(channel_map_test PRIVATE "${BRIDGECOMMON}" "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
+target_compile_options(channel_map_test PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET channel_map_test PROPERTY CXX_STANDARD 20)
+set_property(TARGET channel_map_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
 # 多声道能力与扬声器向导端到端测试探针
 # D3 验收：VAIO 泵的节拍等待（事件驱动 + 上界）。驱动无关，只包含共享头
@@ -389,6 +392,7 @@ add_library(auraasio_driver SHARED
     "${ASIODRVDIR}/AuraAsioDriver.def"
 )
 target_include_directories(auraasio_driver PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine"
     "${ASIODRVDIR}"
     "${ASIO_SDK_ROOT}/common"
 )

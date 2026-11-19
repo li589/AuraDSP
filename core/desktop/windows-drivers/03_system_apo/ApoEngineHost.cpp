@@ -1,6 +1,8 @@
 // ApoEngineHost.cpp — 见 ApoEngineHost.h 头注（设计 P2）。
 #include "ApoEngineHost.h"
 
+#include "chain/channel_map.h"  // 声道适配统一表（第五十五轮）
+
 #include "ApoEndpointProps.h"
 #include <sddl.h>
 #include <cmath>
@@ -529,77 +531,16 @@ void ApoEngineHost::ApplyEngChResolution() {
 // 立体声处理——内容不丢。离散模式不走这里（顺序截断）。
 static void FoldGather(const float* s, float* in, UINT32 srcCh, UINT32 engCh,
                        UINT32 n) {
-    const float k = 0.70710678f;
-    if (srcCh == 4 && engCh == 2) {
-        for (UINT32 i = 0; i < n; i++) {
-            in[i * 2 + 0] = s[i * 4 + 0] + s[i * 4 + 2] * k;
-            in[i * 2 + 1] = s[i * 4 + 1] + s[i * 4 + 3] * k;
-        }
-    } else if (srcCh == 6 && engCh == 2) {
-        for (UINT32 i = 0; i < n; i++) {
-            const float c = s[i * 6 + 2] * k;
-            in[i * 2 + 0] = s[i * 6 + 0] + c + s[i * 6 + 4] * k;
-            in[i * 2 + 1] = s[i * 6 + 1] + c + s[i * 6 + 5] * k;
-        }
-    } else if (srcCh == 6 && engCh == 4) {
-        for (UINT32 i = 0; i < n; i++) {
-            const float c = s[i * 6 + 2] * k;
-            in[i * 4 + 0] = s[i * 6 + 0] + c;
-            in[i * 4 + 1] = s[i * 6 + 1] + c;
-            in[i * 4 + 2] = s[i * 6 + 4];
-            in[i * 4 + 3] = s[i * 6 + 5];
-        }
-    } else if (srcCh == 8 && engCh == 2) {
-        for (UINT32 i = 0; i < n; i++) {
-            const float* f = s + i * 8;
-            in[i * 2 + 0] = f[0] + (f[2] + f[4] + f[6]) * k;
-            in[i * 2 + 1] = f[1] + (f[2] + f[5] + f[7]) * k;
-        }
-    } else if (srcCh == 8 && engCh == 4) {
-        // 引擎 4ch 是 Quad（FL,FR,BL,BR）：后环绕以 BL/BR 为
-        // 主、SL/SR 折入（第四十七轮 S2 修正主次——原表以
-        // SL/SR 为主是 VAIO 端点布局口径，引擎 Quad 序不同）。
-        for (UINT32 i = 0; i < n; i++) {
-            const float* f = s + i * 8;
-            in[i * 4 + 0] = f[0] + f[2] * k;
-            in[i * 4 + 1] = f[1] + f[2] * k;
-            in[i * 4 + 2] = f[6] + f[4] * k;
-            in[i * 4 + 3] = f[7] + f[5] * k;
-        }
-    } else if (srcCh == 8 && engCh == 6) {
-        for (UINT32 i = 0; i < n; i++) {
-            const float* f = s + i * 8;
-            float* o = in + i * 6;
-            o[0] = f[0];
-            o[1] = f[1];
-            o[2] = f[2];
-            o[3] = f[3];
-            o[4] = f[4] + f[6] * k;
-            o[5] = f[5] + f[7] * k;
-        }
-    } else {
-        // 无折叠表的组合（奇数流宽等）：顺序截断。
-        for (UINT32 i = 0; i < n; i++) {
-            for (UINT32 c = 0; c < engCh; c++) {
-                in[i * engCh + c] = s[i * srcCh + c];
-            }
-        }
-    }
+    // 折叠表已收编至 engine/chain/channel_map.h（第五十五轮，
+    // 全宿主单一真相；8→4 主次为 r47 S2 定案：BL/BR 为主、
+    // SL/SR 折入）。此处只委托，数值由 channel_map_test 守。
+    chmap_fold(s, (int)srcCh, in, (int)engCh, (int)n);
 }
 
-// 引擎声道 → 流内位置（第四十七轮 S2）：引擎 4ch 是 Quad
-// （FL,FR,BL,BR），而 7.1/5.1 流的第 2/3 位是 C/LFE——eng=4
-// 时引擎第 2/3 路必须对到流的后环绕位（8 宽：6/7；6 宽：
-// 4/5，SL/SR 充当后环绕）。其余宽度布局互为前缀，顺序即
-// 位置。r46 的顺序截断/回写在 eng=4 时会把引擎的 BL/BR
-// 写进流的 C/LFE 位、真 BL/BR 被清零——本映射修复之。
-static UINT32 StreamPosForCh(UINT32 eng, UINT32 strm, UINT32 c) {
-    if (eng == 4 && c >= 2) {
-        if (strm == 8) return c + 4;
-        if (strm == 6) return c + 2;
-    }
-    return c;
-}
+// 引擎声道 → 流内位置映射（第四十七轮 S2 立表：eng=4 时引擎
+// BL/BR 对流的后环绕位）已于第五十五轮收编至
+// engine/chain/channel_map.h 的 chmap_stream_pos，本文件经
+// chmap_gather_discrete / chmap_scatter_discrete 直接使用。
 
 void ApoEngineHost::ProcessDirect(const float* src, float* dst, UINT32 frames) {
     const UINT32 eng = liveEngCh_.load();
@@ -626,27 +567,16 @@ void ApoEngineHost::ProcessDirect(const float* src, float* dst, UINT32 frames) {
             // 引擎宽 → 处理 → scatter 回引擎声道对应的流位置，
             // 其余位置清零（第四十六轮 S2：多出的声道丢弃/无
             // 声，旧 stereo adapt 的原样直通已废；第四十七轮
-            // S2：位置经 StreamPosForCh 映射，eng=4 不再顺序
+            // S2：位置经 chmap_stream_pos 映射，eng=4 不再顺序
             // 对位）。离散 = 位置截断；矩阵 = 折叠 gather（折
             // 叠表按引擎声道序产出，scatter 同走位置映射）。
             if (trunc) {
-                for (UINT32 i = 0; i < n; i++) {
-                    for (UINT32 c = 0; c < eng; c++) {
-                        inBuf_[i * eng + c] =
-                            s[i * strm + StreamPosForCh(eng, strm, c)];
-                    }
-                }
+                chmap_gather_discrete(s, (int)strm, inBuf_, (int)eng, (int)n);
             } else {
                 FoldGather(s, inBuf_, strm, eng, n);
             }
             fnProcess_(engine_, inBuf_, outBuf_, (int)n);
-            memset(d, 0, (size_t)n * strm * sizeof(float));
-            for (UINT32 i = 0; i < n; i++) {
-                for (UINT32 c = 0; c < eng; c++) {
-                    d[i * strm + StreamPosForCh(eng, strm, c)] =
-                        outBuf_[i * eng + c];
-                }
-            }
+            chmap_scatter_discrete(outBuf_, (int)eng, d, (int)strm, (int)n);
         }
         done += n;
     }
