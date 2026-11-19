@@ -9,6 +9,11 @@ channels.count」使用户的声道数量设置在 APO 模式下从未
 下行对全是折叠（8→6 把 BL/BR 折入 SL/SR），离散模式
 下与 user 裁定（多出的声道丢弃、不映射）相悖。本冒烟
 守住新口径的接线不回退。
+
+第五十四轮补：VAIO 离散截断由顺序拷贝改为位置映射
+（VaioChannelMap.h，引擎 4ch 在 7.1 流取第 7/8 声道），
+本冒烟的 VAIO 段随之改守新接线；数值行为由
+smoke_vaio_channel_map.py 的宿主单测守。
 """
 import os
 import sys
@@ -54,7 +59,15 @@ check("APO buffers sized by stream width",
 vaio = read(os.path.join(
     ROOT, "core", "desktop", "windows-drivers", "bridge",
     "vaio_bridge", "VaioBridge.cpp"))
-check("VAIO truncate remap exists", "TruncateRemapAudio" in vaio)
+vaio_map = read(os.path.join(
+    ROOT, "core", "desktop", "windows-drivers", "bridge",
+    "vaio_bridge", "VaioChannelMap.h"))
+check("VAIO truncate is position-mapped (r54: quad vs C/LFE)",
+      "VaioTruncateGather" in vaio and "VaioTruncateScatter" in vaio
+      and "TruncateRemapAudio" not in vaio)
+check("VAIO 4ch position map present (r54)",
+      "if (streamCh == 8) return c + 4;" in vaio_map
+      and "if (streamCh == 6) return c + 2;" in vaio_map)
 check("VAIO bridge records channels.mode",
       "g_vaio.chanMode" in vaio)
 check("VAIO pump engine path branches on discrete",

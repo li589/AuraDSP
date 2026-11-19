@@ -337,6 +337,16 @@ set_property(TARGET auravaio_bridge PROPERTY CXX_STANDARD 20)
 set_property(TARGET auravaio_bridge PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(auravaio_bridge PRIVATE ole32 avrt version)
 
+# 第五十四轮：VAIO 桥离散截断位置映射数值单测（VaioChannelMap.h，
+# 驱动无关）。引擎 4ch（Quad）在 7.1/5.1 流的取位与丢弃语义。
+add_executable(vaio_channel_map_test
+    "${VAIOBRIDGE}/vaio_channel_map_test.cpp"
+)
+target_include_directories(vaio_channel_map_test PRIVATE "${VAIOBRIDGE}")
+target_compile_options(vaio_channel_map_test PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET vaio_channel_map_test PROPERTY CXX_STANDARD 20)
+set_property(TARGET vaio_channel_map_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
 # 多声道能力与扬声器向导端到端测试探针
 # D3 验收：VAIO 泵的节拍等待（事件驱动 + 上界）。驱动无关，只包含共享头
 # vaio_pump_wait.h，不链 auravaio_bridge —— CI 无虚拟声卡驱动也能跑。

@@ -8,6 +8,7 @@
 // - 控制面（detect/start/stop/set_param/status/viz）在 Dart isolate 或控制线程执行。
 #include "VaioBridge.h"
 #include "VaioSampleConvert.h"
+#include "VaioChannelMap.h"
 #include "VaioMirrorFeed.h"
 
 #include <windows.h>
@@ -651,21 +652,13 @@ void RemapInterleavedAudio(const float* src, int srcCh, float* dst, int dstCh, i
     }
 }
 
-// 离散逐声道专用适配（第四十六轮 S2）：顺序截断/补零，绝不
-// 折叠——多出的声道丢弃（user 裁定：离散模式不做声道映射）。
-// 与 RemapInterleavedAudio 的通用回退同形，但对所有宽对都
-// 绕开其折叠特例（8→6 折 BL/BR、6→2 折 C 等）。
-void TruncateRemapAudio(const float* src, int srcCh, float* dst, int dstCh, int frames) {
-    const int copyCh = srcCh < dstCh ? srcCh : dstCh;
-    for (int f = 0; f < frames; ++f) {
-        for (int c = 0; c < copyCh; ++c) {
-            dst[f * dstCh + c] = src[f * srcCh + c];
-        }
-        for (int c = copyCh; c < dstCh; ++c) {
-            dst[f * dstCh + c] = 0.0f;
-        }
-    }
-}
+// 离散逐声道专用适配在 VaioChannelMap.h（第五十四轮起）：按
+// 声道布局位置映射截断/补零，绝不折叠——多出的声道丢弃
+// （r46 user 裁定）。r46 初版为顺序截断，引擎 4ch（Quad）的
+// BL/BR 被对到流的 C/LFE（第 3/4 声道）；第五十四轮按 APO
+// StreamPosForCh / VB BusChForSlot 同表改位置映射（7.1 流取
+// 第 7/8 声道、5.1 流取第 5/6 声道），数值单测
+// vaio_channel_map_test.cpp 守回归。
 
 // 环数据格式归一：实现已抽到 VaioSampleConvert.h（格式升级一期，
 // 2026-11-12），按（格式类别， 容器位深， 有效位深）分发，宿主门禁
@@ -1411,7 +1404,7 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                 // 1. 将驱动环输入重映射至引擎工作声道数（消除声道步进错位）
                 // 离散模式走截断（不折叠，第四十六轮 S2）。
                 if (g_vaio.chanMode == 1) {
-                    TruncateRemapAudio(g_vaio.scratchIn, inCh, g_vaio.scratchProcIn, safeEngineCh, (int)framesToProcess);
+                    VaioTruncateGather(g_vaio.scratchIn, inCh, g_vaio.scratchProcIn, safeEngineCh, (int)framesToProcess);
                 } else {
                     RemapInterleavedAudio(g_vaio.scratchIn, inCh, g_vaio.scratchProcIn, safeEngineCh, (int)framesToProcess);
                 }
@@ -1451,7 +1444,7 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                 // 4. 将引擎输出重映射至 WASAPI 物理设备声道数
                 // 离散模式走截断（引擎宽大于设备宽时多余声道丢弃）。
                 if (g_vaio.chanMode == 1) {
-                    TruncateRemapAudio(g_vaio.scratchProcOut, safeEngineCh, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
+                    VaioTruncateScatter(g_vaio.scratchProcOut, safeEngineCh, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
                 } else {
                     RemapInterleavedAudio(g_vaio.scratchProcOut, safeEngineCh, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
                 }
