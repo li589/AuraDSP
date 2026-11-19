@@ -8,7 +8,6 @@
 // ValueListenableBuilder 切 physics）组装同构嵌套，断言：
 //   1. 列表可滚时：滚轮滚列表到底，页面 offset 恒 0；
 //   2. 列表无滚动区间时：不冻结，滚轮照常滚页面。
-import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

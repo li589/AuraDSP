@@ -24,7 +24,6 @@
 //   - maxScrollExtent > minScrollExtent → true：滚轮滚列表（到顶到底也不带动
 //     页面，符合用户口径），Scrollbar 拖拽正常；
 //   - 否则 false：滚轮穿透给页面。
-import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:flutter/widgets.dart';
 
 class AuraListScrollPhysics extends ScrollPhysics {
