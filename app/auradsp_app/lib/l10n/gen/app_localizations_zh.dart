@@ -175,7 +175,8 @@ class AppLocalizationsZh extends AppLocalizations {
       '注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。';
 
   @override
-  String get apoModeHint => '模式切换仅选择附加目标；实际附加 / 卸载由下方「一键附加」「一键卸载」执行。';
+  String get apoModeHint =>
+      '模式切换仅选择附加目标；实际附加 / 卸载由下方「一键附加」「一键卸载」执行。勾选端点会同时选中它；选中哪个端点，电平与可视化就跟随哪个端点。';
 
   @override
   String get apoSwitchDetachTitle => '正在卸载 System APO';

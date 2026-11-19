@@ -182,7 +182,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get apoModeHint =>
-      'Switching modes only selects the attach target; use Attach / Detach below to actually apply or remove the APO.';
+      'Switching modes only selects the attach target; use Attach / Detach below to actually apply or remove the APO. Checking an endpoint also selects it; meters and visuals follow the selected endpoint.';
 
   @override
   String get apoSwitchDetachTitle => 'Uninstalling System APO';

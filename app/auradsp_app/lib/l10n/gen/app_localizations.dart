@@ -415,7 +415,7 @@ abstract class AppLocalizations {
   /// No description provided for @apoModeHint.
   ///
   /// In zh, this message translates to:
-  /// **'模式切换仅选择附加目标；实际附加 / 卸载由下方「一键附加」「一键卸载」执行。'**
+  /// **'模式切换仅选择附加目标；实际附加 / 卸载由下方「一键附加」「一键卸载」执行。勾选端点会同时选中它；选中哪个端点，电平与可视化就跟随哪个端点。'**
   String get apoModeHint;
 
   /// No description provided for @apoSwitchDetachTitle.
