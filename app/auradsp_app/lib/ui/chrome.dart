@@ -22,6 +22,7 @@ import '../core/design.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
 import '../platform/adapters.dart';
+import 'wheel_scroll.dart';
 import '../engine/auradsp_ffi.dart' show VizBands;
 
 /* ==================== 1. 页面骨架 ==================== */
@@ -67,6 +68,11 @@ class _PageScaffoldState extends State<PageScaffold>
   );
   final HelpVisibilityController _helpController = HelpVisibilityController();
 
+  /// 滚轮陷阱计数（第五十六轮 S2 修正）：内嵌列表的 ScrollTrap
+  /// 在指针悬停且其确有滚动区间时 +1，本页据此冻结整页滚动，
+  /// 使列表滚轮余量无处串页（见 wheel_scroll.dart 失效判读）。
+  final ValueNotifier<int> _scrollTrap = ValueNotifier<int>(0);
+
   @override
   void initState() {
     super.initState();
@@ -82,6 +88,7 @@ class _PageScaffoldState extends State<PageScaffold>
 
   @override
   void dispose() {
+    _scrollTrap.dispose();
     _helpController.dispose();
     _c.dispose();
     super.dispose();
@@ -120,9 +127,11 @@ class _PageScaffoldState extends State<PageScaffold>
       body.add(_reveal(i, widget.children[i]));
     }
 
-    return HelpVisibilityScope(
-      controller: _helpController,
-      child: Stack(
+    return ScrollTrapScope(
+      counter: _scrollTrap,
+      child: HelpVisibilityScope(
+        controller: _helpController,
+        child: Stack(
         fit: StackFit.expand,
         children: [
           if (widget.ambient != null)
@@ -137,10 +146,17 @@ class _PageScaffoldState extends State<PageScaffold>
               }
               return false;
             },
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                  context.responsivePageX, AuraSpace.pageTop,
-                  context.responsivePageX, AuraSpace.pageBottom),
+            child: ValueListenableBuilder<int>(
+              valueListenable: _scrollTrap,
+              builder: (_, trapCount, scrollChild) => SingleChildScrollView(
+                physics: trapCount > 0
+                    ? const NeverScrollableScrollPhysics()
+                    : null,
+                padding: EdgeInsets.fromLTRB(
+                    context.responsivePageX, AuraSpace.pageTop,
+                    context.responsivePageX, AuraSpace.pageBottom),
+                child: scrollChild,
+              ),
               child: Center(
                 heightFactor: 1.0,
                 child: ConstrainedBox(
@@ -184,6 +200,7 @@ class _PageScaffoldState extends State<PageScaffold>
               child: IgnorePointer(child: ColoredBox(color: p.bg)),
             ),
         ],
+        ),
       ),
     );
   }

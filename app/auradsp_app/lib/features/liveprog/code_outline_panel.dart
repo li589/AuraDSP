@@ -204,7 +204,8 @@ class _CodeOutlinePanelState extends State<CodeOutlinePanel> {
                       ),
                     ),
                   )
-                : Scrollbar(
+                : ScrollTrap(
+                    child: Scrollbar(
                     controller: _outlineScrollCtrl,
                     thumbVisibility: true,
                     child: ListView.builder(
@@ -266,6 +267,7 @@ class _CodeOutlinePanelState extends State<CodeOutlinePanel> {
                       );
                     },
                     ),
+                  ),
                   ),
           ),
         ],

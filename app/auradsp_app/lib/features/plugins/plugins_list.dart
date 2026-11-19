@@ -182,7 +182,8 @@ class _PluginListViewState extends State<_PluginListView> {
 
     return Container(
       constraints: const BoxConstraints(maxHeight: 460),
-      child: Scrollbar(
+      child: ScrollTrap(
+        child: Scrollbar(
         controller: _scrollCtrl,
         thumbVisibility: true,
         child: ListView.builder(
@@ -239,6 +240,7 @@ class _PluginListViewState extends State<_PluginListView> {
           );
             },
           ),
+      ),
       ),
     );
   }

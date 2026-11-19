@@ -826,7 +826,8 @@ class _ApoEndpointListState extends State<_ApoEndpointList> {
         ignoring: operating,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 164),
-          child: Scrollbar(
+          child: ScrollTrap(
+            child: Scrollbar(
             controller: _ctrl,
             thumbVisibility: widget.endpoints.length > 5,
             child: SingleChildScrollView(
@@ -851,6 +852,7 @@ class _ApoEndpointListState extends State<_ApoEndpointList> {
                 ],
               ),
             ),
+          ),
           ),
         ),
       ),

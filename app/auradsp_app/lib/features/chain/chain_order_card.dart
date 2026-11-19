@@ -133,7 +133,8 @@ class _ChainOrderCardState extends State<ChainOrderCard> {
               0.0,
               (MediaQuery.sizeOf(context).height * 0.6).clamp(320.0, 900.0),
             ),
-            child: Scrollbar(
+            child: ScrollTrap(
+              child: Scrollbar(
               controller: _chainScrollCtrl,
               thumbVisibility: true,
               child: ReorderableListView.builder(
@@ -310,6 +311,7 @@ class _ChainOrderCardState extends State<ChainOrderCard> {
                   );
                 },
               ),
+            ),
             ),
           ),
           const SizedBox(height: AuraSpace.md),

@@ -358,7 +358,8 @@ class _EelManualPanelState extends State<EelManualPanel> {
                       style: captionOf(p),
                     ),
                   )
-                : ListView.builder(
+                : ScrollTrap(
+                    child: ListView.builder(
                     controller: _listScrollCtrl,
                     // 滚轮门控（第五十六轮 S2）：同
                     // AuraListScrollPhysics 口径。
@@ -549,6 +550,7 @@ class _EelManualPanelState extends State<EelManualPanel> {
                         ),
                       );
                     },
+                  ),
                   ),
           ),
         ],
