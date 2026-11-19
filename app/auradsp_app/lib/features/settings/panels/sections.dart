@@ -831,6 +831,9 @@ class _ApoEndpointListState extends State<_ApoEndpointList> {
             thumbVisibility: widget.endpoints.length > 5,
             child: SingleChildScrollView(
               controller: _ctrl,
+              // 滚轮门控（第五十六轮 S2）：列表可滚时滚轮只滚
+              // 列表、到顶到底不带动整页；不可滚时放行页面。
+              physics: const AuraListScrollPhysics(),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

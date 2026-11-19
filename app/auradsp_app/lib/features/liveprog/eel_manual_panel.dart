@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import '../../core/design.dart';
 import '../../core/liveprog/eel_manual_registry.dart';
 import '../../core/theme.dart';
+import '../../ui/wheel_scroll.dart';
 import '../widgets.dart';
 
 class EelManualPanel extends StatefulWidget {
@@ -359,6 +360,9 @@ class _EelManualPanelState extends State<EelManualPanel> {
                   )
                 : ListView.builder(
                     controller: _listScrollCtrl,
+                    // 滚轮门控（第五十六轮 S2）：同
+                    // AuraListScrollPhysics 口径。
+                    physics: const AuraListScrollPhysics(),
                     itemCount: _filteredEntries.length,
                     padding: const EdgeInsets.all(AuraSpace.sm),
                     itemBuilder: (ctx, idx) {

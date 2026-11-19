@@ -40,6 +40,27 @@ void main() {
     expect(find.text('Spatial Effects'), findsWidgets);
     expect(find.text('Spatial'), findsNWidgets(2));
 
+    // 第五十六轮 S3：混响徽标与分组解耦——reverb 行内徽标是
+    // Spatial Effects 而非 Output（其注册分组仍是 chOut，
+    // 整组旁路语义由下方组测试守，不随徽标变）。
+    final reverbName = find.descendant(
+      of: find.byType(ReorderableListView),
+      matching: find.text('Spatial Reverb'),
+    );
+    expect(reverbName, findsOneWidget);
+    final reverbRow = find
+        .ancestor(of: reverbName, matching: find.byType(Row))
+        .first;
+    expect(
+      find.descendant(
+          of: reverbRow, matching: find.text('Spatial Effects')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: reverbRow, matching: find.text('Output')),
+      findsNothing,
+    );
+
     // 空间行与默认顺序（haas 之后）
     expect(kDefaultCoreOrder.indexOf('spatial'),
         kDefaultCoreOrder.indexOf('haas') + 1);

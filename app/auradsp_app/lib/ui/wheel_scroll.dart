@@ -2,6 +2,10 @@
 //
 // 需求：脚本 / 插件 / 处理链页面里，鼠标在「可滚动列表」内滚动时只滚列表、
 // 不带动整页；列表不可滚动（内容未超高度）时滚轮放行给页面；列表外滚页面。
+// 覆盖面（第五十六轮 S2 补齐）：处理链序列表、插件列表、代码大纲、
+// APO 端点列表、EEL 手册条目列表。新增内嵌纵向列表时同样套用本
+// physics，不要用默认 physics（会串页）。横向滚动区不串纵向页面，
+// 不在覆盖内。
 //
 // 为什么用自定义 ScrollPhysics 而不是手动 Listener：
 // Flutter 的 Scrollable 只在 `physics.shouldAcceptUserOffset(position)` 为真

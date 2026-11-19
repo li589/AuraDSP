@@ -69,7 +69,7 @@
   "apoCompositeTip": "Composite slot can only be chosen before attaching; detach first to change it",
   "setRefreshStatus": "Refresh status",
   "setApoSafetyNote": "Registry safety: all changes are atomically protected via HKLM\\SOFTWARE\\AuraDSP\\Child APOs plus a dual-layer disk snapshot; the original driver config is 100% restored on uninstall.",
-  "apoModeHint": "Switching modes only selects the attach target; use Attach / Detach below to actually apply or remove the APO.",
+  "apoModeHint": "Switching modes only selects the attach target; use Attach / Detach below to actually apply or remove the APO. Checking an endpoint also selects it; meters and visuals follow the selected endpoint.",
   "apoSwitchDetachTitle": "Uninstalling System APO",
   "apoSwitchDetachHint": "The mode switch first uninstalls the APO. Mode options stay locked until it finishes; the switch then applies automatically.",
   "apoEngineNoteActive": "APO engine active: audio through this endpoint is processed by the AuraDSP engine in real time (the plugin chain does not run in APO mode).",

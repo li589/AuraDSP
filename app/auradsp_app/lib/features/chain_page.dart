@@ -72,6 +72,13 @@ String stageCategoryLabelOf(BuildContext ctx, String id) {
   if (id == 'crossfeed' || id == 'stereo' || id == 'haas' || id == 'convolver' || id == 'ddc') {
     return l.catStereo;
   }
+  // 徽标与分组解耦（第五十六轮 S3）：reverb 的注册分组是历史
+  // 遗留的 chOut（整组旁路语义靠它，不动），但它是空间类效果
+  // （立体声/矩阵/双耳路径走立体声混响、离散多声道走 MC FDN
+  // 全声道混响），徽标按性质标“空间”而非“输出”。
+  if (id == 'reverb') {
+    return l.catSpace;
+  }
   final g = _stageToGroup[id];
   return switch (g) {
     'chInput' => l.catInput,

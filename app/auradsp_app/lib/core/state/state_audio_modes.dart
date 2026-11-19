@@ -1452,6 +1452,12 @@ extension AudioModesState on AppModel {
   void toggleApoChecked(String endpointId, bool on) {
     if (on) {
       apoCheckedEndpoints.add(endpointId);
+      // 勾选即选中（第五十六轮 S1，user 裁定）：电平/可视化
+      // 跟随选中端点，勾上时顺带选中该端点；用户仍可点行改
+      // 选其它端点。取消勾选不动选中。
+      if (selectedApoEndpointId != endpointId) {
+        setApoTargetEndpoint(endpointId);
+      }
     } else {
       apoCheckedEndpoints.remove(endpointId);
     }

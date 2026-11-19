@@ -201,11 +201,11 @@ void main() {
     test('字段齐备且口径正确', () {
       final v = InstallEngine.uninstallValues(
         installDir: r'C:\Program Files\AuraDSP',
-        fullVersion: '0.1.0.1',
+        displayVersion: '0.1.0',
         estimatedSizeKb: 145000,
       );
       expect(v['DisplayName'], 'AuraDSP');
-      expect(v['DisplayVersion'], '0.1.0.1');
+      expect(v['DisplayVersion'], '0.1.0');
       expect(v['UninstallString'], r'"C:\Program Files\AuraDSP\uninstall.exe"');
       expect(v['QuietUninstallString'],
           r'"C:\Program Files\AuraDSP\uninstall.exe" /silent');

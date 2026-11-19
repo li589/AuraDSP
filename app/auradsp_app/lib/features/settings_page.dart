@@ -24,6 +24,7 @@ import '../core/notice.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
+import '../ui/wheel_scroll.dart';
 import '../l10n/gen/app_localizations.dart';
 import '../platform/adapters.dart';
 import '../platform/platform_profile.dart';

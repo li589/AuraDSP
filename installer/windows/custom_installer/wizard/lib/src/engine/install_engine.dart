@@ -72,12 +72,15 @@ class InstallEngine {
   // ---- 卸载表字段组装（纯逻辑，可单测；设计 §5.5） ----
   static Map<String, Object> uninstallValues({
     required String installDir,
-    required String fullVersion,
+    // DisplayVersion 用发行版（0.1.0，与发行 tag 及各处显示一
+    // 致）；四段全版本（0.1.0.1）只存安装清单供升级比较，不
+    // 进系统设置显示（第五十六轮 S4）。
+    required String displayVersion,
     required int estimatedSizeKb,
   }) =>
       {
         'DisplayName': 'AuraDSP',
-        'DisplayVersion': fullVersion,
+        'DisplayVersion': displayVersion,
         'Publisher': 'AuraDSP Project',
         'DisplayIcon': '$installDir\\auradsp_app.exe,0',
         'InstallLocation': installDir,
@@ -318,7 +321,7 @@ class InstallEngine {
         r'Software\Microsoft\Windows\CurrentVersion\Uninstall\AuraDSP',
         uninstallValues(
           installDir: o.installDir,
-          fullVersion: wizard.fullVersion,
+          displayVersion: wizard.version,
           estimatedSizeKb: manifest.estimatedSizeKb,
         ),
       );
