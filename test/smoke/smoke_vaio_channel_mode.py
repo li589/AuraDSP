@@ -7,7 +7,10 @@
 3. 手动模式下非法档位（如 5）返回 -1，且不改变当前有效档位；
 4. countMode=0（auto）后有效档位回到驱动环声道数；auto 下写 channels.count
    只更新手动影子，不得改变当前有效档位；
-5. float / 整型两条取值路径结果一致。
+5. float / 整型两条取值路径结果一致；
+6. channels.mode 写入必须同步桥内泵影子（status 的 chanMode 字段）：
+   泵的截断/折叠分流只看该影子（第五十三轮定罪：vaio_set_param 曾漏接
+   此参数，运行中切离散不生效、泵恒按矩阵折叠，桥重启回放镜像才自愈）。
 
 说明：本脚本只断言真实 DLL 的对外契约。交织重映射（RemapInterleavedAudio）是
 桥内部的 RT 实现，无法从 C ABI 观测，不在 Python 侧仿写自证；其正确性由
@@ -46,6 +49,8 @@ b.vaio_set_param.restype = ctypes.c_int
 b.vaio_set_param.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p]
 b.vaio_get_param.restype = ctypes.c_int
 b.vaio_get_param.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p]
+b.vaio_status.restype = ctypes.c_int
+b.vaio_status.argtypes = [ctypes.c_char_p, ctypes.c_int]
 
 VALID = (2, 4, 6, 8)
 fails = []
@@ -77,6 +82,19 @@ def set_int(pid, val):
 def set_float(pid, val):
     v = ctypes.c_float(val)
     return b.vaio_set_param(pid, 1, ctypes.byref(v))
+
+
+def status_chan_mode():
+    """读 vaio_status JSON 的 chanMode（桥内泵影子）；字段缺失返回 None。"""
+    import json
+    buf = ctypes.create_string_buffer(8192)
+    rc = b.vaio_status(buf, 8192)
+    if rc <= 0:
+        return None
+    try:
+        return json.loads(buf.value.decode("utf-8")).get("chanMode")
+    except Exception:
+        return None
 
 
 # 0. 基线：进程内新加载的桥必须是 auto 模式
@@ -115,6 +133,20 @@ check("auto mode accepts channels.count", rc == 0, f"rc={rc}")
 rc, after = get_int(b"channels.count")
 check("auto mode effective tier unchanged by manual write",
       rc == 0 and after == before, f"before={before} after={after}")
+
+# 5. channels.mode 写入必须同步桥内泵影子（status chanMode），整型/浮点同口径
+check("status chanMode defaults to 0 (matrix)", status_chan_mode() == 0,
+      f"got={status_chan_mode()}")
+check("set channels.mode=1 via int", set_int(b"channels.mode", 1) == 0)
+check("status chanMode == 1 after int write", status_chan_mode() == 1,
+      f"got={status_chan_mode()}")
+check("set channels.mode=0 via float", set_float(b"channels.mode", 0.0) == 0)
+check("status chanMode == 0 after float write", status_chan_mode() == 0,
+      f"got={status_chan_mode()}")
+check("set channels.mode=1 via float", set_float(b"channels.mode", 1.0) == 0)
+check("status chanMode == 1 after float write", status_chan_mode() == 1,
+      f"got={status_chan_mode()}")
+check("restore channels.mode=0", set_int(b"channels.mode", 0) == 0)
 
 if fails:
     print(f"\nFAILED {len(fails)} checks: {fails}")

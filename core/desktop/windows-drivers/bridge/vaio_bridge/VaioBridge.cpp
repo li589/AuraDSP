@@ -2344,7 +2344,7 @@ int vaio_status(char* out, int cap) {
         "\"peakIn\":%.4f,\"peakOut\":%.4f,\"maxPumpUs\":%.2f,\"startRc\":%d,\"note\":\"%s\","
         "\"outputEndpoint\":\"%s\",\"engineOk\":%s,\"enginePath\":\"%s\","
         "\"paramsApplied\":%d,\"paramsFailed\":%d,\"bypass\":%ld,\"testKind\":%ld,"
-        "\"gated\":%d,\"idleMs\":%lld",
+        "\"gated\":%d,\"idleMs\":%lld,\"chanMode\":%ld",
         isRunning ? "true" : "false",
         (unsigned long long)g_vaio.totalPumpedFrames,
         g_vaio.wasapiSampleRate ? g_vaio.wasapiSampleRate : g_vaio.ringSampleRate,
@@ -2370,7 +2370,8 @@ int vaio_status(char* out, int cap) {
         InterlockedCompareExchange(&g_vaio.userBypass, 0, 0),
         InterlockedCompareExchange(&g_vaio.tc.testKind, 0, 0),
         (isRunning && g_vaio.gate.enabled && g_vaio.gate.gated) ? 1 : 0,
-        g_vaio.gate.IdleMs()
+        g_vaio.gate.IdleMs(),
+        (long)g_vaio.chanMode
     );
 
     if (n < 0 || n >= cap) return -1;
@@ -2483,6 +2484,16 @@ int vaio_status(char* out, int cap) {
 int vaio_set_param(const char* id, int isFloat, const void* v4) {
     if (!id || !v4) return -1;
     MirrorSet(id, isFloat != 0, v4);
+
+    if (strcmp(id, "channels.mode") == 0) {
+        // 泵内适配分流（离散截断 / 矩阵折叠）只看 g_vaio.chanMode，
+        // 必须与引擎同步更新。本参数桥与引擎双消费，故不提前返回：
+        // 记桥内影子后继续走下方通用转发送进引擎（第五十三轮定罪：
+        // r46 接线漏了本入口，运行中切离散不生效、泵恒按矩阵折叠，
+        // 只有桥重启时 ReplayMirroredParams 回放镜像才自愈）。
+        g_vaio.chanMode = ((isFloat ? (int32_t)*(const float*)v4
+                                    : *(const int32_t*)v4) != 0) ? 1 : 0;
+    }
 
     if (strcmp(id, "channels.countMode") == 0) {
         const int32_t mode = (isFloat ? (int)*(const float*)v4 : *(const int32_t*)v4) ? 1 : 0;
