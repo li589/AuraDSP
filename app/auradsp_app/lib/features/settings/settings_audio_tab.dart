@@ -71,10 +71,22 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
                     tooltip: l.tooltipInputAsioDriver),
               ],
               selected: model.pipelineInput,
-              onChanged: model.apoDetachBlocking
+              onChanged: model.apoDetachBlocking ||
+                      model.pipelineInputOverridden
                   ? null
                   : (v) => model.setPipelineInput(v),
             ),
+            // r57 P2：输入被桥链接管时置灰（上方）+ 本行说明，
+            // 不再出现「能点但不生效」（与输入子面板置灰下拉同口径）。
+            if (model.pipelineInputOverridden) ...[
+              const SizedBox(height: AuraSpace.xs),
+              Text(
+                model.pipelineChain == PipelineChain.asio
+                    ? l.ioInputOverriddenByAsio
+                    : l.ioInputOverriddenByVaio,
+                style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
+              ),
+            ],
             const SizedBox(height: AuraSpace.sm),
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -95,10 +107,21 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
                     tooltip: l.tooltipOutputAsioClient),
               ],
               selected: model.pipelineOutput,
-              onChanged: model.apoDetachBlocking
+              onChanged: model.apoDetachBlocking ||
+                      model.pipelineOutputOverridden
                   ? null
                   : (v) => model.setPipelineOutput(v),
             ),
+            // r57 P2：输出被桥链接管时置灰（上方）+ 本行说明。
+            if (model.pipelineOutputOverridden) ...[
+              const SizedBox(height: AuraSpace.xs),
+              Text(
+                model.pipelineChain == PipelineChain.asio
+                    ? l.ioOutputOverriddenByAsio
+                    : l.ioOutputOverriddenByVaio,
+                style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
+              ),
+            ],
           ],
         ],
       ),

@@ -180,9 +180,29 @@
   "ioExclusiveDesc": "Low-latency WASAPI exclusive/shared capture from the selected hardware/virtual port",
   "ioInputLabel": "Input endpoint",
   "ioVaioEndpointDesc": "AuraVAIO virtual input endpoint (Stereo / 7.1 ch)",
+  "ioVaioEndpointDescLayout": "AuraVAIO virtual input endpoint ({layout})",
+  "@ioVaioEndpointDescLayout": {
+    "placeholders": {
+      "layout": {
+        "type": "String"
+      }
+    }
+  },
+  "ioWorkFormat": "Working format",
+  "ioWorkFormatValue": "{bits} bit / {rate}",
+  "@ioWorkFormatValue": {
+    "placeholders": {
+      "bits": {
+        "type": "int"
+      },
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
   "ioChannelStatus": "Channel status",
-  "ioVaioActive": "Active (full-duplex DMA ring buffer)",
-  "ioVaioReady": "Ready (waiting for system/app stream)",
+  "ioVaioActive": "Active",
+  "ioVaioReady": "Ready",
   "ioVaioGuideShort": "In system sound settings or your player, set the default output to AuraVAIO.",
   "ioAsioChannelLabel": "Input channels",
   "ioAsioActive": "DAW live injection (active)",
@@ -193,6 +213,7 @@
   "ioNoAvailableSoundCard": "No sound card available",
   "ioInputOverriddenByVaio": "Driven by the VAIO bridge chain — this input selection has no effect. Point the player's output at the AuraVAIO endpoint",
   "ioOutputOverriddenByVaio": "Driven by the VAIO bridge chain — this output device selection has no effect. Set the bridge's physical landing point in the panel below",
+  "ioInputOverriddenByAsio": "Driven by the ASIO bridge chain; this input selection has no effect — input is decided by the ASIO driver",
   "ioOutputOverriddenByAsio": "Driven by the ASIO bridge chain — this output selection has no effect; the ASIO driver decides the output",
   "ioOnlyVirtualOutputs": "Only virtual output endpoints (no physical sound card)",
   "ioPhysicalOutput": "Physical output",

@@ -412,6 +412,20 @@ class AppModel extends ChangeNotifier {
     return list;
   }
 
+  /// VAIO 桥输入所吃的渲染端点（播放器输出指向它）在最近一轮设备
+  /// 扫描中的在场项，含系统共享格式（rate/ch/bits；用户在系统设置
+  /// 里改声道数/采样率/位深后，统一系统监听触发重扫随之刷新）。
+  /// I/O 面板据此显示实时声道布局与工作格式（r57 P1）；未扫到
+  /// （未装驱动/未枚举）时为 null。
+  AudioDeviceItem? get vaioRenderEndpoint {
+    for (final d in wasapiDevices) {
+      if (d.isRender && d.name.toLowerCase().contains('auravaio')) {
+        return d;
+      }
+    }
+    return null;
+  }
+
   List<AudioDeviceItem> get filteredWasapiOutputs {
     final list = <AudioDeviceItem>[];
     for (final d in wasapiDevices) {

@@ -181,6 +181,33 @@ abstract final class AudioModes {
     return PipelineChain.vaio;
   }
 
+  /// 桥链接管下哪一侧的分段选择不生效（r57 P2）：桥链（vaio/asio）
+  /// 自带双端，被接管侧的选择只剩显示意义——UI 据此置灰并给说明，
+  /// 避免「能点但不生效」（业主 2026-11-19 实拍：选了 VAIO 输入 +
+  /// ASIO 输出，输入侧看着已选中、实际链路是 ASIO 桥）。capture 链
+  /// 两端皆生效。与 pipelineOutputForMode 同为可测接缝（纯函数）。
+  static bool inputOverriddenByChain({
+    required String input,
+    required String output,
+  }) {
+    return switch (composeChain(input: input, output: output)) {
+      PipelineChain.asio => input != inputAsioDriver,
+      PipelineChain.vaio => input != inputVaio,
+      PipelineChain.capture => false,
+    };
+  }
+
+  static bool outputOverriddenByChain({
+    required String input,
+    required String output,
+  }) {
+    return switch (composeChain(input: input, output: output)) {
+      PipelineChain.asio => output != outputAsioClient,
+      PipelineChain.vaio => output != outputVaio,
+      PipelineChain.capture => false,
+    };
+  }
+
   /// 模式切换时对 pipelineOutput 的覆写（非损口径，2026-11-09
   /// 真机报告 §2.1）：引擎模式与输出端是多对一映射（wasapi/vaio
   /// 输出同合成 vaio 模式），覆写只纠正与模式硬冲突的选择——

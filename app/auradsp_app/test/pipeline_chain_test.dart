@@ -50,4 +50,42 @@ void main() {
       'vaio',
     );
   });
+  // r57 P2：桥链接管侧判定（UI 置灰的真相源，与 composeChain 同步）。
+  group('bridge chain override sides', () {
+    bool inO(String i, String o) =>
+        AudioModes.inputOverriddenByChain(input: i, output: o);
+    bool outO(String i, String o) =>
+        AudioModes.outputOverriddenByChain(input: i, output: o);
+
+    test('capture chain: neither side overridden', () {
+      expect(inO('wasapi', 'wasapi'), isFalse);
+      expect(outO('wasapi', 'wasapi'), isFalse);
+    });
+
+    test('asio chain via output: input side overridden unless ASIO input', () {
+      expect(inO('vaio', 'asio_client'), isTrue);
+      expect(inO('wasapi', 'asio_client'), isTrue);
+      expect(inO('asio_driver', 'asio_client'), isFalse);
+      expect(outO('vaio', 'asio_client'), isFalse);
+    });
+
+    test('asio chain via input: output side overridden unless ASIO output', () {
+      expect(outO('asio_driver', 'vaio'), isTrue);
+      expect(outO('asio_driver', 'wasapi'), isTrue);
+      expect(outO('asio_driver', 'asio_client'), isFalse);
+      expect(inO('asio_driver', 'vaio'), isFalse);
+    });
+
+    test('vaio chain: wasapi output overridden, vaio picks effective', () {
+      expect(outO('vaio', 'wasapi'), isTrue);
+      expect(outO('vaio', 'vaio'), isFalse);
+      expect(inO('vaio', 'wasapi'), isFalse);
+    });
+
+    test('vaio chain via wasapi-in + vaio-out: input side overridden', () {
+      expect(inO('wasapi', 'vaio'), isTrue);
+      expect(outO('wasapi', 'vaio'), isFalse);
+    });
+  });
 }
+

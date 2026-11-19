@@ -361,6 +361,21 @@ extension AudioModesState on AppModel {
             )
           : null;
 
+  /// 输入/输出分段选择是否被桥链接管而不生效（r57 P2，UI 置灰用）。
+  bool get pipelineInputOverridden =>
+      config.modeCategory == AudioModes.categoryPipeline &&
+      AudioModes.inputOverriddenByChain(
+        input: config.pipelineInput,
+        output: config.pipelineOutput,
+      );
+
+  bool get pipelineOutputOverridden =>
+      config.modeCategory == AudioModes.categoryPipeline &&
+      AudioModes.outputOverriddenByChain(
+        input: config.pipelineInput,
+        output: config.pipelineOutput,
+      );
+
   /// 链路任一端经 ASIO（输入 ASIO 驱动或输出 ASIO 客户端
   /// 任一成立，合成链即 ASIO 桥链）。测试源无效判定（拦
   /// 截/徽标/禁用/切入停源）的唯一谓词（第五十轮 S2 订

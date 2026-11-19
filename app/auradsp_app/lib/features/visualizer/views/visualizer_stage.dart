@@ -81,6 +81,12 @@ class _VisualizerStageState extends State<VisualizerStage> {
   bool _audible = false;
   Timer? _silenceTimer;
 
+  /// 帧流停摆看守（r57 P3）：最近一帧到达时刻 + 看守计时器。
+  /// 衰减只在新帧到达时推进；帧流戛然而止时由看守补零帧驱动
+  /// 衰减（见 _ensureStallWatchdog）。
+  Timer? _stallTimer;
+  DateTime? _lastFrameAt;
+
   /// 窗口可见性：最小化/托盘隐藏时与 `active` 一样参与时间轴门控。
   /// 隔离层（setVizSuspended）只停了 `viz` 事件推送，UI 侧此前仍会按
   /// 30 Hz 空转，两者必须一起停。
@@ -146,6 +152,7 @@ class _VisualizerStageState extends State<VisualizerStage> {
   /// 只决定 UI 侧是否消费）。
   void _onSpectrumFrame() {
     if (!widget.active || !widget.playing) return;
+    _lastFrameAt = DateTime.now();
     final bands = widget.spectrum.value;
     var peak = 0.0;
     for (final v in bands) {
@@ -165,7 +172,48 @@ class _VisualizerStageState extends State<VisualizerStage> {
     _silenceTimer = null;
     _audible = true;
     _gatedSpectrum.value = widget.spectrum.value;
+    _ensureStallWatchdog();
     _syncTimeline();
+  }
+
+  /// 帧流停摆看守（r57 P3）：频谱物理衰减只在新帧到达时推进
+  /// （viewport 在 spectrum 通知里调 PeakPhysicsEngine.update）。
+  /// 链路停止/模式拆除/viz 挂起会让帧流**戛然而止**——连静默帧都
+  /// 不再来，_markSilenced 的迟滞计时器无从武装，柱体与峰帽便冻
+  /// 在最后一张有声帧上（业主实报「可视化页频谱偶尔落不下去」，
+  /// 是否发生取决于停声方式）。看守在帧龄超限时本地补零帧、走
+  /// 同一条衰减路径，全部落定后自停并关闸；帧流正常时仅查帧龄。
+  void _ensureStallWatchdog() {
+    _stallTimer ??= Timer.periodic(const Duration(milliseconds: 120), (_) {
+      if (!mounted) return;
+      final last = _lastFrameAt;
+      if (last == null) return;
+      if (DateTime.now().difference(last) <
+          const Duration(milliseconds: 250)) {
+        return;
+      }
+      if (_peakSettled()) {
+        _stallTimer?.cancel();
+        _stallTimer = null;
+        if (_audible) {
+          _audible = false;
+          _syncTimeline();
+        }
+        return;
+      }
+      final n = _peakEngine.renderedBands.length;
+      _gatedSpectrum.value = List<double>.filled(n == 0 ? 32 : n, 0.0);
+    });
+  }
+
+  bool _peakSettled() {
+    for (final v in _peakEngine.renderedBands) {
+      if (v > 0.001) return false;
+    }
+    for (final v in _peakEngine.peaks) {
+      if (v > 0.001) return false;
+    }
+    return true;
   }
 
   /// 静默帧：连续静默满 [_silenceHold] 才停，避免句间停顿/轻音误判。
@@ -201,6 +249,8 @@ class _VisualizerStageState extends State<VisualizerStage> {
         // 暂停/切页/无媒体：立刻关闸，不等待迟滞。
         _silenceTimer?.cancel();
         _silenceTimer = null;
+        _stallTimer?.cancel();
+        _stallTimer = null;
         _audible = false;
       }
       _syncTimeline();
@@ -215,6 +265,7 @@ class _VisualizerStageState extends State<VisualizerStage> {
     _hudHideTimer?.cancel();
     _timelineTimer?.cancel();
     _silenceTimer?.cancel();
+    _stallTimer?.cancel();
     widget.spectrum.removeListener(_onSpectrumFrame);
     PlatformAdapters.instance.window.visibleListenable
         .removeListener(_onWindowVisibility);

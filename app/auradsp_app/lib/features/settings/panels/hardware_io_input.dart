@@ -261,16 +261,43 @@ class _VaioInputSubpanel extends StatelessWidget {
   final AppModel model;
   const _VaioInputSubpanel({required this.model});
 
+  // 端点声道数 -> 布局名（与音频页声道档位口径一致：2=Stereo、
+  // 4=4.0、6=5.1、8=7.1；其余档位直写声道数）。
+  static String _layoutLabel(int ch) => switch (ch) {
+        1 => 'Mono',
+        2 => 'Stereo',
+        4 => '4.0',
+        6 => '5.1',
+        8 => '7.1',
+        _ => '$ch ch',
+      };
+
+  static String _rateLabel(int rate) => rate % 1000 == 0
+      ? '${rate ~/ 1000} kHz'
+      : '${(rate / 1000).toStringAsFixed(1)} kHz';
+
   @override
   Widget build(BuildContext context) {
     final active = model.vaioActive;
     final l = l10nOf(context);
+    // r57 P1（user 建议）：端点括号内显示系统实时声道布局，并新增
+    // 工作格式行（系统设置的位深/采样率）——数据源为设备扫描的端点
+    // 共享格式（统一系统监听在格式变更时触发重扫）。未扫到格式时
+    // 回退旧静态文案且不显示工作格式行（不编造数值）。
+    final ep = model.vaioRenderEndpoint;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoRow(l.ioInputLabel, l.ioVaioEndpointDesc),
+        _InfoRow(
+            l.ioInputLabel,
+            (ep != null && ep.ch > 0)
+                ? l.ioVaioEndpointDescLayout(_layoutLabel(ep.ch))
+                : l.ioVaioEndpointDesc),
         _InfoRow(l.ioChannelStatus, active ? l.ioVaioActive : l.ioVaioReady),
+        if (ep != null && ep.rate > 0 && ep.bits > 0)
+          _InfoRow(l.ioWorkFormat,
+              l.ioWorkFormatValue(ep.bits, _rateLabel(ep.rate))),
         // 指引文案已移至输入层标题旁气泡（第四十四轮 S2）。
       ],
     );
