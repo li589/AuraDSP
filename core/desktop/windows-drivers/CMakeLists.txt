@@ -123,7 +123,8 @@ set_property(TARGET vm_parallel_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreade
 add_executable(rt_drain_test
     "${VMBRIDGE}/rt_drain_test.cpp"
 )
-target_include_directories(rt_drain_test PRIVATE "${VMCLIENT}" "${BRIDGECOMMON}")
+target_include_directories(rt_drain_test PRIVATE "${VMCLIENT}" "${BRIDGECOMMON}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
 target_compile_options(rt_drain_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET rt_drain_test PROPERTY CXX_STANDARD 20)
 set_property(TARGET rt_drain_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
