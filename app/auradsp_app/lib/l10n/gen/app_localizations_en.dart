@@ -480,13 +480,26 @@ class AppLocalizationsEn extends AppLocalizations {
       'AuraVAIO virtual input endpoint (Stereo / 7.1 ch)';
 
   @override
+  String ioVaioEndpointDescLayout(String layout) {
+    return 'AuraVAIO virtual input endpoint ($layout)';
+  }
+
+  @override
+  String get ioWorkFormat => 'Working format';
+
+  @override
+  String ioWorkFormatValue(int bits, String rate) {
+    return '$bits bit / $rate';
+  }
+
+  @override
   String get ioChannelStatus => 'Channel status';
 
   @override
-  String get ioVaioActive => 'Active (full-duplex DMA ring buffer)';
+  String get ioVaioActive => 'Active';
 
   @override
-  String get ioVaioReady => 'Ready (waiting for system/app stream)';
+  String get ioVaioReady => 'Ready';
 
   @override
   String get ioVaioGuideShort =>
@@ -522,6 +535,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get ioOutputOverriddenByVaio =>
       'Driven by the VAIO bridge chain — this output device selection has no effect. Set the bridge\'s physical landing point in the panel below';
+
+  @override
+  String get ioInputOverriddenByAsio =>
+      'Driven by the ASIO bridge chain; this input selection has no effect — input is decided by the ASIO driver';
 
   @override
   String get ioOutputOverriddenByAsio =>

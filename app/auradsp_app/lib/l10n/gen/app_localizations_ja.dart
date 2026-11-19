@@ -452,6 +452,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get ioVaioEndpointDesc => 'AuraVAIO 仮想入力エンドポイント（Stereo / 7.1 ch）';
 
   @override
+  String ioVaioEndpointDescLayout(String layout) {
+    return 'AuraVAIO 虚拟输入端点 ($layout)';
+  }
+
+  @override
+  String get ioWorkFormat => '工作格式';
+
+  @override
+  String ioWorkFormatValue(int bits, String rate) {
+    return '$bits 位 / $rate';
+  }
+
+  @override
   String get ioChannelStatus => 'チャンネル状態';
 
   @override
@@ -493,6 +506,9 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get ioOutputOverriddenByVaio =>
       'VAIOブリッジチェーンで駆動中です。この出力デバイスの選択は無効です。ブリッジの物理的な出力先は下のパネルで設定してください';
+
+  @override
+  String get ioInputOverriddenByAsio => '当前由 ASIO 桥链驱动，此输入选择不生效；输入由 ASIO 驱动决定';
 
   @override
   String get ioOutputOverriddenByAsio =>

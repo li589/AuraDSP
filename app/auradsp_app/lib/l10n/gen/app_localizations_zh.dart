@@ -441,13 +441,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ioVaioEndpointDesc => 'AuraVAIO 虚拟输入端点 (Stereo / 7.1 ch)';
 
   @override
+  String ioVaioEndpointDescLayout(String layout) {
+    return 'AuraVAIO 虚拟输入端点 ($layout)';
+  }
+
+  @override
+  String get ioWorkFormat => '工作格式';
+
+  @override
+  String ioWorkFormatValue(int bits, String rate) {
+    return '$bits 位 / $rate';
+  }
+
+  @override
   String get ioChannelStatus => '通道状态';
 
   @override
-  String get ioVaioActive => '活跃传输中 (全双工 DMA 环形缓冲)';
+  String get ioVaioActive => '活跃传输中';
 
   @override
-  String get ioVaioReady => '就绪 (等待系统/应用推流)';
+  String get ioVaioReady => '就绪';
 
   @override
   String get ioVaioGuideShort => '在系统声音设置或播放器中，将默认输出选为 AuraVAIO。';
@@ -481,6 +494,9 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get ioOutputOverriddenByVaio =>
       '当前由 VAIO 桥链驱动，此输出设备选择不生效；桥的物理落点在下方落点面板设置';
+
+  @override
+  String get ioInputOverriddenByAsio => '当前由 ASIO 桥链驱动，此输入选择不生效；输入由 ASIO 驱动决定';
 
   @override
   String get ioOutputOverriddenByAsio => '当前由 ASIO 桥链驱动，此输出选择不生效；输出由 ASIO 驱动决定';

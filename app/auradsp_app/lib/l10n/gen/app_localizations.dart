@@ -898,6 +898,24 @@ abstract class AppLocalizations {
   /// **'AuraVAIO 虚拟输入端点 (Stereo / 7.1 ch)'**
   String get ioVaioEndpointDesc;
 
+  /// No description provided for @ioVaioEndpointDescLayout.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 虚拟输入端点 ({layout})'**
+  String ioVaioEndpointDescLayout(String layout);
+
+  /// No description provided for @ioWorkFormat.
+  ///
+  /// In zh, this message translates to:
+  /// **'工作格式'**
+  String get ioWorkFormat;
+
+  /// No description provided for @ioWorkFormatValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'{bits} 位 / {rate}'**
+  String ioWorkFormatValue(int bits, String rate);
+
   /// No description provided for @ioChannelStatus.
   ///
   /// In zh, this message translates to:
@@ -907,13 +925,13 @@ abstract class AppLocalizations {
   /// No description provided for @ioVaioActive.
   ///
   /// In zh, this message translates to:
-  /// **'活跃传输中 (全双工 DMA 环形缓冲)'**
+  /// **'活跃传输中'**
   String get ioVaioActive;
 
   /// No description provided for @ioVaioReady.
   ///
   /// In zh, this message translates to:
-  /// **'就绪 (等待系统/应用推流)'**
+  /// **'就绪'**
   String get ioVaioReady;
 
   /// No description provided for @ioVaioGuideShort.
@@ -975,6 +993,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'当前由 VAIO 桥链驱动，此输出设备选择不生效；桥的物理落点在下方落点面板设置'**
   String get ioOutputOverriddenByVaio;
+
+  /// No description provided for @ioInputOverriddenByAsio.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前由 ASIO 桥链驱动，此输入选择不生效；输入由 ASIO 驱动决定'**
+  String get ioInputOverriddenByAsio;
 
   /// No description provided for @ioOutputOverriddenByAsio.
   ///
