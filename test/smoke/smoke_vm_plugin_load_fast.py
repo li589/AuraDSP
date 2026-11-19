@@ -198,7 +198,7 @@ try:
         check("预算紧张时旁路曾启用（loadSuspend 曾见 1）", saw_suspend,
               f"budgetUs={budget_us}")
     else:
-        print(f"NOTE 预算 {budget_us}µs ≥ 8ms：加载旁路门不启用（本机 "
+        print(f"NOTE 预算 {budget_us}us >= 8ms：加载旁路门不启用（本机 "
               f"2048 帧常态），suspend_seen={saw_suspend} 仅记录")
     print(f"[2] backfill {n - 1} groups: {t_fill:.2f}s "
           f"(total≈{t_first + t_fill:.2f}s) suspend_seen={saw_suspend} "
