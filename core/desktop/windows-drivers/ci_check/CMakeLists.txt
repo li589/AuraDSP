@@ -10,6 +10,7 @@ set(ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 add_library(auravaio_bridge_check OBJECT "${ROOT}/bridge/vaio_bridge/VaioBridge.cpp")
 target_include_directories(auravaio_bridge_check PRIVATE
+    "${ROOT}/../../../engine"
     "${ROOT}/02_voicemeeter_client"
     "${ROOT}/01_vaio_driver/src"
     "${ROOT}/common"
