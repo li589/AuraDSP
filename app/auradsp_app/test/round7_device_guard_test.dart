@@ -99,11 +99,16 @@ void main() {
     });
 
     test('输出面板被桥吸收呈现 + 极端文案区分', () {
-      expect(panel.contains('overriddenByBridge'), isTrue);
-      expect(panel.contains('ioOutputOverriddenByVaio'), isTrue);
-      expect(panel.contains('ioOutputOverriddenByAsio'), isTrue);
+      // 第七轮口径：VAIO 桥链下 WASAPI 输出子面板被落点面板吸收
+      // （只保留模式行）。ASIO 重构 S1–S3 后 ASIO 已独立为范式、
+      // 管线层不再有 ASIO 分支：旧置灰呈现（overriddenByBridge /
+      // overriddenByAsio 与两条 overridden 文案）已随检查轮删除，
+      // 本断言改为正反双向钉住新形态。
+      expect(panel.contains('asBridgeLanding'), isTrue);
       expect(panel.contains('ioOnlyVirtualOutputs'), isTrue);
-      expect(panel.contains('overriddenByAsio'), isTrue);
+      expect(panel.contains('overriddenByBridge'), isFalse);
+      expect(panel.contains('overriddenByAsio'), isFalse);
+      expect(panel.contains('ioOutputOverriddenByAsio'), isFalse);
     });
   });
 }

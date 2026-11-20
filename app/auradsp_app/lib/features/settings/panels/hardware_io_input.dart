@@ -34,9 +34,7 @@ class _InputLayer extends StatelessWidget {
                 InfoBadge(
                     message: model.pipelineInput == AudioModes.inputVaio
                         ? l.ioVaioGuideShort
-                        : model.pipelineInput == AudioModes.inputAsioDriver
-                            ? l.ioAsioGuide
-                            : l.tooltipInputWasapi),
+                        : l.tooltipInputWasapi),
               ],
             ),
             AuraSwitch(
@@ -73,8 +71,11 @@ class _InputLayer extends StatelessWidget {
             _WasapiInputSubpanel(model: model)
           else if (model.pipelineInput == AudioModes.inputVaio)
             _VaioInputSubpanel(model: model)
+          // ASIO 范式有专属 I/O 面板（_AsioIoPanel）；管线输入
+          // 自 S1 起不再有 ASIO 选项，存量组合经迁移提升为
+          // ASIO 范式，此处无第三种可达状态。
           else
-            _VirtualAsioInputSubpanel(model: model),
+            const SizedBox.shrink(),
         ],
       ],
     );

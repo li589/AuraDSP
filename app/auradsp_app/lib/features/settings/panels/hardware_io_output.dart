@@ -78,8 +78,10 @@ class _OutputLayer extends StatelessWidget {
           ] else if (model.pipelineOutput == AudioModes.outputVaio)
             HbBuilder(tick: model.hbTick,
                 builder: (_) => _VaioOutputSubpanel(model: model))
+          // ASIO 范式有专属 I/O 面板（_AsioIoPanel）；管线输出
+          // 自 S1 起不再有 ASIO 选项，此处无第三种可达状态。
           else
-            _AsioClientOutputSubpanel(model: model),
+            const SizedBox.shrink(),
         ],
       ],
     );
@@ -113,12 +115,6 @@ class _WasapiOutputSubpanel extends StatelessWidget {
         curDev.isNotEmpty && matched == null && model.pipelinePairConflicts;
     final offlineShown = curDev.isNotEmpty && matched == null && !curExcluded;
     final noItems = inputBlocksDefault && outputs.isEmpty && !offlineShown;
-    // 项 4 诚实呈现（第七轮 S2）：合成链为桥链（VAIO/ASIO）时本
-    // 下拉的设备字段不被链路消费（只供捕获链）——与输入侧
-    // overriddenByVaio 同口径：说明行 + 置灰，不再假装切换有效
-    // （实测：输入 VAIO 时切「系统默认渲染」无事发生且无提示）。
-    final overriddenByBridge = model.pipelineChain == PipelineChain.vaio ||
-        model.pipelineChain == PipelineChain.asio;
     // 桥落点形态（业主 2026-11-12 裁定）：VAIO 桥链 + WASAPI
     // 输出时下方紧接着落点面板（物理输出下拉/采样率/已处理帧/
     // 输出端点俱全），本块只保留标题行——原先的桥链说明行、置
@@ -136,14 +132,6 @@ class _WasapiOutputSubpanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _InfoRow(l.ioModeLabel, l.outputWasapi),
-        if (overriddenByBridge) ...[
-          _InfoRow(
-              l.outputDeviceLabel,
-              model.pipelineChain == PipelineChain.vaio
-                  ? l.ioOutputOverriddenByVaio
-                  : l.ioOutputOverriddenByAsio),
-          const SizedBox(height: AuraSpace.xs),
-        ],
         const SizedBox(height: AuraSpace.xs),
         Row(
           children: [
@@ -243,11 +231,9 @@ class _WasapiOutputSubpanel extends StatelessWidget {
                     : (outputs.isEmpty && !inputBlocksDefault
                         ? l.ioNoOutputDevices
                         : null),
-                onChanged: overriddenByBridge
-                    ? null
-                    : (v) {
-                        if (v != null) model.setPipelineOutputDevice(v);
-                      },
+                onChanged: (v) {
+                  if (v != null) model.setPipelineOutputDevice(v);
+                },
               ),
             ),
             const SizedBox(width: AuraSpace.xs),
@@ -307,10 +293,6 @@ class _VaioOutputSubpanel extends StatelessWidget {
     final selectedValue = matched != null
         ? matched.name
         : (curEndpoint.isEmpty ? '' : curEndpoint);
-    // 第七轮 S2（项 4 同口径）：合成链为 ASIO 桥时 VAIO 物理落点
-    // 不被消费——说明行 + 置灰，与 WASAPI 输出子面板一致。
-    final overriddenByAsio = model.pipelineChain == PipelineChain.asio;
-
     return ListenableBuilder(
       listenable: model,
       builder: (_, _) => Column(
@@ -339,10 +321,6 @@ class _VaioOutputSubpanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AuraSpace.sm),
-          ],
-          if (overriddenByAsio) ...[
-            _InfoRow(l.ioPhysicalOutput, l.ioOutputOverriddenByAsio),
-            const SizedBox(height: AuraSpace.sm),
           ],
           Row(children: [
             SizedBox(
@@ -420,11 +398,9 @@ class _VaioOutputSubpanel extends StatelessWidget {
                     ),
                 ],
                 hint: endpoints.isEmpty ? l.ioNoPhysicalOutputs : null,
-                onChanged: overriddenByAsio
-                    ? null
-                    : (v) {
-                        if (v != null) model.setVaioOutputEndpoint(v);
-                      },
+                onChanged: (v) {
+                  if (v != null) model.setVaioOutputEndpoint(v);
+                },
               ),
             ),
             const SizedBox(width: AuraSpace.xs),

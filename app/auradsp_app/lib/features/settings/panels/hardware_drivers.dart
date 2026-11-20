@@ -826,7 +826,13 @@ class _VirtualAsioDriverCard extends StatelessWidget {
               ? l.asioDriverRegistered
               : l.asioDriverNotRegistered,
         ),
-        if (model.asioActive) _DriverKv(l.asioDawStatus, l.asioDawConnected),
+        // S3 起 DAW 状态以驱动遥测为准（桥 daw* 字段）；桥无
+        // 遥测字段时回落 App 自身会话口径（与 ASIO I/O 面板同规）。
+        if (model.asioInfo.containsKey('dawSeen')
+            ? (model.asioInfo['dawSeen'] == 1 &&
+                model.asioInfo['dawActive'] == 1)
+            : model.asioActive)
+          _DriverKv(l.asioDawStatus, l.asioDawConnected),
       ],
       actions: [
         if (!model.asioDriverInstalled)

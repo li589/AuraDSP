@@ -50,44 +50,5 @@ void main() {
       'vaio',
     );
   });
-  // r57 P2：桥链接管侧判定（UI 置灰的真相源，与 composeChain 同步）。
-  group('bridge chain override sides', () {
-    bool inO(String i, String o) =>
-        AudioModes.inputOverriddenByChain(input: i, output: o);
-    bool outO(String i, String o) =>
-        AudioModes.outputOverriddenByChain(input: i, output: o);
-
-    test('capture chain: neither side overridden', () {
-      expect(inO('wasapi', 'wasapi'), isFalse);
-      expect(outO('wasapi', 'wasapi'), isFalse);
-    });
-
-    test('asio chain via output: input side overridden unless ASIO input', () {
-      expect(inO('vaio', 'asio_client'), isTrue);
-      expect(inO('wasapi', 'asio_client'), isTrue);
-      expect(inO('asio_driver', 'asio_client'), isFalse);
-      expect(outO('vaio', 'asio_client'), isFalse);
-    });
-
-    test('asio chain via input: output side overridden unless ASIO output', () {
-      expect(outO('asio_driver', 'vaio'), isTrue);
-      expect(outO('asio_driver', 'wasapi'), isTrue);
-      expect(outO('asio_driver', 'asio_client'), isFalse);
-      expect(inO('asio_driver', 'vaio'), isFalse);
-    });
-
-    // r58（业主裁定）：vaio 链不互锁——VAIO 输入/输出组合的
-    // 顶层分段控件保持可选，两侧均不置灰。
-    test('vaio chain: neither side overridden (r58 no-lock ruling)', () {
-      expect(outO('vaio', 'wasapi'), isFalse);
-      expect(outO('vaio', 'vaio'), isFalse);
-      expect(inO('vaio', 'wasapi'), isFalse);
-    });
-
-    test('vaio chain via wasapi-in + vaio-out: neither side overridden', () {
-      expect(inO('wasapi', 'vaio'), isFalse);
-      expect(outO('wasapi', 'vaio'), isFalse);
-    });
-  });
 }
 

@@ -91,21 +91,10 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
                     tooltip: l.tooltipInputVaio),
               ],
               selected: model.pipelineInput,
-              onChanged: model.apoDetachBlocking ||
-                      model.pipelineInputOverridden
+              onChanged: model.apoDetachBlocking
                   ? null
                   : (v) => model.setPipelineInput(v),
             ),
-            // r57 P2 / r58 收窄：输入被 ASIO 桥接管时置灰（上方）
-            // + 本行说明，不再出现「能点但不生效」。overridden
-            // 现仅 asio 链为真（vaio 组合不互锁，见 audio_modes）。
-            if (model.pipelineInputOverridden) ...[
-              const SizedBox(height: AuraSpace.xs),
-              Text(
-                l.ioInputOverriddenByAsio,
-                style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
-              ),
-            ],
             const SizedBox(height: AuraSpace.sm),
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -124,20 +113,10 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
                     tooltip: l.tooltipOutputVaio),
               ],
               selected: model.pipelineOutput,
-              onChanged: model.apoDetachBlocking ||
-                      model.pipelineOutputOverridden
+              onChanged: model.apoDetachBlocking
                   ? null
                   : (v) => model.setPipelineOutput(v),
             ),
-            // r57 P2 / r58 收窄：输出被 ASIO 桥接管时置灰 + 说明
-            // （overridden 仅 asio 链为真）。
-            if (model.pipelineOutputOverridden) ...[
-              const SizedBox(height: AuraSpace.xs),
-              Text(
-                l.ioOutputOverriddenByAsio,
-                style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
-              ),
-            ],
           ],
         ],
       ),
