@@ -552,8 +552,14 @@ bool ProcessPluginProxy::loadPreset(const std::string& filePath) {
     const bool ok = m_client->loadPreset(static_cast<uint32_t>(m_slot), filePath);
     if (ok) {
         const uint32_t latency = m_client->getLatency(static_cast<uint32_t>(m_slot));
-        /* E15: 与 load() 同口径——插件延迟 + 1×传输块（见 load 处注释）。 */
-        m_latency.store(latency + ipc::kTransportFrames,
+        /* AUD-01（2026-11-20 审查）：与 processInterleaved 的块数变更分支
+         * 同一分层口径——先更新插件自身延迟，再按当前目标深度重算总延迟。
+         * 旧实现只写 m_latency = 新延迟 + 1×传输块、且不更新 m_pluginLatency：
+         * 多块回调下少报传输部分；块数不变时该错值永不重算、长期保留；
+         * 块数变化时又被旧 m_pluginLatency 重算覆盖，新 preset 延迟丢失。 */
+        m_pluginLatency.store(latency, std::memory_order_release);
+        m_latency.store(latency + m_targetInFlight.load(std::memory_order_acquire) *
+                                       ipc::kTransportFrames,
                         std::memory_order_release);
     }
     return ok;
