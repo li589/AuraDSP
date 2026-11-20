@@ -24,6 +24,8 @@ Windows 的「先 light 后 full」与 Linux 的「单档位」都是各自的�
 from __future__ import annotations
 
 import argparse
+import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -125,6 +127,33 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return ap.parse_args(argv)
 
 
+_CLEAN_WORK_NAME = re.compile(r"^\.release-r\d+$")
+
+
+def clean_work_dir(work_dir: Path, out_root: Path) -> None:
+    """--clean-work 的受控清理（AUD-02，2026-11-20 审查）。
+
+    --work-dir 可传任意路径，旧实现对其直接 rmtree(ignore_errors=True)：
+    误传仓库根、交付目录或其他目录即不可逆删除且无声。清理只允许一种
+    目标：out-root 直下、按发布约定命名的中间目录（.release-rNN，即
+    默认值的形状）。路径先 resolve（符号链接按真实落点判），越界一律
+    die 明确报错；目录不存在视为无事可做（未生成/已清理），不报错。
+    """
+    resolved_work = work_dir.resolve()
+    resolved_out = out_root.resolve()
+    if (resolved_work.parent != resolved_out
+            or not _CLEAN_WORK_NAME.match(resolved_work.name)):
+        raise die(
+            f"--clean-work 拒绝清理非受控目录: {work_dir}"
+            f"（解析为 {resolved_work}）。只允许清理 {resolved_out} 直下的"
+            " .release-rNN 发布中间目录；如确需删除该目录请手工处理。")
+    if not resolved_work.exists():
+        log(f"中间目录不存在，无需清理: {work_dir}")
+        return
+    shutil.rmtree(resolved_work)
+    log(f"已清理中间目录: {work_dir}")
+
+
 def _split_tiers(raw: str | None) -> list[str] | None:
     if raw is None:
         return None
@@ -221,10 +250,7 @@ def main(argv: list[str]) -> int:
     plan.post_check(result.files, ver)
 
     if args.clean_work:
-        import shutil
-
-        shutil.rmtree(work_dir, ignore_errors=True)
-        log(f"已清理中间目录: {work_dir}")
+        clean_work_dir(work_dir, args.out_root)
 
     print(f"\n交付就绪: {dest}")
     for p in result.files:

@@ -53,6 +53,7 @@ jobs:
         run: |
           python installer/tests/test_packkit_unit.py
           python installer/tests/test_packkit_linux_unit.py
+          python installer/tests/test_release_clean_work.py
 
       - name: 合成 fake bundle（真实 ELF 载荷，免构建）
         run: |

@@ -93,6 +93,13 @@ jobs:
               ForEach-Object { Write-Host "::error::$($_.Trim() -replace '%', '%25')" }
             throw "packkit linux unit tests failed"
           }
+          # 发布编排清理边界单测（AUD-02：--clean-work 只许删受控中间目录）
+          $cw = python installer/tests/test_release_clean_work.py 2>&1 | Out-String
+          $cwCode = $LASTEXITCODE
+          $cw | Write-Host
+          if ($cwCode -ne 0) {
+            throw "release clean-work tests failed"
+          }
           # --plan 在无 staging 的 CI 上会把缺件标 FAIL 但退出 0（只读门禁表）。
           python installer/release.py --plan
           if ($LASTEXITCODE -ne 0) { throw "release plan failed" }
