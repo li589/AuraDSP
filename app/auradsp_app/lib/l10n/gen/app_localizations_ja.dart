@@ -488,7 +488,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get ioAsioGuide =>
-      'DAW（FL Studio / Cubase / Reaper / Ableton）の Audio Device で「AuraDSP Virtual ASIO」を選択すると、プロジェクトの音声がここにルーティングされます。';
+      'DAW（FL Studio / Cubase / Reaper / Ableton）のオーディオデバイスで「AuraDSP Driver」を選択すると、プロジェクトの音声がここにルーティングされます。';
 
   @override
   String get ioModeLabel => 'モード';
@@ -502,17 +502,6 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get ioInputOverriddenByVaio =>
       'VAIOブリッジチェーンで駆動中です。この入力の選択は無効です。プレーヤーの出力を AuraVAIO エンドポイントに向けてください';
-
-  @override
-  String get ioOutputOverriddenByVaio =>
-      'VAIOブリッジチェーンで駆動中です。この出力デバイスの選択は無効です。ブリッジの物理的な出力先は下のパネルで設定してください';
-
-  @override
-  String get ioInputOverriddenByAsio => '当前由 ASIO 桥链驱动，此输入选择不生效；输入由 ASIO 驱动决定';
-
-  @override
-  String get ioOutputOverriddenByAsio =>
-      'ASIOブリッジチェーンで駆動中です。この出力の選択は無効です。出力は ASIO ドライバーが決定します';
 
   @override
   String get ioOnlyVirtualOutputs => '仮想出力エンドポイントのみ（物理サウンドカードなし）';
@@ -1223,16 +1212,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get inputVaio => 'AuraVAIO 仮想入力';
 
   @override
-  String get inputAsioDriver => 'AuraDSP Virtual ASIO';
-
-  @override
   String get outputWasapi => 'WASAPI 標準出力';
 
   @override
   String get outputVaio => 'AuraVAIO 仮想出力';
-
-  @override
-  String get outputAsioClient => 'AuraDSP ASIO Client';
 
   @override
   String get tooltipInputWasapi =>
@@ -1244,7 +1227,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get tooltipInputAsioDriver =>
-      'AuraDSP Virtual ASIO：FL Studio や Cubase などの DAW 向けに仮想 ASIO ドライバを提供します';
+      '仮想 ASIO：この PC に登録された「AuraDSP Driver」仮想ドライバを、FL Studio や Cubase などの DAW がホストして音声を入力します';
 
   @override
   String get tooltipOutputWasapi =>

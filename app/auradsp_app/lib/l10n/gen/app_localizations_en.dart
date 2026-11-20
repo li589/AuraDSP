@@ -516,7 +516,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ioAsioGuide =>
-      'In your DAW (FL Studio / Cubase / Reaper / Ableton) select \"AuraDSP Virtual ASIO\" as Audio Device to route project audio here.';
+      'In your DAW (FL Studio / Cubase / Reaper / Ableton) select \"AuraDSP Driver\" as the audio device to route project audio here.';
 
   @override
   String get ioModeLabel => 'Mode';
@@ -530,18 +530,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get ioInputOverriddenByVaio =>
       'Driven by the VAIO bridge chain — this input selection has no effect. Point the player\'s output at the AuraVAIO endpoint';
-
-  @override
-  String get ioOutputOverriddenByVaio =>
-      'Driven by the VAIO bridge chain — this output device selection has no effect. Set the bridge\'s physical landing point in the panel below';
-
-  @override
-  String get ioInputOverriddenByAsio =>
-      'Driven by the ASIO bridge chain; this input selection has no effect — input is decided by the ASIO driver';
-
-  @override
-  String get ioOutputOverriddenByAsio =>
-      'Driven by the ASIO bridge chain — this output selection has no effect; the ASIO driver decides the output';
 
   @override
   String get ioOnlyVirtualOutputs =>
@@ -1299,16 +1287,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get inputVaio => 'AuraVAIO Virtual Input';
 
   @override
-  String get inputAsioDriver => 'AuraDSP Virtual ASIO';
-
-  @override
   String get outputWasapi => 'WASAPI Standard Output';
 
   @override
   String get outputVaio => 'AuraVAIO Virtual Output';
-
-  @override
-  String get outputAsioClient => 'AuraDSP ASIO Client';
 
   @override
   String get tooltipInputWasapi =>
@@ -1320,7 +1302,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tooltipInputAsioDriver =>
-      'AuraDSP Virtual ASIO: Expose a virtual ASIO driver for DAWs like FL Studio, Cubase, Ableton, etc.';
+      'Virtual ASIO: the locally registered \"AuraDSP Driver\" virtual driver, hosted by DAWs like FL Studio, Cubase and Ableton to inject audio';
 
   @override
   String get tooltipOutputWasapi =>

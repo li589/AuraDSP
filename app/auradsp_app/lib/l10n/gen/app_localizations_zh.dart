@@ -476,7 +476,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ioAsioGuide =>
-      '在 DAW (FL Studio / Cubase / Reaper / Ableton) 的 Audio Device 中选择 \"AuraDSP Virtual ASIO\" 即可将工程音频路由至此。';
+      '在 DAW（FL Studio / Cubase / Reaper / Ableton）的音频设备中选择 \"AuraDSP Driver\"，即可将工程音频路由至此。';
 
   @override
   String get ioModeLabel => '模式';
@@ -490,16 +490,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get ioInputOverriddenByVaio =>
       '当前由 VAIO 桥链驱动，输入选择不生效；请将播放器输出指向 AuraVAIO 端点';
-
-  @override
-  String get ioOutputOverriddenByVaio =>
-      '当前由 VAIO 桥链驱动，此输出设备选择不生效；桥的物理落点在下方落点面板设置';
-
-  @override
-  String get ioInputOverriddenByAsio => '当前由 ASIO 桥链驱动，此输入选择不生效；输入由 ASIO 驱动决定';
-
-  @override
-  String get ioOutputOverriddenByAsio => '当前由 ASIO 桥链驱动，此输出选择不生效；输出由 ASIO 驱动决定';
 
   @override
   String get ioOnlyVirtualOutputs => '仅有虚拟输出端点（无物理声卡）';
@@ -1203,16 +1193,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get inputVaio => 'AuraVAIO 虚拟输入';
 
   @override
-  String get inputAsioDriver => 'AuraDSP Virtual ASIO';
-
-  @override
   String get outputWasapi => 'WASAPI 标准输出';
 
   @override
   String get outputVaio => 'AuraVAIO 虚拟输出';
-
-  @override
-  String get outputAsioClient => 'AuraDSP ASIO Client';
 
   @override
   String get tooltipInputWasapi =>
@@ -1224,7 +1208,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tooltipInputAsioDriver =>
-      'AuraDSP Virtual ASIO：作为虚拟 ASIO 驱动供 FL Studio、Cubase、Ableton 等专业 DAW 宿主调用注入音频';
+      '虚拟 ASIO：本机注册的 \"AuraDSP Driver\" 虚拟驱动，供 FL Studio、Cubase、Ableton 等专业 DAW 宿主调用注入音频';
 
   @override
   String get tooltipOutputWasapi => 'WASAPI 标准输出：将处理完成的声音输出至物理扬声器、耳机或第三方虚拟输出设备';

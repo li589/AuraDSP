@@ -961,7 +961,7 @@ abstract class AppLocalizations {
   /// No description provided for @ioAsioGuide.
   ///
   /// In zh, this message translates to:
-  /// **'在 DAW (FL Studio / Cubase / Reaper / Ableton) 的 Audio Device 中选择 \"AuraDSP Virtual ASIO\" 即可将工程音频路由至此。'**
+  /// **'在 DAW（FL Studio / Cubase / Reaper / Ableton）的音频设备中选择 \"AuraDSP Driver\"，即可将工程音频路由至此。'**
   String get ioAsioGuide;
 
   /// No description provided for @ioModeLabel.
@@ -987,24 +987,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'当前由 VAIO 桥链驱动，输入选择不生效；请将播放器输出指向 AuraVAIO 端点'**
   String get ioInputOverriddenByVaio;
-
-  /// No description provided for @ioOutputOverriddenByVaio.
-  ///
-  /// In zh, this message translates to:
-  /// **'当前由 VAIO 桥链驱动，此输出设备选择不生效；桥的物理落点在下方落点面板设置'**
-  String get ioOutputOverriddenByVaio;
-
-  /// No description provided for @ioInputOverriddenByAsio.
-  ///
-  /// In zh, this message translates to:
-  /// **'当前由 ASIO 桥链驱动，此输入选择不生效；输入由 ASIO 驱动决定'**
-  String get ioInputOverriddenByAsio;
-
-  /// No description provided for @ioOutputOverriddenByAsio.
-  ///
-  /// In zh, this message translates to:
-  /// **'当前由 ASIO 桥链驱动，此输出选择不生效；输出由 ASIO 驱动决定'**
-  String get ioOutputOverriddenByAsio;
 
   /// No description provided for @ioOnlyVirtualOutputs.
   ///
@@ -2308,12 +2290,6 @@ abstract class AppLocalizations {
   /// **'AuraVAIO 虚拟输入'**
   String get inputVaio;
 
-  /// No description provided for @inputAsioDriver.
-  ///
-  /// In zh, this message translates to:
-  /// **'AuraDSP Virtual ASIO'**
-  String get inputAsioDriver;
-
   /// No description provided for @outputWasapi.
   ///
   /// In zh, this message translates to:
@@ -2325,12 +2301,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'AuraVAIO 虚拟输出'**
   String get outputVaio;
-
-  /// No description provided for @outputAsioClient.
-  ///
-  /// In zh, this message translates to:
-  /// **'AuraDSP ASIO Client'**
-  String get outputAsioClient;
 
   /// No description provided for @tooltipInputWasapi.
   ///
@@ -2347,7 +2317,7 @@ abstract class AppLocalizations {
   /// No description provided for @tooltipInputAsioDriver.
   ///
   /// In zh, this message translates to:
-  /// **'AuraDSP Virtual ASIO：作为虚拟 ASIO 驱动供 FL Studio、Cubase、Ableton 等专业 DAW 宿主调用注入音频'**
+  /// **'虚拟 ASIO：本机注册的 \"AuraDSP Driver\" 虚拟驱动，供 FL Studio、Cubase、Ableton 等专业 DAW 宿主调用注入音频'**
   String get tooltipInputAsioDriver;
 
   /// No description provided for @tooltipOutputWasapi.
