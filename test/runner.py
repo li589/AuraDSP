@@ -80,6 +80,11 @@ PLATFORM_ANY = {
     # --check + ApoShared.h 手写布局交叉断言，纯源码/脚本，两平台可跑。
     "smoke_apo_param_layout.py",
     "smoke_apo_plugin_layout.py",
+    # ASIO 跨进程契约（r61 S5）：参数块（App 写/驱动读/seq 门/去
+    # 假会话）与遥测块（v2 频谱/版本接受域/Dart 偏移对位）。
+    # 纯源码扫描，两平台可跑。
+    "smoke_asio_driver_params.py",
+    "smoke_asio_telemetry_contract.py",
     # r43 门禁（2026-11-17）：apo_config ACL 接管必须合并原 DACL
     # （整表替换剥服务 ACE → 默认端点不可读 → 全机无声）+ props
     # clear 删不存在值不得误判失败。纯源码形状，两平台可跑。
@@ -409,6 +414,10 @@ def run_smoke_tests():
         "smoke_d4b_swallow.py",
         "smoke_apo_param_layout.py",
     "smoke_apo_plugin_layout.py",
+    # ASIO 跨进程契约（r61 S5）：参数块 + 遥测块，平台分类在
+    # PLATFORM_ANY（纯源码扫描，Linux CI 必须实跑）。
+    "smoke_asio_driver_params.py",
+    "smoke_asio_telemetry_contract.py",
     # r43 门禁（2026-11-17）：ACL 接管合并原 DACL + props clear
     # 容忍值不存在（宾机全机无声/附加误判实证）。平台分类在
     # PLATFORM_ANY：纯源码扫描，Linux CI 必须实跑。
