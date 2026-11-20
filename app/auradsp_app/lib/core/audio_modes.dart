@@ -24,9 +24,18 @@
 import '../platform/platform_profile.dart';
 
 abstract final class AudioModes {
-  // ADR-009 两大交互范式
+  // ADR-009 两大交互范式；2026-11-20 ASIO 模式重构（业主裁定）
+  // 起 ASIO 升为第三范式：ASIO 是全双工单设备协议，不再拆进管线
+  // 的输入/输出交叉组合（方案 docs/20-执行/ASIO模式重构方案）。
   static const String categoryAttachment = 'attachment';
   static const String categoryPipeline = 'pipeline';
+  static const String categoryAsio = 'asio';
+
+  // ASIO 范式子形态：virtual = Driver 线（DAW 宿主我们的虚拟
+  // 驱动）；client = Client 线（App 宿主第三方 ASIO 驱动）。
+  static const String asioVirtual = 'virtual';
+  static const String asioClient = 'client';
+  static const List<String> asioFlavorOptions = [asioVirtual, asioClient];
 
   // 附加模式子项
   static const String attachSysApo = 'sysapo';
@@ -45,6 +54,7 @@ abstract final class AudioModes {
   static const List<String> categories = [
     categoryAttachment,
     categoryPipeline,
+    categoryAsio,
   ];
 
   static const List<String> attachmentOptions = [
@@ -117,8 +127,9 @@ abstract final class AudioModes {
       case 'vbcallback':
       case 'voicemeeter_api':
         return categoryAttachment;
-      case 'vaio':
       case 'asio':
+        return categoryAsio;
+      case 'vaio':
       default:
         return categoryPipeline;
     }
@@ -148,6 +159,12 @@ abstract final class AudioModes {
         return 'vbcallback';
       }
       return 'sysapo';
+    }
+    // ASIO 范式两子形态同合成 'asio' 模式；形态差异落在管线对
+    // （virtual → 输入 asio_driver；client → 输出 asio_client），
+    // 由状态层 setAsioFlavor/setModeCategory 拨对后合成链恒 asio。
+    if (category == categoryAsio) {
+      return 'asio';
     }
     if (pipelineOut == outputAsioClient || pipelineOut == 'asio') {
       return 'asio';
@@ -179,6 +196,50 @@ abstract final class AudioModes {
       return PipelineChain.capture;
     }
     return PipelineChain.vaio;
+  }
+
+  /// ASIO 子形态推导（存量管线对）：输入为 ASIO 驱动（DAW 注入，
+  /// 虚拟 ASIO 是主语义）优先判 virtual；其余判 client（输出
+  /// ASIO Client 是历史默认形态，旧默认路径即此）。
+  static String deriveAsioFlavor({
+    required String pipelineInput,
+    required String pipelineOutput,
+  }) {
+    return pipelineInput == inputAsioDriver ? asioVirtual : asioClient;
+  }
+
+  static bool isValidAsioFlavor(String? v) =>
+      v == asioVirtual || v == asioClient;
+
+  /// 范式迁移（ASIO 模式重构 S1，纯函数）：把旧「管线范式内嵌
+  /// ASIO」的存量组合提升为 ASIO 范式。config 加载与会话恢复
+  /// 共用同一口径，避免两处判定漂移。
+  ///
+  /// 规则：合成链为 asio（输入 asio_driver 或输出 asio_client）
+  /// 且类别非附加 → 类别升为 asio；已是 asio 类别时保持（子形态
+  /// 以已存合法值为准）。子形态缺失/非法时由存量对推导；其余
+  /// 组合类别原样返回，flavor 仍给出推导值备日后切入 ASIO 用。
+  static ({String category, String flavor}) migrateParadigm({
+    required String category,
+    required String pipelineInput,
+    required String pipelineOutput,
+    String? asioFlavor,
+  }) {
+    final flavor = isValidAsioFlavor(asioFlavor)
+        ? asioFlavor!
+        : deriveAsioFlavor(
+            pipelineInput: pipelineInput,
+            pipelineOutput: pipelineOutput,
+          );
+    if (category == categoryAsio) {
+      return (category: categoryAsio, flavor: flavor);
+    }
+    if (category != categoryAttachment &&
+        composeChain(input: pipelineInput, output: pipelineOutput) ==
+            PipelineChain.asio) {
+      return (category: categoryAsio, flavor: flavor);
+    }
+    return (category: category, flavor: flavor);
   }
 
   /// 哪一侧的分段选择被 ASIO 桥接管而不生效（r57 P2 立、r58 收窄）：

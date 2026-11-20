@@ -53,6 +53,7 @@ class AppConfig {
   String attachmentMode; // 'sysapo' | 'voicemeeter_api'
   String pipelineInput; // 'asio_driver' | 'vaio' | 'wasapi'
   String pipelineOutput; // 'wasapi' | 'vaio' | 'asio_client'
+  String asioFlavor; // ASIO 范式子形态：'virtual' | 'client'（2026-11-20 重构）
   String pipelineInputDevice; // WASAPI 采集端点
   String pipelineOutputDevice; // WASAPI 渲染端点
   bool pipelineInputEnabled; // 输入端启用开关
@@ -125,6 +126,7 @@ class AppConfig {
     String? attachmentMode,
     String? pipelineInput,
     String? pipelineOutput,
+    String? asioFlavor,
     this.pipelineInputDevice = '',
     this.pipelineOutputDevice = '',
     this.pipelineInputEnabled = true,
@@ -164,9 +166,26 @@ class AppConfig {
             (audioMode == 'asio'
                 ? AudioModes.outputAsioClient
                 : (audioMode == 'vaio' ? AudioModes.outputVaio : AudioModes.outputWasapi)),
+        asioFlavor = asioFlavor ?? AudioModes.asioClient,
         pluginScanDirs = pluginScanDirs ?? [],
         customScriptDirs = customScriptDirs ?? [],
-        visualizerConfig = visualizerConfig ?? const VisualizerConfig();
+        visualizerConfig = visualizerConfig ?? const VisualizerConfig() {
+    // ASIO 模式重构 S1 迁移：旧存量「管线类别 + ASIO 管线对」
+    // 在此统一提升为 ASIO 范式（纯函数 migrateParadigm，config
+    // 加载与会话恢复同口径）。新鲜构造（默认对 wasapi/wasapi）
+    // 不受影响。
+    // 注意 asioFlavor 传的是构造参数原文（可空）：字段初值已填
+    // 缺省 client，若把字段值传给迁移，「未存过 flavor」与
+    // 「存了 client」不可分辨，推导（输入优先）会被缺省值短路。
+    final mig = AudioModes.migrateParadigm(
+      category: this.modeCategory,
+      pipelineInput: this.pipelineInput,
+      pipelineOutput: this.pipelineOutput,
+      asioFlavor: asioFlavor,
+    );
+    this.modeCategory = mig.category;
+    this.asioFlavor = mig.flavor;
+  }
 
   factory AppConfig.fromJson(Map<String, dynamic> json) {
     final audio = (json['audio'] as Map<String, dynamic>?) ?? {};
@@ -192,6 +211,7 @@ class AppConfig {
       attachmentMode: rawAttach,
       pipelineInput: rawPipeIn,
       pipelineOutput: rawPipeOut,
+      asioFlavor: audio['asioFlavor'] as String?,
       pipelineInputDevice: (audio['pipelineInputDevice'] as String?) ?? '',
       pipelineOutputDevice: (audio['pipelineOutputDevice'] as String?) ?? '',
       pipelineInputEnabled: (audio['pipelineInputEnabled'] as bool?) ?? true,
@@ -284,6 +304,7 @@ class AppConfig {
           'attachmentMode': attachmentMode,
           'pipelineInput': pipelineInput,
           'pipelineOutput': pipelineOutput,
+          'asioFlavor': asioFlavor,
           'pipelineInputDevice': pipelineInputDevice,
           'pipelineOutputDevice': pipelineOutputDevice,
           'pipelineInputEnabled': pipelineInputEnabled,

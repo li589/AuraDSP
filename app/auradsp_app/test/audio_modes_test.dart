@@ -77,7 +77,8 @@ void main() {
     expect(AudioModes.categoryForMode('sysapo'), AudioModes.categoryAttachment);
     expect(AudioModes.categoryForMode('vbcallback'), AudioModes.categoryAttachment);
     expect(AudioModes.categoryForMode('vaio'), AudioModes.categoryPipeline);
-    expect(AudioModes.categoryForMode('asio'), AudioModes.categoryPipeline);
+    // 2026-11-20 ASIO 重构：'asio' 模式归 ASIO 范式（第三范式）。
+    expect(AudioModes.categoryForMode('asio'), AudioModes.categoryAsio);
 
     expect(
         AudioModes.composeMode(
@@ -99,6 +100,96 @@ void main() {
             category: AudioModes.categoryPipeline,
             pipelineOut: AudioModes.outputWasapi),
         'vaio');
+    // ASIO 范式恒合成 'asio'（两子形态同模式）。
+    expect(
+        AudioModes.composeMode(category: AudioModes.categoryAsio),
+        'asio');
+  });
+
+  test('ASIO paradigm migration matrix (2026-11-20 restructure S1)', () {
+    // 存量：管线类别 + 输入 ASIO 驱动（DAW 注入）→ ASIO 范式/virtual。
+    var mig = AudioModes.migrateParadigm(
+      category: AudioModes.categoryPipeline,
+      pipelineInput: AudioModes.inputAsioDriver,
+      pipelineOutput: AudioModes.outputWasapi,
+    );
+    expect(mig.category, AudioModes.categoryAsio);
+    expect(mig.flavor, AudioModes.asioVirtual);
+    // 存量：管线类别 + 输出 ASIO Client → ASIO 范式/client。
+    mig = AudioModes.migrateParadigm(
+      category: AudioModes.categoryPipeline,
+      pipelineInput: AudioModes.inputWasapi,
+      pipelineOutput: AudioModes.outputAsioClient,
+    );
+    expect(mig.category, AudioModes.categoryAsio);
+    expect(mig.flavor, AudioModes.asioClient);
+    // 两侧皆 ASIO：输入优先（DAW 注入是主语义）→ virtual。
+    mig = AudioModes.migrateParadigm(
+      category: AudioModes.categoryPipeline,
+      pipelineInput: AudioModes.inputAsioDriver,
+      pipelineOutput: AudioModes.outputAsioClient,
+    );
+    expect(mig.category, AudioModes.categoryAsio);
+    expect(mig.flavor, AudioModes.asioVirtual);
+    // 已存合法 flavor 优先于推导。
+    mig = AudioModes.migrateParadigm(
+      category: AudioModes.categoryPipeline,
+      pipelineInput: AudioModes.inputAsioDriver,
+      pipelineOutput: AudioModes.outputAsioClient,
+      asioFlavor: AudioModes.asioClient,
+    );
+    expect(mig.flavor, AudioModes.asioClient);
+    // 非 ASIO 组合：类别不动，flavor 给出推导值（client 缺省）。
+    mig = AudioModes.migrateParadigm(
+      category: AudioModes.categoryPipeline,
+      pipelineInput: AudioModes.inputVaio,
+      pipelineOutput: AudioModes.outputWasapi,
+    );
+    expect(mig.category, AudioModes.categoryPipeline);
+    expect(mig.flavor, AudioModes.asioClient);
+    // 附加类别即使管线对残留 ASIO 值也不提升（附加不消费管线对）。
+    mig = AudioModes.migrateParadigm(
+      category: AudioModes.categoryAttachment,
+      pipelineInput: AudioModes.inputAsioDriver,
+      pipelineOutput: AudioModes.outputAsioClient,
+    );
+    expect(mig.category, AudioModes.categoryAttachment);
+    // 已是 ASIO 范式：保持，非法 flavor 回推导。
+    mig = AudioModes.migrateParadigm(
+      category: AudioModes.categoryAsio,
+      pipelineInput: AudioModes.inputVaio,
+      pipelineOutput: AudioModes.outputVaio,
+      asioFlavor: 'bogus',
+    );
+    expect(mig.category, AudioModes.categoryAsio);
+    expect(mig.flavor, AudioModes.asioClient);
+  });
+
+  test('config load migrates legacy pipeline-ASIO into ASIO paradigm', () {
+    final back = AppConfig.fromJson({
+      'audio': {
+        'audioMode': 'vaio',
+        'modeCategory': 'pipeline',
+        'pipelineInput': 'asio_driver',
+        'pipelineOutput': 'wasapi',
+      },
+    });
+    expect(back.modeCategory, AudioModes.categoryAsio);
+    expect(back.asioFlavor, AudioModes.asioVirtual);
+    // 新格式往返：asio 类别 + flavor 原样保留。
+    final back2 = AppConfig.fromJson(back.toJson());
+    expect(back2.modeCategory, AudioModes.categoryAsio);
+    expect(back2.asioFlavor, AudioModes.asioVirtual);
+    // 普通管线存量不受迁移影响。
+    final back3 = AppConfig.fromJson({
+      'audio': {
+        'audioMode': 'vaio',
+        'modeCategory': 'pipeline',
+        'pipelineInput': 'vaio',
+        'pipelineOutput': 'wasapi',
+      },
+    });
+    expect(back3.modeCategory, AudioModes.categoryPipeline);
   });
 
   test('Linux three modes (ADR-012 D-5): options, normalize, compose', () {

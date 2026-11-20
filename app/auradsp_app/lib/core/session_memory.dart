@@ -71,6 +71,7 @@ abstract final class SessionMemory {
         'attachmentMode': m.attachmentMode,
         'pipelineInput': m.pipelineInput,
         'pipelineOutput': m.pipelineOutput,
+        'asioFlavor': m.config.asioFlavor,
         'pipelineInputDevice': m.pipelineInputDevice,
         'pipelineOutputDevice': m.pipelineOutputDevice,
         'pipelineInputEnabled': m.pipelineInputEnabled,
@@ -181,6 +182,22 @@ abstract final class SessionMemory {
       if (session['pipelineOutputEnabled'] is bool) {
         m.config.pipelineOutputEnabled = session['pipelineOutputEnabled'] as bool;
       }
+      if (session['asioFlavor'] is String) {
+        m.config.asioFlavor = session['asioFlavor'] as String;
+      }
+      // ASIO 模式重构 S1：旧会话（管线类别 + ASIO 管线对）恢复后
+      // 统一提升为 ASIO 范式，与 config 加载同口径（migrateParadigm）。
+      // 会话本身没存 flavor 时传 null 按会话的管线对推导，不被
+      // config 的缺省 client 短路（同 config 构造的口径注）。
+      final mig = AudioModes.migrateParadigm(
+        category: m.config.modeCategory,
+        pipelineInput: m.config.pipelineInput,
+        pipelineOutput: m.config.pipelineOutput,
+        asioFlavor:
+            session['asioFlavor'] is String ? m.config.asioFlavor : null,
+      );
+      m.config.modeCategory = mig.category;
+      m.config.asioFlavor = mig.flavor;
       if (session['asioDriver'] is String) {
         m.config.asioDriver = session['asioDriver'] as String;
       }

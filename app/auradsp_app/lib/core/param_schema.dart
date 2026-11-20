@@ -1540,6 +1540,13 @@ abstract final class ParamRegistry {
     getter: (m) => m.config.modeCategory,
     setter: (m, v) => {},
   );
+  static final routingAsioFlavor = ParamSpec<String>(
+    id: 'routing.asioFlavor', section: 'routing', key: 'asioFlavor',
+    type: ParamType.string, defaultValue: 'client',
+    flags: ParamFlags.presetSerializable | ParamFlags.sessionOnly,
+    getter: (m) => m.config.asioFlavor,
+    setter: (m, v) => {},
+  );
   static final routingAttachmentMode = ParamSpec<String>(
     id: 'routing.attachmentMode', section: 'routing', key: 'attachmentMode',
     type: ParamType.string, defaultValue: 'sysapo',
@@ -2085,7 +2092,7 @@ abstract final class ParamRegistry {
       name: 'routing',
       specs: [
         routingModeCategory, routingAttachmentMode, routingPipelineInput,
-        routingPipelineOutput, routingPipelineInputDevice, routingPipelineOutputDevice,
+        routingPipelineOutput, routingAsioFlavor, routingPipelineInputDevice, routingPipelineOutputDevice,
         routingPipelineInputEnabled, routingPipelineOutputEnabled,
         routingAsioDriver, routingAsioBufSize, routingAsioOutPair,
         routingVaioOutputEndpoint, routingApoTargetEndpoint, routingMonitorMirroring,

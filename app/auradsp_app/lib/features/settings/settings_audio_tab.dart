@@ -13,7 +13,8 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
 
   return [
     // 1. 音频模式。Linux（ADR-012 D-5）无范式分层、直选三模式；其余
-    // 平台走 ADR-009 两范式（附加模式原地挂载；管线模式端到端流转）。
+    // 平台走三范式（附加模式原地挂载；管线模式端到端流转；ASIO
+    // 模式 2026-11-20 重构升为独立范式，子形态二选一）。
     if (PlatformProfile.isLinux)
       _linuxModeCard(context, model)
     else
@@ -23,12 +24,13 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 第一级：两大范式选择（切离 APO 的自动卸载在途时全卡
+          // 第一级：三大范式选择（切离 APO 的自动卸载在途时全卡
           // 禁选——业主 2026-11-12：等待落定前如何点都不生效）
           AuraSegmented<String>(
             segments: [
               AuraSegment(AudioModes.categoryAttachment, l.paradigmAttachment),
               AuraSegment(AudioModes.categoryPipeline, l.paradigmPipeline),
+              AuraSegment(AudioModes.categoryAsio, l.paradigmAsio),
             ],
             selected: model.modeCategory,
             onChanged: model.apoDetachBlocking
@@ -50,6 +52,26 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
                   ? null
                   : (v) => model.setAttachmentMode(v),
             ),
+          ] else if (model.modeCategory == AudioModes.categoryAsio) ...[
+            // ASIO 范式：子形态二选一（虚拟 ASIO = 我们是驱动、
+            // DAW 是宿主；ASIO Client = App 是宿主、开第三方
+            // 驱动）。本范式下不再出现输入/输出端选择——ASIO
+            // 全双工单设备，两线各自的连接配置在下方 I/O 卡
+            // （S2 整卡重画；S1 先行为等价搬家）。
+            Text(l.audioMode, style: labelOf(p, size: 12, color: p.textDim)),
+            const SizedBox(height: AuraSpace.xs),
+            AuraSegmented<String>(
+              segments: [
+                AuraSegment(AudioModes.asioVirtual, l.asioFlavorVirtual,
+                    tooltip: l.tooltipInputAsioDriver),
+                AuraSegment(AudioModes.asioClient, l.asioFlavorClient,
+                    tooltip: l.tooltipOutputAsioClient),
+              ],
+              selected: model.asioFlavor,
+              onChanged: model.apoDetachBlocking
+                  ? null
+                  : (v) => model.setAsioFlavor(v),
+            ),
           ] else ...[
             // 管线模式：输入端 + 输出端（上下文字对齐，帮助提示统一由 InfoBadge 承担）
             Row(
@@ -67,8 +89,6 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
                     tooltip: l.tooltipInputWasapi),
                 AuraSegment(AudioModes.inputVaio, l.inputVaio,
                     tooltip: l.tooltipInputVaio),
-                AuraSegment(AudioModes.inputAsioDriver, l.inputAsioDriver,
-                    tooltip: l.tooltipInputAsioDriver),
               ],
               selected: model.pipelineInput,
               onChanged: model.apoDetachBlocking ||
@@ -102,8 +122,6 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
                     tooltip: l.tooltipOutputWasapi),
                 AuraSegment(AudioModes.outputVaio, l.outputVaio,
                     tooltip: l.tooltipOutputVaio),
-                AuraSegment(AudioModes.outputAsioClient, l.outputAsioClient,
-                    tooltip: l.tooltipOutputAsioClient),
               ],
               selected: model.pipelineOutput,
               onChanged: model.apoDetachBlocking ||

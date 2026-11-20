@@ -299,13 +299,32 @@ extension AudioModesState on AppModel {
     _notifyUi();
   }
 
-  /// ADR-009: 切换音频范式（附加模式 vs 普通管线模式）
+  /// ADR-009: 切换音频范式（附加模式 vs 普通管线模式）；
+  /// 2026-11-20 ASIO 重构起第三范式 ASIO（子形态见 setAsioFlavor）。
   void setModeCategory(String category) {
     if (category != AudioModes.categoryAttachment &&
-        category != AudioModes.categoryPipeline) {
+        category != AudioModes.categoryPipeline &&
+        category != AudioModes.categoryAsio) {
       return;
     }
     config.modeCategory = category;
+    if (category == AudioModes.categoryPipeline) {
+      // 回管线范式：管线对里的 ASIO 残留已无对应选项（ASIO
+      // 已升独立范式、管线选择器不再提供），按既有口径降为
+      // VAIO（pipelineOutputForMode 对模式直切的同款处理）。
+      if (config.pipelineInput == AudioModes.inputAsioDriver) {
+        config.pipelineInput = AudioModes.inputVaio;
+      }
+      if (config.pipelineOutput == AudioModes.outputAsioClient) {
+        config.pipelineOutput = AudioModes.outputVaio;
+      }
+    }
+    if (category == AudioModes.categoryAsio) {
+      // 进入 ASIO 范式先按已存子形态把管线对拨到位，合成链
+      // 才恒为 asio（composeChain 仍以管线对为真相，S1 行为
+      // 等价搬家；新卡呈现留 S2）。
+      _applyAsioFlavorToPair();
+    }
     final composed = AudioModes.composeMode(
       category: category,
       attachmentMode: config.attachmentMode,
@@ -346,20 +365,57 @@ extension AudioModesState on AppModel {
     }
   }
 
+  /// 把管线对拨到当前 ASIO 子形态对应的存量形态：virtual →
+  /// 输入 asio_driver（DAW 注入）；client → 输出 asio_client。
+  /// 只写形态所属的那一侧，另一侧保留用户既有选择（合成链
+  /// 任一侧命中即 asio，非损口径同 pipelineOutputForMode）。
+  void _applyAsioFlavorToPair() {
+    if (config.asioFlavor == AudioModes.asioVirtual) {
+      config.pipelineInput = AudioModes.inputAsioDriver;
+    } else {
+      config.pipelineOutput = AudioModes.outputAsioClient;
+    }
+  }
+
+  /// ASIO 范式子形态切换（虚拟 ASIO / ASIO Client）：落盘 +
+  /// 管线对拨形 + 链路对账。两形态同合成 'asio' 模式，模式
+  /// 漂移（非 asio）时经 setAudioMode 收口。
+  void setAsioFlavor(String flavor) {
+    if (!AudioModes.isValidAsioFlavor(flavor)) return;
+    config.asioFlavor = flavor;
+    if (config.modeCategory == AudioModes.categoryAsio) {
+      _applyAsioFlavorToPair();
+      if (audioMode != 'asio') {
+        setAudioMode('asio');
+        return;
+      }
+      applyPipelineChain();
+      _sendChCap();
+    }
+    persistRoutingChange();
+    _notifyUi();
+  }
+
   /// 输入/输出开关总闸（第七轮 S2 项 5）：管线类别内任一开关
   /// 关闭即压过一切起链路径（分发器对账、模式直发、就绪恢复）。
+  /// ASIO 范式沿用同一总闸（I/O 卡 S2 重画前行为等价）。
   bool get _pipelineIoSuppressed =>
-      config.modeCategory == AudioModes.categoryPipeline &&
+      (config.modeCategory == AudioModes.categoryPipeline ||
+          config.modeCategory == AudioModes.categoryAsio) &&
       (!config.pipelineInputEnabled || !config.pipelineOutputEnabled);
 
-  /// 当前管线链路（仅管线类别内有意义；其余类别返回 null）。
+  /// 当前管线链路（仅管线/ASIO 类别内有意义；其余类别返回
+  /// null）。ASIO 范式恒 asio 链（子形态差异在管线对与桥的
+  /// 驱动参数，不在链种类）。
   PipelineChain? get pipelineChain =>
       config.modeCategory == AudioModes.categoryPipeline
           ? AudioModes.composeChain(
               input: config.pipelineInput,
               output: config.pipelineOutput,
             )
-          : null;
+          : config.modeCategory == AudioModes.categoryAsio
+              ? PipelineChain.asio
+              : null;
 
   /// 输入/输出分段选择是否被 ASIO 桥接管而不生效（r57 P2 立，
   /// r58 收窄至仅 asio 链，UI 置灰用；vaio 组合不互锁）。
@@ -401,6 +457,7 @@ extension AudioModesState on AppModel {
   /// 类别为 attachment 时才由 audioMode 直接分发（sysapo 读
   /// APO 遥测、vbcallback 走 VM 桥）；其余直连模式按 audioMode。
   String get expectedVizBackend {
+    if (modeCategory == AudioModes.categoryAsio) return 'asio';
     if (modeCategory == AudioModes.categoryPipeline) {
       final chain = pipelineChain;
       if (chain == PipelineChain.asio) return 'asio';

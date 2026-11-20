@@ -56,10 +56,12 @@ void main() {
       await tester.pumpWidget(_app(model));
       await tester.pumpAndSettle();
 
-      // 切换到普通管线模式
+      // 切换到普通管线模式（2026-11-20 重构后管线选择器只剩
+      // WASAPI/VAIO，ASIO 已升独立范式——ASIO 断言移至下方
+      // ASIO 范式用例）
       model.setModeCategory(AudioModes.categoryPipeline);
-      model.setPipelineInput(AudioModes.inputAsioDriver);
-      model.setPipelineOutput(AudioModes.outputAsioClient);
+      model.setPipelineInput(AudioModes.inputVaio);
+      model.setPipelineOutput(AudioModes.outputVaio);
       await tester.pumpAndSettle();
 
       expect(find.text('普通管线模式'), findsWidgets);
@@ -77,23 +79,10 @@ void main() {
       expect(find.text('AuraVAIO 虚拟输入'), findsWidgets);
       expect(find.text('WASAPI 标准输出'), findsWidgets);
       expect(find.text('AuraVAIO 虚拟输出'), findsWidgets);
-      expect(find.text('AuraDSP ASIO Client'), findsWidgets);
-
-      // Virtual ASIO driver management card visible in driver layer
-      expect(find.text('AuraDSP 虚拟 ASIO 驱动'), findsOneWidget);
-      expect(find.text('驱动状态'), findsOneWidget);
-      // 第三十七轮（业主目检裁定）：DAW 状态仅在活跃连接时显示，
-      // 本例 DAW 空闲——该行不得出现。
-      expect(find.text('DAW 状态'), findsNothing);
-
-      // External ASIO client controls visible
-      expect(find.text('缓冲档'), findsOneWidget);
-      expect(find.text('输出起始声道对'), findsOneWidget);
 
       // 切到 AuraVAIO 输出端：耳机监听镜像开关在场；虚拟声卡说明
       // 自 2026-11-14（业主裁定）起收进问号气泡——旧的常显提示
       // 文本不得再以正文出现，气泡载体 InfoBadge 须在镜像行内。
-      model.setPipelineOutput(AudioModes.outputVaio);
       await tester.pumpAndSettle();
       expect(find.textContaining('为虚拟声卡输出'), findsNothing);
       expect(find.text('本地耳机监听镜像'), findsOneWidget);
@@ -117,15 +106,53 @@ void main() {
         if (hasBadge && hasSwitch) mirrorRowFound = true;
       }
       expect(mirrorRowFound, isTrue);
-      // 「物理输出」两处同名是设计内（第七轮 S2）：本用例输入为
-      // ASIO 驱动（合成链 = asio），VAIO 输出子面板除物理输出
-      // 字段行外，另有一条同名标签的「被 ASIO 接管」说明行。
-      expect(find.text('物理输出'), findsNWidgets(2));
+      // VAIO 链下物理输出落点字段行在场。
+      expect(find.text('物理输出'), findsWidgets);
 
       // 切到 WASAPI 渲染输出端（r58 文案：模式行值 = WASAPI 标准输出）
       model.setPipelineOutput(AudioModes.outputWasapi);
       await tester.pumpAndSettle();
       expect(find.text('WASAPI 标准输出'), findsWidgets);
+    });
+
+    testWidgets('ASIO paradigm: flavor switch card replaces in/out selectors',
+        (tester) async {
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+      await tester.pumpWidget(_app(model));
+      await tester.pumpAndSettle();
+
+      // 进入 ASIO 范式：主卡只剩子形态切换卡，无输入/输出端选择。
+      model.setModeCategory(AudioModes.categoryAsio);
+      await tester.pumpAndSettle();
+      expect(find.text('ASIO 模式'), findsWidgets);
+      expect(find.text('虚拟 ASIO'), findsWidgets);
+      expect(find.text('ASIO Client'), findsWidgets);
+      expect(find.text('输入端'), findsNothing);
+      expect(find.text('输出端'), findsNothing);
+      expect(model.pipelineChain, PipelineChain.asio);
+      expect(model.asioInChain, isTrue);
+
+      // 缺省子形态 client：ASIO Client 控制（缓冲档/输出声道对）在场。
+      expect(model.asioFlavor, AudioModes.asioClient);
+      expect(find.text('缓冲档'), findsOneWidget);
+      expect(find.text('输出起始声道对'), findsOneWidget);
+
+      // 切到虚拟 ASIO：驱动管理卡在场；DAW 空闲时无 DAW 状态行
+      // （第三十七轮口径沿用）。
+      model.setAsioFlavor(AudioModes.asioVirtual);
+      await tester.pumpAndSettle();
+      expect(model.asioFlavor, AudioModes.asioVirtual);
+      expect(find.text('AuraDSP 虚拟 ASIO 驱动'), findsOneWidget);
+      expect(find.text('驱动状态'), findsOneWidget);
+      expect(find.text('DAW 状态'), findsNothing);
+
+      // 回普通管线：ASIO 残留对降为 VAIO（无 ASIO 选项可选）。
+      model.setModeCategory(AudioModes.categoryPipeline);
+      await tester.pumpAndSettle();
+      expect(model.pipelineInput, AudioModes.inputVaio);
+      expect(model.pipelineOutput, AudioModes.outputVaio);
+      expect(find.text('输入端'), findsOneWidget);
     });
   }, skip: !PlatformProfile.isWindows ? 'ADR-009 paradigms UI is Windows only' : null);
 }
