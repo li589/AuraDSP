@@ -1593,6 +1593,20 @@ extension AudioModesState on AppModel {
       );
       asioDriverChannels =
           (ch != null && const {2, 4, 6, 8}.contains(ch)) ? ch : 2;
+      // S3：汇后端端点以 config 为真相、注册表为驱动消费面——
+      // 不一致时把 config 值推回注册表（覆盖新装/还原/手改注册
+      // 表的漂移），驱动下次 Open 即按指定端点打开。
+      final regEp = registry.readString(
+        r'HKCU\SOFTWARE\AuraDSP\AsioDriver',
+        'RenderEndpoint',
+      );
+      if ((regEp ?? '') != config.asioRenderEndpoint) {
+        registry.writeString(
+          r'HKCU\SOFTWARE\AuraDSP\AsioDriver',
+          'RenderEndpoint',
+          config.asioRenderEndpoint,
+        );
+      }
     } catch (e, st) {
       swallow(e, st);
       asioDriverInstalled = false;
@@ -1614,6 +1628,22 @@ extension AudioModesState on AppModel {
       asioDriverChannels = ch;
       _notifyUi();
     }
+    return ok;
+  }
+
+  /// 设置虚拟 ASIO 汇的后端渲染端点（S3）。[endpointId] 为端点
+  /// id（'' = 跟随系统默认）。config 落盘 + 注册表同步写（驱动汇
+  /// 下次 Open 时消费；DAW 正在运行时需重连才切换）。返回注册表
+  /// 写入是否成功（config 本身恒已更新）。
+  bool setAsioRenderEndpoint(String endpointId) {
+    config.asioRenderEndpoint = endpointId;
+    final ok = registry.writeString(
+      r'HKCU\SOFTWARE\AuraDSP\AsioDriver',
+      'RenderEndpoint',
+      endpointId,
+    );
+    persistRoutingChange();
+    _notifyUi();
     return ok;
   }
 

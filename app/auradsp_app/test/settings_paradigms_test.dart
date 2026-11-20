@@ -153,6 +153,10 @@ void main() {
       // （档位行与驱动卡共用同一控件，两处在场）。
       expect(find.text('输入通道'), findsOneWidget);
       expect(find.text('驱动声道数'), findsWidgets);
+      // S3：后端输出端点下拉在场，缺省选中「跟随系统默认」。
+      expect(find.text('物理输出'), findsOneWidget);
+      expect(find.text('跟随系统默认'), findsOneWidget);
+      expect(model.asioRenderEndpoint, isEmpty);
 
       // 回普通管线：ASIO 残留对降为 VAIO（无 ASIO 选项可选）。
       model.setModeCategory(AudioModes.categoryPipeline);

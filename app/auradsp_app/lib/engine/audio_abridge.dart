@@ -87,7 +87,10 @@ class AuraAsioBridge implements AudioBridgeCommon {
   int stop() => core.stop();
 
   @override
-  Map<String, dynamic>? status() => core.statusJson(2048);
+  // cap 4096（S3）：asiostatus 增 daw* 遥测转读字段（DAW 在场/
+  // 已处理帧/峰值/汇端点），2048 在长驱动名/长端点 id 下会溢出
+  // 致整帧状态丢失，放宽一档。
+  Map<String, dynamic>? status() => core.statusJson(4096);
 
   @override
   int setParam(String id, {required bool isFloat, required double value}) =>

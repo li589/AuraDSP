@@ -1,5 +1,6 @@
 // AuraAsioWasapiSink.cpp — AuraDSP 虚拟 ASIO 驱动 WASAPI 直通输出实现
 #include "AuraAsioWasapiSink.h"
+#include "AsioDriverShared.h"
 
 #include <cstring>
 #include <algorithm>
@@ -24,10 +25,37 @@ bool AuraAsioWasapiSink::Open() {
         return false;
     }
 
-    hr = m_pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &m_pDevice);
-    if (FAILED(hr) || !m_pDevice) {
-        Close();
-        return false;
+    // S3（ASIO 模式重构）：汇端点先认 App 经注册表指定的端点 id
+    // （AsioDriver\RenderEndpoint），失效/缺失才回落系统默认端点。
+    // 此前写死 GetDefaultAudioEndpoint——宾机默认端点恰为 AuraVAIO
+    // 虚拟设备时，处理完的声音渲染进无人转送的虚拟端点，REAPER
+    // 全程无声（2026-11-20 定罪）。
+    {
+        wchar_t idBuf[256] = {0};
+        DWORD idBytes = sizeof(idBuf);
+        m_usedConfiguredEndpoint = false;
+        if (RegGetValueW(HKEY_CURRENT_USER, ASIO_DRIVER_REG_KEY,
+                         ASIO_DRIVER_REG_RENDER_ENDPOINT, RRF_RT_REG_SZ,
+                         nullptr, idBuf, &idBytes) == ERROR_SUCCESS &&
+            idBuf[0] != L'\0') {
+            if (SUCCEEDED(m_pEnumerator->GetDevice(idBuf, &m_pDevice)) &&
+                m_pDevice) {
+                m_usedConfiguredEndpoint = true;
+            }
+        }
+        if (!m_pDevice) {
+            hr = m_pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia,
+                                                        &m_pDevice);
+            if (FAILED(hr) || !m_pDevice) {
+                Close();
+                return false;
+            }
+        }
+        LPWSTR idRaw = nullptr;
+        if (SUCCEEDED(m_pDevice->GetId(&idRaw)) && idRaw) {
+            m_endpointId = idRaw;
+            CoTaskMemFree(idRaw);
+        }
     }
 
     hr = m_pDevice->Activate(
@@ -56,6 +84,16 @@ bool AuraAsioWasapiSink::Open() {
         m_isFloat = (pExt->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT);
     } else {
         m_isFloat = false;
+    }
+    // 有效位深：extensible 格式以 ValidBits 为准（24-in-32 容器时
+    // wBitsPerSample=32 而有效仅 24，转换须按 24 缩放后左移对齐）。
+    m_validBitsPerSample = m_bitsPerSample;
+    if (pMixFormat->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
+        auto* pExt = reinterpret_cast<WAVEFORMATEXTENSIBLE*>(pMixFormat);
+        if (pExt->Samples.wValidBitsPerSample > 0 &&
+            pExt->Samples.wValidBitsPerSample < m_bitsPerSample) {
+            m_validBitsPerSample = pExt->Samples.wValidBitsPerSample;
+        }
     }
 
     // 默认开 20ms 缓冲（200,000 reference time units, 100ns 进制）
@@ -125,6 +163,8 @@ void AuraAsioWasapiSink::Close() {
         m_pEnumerator = nullptr;
     }
     m_open = false;
+    m_endpointId.clear();
+    m_usedConfiguredEndpoint = false;
     m_fifoRead = 0;
     m_fifoWrite = 0;
     m_fifoCount = 0;
@@ -220,7 +260,49 @@ void AuraAsioWasapiSink::DrainToWasapi() {
                 dst[i * m_targetChannels + c] = 0;
             }
         }
+    } else if (m_bitsPerSample == 24 || m_bitsPerSample == 32) {
+        // S3 格式补全：24 位打包 / 32 位整数（含 24-in-32）真转换。
+        // 此前落入 memset 清零分支——端点为 24/32 位整数格式时汇
+        // 输出恒为静音（宾机多个 Voicemeeter 端点即 24 位，潜伏
+        // 第二雷，2026-11-20 定罪时一并查出）。
+        // 口径：按有效位深缩放（2^(valid-1)-1），再左移
+        // (容器-有效) 位对齐（24-in-32 为左对齐），小端写出。
+        const int containerBytes = m_bitsPerSample / 8;
+        const int validBits =
+            (m_validBitsPerSample > 0 && m_validBitsPerSample <= m_bitsPerSample)
+                ? m_validBitsPerSample
+                : m_bitsPerSample;
+        const int shift = m_bitsPerSample - validBits;
+        const double scale =
+            (double)((validBits >= 32) ? 2147483647LL
+                                       : ((1LL << (validBits - 1)) - 1));
+        for (UINT32 i = 0; i < framesToWrite; ++i) {
+            float L = m_fifo[m_fifoRead * 2 + 0];
+            float R = m_fifo[m_fifoRead * 2 + 1];
+            m_fifoRead = (m_fifoRead + 1) % kFifoCapacity;
+            m_fifoCount--;
+
+            if (L > 1.0f) L = 1.0f; else if (L < -1.0f) L = -1.0f;
+            if (R > 1.0f) R = 1.0f; else if (R < -1.0f) R = -1.0f;
+
+            const float vals[2] = {L, R};
+            for (int c = 0; c < m_targetChannels; ++c) {
+                const float v = (c < 2) ? vals[c] : 0.0f;
+                // double 乘法：float 表示不了 2^31-1，满幅会溢出成
+                // 负满幅单点爆音。
+                int64_t s = (int64_t)((double)v * scale);
+                s <<= shift;
+                uint64_t u = (uint64_t)s;
+                BYTE* dst = pData + ((size_t)i * m_targetChannels + c) *
+                                        (size_t)containerBytes;
+                for (int b = 0; b < containerBytes; ++b) {
+                    dst[b] = (BYTE)((u >> (8 * b)) & 0xFF);
+                }
+            }
+        }
     } else {
+        // 未知整数格式（真实混音格式不会落此）：保持旧静音兜底，
+        // 不写坏数据。
         memset(pData, 0, (size_t)framesToWrite * m_targetChannels * (m_bitsPerSample / 8));
         m_fifoRead = (m_fifoRead + framesToWrite) % kFifoCapacity;
         m_fifoCount -= framesToWrite;

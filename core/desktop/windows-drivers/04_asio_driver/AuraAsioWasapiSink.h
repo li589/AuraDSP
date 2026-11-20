@@ -12,6 +12,7 @@
 #include <audioclient.h>
 
 #include <vector>
+#include <string>
 #include <cstdint>
 
 class AuraAsioWasapiSink {
@@ -29,6 +30,10 @@ public:
     double GetTargetSampleRate() const { return m_targetSampleRate; }
     int GetTargetChannels() const { return m_targetChannels; }
     uint64_t GetTotalFramesRendered() const { return m_totalFramesRendered; }
+    // S3（ASIO 模式重构）：汇实际生效端点的身份与格式，供遥测发布。
+    int GetValidBitsPerSample() const { return m_validBitsPerSample; }
+    const wchar_t* GetEndpointId() const { return m_endpointId.c_str(); }
+    bool UsedConfiguredEndpoint() const { return m_usedConfiguredEndpoint; }
 
 private:
     void DrainToWasapi();
@@ -42,7 +47,10 @@ private:
     double m_targetSampleRate = 48000.0;
     int m_targetChannels = 2;
     bool m_isFloat = true;
-    int m_bitsPerSample = 32;
+    int m_bitsPerSample = 32;      // 容器位深（wBitsPerSample）
+    int m_validBitsPerSample = 32; // 有效位深（extensible 的 ValidBits；24-in-32 时为 24）
+    std::wstring m_endpointId;     // 实际生效端点 id（Open 时写定）
+    bool m_usedConfiguredEndpoint = false; // true = 注册表指定端点生效
     UINT32 m_bufferFrames = 0;
 
     // 重采样相位累加器

@@ -350,6 +350,7 @@ class AppModel extends ChangeNotifier {
   String get pipelineInput => config.pipelineInput;
   String get pipelineOutput => config.pipelineOutput;
   String get asioFlavor => config.asioFlavor;
+  String get asioRenderEndpoint => config.asioRenderEndpoint;
   String get pipelineInputDevice => config.pipelineInputDevice;
   String get pipelineOutputDevice => config.pipelineOutputDevice;
   String get apoTargetEndpoint => config.apoTargetEndpoint;

@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstring>
 #include <new>
+#include <sddl.h>
 
 std::atomic<long> AuraAsioDriver::s_instanceCount{0};
 
@@ -498,6 +499,75 @@ ASIOError AuraAsioDriver::outputReady() {
     return ASE_OK;
 }
 
+// ---------------------------------------------------------------------------
+// S3 最小遥测：Global\AuraDSP_AsioDriverTelemetry 发布（契约见
+// AsioDriverShared.h）。SDDL 口径：交互用户全权（DAW 与 App 桥
+// 均为同一交互用户进程，无 audiodg/LocalService 参与，不照搬
+// APO 的 LS/LPAC 段）。
+// ---------------------------------------------------------------------------
+void AuraAsioDriver::OpenTelemetry() {
+    CloseTelemetry();
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            L"D:(A;;GA;;;WD)", SDDL_REVISION_1, &sd, nullptr)) {
+        return;
+    }
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = sd;
+    sa.bInheritHandle = FALSE;
+    HANDLE hMap = CreateFileMappingW(INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE,
+                                     0, ASIO_DRIVER_TELEMETRY_BYTES,
+                                     ASIO_DRIVER_TELEMETRY_NAME);
+    const bool preExisting = (GetLastError() == ERROR_ALREADY_EXISTS);
+    LocalFree(sd);
+    if (!hMap) return;
+    void* view = MapViewOfFile(hMap, FILE_MAP_WRITE, 0, 0,
+                               sizeof(AsioDriverTelemetryBlock));
+    if (!view) {
+        CloseHandle(hMap);
+        return;
+    }
+    m_hTelemetryMap = hMap;
+    m_telemetry = (AsioDriverTelemetryBlock*)view;
+    // 仅新建（或内容无效）时初始化；存活块只接管写者身份，避免
+    // 双实例互踩计数（APO-2 同口径）。
+    if (!preExisting || m_telemetry->magic != ASIO_DRIVER_TELEMETRY_MAGIC) {
+        memset(m_telemetry, 0, sizeof(AsioDriverTelemetryBlock));
+        m_telemetry->magic = ASIO_DRIVER_TELEMETRY_MAGIC;
+        m_telemetry->version = ASIO_DRIVER_TELEMETRY_VERSION;
+    }
+    m_telemetry->writerPid = GetCurrentProcessId();
+}
+
+void AuraAsioDriver::CloseTelemetry() {
+    if (m_telemetry) {
+        m_telemetry->running = 0;
+        UnmapViewOfFile(m_telemetry);
+        m_telemetry = nullptr;
+    }
+    if (m_hTelemetryMap) {
+        CloseHandle(m_hTelemetryMap);
+        m_hTelemetryMap = nullptr;
+    }
+}
+
+void AuraAsioDriver::PublishTelemetrySinkState() {
+    if (!m_telemetry) return;
+    m_telemetry->sampleRate = (uint32_t)(m_sampleRate + 0.5);
+    m_telemetry->channels = (uint32_t)m_channels;
+    m_telemetry->bufferSize = (uint32_t)m_bufferSize;
+    m_telemetry->sinkOpen = m_wasapiSink.IsOpen() ? 1u : 0u;
+    m_telemetry->sinkRate = (uint32_t)(m_wasapiSink.GetTargetSampleRate() + 0.5);
+    m_telemetry->sinkChannels = (uint32_t)m_wasapiSink.GetTargetChannels();
+    m_telemetry->sinkBits = (uint32_t)m_wasapiSink.GetValidBitsPerSample();
+    m_telemetry->sinkUsedConfigured =
+        m_wasapiSink.UsedConfiguredEndpoint() ? 1u : 0u;
+    wcsncpy_s(m_telemetry->sinkEndpointId,
+              m_wasapiSink.GetEndpointId(), _TRUNCATE);
+    m_telemetry->running = 1;
+}
+
 ASIOError AuraAsioDriver::start() {
     if (!m_buffersAllocated) return ASE_InvalidMode;
     if (m_started) return ASE_OK;
@@ -507,6 +577,8 @@ ASIOError AuraAsioDriver::start() {
 
     m_hStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!m_hStopEvent) return ASE_HWMalfunction;
+
+    OpenTelemetry();
 
     m_hThread = CreateThread(nullptr, 0, AudioPumpThreadProc, this, 0, nullptr);
     if (!m_hThread) {
@@ -536,6 +608,7 @@ ASIOError AuraAsioDriver::stop() {
         CloseHandle(m_hStopEvent);
         m_hStopEvent = nullptr;
     }
+    CloseTelemetry();
     return ASE_OK;
 }
 
@@ -557,6 +630,7 @@ DWORD AuraAsioDriver::PumpLoop() {
     HANDLE hMmcss = AvSetMmThreadCharacteristicsW(L"Pro Audio", &taskIndex);
 
     m_wasapiSink.Open();
+    PublishTelemetrySinkState();
 
     LARGE_INTEGER qpcFreq;
     QueryPerformanceFrequency(&qpcFreq);
@@ -580,6 +654,7 @@ DWORD AuraAsioDriver::PumpLoop() {
         const long ch = m_channels;
         const long playIndex = 1 - currentToggle;
 
+        float telePeakIn = 0.0f, telePeakOut = 0.0f;
         if (m_proc && m_interleavedIn && m_interleavedOut && m_foldL && m_foldR) {
             // 按通道收集 DAW 输出块，交织进 m_interleavedIn（缺缓冲的通道补零）
             for (long c = 0; c < ch; ++c) {
@@ -632,6 +707,28 @@ DWORD AuraAsioDriver::PumpLoop() {
                     }
                 }
             }
+
+            // S3 遥测峰值：入 = DAW 原始块 ch0/1，出 = 处理后立体声折。
+            for (long i = 0; i < m_bufferSize; ++i) {
+                const float a0 = std::abs(m_interleavedIn[i * ch + 0]);
+                const float a1 =
+                    (ch > 1) ? std::abs(m_interleavedIn[i * ch + 1]) : a0;
+                if (a0 > telePeakIn) telePeakIn = a0;
+                if (a1 > telePeakIn) telePeakIn = a1;
+                const float o0 = std::abs(m_foldL[i]);
+                const float o1 = std::abs(m_foldR[i]);
+                if (o0 > telePeakOut) telePeakOut = o0;
+                if (o1 > telePeakOut) telePeakOut = o1;
+            }
+        }
+
+        // S3 遥测逐块发布（共享内存普通写，泵线程零额外同步）。
+        if (m_telemetry) {
+            m_telemetry->heartbeat++;
+            m_telemetry->processedFrames = (uint64_t)m_samplePosition;
+            m_telemetry->peakIn = telePeakIn;
+            m_telemetry->peakOut = telePeakOut;
+            m_telemetry->updateSeq++;
         }
 
         // 通知 DAW：消费输入/填充输出半区
@@ -681,6 +778,7 @@ DWORD AuraAsioDriver::PumpLoop() {
         }
     }
 
+    if (m_telemetry) m_telemetry->running = 0;
     m_wasapiSink.Close();
 
     if (hMmcss) AvRevertMmThreadCharacteristics(hMmcss);

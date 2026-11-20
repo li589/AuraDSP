@@ -111,6 +111,8 @@ void main() {
           'pipelineOutput': 'asio_client',
           // ASIO 重构 S1 新增键：默认 'client'，哨兵取非默认 'virtual'。
           'asioFlavor': 'virtual',
+          // S3 新增键：默认 ''，哨兵取一个端点 id 形态值。
+          'asioRenderEndpoint': '{0.0.0.00000000}.{sentinel-endpoint}',
           'pipelineInputDevice': 'sentinel-in-device',
           'pipelineOutputDevice': 'sentinel-out-device',
           'pipelineInputEnabled': false,

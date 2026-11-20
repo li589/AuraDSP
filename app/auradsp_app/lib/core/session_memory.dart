@@ -72,6 +72,7 @@ abstract final class SessionMemory {
         'pipelineInput': m.pipelineInput,
         'pipelineOutput': m.pipelineOutput,
         'asioFlavor': m.config.asioFlavor,
+        'asioRenderEndpoint': m.config.asioRenderEndpoint,
         'pipelineInputDevice': m.pipelineInputDevice,
         'pipelineOutputDevice': m.pipelineOutputDevice,
         'pipelineInputEnabled': m.pipelineInputEnabled,
@@ -184,6 +185,9 @@ abstract final class SessionMemory {
       }
       if (session['asioFlavor'] is String) {
         m.config.asioFlavor = session['asioFlavor'] as String;
+      }
+      if (session['asioRenderEndpoint'] is String) {
+        m.config.asioRenderEndpoint = session['asioRenderEndpoint'] as String;
       }
       // ASIO 模式重构 S1：旧会话（管线类别 + ASIO 管线对）恢复后
       // 统一提升为 ASIO 范式，与 config 加载同口径（migrateParadigm）。

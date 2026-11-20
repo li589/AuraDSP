@@ -19,6 +19,7 @@
 #include "PluginBridge.h"
 #include "VizSilence.h"
 #include "../../04_asio_client/AsioHost.h"
+#include "AsioDriverShared.h"  // 虚拟 ASIO 驱动遥测契约（S3）
 #include "../../02_voicemeeter_client/VmPumpCore.h"  // TryLoadEngine / FillTestSignal / FnEng*
 
 #include <cstdio>
@@ -571,6 +572,97 @@ int asio_stop() {
     });
 }
 
+// ---------------------------------------------------------------------------
+// S3 最小遥测转读：虚拟 ASIO 驱动（DAW 进程内实例）发布的
+// Global\AuraDSP_AsioDriverTelemetry 块 → asiostatus 的 daw* 字段。
+// 活跃判定：块有效且 running=1，且 heartbeat 在最近数次 status
+// 轮询内推进过（status 约 1Hz；容忍 3 次未推进防抖）。块缺失/
+// 无效时 dawSeen=0，App 回落旧口径。
+// ---------------------------------------------------------------------------
+struct DawTelemetryView {
+    bool seen = false;
+    bool active = false;
+    uint64_t frames = 0;
+    float peakIn = 0.0f;
+    float peakOut = 0.0f;
+    uint32_t sr = 0;
+    uint32_t ch = 0;
+    uint32_t sinkBits = 0;
+    uint32_t sinkRate = 0;
+    bool sinkConfigured = false;
+    char sinkEndpointUtf8[512] = {0};
+};
+
+static const AsioDriverTelemetryBlock* DawTelemetryMap() {
+    static HANDLE hMap = nullptr;
+    static const AsioDriverTelemetryBlock* view = nullptr;
+    if (view) {
+        if (view->magic == ASIO_DRIVER_TELEMETRY_MAGIC) return view;
+        // 块内容失效（写者退出后内存被回收/重建）：拆掉重开。
+        UnmapViewOfFile(view);
+        view = nullptr;
+        CloseHandle(hMap);
+        hMap = nullptr;
+    }
+    hMap = OpenFileMappingW(FILE_MAP_READ, FALSE, ASIO_DRIVER_TELEMETRY_NAME);
+    if (!hMap) return nullptr;
+    view = (const AsioDriverTelemetryBlock*)MapViewOfFile(
+        hMap, FILE_MAP_READ, 0, 0, sizeof(AsioDriverTelemetryBlock));
+    if (!view) {
+        CloseHandle(hMap);
+        hMap = nullptr;
+        return nullptr;
+    }
+    if (view->magic != ASIO_DRIVER_TELEMETRY_MAGIC ||
+        view->version != ASIO_DRIVER_TELEMETRY_VERSION) {
+        UnmapViewOfFile(view);
+        view = nullptr;
+        CloseHandle(hMap);
+        hMap = nullptr;
+        return nullptr;
+    }
+    return view;
+}
+
+static DawTelemetryView ReadDawTelemetry() {
+    DawTelemetryView v;
+    static long lastHeartbeat = 0;
+    static int stalePolls = 0;
+    const AsioDriverTelemetryBlock* b = DawTelemetryMap();
+    if (!b) {
+        stalePolls = 0;
+        lastHeartbeat = 0;
+        return v;
+    }
+    v.seen = true;
+    v.frames = b->processedFrames;
+    v.peakIn = b->peakIn;
+    v.peakOut = b->peakOut;
+    v.sr = b->sampleRate;
+    v.ch = b->channels;
+    v.sinkBits = b->sinkBits;
+    v.sinkRate = b->sinkRate;
+    v.sinkConfigured = b->sinkUsedConfigured != 0;
+    char esc[512] = {0};
+    WideCharToMultiByte(CP_UTF8, 0, b->sinkEndpointId, -1, esc, sizeof(esc),
+                        nullptr, nullptr);
+    EscapeJsonA(esc, v.sinkEndpointUtf8, sizeof(v.sinkEndpointUtf8));
+    const long hb = b->heartbeat;
+    if (b->running == 1) {
+        if (hb != lastHeartbeat) {
+            lastHeartbeat = hb;
+            stalePolls = 0;
+        } else {
+            ++stalePolls;
+        }
+        v.active = stalePolls <= 3;
+    } else {
+        lastHeartbeat = hb;
+        stalePolls = 0;
+    }
+    return v;
+}
+
 int asio_status(char* out, int cap) {
     if (!out || cap <= 0) return -1;
     LARGE_INTEGER qpf, qnow;
@@ -600,6 +692,7 @@ int asio_status(char* out, int cap) {
     EscapeJsonA(g_b.driverUtf8, drvEsc, sizeof(drvEsc));
     char noteEsc[512] = {0};
     EscapeJsonA(g_b.note, noteEsc, sizeof(noteEsc));
+    const DawTelemetryView daw = ReadDawTelemetry();
     const int n = snprintf(
         out, (size_t)cap,
         "{\"running\":%s,\"switches\":%llu,\"sr\":%.1f,\"nbs\":%ld,"
@@ -610,7 +703,11 @@ int asio_status(char* out, int cap) {
         "\"paramsApplied\":%d,\"paramsFailed\":%d,"
         "\"resetPending\":%d,\"latenciesChanged\":%d,\"dropouts\":%lu,"
         "\"gated\":%d,\"idleMs\":%lld,"
-        "\"engine\":\"%s\",\"engineOk\":%s}",
+        "\"engine\":\"%s\",\"engineOk\":%s,"
+        "\"dawSeen\":%d,\"dawActive\":%d,\"dawFrames\":%llu,"
+        "\"dawPeakIn\":%.6f,\"dawPeakOut\":%.6f,\"dawSr\":%u,\"dawCh\":%u,"
+        "\"dawSinkBits\":%u,\"dawSinkRate\":%u,\"dawSinkConfigured\":%d,"
+        "\"dawSinkEndpoint\":\"%s\"}",
         InterlockedCompareExchange(&g_b.running, 0, 0) ? "true" : "false",
         (unsigned long long)sw, g_b.sr, g_b.nbs,
         drvEsc, g_b.outPair, g_b.ioCh,
@@ -625,7 +722,12 @@ int asio_status(char* out, int cap) {
         g_b.dropouts,
         g_b.gate.enabled && g_b.gate.gated ? 1 : 0, g_b.gate.IdleMs(),
         eng,
-        (g_b.engine && g_b.process) ? "true" : "false");
+        (g_b.engine && g_b.process) ? "true" : "false",
+        daw.seen ? 1 : 0, daw.active ? 1 : 0,
+        (unsigned long long)daw.frames,
+        (double)daw.peakIn, (double)daw.peakOut, daw.sr, daw.ch,
+        daw.sinkBits, daw.sinkRate, daw.sinkConfigured ? 1 : 0,
+        daw.sinkEndpointUtf8);
     return (n >= 0 && n < cap) ? n : -1;
 }
 

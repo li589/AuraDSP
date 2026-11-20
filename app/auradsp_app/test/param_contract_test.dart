@@ -99,6 +99,7 @@ const Set<String> kNoEngineWriteSpecIds = {
   'routing.asioDriver', // ASIO 驱动，ConfigManager 域
   'routing.asioOutPair', // ASIO 输出对，ConfigManager 域
   'routing.asioFlavor', // ASIO 子形态，ConfigManager 域
+  'routing.asioRenderEndpoint', // 虚拟 ASIO 汇后端端点，ConfigManager 域
   'routing.monitorMirroring', // 监视器镜像，ConfigManager 域
   // 注：routing.pipelineInputDevice / pipelineOutputDevice 已于
   // 全接线 W3（2026-11-10）移出本集——其 setter 经
@@ -131,6 +132,7 @@ const Set<String> kNonRoundtripSpecIds = {
   'routing.pipelineInput', // noop setter：同上
   'routing.pipelineOutput', // noop setter：同上
   'routing.asioFlavor', // noop setter：同上
+  'routing.asioRenderEndpoint', // noop setter：同上
   // 可视化枚举型 spec（2026-10-31）：setter 走 fromId() 归一，未知探针值
   // 会被安全回落到默认枚举，探针无法原样读回（业务上正是期望的容错行为）。
   'visualizer.style', 'visualizer.colorTheme', 'visualizer.lyricsSource',
@@ -147,7 +149,7 @@ const Set<String> kUiOnlySpecIds = {
   // 注：bass.mode 曾在此登记为 UI 专属——P-032 起引擎新增了同名状态载体
   // 参数（纯 UI 模式选择的状态回读通道，不参与 DSP 计算），故已移出。
   'routing.apoTargetEndpoint', 'routing.asioBufSize',
-  'routing.asioDriver', 'routing.asioFlavor', 'routing.asioOutPair', 'routing.attachmentMode',
+  'routing.asioDriver', 'routing.asioFlavor', 'routing.asioRenderEndpoint', 'routing.asioOutPair', 'routing.attachmentMode',
   'routing.modeCategory', 'routing.monitorMirroring', 'routing.pipelineInput',
   'routing.pipelineInputDevice', 'routing.pipelineInputEnabled',
   'routing.pipelineOutput', 'routing.pipelineOutputDevice',

@@ -54,6 +54,7 @@ class AppConfig {
   String pipelineInput; // 'asio_driver' | 'vaio' | 'wasapi'
   String pipelineOutput; // 'wasapi' | 'vaio' | 'asio_client'
   String asioFlavor; // ASIO 范式子形态：'virtual' | 'client'（2026-11-20 重构）
+  String asioRenderEndpoint; // 虚拟 ASIO 汇后端端点 id（''=跟随系统默认；S3）
   String pipelineInputDevice; // WASAPI 采集端点
   String pipelineOutputDevice; // WASAPI 渲染端点
   bool pipelineInputEnabled; // 输入端启用开关
@@ -127,6 +128,7 @@ class AppConfig {
     String? pipelineInput,
     String? pipelineOutput,
     String? asioFlavor,
+    this.asioRenderEndpoint = '',
     this.pipelineInputDevice = '',
     this.pipelineOutputDevice = '',
     this.pipelineInputEnabled = true,
@@ -212,6 +214,7 @@ class AppConfig {
       pipelineInput: rawPipeIn,
       pipelineOutput: rawPipeOut,
       asioFlavor: audio['asioFlavor'] as String?,
+      asioRenderEndpoint: (audio['asioRenderEndpoint'] as String?) ?? '',
       pipelineInputDevice: (audio['pipelineInputDevice'] as String?) ?? '',
       pipelineOutputDevice: (audio['pipelineOutputDevice'] as String?) ?? '',
       pipelineInputEnabled: (audio['pipelineInputEnabled'] as bool?) ?? true,
@@ -305,6 +308,7 @@ class AppConfig {
           'pipelineInput': pipelineInput,
           'pipelineOutput': pipelineOutput,
           'asioFlavor': asioFlavor,
+          'asioRenderEndpoint': asioRenderEndpoint,
           'pipelineInputDevice': pipelineInputDevice,
           'pipelineOutputDevice': pipelineOutputDevice,
           'pipelineInputEnabled': pipelineInputEnabled,

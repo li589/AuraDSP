@@ -73,6 +73,7 @@ add_library(auraasio_bridge SHARED
     "${ASIOBRIDGE}/AsioBridge.def"
 )
 target_include_directories(auraasio_bridge PRIVATE "${VMCLIENT}" "${ASIODIR}" "${ASIOBRIDGE}" "${BRIDGECOMMON}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/04_asio_driver"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
 target_link_libraries(auraasio_bridge PRIVATE auraasio_host ole32 version)
 target_compile_options(auraasio_bridge PRIVATE /utf-8 /W1 /EHsc)

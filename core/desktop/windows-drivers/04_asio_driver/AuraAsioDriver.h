@@ -23,6 +23,7 @@
 
 #include "AuraAsioWasapiSink.h"
 #include "AuraAsioEngineLoader.h"
+#include "AsioDriverShared.h"
 
 class AuraAsioDriver : public IASIO {
 public:
@@ -73,6 +74,14 @@ private:
     static DWORD WINAPI AudioPumpThreadProc(LPVOID param);
     DWORD PumpLoop();
     void LoadConfiguredChannels();  // 启动前从注册表读取档位（默认 2）
+
+    // S3 最小遥测（AsioDriverShared.h）：泵运行期发布 DAW 在场/
+    // 已处理帧/峰值/汇生效端点至 Global 共享块，桥转读给 App。
+    void OpenTelemetry();
+    void CloseTelemetry();
+    void PublishTelemetrySinkState();
+    HANDLE m_hTelemetryMap = nullptr;
+    AsioDriverTelemetryBlock* m_telemetry = nullptr;
 
     std::atomic<long> m_refCount{1};
 

@@ -1583,5 +1583,8 @@
   "apoChannelsGlobal": "System APO mode uses this same global channel setup on every attached endpoint",
   "apoFillFill": "Fill",
   "apoFillGated": "Gated",
-  "asioChainDisabledNotice": "ASIO chain disabled (processing paused, output silent)"
+  "asioChainDisabledNotice": "ASIO chain disabled (processing paused, output silent)",
+  "asioRenderFollowDefault": "Follow system default",
+  "asioSinkActual": "Active endpoint",
+  "asioSinkDefaultTag": "system default"
 }

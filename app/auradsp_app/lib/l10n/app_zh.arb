@@ -1706,5 +1706,8 @@
   "apoChannelsGlobal": "System APO 模式下同样使用这份全局声道设置（所有已附加端点一致）",
   "apoFillFill": "铺满",
   "apoFillGated": "门控",
-  "asioChainDisabledNotice": "ASIO 链路已停用（处理已暂停，处于静音状态）"
+  "asioChainDisabledNotice": "ASIO 链路已停用（处理已暂停，处于静音状态）",
+  "asioRenderFollowDefault": "跟随系统默认",
+  "asioSinkActual": "实际生效端点",
+  "asioSinkDefaultTag": "系统默认"
 }
