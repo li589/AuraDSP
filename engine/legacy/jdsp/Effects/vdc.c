@@ -44,12 +44,69 @@ int get_doubleVDC(char *val, double *F)
 	char *eptr;
 	errno = 0;
 	double f = strtod(val, &eptr);
-	if (eptr != val && errno != ERANGE)
+	/* [PATCHED-AuraDSP P-051] 拒绝非有限值：strtod 会把 "nan"/"inf" 文本
+	 * 解析成 NaN/Inf 且不置 ERANGE，原实现照单全收 → 非有限系数进入
+	 * SOS 链毒化输出。溢出仍由 ERANGE 拒绝，下溢同理。 */
+	if (eptr != val && errno != ERANGE && isfinite(f))
 	{
 		*F = f;
 		return 1;
 	}
 	return 0;
+}
+/* [PATCHED-AuraDSP P-051] 按节解析辅助：扫描严格限制在 [start, end) 内，
+ * 恰好读满 numberCount 个数字才算成功。原实现两节共用一个由 SR_48000
+ * 起数到串尾的个数：44.1 节偏短时扫描越节串入 48k 节数字、甚至越过
+ * 结尾 NUL 越界读；个数非 5 倍数时尾组还会写出 df[sosCount] 堆溢出。 */
+static int DDCParseSection(char *start, char *end, DirectForm2 *df, int numberCount)
+{
+	double number;
+	int counter = 0;
+	int i = 0;
+	int b0b1b2a1a2 = 0;
+	char *p = start;
+	while (counter < numberCount)
+	{
+		if (p >= end)
+			return 0;
+		if (get_doubleVDC(p, &number))
+		{
+			char *next;
+			double val = strtod(p, &next);
+			if (next > end)
+				return 0;
+			p = next;
+			counter++;
+			if (!b0b1b2a1a2)
+				df[i].b0 = val;
+			else if (b0b1b2a1a2 == 1)
+				df[i].b1 = val;
+			else if (b0b1b2a1a2 == 2)
+				df[i].b2 = val;
+			else if (b0b1b2a1a2 == 3)
+				df[i].a1 = -val;
+			else if (b0b1b2a1a2 == 4)
+			{
+				df[i].a2 = -val;
+				i++;
+			}
+			b0b1b2a1a2++;
+			if (b0b1b2a1a2 == 5)
+				b0b1b2a1a2 = 0;
+		}
+		else
+			p++;
+	}
+	return 1;
+}
+static int DDCCountNumbers(char *start, char *end)
+{
+	int n = 1;
+	char *q;
+	for (q = start; q < end; ++q)
+		if (*q == ',')
+			n++;
+	return n;
 }
 int DDCParser(char *DDCString, DirectForm2 **ptrdf441, DirectForm2 **ptrdf48)
 {
@@ -57,74 +114,41 @@ int DDCParser(char *DDCString, DirectForm2 **ptrdf441, DirectForm2 **ptrdf48)
 	char *fs48 = strstr(DDCString, "SR_48000");
 	if (!fs44_1 || !fs48)
 		return 0;
-	int numberCount = (countChars(fs48, ',') + 1);
-	int sosCount = numberCount / 5;
+	char *strEnd = DDCString + strlen(DDCString);
+	/* 两节各自的边界：起点 +9（跳过标记与分隔符），终点为另一节的标记
+	 * 起点（若在本节之后）或串尾。 */
+	char *sec44Start = fs44_1 + 9;
+	char *sec44End = (fs48 > fs44_1) ? fs48 : strEnd;
+	char *sec48Start = fs48 + 9;
+	char *sec48End = (fs44_1 > fs48) ? fs44_1 : strEnd;
+	if (sec44Start > sec44End || sec48Start > sec48End)
+		return 0;
+	/* [PATCHED-AuraDSP P-051] 个数按节内逗号各自推得：两节必须相等且
+	 * 为 5 的倍数（每节 SOS 恰 5 个系数），否则整份拒绝。合法文件
+	 * （两节等长、全有限数）解析结果与原实现一致。 */
+	int count44 = DDCCountNumbers(sec44Start, sec44End);
+	int count48 = DDCCountNumbers(sec48Start, sec48End);
+	if (count44 != count48 || count48 % 5 != 0)
+		return 0;
+	int sosCount = count48 / 5;
 	if (!sosCount)
 		return 0;
 	DirectForm2 *df441 = (DirectForm2*)malloc(sosCount * sizeof(DirectForm2));
 	DirectForm2 *df48 = (DirectForm2*)malloc(sosCount * sizeof(DirectForm2));
+	if (!df441 || !df48)
+	{
+		free(df441);
+		free(df48);
+		return 0;
+	}
 	memset(df441, 0, sosCount * sizeof(DirectForm2));
 	memset(df48, 0, sosCount * sizeof(DirectForm2));
-	double number;
-	int i = 0;
-	int counter = 0;
-	int b0b1b2a1a2 = 0;
-	char *startingPoint = fs44_1 + 9;
-	while (counter < numberCount)
+	if (!DDCParseSection(sec44Start, sec44End, df441, count44) ||
+		!DDCParseSection(sec48Start, sec48End, df48, count48))
 	{
-		if (get_doubleVDC(startingPoint, &number))
-		{
-			double val = strtod(startingPoint, &startingPoint);
-			counter++;
-			if (!b0b1b2a1a2)
-				df441[i].b0 = val;
-			else if (b0b1b2a1a2 == 1)
-				df441[i].b1 = val;
-			else if (b0b1b2a1a2 == 2)
-				df441[i].b2 = val;
-			else if (b0b1b2a1a2 == 3)
-				df441[i].a1 = -val;
-			else if (b0b1b2a1a2 == 4)
-			{
-				df441[i].a2 = -val;
-				i++;
-			}
-			b0b1b2a1a2++;
-			if (b0b1b2a1a2 == 5)
-				b0b1b2a1a2 = 0;
-		}
-		else
-			startingPoint++;
-	}
-	i = 0;
-	counter = 0;
-	b0b1b2a1a2 = 0;
-	startingPoint = fs48 + 9;
-	while (counter < numberCount)
-	{
-		if (get_doubleVDC(startingPoint, &number))
-		{
-			double val = strtod(startingPoint, &startingPoint);
-			counter++;
-			if (!b0b1b2a1a2)
-				df48[i].b0 = val;
-			else if (b0b1b2a1a2 == 1)
-				df48[i].b1 = val;
-			else if (b0b1b2a1a2 == 2)
-				df48[i].b2 = val;
-			else if (b0b1b2a1a2 == 3)
-				df48[i].a1 = -val;
-			else if (b0b1b2a1a2 == 4)
-			{
-				df48[i].a2 = -val;
-				i++;
-			}
-			b0b1b2a1a2++;
-			if (b0b1b2a1a2 == 5)
-				b0b1b2a1a2 = 0;
-		}
-		else
-			startingPoint++;
+		free(df441);
+		free(df48);
+		return 0;
 	}
 	*ptrdf441 = df441;
 	*ptrdf48 = df48;
@@ -228,11 +252,17 @@ int PeakingFilterResampler(DirectForm2 *inputIIR, double inFs, DirectForm2 **res
 		double bandwidth = ((asinh(((A0 - 1.0) * lingain) / num3) * num3) / omega) / 0.34657359027997264;
 		if (bandwidth > 98.8 - DBL_EPSILON)
 			bandwidth = 98.8;
+		/* [PATCHED-AuraDSP P-050] 按保留序压紧写入：原实现按原下标 i 存
+		 * cell、下方按 0..outSOSCount-1 读——被跳过的节不在尾部时，读到
+		 * 的是「含被跳节、丢末尾保留节」的错位集合（V-02）。压紧后读写
+		 * 下标一致；保留判据（centreFreq < outFs）不变。 */
 		if (centreFreq < outFs - DBL_EPSILON)
+		{
+			cell[0][outSOSCount] = magnitude[index];
+			cell[1][outSOSCount] = centreFreq;
+			cell[2][outSOSCount] = bandwidth;
 			outSOSCount++;
-		cell[0][i] = magnitude[index];
-		cell[1][i] = centreFreq;
-		cell[2][i] = bandwidth;
+		}
 	}
 	free(magnitude);
 	/* [PATCHED-AuraDSP P-017 B1-b] 原实现此处连续两次 malloc（第一次结果被

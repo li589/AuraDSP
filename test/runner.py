@@ -111,6 +111,9 @@ PLATFORM_ANY = {
     "smoke_liveprog_mc.py",
     "smoke_liveprog_mc_stress.py",
     "smoke_liveprog_mc_examples.py",
+    # DDC 解析/文件门回归（2026-11-20，V-02/V-03/V-04）：引擎 ctypes
+    # 活体 + 内嵌 C 直测，两平台可跑（产物/编译器缺失时内部 SKIP）。
+    "smoke_ddc_parser_guard.py",
 }
 
 # PLATFORM_LINUX（2026-11-01，测试补强轮）：与 PLATFORM_WINDOWS 对称的
@@ -596,6 +599,10 @@ def run_smoke_tests():
     # 交替 ddc.load 两份大 VDC + RT 连续 process。修复前 enable 落入
     # DDCStringParser 解析瞬窗即误拒；修复后控制侧同锁零误拒。
     "smoke_ddc_race.py",
+    # DDC 解析/文件门回归（2026-11-20 审查 V-02/V-03/V-04）：畸形 DDC
+    # （nan/inf、越节、个数不等、非 5 倍数）必须被拒；DDC 上限服从
+    # gate.maxFileMb；重采样跳节错位由内嵌 C 直测锁定（无编译器 SKIP）。
+    "smoke_ddc_parser_guard.py",
     # B1 liveprog 影子 VM 编译门禁（2026-10-24）：RT 连续 process 逐块
     # 计时 + UI 线程高频加载重脚本（~26ms 编译）/坏脚本/变增益脚本。
     # 修复前（持 jdsp_lock 原地编译）RT 每窗口被挡 ~26ms、总产出仅 ~400
