@@ -619,7 +619,12 @@ static auradsp_status set_ddc_load(auradsp_handle h, const void* value, uint32_t
     memcpy(pbuf, value, bytes);
     pbuf[bytes] = 0;
     auradsp_status st = AURADSP_OK;
-    char* content = read_text_file(h, pbuf, 4 * 1024 * 1024, &st);
+    /* V-04（2026-11-20 复核）：DDC 上限与 FileGate 统一——原写死 4MiB 与
+     * gate.maxFileMb 不一致（卷积器等路径均按 gate）。read_text_file 的
+     * max_bytes 是 long，钳到 2GiB-1 防 32 位 long 平台溢出。 */
+    const long long gateBytes = gate_file_bytes(h);
+    const long maxBytes = gateBytes > 2147483647LL ? 2147483647L : (long)gateBytes;
+    char* content = read_text_file(h, pbuf, maxBytes, &st);
     free(pbuf);
     if (!content) return st;
     const int rc = DDCStringParser(&h->jdsp, content);

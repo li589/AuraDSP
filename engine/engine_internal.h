@@ -922,6 +922,16 @@ void mx_upmix(auradsp_handle h, float* out, const float* stereo, int frames, int
 void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
                           int frames, bool skip_spatial = false);
 char* read_text_file(auradsp_handle h, const char* path, long max_bytes, auradsp_status* st);
+/* FileGate 文件体积上限（字节）：来自 gate.maxFileMb，兜底 64MiB。
+ * 注意兜底判据必须是 "> 0" 而不是 "> 1"——set_param 已把取值夹到 [1,4096]，
+ * 用 "> 1" 会把用户显式设置的 1MB 误判成"未设置"而回退到 64MB。
+ * 控制线程下发，create 时也会按当时的值生效。全部文件加载路径共用此
+ * 口径（原置于 engine_convolver.cpp，V-04 收编 DDC 入口时提升至此）。 */
+static inline long long gate_file_bytes(auradsp_handle h) {
+    const float mb = h->gate_max_file_mb.load(std::memory_order_relaxed);
+    const double v = (mb > 0.0f) ? (double)mb : 64.0;
+    return (long long)(v * 1024.0 * 1024.0);
+}
 void rebuild_hann(auradsp_handle h, int n);
 void shelf_process(auradsp_handle h, float* io, int frames);
 void shelf_recalc(auradsp_handle h);

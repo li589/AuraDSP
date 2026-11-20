@@ -129,15 +129,7 @@ void compute_ir_spectrum(auradsp_handle h, const float* data, size_t frames, int
 }
 
 
-/* FileGate 文件体积上限（字节）：来自 gate.maxFileMb，兜底 64MiB。
- * 注意兜底判据必须是 "> 0" 而不是 "> 1"——set_param 已把取值夹到 [1,4096]，
- * 用 "> 1" 会把用户显式设置的 1MB 误判成"未设置"而回退到 64MB。
- * 控制线程下发，create 时也会按当时的值生效。 */
-static inline long long gate_file_bytes(auradsp_handle h) {
-    const float mb = h->gate_max_file_mb.load(std::memory_order_relaxed);
-    const double v = (mb > 0.0f) ? (double)mb : 64.0;
-    return (long long)(v * 1024.0 * 1024.0);
-}
+/* gate_file_bytes 已提升至 engine_internal.h（FileGate 统一口径，见该处）。 */
 
 
 /* 重建汉宁窗。窗长必须**等于**实际 FFT 长度：取长窗的前 kN 个采样会只拿到
