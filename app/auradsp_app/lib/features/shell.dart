@@ -870,12 +870,14 @@ class _TopBar extends StatelessWidget {
                       ),
                     const SizedBox(width: AuraSpace.sm),
                     _IconAction(
+                      key: const ValueKey<String>('shell.topAction.theme'),
                       icon: Icons.palette_outlined,
                       tooltip: l.themeSwitchTip,
                       onTap: onCycleTheme,
                     ),
                     const SizedBox(width: AuraSpace.sm),
                     _IconAction(
+                      key: const ValueKey<String>('shell.topAction.settings'),
                       icon: Icons.settings_outlined,
                       tooltip: l.navSettings,
                       onTap: onOpenSettings,
@@ -891,12 +893,13 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-/// 32×32 的图标动作按钮：hover 有底、按下有缩放
+/// 图标动作按钮：视觉药丸 32×32；触屏命中区 48×48（R7）
 class _IconAction extends StatefulWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
   const _IconAction({
+    super.key,
     required this.icon,
     required this.tooltip,
     required this.onTap,
@@ -913,6 +916,8 @@ class _IconActionState extends State<_IconAction> {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    // R7：触屏命中区 48（视觉药丸仍 32）；指针保持 32 紧凑排布。
+    final hit = context.usesTouchInput ? 48.0 : 32.0;
     return Tooltip(
       message: widget.tooltip,
       child: MouseRegion(
@@ -923,7 +928,7 @@ class _IconActionState extends State<_IconAction> {
           _down = false;
         }),
         child: GestureDetector(
-          // opaque：32×32 整块可命中——透明底色（未 hover）时也必须能点
+          // opaque：整块命中区可点——透明底色（未 hover）时也必须能点
           behavior: HitTestBehavior.opaque,
           onTapDown: (_) => setState(() => _down = true),
           onTapUp: (_) => setState(() => _down = false),
@@ -932,21 +937,29 @@ class _IconActionState extends State<_IconAction> {
             DebugTrace.instance.tap('icon', widget.tooltip);
             widget.onTap();
           },
-          child: AnimatedScale(
-            duration: AuraDur.instant,
-            scale: _down ? 0.92 : 1.0,
-            child: AnimatedContainer(
-              duration: AuraDur.fast,
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: _hover ? hoverOn(p, alpha: 0.07) : Colors.transparent,
-                borderRadius: BorderRadius.circular(AuraRadius.sm),
-              ),
-              child: Icon(
-                widget.icon,
-                size: 18,
-                color: _hover ? p.text : p.textDim,
+          child: SizedBox(
+            width: hit,
+            height: hit,
+            child: Center(
+              child: AnimatedScale(
+                duration: AuraDur.instant,
+                scale: _down ? 0.92 : 1.0,
+                child: AnimatedContainer(
+                  duration: AuraDur.fast,
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: _hover
+                        ? hoverOn(p, alpha: 0.07)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(AuraRadius.sm),
+                  ),
+                  child: Icon(
+                    widget.icon,
+                    size: 18,
+                    color: _hover ? p.text : p.textDim,
+                  ),
+                ),
               ),
             ),
           ),

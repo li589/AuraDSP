@@ -438,6 +438,8 @@ class _InfoBadgeState extends State<InfoBadge> {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final isVisible = HelpVisibilityScope.isVisibleOf(context);
+    // R7：触屏按 Material 最小触控目标 48；指针沿用 15+4×2=23 的紧凑外衬。
+    final hit = context.usesTouchInput ? 48.0 : widget.size + AuraSpace.xs * 2;
 
     // 移动端淡出隐藏时若浮层仍在，安全关闭浮层
     if (!isVisible && _entry != null) {
@@ -497,26 +499,31 @@ class _InfoBadgeState extends State<InfoBadge> {
                     });
                   }
                 },
-                // 4px 透明外衬：视觉仍是 15，触屏命中扩展至 23~25px
-                child: Padding(
-                  padding: const EdgeInsets.all(AuraSpace.xs),
-                  child: Container(
-                    width: widget.size,
-                    height: widget.size,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: _hover
-                            ? p.accent
-                            : p.textDim.withValues(alpha: 0.55),
-                        width: 1.2,
+                // 命中区：指针 23（15 视觉 + 4×2 透明外衬）；触屏 48（R7 触控目标）。
+                // 触屏必须让布局盒本身达到 48——RenderBox 只在自己尺寸内命中，
+                // 溢出绘制出去的部分收不到点击，无法"只看不占位"。
+                child: SizedBox(
+                  width: hit,
+                  height: hit,
+                  child: Center(
+                    child: Container(
+                      width: widget.size,
+                      height: widget.size,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: _hover
+                              ? p.accent
+                              : p.textDim.withValues(alpha: 0.55),
+                          width: 1.2,
+                        ),
                       ),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        Icons.question_mark_rounded,
-                        size: widget.size * 0.65,
-                        color: _hover ? p.accent : p.textDim,
+                      child: Center(
+                        child: Icon(
+                          Icons.question_mark_rounded,
+                          size: widget.size * 0.65,
+                          color: _hover ? p.accent : p.textDim,
+                        ),
                       ),
                     ),
                   ),

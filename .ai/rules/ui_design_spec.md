@@ -124,3 +124,13 @@ AuraDSP 采用跨平台自适应响应系统：
 - **必须全部可见的等价控件**（页签、分段控件）窄屏用 `FittedBox(fit: BoxFit.scaleDown)` 等比缩小，不要藏进横向滚动。
 - **可折行的控件组**（视效 HUD、量程胶囊）窄屏用 `Wrap` 折行；禁止用 `SingleChildScrollView` 把主操作藏到视口外。
 - 降级允许压缩/截断次级文本，**不允许为了过测试隐藏主操作**。新增页面必须在 `test/narrow_pages_test.dart` 的 `_pageNames` 对应档位补 360 回归。
+
+---
+
+## 8. 触控目标（R7，2026-11-20）
+
+- **尺寸按输入能力判定，不按视口宽度**：`context.usesTouchInput` 为真时，交互控件命中区 ≥48×48；指针环境保持紧凑视觉尺寸。
+- 命中区变大**必须让布局盒真的到 48**：`RenderBox` 只在自己尺寸内命中，`OverflowBox`/负偏移画出去的部分收不到点击。做法是 `SizedBox(48) + Center(视觉件)`。
+- 已达标：`InfoBadge`（23↔48）、顶栏 `_IconAction`（32↔48）、底栏六项（60）。
+- 未达标（R7-b，需单独一轮）：`AuraChip`、`AuraDropdown` 触发器、效果卡开关等 28–32 高控件。
+- 回归在 `test/touch_target_test.dart`；新增可点控件请同步加断言（widget 测试默认平台是 android，断言顺序固定「先鼠标 → 再触屏」）。

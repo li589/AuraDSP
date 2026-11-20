@@ -17,6 +17,12 @@ String _read(String relPath) {
   throw StateError('找不到 $relPath（cwd=${Directory.current.path}）');
 }
 
+/// 源码契约按「去空白」匹配：`dart format` 会按行长自由折行，
+/// 逐字面量匹配会把一次纯格式化误判成行为回归（2026-11-20 P3 实测踩到）。
+/// 折行时格式化器还会补尾逗号（`f(a,)`），同样归一掉。
+String _squash(String src) =>
+    src.replaceAll(RegExp(r'\s+'), '').replaceAll(RegExp(r',\)'), ')');
+
 void main() {
   group('vendor 子序与真序拼合', () {
     test('默认序的 vendor 子序 = 11 级既定相对序', () {
@@ -63,14 +69,20 @@ void main() {
 
     test('任意交错的存档串规范化后钉死级恒居其位、vendor 子序保真', () {
       // 模拟旧存档：reverb 被拖到最前、loudness 第二、eq 与 tube 互换。
-      final legacy = 'reverb,loudness,eq,gate,comp,tube,filter,bass,dyneq,'
+      final legacy =
+          'reverb,loudness,eq,gate,comp,tube,filter,bass,dyneq,'
           'arbmag,convolver,ddc,liveprog,crossfeed,stereo,bassmono,haas,'
           'spatial,exciter,output';
       final normalized = trueChainOrderFrom(legacy);
       expect(normalized.length, 19);
       expect(normalized.sublist(0, 4), ['gate', 'filter', 'bassmono', 'dyneq']);
       expect(normalized.last, 'loudness');
-      expect(normalized.sublist(15), ['haas', 'spatial', 'exciter', 'loudness']);
+      expect(normalized.sublist(15), [
+        'haas',
+        'spatial',
+        'exciter',
+        'loudness',
+      ]);
       // vendor 子序按存档中的相对序：reverb 第一、eq 在 tube 之前。
       expect(vendorSubsequenceOf(normalized), [
         'reverb',
@@ -101,16 +113,20 @@ void main() {
 
     test('钉死/vendor 分类互斥且覆盖全部 19 级', () {
       for (final id in kDefaultCoreOrder) {
-        expect(isChainVendorStage(id) != isChainPinnedStage(id), isTrue,
-            reason: '$id 必须恰属一类');
+        expect(
+          isChainVendorStage(id) != isChainPinnedStage(id),
+          isTrue,
+          reason: '$id 必须恰属一类',
+        );
       }
     });
   });
 
   group('源码契约', () {
     test('信号流面板按真序拼合、无硬编码分桶残留', () {
-      final panel =
-          _read('app/auradsp_app/lib/features/chain/chain_scifi_flow_panel.dart');
+      final panel = _read(
+        'app/auradsp_app/lib/features/chain/chain_scifi_flow_panel.dart',
+      );
       expect(panel.contains('vendorSubsequenceOf(widget.order)'), isTrue);
       expect(panel.contains('kChainPinnedHead'), isTrue);
       expect(panel.contains('kChainPinnedTail'), isTrue);
@@ -120,14 +136,17 @@ void main() {
     });
 
     test('链卡展示走真序规范化、钉死级锁定、外部改序重同步', () {
-      final card =
-          _read('app/auradsp_app/lib/features/chain/chain_order_card.dart');
+      final card = _squash(
+        _read('app/auradsp_app/lib/features/chain/chain_order_card.dart'),
+      );
       expect(card.contains('trueChainOrderFrom'), isTrue);
       expect(card.contains('isChainPinnedStage'), isTrue);
       expect(card.contains('lock_outline_rounded'), isTrue);
       expect(card.contains('addListener(_onModelChanged)'), isTrue);
-      expect(card.contains('composeTrueChainOrder(vendorSubsequenceOf(_order))'),
-          isTrue);
+      expect(
+        card.contains('composeTrueChainOrder(vendorSubsequenceOf(_order))'),
+        isTrue,
+      );
     });
 
     test('setGraphOrder 改序后广播 UI 通知', () {
