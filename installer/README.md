@@ -14,8 +14,8 @@
 installer/
 ├── README.md                      # 本文档：发行与安装工程总纲
 ├── release.py                     # 统一发布编排（预检→构建→分档打包→交付归集；本轮不发布）
-├── packkit/                       # 打包工具链内核（平台无关内核 + windows 平台层，见 docs/07）
-├── tests/                         # packkit 内核单测（CI 同跑）
+├── packkit/                       # 打包工具链内核（平台无关内核 + windows/ + linux/ 平台层，见 docs/07）
+├── tests/                         # packkit 内核单测（windows 与 linux 两层，CI 同跑）
 ├── docs/                          # 详细架构与技术设计文档
 │   ├── 01_distribution_architecture.md   # 发行架构总纲与跨平台分发规范
 │   ├── 02_windows_installer_design.md     # 自研 Windows 安装程序设计方案
@@ -41,10 +41,15 @@ installer/
 │       └── wizard/                # Flutter 安装向导 auradsp_setup（极光 UI + 安装引擎）
 ├── linux/                         # Linux 发行与打包体系
 │   ├── README.md                  # Linux 打包说明与运行时矩阵
-│   ├── deb/                       # Debian / Ubuntu (.deb) 打包工具与模板
+│   ├── pack.sh                    # 转发壳：bash pack.sh 命令行不变
+│   ├── pack.py                    # Linux 打包 CLI 薄壳（实现见 packkit/linux）
+│   ├── shared/                    # desktop 入口等共享静态资源
+│   ├── deb/                       # Debian / Ubuntu (.deb) 规格说明
 │   │   └── README.md
-│   ├── appimage/                  # AppImage 通用单文件免安装包
+│   ├── driver/                    # snd-aloop 驱动配置包说明
+│   ├── appimage/                  # AppImage 规格、AppRun 与工具钉版表
 │   │   └── README.md
+│   ├── portable/                  # tar.gz 便携包说明与包内 README
 │   ├── flatpak/                   # Flatpak (Flathub 商店预留)
 │   │   └── README.md
 │   └── snap/                      # Snapcraft (Snap 商店预留)
@@ -91,8 +96,14 @@ installer/
 
 ### 发布入口（2026-11-20 收敛）
 
-- **单平台打包**：`python installer/windows/pack.py ...`，命令行契约不变（四个模式 + 资源档位 + `--verify`）。
-- **一轮完整交付**：`python installer/release.py --round <NN>` —— 预检门禁 → 分档打包（**light 先、full 后**）→ 归集 `deliver-r<NN>/` → 大写哈希清单 + 说明卡 → Setup 自检。`--plan` 只读，`--dry-run` 只做资产探测。
+- **单平台打包**：`python installer/windows/pack.py ...` / `python installer/linux/pack.py ...`
+  （或历史入口 `bash installer/linux/pack.sh ...`），命令行契约不变。
+- **一轮完整交付**：`python installer/release.py [--platform windows|linux] --round <NN>`
+  —— 预检门禁 → 分档打包 → 归集 `deliver-r<NN>/` → 大写哈希清单 + 说明卡 →
+  平台自检。`--plan` 只读，`--dry-run` 只做资产探测。
+  - Windows：**light 先、full 后**，四件（Setup/Full/Light/Driver）；
+  - Linux：四件（deb / 驱动 deb / AppImage / tar.gz），**单档位**——
+    产物名不含档位后缀，两档会互相覆盖（`release.py` 直接拒绝）。
 - **发布未接线**：`--publish` 会明确失败。本轮（2026-11-20）只落工具，不产出、不上传、不投放。
 - 分层、命名规范与驱动门禁细则见 `docs/07_打包工具链分层与发布编排-2026-11-20.md`。
 

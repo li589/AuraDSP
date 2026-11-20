@@ -81,6 +81,18 @@ jobs:
               ForEach-Object { Write-Host "::error::$($_.Trim() -replace '%', '%25')" }
             throw "packkit unit tests failed"
           }
+          # Linux 平台层纯函数同跑（权限位断言在 Windows 上自动 SKIP，
+          # 由 linux-pack.yml 的 ubuntu job 覆盖）
+          $lx = python installer/tests/test_packkit_linux_unit.py 2>&1 | Out-String
+          $lxCode = $LASTEXITCODE
+          $lx | Write-Host
+          if ($lxCode -ne 0) {
+            ($lx -split "`n") |
+              Where-Object { $_ -match 'FAIL' } |
+              Select-Object -First 40 |
+              ForEach-Object { Write-Host "::error::$($_.Trim() -replace '%', '%25')" }
+            throw "packkit linux unit tests failed"
+          }
           # --plan 在无 staging 的 CI 上会把缺件标 FAIL 但退出 0（只读门禁表）。
           python installer/release.py --plan
           if ($LASTEXITCODE -ne 0) { throw "release plan failed" }

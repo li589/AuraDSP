@@ -19,18 +19,27 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from .common import die, log
+from .common import die, log, warn
 from .paths import APP_DIR
 
 
-def apply_defaults(work_staging: Path, what_if: bool) -> None:
+def apply_defaults(work_staging: Path, what_if: bool, strict: bool = True) -> bool:
+    """生成 `defaults/`，返回是否成功。
+
+    `strict` 区分两平台的历史口径：Windows 发行包必须带默认层（缺即失败），
+    Linux 侧一直把缺失降级为警告（App 侧有代码默认兜底，不阻塞打包）。
+    默认 True 保持 Windows 行为逐字不变。
+    """
     if what_if:
         log("defaults: what-if 跳过生成")
-        return
+        return True
     flutter = shutil.which("flutter")
     if flutter is None:
-        raise die("生成 defaults/ 需要 flutter 在 PATH 中"
-                  "（默认层由 App 代码经契约测试导出）")
+        if strict:
+            raise die("生成 defaults/ 需要 flutter 在 PATH 中"
+                      "（默认层由 App 代码经契约测试导出）")
+        warn("无 flutter，跳过 defaults/ 生成（App 回退代码默认）")
+        return False
 
     log("defaults: 经 App 契约测试生成默认层…")
     marker = APP_DIR / ".auradsp_emit_defaults"
@@ -47,10 +56,17 @@ def apply_defaults(work_staging: Path, what_if: bool) -> None:
                 lf.seek(0)
                 tail = "\n".join(
                     lf.read().decode("utf-8", "replace").splitlines()[-15:])
-                raise die(f"defaults 生成失败（flutter test rc={r.returncode}）：\n{tail}")
+                if strict:
+                    raise die(f"defaults 生成失败（flutter test rc={r.returncode}）：\n{tail}")
+                warn(f"defaults/ 生成失败（rc={r.returncode}），包将不带默认层")
+                return False
     finally:
         marker.unlink(missing_ok=True)
 
     if not (work_staging / "defaults" / "manifest.json").is_file():
-        raise die("defaults 生成未产出 manifest.json")
+        if strict:
+            raise die("defaults 生成未产出 manifest.json")
+        warn("defaults 生成未产出 manifest.json，包将不带默认层")
+        return False
     log("defaults: 默认层已生成（config.default.json + presets + manifest）")
+    return True

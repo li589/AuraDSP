@@ -34,6 +34,17 @@ from pathlib import Path
 
 PRODUCT = "AuraDSP"
 PLATFORM = "Windows-x64"
+LINUX_PLATFORM = "Linux-x64"
+
+# Linux 产物名（03 号规格 §5 定稿）。注意两条与 Windows 不同的口径：
+#
+#   1. **deb 用版本号而非 tag**：`auradsp_0.1.0_amd64.deb`（dpkg 不接受
+#      `v` 前缀，且控制文件 Version 是 `0.1.0-1`）。
+#   2. **产物名不含资源档位**：`AuraDSP-Linux-x64-v0.1.0.tar.gz` 在 light
+#      与 full 下同名。因此 Linux 一次只能打**一个档位**，两档并发必互相
+#      覆盖——这是 `modes.resolve_tiers` 里一条硬门禁的来源（Windows 用
+#      `-Full-`/`-Light-` 后缀解决，Linux 用「单档」解决）。
+LINUX_MODES = ("deb", "driver", "appimage", "portable")
 
 # 交付批次目录：deliver-r59
 DELIVERY_DIR_RE = re.compile(r"^deliver-r(\d+)$")
@@ -74,6 +85,35 @@ class ArtifactNames:
     @staticmethod
     def sums(round_no: int | None = None) -> str:
         return "SHA256SUMS.txt" if round_no is None else f"SHA256SUMS-r{round_no}.txt"
+
+
+@dataclass(frozen=True)
+class LinuxArtifactNames:
+    """Linux 四件命名。`version` 形如 `0.1.0`，`tag` 形如 `v0.1.0`。
+
+    Linux 没有「交付名 ≠ 构建名」的问题：产物名本身就是发行名（deb 由
+    apt 直接消费），因此 `delivery()` 与 `build()` 同形，不做改名。归集
+    到 `deliver-rNN/` 时保持原名，避免出现「交付目录里的包名 ≠ 用户下载
+    页上的包名」。
+    """
+
+    version: str
+    tag: str
+
+    def build(self, mode: str) -> str:
+        if mode == "deb":
+            return f"{PRODUCT.lower()}_{self.version}_amd64.deb"
+        if mode == "driver":
+            return f"{PRODUCT.lower()}-driver-loopback_{self.version}_all.deb"
+        if mode == "appimage":
+            return f"{PRODUCT}-v{self.version}-x86_64.AppImage"
+        if mode == "portable":
+            return f"{PRODUCT}-{LINUX_PLATFORM}-v{self.version}.tar.gz"
+        raise ValueError(f"未知 Linux 打包模式: {mode}")
+
+    def delivery(self, mode: str) -> str:
+        """Linux 交付名 = 构建名（见类 docstring）。"""
+        return self.build(mode)
 
 
 def delivery_dirname(round_no: int) -> str:

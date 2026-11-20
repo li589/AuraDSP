@@ -162,8 +162,12 @@ exec "${HERE}/usr/bin/auradsp_app" "$@"
 ---
 
 ## 5. 打包自动化产物落地
-打包入口：`installer/linux/pack.sh`（读取 `installer/shared/version_resolver.py`
-导出的版本号；输入为 Flutter Linux bundle + 引擎产物，见 `installer/linux/README.md`）。
+打包入口：`installer/linux/pack.sh`（转发壳）→ `pack.py`（薄壳）→
+`packkit/linux/cli.py`（实现，2026-11-20 收编；命令行与产物名均未变）。
+版本号读取 `installer/shared/version_resolver.py`；输入为 Flutter Linux
+bundle + 引擎产物，见 `installer/linux/README.md`。
+一轮完整交付（四件 + `deliver-rNN/` + 哈希清单）用
+`python installer/release.py --platform linux`，见 docs/07 §5。
 所有打包产物统一输出到根目录 `dist/`：
 - `dist/auradsp_0.1.0_amd64.deb`（正式安装包）
 - `dist/auradsp-driver-loopback_0.1.0_all.deb`（驱动包，见 §6）

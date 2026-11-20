@@ -1,0 +1,118 @@
+# Linux 打包验证（与 windows-installer.yml 对称）。
+#
+# 在 ubuntu-latest 上用**合成的 fake bundle** 跑真实打包链路，不依赖
+# Flutter/cmake 构建（那由 ci.yml 的 build-app-linux / build-engine-linux
+# 负责）：本 workflow 只回答一个问题——「packkit/linux 产出的包能不能被
+# dpkg 正常读取、权限位对不对、交付清单能不能自校验」。
+#
+# 刻意不跑 AppImage：appimagetool 要按 pins 从 GitHub Release 下载，
+# 在 CI 里偶发超时会把整条流水线拖红。AppImage 的逻辑（钉版解析、铁律
+# 自检、AppDir 结构）由 test_packkit_linux_unit.py 覆盖，人工发布时跑。
+name: linux-pack
+
+on:
+  push:
+    branches: [feature/linux]
+    paths:
+      - 'installer/linux/**'
+      - 'installer/shared/**'
+      - 'installer/packkit/**'
+      - 'installer/tests/**'
+      - 'installer/release.py'
+      - '.github/workflows/linux-pack.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: linux-pack-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装打包依赖
+        run: |
+          # file 是 appimagetool 的硬依赖（本 workflow 不跑 AppImage，
+          # 但预检会检查它，保持环境与发行机一致）
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq file dpkg-dev
+
+      - name: packkit 内核 + Linux 平台层单测
+        run: |
+          python installer/tests/test_packkit_unit.py
+          python installer/tests/test_packkit_linux_unit.py
+
+      - name: 合成 fake bundle（真实 ELF 载荷，免构建）
+        run: |
+          set -euo pipefail
+          B=fake-bundle
+          rm -rf "$B"
+          mkdir -p "$B/lib" "$B/data" "$B/resources" "$B/defaults"
+          # 用系统二进制当载荷：权限规范化必须把它判成 ELF → 755
+          cp /bin/true "$B/auradsp_app"
+          cp /bin/true "$B/lib/libauradsp_engine.so"
+          cp /bin/true "$B/lib/plugin_host_x64"
+          cp /bin/true "$B/lib/plugin_host_x86"
+          printf '{"files":[]}\n' > "$B/data/placeholder.json"
+          printf '{}\n' > "$B/resources/manifest.json"
+          printf 'x\n' > "$B/defaults/manifest.json"
+
+      - name: 打 deb / 驱动 deb / tar.gz
+        run: |
+          python installer/linux/pack.py \
+            --bundle fake-bundle --out out-pack \
+            --only deb,driver,portable --resources core
+
+      - name: 断言封装结构与权限位
+        run: |
+          set -euo pipefail
+          DEB=out-pack/auradsp_0.1.0_amd64.deb
+          DDEB=out-pack/auradsp-driver-loopback_0.1.0_all.deb
+          dpkg-deb --info "$DEB" > /dev/null
+          dpkg-deb --contents "$DEB" > contents.txt
+          # 主程序与引擎必须是 755——这是「装完能不能跑」的唯一判据，
+          # 也正是 file 缺失时旧实现会悄悄弄坏的地方
+          grep -E '^-rwxr-xr-x .*\./usr/lib/auradsp/auradsp_app$' contents.txt
+          grep -E '^-rwxr-xr-x .*\./usr/lib/auradsp/lib/libauradsp_engine\.so$' contents.txt
+          grep -E '^lrwxrwxrwx .*\./usr/bin/auradsp -> ' contents.txt
+          grep -E '^-rwxr-xr-x .*\./usr/lib/auradsp/lib/plugin_host_x86$' contents.txt
+          dpkg-deb --info "$DDEB" > /dev/null
+          tar -tzf out-pack/AuraDSP-Linux-x64-v0.1.0.tar.gz | grep -q '^AuraDSP-Linux-x64/auradsp$'
+
+      - name: 发布编排端到端（core 档四件 → deliver-r1 + 哈希自校验）
+        run: |
+          set -euo pipefail
+          python installer/release.py --platform linux \
+            --bundle fake-bundle --out-root out-rel \
+            --round 1 --resources-tiers core
+          ls out-rel/deliver-r1
+          cd out-rel/deliver-r1
+          # 大写 + LF 的清单必须能被 GNU sha256sum 直接校验
+          sha256sum -c SHA256SUMS-r1.txt
+          test -s RELEASE-r1.txt
+
+      - name: 多档位必须被拒绝（Linux 产物名不含档位）
+        run: |
+          if python installer/release.py --platform linux --bundle fake-bundle \
+               --out-root out-rel --resources-tiers full,light --plan; then
+            echo "::error::多档位未被拒绝，Linux 会出现同名覆盖"
+            exit 1
+          fi
+
+      - name: 收集日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-pack-artifacts
+          path: |
+            out-pack/
+            out-rel/
+            contents.txt
+          retention-days: 7
+          if-no-files-found: warn
