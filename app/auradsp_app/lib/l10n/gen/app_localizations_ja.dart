@@ -3601,4 +3601,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get asioChainDisabledNotice => 'ASIO チェーンは無効です（処理停止中、無音）';
+
+  @override
+  String get asioRenderFollowDefault => 'システム既定に従う';
+
+  @override
+  String get asioSinkActual => '実際に有効な出力先';
+
+  @override
+  String get asioSinkDefaultTag => 'システム既定';
 }

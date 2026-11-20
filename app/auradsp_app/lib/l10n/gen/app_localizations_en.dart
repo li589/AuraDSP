@@ -3755,4 +3755,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get asioChainDisabledNotice =>
       'ASIO chain disabled (processing paused, output silent)';
+
+  @override
+  String get asioRenderFollowDefault => 'Follow system default';
+
+  @override
+  String get asioSinkActual => 'Active endpoint';
+
+  @override
+  String get asioSinkDefaultTag => 'system default';
 }

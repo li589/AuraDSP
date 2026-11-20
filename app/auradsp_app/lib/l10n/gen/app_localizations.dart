@@ -6795,6 +6795,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'ASIO 链路已停用（处理已暂停，处于静音状态）'**
   String get asioChainDisabledNotice;
+
+  /// No description provided for @asioRenderFollowDefault.
+  ///
+  /// In zh, this message translates to:
+  /// **'跟随系统默认'**
+  String get asioRenderFollowDefault;
+
+  /// No description provided for @asioSinkActual.
+  ///
+  /// In zh, this message translates to:
+  /// **'实际生效端点'**
+  String get asioSinkActual;
+
+  /// No description provided for @asioSinkDefaultTag.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统默认'**
+  String get asioSinkDefaultTag;
 }
 
 class _AppLocalizationsDelegate

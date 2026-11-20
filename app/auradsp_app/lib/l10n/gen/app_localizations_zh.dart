@@ -3562,4 +3562,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get asioChainDisabledNotice => 'ASIO 链路已停用（处理已暂停，处于静音状态）';
+
+  @override
+  String get asioRenderFollowDefault => '跟随系统默认';
+
+  @override
+  String get asioSinkActual => '实际生效端点';
+
+  @override
+  String get asioSinkDefaultTag => '系统默认';
 }
