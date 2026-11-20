@@ -942,6 +942,6 @@ class _AsioDriverChannelsRow extends StatelessWidget {
             ),
           ),
         ],
-      ),;
+      );
   }
 }
