@@ -42,7 +42,7 @@ void main() {
       model.setPipelineOutput('vaio');
       await tester.pumpAndSettle();
       expect(find.text('物理输出'), findsOneWidget);
-      expect(find.text('自动选择（非VAIO扬声器）'), findsOneWidget);
+      expect(find.text('自动选择（非AuraVAIO）'), findsOneWidget);
     });
 
     // ASIO-2 补全（2026-11-14）：监听镜像开关接真值可切换，

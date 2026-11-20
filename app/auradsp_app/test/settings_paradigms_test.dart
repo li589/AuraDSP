@@ -122,10 +122,10 @@ void main() {
       // 字段行外，另有一条同名标签的「被 ASIO 接管」说明行。
       expect(find.text('物理输出'), findsNWidgets(2));
 
-      // 切到 WASAPI 渲染输出端
+      // 切到 WASAPI 渲染输出端（r58 文案：模式行值 = WASAPI 标准输出）
       model.setPipelineOutput(AudioModes.outputWasapi);
       await tester.pumpAndSettle();
-      expect(find.text('WASAPI 物理渲染 (扬声器/耳机)'), findsWidgets);
+      expect(find.text('WASAPI 标准输出'), findsWidgets);
     });
   }, skip: !PlatformProfile.isWindows ? 'ADR-009 paradigms UI is Windows only' : null);
 }

@@ -52,6 +52,15 @@ bool ReadRegDword(HKEY root, const std::wstring& sub, const std::wstring& val, D
 
 const wchar_t* kFxBase = L"{d04e05a6-594b-4fb6-a80d-01af5eed7d1d},";
 
+// PKEY_AudioEngine_DeviceFormat（{F19F064D-082C-4E27-BC73-
+// 6882A1BB8E4C}, pid 0）：端点默认格式（WAVEFORMATEXTENSIBLE
+// blob），即系统声音设置高级页的当前值。SDK propkey 头未导出
+// 此键，本地定义。
+static const PROPERTYKEY kPkeyAudioEngineDeviceFormat = {
+    {0xF19F064D, 0x082C, 0x4E27,
+     {0xBC, 0x73, 0x68, 0x82, 0xA1, 0xBB, 0x8E, 0x4C}},
+    0};
+
 ApoEndpoint ReadEndpoint(IMMDevice* dev, const std::string& dir) {
     ApoEndpoint e;
     e.direction = dir;
@@ -62,10 +71,43 @@ ApoEndpoint ReadEndpoint(IMMDevice* dev, const std::string& dir) {
     }
     DWORD state = 0;
     if (dev->GetState(&state) == S_OK) e.state = (unsigned long)state;
-    // 设备格式（2026-11-14）：仅 ACTIVE 端点激活 IAudioClient 读 mix
-    // format——禁用/拔出端点不唤醒；任何失败置 0（消费者按「未知」
-    // 处理，不判 FAIL）。系统里改声道数/采样率/位深即改此值。
-    if (e.state & DEVICE_STATE_ACTIVE) {
+    // 设备格式（2026-11-14 立；r58 口径修正）：优先读属性存储的
+    // PKEY_AudioEngine_DeviceFormat——即系统声音设置「高级」页
+    // 显示并可改的**默认格式**（用户在系统里改声道数/采样率/
+    // 位深改的就是它）。旧实现读 IAudioClient::GetMixFormat，
+    // 那是音频引擎的共享混音格式（Win10/11 恒为 32-bit float），
+    // 与系统设置不一致（VAIO 装机默认 16 位/48k 却显示 32 位/
+    // 48k，业主 2026-11-20 实报）。属性缺失才回退 GetMixFormat；
+    // 再失败置 0（消费者按「未知」处理，不判 FAIL）。仅 ACTIVE
+    // 端点读，禁用/拔出端点不唤醒。
+    IPropertyStore* ps = nullptr;
+    if (dev->OpenPropertyStore(STGM_READ, &ps) == S_OK && ps) {
+        PROPVARIANT v;
+        PropVariantInit(&v);
+        if (ps->GetValue(PKEY_Device_FriendlyName, &v) == S_OK && v.pwszVal)
+            e.name = WideToUtf8(v.pwszVal);
+        PropVariantClear(&v);
+        if (e.state & DEVICE_STATE_ACTIVE) {
+            PropVariantInit(&v);
+            if (ps->GetValue(kPkeyAudioEngineDeviceFormat, &v) == S_OK &&
+                v.vt == VT_BLOB && v.blob.pBlobData &&
+                v.blob.cbSize >= sizeof(WAVEFORMATEX)) {
+                const auto* wf = (const WAVEFORMATEX*)v.blob.pBlobData;
+                e.fmtRate = (int)wf->nSamplesPerSec;
+                e.fmtCh = (int)wf->nChannels;
+                e.fmtBits = (int)wf->wBitsPerSample;
+                if (wf->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
+                    v.blob.cbSize >= sizeof(WAVEFORMATEXTENSIBLE)) {
+                    const auto* wfx = (const WAVEFORMATEXTENSIBLE*)wf;
+                    if (wfx->Samples.wValidBitsPerSample > 0)
+                        e.fmtBits = (int)wfx->Samples.wValidBitsPerSample;
+                }
+            }
+            PropVariantClear(&v);
+        }
+        ps->Release();
+    }
+    if ((e.state & DEVICE_STATE_ACTIVE) && e.fmtRate == 0) {
         IAudioClient* ac = nullptr;
         if (dev->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
                           (void**)&ac) == S_OK &&
@@ -79,16 +121,6 @@ ApoEndpoint ReadEndpoint(IMMDevice* dev, const std::string& dir) {
             }
             ac->Release();
         }
-    }
-    // 友好名。
-    IPropertyStore* ps = nullptr;
-    if (dev->OpenPropertyStore(STGM_READ, &ps) == S_OK && ps) {
-        PROPVARIANT v;
-        PropVariantInit(&v);
-        if (ps->GetValue(PKEY_Device_FriendlyName, &v) == S_OK && v.pwszVal)
-            e.name = WideToUtf8(v.pwszVal);
-        PropVariantClear(&v);
-        ps->Release();
     }
     // FxProperties（读不到置 readable=false，不判 FAIL）。
     // 注意：GetId 返回长式 `{0.0.0.00000000}.{guid}`，注册表键是短式 `{guid}`。

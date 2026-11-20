@@ -413,8 +413,10 @@ class AppModel extends ChangeNotifier {
   }
 
   /// VAIO 桥输入所吃的渲染端点（播放器输出指向它）在最近一轮设备
-  /// 扫描中的在场项，含系统共享格式（rate/ch/bits；用户在系统设置
-  /// 里改声道数/采样率/位深后，统一系统监听触发重扫随之刷新）。
+  /// 扫描中的在场项，含系统默认格式（rate/ch/bits，apo_inspect
+  /// 读 PKEY_AudioEngine_DeviceFormat，r58 起与系统声音设置高级
+  /// 页同源；用户改声道数/采样率/位深后，统一系统监听触发重扫
+  /// 随之刷新）。
   /// I/O 面板据此显示实时声道布局与工作格式（r57 P1）；未扫到
   /// （未装驱动/未枚举）时为 null。
   AudioDeviceItem? get vaioRenderEndpoint {

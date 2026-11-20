@@ -76,14 +76,16 @@ void main() {
       expect(inO('asio_driver', 'vaio'), isFalse);
     });
 
-    test('vaio chain: wasapi output overridden, vaio picks effective', () {
-      expect(outO('vaio', 'wasapi'), isTrue);
+    // r58（业主裁定）：vaio 链不互锁——VAIO 输入/输出组合的
+    // 顶层分段控件保持可选，两侧均不置灰。
+    test('vaio chain: neither side overridden (r58 no-lock ruling)', () {
+      expect(outO('vaio', 'wasapi'), isFalse);
       expect(outO('vaio', 'vaio'), isFalse);
       expect(inO('vaio', 'wasapi'), isFalse);
     });
 
-    test('vaio chain via wasapi-in + vaio-out: input side overridden', () {
-      expect(inO('wasapi', 'vaio'), isTrue);
+    test('vaio chain via wasapi-in + vaio-out: neither side overridden', () {
+      expect(inO('wasapi', 'vaio'), isFalse);
       expect(outO('wasapi', 'vaio'), isFalse);
     });
   });

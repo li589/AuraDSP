@@ -361,7 +361,8 @@ extension AudioModesState on AppModel {
             )
           : null;
 
-  /// 输入/输出分段选择是否被桥链接管而不生效（r57 P2，UI 置灰用）。
+  /// 输入/输出分段选择是否被 ASIO 桥接管而不生效（r57 P2 立，
+  /// r58 收窄至仅 asio 链，UI 置灰用；vaio 组合不互锁）。
   bool get pipelineInputOverridden =>
       config.modeCategory == AudioModes.categoryPipeline &&
       AudioModes.inputOverriddenByChain(

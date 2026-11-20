@@ -127,7 +127,7 @@ class _WasapiOutputSubpanel extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _InfoRow(l.outputWasapi, l.ioWasapiRenderDesc),
+          _InfoRow(l.ioModeLabel, l.outputWasapi),
         ],
       );
     }
@@ -135,7 +135,7 @@ class _WasapiOutputSubpanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoRow(l.outputWasapi, l.ioWasapiRenderDesc),
+        _InfoRow(l.ioModeLabel, l.outputWasapi),
         if (overriddenByBridge) ...[
           _InfoRow(
               l.outputDeviceLabel,

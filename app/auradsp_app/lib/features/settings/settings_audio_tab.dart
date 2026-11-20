@@ -76,14 +76,13 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
                   ? null
                   : (v) => model.setPipelineInput(v),
             ),
-            // r57 P2：输入被桥链接管时置灰（上方）+ 本行说明，
-            // 不再出现「能点但不生效」（与输入子面板置灰下拉同口径）。
+            // r57 P2 / r58 收窄：输入被 ASIO 桥接管时置灰（上方）
+            // + 本行说明，不再出现「能点但不生效」。overridden
+            // 现仅 asio 链为真（vaio 组合不互锁，见 audio_modes）。
             if (model.pipelineInputOverridden) ...[
               const SizedBox(height: AuraSpace.xs),
               Text(
-                model.pipelineChain == PipelineChain.asio
-                    ? l.ioInputOverriddenByAsio
-                    : l.ioInputOverriddenByVaio,
+                l.ioInputOverriddenByAsio,
                 style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
               ),
             ],
@@ -112,13 +111,12 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
                   ? null
                   : (v) => model.setPipelineOutput(v),
             ),
-            // r57 P2：输出被桥链接管时置灰（上方）+ 本行说明。
+            // r57 P2 / r58 收窄：输出被 ASIO 桥接管时置灰 + 说明
+            // （overridden 仅 asio 链为真）。
             if (model.pipelineOutputOverridden) ...[
               const SizedBox(height: AuraSpace.xs),
               Text(
-                model.pipelineChain == PipelineChain.asio
-                    ? l.ioOutputOverriddenByAsio
-                    : l.ioOutputOverriddenByVaio,
+                l.ioOutputOverriddenByAsio,
                 style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
               ),
             ],
