@@ -137,6 +137,8 @@ void main() {
       expect(model.asioFlavor, AudioModes.asioClient);
       expect(find.text('缓冲档'), findsOneWidget);
       expect(find.text('输出起始声道对'), findsOneWidget);
+      // S2：Client 卡无输入侧行（全双工单设备，输入随驱动同体）。
+      expect(find.text('输入通道'), findsNothing);
 
       // 切到虚拟 ASIO：驱动管理卡在场；DAW 空闲时无 DAW 状态行
       // （第三十七轮口径沿用）。
@@ -144,8 +146,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(model.asioFlavor, AudioModes.asioVirtual);
       expect(find.text('AuraDSP 虚拟 ASIO 驱动'), findsOneWidget);
-      expect(find.text('驱动状态'), findsOneWidget);
+      // S2：驱动状态在 I/O 面板与驱动卡各一行。
+      expect(find.text('驱动状态'), findsWidgets);
       expect(find.text('DAW 状态'), findsNothing);
+      // S2：虚拟形态 I/O 面板承输入通道行与驱动声道档位行
+      // （档位行与驱动卡共用同一控件，两处在场）。
+      expect(find.text('输入通道'), findsOneWidget);
+      expect(find.text('驱动声道数'), findsWidgets);
 
       // 回普通管线：ASIO 残留对降为 VAIO（无 ASIO 选项可选）。
       model.setModeCategory(AudioModes.categoryPipeline);

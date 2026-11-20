@@ -876,59 +876,72 @@ class _VirtualAsioDriverCard extends StatelessWidget {
               message: model.lastAsioError!,
               onDismiss: () => model.clearAsioError(),
             ),
-          // 全面复审 S3（ASIO-4）：驱动声道档位写者——此前注册表
-          // Channels 值只有驱动读、无人写，档位恒缺省 2。驱动在
-          // 被 DAW 创建时读取，故提示下次连接生效。
           const SizedBox(height: AuraSpace.xs),
-          Row(
-            children: [
-              SizedBox(
-                width: 104,
-                child: Text(
-                  l.asioDriverChannels,
-                  style: labelOf(
-                    paletteOf(context),
-                    size: 12,
-                    color: paletteOf(context).textDim,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: AuraDropdown<int>(
-                  value: model.asioDriverChannels,
-                  items: [
-                    for (final n in const [2, 4, 6, 8])
-                      DropdownMenuItem<int>(
-                        value: n,
-                        child: Text(
-                          '$n ch',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: n == model.asioDriverChannels
-                                ? paletteOf(context).accent
-                                : paletteOf(context).text,
-                          ),
-                        ),
-                      ),
-                  ],
-                  onChanged: (v) {
-                    if (v == null) return;
-                    final ok = model.setAsioDriverChannels(v);
-                    model.postNotice(
-                      ok
-                          ? l.asioDriverChannelsSaved
-                          : l.asioDriverChannelsFailed,
-                      level: ok ? NoticeLevel.info : NoticeLevel.error,
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
+          _AsioDriverChannelsRow(model: model),
           // 第三十七轮（业主目检裁定）：原「写入注册表，DAW 下次
           // 连接时生效」提示行删除——档位行本身已自明。
         ],
       ),
     );
+  }
+}
+
+/* ---- ASIO 驱动声道档位行（ASIO 模式重构 S2 抽取共用） ----
+ * 全面复审 S3（ASIO-4）：驱动声道档位写者——此前注册表 Channels
+ * 值只有驱动读、无人写，档位恒缺省 2。驱动在被 DAW 创建时读取。
+ * 原嵌在 _VirtualAsioDriverCard 的 below 块；S2 起驱动卡与 ASIO
+ * 模式 I/O 面板的虚拟 ASIO 形态共用本行。 */
+class _AsioDriverChannelsRow extends StatelessWidget {
+  final AppModel model;
+  const _AsioDriverChannelsRow({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    return Row(
+        children: [
+          SizedBox(
+            width: 104,
+            child: Text(
+              l.asioDriverChannels,
+              style: labelOf(
+                paletteOf(context),
+                size: 12,
+                color: paletteOf(context).textDim,
+              ),
+            ),
+          ),
+          Expanded(
+            child: AuraDropdown<int>(
+              value: model.asioDriverChannels,
+              items: [
+                for (final n in const [2, 4, 6, 8])
+                  DropdownMenuItem<int>(
+                    value: n,
+                    child: Text(
+                      '$n ch',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: n == model.asioDriverChannels
+                            ? paletteOf(context).accent
+                            : paletteOf(context).text,
+                      ),
+                    ),
+                  ),
+              ],
+              onChanged: (v) {
+                if (v == null) return;
+                final ok = model.setAsioDriverChannels(v);
+                model.postNotice(
+                  ok
+                      ? l.asioDriverChannelsSaved
+                      : l.asioDriverChannelsFailed,
+                  level: ok ? NoticeLevel.info : NoticeLevel.error,
+                );
+              },
+            ),
+          ),
+        ],
+      ),;
   }
 }

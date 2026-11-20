@@ -113,6 +113,10 @@ class _IoConfigPanel extends StatelessWidget {
                 builder: (_) => _VoicemeeterPanel(model: model))
           else
             _SystemApoPanel(model: model)
+        // ASIO 模式重构 S2：ASIO 范式下 I/O 配置整卡换成 ASIO
+        // 专属面板（Client / 虚拟两形态），不再走输入层+输出层。
+        else if (model.modeCategory == AudioModes.categoryAsio)
+          _AsioIoPanel(model: model)
         else ...[
           _InputLayer(model: model),
           const SizedBox(height: AuraSpace.md),

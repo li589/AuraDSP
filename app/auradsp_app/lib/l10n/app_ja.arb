@@ -1560,5 +1560,6 @@
   },
   "apoChannelsGlobal": "System APO モードでもこの全体設定がすべての接続先エンドポイントに適用されます",
   "apoFillFill": "填充",
-  "apoFillGated": "ゲート"
+  "apoFillGated": "ゲート",
+  "asioChainDisabledNotice": "ASIO チェーンは無効です（処理停止中、無音）"
 }

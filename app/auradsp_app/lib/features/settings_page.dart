@@ -43,6 +43,7 @@ part 'settings/panels/sections.dart';
 part 'settings/panels/hardware_drivers.dart';
 part 'settings/panels/hardware_io_input.dart';
 part 'settings/panels/hardware_io_output.dart';
+part 'settings/panels/hardware_io_asio.dart';
 part 'settings/panels/vb_theme.dart';
 
 class SettingsPage extends StatefulWidget {

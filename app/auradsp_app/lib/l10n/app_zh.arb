@@ -1705,5 +1705,6 @@
   },
   "apoChannelsGlobal": "System APO 模式下同样使用这份全局声道设置（所有已附加端点一致）",
   "apoFillFill": "铺满",
-  "apoFillGated": "门控"
+  "apoFillGated": "门控",
+  "asioChainDisabledNotice": "ASIO 链路已停用（处理已暂停，处于静音状态）"
 }
