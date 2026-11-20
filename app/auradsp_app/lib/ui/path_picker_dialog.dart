@@ -10,6 +10,7 @@
 import '../core/io/resource_gate.dart';
 
 import '../core/selection/resource_picker.dart';
+
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
@@ -17,6 +18,7 @@ import '../platform/adapters.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
 import '../platform/platform_profile.dart';
+import 'aura_dialog.dart';
 
 /// 选择模式唯一真相在 core；此处 re-export 方便既有 UI 调用点继续只 import 本文件。
 export '../core/selection/resource_picker.dart' show ResourcePickMode;
@@ -80,7 +82,9 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
   @override
   void initState() {
     super.initState();
-    final init = widget.initialPath ?? (_picker.initialDirectory(widget.memorySlot) ?? '');
+    final init =
+        widget.initialPath ??
+        (_picker.initialDirectory(widget.memorySlot) ?? '');
     _controller = TextEditingController(text: init);
   }
 
@@ -160,13 +164,24 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
 
     return AlertDialog(
       backgroundColor: p.panel,
+      insetPadding: auraDialogInset(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AuraRadius.md),
         side: BorderSide(color: p.hairline),
       ),
-      titlePadding: const EdgeInsets.fromLTRB(AuraSpace.md, AuraSpace.md, AuraSpace.md, AuraSpace.sm),
+      titlePadding: const EdgeInsets.fromLTRB(
+        AuraSpace.md,
+        AuraSpace.md,
+        AuraSpace.md,
+        AuraSpace.sm,
+      ),
       contentPadding: const EdgeInsets.symmetric(horizontal: AuraSpace.md),
-      actionsPadding: const EdgeInsets.fromLTRB(AuraSpace.md, AuraSpace.sm, AuraSpace.md, AuraSpace.md),
+      actionsPadding: const EdgeInsets.fromLTRB(
+        AuraSpace.md,
+        AuraSpace.sm,
+        AuraSpace.md,
+        AuraSpace.md,
+      ),
       title: Row(
         children: [
           Icon(
@@ -186,86 +201,108 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
           ),
         ],
       ),
-      content: SizedBox(
-        width: 460,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (widget.prompt != null) ...[
-              Text(widget.prompt!, style: captionOf(p).copyWith(fontSize: 12)),
-              const SizedBox(height: AuraSpace.sm),
-            ],
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: _controller,
-              builder: (context, value, _) {
-                return TextField(
-                  controller: _controller,
-                  style: monoOf(p, size: 12),
-                  onChanged: (_) {
-                    if (_errorText != null) {
-                      setState(() => _errorText = null);
-                    }
-                  },
-                  onSubmitted: (_) => _submit(),
-                  decoration: InputDecoration(
-                    hintText: defaultHint,
-                    hintStyle: captionOf(p).copyWith(color: p.textDim.withValues(alpha: 0.5)),
-                    filled: true,
-                    fillColor: p.panelRaised,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AuraRadius.sm),
-                      borderSide: BorderSide(color: p.hairline),
+      content: AuraDialogConstraints(
+        maxWidth: 460,
+        maxHeight: 520,
+        child: SizedBox(
+          width: double.infinity,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.prompt != null) ...[
+                Text(
+                  widget.prompt!,
+                  style: captionOf(p).copyWith(fontSize: 12),
+                ),
+                const SizedBox(height: AuraSpace.sm),
+              ],
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _controller,
+                builder: (context, value, _) {
+                  return TextField(
+                    controller: _controller,
+                    style: monoOf(p, size: 12),
+                    onChanged: (_) {
+                      if (_errorText != null) {
+                        setState(() => _errorText = null);
+                      }
+                    },
+                    onSubmitted: (_) => _submit(),
+                    decoration: InputDecoration(
+                      hintText: defaultHint,
+                      hintStyle: captionOf(p)
+                          .copyWith(color: p.textDim.withValues(alpha: 0.5)),
+                      filled: true,
+                      fillColor: p.panelRaised,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AuraRadius.sm),
+                        borderSide: BorderSide(color: p.hairline),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AuraRadius.sm),
+                        borderSide: BorderSide(color: p.hairline),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AuraRadius.sm),
+                        borderSide: BorderSide(color: p.accent, width: 1.2),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 9,
+                      ),
+                      suffixIcon: value.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.close_rounded, size: 15),
+                              tooltip: l.pathPickerClear,
+                              onPressed: () {
+                                _controller.clear();
+                                if (_errorText != null) {
+                                  setState(() => _errorText = null);
+                                }
+                              },
+                            )
+                          : null,
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AuraRadius.sm),
-                      borderSide: BorderSide(color: p.hairline),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AuraRadius.sm),
-                      borderSide: BorderSide(color: p.accent, width: 1.2),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-                    suffixIcon: value.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.close_rounded, size: 15),
-                            tooltip: l.pathPickerClear,
-                            onPressed: () {
-                              _controller.clear();
-                              if (_errorText != null) {
-                                setState(() => _errorText = null);
-                              }
-                            },
-                          )
-                        : null,
-                  ),
-                );
-              },
-            ),
-            if (widget.allowedExtensions != null && widget.allowedExtensions!.isNotEmpty) ...[
-              const SizedBox(height: AuraSpace.xxs),
-              Text(
-                l.pathPickerSupported(widget.allowedExtensions!.map((e) => '*.$e').join(', ')),
-                style: captionOf(p).copyWith(fontSize: 10.5, color: p.textDim),
+                  );
+                },
               ),
-            ],
-            if (_errorText != null) ...[
-              const SizedBox(height: AuraSpace.xs),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline_rounded, size: 13, color: p.warning),
-                  const SizedBox(width: AuraSpace.xxs),
-                  Expanded(
-                    child: Text(
-                      _errorText!,
-                      style: captionOf(p, color: p.warning).copyWith(fontSize: 11),
-                    ),
+              if (widget.allowedExtensions != null &&
+                  widget.allowedExtensions!.isNotEmpty) ...[
+                const SizedBox(height: AuraSpace.xxs),
+                Text(
+                  l.pathPickerSupported(
+                    widget.allowedExtensions!.map((e) => '*.$e').join(', '),
                   ),
-                ],
-              ),
+                  style: captionOf(p)
+                      .copyWith(fontSize: 10.5, color: p.textDim),
+                ),
+              ],
+              if (_errorText != null) ...[
+                const SizedBox(height: AuraSpace.xs),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.error_outline_rounded,
+                      size: 13,
+                      color: p.warning,
+                    ),
+                    const SizedBox(width: AuraSpace.xxs),
+                    Expanded(
+                      child: Text(
+                        _errorText!,
+                        style: captionOf(
+                          p,
+                          color: p.warning,
+                        ).copyWith(fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       actions: [
@@ -284,7 +321,10 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
                 foregroundColor: p.accent,
                 side: BorderSide(color: p.accent.withValues(alpha: 0.4)),
                 visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: AuraSpace.sm, vertical: AuraSpace.xs),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AuraSpace.sm,
+                  vertical: AuraSpace.xs,
+                ),
               ),
               onPressed: _openNativePicker,
             ),
@@ -299,7 +339,10 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
                 backgroundColor: p.accent,
                 foregroundColor: p.accentContrast,
                 visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: AuraSpace.md, vertical: AuraSpace.xs),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AuraSpace.md,
+                  vertical: AuraSpace.xs,
+                ),
               ),
               onPressed: _submit,
               child: Text(widget.confirmLabel ?? l.pathPickerConfirm),

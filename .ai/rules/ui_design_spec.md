@@ -104,3 +104,12 @@ AuraDSP 采用跨平台自适应响应系统：
   - `reverb` $\rightarrow$ `l.spatialReverbTitle`（空间混响）
   - `output` $\rightarrow$ `l.postGain`（输出增益）
 - 严禁同一效果器在处理链页和效果页使用不同的同义词。
+
+---
+
+## 6. 浮层（Dialog）窄屏规范（P2，2026-11-20）
+
+- 所有 `Dialog` / `AlertDialog` 必须设置 `insetPadding: auraDialogInset(context)`（`ui/aura_dialog.dart`）；窄屏 12px，桌面沿用 40/24。
+- 内容尺寸禁止裸写固定宽高：用 `AuraDialogConstraints(maxWidth:, maxHeight:)` 包住，内部保留显式设计尺寸；`AlertDialog` 内容含 `ListView` 等惰性视口时**不要**用 `width/height: double.infinity`（会触发 intrinsic 尺寸断言）。
+- 360px 下浮层实际矩形不得超出视口；主操作按钮命中区 ≥48×48。
+- 新增浮层必须在 `test/dialog_layout_test.dart` 或对应页面测试中补 360 回归。

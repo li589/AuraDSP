@@ -8,8 +8,10 @@ import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/nav.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
+import 'package:auradsp_app/features/settings_page.dart';
 import 'package:auradsp_app/features/shell.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
+import 'package:auradsp_app/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -84,6 +86,49 @@ void main() {
         find.byKey(const ValueKey<String>('shell.bottomNav')),
       );
       expect(navRect.top, closeTo(740, 1), reason: '跨断点后底栏应滑入');
+    });
+
+    testWidgets('360 打开设置覆盖层不超视口且无溢出', (tester) async {
+      await _pumpAt(tester, 360);
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(tester.takeException(), isNull);
+      final rect = tester.getRect(find.byType(SettingsPage));
+      expect(rect.width, lessThanOrEqualTo(360));
+      expect(rect.height, lessThanOrEqualTo(800));
+      expect(rect.left, greaterThanOrEqualTo(0));
+      expect(rect.top, greaterThanOrEqualTo(0));
+
+      // 关闭浮层，避免测试结束时路由内异步/定时器遗留导致 did-not-complete。
+      Navigator.of(tester.element(find.byType(SettingsPage))).pop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+    });
+
+    testWidgets('360 引擎致命页不超视口且无溢出', (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+      model.setConn(EngineConn.fatal);
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: const Locale('en'),
+          theme: withAuraExtension(ThemeData.dark(), auraDark),
+          home: ShellGate(model: model),
+        ),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(Scaffold), findsOneWidget);
     });
   });
 }

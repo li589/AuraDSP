@@ -19,6 +19,7 @@ import '../core/state.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
 import '../platform/platform_profile.dart';
+import '../ui/aura_dialog.dart';
 import 'chain_page.dart';
 import 'effects_page.dart';
 import 'home_page.dart';
@@ -271,13 +272,16 @@ class _AppShellState extends State<AppShell> {
           // 面板自身提供底色（此前 transparent 导致"无背景"）
           backgroundColor: p.panel,
           surfaceTintColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(AuraSpace.xl),
+          insetPadding: ctx.isMobile
+              ? const EdgeInsets.all(AuraSpace.md)
+              : const EdgeInsets.all(AuraSpace.xl),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AuraRadius.lg),
             side: BorderSide(color: p.hairline),
           ),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720, maxHeight: 640),
+          child: AuraDialogConstraints(
+            maxWidth: 720,
+            maxHeight: 640,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(AuraRadius.lg),
               child: SettingsPage(model: widget.model),

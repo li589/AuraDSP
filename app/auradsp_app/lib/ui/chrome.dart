@@ -76,8 +76,12 @@ class _PageScaffoldState extends State<PageScaffold>
   @override
   void initState() {
     super.initState();
-    final reduce = WidgetsBinding.instance.platformDispatcher
-            .accessibilityFeatures.disableAnimations ==
+    final reduce =
+        WidgetsBinding
+            .instance
+            .platformDispatcher
+            .accessibilityFeatures
+            .disableAnimations ==
         true;
     if (reduce) {
       _c.value = 1.0;
@@ -98,8 +102,11 @@ class _PageScaffoldState extends State<PageScaffold>
     final start = (i * 0.075).clamp(0.0, 0.42);
     final anim = CurvedAnimation(
       parent: _c,
-      curve: Interval(start, (start + 0.58).clamp(0.0, 1.0),
-          curve: AuraCurve.entrance),
+      curve: Interval(
+        start,
+        (start + 0.58).clamp(0.0, 1.0),
+        curve: AuraCurve.entrance,
+      ),
     );
     return AnimatedBuilder(
       animation: anim,
@@ -132,74 +139,78 @@ class _PageScaffoldState extends State<PageScaffold>
       child: HelpVisibilityScope(
         controller: _helpController,
         child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (widget.ambient != null)
-            AmbientSpectrum(spectrum: widget.ambient!, palette: p),
-          if (p.isDark) const GrainOverlay(),
-          NotificationListener<ScrollNotification>(
-            onNotification: (notification) {
-              if (notification is ScrollUpdateNotification ||
-                  notification is UserScrollNotification ||
-                  notification is ScrollStartNotification) {
-                _helpController.recordScroll();
-              }
-              return false;
-            },
-            child: ValueListenableBuilder<int>(
-              valueListenable: _scrollTrap,
-              builder: (_, trapCount, scrollChild) => SingleChildScrollView(
-                physics: trapCount > 0
-                    ? const NeverScrollableScrollPhysics()
-                    : null,
-                padding: EdgeInsets.fromLTRB(
-                    context.responsivePageX, AuraSpace.pageTop,
-                    context.responsivePageX, AuraSpace.pageBottom),
-                child: scrollChild,
-              ),
-              child: Center(
-                heightFactor: 1.0,
-                child: ConstrainedBox(
-                  constraints:
-                      BoxConstraints(maxWidth: widget.maxWidth ?? context.responsiveMaxW),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (widget.eyebrow != null)
-                        PageHeader(
-                          eyebrow: widget.eyebrow!,
-                          title: widget.title,
-                          trailing: widget.trailing,
-                        )
-                      else
-                        PageHeader(
-                          eyebrow: '',
-                          title: widget.title,
-                          trailing: widget.trailing,
-                          bare: true,
-                        ),
-                      const SizedBox(height: AuraSpace.xl),
-                      ...body,
-                    ],
+          fit: StackFit.expand,
+          children: [
+            if (widget.ambient != null)
+              AmbientSpectrum(spectrum: widget.ambient!, palette: p),
+            if (p.isDark) const GrainOverlay(),
+            NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                if (notification is ScrollUpdateNotification ||
+                    notification is UserScrollNotification ||
+                    notification is ScrollStartNotification) {
+                  _helpController.recordScroll();
+                }
+                return false;
+              },
+              child: ValueListenableBuilder<int>(
+                valueListenable: _scrollTrap,
+                builder: (_, trapCount, scrollChild) => SingleChildScrollView(
+                  physics: trapCount > 0
+                      ? const NeverScrollableScrollPhysics()
+                      : null,
+                  padding: EdgeInsets.fromLTRB(
+                    context.responsivePageX,
+                    AuraSpace.pageTop,
+                    context.responsivePageX,
+                    AuraSpace.pageBottom,
+                  ),
+                  child: scrollChild,
+                ),
+                child: Center(
+                  heightFactor: 1.0,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: widget.maxWidth ?? context.responsiveMaxW,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (widget.eyebrow != null)
+                          PageHeader(
+                            eyebrow: widget.eyebrow!,
+                            title: widget.title,
+                            trailing: widget.trailing,
+                          )
+                        else
+                          PageHeader(
+                            eyebrow: '',
+                            title: widget.title,
+                            trailing: widget.trailing,
+                            bare: true,
+                          ),
+                        const SizedBox(height: AuraSpace.xl),
+                        ...body,
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          // 顶部守卫带（真机报告 2026-11-09 §2.5）：页眉随内容滚动，
-          // 滚到视口顶边附近时其控件残片会紧贴外壳顶栏形成无文字
-          // 灰框伪影。以页面底色覆盖 pageTop 高度带区，让残片在
-          // 带区内干净滑出。有氛围层的页面（主页）不加，避免压平
-          // 氛围渐变。
-          if (widget.ambient == null)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: AuraSpace.pageTop,
-              child: IgnorePointer(child: ColoredBox(color: p.bg)),
-            ),
-        ],
+            // 顶部守卫带（真机报告 2026-11-09 §2.5）：页眉随内容滚动，
+            // 滚到视口顶边附近时其控件残片会紧贴外壳顶栏形成无文字
+            // 灰框伪影。以页面底色覆盖 pageTop 高度带区，让残片在
+            // 带区内干净滑出。有氛围层的页面（主页）不加，避免压平
+            // 氛围渐变。
+            if (widget.ambient == null)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: AuraSpace.pageTop,
+                child: IgnorePointer(child: ColoredBox(color: p.bg)),
+              ),
+          ],
         ),
       ),
     );
@@ -349,7 +360,9 @@ class _AmbientSpectrumState extends State<AmbientSpectrum> {
   void initState() {
     super.initState();
     widget.spectrum.addListener(_onFrame);
-    PlatformAdapters.instance.window.visibleListenable.addListener(_onVisibilityChanged);
+    PlatformAdapters.instance.window.visibleListenable.addListener(
+      _onVisibilityChanged,
+    );
     // 首帧到达前也可能已有历史值（切页回来），先武装一次无信号检测。
     _armStaleTimer();
   }
@@ -433,8 +446,10 @@ class _AmbientSpectrumState extends State<AmbientSpectrum> {
     }
     // 进入无信号期：周期性衰减直到柱体归零。
     _decayTimer?.cancel();
-    _decayTimer =
-        Timer.periodic(const Duration(milliseconds: _decayIntervalMs), _onDecay);
+    _decayTimer = Timer.periodic(
+      const Duration(milliseconds: _decayIntervalMs),
+      _onDecay,
+    );
   }
 
   void _onDecay(Timer _) {
@@ -467,7 +482,9 @@ class _AmbientSpectrumState extends State<AmbientSpectrum> {
 
   @override
   void dispose() {
-    PlatformAdapters.instance.window.visibleListenable.removeListener(_onVisibilityChanged);
+    PlatformAdapters.instance.window.visibleListenable.removeListener(
+      _onVisibilityChanged,
+    );
     _staleTimer?.cancel();
     _decayTimer?.cancel();
     widget.spectrum.removeListener(_onFrame);
@@ -478,11 +495,10 @@ class _AmbientSpectrumState extends State<AmbientSpectrum> {
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
-        child: RepaintBoundary(
-          child: CustomPaint(
-              painter: _painter, child: const SizedBox.expand()),
-        ),
-      );
+    child: RepaintBoundary(
+      child: CustomPaint(painter: _painter, child: const SizedBox.expand()),
+    ),
+  );
 }
 
 /// 氛围频谱包络：32 带引擎频谱 → 72 根氛围条的重采样 + 攻击/释放平滑 +
@@ -496,7 +512,7 @@ class AmbientEnvelope {
   /// 上升约 0.4s、回落约 1s —— 变化不再抢注意力，只留氛围。
   static const double attack = 0.22;
   static const double release = 0.10;
-  static const double staleDecay = 0.86;  // 无信号时的衰减（放慢，收尾不突兀）
+  static const double staleDecay = 0.86; // 无信号时的衰减（放慢，收尾不突兀）
   static const double epsilon = 0.005; // 真实静音底噪截断门限（~-46dBFS），保障闲置 0fps 休眠
 
   /// 氛围柱的频率覆盖范围（对数均分到 [focusMinHz, focusMaxHz]）。
@@ -515,8 +531,7 @@ class AmbientEnvelope {
   /// （内含 log），而 feed 随频谱帧以 30Hz 被调用 → 2160 次 log/s，
   /// 产出的结果却和上一帧完全相同。表格化后降到 0。
   static final List<int> _srcBand = List<int>.generate(bars, (i) {
-    final hz =
-        focusMinHz * math.pow(focusMaxHz / focusMinHz, i / (bars - 1));
+    final hz = focusMinHz * math.pow(focusMaxHz / focusMinHz, i / (bars - 1));
     return VizBands.sampleIndex(VizBands.logX(hz))
         .round()
         .clamp(0, VizBands.count - 1);
@@ -612,8 +627,10 @@ class _AmbientPainter extends CustomPainter {
     required this.clock,
   }) : super(repaint: clock);
 
-  _AmbientPainter withPalette(AuraPalette p,
-      {required ValueListenable<int> clock}) {
+  _AmbientPainter withPalette(
+    AuraPalette p, {
+    required ValueListenable<int> clock,
+  }) {
     final n = _AmbientPainter(spectrum: spectrum, palette: p, clock: clock);
     for (var i = 0; i < AmbientEnvelope.bars; i++) {
       n._env.smooth[i] = _env.smooth[i];
@@ -698,8 +715,7 @@ class _AmbientPainter extends CustomPainter {
     for (var i = 0; i < collarWidths.length; i++) {
       _crownPaint
         ..strokeWidth = collarWidths[i]
-        ..color =
-            palette.accent.withValues(alpha: collarAlphas[i] * intensity);
+        ..color = palette.accent.withValues(alpha: collarAlphas[i] * intensity);
       canvas.drawPath(_crownPath, _crownPaint);
     }
 
@@ -711,8 +727,9 @@ class _AmbientPainter extends CustomPainter {
     // 冠部细高光：给柔化后的轮廓留一条「玻璃边」，避免整片糊成雾。
     _crownPaint
       ..strokeWidth = 1.1
-      ..color = palette.accent
-          .withValues(alpha: (0.10 + 0.16 * bass) * intensity);
+      ..color = palette.accent.withValues(
+        alpha: (0.10 + 0.16 * bass) * intensity,
+      );
     canvas.drawPath(_crownPath, _crownPaint);
   }
 
@@ -729,7 +746,11 @@ class _AmbientPainter extends CustomPainter {
       final currX = i * stepX;
       final currY = _ys[i] - dy;
       p.quadraticBezierTo(
-          prevX, prevY, (prevX + currX) / 2, (prevY + currY) / 2);
+        prevX,
+        prevY,
+        (prevX + currX) / 2,
+        (prevY + currY) / 2,
+      );
     }
     p.lineTo(w, _ys[bars - 1] - dy);
     p.lineTo(w, h);
@@ -747,7 +768,11 @@ class _AmbientPainter extends CustomPainter {
       final currX = i * stepX;
       final currY = _ys[i];
       p.quadraticBezierTo(
-          prevX, prevY, (prevX + currX) / 2, (prevY + currY) / 2);
+        prevX,
+        prevY,
+        (prevX + currX) / 2,
+        (prevY + currY) / 2,
+      );
     }
     p.lineTo(w, _ys[bars - 1]);
   }
@@ -782,8 +807,7 @@ CustomPainter ambientSpectrumPainterForTest({
   required ValueListenable<List<double>> spectrum,
   required AuraPalette palette,
   required ValueListenable<int> clock,
-}) =>
-    _AmbientPainter(spectrum: spectrum, palette: palette, clock: clock);
+}) => _AmbientPainter(spectrum: spectrum, palette: palette, clock: clock);
 
 /// 程序化细噪点：给大面积纯色底加一层"物质感"，非贴图、可复现。
 class GrainOverlay extends StatelessWidget {
@@ -798,10 +822,13 @@ class GrainOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
-        child: RepaintBoundary(
-          child: CustomPaint(painter: const _GrainPainter(), child: const SizedBox.expand()),
-        ),
-      );
+    child: RepaintBoundary(
+      child: CustomPaint(
+        painter: const _GrainPainter(),
+        child: const SizedBox.expand(),
+      ),
+    ),
+  );
 }
 
 class _GrainPainter extends CustomPainter {
@@ -809,7 +836,8 @@ class _GrainPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = const Color(0xFFFFFFFF).withValues(alpha: 0.022);
+    final paint = Paint()
+      ..color = const Color(0xFFFFFFFF).withValues(alpha: 0.022);
     for (final o in GrainOverlay._pts) {
       canvas.drawRect(
         Rect.fromLTWH(o.dx * size.width, o.dy * size.height, 1, 1),
@@ -853,7 +881,9 @@ class _PulseDotState extends State<PulseDot>
     if (widget.active && PlatformAdapters.instance.window.isVisible) {
       _c.repeat();
     }
-    PlatformAdapters.instance.window.visibleListenable.addListener(_onVisibilityChanged);
+    PlatformAdapters.instance.window.visibleListenable.addListener(
+      _onVisibilityChanged,
+    );
   }
 
   void _onVisibilityChanged() {
@@ -881,7 +911,9 @@ class _PulseDotState extends State<PulseDot>
 
   @override
   void dispose() {
-    PlatformAdapters.instance.window.visibleListenable.removeListener(_onVisibilityChanged);
+    PlatformAdapters.instance.window.visibleListenable.removeListener(
+      _onVisibilityChanged,
+    );
     _c.dispose();
     super.dispose();
   }
@@ -891,39 +923,39 @@ class _PulseDotState extends State<PulseDot>
   // 独立图层，每帧把最近的整条顶栏/hero 行标脏重绘。加边界后每帧只重绘
   // 这颗 ~16px 圆点，非可视化页面的 GPU 占用回到接近 0。
   Widget build(BuildContext context) => RepaintBoundary(
-        child: SizedBox(
-          width: widget.size * 2.6,
-          height: widget.size * 2.6,
-          child: AnimatedBuilder(
-            animation: _c,
-            builder: (_, _) {
-              final t = Curves.easeInOut.transform(_c.value);
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  // 光晕
-                  Container(
-                    width: widget.size + t * widget.size * 1.5,
-                    height: widget.size + t * widget.size * 1.5,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: widget.color.withValues(alpha: 0.30 * (1 - t)),
-                    ),
-                  ),
-                  Container(
-                    width: widget.size,
-                    height: widget.size,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: widget.color,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-      );
+    child: SizedBox(
+      width: widget.size * 2.6,
+      height: widget.size * 2.6,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (_, _) {
+          final t = Curves.easeInOut.transform(_c.value);
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              // 光晕
+              Container(
+                width: widget.size + t * widget.size * 1.5,
+                height: widget.size + t * widget.size * 1.5,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: widget.color.withValues(alpha: 0.30 * (1 - t)),
+                ),
+              ),
+              Container(
+                width: widget.size,
+                height: widget.size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: widget.color,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    ),
+  );
 }
 
 /* ==================== 4. 自定义控件 ==================== */
@@ -949,7 +981,9 @@ class AuraSwitch extends StatelessWidget {
         child: Padding(
           // 命中区扩展到 40×40（8pt 网格），视觉尺寸仍为 38×22
           padding: const EdgeInsets.symmetric(
-              vertical: (40 - AuraSize.switchH) / 2, horizontal: 1),
+            vertical: (40 - AuraSize.switchH) / 2,
+            horizontal: 1,
+          ),
           child: AnimatedContainer(
             duration: AuraDur.fast,
             curve: AuraCurve.standard,
@@ -1049,7 +1083,9 @@ class AuraSegmented<T> extends StatelessWidget {
                             onTap: enabled
                                 ? () {
                                     DebugTrace.instance.tap(
-                                        'segment', segments[k].label);
+                                      'segment',
+                                      segments[k].label,
+                                    );
                                     onChanged!(segments[k].value);
                                   }
                                 : null,
@@ -1065,9 +1101,11 @@ class AuraSegmented<T> extends StatelessWidget {
                                       ? (enabled ? p.accentContrast : p.textDim)
                                       : p.textDim,
                                 ),
-                                child: Text(segments[k].label,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
+                                child: Text(
+                                  segments[k].label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ),
                           );
@@ -1141,18 +1179,18 @@ class _AuraChipState extends State<AuraChip>
     // 窗口可见性门控（与 PulseDot 同型）：托盘/最小化时呼吸必须
     // 停转——隐藏窗口里持续产帧纯属浪费 GPU/CPU（2026-11-12
     // 业主优化指令）。恢复可见且仍处于故障脉冲态时自动续转。
-    PlatformAdapters.instance.window.visibleListenable
-        .addListener(_syncPulse);
+    PlatformAdapters.instance.window.visibleListenable.addListener(_syncPulse);
     if (widget.pulse) _ensurePulse();
   }
 
   void _ensurePulse() {
-    _pulseCtl ??= AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1600),
-    )..addListener(() {
-        if (mounted) setState(() {});
-      });
+    _pulseCtl ??=
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 1600),
+        )..addListener(() {
+          if (mounted) setState(() {});
+        });
     _syncPulse();
   }
 
@@ -1178,8 +1216,9 @@ class _AuraChipState extends State<AuraChip>
 
   @override
   void dispose() {
-    PlatformAdapters.instance.window.visibleListenable
-        .removeListener(_syncPulse);
+    PlatformAdapters.instance.window.visibleListenable.removeListener(
+      _syncPulse,
+    );
     _pulseCtl?.dispose();
     super.dispose();
   }
@@ -1189,9 +1228,7 @@ class _AuraChipState extends State<AuraChip>
     final p = paletteOf(context);
     final tint = widget.danger
         ? p.error
-        : (widget.warning
-            ? p.warning
-            : (widget.selected ? p.accent : p.text));
+        : (widget.warning ? p.warning : (widget.selected ? p.accent : p.text));
     final active = widget.selected || widget.warning;
     // 呼吸系数 0.55..1.0：只调底色/描边明暗，文案与色相不变。
     final pulseK = (widget.pulse && _pulseCtl != null)
@@ -1200,13 +1237,13 @@ class _AuraChipState extends State<AuraChip>
     final bg = widget.pulse
         ? tint.withValues(alpha: 0.16 * pulseK)
         : (active
-            ? tint.withValues(alpha: 0.14)
-            : (_hover ? hoverOn(p) : Colors.transparent));
+              ? tint.withValues(alpha: 0.14)
+              : (_hover ? hoverOn(p) : Colors.transparent));
     final border = widget.pulse
         ? tint.withValues(alpha: 0.35 + 0.35 * pulseK)
         : (active
-            ? tint.withValues(alpha: 0.55)
-            : (_hover ? p.textDim.withValues(alpha: 0.45) : p.hairline));
+              ? tint.withValues(alpha: 0.55)
+              : (_hover ? p.textDim.withValues(alpha: 0.45) : p.hairline));
 
     return MouseRegion(
       cursor: widget.onTap == null
@@ -1232,14 +1269,9 @@ class _AuraChipState extends State<AuraChip>
             borderRadius: BorderRadius.circular(AuraRadius.sm),
             border: Border.all(color: border, width: 1),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.icon != null) ...[
-                Icon(widget.icon, size: 14, color: tint),
-                const SizedBox(width: AuraSpace.sm - 2),
-              ],
-              AnimatedSwitcher(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final label = AnimatedSwitcher(
                 duration: AuraDur.fast,
                 switchInCurve: AuraCurve.standard,
                 switchOutCurve: AuraCurve.standard,
@@ -1267,10 +1299,28 @@ class _AuraChipState extends State<AuraChip>
                           letterSpacing: 0.1,
                           color: tint,
                         ),
-                        child: Text(widget.label),
+                        child: Text(
+                          widget.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-              ),
-            ],
+              );
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.icon != null) ...[
+                    Icon(widget.icon, size: 14, color: tint),
+                    const SizedBox(width: AuraSpace.sm - 2),
+                  ],
+                  // 有界宽度（如状态横幅右侧）允许标签省略；无界场景保持自然宽。
+                  if (constraints.maxWidth.isFinite)
+                    Flexible(child: label)
+                  else
+                    label,
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -1291,9 +1341,9 @@ class HbBuilder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<int>(
-        valueListenable: tick,
-        builder: (c, _, _) => builder(c),
-      );
+    valueListenable: tick,
+    builder: (c, _, _) => builder(c),
+  );
 }
 
 class StatReadout extends StatelessWidget {
@@ -1324,8 +1374,10 @@ class StatReadout extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: [
-            Text(value,
-                style: monoOf(p, size: size, color: valueColor ?? p.text)),
+            Text(
+              value,
+              style: monoOf(p, size: size, color: valueColor ?? p.text),
+            ),
             if (unit != null) ...[
               const SizedBox(width: AuraSpace.xs),
               Text(unit!, style: monoOf(p, size: 11, color: p.textDim)),
@@ -1403,8 +1455,11 @@ class _AuraDropdownState<T> extends State<AuraDropdown<T>> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            Icon(Icons.keyboard_arrow_down_rounded,
-                color: p.textDim.withValues(alpha: 0.5), size: 18),
+            Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: p.textDim.withValues(alpha: 0.5),
+              size: 18,
+            ),
           ],
         ),
       );
@@ -1420,7 +1475,8 @@ class _AuraDropdownState<T> extends State<AuraDropdown<T>> {
     }
 
     // 3. 防御性安全值校验：确保选中的 value 在有效项中
-    final effectiveValue = (widget.value != null &&
+    final effectiveValue =
+        (widget.value != null &&
             uniqueItems.any((it) => it.value == widget.value))
         ? widget.value
         : (uniqueItems.isNotEmpty ? uniqueItems.first.value : null);
@@ -1445,8 +1501,10 @@ class _AuraDropdownState<T> extends State<AuraDropdown<T>> {
             items: uniqueItems,
             onChanged: enabled
                 ? (v) {
-                    DebugTrace.instance
-                        .tap('dropdown', '${widget.value ?? '-'} -> $v');
+                    DebugTrace.instance.tap(
+                      'dropdown',
+                      '${widget.value ?? '-'} -> $v',
+                    );
                     widget.onChanged!(v);
                   }
                 : null,
@@ -1455,7 +1513,8 @@ class _AuraDropdownState<T> extends State<AuraDropdown<T>> {
             dropdownColor: p.panelRaised,
             borderRadius: BorderRadius.circular(AuraRadius.sm),
             style: labelOf(p),
-            icon: widget.icon ??
+            icon:
+                widget.icon ??
                 Icon(
                   Icons.keyboard_arrow_down_rounded,
                   color: enabled ? p.accent : p.textDim,

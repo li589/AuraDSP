@@ -22,6 +22,7 @@ import 'features/notice_host.dart';
 import 'features/visualizer/styles/visualizer_sprite_atlas.dart';
 import 'features/shell.dart';
 import 'l10n/gen/app_localizations.dart';
+import 'ui/aura_dialog.dart';
 
 void main(List<String> args) {
   // 调试总线：--debug / --debug-log=<path> 时才产生结构化 JSONL 事件流。
@@ -247,44 +248,60 @@ class _FatalPage extends StatelessWidget {
     final l = l10nOf(context);
     return Scaffold(
       backgroundColor: p.bg,
-      body: Center(
-        child: Container(
-          width: 520,
-          padding: const EdgeInsets.all(28),
-          decoration: BoxDecoration(
-            color: p.panel,
-            borderRadius: BorderRadius.circular(AuraRadius.lg),
-            border: Border.all(color: p.error.withValues(alpha: 0.5)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l.engineFailed,
-                style: TextStyle(
-                  fontFamily: 'AuraDisplay',
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: p.error,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                l.engineFailedBody,
-                style: TextStyle(fontSize: 13.5, color: p.text, height: 1.6),
-              ),
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(12),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(12),
+            child: AuraDialogConstraints(
+              maxWidth: 520,
+              maxHeight: 600,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(28),
                 decoration: BoxDecoration(
-                  color: p.bg,
-                  borderRadius: BorderRadius.circular(AuraRadius.sm),
-                  border: Border.all(color: p.hairline),
+                  color: p.panel,
+                  borderRadius: BorderRadius.circular(AuraRadius.lg),
+                  border: Border.all(color: p.error.withValues(alpha: 0.5)),
                 ),
-                child: Text(msg, style: monoOf(p, size: 11, color: p.textDim)),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l.engineFailed,
+                      style: TextStyle(
+                        fontFamily: 'AuraDisplay',
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: p.error,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      l.engineFailedBody,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        color: p.text,
+                        height: 1.6,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: p.bg,
+                        borderRadius: BorderRadius.circular(AuraRadius.sm),
+                        border: Border.all(color: p.hairline),
+                      ),
+                      child: Text(
+                        msg,
+                        style: monoOf(p, size: 11, color: p.textDim),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
         ),
       ),

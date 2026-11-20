@@ -20,6 +20,7 @@ import '../../../core/notice.dart';
 import '../../../core/state.dart';
 import '../../../core/theme.dart';
 import '../../../core/ui_helpers.dart';
+import '../../../ui/aura_dialog.dart';
 import '../../../ui/path_picker_dialog.dart';
 import '../../chrome.dart';
 import '../liveprog_library.dart';
@@ -98,8 +99,9 @@ class LiveprogLibraryDialog extends StatefulWidget {
 }
 
 class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
-  final TextEditingController _saveNameController =
-      TextEditingController(text: 'my-script');
+  final TextEditingController _saveNameController = TextEditingController(
+    text: 'my-script',
+  );
   String? _selectedDir;
   List<LiveprogItem> _items = const [];
   bool _loadingScripts = false;
@@ -173,12 +175,10 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
     final isDefault = dir == LiveprogLibrary.dir;
     final folderName = isDefault
         ? 'Local'
-        : (Directory(dir)
-                .uri
-                .pathSegments
-                .where((s) => s.isNotEmpty)
-                .lastOrNull ??
-            dir);
+        : (Directory(dir).uri.pathSegments
+                  .where((s) => s.isNotEmpty)
+                  .lastOrNull ??
+              dir);
 
     final items = await LiveprogLibrary.listDirAsync(
       dir,
@@ -255,7 +255,8 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
     // 保存目标不得落安装内置目录（随包内容只读语义，资源计划
     // P2）：选中它时回退本地库。
     final installDir = widget.model.installBuiltinDir('liveprog');
-    final targetDir = (_selectedDir != null &&
+    final targetDir =
+        (_selectedDir != null &&
             _selectedDir != installDir &&
             (_selectedDir == LiveprogLibrary.dir ||
                 (_dirExistence[_selectedDir] ?? false)))
@@ -418,34 +419,35 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
 
     return AlertDialog(
       backgroundColor: p.panel,
+      insetPadding: auraDialogInset(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AuraRadius.md),
         side: BorderSide(color: p.hairline),
       ),
       titlePadding: const EdgeInsets.fromLTRB(
-          AuraSpace.md, AuraSpace.md, AuraSpace.md, AuraSpace.xs),
+        AuraSpace.md,
+        AuraSpace.md,
+        AuraSpace.md,
+        AuraSpace.xs,
+      ),
       contentPadding: const EdgeInsets.symmetric(horizontal: AuraSpace.md),
       actionsPadding: const EdgeInsets.fromLTRB(
-          AuraSpace.md, AuraSpace.xs, AuraSpace.md, AuraSpace.md),
+        AuraSpace.md,
+        AuraSpace.xs,
+        AuraSpace.md,
+        AuraSpace.md,
+      ),
       title: Row(
         children: [
           Icon(Icons.library_books_rounded, size: 20, color: p.accent),
           const SizedBox(width: AuraSpace.xs),
-          Expanded(
-            child: Text(
-              l.lpLibDialogTitle,
-              style: sectionOf(p),
-            ),
-          ),
+          Expanded(child: Text(l.lpLibDialogTitle, style: sectionOf(p))),
           if (_checkingDirs) ...[
             const SizedBox(width: AuraSpace.xs),
             SizedBox(
               width: 14,
               height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: p.accent,
-              ),
+              child: CircularProgressIndicator(strokeWidth: 2, color: p.accent),
             ),
             const SizedBox(width: AuraSpace.xs),
           ],
@@ -458,320 +460,337 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
           ),
         ],
       ),
-      content: SizedBox(
-        width: 680,
-        height: 520,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 脚本目录标题行
-            Row(
-              children: [
-                Icon(Icons.folder_shared_outlined, size: 16, color: p.accent),
-                const SizedBox(width: AuraSpace.xs),
-                Text(
-                  l.lpLibDirs,
-                  style: monoOf(p, size: 12, color: p.text),
-                ),
-              ],
-            ),
-            const SizedBox(height: AuraSpace.xs),
-
-            // 目录列表（首个为系统初始目录，支持单选与状态标记）
-            Container(
-              constraints: const BoxConstraints(maxHeight: 120),
-              decoration: BoxDecoration(
-                color: p.panelRaised,
-                borderRadius: BorderRadius.circular(AuraRadius.sm),
-                border: Border.all(color: p.hairline),
+      content: AuraDialogConstraints(
+        maxWidth: 680,
+        maxHeight: 520,
+        // 显式尺寸供 AlertDialog 取 intrinsic；外层 AuraDialogConstraints
+        // 会在窄屏把它收窄到视口内。
+        child: SizedBox(
+          width: 680,
+          height: 520,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 脚本目录标题行
+              Row(
+                children: [
+                  Icon(Icons.folder_shared_outlined, size: 16, color: p.accent),
+                  const SizedBox(width: AuraSpace.xs),
+                  Text(l.lpLibDirs, style: monoOf(p, size: 12, color: p.text)),
+                ],
               ),
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: allDirs.length,
-                separatorBuilder: (_, _) =>
-                    Divider(color: p.hairline, height: 1),
-                itemBuilder: (ctx, idx) {
-                  final d = allDirs[idx];
-                  final isDefault = idx == 0;
-                  final isInstallBuiltin =
-                      installDir != null && d == installDir;
-                  final isSelected = _selectedDir == d;
-                  final exists = _dirExistence[d] ?? true;
+              const SizedBox(height: AuraSpace.xs),
 
-                  return InkWell(
-                    onTap: () => _selectDirectory(d),
-                    borderRadius: BorderRadius.circular(AuraRadius.sm),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: AuraSpace.sm, vertical: 4),
-                      child: Row(
-                        children: [
-                          Icon(
-                            isSelected
-                                ? Icons.radio_button_checked
-                                : Icons.radio_button_unchecked,
-                            size: 16,
-                            color: isSelected ? p.accent : p.textDim,
-                          ),
-                          const SizedBox(width: AuraSpace.xs),
-                          Icon(
-                            isDefault
-                                ? Icons.folder_special_outlined
-                                : (exists
-                                    ? Icons.folder_outlined
-                                    : Icons.folder_off_outlined),
-                            size: 15,
-                            color: exists
-                                ? (isSelected ? p.accent : p.text)
-                                : p.error,
-                          ),
-                          const SizedBox(width: AuraSpace.xs),
-                          Expanded(
-                            child: Text(
-                              d,
-                              style: monoOf(
-                                p,
-                                size: 11,
-                                color: exists
-                                    ? (isSelected ? p.accent : p.text)
-                                    : p.error,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (isDefault) ...[
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 4, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: p.accent.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(3),
-                                  ),
-                                  child: Text(
-                                    l.lpLibSystemInitial,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: p.accent,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: AuraSpace.xs),
-                              ],
-                              // 安装内置目录（随包 EEL 脚本，资源计划
-                              // P2）：内置 chip 与插件扫描目录同款，
-                              // 不可移除；与失效标记可同时出现。
-                              if (isInstallBuiltin) ...[
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 4, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: p.accent.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(3),
-                                  ),
-                                  child: Text(
-                                    l.plugScanDirsBuiltin,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: p.accent,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: AuraSpace.xs),
-                              ],
-                              if (!exists) ...[
-                                Tooltip(
-                                  message: l.lpLibDirInvalid,
-                                  child: Icon(
-                                    Icons.warning_amber_rounded,
-                                    size: 16,
-                                    color: p.warning,
-                                  ),
-                                ),
-                                const SizedBox(width: AuraSpace.xs),
-                              ],
-                              // 浏览：打开平台文件管理器
-                              IconButton(
-                                tooltip: l.lpLibOpenInExplorer,
-                                icon: const Icon(Icons.open_in_new_rounded,
-                                    size: 14),
-                                visualDensity: VisualDensity.compact,
-                                color: p.textDim,
-                                onPressed: exists
-                                    ? () => _browseInFileManager(d)
-                                    : null,
-                              ),
-                              // 移除外部目录（默认/安装内置目录禁止删除）
-                              if (!isDefault && !isInstallBuiltin)
-                                IconButton(
-                                  tooltip: l.lpDeleteAction,
-                                  icon: const Icon(Icons.close_rounded,
-                                      size: 14),
-                                  visualDensity: VisualDensity.compact,
-                                  color: p.textDim,
-                                  onPressed: () {
-                                    widget.model.removeCustomScriptDir(d);
-                                    if (_selectedDir == d) {
-                                      _selectDirectory(LiveprogLibrary.dir);
-                                    }
-                                    _checkDirsAsync();
-                                  },
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: AuraSpace.sm),
-
-            // 脚本列表标题行
-            Row(
-              children: [
-                Icon(Icons.code_rounded, size: 16, color: p.accent),
-                const SizedBox(width: AuraSpace.xs),
-                Text(
-                  l.lpLibScriptList,
-                  style: monoOf(p, size: 12, color: p.text),
-                ),
-              ],
-            ),
-            const SizedBox(height: AuraSpace.xs),
-
-            // 脚本列表区（异步加载动画与展示）
-            Expanded(
-              child: Container(
+              // 目录列表（首个为系统初始目录，支持单选与状态标记）
+              Container(
+                constraints: const BoxConstraints(maxHeight: 120),
                 decoration: BoxDecoration(
                   color: p.panelRaised,
                   borderRadius: BorderRadius.circular(AuraRadius.sm),
                   border: Border.all(color: p.hairline),
                 ),
-                child: _loadingScripts
-                    ? Center(
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: p.accent,
-                          ),
-                        ),
-                      )
-                    : _items.isEmpty
-                        ? Center(
-                            child: Text(l.lpLibraryEmpty, style: captionOf(p)),
-                          )
-                        : ListView.builder(
-                            itemCount: _items.length,
-                            itemBuilder: (ctx, idx) {
-                              final item = _items[idx];
-                              // 安装内置目录的条目只读：不给重命名/
-                              // 删除入口（底层 deletePath/renamePath
-                              // 的路径收敛本来也只放行本地+外部）。
-                              final fromInstall = installDir != null &&
-                                  _selectedDir == installDir;
-                              return ListTile(
-                                dense: true,
-                                leading: Icon(
-                                  item.isExternal
-                                      ? Icons.folder_shared_rounded
-                                      : Icons.description_outlined,
-                                  size: 16,
-                                  color: p.accent,
-                                ),
-                                title: Text(
-                                  item.name,
-                                  style: monoOf(p, size: 12),
-                                ),
-                                trailing: fromInstall
-                                    ? null
-                                    : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      tooltip: l.lpRenameTitle,
-                                      visualDensity: VisualDensity.compact,
-                                      iconSize: 14,
-                                      color: p.textDim,
-                                      icon: const Icon(
-                                          Icons.drive_file_rename_outline_rounded),
-                                      onPressed: () => _renameItem(item),
-                                    ),
-                                    IconButton(
-                                      tooltip: l.lpDeleteTitle,
-                                      visualDensity: VisualDensity.compact,
-                                      iconSize: 14,
-                                      color: p.textDim,
-                                      icon: const Icon(
-                                          Icons.delete_outline_rounded),
-                                      onPressed: () => _deleteItem(item),
-                                    ),
-                                  ],
-                                ),
-                                onTap: () => _onSelect(item),
-                              );
-                            },
-                          ),
-              ),
-            ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: allDirs.length,
+                  separatorBuilder: (_, _) =>
+                      Divider(color: p.hairline, height: 1),
+                  itemBuilder: (ctx, idx) {
+                    final d = allDirs[idx];
+                    final isDefault = idx == 0;
+                    final isInstallBuiltin =
+                        installDir != null && d == installDir;
+                    final isSelected = _selectedDir == d;
+                    final exists = _dirExistence[d] ?? true;
 
-            if (_skippedCount > 0) ...[
-              const SizedBox(height: AuraSpace.xs),
+                    return InkWell(
+                      onTap: () => _selectDirectory(d),
+                      borderRadius: BorderRadius.circular(AuraRadius.sm),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AuraSpace.sm,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              isSelected
+                                  ? Icons.radio_button_checked
+                                  : Icons.radio_button_unchecked,
+                              size: 16,
+                              color: isSelected ? p.accent : p.textDim,
+                            ),
+                            const SizedBox(width: AuraSpace.xs),
+                            Icon(
+                              isDefault
+                                  ? Icons.folder_special_outlined
+                                  : (exists
+                                        ? Icons.folder_outlined
+                                        : Icons.folder_off_outlined),
+                              size: 15,
+                              color: exists
+                                  ? (isSelected ? p.accent : p.text)
+                                  : p.error,
+                            ),
+                            const SizedBox(width: AuraSpace.xs),
+                            Expanded(
+                              child: Text(
+                                d,
+                                style: monoOf(
+                                  p,
+                                  size: 11,
+                                  color: exists
+                                      ? (isSelected ? p.accent : p.text)
+                                      : p.error,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isDefault) ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 1,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: p.accent.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                    child: Text(
+                                      l.lpLibSystemInitial,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: p.accent,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: AuraSpace.xs),
+                                ],
+                                // 安装内置目录（随包 EEL 脚本，资源计划
+                                // P2）：内置 chip 与插件扫描目录同款，
+                                // 不可移除；与失效标记可同时出现。
+                                if (isInstallBuiltin) ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 1,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: p.accent.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                    child: Text(
+                                      l.plugScanDirsBuiltin,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: p.accent,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: AuraSpace.xs),
+                                ],
+                                if (!exists) ...[
+                                  Tooltip(
+                                    message: l.lpLibDirInvalid,
+                                    child: Icon(
+                                      Icons.warning_amber_rounded,
+                                      size: 16,
+                                      color: p.warning,
+                                    ),
+                                  ),
+                                  const SizedBox(width: AuraSpace.xs),
+                                ],
+                                // 浏览：打开平台文件管理器
+                                IconButton(
+                                  tooltip: l.lpLibOpenInExplorer,
+                                  icon: const Icon(
+                                    Icons.open_in_new_rounded,
+                                    size: 14,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  color: p.textDim,
+                                  onPressed: exists
+                                      ? () => _browseInFileManager(d)
+                                      : null,
+                                ),
+                                // 移除外部目录（默认/安装内置目录禁止删除）
+                                if (!isDefault && !isInstallBuiltin)
+                                  IconButton(
+                                    tooltip: l.lpDeleteAction,
+                                    icon: const Icon(
+                                      Icons.close_rounded,
+                                      size: 14,
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                    color: p.textDim,
+                                    onPressed: () {
+                                      widget.model.removeCustomScriptDir(d);
+                                      if (_selectedDir == d) {
+                                        _selectDirectory(LiveprogLibrary.dir);
+                                      }
+                                      _checkDirsAsync();
+                                    },
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: AuraSpace.sm),
+
+              // 脚本列表标题行
               Row(
                 children: [
-                  Icon(Icons.shield_outlined, size: 12, color: p.warning),
-                  const SizedBox(width: 4),
+                  Icon(Icons.code_rounded, size: 16, color: p.accent),
+                  const SizedBox(width: AuraSpace.xs),
                   Text(
-                    l.lpSkipped(_skippedCount),
-                    style: captionOf(p, color: p.warning),
+                    l.lpLibScriptList,
+                    style: monoOf(p, size: 12, color: p.text),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AuraSpace.xs),
+
+              // 脚本列表区（异步加载动画与展示）
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: p.panelRaised,
+                    borderRadius: BorderRadius.circular(AuraRadius.sm),
+                    border: Border.all(color: p.hairline),
+                  ),
+                  child: _loadingScripts
+                      ? Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: p.accent,
+                            ),
+                          ),
+                        )
+                      : _items.isEmpty
+                      ? Center(
+                          child: Text(l.lpLibraryEmpty, style: captionOf(p)),
+                        )
+                      : ListView.builder(
+                          itemCount: _items.length,
+                          itemBuilder: (ctx, idx) {
+                            final item = _items[idx];
+                            // 安装内置目录的条目只读：不给重命名/
+                            // 删除入口（底层 deletePath/renamePath
+                            // 的路径收敛本来也只放行本地+外部）。
+                            final fromInstall =
+                                installDir != null &&
+                                _selectedDir == installDir;
+                            return ListTile(
+                              dense: true,
+                              leading: Icon(
+                                item.isExternal
+                                    ? Icons.folder_shared_rounded
+                                    : Icons.description_outlined,
+                                size: 16,
+                                color: p.accent,
+                              ),
+                              title: Text(
+                                item.name,
+                                style: monoOf(p, size: 12),
+                              ),
+                              trailing: fromInstall
+                                  ? null
+                                  : Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          tooltip: l.lpRenameTitle,
+                                          visualDensity: VisualDensity.compact,
+                                          iconSize: 14,
+                                          color: p.textDim,
+                                          icon: const Icon(
+                                            Icons
+                                                .drive_file_rename_outline_rounded,
+                                          ),
+                                          onPressed: () => _renameItem(item),
+                                        ),
+                                        IconButton(
+                                          tooltip: l.lpDeleteTitle,
+                                          visualDensity: VisualDensity.compact,
+                                          iconSize: 14,
+                                          color: p.textDim,
+                                          icon: const Icon(
+                                            Icons.delete_outline_rounded,
+                                          ),
+                                          onPressed: () => _deleteItem(item),
+                                        ),
+                                      ],
+                                    ),
+                              onTap: () => _onSelect(item),
+                            );
+                          },
+                        ),
+                ),
+              ),
+
+              if (_skippedCount > 0) ...[
+                const SizedBox(height: AuraSpace.xs),
+                Row(
+                  children: [
+                    Icon(Icons.shield_outlined, size: 12, color: p.warning),
+                    const SizedBox(width: 4),
+                    Text(
+                      l.lpSkipped(_skippedCount),
+                      style: captionOf(p, color: p.warning),
+                    ),
+                  ],
+                ),
+              ],
+
+              const SizedBox(height: AuraSpace.sm),
+              Divider(color: p.hairline, height: 1),
+              const SizedBox(height: AuraSpace.sm),
+
+              // 保存当前代码到库
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _saveNameController,
+                      style: monoOf(p, size: 12.5, color: p.text),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: 'my-script',
+                        hintStyle: monoOf(p, size: 12.5, color: p.textDim),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: AuraSpace.md,
+                          vertical: AuraSpace.sm,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AuraRadius.sm),
+                          borderSide: BorderSide(color: p.hairline),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AuraSpace.sm),
+                  AuraChip(
+                    l.lpLibSaveCurrent,
+                    icon: Icons.save_outlined,
+                    onTap: _saveCurrentScript,
                   ),
                 ],
               ),
             ],
-
-            const SizedBox(height: AuraSpace.sm),
-            Divider(color: p.hairline, height: 1),
-            const SizedBox(height: AuraSpace.sm),
-
-            // 保存当前代码到库
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _saveNameController,
-                    style: monoOf(p, size: 12.5, color: p.text),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintText: 'my-script',
-                      hintStyle: monoOf(p, size: 12.5, color: p.textDim),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: AuraSpace.md,
-                        vertical: AuraSpace.sm,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AuraRadius.sm),
-                        borderSide: BorderSide(color: p.hairline),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AuraSpace.sm),
-                AuraChip(
-                  l.lpLibSaveCurrent,
-                  icon: Icons.save_outlined,
-                  onTap: _saveCurrentScript,
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
       actions: [

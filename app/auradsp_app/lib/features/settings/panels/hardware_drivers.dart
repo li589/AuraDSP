@@ -1,7 +1,6 @@
 part of '../../settings_page.dart';
+
 // P1-1b（2026-10-23）：hardware 再拆——管线三层 + 驱动行（ASIO/VAIO/WASAPI/VASIO）。
-
-
 
 /* ---- 驱动卡（只读状态 + 安装/检查动作） ----
  *
@@ -64,38 +63,56 @@ class _DriverBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final info = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: p.text,
+          ),
+        ),
+        for (final line in lines) ...[const SizedBox(height: 2), line],
+      ],
+    );
+    final actionWrap = Wrap(
+      alignment: WrapAlignment.end,
+      spacing: AuraSpace.sm,
+      runSpacing: AuraSpace.xs,
+      children: actions,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
+        LayoutBuilder(
+          builder: (context, constraints) {
+            // 窄屏（设置面板 360 时约 262px）动作按钮与文字同行必溢出，
+            // 改为上下堆叠；桌面阈值以下保持原一行版式。
+            if (constraints.maxWidth < 420) {
+              return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: p.text)),
-                  for (final line in lines) ...[
-                    const SizedBox(height: 2),
-                    line,
+                  info,
+                  if (actions.isNotEmpty) ...[
+                    const SizedBox(height: AuraSpace.sm),
+                    actionWrap,
                   ],
                 ],
-              ),
-            ),
-            if (actions.isNotEmpty) ...[
-              const SizedBox(width: AuraSpace.sm),
-              Wrap(
-                alignment: WrapAlignment.end,
-                spacing: AuraSpace.sm,
-                runSpacing: AuraSpace.xs,
-                children: actions,
-              ),
-            ],
-          ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: info),
+                if (actions.isNotEmpty) ...[
+                  const SizedBox(width: AuraSpace.sm),
+                  actionWrap,
+                ],
+              ],
+            );
+          },
         ),
         ?below,
       ],
@@ -110,9 +127,10 @@ class _DriverStatus extends StatelessWidget {
   const _DriverStatus(this.text, this.color);
 
   @override
-  Widget build(BuildContext context) => Text(text,
-      style:
-          TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500, color: color));
+  Widget build(BuildContext context) => Text(
+    text,
+    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500, color: color),
+  );
 }
 
 /// 驱动块明细行（mono 小字，恒 dim）。
@@ -168,7 +186,9 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
     if (_expanded) {
       widget.model.requestEngineValues();
       _poll = Timer.periodic(
-          const Duration(seconds: 2), (_) => widget.model.requestEngineValues());
+        const Duration(seconds: 2),
+        (_) => widget.model.requestEngineValues(),
+      );
     } else {
       _poll?.cancel();
       _poll = null;
@@ -179,8 +199,14 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
   /// 引擎一组短标签行（模式/填充/声道/采样率[/已应用参数]），
   /// 只列有回读的项；撤下原「· 」拼接的一行长串（AI 感文案）。
   /// 无回读的引擎只留组名（有无回读另有标题行指示灯表意）。
-  List<Widget> _effRows(AppLocalizations l,
-      {int? mode, int? fill, int? rate, int? ch, int? applied}) {
+  List<Widget> _effRows(
+    AppLocalizations l, {
+    int? mode,
+    int? fill,
+    int? rate,
+    int? ch,
+    int? applied,
+  }) {
     final rows = <Widget>[];
     void add(String k, String v) {
       if (rows.isNotEmpty) rows.add(const SizedBox(height: 2));
@@ -204,15 +230,22 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title,
-            style: TextStyle(
-                fontSize: 11.5, fontWeight: FontWeight.w500, color: p.text)),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w500,
+            color: p.text,
+          ),
+        ),
         if (rows.isNotEmpty) ...[
           const SizedBox(height: 2),
           Padding(
             padding: const EdgeInsets.only(left: AuraSpace.sm),
             child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, children: rows),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: rows,
+            ),
           ),
         ],
       ],
@@ -240,15 +273,21 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
           borderRadius: BorderRadius.circular(6),
           child: Row(
             children: [
-              Icon(_expanded ? Icons.expand_less : Icons.expand_more,
-                  size: 15, color: p.textDim),
+              Icon(
+                _expanded ? Icons.expand_less : Icons.expand_more,
+                size: 15,
+                color: p.textDim,
+              ),
               const SizedBox(width: AuraSpace.xs),
               Expanded(
-                child: Text(l.engineEffectiveTitle,
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: p.text)),
+                child: Text(
+                  l.engineEffectiveTitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: p.text,
+                  ),
+                ),
               ),
               // 第三十七轮（业主目检裁定）：状态文字撤下，标题行
               // 右侧只留一盏指示灯——绿 = 主引擎有回读，暗 = 无。
@@ -273,41 +312,50 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _effGroup(
-                    l,
-                    l.effEngineLocal,
-                    m.localEffValues == null
-                        ? const []
-                        : _effRows(l,
-                            mode: m.localEffValues!['mode'],
-                            fill: m.localEffValues!['fill'],
-                            rate: m.localEffValues!['rate'])),
+                  l,
+                  l.effEngineLocal,
+                  m.localEffValues == null
+                      ? const []
+                      : _effRows(
+                          l,
+                          mode: m.localEffValues!['mode'],
+                          fill: m.localEffValues!['fill'],
+                          rate: m.localEffValues!['rate'],
+                        ),
+                ),
                 const SizedBox(height: AuraSpace.xs),
                 _effGroup(
-                    l,
-                    l.effEngineBridge,
-                    m.bridgeEffValues == null
-                        ? const []
-                        : _effRows(l,
-                            mode: m.bridgeEffValues!['mode'],
-                            fill: m.bridgeEffValues!['fill'],
-                            rate: m.bridgeEffValues!['rate'],
-                            ch: m.bridgeEffValues!['ch'])),
+                  l,
+                  l.effEngineBridge,
+                  m.bridgeEffValues == null
+                      ? const []
+                      : _effRows(
+                          l,
+                          mode: m.bridgeEffValues!['mode'],
+                          fill: m.bridgeEffValues!['fill'],
+                          rate: m.bridgeEffValues!['rate'],
+                          ch: m.bridgeEffValues!['ch'],
+                        ),
+                ),
                 const SizedBox(height: AuraSpace.xs),
                 _effGroup(
-                    l,
-                    l.effEngineApo,
-                    !m.apoEngineActive
-                        ? const []
-                        : _effRows(l,
-                            mode: m.apoEffMode,
-                            fill: m.apoEffFill,
-                            rate: m.apoEngineRate,
-                            // 声道行 = 引擎实际处理宽（第四十七
-                            // 轮 S3 回显）；未知时回落流宽。
-                            ch: m.apoEffCount > 0
-                                ? m.apoEffCount
-                                : m.apoEngineChannels,
-                            applied: m.apoParamsApplied)),
+                  l,
+                  l.effEngineApo,
+                  !m.apoEngineActive
+                      ? const []
+                      : _effRows(
+                          l,
+                          mode: m.apoEffMode,
+                          fill: m.apoEffFill,
+                          rate: m.apoEngineRate,
+                          // 声道行 = 引擎实际处理宽（第四十七
+                          // 轮 S3 回显）；未知时回落流宽。
+                          ch: m.apoEffCount > 0
+                              ? m.apoEffCount
+                              : m.apoEngineChannels,
+                          applied: m.apoParamsApplied,
+                        ),
+                ),
               ],
             ),
           ),
@@ -329,8 +377,9 @@ class _DriverKv extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-            width: 76,
-            child: Text(k, style: labelOf(p, size: 11, color: p.textDim))),
+          width: 76,
+          child: Text(k, style: labelOf(p, size: 11, color: p.textDim)),
+        ),
         Expanded(child: Text(v, style: monoOf(p, size: 11))),
       ],
     );
@@ -366,125 +415,158 @@ class _AsioClientDriverRow extends StatelessWidget {
       builder: (_, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            SizedBox(
+          Row(
+            children: [
+              SizedBox(
                 width: 104,
-                child: Text(l.asioDriver,
-                    style: labelOf(p, size: 12, color: p.textDim))),
-            Expanded(
-              child: names.isEmpty && curDriver.isEmpty
-                  ? Text('—', style: monoOf(p, size: 12))
-                  : AuraDropdown<String>(
-                      value: sel,
-                      items: [
-                        if (curDriver.isNotEmpty && !names.contains(curDriver))
-                          DropdownMenuItem<String>(
-                            value: curDriver,
-                            child: Text(l.setDriverOffline(curDriver),
+                child: Text(
+                  l.asioDriver,
+                  style: labelOf(p, size: 12, color: p.textDim),
+                ),
+              ),
+              Expanded(
+                child: names.isEmpty && curDriver.isEmpty
+                    ? Text('—', style: monoOf(p, size: 12))
+                    : AuraDropdown<String>(
+                        value: sel,
+                        items: [
+                          if (curDriver.isNotEmpty &&
+                              !names.contains(curDriver))
+                            DropdownMenuItem<String>(
+                              value: curDriver,
+                              child: Text(
+                                l.setDriverOffline(curDriver),
                                 style: TextStyle(
-                                    fontSize: 12,
-                                    color: p.warning,
-                                    fontStyle: FontStyle.italic),
-                                overflow: TextOverflow.ellipsis),
-                          ),
-                        for (final n in names)
-                          DropdownMenuItem<String>(
-                            value: n,
-                            child: Text(n,
+                                  fontSize: 12,
+                                  color: p.warning,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          for (final n in names)
+                            DropdownMenuItem<String>(
+                              value: n,
+                              child: Text(
+                                n,
                                 style: TextStyle(
-                                    fontSize: 12,
-                                    color: n == sel ? p.accent : p.text),
-                                overflow: TextOverflow.ellipsis),
-                          ),
-                      ],
-                      hint: '—',
-                      onChanged: (v) {
-                        if (v != null) model.setAsioDriver(v);
-                      },
-                    ),
-            ),
-            const SizedBox(width: AuraSpace.xs),
-            AuraChip(l.asioRefresh,
+                                  fontSize: 12,
+                                  color: n == sel ? p.accent : p.text,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        hint: '—',
+                        onChanged: (v) {
+                          if (v != null) model.setAsioDriver(v);
+                        },
+                      ),
+              ),
+              const SizedBox(width: AuraSpace.xs),
+              AuraChip(
+                l.asioRefresh,
                 icon: Icons.refresh_rounded,
-                onTap: () => model.refreshAsioDrivers()),
-          ]),
+                onTap: () => model.refreshAsioDrivers(),
+              ),
+            ],
+          ),
           if (note.isNotEmpty) _InfoRow('ASIO', note),
           // 第三十七轮（业主目检裁定）：三组下拉行距统一——驱动行
           // 与缓冲行之间补与缓冲↔声道对相同的间隔（此前驱动行
           // 贴着下方缓冲行，视觉上更挤）。
           const SizedBox(height: AuraSpace.xs),
-          Row(children: [
-            SizedBox(
+          Row(
+            children: [
+              SizedBox(
                 width: 104,
-                child: Text(l.asioBufSize,
-                    style: labelOf(p, size: 12, color: p.textDim))),
-            Expanded(
-              child: AuraDropdown<int>(
-                value: _bufSizes.contains(model.config.asioBufSize)
-                    ? model.config.asioBufSize
-                    : 0,
-                items: [
-                  for (final b in _bufSizes)
-                    DropdownMenuItem<int>(
-                      value: b,
-                      child: Text(
+                child: Text(
+                  l.asioBufSize,
+                  style: labelOf(p, size: 12, color: p.textDim),
+                ),
+              ),
+              Expanded(
+                child: AuraDropdown<int>(
+                  value: _bufSizes.contains(model.config.asioBufSize)
+                      ? model.config.asioBufSize
+                      : 0,
+                  items: [
+                    for (final b in _bufSizes)
+                      DropdownMenuItem<int>(
+                        value: b,
+                        child: Text(
                           b == 0 ? l.asioBufAuto : '$b frames',
                           style: TextStyle(
-                              fontSize: 12,
-                              color: b == model.config.asioBufSize
-                                  ? p.accent
-                                  : p.text)),
-                    ),
-                ],
-                onChanged: (v) {
-                  if (v != null) model.setAsioBufSize(v);
-                },
+                            fontSize: 12,
+                            color: b == model.config.asioBufSize
+                                ? p.accent
+                                : p.text,
+                          ),
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) model.setAsioBufSize(v);
+                  },
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
           const SizedBox(height: AuraSpace.xs),
-          Row(children: [
-            SizedBox(
+          Row(
+            children: [
+              SizedBox(
                 width: 104,
-                child: Text(l.asioOutPair,
-                    style: labelOf(p, size: 12, color: p.textDim))),
-            Expanded(
-              child: AuraDropdown<int>(
-                value: _outPairs.contains(model.config.asioOutPair)
-                    ? model.config.asioOutPair
-                    : 0,
-                items: [
-                  for (final n in _outPairs)
-                    DropdownMenuItem<int>(
-                      value: n,
-                      child: Text('ch ${n + 1}/${n + 2}',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: n == model.config.asioOutPair
-                                  ? p.accent
-                                  : p.text)),
-                    ),
-                ],
-                onChanged: (v) {
-                  if (v != null) model.setAsioOutPair(v);
-                },
+                child: Text(
+                  l.asioOutPair,
+                  style: labelOf(p, size: 12, color: p.textDim),
+                ),
               ),
-            ),
-          ]),
+              Expanded(
+                child: AuraDropdown<int>(
+                  value: _outPairs.contains(model.config.asioOutPair)
+                      ? model.config.asioOutPair
+                      : 0,
+                  items: [
+                    for (final n in _outPairs)
+                      DropdownMenuItem<int>(
+                        value: n,
+                        child: Text(
+                          'ch ${n + 1}/${n + 2}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: n == model.config.asioOutPair
+                                ? p.accent
+                                : p.text,
+                          ),
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) model.setAsioOutPair(v);
+                  },
+                ),
+              ),
+            ],
+          ),
           // 全面复审 S2（ASIO-3 呈现半）：起桥失败 note 上屏（与
           // VAIO 面板 note 行同口径；通知半已在 S1 落地）。
           if (info['note'] is String && (info['note'] as String).isNotEmpty)
             _InfoRow('ASIO', '${info['note']}'),
           if (model.asioActive) ...[
             if (info['inCh'] is num && info['outCh'] is num)
-              _InfoRow(l.asioDeviceChannels,
-                  'IN ${info['inCh']} / OUT ${info['outCh']}'),
+              _InfoRow(
+                l.asioDeviceChannels,
+                'IN ${info['inCh']} / OUT ${info['outCh']}',
+              ),
             if (info['ioCh'] is num && (info['ioCh'] as num) > 2)
               _InfoRow(l.asioTransportChannels, '${info['ioCh']} ch'),
             _InfoRow(l.asioSwitches, '${info['switches'] ?? 0}'),
             if (info['sr'] is num)
-              _InfoRow(l.sampleRate,
-                  '${(info['sr'] as num).toInt()} Hz / ${info['nbs'] ?? '?'} frames'),
+              _InfoRow(
+                l.sampleRate,
+                '${(info['sr'] as num).toInt()} Hz / ${info['nbs'] ?? '?'} frames',
+              ),
             if ((info['dropouts'] as int? ?? 0) > 0)
               _InfoRow(l.asioDropouts, '${info['dropouts']}'),
             if ((info['latenciesChanged'] as int? ?? 0) == 1)
@@ -492,9 +574,12 @@ class _AsioClientDriverRow extends StatelessWidget {
             if (info['sr'] is num &&
                 (info['sr'] as num).toInt() != model.config.sampleRate)
               _InfoRow(
-                  l.sampleRate,
-                  l.asioSrMismatch('${(info['sr'] as num).toInt()}',
-                      '${model.config.sampleRate}')),
+                l.sampleRate,
+                l.asioSrMismatch(
+                  '${(info['sr'] as num).toInt()}',
+                  '${model.config.sampleRate}',
+                ),
+              ),
           ],
         ],
       ),
@@ -513,7 +598,9 @@ class _ErrorBanner extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(top: AuraSpace.xs + 2),
       padding: const EdgeInsets.symmetric(
-          horizontal: AuraSpace.sm + 2, vertical: AuraSpace.xs + 2),
+        horizontal: AuraSpace.sm + 2,
+        vertical: AuraSpace.xs + 2,
+      ),
       decoration: BoxDecoration(
         color: p.error.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(AuraRadius.sm),
@@ -559,7 +646,9 @@ class _VaioGuardBanner extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(top: AuraSpace.xs + 2),
       padding: const EdgeInsets.symmetric(
-          horizontal: AuraSpace.sm + 2, vertical: AuraSpace.xs + 2),
+        horizontal: AuraSpace.sm + 2,
+        vertical: AuraSpace.xs + 2,
+      ),
       decoration: BoxDecoration(
         color: p.warning.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(AuraRadius.sm),
@@ -567,8 +656,7 @@ class _VaioGuardBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.pause_circle_outline_rounded,
-              size: 16, color: p.warning),
+          Icon(Icons.pause_circle_outline_rounded, size: 16, color: p.warning),
           const SizedBox(width: AuraSpace.sm),
           Expanded(
             child: Text(
@@ -606,8 +694,7 @@ class _VaioDriverRow extends StatelessWidget {
     // 按 user 口径内嵌 track（auravaio kmdf modern/legacy 驱动已
     // 就绪（sysvad））；原说明行与版本/track/KMDF 明细行删除——
     // track 信息已并入状态行，版本数值排障走 detect 日志。
-    final track = det['track'] is String &&
-            (det['track'] as String).isNotEmpty
+    final track = det['track'] is String && (det['track'] as String).isNotEmpty
         ? det['track'] as String
         : 'modern';
 
@@ -634,8 +721,8 @@ class _VaioDriverRow extends StatelessWidget {
                 ok
                     ? l.setVaioInstallOk
                     : (model.vaioActionUnverified
-                        ? l.setVaioInstallUnverified
-                        : (model.lastVaioError ?? l.setDriverInstallFailed)),
+                          ? l.setVaioInstallUnverified
+                          : (model.lastVaioError ?? l.setDriverInstallFailed)),
                 level: ok ? NoticeLevel.info : NoticeLevel.error,
               );
             },
@@ -651,8 +738,8 @@ class _VaioDriverRow extends StatelessWidget {
                 ok
                     ? l.setVaioUninstallOk
                     : (model.vaioActionUnverified
-                        ? l.setVaioUninstallUnverified
-                        : l.setDriverUninstallFailed),
+                          ? l.setVaioUninstallUnverified
+                          : l.setDriverUninstallFailed),
                 level: ok ? NoticeLevel.info : NoticeLevel.error,
               );
             },
@@ -739,8 +826,7 @@ class _VirtualAsioDriverCard extends StatelessWidget {
               ? l.asioDriverRegistered
               : l.asioDriverNotRegistered,
         ),
-        if (model.asioActive)
-          _DriverKv(l.asioDawStatus, l.asioDawConnected),
+        if (model.asioActive) _DriverKv(l.asioDawStatus, l.asioDawConnected),
       ],
       actions: [
         if (!model.asioDriverInstalled)
@@ -794,40 +880,51 @@ class _VirtualAsioDriverCard extends StatelessWidget {
           // Channels 值只有驱动读、无人写，档位恒缺省 2。驱动在
           // 被 DAW 创建时读取，故提示下次连接生效。
           const SizedBox(height: AuraSpace.xs),
-          Row(children: [
-            SizedBox(
+          Row(
+            children: [
+              SizedBox(
                 width: 104,
-                child: Text(l.asioDriverChannels,
-                    style: labelOf(paletteOf(context), size: 12,
-                        color: paletteOf(context).textDim))),
-            Expanded(
-              child: AuraDropdown<int>(
-                value: model.asioDriverChannels,
-                items: [
-                  for (final n in const [2, 4, 6, 8])
-                    DropdownMenuItem<int>(
-                      value: n,
-                      child: Text('$n ch',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: n == model.asioDriverChannels
-                                  ? paletteOf(context).accent
-                                  : paletteOf(context).text)),
-                    ),
-                ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  final ok = model.setAsioDriverChannels(v);
-                  model.postNotice(
-                    ok
-                        ? l.asioDriverChannelsSaved
-                        : l.asioDriverChannelsFailed,
-                    level: ok ? NoticeLevel.info : NoticeLevel.error,
-                  );
-                },
+                child: Text(
+                  l.asioDriverChannels,
+                  style: labelOf(
+                    paletteOf(context),
+                    size: 12,
+                    color: paletteOf(context).textDim,
+                  ),
+                ),
               ),
-            ),
-          ]),
+              Expanded(
+                child: AuraDropdown<int>(
+                  value: model.asioDriverChannels,
+                  items: [
+                    for (final n in const [2, 4, 6, 8])
+                      DropdownMenuItem<int>(
+                        value: n,
+                        child: Text(
+                          '$n ch',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: n == model.asioDriverChannels
+                                ? paletteOf(context).accent
+                                : paletteOf(context).text,
+                          ),
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v == null) return;
+                    final ok = model.setAsioDriverChannels(v);
+                    model.postNotice(
+                      ok
+                          ? l.asioDriverChannelsSaved
+                          : l.asioDriverChannelsFailed,
+                      level: ok ? NoticeLevel.info : NoticeLevel.error,
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
           // 第三十七轮（业主目检裁定）：原「写入注册表，DAW 下次
           // 连接时生效」提示行删除——档位行本身已自明。
         ],
@@ -835,4 +932,3 @@ class _VirtualAsioDriverCard extends StatelessWidget {
     );
   }
 }
-
