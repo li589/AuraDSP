@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+#include "auradsp_engine.h"  // auradsp_viz_frame（S4 频谱回传）
+
 class AuraAsioEngineLoader {
 public:
     using FnEngCreate = void*(__cdecl*)(float sampleRate, int maxBlockFrames);
@@ -21,6 +23,8 @@ public:
     using FnEngProcess = void(__cdecl*)(void* handle, const float* in, float* out, int frames);
     using FnEngSetParam = int(__cdecl*)(void* handle, const char* id, const void* value, unsigned int bytes);
     using FnEngGetParam = int(__cdecl*)(void* handle, const char* id, void* outValue, unsigned int bytes);
+    // S4：viz 帧读取（频谱回传）。帧结构以引擎公共头为准。
+    using FnEngVizRead = uint32_t(__cdecl*)(void* handle, auradsp_viz_frame* out, uint32_t maxFrames);
 
     AuraAsioEngineLoader() = default;
     ~AuraAsioEngineLoader() {
@@ -80,6 +84,8 @@ public:
                 auto fnProcess = (FnEngProcess)GetProcAddress(h, "auradsp_process");
                 auto fnSetParam = (FnEngSetParam)GetProcAddress(h, "auradsp_set_param");
                 auto fnGetParam = (FnEngGetParam)GetProcAddress(h, "auradsp_get_param");
+                // viz 为可选绑定：缺失只丢频谱回传，不否决引擎装载。
+                auto fnVizRead = (FnEngVizRead)GetProcAddress(h, "auradsp_viz_read");
 
                 if (fnCreate && fnDestroy && fnProcess) {
                     m_hModule = h;
@@ -88,6 +94,7 @@ public:
                     m_pfnProcess = fnProcess;
                     m_pfnSetParam = fnSetParam;
                     m_pfnGetParam = fnGetParam;
+                    m_pfnVizRead = fnVizRead;
                     m_loadedPath = path;
                     return true;
                 }
@@ -107,6 +114,7 @@ public:
         m_pfnProcess = nullptr;
         m_pfnSetParam = nullptr;
         m_pfnGetParam = nullptr;
+        m_pfnVizRead = nullptr;
         m_loadedPath.clear();
     }
 
@@ -130,6 +138,17 @@ public:
             m_pfnDestroy(handle);
         }
     }
+
+    // S4：读引擎 viz 帧（频谱/电平）。返回读到的帧数；未绑定
+    // 或无帧为 0。
+    uint32_t VizRead(void* handle, auradsp_viz_frame* out, uint32_t maxFrames) {
+        if (m_pfnVizRead && handle && out) {
+            return m_pfnVizRead(handle, out, maxFrames);
+        }
+        return 0;
+    }
+
+    bool HasViz() const { return m_pfnVizRead != nullptr; }
 
     void Process(void* handle, const float* in, float* out, int frames) {
         if (m_pfnProcess && handle) {
@@ -186,4 +205,5 @@ private:
     FnEngProcess m_pfnProcess = nullptr;
     FnEngSetParam m_pfnSetParam = nullptr;
     FnEngGetParam m_pfnGetParam = nullptr;
+    FnEngVizRead m_pfnVizRead = nullptr;
 };

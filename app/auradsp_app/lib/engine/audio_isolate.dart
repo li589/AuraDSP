@@ -47,6 +47,7 @@ part 'audio_slots.dart';
 part 'audio_isolate_linux.dart';
 part 'audio_isolate_windows.dart';
 part 'audio_isolate_apo.dart';
+part 'audio_isolate_asio.dart';
 
 
 
@@ -207,6 +208,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // AuraDSP_ApoPlugins；未激活时全部方法为空操作）。
   final apoPluginPublisher = ApoPluginPublisher();
   final apoTelemetry = ApoTelemetryReader();
+  // ASIO S4 通道：参数块发布者 + 遥测读者（虚拟形态控制模式下
+  // 激活；Client 形态走桥会话、两者恒空操作）。与 APO 发布者共
+  // 用同一份参数镜像。
+  final asioPublisher = AsioParamPublisher()
+    ..bind(
+        mirror: paramMirror,
+        strMirror: paramStrMirror,
+        bypassOf: () => bypass);
+  final asioTelemetry = AsioTelemetryReader();
+  // 虚拟形态控制模式在场标志（asiomode 分支维护）：为真时不存
+  // 在桥会话，asiorestart 只重发参数块。
+  bool asioControlMode = false;
   // VB 总线掩码（session 级；进桥/重建后下发，CHANGE 重建不丢——掩码活在 ctx）。
   // 出厂只开 A1/A2：其余路按需开路再建句柄。
   int vbBusMask = 0x03;
@@ -1040,6 +1053,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             value: (m['value'] as num).toDouble()
           );
           apoPublisher.onNumeric(m['id'] as String, dispatchValue);
+          asioPublisher.noteChanged();
           final brcBridge = bridgeManager.active;
           if (brcBridge != null) {
             final bridgeId = bridgeManager.activeId ?? '?';
@@ -1437,6 +1451,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             if (rc == Status.ok) {
               paramStrMirror[m['id'] as String] = m['text'] as String;
               apoPublisher.onString(m['id'] as String, m['text'] as String);
+              asioPublisher.noteChanged();
             }
             final activeBridge = bridgeManager.active;
             if (activeBridge != null) {
@@ -1750,17 +1765,48 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             // 三桥互斥由 stopOtherBridges 统一收口（主 isolate 的 setAudioMode
             // 已保证一次只选一个模式，这里防御性再压一遍）。
             stopOtherBridges('asio');
-            startAsioBridge(
-              driver: (m['driver'] as String?) ?? '',
-              bufSize: (m['bufSize'] as num?)?.toInt() ?? 0,
-              outPair: (m['outPair'] as num?)?.toInt() ?? 0,
-              channels: (m['channels'] as num?)?.toInt() ?? asioChannelsFromSource(),
-            );
+            if ((m['flavor'] as String?) == 'virtual') {
+              // S4 虚拟形态 = 控制模式（方案 D1）：不自开自家驱
+              // 动会话（去假会话）——本地链全停，参数块发布 +
+              // 遥测读者即全部通道；残留的 Client 会话先收掉。
+              // 对账重发（asioActive 恒假）会重复命中本分支：
+              // 已在控制模式时只重发参数块，不重建读者。
+              if (!asioControlMode) {
+                if (bridgeManager.isActive('asio')) stopAsioBridge();
+                asioControlMode = true;
+                asioPublisher.active = true;
+                asioTelemetry.start(send);
+                dbgLog('asiomode: virtual control mode on');
+              }
+              asioPublisher.flushAll();
+            } else {
+              if (asioControlMode) {
+                asioControlMode = false;
+                asioPublisher.active = false;
+                asioTelemetry.stop();
+              }
+              startAsioBridge(
+                driver: (m['driver'] as String?) ?? '',
+                bufSize: (m['bufSize'] as num?)?.toInt() ?? 0,
+                outPair: (m['outPair'] as num?)?.toInt() ?? 0,
+                channels: (m['channels'] as num?)?.toInt() ?? asioChannelsFromSource(),
+              );
+            }
           } else {
+            if (asioControlMode) {
+              asioControlMode = false;
+              asioPublisher.active = false;
+              asioTelemetry.stop();
+            }
             stopAsioBridge();
           }
           break;
         case 'asiorestart':
+          // 控制模式下无会话可重启：参数块全量重发即可。
+          if (asioControlMode) {
+            asioPublisher.flushAll();
+            break;
+          }
           // 驱动/缓冲/声道数变更：热切换（stop → start 新参数）。
           bridgeDeathGate.reset('asio');
           if (!bridgeManager.isActive('asio')) break;
@@ -1803,6 +1849,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           bypass = m['value'] as bool;
           bridgeManager.active?.setBypass(bypass);
           apoPublisher.onBypass(bypass);
+          asioPublisher.noteChanged();
           break;
         case 'apopublish':
           // 进 sysapo / 附加后全量重发参数块（镜像即全量真相）。
@@ -2796,6 +2843,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
           }
         } catch (e, st) { swallowThrottled(e, st, 'pump-$vizBackend'); }
+        continue;
+      }
+      if (asioControlMode) {
+        // S4 控制模式（方案 D1）：本地链全停——不读源、不处理、
+        // 不出声，泵仅维持节拍等命令/模式切换（与 source==null
+        // 的空转口径一致，不停 audioOut）。参数与遥测由
+        // AsioParamPublisher / AsioTelemetryReader 各自驱动。
+        noteIdle(DateTime.now().millisecondsSinceEpoch);
         continue;
       }
       try {

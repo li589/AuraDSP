@@ -614,7 +614,7 @@ static const AsioDriverTelemetryBlock* DawTelemetryMap() {
         return nullptr;
     }
     if (view->magic != ASIO_DRIVER_TELEMETRY_MAGIC ||
-        view->version != ASIO_DRIVER_TELEMETRY_VERSION) {
+        view->version < 1 || view->version > ASIO_DRIVER_TELEMETRY_VERSION) {
         UnmapViewOfFile(view);
         view = nullptr;
         CloseHandle(hMap);

@@ -552,6 +552,77 @@ void AuraAsioDriver::CloseTelemetry() {
     }
 }
 
+// ---------------- S4 参数块（App 写、驱动读） ----------------
+
+void AuraAsioDriver::OpenParams() {
+    CloseParams();
+    m_hParamsMap = OpenFileMappingW(FILE_MAP_READ, FALSE,
+                                    ASIO_DRIVER_PARAMS_NAME);
+    if (!m_hParamsMap) return;  // App 未运行：保持默认参数口径
+    const void* view = MapViewOfFile(m_hParamsMap, FILE_MAP_READ, 0, 0,
+                                     ASIO_DRIVER_PARAMS_BYTES);
+    if (!view) {
+        CloseHandle(m_hParamsMap);
+        m_hParamsMap = nullptr;
+        return;
+    }
+    const auto* block =
+        static_cast<const AsioDriverParamsBlock*>(view);
+    if (block->magic != ASIO_DRIVER_PARAMS_MAGIC ||
+        block->version != ASIO_DRIVER_PARAMS_VERSION) {
+        UnmapViewOfFile(view);
+        CloseHandle(m_hParamsMap);
+        m_hParamsMap = nullptr;
+        return;
+    }
+    m_params = block;
+    m_lastParamSeq = 0;  // 首块强制应用一次现行参数
+}
+
+void AuraAsioDriver::CloseParams() {
+    if (m_params) {
+        UnmapViewOfFile(m_params);
+        m_params = nullptr;
+    }
+    if (m_hParamsMap) {
+        CloseHandle(m_hParamsMap);
+        m_hParamsMap = nullptr;
+    }
+}
+
+// seq 变化才动作：拷贝载荷 → 复核 seq 未再变（写者中途改写则
+// 本轮放弃、下块重试）→ 更新待应用串 + 旁路，并立即应用到
+// 在生引擎。泵线程调用（非 RT 回调），引擎 set_param 的线程
+// 安全口径与 APO worker 应用参数同级。
+void AuraAsioDriver::PullParamsFromBlock() {
+    if (!m_params) {
+        // 块缺席（App 后启）：低频重试打开（约每 600 块一次），
+        // 免得 DAW 先于 App 启动时参数线永不接通。
+        if (++m_paramsRetry >= 600) {
+            m_paramsRetry = 0;
+            OpenParams();
+        }
+        return;
+    }
+    const long seq = m_params->seq;
+    if (seq == m_lastParamSeq) return;
+    uint32_t bytes = m_params->payloadBytes;
+    if (bytes > ASIO_DRIVER_PARAMS_PAYLOAD_CAP) {
+        bytes = ASIO_DRIVER_PARAMS_PAYLOAD_CAP;
+    }
+    const char* payload = reinterpret_cast<const char*>(m_params) +
+                          ASIO_DRIVER_PARAMS_PAYLOAD_OFFSET;
+    std::string snapshot(payload, payload + bytes);
+    const long bypass = m_params->bypass;
+    if (m_params->seq != seq) return;  // 拷贝期间写者已更新，下块重试
+    m_lastParamSeq = seq;
+    m_pendingParamString = snapshot;
+    m_bypass.store(bypass != 0, std::memory_order_relaxed);
+    if (m_engine && !snapshot.empty()) {
+        m_engineLoader.ApplyParamsString(m_engine, snapshot.c_str());
+    }
+}
+
 void AuraAsioDriver::PublishTelemetrySinkState() {
     if (!m_telemetry) return;
     m_telemetry->sampleRate = (uint32_t)(m_sampleRate + 0.5);
@@ -579,6 +650,7 @@ ASIOError AuraAsioDriver::start() {
     if (!m_hStopEvent) return ASE_HWMalfunction;
 
     OpenTelemetry();
+    OpenParams();
 
     m_hThread = CreateThread(nullptr, 0, AudioPumpThreadProc, this, 0, nullptr);
     if (!m_hThread) {
@@ -609,6 +681,7 @@ ASIOError AuraAsioDriver::stop() {
         m_hStopEvent = nullptr;
     }
     CloseTelemetry();
+    CloseParams();
     return ASE_OK;
 }
 
@@ -644,6 +717,9 @@ DWORD AuraAsioDriver::PumpLoop() {
 
     while (WaitForSingleObject(m_hStopEvent, 0) == WAIT_TIMEOUT) {
         qpcNext.QuadPart += ticksPerBlock;
+
+        // S4：参数块拉取（seq 未变时仅一次原子读，开销可忽略）。
+        PullParamsFromBlock();
 
         const long currentToggle = m_toggle;
         m_toggle = 1 - m_toggle;
@@ -728,6 +804,27 @@ DWORD AuraAsioDriver::PumpLoop() {
             m_telemetry->processedFrames = (uint64_t)m_samplePosition;
             m_telemetry->peakIn = telePeakIn;
             m_telemetry->peakOut = telePeakOut;
+            // S4 频谱：取引擎 viz 环最新一帧。旁路（引擎不处理）
+            // 或引擎缺席/viz 未绑定时写全零，不留陈旧频谱误导
+            // UI；处理中但本块无新帧则保留上一帧（防闪烁）。
+            if (!m_bypass.load(std::memory_order_relaxed) && m_engine &&
+                m_engineLoader.HasViz()) {
+                auradsp_viz_frame frame;
+                int guard = 0;
+                while (m_engineLoader.VizRead(m_engine, &frame, 1) > 0 &&
+                       ++guard <= 32) {
+                    std::memcpy(m_telemetry->spectrum, frame.spectrum,
+                                sizeof(m_telemetry->spectrum));
+                    std::memcpy(m_telemetry->eqInSpectrum,
+                                frame.eq_in_spectrum,
+                                sizeof(m_telemetry->eqInSpectrum));
+                }
+            } else {
+                std::memset(m_telemetry->spectrum, 0,
+                            sizeof(m_telemetry->spectrum));
+                std::memset(m_telemetry->eqInSpectrum, 0,
+                            sizeof(m_telemetry->eqInSpectrum));
+            }
             m_telemetry->updateSeq++;
         }
 

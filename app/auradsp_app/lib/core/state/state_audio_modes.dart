@@ -132,6 +132,7 @@ extension AudioModesState on AppModel {
           'driver': config.asioDriver,
           'bufSize': config.asioBufSize,
           'outPair': config.asioOutPair,
+          'flavor': config.asioFlavor,
         });
       }
       if (!isAsio) {
@@ -390,6 +391,19 @@ extension AudioModesState on AppModel {
         return;
       }
       applyPipelineChain();
+      // S4 起两形态在 isolate 侧根本分岔（虚拟=控制模式无会话 /
+      // Client=桥会话）：已在 asio 模式时对账分发只在链未活时
+      // 重发，活会话下形态切换必须显式直达 isolate。
+      if (!_pipelineIoSuppressed) {
+        _toIso?.send({
+          'cmd': 'asiomode',
+          'on': true,
+          'driver': config.asioDriver,
+          'bufSize': config.asioBufSize,
+          'outPair': config.asioOutPair,
+          'flavor': config.asioFlavor,
+        });
+      }
       _sendChCap();
     }
     persistRoutingChange();
@@ -619,6 +633,7 @@ extension AudioModesState on AppModel {
           'driver': config.asioDriver,
           'bufSize': config.asioBufSize,
           'outPair': config.asioOutPair,
+          'flavor': config.asioFlavor,
         });
         asioActive = false;
         asioInfo = {};
@@ -680,6 +695,7 @@ extension AudioModesState on AppModel {
         'driver': config.asioDriver,
         'bufSize': config.asioBufSize,
         'outPair': config.asioOutPair,
+        'flavor': config.asioFlavor,
       });
     }
   }

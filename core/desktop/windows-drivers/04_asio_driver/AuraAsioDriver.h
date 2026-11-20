@@ -80,8 +80,18 @@ private:
     void OpenTelemetry();
     void CloseTelemetry();
     void PublishTelemetrySinkState();
+    // S4 参数块：App 写、驱动读（seq 变化即应用到引擎）。
+    void OpenParams();
+    void CloseParams();
+    void PullParamsFromBlock();
     HANDLE m_hTelemetryMap = nullptr;
     AsioDriverTelemetryBlock* m_telemetry = nullptr;
+    // S4 参数块（只读映射；App 未运行时缺席，引擎保持默认参数
+    // 与 future() 既有口径）。
+    HANDLE m_hParamsMap = nullptr;
+    const AsioDriverParamsBlock* m_params = nullptr;
+    long m_lastParamSeq = 0;
+    int m_paramsRetry = 0;
 
     std::atomic<long> m_refCount{1};
 
