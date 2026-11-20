@@ -44,29 +44,28 @@
 
   <!-- ========== 首屏 ========== -->
   <section class="hero">
-    <div class="aura" aria-hidden="true"></div>
-    <div class="wrap heroGrid">
-      <div>
-        <p class="eyebrow">系统级实时音频处理引擎</p>
-        <h1 class="h1">
-          <span class="ln"><span>整条音频链路，</span></span>
-          <span class="ln"><span>拆成 23 个单元</span></span>
-        </h1>
-        <p class="lede">
-          AuraDSP 接管系统音频输出，把它拆成 <b>23 个可以单独调节的单元</b>。噪声门、滤波、动态、限幅，中间夹着 12 级可以自己排顺序的经典算法。刚装好时所有单元都在旁路状态，打开哪个，哪个才开始处理。
-        </p>
-        <div class="actions">
-          <a class="btn" href="#anatomy"><span>看看链路</span><span class="arw" aria-hidden="true">→</span></a>
-          <a class="quiet" href="https://github.com/li589/AuraDSP" target="_blank" rel="noopener"><span class="ln"></span>查看源码</a>
-        </div>
-        <ul class="facts">
-          <li>23 个单元</li>
-          <li>12 级可重排</li>
-          <li>4 槽 × 5 级插件</li>
-          <li>GPL-3.0 开源</li>
-        </ul>
+    <div class="wrap hero-in">
+      <a class="pill" href="#start"><i aria-hidden="true"></i><span>v0.1.0 · Windows 与 Linux</span><span class="arw" aria-hidden="true">→</span></a>
+      <h1 class="h1">
+        <span class="ln"><span>整条音频链路，</span></span>
+        <span class="ln"><span>拆成 <span class="num">23</span> 个单元</span></span>
+      </h1>
+      <p class="lede">
+        AuraDSP 接管系统音频输出，把它拆成 <b>23 个可以单独调节的单元</b>。噪声门、滤波、动态、限幅，中间夹着 12 级可以自己排顺序的经典算法。刚装好时所有单元都在旁路状态，打开哪个，哪个才开始处理。
+      </p>
+      <div class="actions">
+        <a class="btn" href="#anatomy"><span>看看链路</span><span class="arw" aria-hidden="true">→</span></a>
+        <a class="ghost-btn" href="https://github.com/li589/AuraDSP" target="_blank" rel="noopener">查看源码</a>
       </div>
+      <ul class="facts">
+        <li>23 个单元</li>
+        <li>12 级可重排</li>
+        <li>4 槽 × 5 级插件</li>
+        <li>GPL-3.0 开源</li>
+      </ul>
+    </div>
 
+    <div class="wrap plate-zone">
       <figure class="plate" id="plate">
         <svg id="plateSvg" viewBox="0 0 600 436" role="img"
              aria-label="AuraDSP 信号链路示意：前级、经典算法链、后级、输出四段共 23 个单元"></svg>
@@ -92,13 +91,15 @@
   <section class="sec" id="believe">
     <div class="wrap">
       <div class="sec-head rv">
-        <p class="label"><b>01</b> 定位</p>
+        <p class="kicker"><b>01</b><span>定位</span></p>
         <h2>设计出发点</h2>
       </div>
 
       <div class="phi">
-        <div></div>
-        <div class="phi-body rv" style="--d:.06s">
+        <blockquote class="pull rv" style="--d:.06s">
+          刚装好时，23 个单元都是旁路状态。<small>默认状态</small>
+        </blockquote>
+        <div class="phi-body rv" style="--d:.12s">
           <p>
             大部分音效软件卖的是预设：装好，挑一个「流行」或「人声」，声音就变了。AuraDSP 不做一键结果。它给的是一条完整通路：四段，二十三个单元，段与段之间留着插件的插入点。
           </p>
@@ -110,12 +111,6 @@
           </p>
         </div>
       </div>
-
-      <blockquote class="pull rv" style="--d:.1s">
-        刚装好时，23 个单元都是旁路状态。<small>默认状态</small>
-      </blockquote>
-
-      <div class="ruler rv" style="--d:.16s" aria-hidden="true"></div>
     </div>
   </section>
 
@@ -125,8 +120,9 @@
   <section class="sec" id="anatomy">
     <div class="wrap">
       <div class="sec-head rv">
-        <p class="label"><b>02</b> 结构</p>
+        <p class="kicker"><b>02</b><span>结构</span></p>
         <h2>四段结构</h2>
+        <p class="sec-lead">四段，二十三个单元，段与段之间留着插件的插入点。</p>
       </div>
 
       <div class="rv" style="--d:.06s">
@@ -156,34 +152,42 @@
   <section class="sec" id="platforms">
     <div class="wrap">
       <div class="sec-head rv">
-        <p class="label"><b>03</b> 形态</p>
+        <p class="kicker"><b>03</b><span>形态</span></p>
         <h2>平台与接法</h2>
       </div>
 
       <div class="matrix">
         <div class="row rv">
-          <div class="form">Desktop</div>
+          <div class="row-top">
+            <div class="form">Desktop</div>
+            <div class="st"><i></i>主力形态</div>
+          </div>
           <div class="plat">Windows 10 / 11</div>
           <div class="how">引擎以 DLL 跑在进程内。输出侧可选系统 APO、AuraVAIO 虚拟声卡、Voicemeeter 回调，或直接用 ASIO（2 / 4 / 6 / 8 声道）。</div>
-          <div class="st"><i></i>主力形态</div>
         </div>
         <div class="row rv" style="--d:.05s">
-          <div class="form">Linux</div>
+          <div class="row-top">
+            <div class="form">Linux</div>
+            <div class="st"><i></i>功能对等</div>
+          </div>
           <div class="plat">Ubuntu · PulseAudio / PipeWire</div>
           <div class="how">同一份 C ABI 的原生库，系统输出、虚拟设备、回环驱动三种接法都能用，也可以直接挂 ALSA。</div>
-          <div class="st"><i></i>功能对等</div>
         </div>
         <div class="row rv" style="--d:.1s">
-          <div class="form">Root</div>
+          <div class="row-top">
+            <div class="form">Root</div>
+            <div class="st"><i></i>端到端打通</div>
+          </div>
           <div class="plat">Android · KSU / Magisk</div>
           <div class="how">效果注入系统音频 HAL，全局生效。重启之后依然在位。</div>
-          <div class="st"><i></i>端到端打通</div>
         </div>
         <div class="row rv" style="--d:.15s">
-          <div class="form">Rootless</div>
+          <div class="row-top">
+            <div class="form">Rootless</div>
+            <div class="st behind"><i></i>蓝本阶段</div>
+          </div>
           <div class="plat">Android · APK</div>
           <div class="how">以会话级 AudioEffect 前台服务运行，不需要 root。作用范围限于当前会话。</div>
-          <div class="st behind"><i></i>蓝本阶段</div>
         </div>
       </div>
 
@@ -199,20 +203,20 @@
   <section class="sec" id="engineering">
     <div class="wrap">
       <div class="sec-head rv">
-        <p class="label"><b>04</b> 工程</p>
+        <p class="kicker"><b>04</b><span>工程</span></p>
         <h2>实时回调的约束</h2>
       </div>
 
-      <div class="principles">
-        <div class="rv">
+      <div class="principles rv">
+        <div>
           <span>第一</span>
           <p>音频回调里<b>不分配内存、不加锁、不做 IO</b>。调参数时不直接改引擎正在读的那份，先写一份副本，等一个块处理完再整体换过去。</p>
         </div>
-        <div class="rv" style="--d:.05s">
+        <div>
           <span>第二</span>
           <p><b>界面和引擎之间只有一份头文件</b>。两边的函数签名对不上，构建脚本会直接拦下来，不靠谁去记。</p>
         </div>
-        <div class="rv" style="--d:.1s">
+        <div>
           <span>第三</span>
           <p><b>参数、预设、效果表都不写死在代码里</b>。它们放在引擎的参数表和 JSON 文件里，界面读同一份，改一处两边都跟着变。</p>
         </div>
@@ -233,7 +237,7 @@
   <section class="sec start" id="start">
     <div class="wrap">
       <div class="sec-head rv">
-        <p class="label"><b>05</b> 开始</p>
+        <p class="kicker"><b>05</b><span>开始</span></p>
         <h2>安装与首次运行</h2>
       </div>
 
@@ -255,13 +259,15 @@
         </article>
       </div>
 
-      <div class="start-links rv" style="--d:.08s">
-        <a class="primary" href="https://github.com/li589/AuraDSP/releases" target="_blank" rel="noopener">下载安装包</a>
-        <a href="https://github.com/li589/AuraDSP" target="_blank" rel="noopener">阅读源码</a>
-        <a href="https://github.com/li589/AuraDSP/tree/main/docs" target="_blank" rel="noopener">架构文档</a>
+      <div class="cta-band rv" style="--d:.08s">
+        <h3>装好只要三步。</h3>
+        <p class="start-note">首个正式版 v0.1.0 面向 Windows 与 Linux，只从 main 分支构建。</p>
+        <div class="start-links">
+          <a class="primary" href="https://github.com/li589/AuraDSP/releases" target="_blank" rel="noopener">下载安装包</a>
+          <a href="https://github.com/li589/AuraDSP" target="_blank" rel="noopener">阅读源码</a>
+          <a href="https://github.com/li589/AuraDSP/tree/main/docs" target="_blank" rel="noopener">架构文档</a>
+        </div>
       </div>
-
-      <p class="start-note rv" style="--d:.12s">首个正式版 v0.1.0 面向 Windows 与 Linux，只从 main 分支构建。</p>
     </div>
   </section>
 
@@ -270,23 +276,43 @@
 <footer>
   <div class="wrap">
     <div class="foot">
-      <a class="mark" href="#top">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="9.4" fill="none" stroke="#D4FF3F" stroke-width="1" opacity=".38"/>
-          <circle cx="12" cy="12" r="4.6" fill="none" stroke="#D4FF3F" stroke-width="1.3"/>
-          <circle cx="12" cy="12" r="1.4" fill="#D4FF3F"/>
-        </svg>
-        <b>AuraDSP</b>
-      </a>
-      <div class="foot-meta">
-        <span class="ver">v0.1.0</span>
-        <span>GPL-3.0</span>
-        <span class="ver">C ABI v2</span>
-        <span>48000 Hz · 2 ch</span>
+      <div>
+        <a class="mark" href="#top">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9.4" fill="none" stroke="#D4FF3F" stroke-width="1" opacity=".38"/>
+            <circle cx="12" cy="12" r="4.6" fill="none" stroke="#D4FF3F" stroke-width="1.3"/>
+            <circle cx="12" cy="12" r="1.4" fill="#D4FF3F"/>
+          </svg>
+          <b>AuraDSP</b>
+        </a>
+        <p class="foot-note">
+          跨平台的全局音频效果处理。界面和引擎之间只有一层 C ABI，效果和预设都放在数据文件里。代码基础来自 JamesDSP，按 GPL-3.0 分发。
+        </p>
       </div>
-      <p class="foot-note">
-        跨平台的全局音频效果处理。界面和引擎之间只有一层 C ABI，效果和预设都放在数据文件里。代码基础来自 JamesDSP，按 GPL-3.0 分发。
-      </p>
+      <div class="foot-col">
+        <h4>导航</h4>
+        <ul>
+          <li><a href="#believe">定位</a></li>
+          <li><a href="#anatomy">结构</a></li>
+          <li><a href="#platforms">形态</a></li>
+          <li><a href="#engineering">工程</a></li>
+          <li><a href="#start">开始</a></li>
+        </ul>
+      </div>
+      <div class="foot-col">
+        <h4>项目</h4>
+        <ul>
+          <li><a href="https://github.com/li589/AuraDSP/releases" target="_blank" rel="noopener">下载安装包</a></li>
+          <li><a href="https://github.com/li589/AuraDSP" target="_blank" rel="noopener">阅读源码</a></li>
+          <li><a href="https://github.com/li589/AuraDSP/tree/main/docs" target="_blank" rel="noopener">架构文档</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-meta">
+      <span class="ver">v0.1.0</span>
+      <span>GPL-3.0</span>
+      <span class="ver">C ABI v2</span>
+      <span>48000 Hz · 2 ch</span>
     </div>
     <svg class="wordmark" viewBox="0 0 1000 150" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
       <text x="0" y="120" font-size="148" textLength="1000" lengthAdjust="spacingAndGlyphs">AuraDSP</text>
