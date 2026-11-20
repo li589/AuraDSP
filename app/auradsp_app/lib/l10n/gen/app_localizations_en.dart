@@ -3751,4 +3751,8 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get apoFillGated => 'Gated';
+
+  @override
+  String get asioChainDisabledNotice =>
+      'ASIO chain disabled (processing paused, output silent)';
 }

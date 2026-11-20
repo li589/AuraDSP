@@ -6789,6 +6789,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'门控'**
   String get apoFillGated;
+
+  /// No description provided for @asioChainDisabledNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'ASIO 链路已停用（处理已暂停，处于静音状态）'**
+  String get asioChainDisabledNotice;
 }
 
 class _AppLocalizationsDelegate

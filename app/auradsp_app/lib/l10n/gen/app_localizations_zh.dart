@@ -3559,4 +3559,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get apoFillGated => '门控';
+
+  @override
+  String get asioChainDisabledNotice => 'ASIO 链路已停用（处理已暂停，处于静音状态）';
 }

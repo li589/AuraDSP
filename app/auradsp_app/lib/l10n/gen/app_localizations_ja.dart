@@ -3598,4 +3598,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get apoFillGated => 'ゲート';
+
+  @override
+  String get asioChainDisabledNotice => 'ASIO チェーンは無効です（処理停止中、無音）';
 }
