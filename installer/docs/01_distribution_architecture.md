@@ -111,6 +111,7 @@ AuraDSP-Linux-x64-v{VERSION}.tar.gz         # Linux 便携包（AppImage 的等�
 - **Release 形态**：标题建议 `AuraDSP 资源包 resources-v{版本}`；资产为 `tools/resource_pipeline/build_packages.py` 的产出（文件名不含版本号，版本由 tag 承载）：`auradsp-resource-core.zip`、`auradsp-resource-full.zip`、`auradsp-addon-headphone-ddc.zip`、`auradsp-addon-acoustic-spaces.zip`、`auradsp-addon-community-tuning.zip`，外加该 Release 专属的 `SHA256SUMS.txt`（§3 同格式）。
 - **何时发新版**：仅当资源内容真有变更（曲线 / IR / 脚本增删改）时；本体发版、修复、重打包均不触发资源包发版。
 - **历史 `v0.5.0` 的处置**：现有 `v0.5.0` Release 实为资源包性质的历史发行（2026-10-12），**先保留、不动**；待 `resources-v0.0.1` 建好并校验通过（资产齐全、SHA256 对得上、可正常下载）后，再由 owner 决定删除或保留，删除动作不在任何自动化流程内。在新资源包 Release 就绪前，文档与说明中不把 `v0.5.0` 作为规范引用目标，新引用一律指向 `resources-v*` 系列。
+  - **处置结果（2026-11-20 owner 裁定并执行）**：既有 `v0.5.0` Release 已直接改名承接资源包版本线——在同一提交 `4fe1175c` 上新建 tag `resources-v0.0.1`（tag 说明沿用原文），Release 改指新 tag 并更名为「AuraDSP 资源包 0.0.1 — 统一声学资源库与分发包」（正文版本号一并订正，5 个资产原样保留），旧 tag `v0.5.0` 已删除。自此资源包版本线正式启用：资源包按 `x.x.x` 格式单独发版、tag 为 `resources-v{版本}`；软件包维持现行 `vxx.xx.xx`（每段最多两位数）口径不变。
 
 ---
 
