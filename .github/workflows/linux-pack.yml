@@ -83,7 +83,11 @@ jobs:
           grep -E '^lrwxrwxrwx .*\./usr/bin/auradsp -> ' contents.txt
           grep -E '^-rwxr-xr-x .*\./usr/lib/auradsp/lib/plugin_host_x86$' contents.txt
           dpkg-deb --info "$DDEB" > /dev/null
-          tar -tzf out-pack/AuraDSP-Linux-x64-v0.1.0.tar.gz | grep -q '^AuraDSP-Linux-x64/auradsp$'
+          # 先落文件再 grep：`tar | grep -q` 在 pipefail 下会因 grep 提前
+          # 关管道让 tar 收到 SIGPIPE（write error → 退出码 2）而假失败。
+          tar -tzf out-pack/AuraDSP-Linux-x64-v0.1.0.tar.gz > tar-list.txt
+          grep -q '^AuraDSP-Linux-x64/auradsp$' tar-list.txt
+          grep -q '^AuraDSP-Linux-x64/auradsp_app$' tar-list.txt
 
       - name: 发布编排端到端（core 档四件 → deliver-r1 + 哈希自校验）
         run: |

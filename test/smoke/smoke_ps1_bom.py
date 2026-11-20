@@ -58,10 +58,15 @@ for rel in SHIPPED_PS1:
     if os.path.isfile(p):
         check(bom_or_ascii(p), f"BOM 或纯 ASCII: {rel}")
 
-pack_src = open(os.path.join(ROOT, "installer/windows/pack.py"),
-                encoding="utf-8").read()
-check('b"\\xef\\xbb\\xbf" + _asio_ps1_bytes' in pack_src,
-      "pack.py: register_asio.ps1 字节级补 BOM 落盘")
+# 2026-11-20：实现从 installer/windows/pack.py 迁到
+# installer/packkit/windows/driver_payload.py（pack.py 降为 CLI 薄壳），
+# 源码断言的落点随之迁移；断言强度不变，并改为「去空白匹配」以抵抗
+# 格式化折行（同日 chain_true_order 契约被 dart format 打脸的同类教训）。
+IMPL = os.path.join(ROOT, "installer", "packkit", "windows", "driver_payload.py")
+check(os.path.isfile(IMPL), "driver_payload.py 存在")
+pack_src = open(IMPL, encoding="utf-8").read()
+check("write_bytes(BOM+raw)" in "".join(pack_src.split()),
+      "driver_payload.py: register_asio.ps1 字节级补 BOM 落盘")
 # 第二十二轮（2026-11-13）：BOM 完好也救不了 \r 转义事故——模板
 # 是普通 Python 字符串，用法注释 .\register 与路径 \regsvr32 的
 # 单反斜杠 + r 被转义成真 CR 字节，注释行被从中劈开、后半截被
@@ -74,16 +79,16 @@ for _node in _ast.parse(pack_src).body:
     if isinstance(_node, _ast.Assign) and \
             getattr(_node.targets[0], "id", "") == "REGISTER_ASIO_PS1":
         _asio_tpl = _ast.literal_eval(_node.value)
-check(_asio_tpl is not None, "pack.py: REGISTER_ASIO_PS1 常量可求值")
+check(_asio_tpl is not None, "driver_payload.py: REGISTER_ASIO_PS1 常量可求值")
 if _asio_tpl is not None:
     check("\r" not in _asio_tpl,
-          "pack.py: register_asio 模板无 CR 字节（\\\\r 转义事故门）")
+          "driver_payload.py: register_asio 模板无 CR 字节（\\\\r 转义事故门）")
     check(_asio_tpl.count("." + chr(92) + "register_asio.ps1") == 2,
-          "pack.py: register_asio 用法行反斜杠在位")
+          "driver_payload.py: register_asio 用法行反斜杠在位")
     check("System32" + chr(92) + "regsvr32.exe" in _asio_tpl,
-          "pack.py: regsvr32 路径完整")
+          "driver_payload.py: regsvr32 路径完整")
 check('name.lower().endswith(".ps1")' in pack_src,
-      "pack.py: 模板 .ps1 拷贝路径含 BOM 补齐分支")
+      "driver_payload.py: 模板 .ps1 拷贝路径含 BOM 补齐分支")
 
 staging = os.path.join(ROOT, "dist", "AuraDSP-Windows-x64", "driver")
 if os.path.isdir(staging):
