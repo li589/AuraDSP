@@ -1,16 +1,23 @@
 /*
- * ui_helpers.dart — P0 基础设施：响应式断点 + 问号帮助徽标
+ * ui_helpers.dart — P0 基础设施：响应式断点 + 输入能力 + 问号帮助徽标
  *
- * - AuraBreakpoint：mobile(<600) / tablet(600-900) / desktop(>900)，
- *   由 MediaQuery 宽度推导；PageScaffold 在 P2 阶段接入。
+ * - AuraBreakpoint：mobile(<600) / tablet(600-899) / desktop(>=900)，
+ *   由 MediaQuery 宽度推导；只负责布局形态，不负责输入能力。
+ * - AuraInputMode / AuraInputScope：指针 vs 触屏由真实 PointerDown 判定，
+ *   与窗口宽度解耦（窄桌面窗口仍是鼠标，宽触屏平板仍是触屏）。
  * - InfoBadge：问号圆圈徽标 + 定制箭头气泡（OverlayEntry + LayerLink 跟随）。
- *   桌面 hover 300ms 弹出、离即消；触屏长按弹出、2.5s 后自动收起、
- *   再点徽标也可关闭。空间不足自动翻转。R2 取代 P0 的 Tooltip 版。
+ *   指针环境 hover 300ms 弹出、离即消；触屏长按/点击弹出、3.5s 自动收起。
+ *   空间不足自动翻转。
  */
 import 'dart:async' show Timer;
+import 'dart:ui' show PointerDeviceKind;
+
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
+
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 
 import 'design.dart';
@@ -18,13 +25,31 @@ import 'theme.dart';
 
 /* ---------- 响应式断点 ---------- */
 
+/// 断点常量集中在此，避免页面各自写魔法数。
+/// 注意：这些值只决定**布局形态**；输入能力见 [AuraInputMode]。
+class AuraBreakpoints {
+  const AuraBreakpoints._();
+
+  /// 承诺支持的最小视口宽度（Q2 owner 裁定 2026-11-20）。
+  static const minSupported = 360.0;
+
+  /// 超窄档：单列、全屏浮层。
+  static const compact = 480.0;
+
+  /// mobile / tablet 分界。
+  static const tablet = 600.0;
+
+  /// tablet / desktop 分界。
+  static const desktop = 900.0;
+}
+
 enum AuraBreakpoint { mobile, tablet, desktop }
 
 extension AuraBreakpointX on BuildContext {
   AuraBreakpoint get auraBreakpoint {
     final w = MediaQuery.sizeOf(this).width;
-    if (w < 600) return AuraBreakpoint.mobile;
-    if (w < 900) return AuraBreakpoint.tablet;
+    if (w < AuraBreakpoints.tablet) return AuraBreakpoint.mobile;
+    if (w < AuraBreakpoints.desktop) return AuraBreakpoint.tablet;
     return AuraBreakpoint.desktop;
   }
 
@@ -32,26 +57,111 @@ extension AuraBreakpointX on BuildContext {
   bool get isTablet => auraBreakpoint == AuraBreakpoint.tablet;
   bool get isDesktop => auraBreakpoint == AuraBreakpoint.desktop;
 
+  /// <480 的超窄子档；不新增 enum，避免破坏既有三档语义与测试。
+  bool get isCompactWidth =>
+      MediaQuery.sizeOf(this).width < AuraBreakpoints.compact;
+
   /// 页面左右留白：mobile 16 / tablet 24 / desktop 32（= AuraSpace.pageX）
   double get responsivePageX => switch (auraBreakpoint) {
-        AuraBreakpoint.mobile => AuraSpace.lg,
-        AuraBreakpoint.tablet => AuraSpace.xl,
-        AuraBreakpoint.desktop => AuraSpace.pageX,
-      };
+    AuraBreakpoint.mobile => AuraSpace.lg,
+    AuraBreakpoint.tablet => AuraSpace.xl,
+    AuraBreakpoint.desktop => AuraSpace.pageX,
+  };
 
   /// 卡片内边距：mobile 16 / tablet 18 / desktop 20（= AuraSpace.cardPad）
   double get responsiveCardPad => switch (auraBreakpoint) {
-        AuraBreakpoint.mobile => AuraSpace.lg,
-        AuraBreakpoint.tablet => 18.0,
-        AuraBreakpoint.desktop => AuraSpace.cardPad,
-      };
+    AuraBreakpoint.mobile => AuraSpace.lg,
+    AuraBreakpoint.tablet => 18.0,
+    AuraBreakpoint.desktop => AuraSpace.cardPad,
+  };
 
   /// 内容区最大宽度：mobile 480 / tablet 720 / desktop 1080
   double get responsiveMaxW => switch (auraBreakpoint) {
-        AuraBreakpoint.mobile => 480.0,
-        AuraBreakpoint.tablet => 720.0,
-        AuraBreakpoint.desktop => AuraSpace.contentMaxW,
-      };
+    AuraBreakpoint.mobile => 480.0,
+    AuraBreakpoint.tablet => 720.0,
+    AuraBreakpoint.desktop => AuraSpace.contentMaxW,
+  };
+}
+
+/* ---------- 输入能力（与宽度解耦） ---------- */
+
+/// 输入能力：指针（鼠标/触控板）或触屏。
+/// Q3 owner 裁定（2026-11-20）：宽度只决定布局，输入能力独立判定。
+enum AuraInputMode { pointer, touch }
+
+/// 在应用外壳根部安装一次，监听真实 PointerDown 事件。
+/// 子树通过 `context.usesTouchInput` / `context.auraInputMode` 读取。
+class AuraInputScope extends StatefulWidget {
+  final Widget child;
+
+  const AuraInputScope({super.key, required this.child});
+
+  /// 无 Scope 时返回 null，调用方自行回退（测试单独 pump 组件时常见）。
+  static AuraInputMode? maybeModeOf(BuildContext context) {
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<_AuraInputInherited>();
+    return scope?.notifier?.value;
+  }
+
+  @override
+  State<AuraInputScope> createState() => _AuraInputScopeState();
+}
+
+class _AuraInputScopeState extends State<AuraInputScope> {
+  late final ValueNotifier<AuraInputMode> _mode;
+
+  @override
+  void initState() {
+    super.initState();
+    // 首帧先按平台给一个合理默认；首个 PointerDown 会立即校正。
+    _mode = ValueNotifier(switch (defaultTargetPlatform) {
+      TargetPlatform.android || TargetPlatform.iOS => AuraInputMode.touch,
+      _ => AuraInputMode.pointer,
+    });
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    final next = switch (event.kind) {
+      PointerDeviceKind.touch ||
+      PointerDeviceKind.stylus ||
+      PointerDeviceKind.invertedStylus => AuraInputMode.touch,
+      _ => AuraInputMode.pointer,
+    };
+    if (_mode.value != next) _mode.value = next;
+  }
+
+  @override
+  void dispose() {
+    _mode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _AuraInputInherited(
+      notifier: _mode,
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _handlePointerDown,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+class _AuraInputInherited
+    extends InheritedNotifier<ValueNotifier<AuraInputMode>> {
+  const _AuraInputInherited({required super.notifier, required super.child});
+}
+
+extension AuraInputModeX on BuildContext {
+  /// 有 Scope 时以真实指针事件为准；独立组件（无 Scope）回退到宽度语义，
+  /// 保证既有测试与局部预览不崩。
+  AuraInputMode get auraInputMode =>
+      AuraInputScope.maybeModeOf(this) ??
+      (isMobile ? AuraInputMode.touch : AuraInputMode.pointer);
+
+  bool get usesTouchInput => auraInputMode == AuraInputMode.touch;
 }
 
 /* ---------- 问号帮助徽标 ---------- */
@@ -114,13 +224,14 @@ class HelpVisibilityScope extends InheritedNotifier<HelpVisibilityController> {
   }) : super(notifier: controller);
 
   /// 查询当前上下文中的问号是否应该可见
-  /// - 电脑端（桌面端/宽屏 !context.isMobile）：恒返回 true，保持常驻
-  /// - 移动端（context.isMobile）：仅在滑动中或滑动后延迟时间内返回 true
+  /// - 指针环境：恒返回 true，保持常驻（窄桌面窗口也走这条）
+  /// - 触屏环境：仅在滑动中或滑动后延迟时间内返回 true
   static bool isVisibleOf(BuildContext context) {
-    if (!context.isMobile) {
+    if (!context.usesTouchInput) {
       return true;
     }
-    final scope = context.dependOnInheritedWidgetOfExactType<HelpVisibilityScope>();
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<HelpVisibilityScope>();
     return scope?.notifier?.isScrollingOrRecent ?? false;
   }
 }
@@ -219,8 +330,10 @@ class _InfoBadgeState extends State<InfoBadge> {
     _maxW = math.min(widget.maxWidth, _screen.width - _margin * 2).toDouble();
 
     // 估算气泡宽高（首帧定位用），随后一律以真实渲染尺寸回正。
-    final span =
-        TextSpan(text: widget.message, style: captionOf(p, color: p.text));
+    final span = TextSpan(
+      text: widget.message,
+      style: captionOf(p, color: p.text),
+    );
     final dir = Directionality.of(context);
     double avail(double bubbleW) =>
         math.max(40.0, bubbleW - _padH * 2 - _bubbleBorder * 2).toDouble();
@@ -247,15 +360,17 @@ class _InfoBadgeState extends State<InfoBadge> {
     final fitsBelow =
         bottomEdge + _gap + _arrowH + bubbleH + 8 <= _screen.height;
     final fitsAbove = _origin.dy - _gap - _arrowH - bubbleH - 8 >= 0;
-    _below =
-        widget.preferBelow ? (fitsBelow || !fitsAbove) : !fitsAbove;
-    _left = (_centerX - _bubbleW / 2)
-            .clamp(_margin, math.max(_margin, _screen.width - _margin - _bubbleW))
+    _below = widget.preferBelow ? (fitsBelow || !fitsAbove) : !fitsAbove;
+    _left =
+        (_centerX - _bubbleW / 2)
+            .clamp(
+              _margin,
+              math.max(_margin, _screen.width - _margin - _bubbleW),
+            )
             .toDouble() -
         _origin.dx;
-    _top = (_below
-            ? bottomEdge + _gap
-            : _origin.dy - _gap - _arrowH - bubbleH) -
+    _top =
+        (_below ? bottomEdge + _gap : _origin.dy - _gap - _arrowH - bubbleH) -
         _origin.dy;
     _arrowX = (_centerX - _origin.dx - _left)
         .clamp(_arrowW, math.max(_arrowW, _bubbleW - _arrowW))
@@ -305,7 +420,7 @@ class _InfoBadgeState extends State<InfoBadge> {
                       message: widget.message,
                       below: _below,
                       arrowX: _arrowX,
-width: _bubbleW,
+                      width: _bubbleW,
                     ),
                   ),
                 ),
@@ -389,8 +504,9 @@ width: _bubbleW,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color:
-                            _hover ? p.accent : p.textDim.withValues(alpha: 0.55),
+                        color: _hover
+                            ? p.accent
+                            : p.textDim.withValues(alpha: 0.55),
                         width: 1.2,
                       ),
                     ),
@@ -430,7 +546,9 @@ Widget infoBubble({
       border: Border.all(color: p.hairline, width: 1),
     ),
     padding: const EdgeInsets.symmetric(
-        horizontal: _bubblePadH, vertical: _bubblePadV),
+      horizontal: _bubblePadH,
+      vertical: _bubblePadV,
+    ),
     child: Text(message, style: captionOf(p, color: p.text)),
   );
   final arrow = _ArrowRow(arrowX: arrowX, pointUp: below, palette: p);
@@ -446,8 +564,11 @@ class _ArrowRow extends StatelessWidget {
   final double arrowX;
   final bool pointUp;
   final AuraPalette palette;
-  const _ArrowRow(
-      {required this.arrowX, required this.pointUp, required this.palette});
+  const _ArrowRow({
+    required this.arrowX,
+    required this.pointUp,
+    required this.palette,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -458,9 +579,10 @@ class _ArrowRow extends StatelessWidget {
         CustomPaint(
           size: const Size(12.0, 7.0),
           painter: _ArrowPainter(
-              color: palette.panelRaised,
-              border: palette.hairline,
-              pointUp: pointUp),
+            color: palette.panelRaised,
+            border: palette.hairline,
+            pointUp: pointUp,
+          ),
         ),
       ],
     );
@@ -471,8 +593,11 @@ class _ArrowPainter extends CustomPainter {
   final Color color;
   final Color border;
   final bool pointUp;
-  const _ArrowPainter(
-      {required this.color, required this.border, required this.pointUp});
+  const _ArrowPainter({
+    required this.color,
+    required this.border,
+    required this.pointUp,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -499,5 +624,4 @@ class _ArrowPainter extends CustomPainter {
 }
 
 /// l10n 取用便捷通道（P1 后从 ui/widgets.dart 上移到 core，供 ui/ 与 features/ 共用）。
-AppLocalizations l10nOf(BuildContext context) =>
-    AppLocalizations.of(context)!;
+AppLocalizations l10nOf(BuildContext context) => AppLocalizations.of(context)!;

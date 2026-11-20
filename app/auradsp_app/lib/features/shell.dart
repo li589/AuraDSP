@@ -17,6 +17,7 @@ import '../core/design.dart';
 import '../core/nav.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../core/ui_helpers.dart';
 import '../platform/platform_profile.dart';
 import 'chain_page.dart';
 import 'effects_page.dart';
@@ -26,6 +27,9 @@ import 'plugins_page.dart';
 import 'settings_page.dart';
 import 'visualizer_page.dart';
 import 'widgets.dart';
+
+/// 底栏高度（内容区下留位与底栏自身共用同一常量，避免两处漂移）。
+const double _kBottomNavH = 60.0;
 
 class AppShell extends StatefulWidget {
   final AppModel model;
@@ -40,10 +44,7 @@ class _PageTransitionChild extends StatelessWidget {
   final bool active;
   final Widget child;
 
-  const _PageTransitionChild({
-    required this.active,
-    required this.child,
-  });
+  const _PageTransitionChild({required this.active, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -118,84 +119,141 @@ class _AppShellState extends State<AppShell> {
     final p = paletteOf(context);
     final m = widget.model;
     final l = l10nOf(context);
-    final labels = [l.navHome, l.navEffects, l.navLiveprog, l.navPlugins, l.navChain, l.navVisualizer];
+    final labels = [
+      l.navHome,
+      l.navEffects,
+      l.navLiveprog,
+      l.navPlugins,
+      l.navChain,
+      l.navVisualizer,
+    ];
+    final isMobile = context.isMobile;
+    final railWidth = _railCollapsed ? AuraSize.railMinW : AuraSize.railW;
 
     return Scaffold(
-      body: Row(
-        children: [
-          // 仅视效沉浸档：折叠左栏导航（零宽占位，IndexedStack 层级不变、页面状态不丢）
-          ValueListenableBuilder<bool>(
-            valueListenable: m.visualizerImmersive,
-            builder: (_, immersive, _) => immersive
-                ? const SizedBox.shrink()
-                : Row(
+      // SafeArea 在桌面无 padding 时零副作用；Android 竖屏用来避开
+      // 状态栏/手势条，底部导航因此不会压到系统手势区。
+      body: SafeArea(
+        child: ValueListenableBuilder<bool>(
+          valueListenable: m.visualizerImmersive,
+          builder: (_, immersive, _) {
+            final showRail = !immersive && !isMobile;
+            final showBottomNav = !immersive && isMobile;
+            return Stack(
+              children: [
+                // 内容层：左/下留位随断点即时切换，不参与动画。若这里也用
+                // AnimatedPositioned，跨断点过程中内容会被逐帧压窄，
+                // 中途必然触发一次 RenderFlex 溢出（实测）。
+                Positioned(
+                  left: showRail ? railWidth + 1 : 0,
+                  top: 0,
+                  right: 0,
+                  bottom: showBottomNav ? _kBottomNavH : 0,
+                  child: Column(
                     children: [
-                      _Rail(
+                      // 仅视效沉浸档：折叠顶部状态栏
+                      if (!immersive) ...[
+                        _TopBar(
+                          model: m,
+                          onCycleTheme: _cycleTheme,
+                          onOpenSettings: _openSettings,
+                        ),
+                        Container(height: 1, color: p.hairline),
+                      ],
+                      Expanded(
+                        // P0-1（2026-10-23）：AnimatedSwitcher → IndexedStack。
+                        // 原实现切页销毁非当前页（initState 重跑、定时器重启、
+                        // settings 全量重建）；保活后切页零重建、滚动/展开态保留。
+                        // 配套：离屏页仍在树上——1s 心跳改走 hbTick 级联（P0-2），
+                        // 页面定时器按 model.visiblePage 门控，TickerMode 停离屏动画。
+                        child: IndexedStack(
+                          index: _index,
+                          children: [
+                            for (var i = 0; i < _pages.length; i++)
+                              TickerMode(
+                                enabled: i == _index,
+                                // 页面切换过渡动效：保持 IndexedStack 零重建保活优势，
+                                // 叠加 220ms 丝滑渐变与微上浮过渡，彻底消除突变生硬感。
+                                child: _PageTransitionChild(
+                                  active: i == _index,
+                                  child: i == _index || _pages[i] != null
+                                      ? _pageAt(i)
+                                      : const SizedBox.shrink(),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // 左栏：≥600 显示；<600 由底栏接管。隐藏时移出视口而非
+                // 移出树，保证动画可逆且不丢导航状态。
+                AnimatedPositioned(
+                  duration: AuraDur.base,
+                  curve: AuraCurve.emphasized,
+                  left: showRail ? 0 : -(railWidth + 1),
+                  top: 0,
+                  bottom: 0,
+                  width: railWidth + 1,
+                  child: ExcludeSemantics(
+                    excluding: !showRail,
+                    child: IgnorePointer(
+                      ignoring: !showRail,
+                      child: Row(
+                        children: [
+                          _Rail(
+                            key: const ValueKey<String>('shell.rail'),
+                            labels: labels,
+                            destinations: _destinations,
+                            index: _index,
+                            onSelect: (i) => setState(() {
+                              _index = i;
+                              m.visiblePage.value = AppPage
+                                  .values[i]; // P0-1：定时器可见性门控 + R2 高频消费点门控
+                            }),
+                            model: m,
+                            collapsed: _railCollapsed,
+                            onToggle: () => setState(
+                              () => _railCollapsed = !_railCollapsed,
+                            ),
+                            onOpenSettings: _openSettings,
+                          ),
+                          Container(width: 1, color: p.hairline),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                // 底栏：仅 <600，滑入/滑出。6 项等分，360px 下每项 60px。
+                AnimatedPositioned(
+                  duration: AuraDur.base,
+                  curve: AuraCurve.emphasized,
+                  left: 0,
+                  right: 0,
+                  bottom: showBottomNav ? 0 : -_kBottomNavH,
+                  height: _kBottomNavH,
+                  child: ExcludeSemantics(
+                    excluding: !showBottomNav,
+                    child: IgnorePointer(
+                      ignoring: !showBottomNav,
+                      child: _BottomNav(
+                        key: const ValueKey<String>('shell.bottomNav'),
                         labels: labels,
                         destinations: _destinations,
                         index: _index,
                         onSelect: (i) => setState(() {
                           _index = i;
-                          m.visiblePage.value = AppPage.values[i]; // P0-1：定时器可见性门控 + R2 高频消费点门控
+                          m.visiblePage.value = AppPage.values[i];
                         }),
-                        model: m,
-                        collapsed: _railCollapsed,
-                        onToggle: () =>
-                            setState(() => _railCollapsed = !_railCollapsed),
-                        onOpenSettings: _openSettings,
                       ),
-                      Container(width: 1, color: p.hairline),
-                    ],
-                  ),
-          ),
-          Expanded(
-            child: Column(
-              children: [
-                // 仅视效沉浸档：折叠顶部状态栏
-                ValueListenableBuilder<bool>(
-                  valueListenable: m.visualizerImmersive,
-                  builder: (_, immersive, _) => immersive
-                      ? const SizedBox.shrink()
-                      : Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _TopBar(
-                              model: m,
-                              onCycleTheme: _cycleTheme,
-                              onOpenSettings: _openSettings,
-                            ),
-                            Container(height: 1, color: p.hairline),
-                          ],
-                        ),
-                ),
-                Expanded(
-                  // P0-1（2026-10-23）：AnimatedSwitcher → IndexedStack。
-                  // 原实现切页销毁非当前页（initState 重跑、定时器重启、
-                  // settings 全量重建）；保活后切页零重建、滚动/展开态保留。
-                  // 配套：离屏页仍在树上——1s 心跳改走 hbTick 级联（P0-2），
-                  // 页面定时器按 model.visiblePage 门控，TickerMode 停离屏动画。
-                  child: IndexedStack(
-                    index: _index,
-                    children: [
-                      for (var i = 0; i < _pages.length; i++)
-                        TickerMode(
-                          enabled: i == _index,
-                          // 页面切换过渡动效：保持 IndexedStack 零重建保活优势，
-                          // 叠加 220ms 丝滑渐变与微上浮过渡，彻底消除突变生硬感。
-                          child: _PageTransitionChild(
-                            active: i == _index,
-                            child: i == _index || _pages[i] != null
-                                ? _pageAt(i)
-                                : const SizedBox.shrink(),
-                          ),
-                        ),
-                    ],
+                    ),
                   ),
                 ),
               ],
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -250,6 +308,7 @@ class _Rail extends StatelessWidget {
   final VoidCallback onOpenSettings;
 
   const _Rail({
+    super.key,
     required this.labels,
     required this.destinations,
     required this.index,
@@ -275,12 +334,19 @@ class _Rail extends StatelessWidget {
         children: [
           // 品牌（收起时只留几何标记 + 展开按钮）
           Padding(
-            padding: EdgeInsets.fromLTRB(collapsed ? AuraSpace.sm : AuraSpace.lg,
-                AuraSpace.xl + AuraSpace.xs, collapsed ? AuraSpace.sm : AuraSpace.lg, 0),
+            padding: EdgeInsets.fromLTRB(
+              collapsed ? AuraSpace.sm : AuraSpace.lg,
+              AuraSpace.xl + AuraSpace.xs,
+              collapsed ? AuraSpace.sm : AuraSpace.lg,
+              0,
+            ),
             child: collapsed
                 // 收起态：品牌标记即展开入口（去掉独立按钮，避免与导航项挤在一起）
-                ? _BrandTapTarget(onTap: onToggle, tip: l10nOf(context).railExpandTip,
-                    child: _BrandMark(p: p))
+                ? _BrandTapTarget(
+                    onTap: onToggle,
+                    tip: l10nOf(context).railExpandTip,
+                    child: _BrandMark(p: p),
+                  )
                 : Row(
                     children: [
                       _BrandMark(p: p),
@@ -288,17 +354,19 @@ class _Rail extends StatelessWidget {
                       // Expanded + 省略号：字号放大/回退字体偏宽时不再顶出
                       // 固定宽的导航栏（此前在测试字体下溢出 6.6px）。
                       Expanded(
-                        child: Text('AuraDSP',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontFamily: 'AuraDisplay',
-                              fontFamilyFallback: kDisplayCjkFallback,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.2,
-                              color: p.text,
-                            )),
+                        child: Text(
+                          'AuraDSP',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'AuraDisplay',
+                            fontFamilyFallback: kDisplayCjkFallback,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
+                            color: p.text,
+                          ),
+                        ),
                       ),
                       _RailToggle(collapsed: false, onTap: onToggle),
                     ],
@@ -308,14 +376,17 @@ class _Rail extends StatelessWidget {
           // 导航
           Padding(
             padding: EdgeInsets.symmetric(
-                horizontal: collapsed ? AuraSpace.sm : AuraSpace.lg),
+              horizontal: collapsed ? AuraSpace.sm : AuraSpace.lg,
+            ),
             child: Column(
               children: [
                 for (var i = 0; i < destinations.length; i++)
                   Padding(
                     padding: EdgeInsets.only(
-                        bottom: i == destinations.length - 1 ? 0 : AuraSpace.xs),
+                      bottom: i == destinations.length - 1 ? 0 : AuraSpace.xs,
+                    ),
                     child: _NavItem(
+                      key: ValueKey<String>('shell.railNav.$i'),
                       icon: destinations[i].icon,
                       activeIcon: destinations[i].active,
                       label: labels[i],
@@ -332,7 +403,11 @@ class _Rail extends StatelessWidget {
           if (!collapsed)
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                  AuraSpace.lg, 0, AuraSpace.lg, AuraSpace.xl),
+                AuraSpace.lg,
+                0,
+                AuraSpace.lg,
+                AuraSpace.xl,
+              ),
               child: ListenableBuilder(
                 listenable: model,
                 builder: (_, _) {
@@ -346,8 +421,11 @@ class _Rail extends StatelessWidget {
                         info == null
                             ? l.engineForm
                             : 'ABI v${info.abi} · ${PlatformProfile.formLabel}',
-                        style: monoOf(p, size: 10,
-                            color: p.textDim.withValues(alpha: 0.75)),
+                        style: monoOf(
+                          p,
+                          size: 10,
+                          color: p.textDim.withValues(alpha: 0.75),
+                        ),
                       ),
                     ],
                   );
@@ -362,13 +440,131 @@ class _Rail extends StatelessWidget {
   }
 }
 
+/// <600 的底部导航：6 页等分，选中态用强调色药丸 + 图标切换。
+/// 触控目标高度 60（≥48dp），标签单行省略，避免窄屏横向溢出。
+class _BottomNav extends StatelessWidget {
+  final List<String> labels;
+  final List<({IconData icon, IconData active})> destinations;
+  final int index;
+  final ValueChanged<int> onSelect;
+
+  const _BottomNav({
+    super.key,
+    required this.labels,
+    required this.destinations,
+    required this.index,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: p.bg,
+        border: Border(top: BorderSide(color: p.hairline)),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < destinations.length; i++)
+            Expanded(
+              child: _BottomNavItem(
+                key: ValueKey<String>('shell.nav.$i'),
+                icon: destinations[i].icon,
+                activeIcon: destinations[i].active,
+                label: labels[i],
+                selected: i == index,
+                onTap: () => onSelect(i),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BottomNavItem extends StatelessWidget {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _BottomNavItem({
+    super.key,
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final fg = selected ? p.accent : p.textDim;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          height: _kBottomNavH,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedContainer(
+                duration: AuraDur.fast,
+                curve: AuraCurve.standard,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 3,
+                ),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? p.accent.withValues(alpha: 0.12)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(AuraRadius.sm),
+                ),
+                child: Icon(selected ? activeIcon : icon, size: 20, color: fg),
+              ),
+              const SizedBox(height: 2),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'AuraDisplay',
+                    fontFamilyFallback: kBodyCjkFallback,
+                    fontSize: 10,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    color: fg,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 同心方块几何标记（呼应 "aura" 的环）
 /// 收起态的品牌标记：可点击展开（hover 有反馈）
 class _BrandTapTarget extends StatefulWidget {
   final VoidCallback onTap;
   final String tip;
   final Widget child;
-  const _BrandTapTarget({required this.onTap, required this.tip, required this.child});
+  const _BrandTapTarget({
+    required this.onTap,
+    required this.tip,
+    required this.child,
+  });
 
   @override
   State<_BrandTapTarget> createState() => _BrandTapTargetState();
@@ -398,7 +594,9 @@ class _BrandTapTargetState extends State<_BrandTapTarget> {
                 color: _hover ? hoverOn(p, alpha: 0.08) : Colors.transparent,
                 borderRadius: BorderRadius.circular(AuraRadius.sm),
                 border: Border.all(
-                  color: _hover ? p.accent.withValues(alpha: 0.5) : Colors.transparent,
+                  color: _hover
+                      ? p.accent.withValues(alpha: 0.5)
+                      : Colors.transparent,
                 ),
               ),
               child: Center(child: widget.child),
@@ -456,7 +654,9 @@ class _RailToggleState extends State<_RailToggle> {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     return Tooltip(
-      message: widget.collapsed ? l10nOf(context).railExpandTip : l10nOf(context).railCollapseTip,
+      message: widget.collapsed
+          ? l10nOf(context).railExpandTip
+          : l10nOf(context).railCollapseTip,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         onEnter: (_) => setState(() => _hover = true),
@@ -470,8 +670,10 @@ class _RailToggleState extends State<_RailToggle> {
           onTapUp: (_) => setState(() => _down = false),
           onTapCancel: () => setState(() => _down = false),
           onTap: () {
-            DebugTrace.instance
-                .tap('rail', widget.collapsed ? 'expand' : 'collapse');
+            DebugTrace.instance.tap(
+              'rail',
+              widget.collapsed ? 'expand' : 'collapse',
+            );
             widget.onTap();
           },
           child: AnimatedScale(
@@ -513,6 +715,7 @@ class _NavItem extends StatefulWidget {
   final VoidCallback onTap;
   final bool collapsed;
   const _NavItem({
+    super.key,
     required this.icon,
     required this.activeIcon,
     required this.label,
@@ -555,9 +758,10 @@ class _NavItemState extends State<_NavItem> {
           child: widget.collapsed
               ? Center(
                   child: Icon(
-                      widget.selected ? widget.activeIcon : widget.icon,
-                      size: AuraSize.navIcon,
-                      color: fg),
+                    widget.selected ? widget.activeIcon : widget.icon,
+                    size: AuraSize.navIcon,
+                    color: fg,
+                  ),
                 )
               : Row(
                   children: [
@@ -573,8 +777,11 @@ class _NavItemState extends State<_NavItem> {
                       ),
                     ),
                     const SizedBox(width: AuraSpace.md - 1),
-                    Icon(widget.selected ? widget.activeIcon : widget.icon,
-                        size: AuraSize.navIcon, color: fg),
+                    Icon(
+                      widget.selected ? widget.activeIcon : widget.icon,
+                      size: AuraSize.navIcon,
+                      color: fg,
+                    ),
                     const SizedBox(width: AuraSpace.md - 2),
                     Expanded(
                       child: AnimatedDefaultTextStyle(
@@ -585,12 +792,16 @@ class _NavItemState extends State<_NavItem> {
                           fontFamily: 'AuraDisplay',
                           fontFamilyFallback: kBodyCjkFallback,
                           fontSize: 13,
-                          fontWeight:
-                              widget.selected ? FontWeight.w600 : FontWeight.w500,
+                          fontWeight: widget.selected
+                              ? FontWeight.w600
+                              : FontWeight.w500,
                           color: fg,
                         ),
-                        child: Text(widget.label,
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        child: Text(
+                          widget.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
                     const SizedBox(width: AuraSpace.sm),
@@ -617,6 +828,9 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
+    // 窄屏顶栏只保留紧凑状态徽标；完整 MasterStatusConsole 在 360px
+    // 会与主题/设置按钮挤爆（2026-11-20 P1 实测溢出 15px）。
+    final compact = context.isMobile;
     return SizedBox(
       height: AuraSize.topBarH,
       child: Center(
@@ -624,44 +838,52 @@ class _TopBar extends StatelessWidget {
         child: Padding(
           // 顶栏贴边：不用内容区的 pageX/contentMaxW（超宽屏下两边会空出一大截），
           // 组件右对齐，左右只留 rowGap。
-          padding:
-              const EdgeInsets.symmetric(horizontal: AuraSpace.rowGap),
+          padding: const EdgeInsets.symmetric(horizontal: AuraSpace.rowGap),
           child: Row(
             children: [
               const Spacer(),
               // 徽标 / 延迟 / 主题 / 设置（右对齐）。
               ListenableBuilder(
-                  listenable: model,
-                  builder: (_, _) => Row(
-                    children: [
+                listenable: model,
+                builder: (_, _) => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (compact)
+                      StateBadge(
+                        engineState: model.engineState,
+                        bypass: model.bypass,
+                        live: model.liveSpectrum,
+                      )
+                    else
                       MasterStatusConsole(
                         engineState: model.engineState,
                         bypass: model.bypass,
                         live: model.liveSpectrum,
                         latencyMs: model.latencyMs,
                         onToggleBypass: () => model.toggleBypass(),
-                        onRefreshLatency: () => model.refreshAllComponentLatencies(),
+                        onRefreshLatency: () =>
+                            model.refreshAllComponentLatencies(),
                       ),
-                      const SizedBox(width: AuraSpace.sm),
-                      _IconAction(
-                        icon: Icons.palette_outlined,
-                        tooltip: l.themeSwitchTip,
-                        onTap: onCycleTheme,
-                      ),
-                      const SizedBox(width: AuraSpace.sm),
-                      _IconAction(
-                        icon: Icons.settings_outlined,
-                        tooltip: l.navSettings,
-                        onTap: onOpenSettings,
-                      ),
-                    ],
-                  ),
+                    const SizedBox(width: AuraSpace.sm),
+                    _IconAction(
+                      icon: Icons.palette_outlined,
+                      tooltip: l.themeSwitchTip,
+                      onTap: onCycleTheme,
+                    ),
+                    const SizedBox(width: AuraSpace.sm),
+                    _IconAction(
+                      icon: Icons.settings_outlined,
+                      tooltip: l.navSettings,
+                      onTap: onOpenSettings,
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
   }
 }
 
@@ -717,8 +939,11 @@ class _IconActionState extends State<_IconAction> {
                 color: _hover ? hoverOn(p, alpha: 0.07) : Colors.transparent,
                 borderRadius: BorderRadius.circular(AuraRadius.sm),
               ),
-              child: Icon(widget.icon,
-                  size: 18, color: _hover ? p.text : p.textDim),
+              child: Icon(
+                widget.icon,
+                size: 18,
+                color: _hover ? p.text : p.textDim,
+              ),
             ),
           ),
         ),
@@ -726,4 +951,3 @@ class _IconActionState extends State<_IconAction> {
     );
   }
 }
-

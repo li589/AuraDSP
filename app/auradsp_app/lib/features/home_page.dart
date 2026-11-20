@@ -14,6 +14,7 @@ import '../core/design.dart';
 import '../core/nav.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../core/ui_helpers.dart';
 import '../platform/adapters.dart';
 import 'chrome.dart';
 import 'widgets.dart';
@@ -24,8 +25,9 @@ class HomePage extends StatefulWidget {
 
   /// R2：离屏时 AmbientSpectrum 改订阅冻结通知器（不随 30fps 频谱重建；
   /// 回页时 didUpdateWidget 自动换回真通知器）。
-  static final _frozenSpectrum =
-      ValueNotifier<List<double>>(List.filled(32, 0.0));
+  static final _frozenSpectrum = ValueNotifier<List<double>>(
+    List.filled(32, 0.0),
+  );
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -97,8 +99,9 @@ class _HomeActivityGate extends ValueNotifier<bool> {
 
   _HomeActivityGate(this._model) : super(false) {
     _model.spectrum.addListener(_onFrame);
-    PlatformAdapters.instance.window.visibleListenable
-        .addListener(_onVisibility);
+    PlatformAdapters.instance.window.visibleListenable.addListener(
+      _onVisibility,
+    );
   }
 
   void _onVisibility() {
@@ -138,8 +141,9 @@ class _HomeActivityGate extends ValueNotifier<bool> {
   void dispose() {
     _hold?.cancel();
     _model.spectrum.removeListener(_onFrame);
-    PlatformAdapters.instance.window.visibleListenable
-        .removeListener(_onVisibility);
+    PlatformAdapters.instance.window.visibleListenable.removeListener(
+      _onVisibility,
+    );
     super.dispose();
   }
 }
@@ -171,63 +175,72 @@ class _Hero extends StatelessWidget {
         // 旧口径 liveSpectrum 在 VB/ASIO 挂载后恒真（没有媒体也算），
         // 呼吸点会 60fps 空转；这里额外要求真实能量。
         final live = disp == EngineDisplay.processing && audible.value;
+        final info = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Text(l.statusLabel, style: eyebrowOf(p)),
+                const SizedBox(width: AuraSpace.sm),
+                PulseDot(color: color, active: live, size: 6),
+              ],
+            ),
+            const SizedBox(height: AuraSpace.md),
+            AnimatedDefaultTextStyle(
+              duration: AuraDur.base,
+              curve: AuraCurve.standard,
+              style: displayOf(p, size: 40, color: color),
+              child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(height: AuraSpace.sm + 2),
+            Text(
+              model.liveSpectrum ? l.heroHintProcessing : l.heroHintIdle,
+              style: captionOf(p),
+            ),
+          ],
+        );
+        // 延迟 + 旁路在窄屏另起一行，避免与状态文案抢水平空间
+        // （2026-11-20 P1 实测 360px 溢出 108px）。
+        final readouts = Wrap(
+          spacing: AuraSpace.xl,
+          runSpacing: AuraSpace.md,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Tooltip(
+              message: l.latencyTip,
+              waitDuration: const Duration(milliseconds: 350),
+              child: StatReadout(
+                label: l.latencyLabel,
+                value: LatencyPresenter.number(model.latencyMs),
+                unit: 'ms',
+                size: 30,
+                valueColor: LatencyPresenter.color(model.latencyMs, p),
+              ),
+            ),
+            _BypassButton(model: model),
+          ],
+        );
         return SectionCard(
           hero: true,
           padding: const EdgeInsets.all(AuraSpace.xl),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
+          child: context.isCompactWidth
+              ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
-                      children: [
-                        Text(l.statusLabel, style: eyebrowOf(p)),
-                        const SizedBox(width: AuraSpace.sm),
-                        PulseDot(
-                          color: color,
-                          active: live,
-                          size: 6,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AuraSpace.md),
-                    AnimatedDefaultTextStyle(
-                      duration: AuraDur.base,
-                      curve: AuraCurve.standard,
-                      style: displayOf(p, size: 40, color: color),
-                      child: Text(text, maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                    const SizedBox(height: AuraSpace.sm + 2),
-                    Text(
-                      model.liveSpectrum
-                          ? l.heroHintProcessing
-                          : l.heroHintIdle,
-                      style: captionOf(p),
-                    ),
+                    info,
+                    const SizedBox(height: AuraSpace.lg),
+                    readouts,
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(child: info),
+                    const SizedBox(width: AuraSpace.xl),
+                    readouts,
                   ],
                 ),
-              ),
-              const SizedBox(width: AuraSpace.xl),
-              // 延迟读数（数字即设计；语义为"算法附加延迟"，悬停有解释）
-              Tooltip(
-                message: l.latencyTip,
-                waitDuration: const Duration(milliseconds: 350),
-                child: StatReadout(
-                  label: l.latencyLabel,
-                  value: LatencyPresenter.number(model.latencyMs),
-                  unit: 'ms',
-                  size: 30,
-                  valueColor: LatencyPresenter.color(model.latencyMs, p),
-                ),
-              ),
-              const SizedBox(width: AuraSpace.xl),
-              _BypassButton(model: model),
-            ],
-          ),
         );
       },
     );
@@ -282,18 +295,28 @@ class _BypassButtonState extends State<_BypassButton> {
                   border: Border.all(
                     color: on
                         ? p.accent2
-                        : (_hover ? p.textDim.withValues(alpha: 0.5) : p.hairline),
+                        : (_hover
+                              ? p.textDim.withValues(alpha: 0.5)
+                              : p.hairline),
                   ),
                 ),
                 child: Row(
                   children: [
-                    Icon(on ? Icons.power_settings_new : Icons.bolt_outlined,
-                        size: 18, color: fg),
+                    Icon(
+                      on ? Icons.power_settings_new : Icons.bolt_outlined,
+                      size: 18,
+                      color: fg,
+                    ),
                     const SizedBox(width: AuraSpace.sm + 2),
-                    Text(on ? l.bypassOn : l.bypassOff,
-                        style: TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w700,
-                            letterSpacing: 0.3, color: fg)),
+                    Text(
+                      on ? l.bypassOn : l.bypassOff,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                        color: fg,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -309,6 +332,7 @@ class _BypassButtonState extends State<_BypassButton> {
 
 class _SpectrumCard extends StatefulWidget {
   final AppModel model;
+
   /// R2（2026-10-23）：宿主页可见性（HomePage 经 visiblePage 门控传入）。
   /// false = 离屏——LevelMeter 与 dBFS 读数不订阅 30fps 通知器。
   final bool active;
@@ -427,12 +451,15 @@ class _SpectrumCardState extends State<_SpectrumCard> {
                     builder: (_, lDb, _) => ValueListenableBuilder<double>(
                       valueListenable: widget.model.levelR,
                       builder: (_, rDb, _) => Text(
-                          'L ${dbfsText(lDb)}  R ${dbfsText(rDb)} dBFS',
-                          style: monoOf(p, size: 11, color: p.textDim)),
+                        'L ${dbfsText(lDb)}  R ${dbfsText(rDb)} dBFS',
+                        style: monoOf(p, size: 11, color: p.textDim),
+                      ),
                     ),
                   )
-                : Text('L ${dbfsText(-90.0)}  R ${dbfsText(-90.0)} dBFS',
-                    style: monoOf(p, size: 11, color: p.textDim)),
+                : Text(
+                    'L ${dbfsText(-90.0)}  R ${dbfsText(-90.0)} dBFS',
+                    style: monoOf(p, size: 11, color: p.textDim),
+                  ),
           ),
         ],
       ),
@@ -459,24 +486,34 @@ class _OutputLevelRow extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!active) {
       // 离屏：静态空轨，与现路径一致（不订阅 30fps）。
-      return Row(children: [
-        Expanded(
-            child: LevelMeter(level: model.levelL, label: 'L', active: false)),
-        const SizedBox(width: AuraSpace.lg),
-        Expanded(
-            child: LevelMeter(level: model.levelR, label: 'R', active: false)),
-      ]);
+      return Row(
+        children: [
+          Expanded(
+            child: LevelMeter(level: model.levelL, label: 'L', active: false),
+          ),
+          const SizedBox(width: AuraSpace.lg),
+          Expanded(
+            child: LevelMeter(level: model.levelR, label: 'R', active: false),
+          ),
+        ],
+      );
     }
     return ValueListenableBuilder<int>(
       valueListenable: model.vizChannelCount,
       builder: (_, cc, _) {
         if (cc <= 2) {
           // stereo：原两柱路径（levelL/R 与 channel_levels[0]/[1] 同源）。
-          return Row(children: [
-            Expanded(child: LevelMeter(level: model.levelL, label: 'L')),
-            const SizedBox(width: AuraSpace.lg),
-            Expanded(child: LevelMeter(level: model.levelR, label: 'R')),
-          ]);
+          return Row(
+            children: [
+              Expanded(
+                child: LevelMeter(level: model.levelL, label: 'L'),
+              ),
+              const SizedBox(width: AuraSpace.lg),
+              Expanded(
+                child: LevelMeter(level: model.levelR, label: 'R'),
+              ),
+            ],
+          );
         }
         return ValueListenableBuilder<List<double>>(
           valueListenable: model.vizChannelLevels,
@@ -489,29 +526,36 @@ class _OutputLevelRow extends StatelessWidget {
                 for (var c = 0; c < n; c++) ...[
                   if (c > 0) const SizedBox(width: AuraSpace.sm),
                   Expanded(
-                    child: Row(children: [
-                      SizedBox(
-                        width: 22,
-                        child: Text(labels[c],
-                            style: monoOf(p, size: 9, color: p.textDim)),
-                      ),
-                      const SizedBox(width: 3),
-                      Expanded(
-                        child: RepaintBoundary(
-                          child: SizedBox(
-                            height: 8,
-                            child: CustomPaint(
-                              size: const Size(double.infinity, 8),
-                              painter: MeterPainter(
-                                value: ((levels[c] + 60) / 60).clamp(0.0, 1.0),
-                                track: p.hairline,
-                                fill: levels[c] > -3 ? p.error : p.accent,
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 22,
+                          child: Text(
+                            labels[c],
+                            style: monoOf(p, size: 9, color: p.textDim),
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: RepaintBoundary(
+                            child: SizedBox(
+                              height: 8,
+                              child: CustomPaint(
+                                size: const Size(double.infinity, 8),
+                                painter: MeterPainter(
+                                  value: ((levels[c] + 60) / 60).clamp(
+                                    0.0,
+                                    1.0,
+                                  ),
+                                  track: p.hairline,
+                                  fill: levels[c] > -3 ? p.error : p.accent,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ]),
+                      ],
+                    ),
                   ),
                 ],
               ],
@@ -540,8 +584,9 @@ class _MeterBusScope extends StatelessWidget {
         if (!model.vbActive) return const SizedBox.shrink();
         final g = (model.vbInfo['vizGrp'] as num?)?.toInt() ?? -1;
         if (g < 0 || g > 7) return const SizedBox.shrink();
-        final names =
-            vbBusNames((model.vbInfo['edition'] as num?)?.toInt() ?? 0);
+        final names = vbBusNames(
+          (model.vbInfo['edition'] as num?)?.toInt() ?? 0,
+        );
         final bus = g < names.length ? names[g] : 'G${g + 1}';
         final cc = model.vizChannelCount.value;
         return Align(
@@ -571,9 +616,14 @@ class _DbScaleMini extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           for (final m in marks)
-            Text(m,
-                style: monoOf(
-                    p, size: 9, color: p.textDim.withValues(alpha: 0.7))),
+            Text(
+              m,
+              style: monoOf(
+                p,
+                size: 9,
+                color: p.textDim.withValues(alpha: 0.7),
+              ),
+            ),
         ],
       ),
     );
@@ -594,12 +644,15 @@ class _StateHint extends StatelessWidget {
         model.engineDisplay == EngineDisplay.processing
             ? '● live'
             : model.engineDisplay == EngineDisplay.bypass
-                ? l.stateBypass
-                : l.stateIdle,
-        style: monoOf(p, size: 10,
-            color: model.engineDisplay == EngineDisplay.processing
-                ? p.success
-                : p.textDim.withValues(alpha: 0.7)),
+            ? l.stateBypass
+            : l.stateIdle,
+        style: monoOf(
+          p,
+          size: 10,
+          color: model.engineDisplay == EngineDisplay.processing
+              ? p.success
+              : p.textDim.withValues(alpha: 0.7),
+        ),
       ),
     );
   }
@@ -612,14 +665,20 @@ class _EmptySpectrum extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    // 窄屏下说明文字可能长于频谱区宽度：Wrap 自动换行，避免 Row 硬溢出。
     return Center(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.graphic_eq_outlined, size: 18, color: p.textDim),
-          const SizedBox(width: AuraSpace.sm),
-          Text(text, style: captionOf(p)),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AuraSpace.md),
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: AuraSpace.sm,
+          runSpacing: AuraSpace.xs,
+          children: [
+            Icon(Icons.graphic_eq_outlined, size: 18, color: p.textDim),
+            Text(text, textAlign: TextAlign.center, style: captionOf(p)),
+          ],
+        ),
       ),
     );
   }

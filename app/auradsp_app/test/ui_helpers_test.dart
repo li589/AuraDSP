@@ -9,28 +9,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Widget _app(Widget child) => MaterialApp(
-      theme: withAuraExtension(ThemeData.dark(), auraDark),
-      home: Scaffold(body: Center(child: child)),
-    );
+  theme: withAuraExtension(ThemeData.dark(), auraDark),
+  home: Scaffold(body: Center(child: child)),
+);
 
-Future<AuraBreakpoint> _breakpointOf(
-    WidgetTester tester, double width) async {
+Future<AuraBreakpoint> _breakpointOf(WidgetTester tester, double width) async {
   tester.view.physicalSize = Size(width, 800);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   late AuraBreakpoint got;
-  await tester.pumpWidget(_app(Builder(builder: (ctx) {
-    got = ctx.auraBreakpoint;
-    return const SizedBox();
-  })));
+  await tester.pumpWidget(
+    _app(
+      Builder(
+        builder: (ctx) {
+          got = ctx.auraBreakpoint;
+          return const SizedBox();
+        },
+      ),
+    ),
+  );
   return got;
 }
 
 void main() {
   group('AuraBreakpoint', () {
-    testWidgets('500 -> mobile / 700 -> tablet / 1200 -> desktop',
-        (tester) async {
+    testWidgets('500 -> mobile / 700 -> tablet / 1200 -> desktop', (
+      tester,
+    ) async {
       expect(await _breakpointOf(tester, 500), AuraBreakpoint.mobile);
       expect(await _breakpointOf(tester, 700), AuraBreakpoint.tablet);
       expect(await _breakpointOf(tester, 1200), AuraBreakpoint.desktop);
@@ -42,11 +48,127 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       late double px;
-      await tester.pumpWidget(_app(Builder(builder: (ctx) {
-        px = ctx.responsivePageX;
-        return const SizedBox();
-      })));
+      await tester.pumpWidget(
+        _app(
+          Builder(
+            builder: (ctx) {
+              px = ctx.responsivePageX;
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
       expect(px, AuraSpace.lg);
+    });
+  });
+
+  group('AuraBreakpoint 边界（Q2 最小 360）', () {
+    testWidgets('360/479/480/599 -> mobile，600/899 -> tablet，900 -> desktop', (
+      tester,
+    ) async {
+      expect(await _breakpointOf(tester, 360), AuraBreakpoint.mobile);
+      expect(await _breakpointOf(tester, 479), AuraBreakpoint.mobile);
+      expect(await _breakpointOf(tester, 480), AuraBreakpoint.mobile);
+      expect(await _breakpointOf(tester, 599), AuraBreakpoint.mobile);
+      expect(await _breakpointOf(tester, 600), AuraBreakpoint.tablet);
+      expect(await _breakpointOf(tester, 899), AuraBreakpoint.tablet);
+      expect(await _breakpointOf(tester, 900), AuraBreakpoint.desktop);
+    });
+
+    testWidgets('isCompactWidth 以 480 为界', (tester) async {
+      Future<bool> compactAt(double width) async {
+        tester.view.physicalSize = Size(width, 800);
+        tester.view.devicePixelRatio = 1.0;
+        late bool got;
+        await tester.pumpWidget(
+          _app(
+            Builder(
+              builder: (ctx) {
+                got = ctx.isCompactWidth;
+                return const SizedBox();
+              },
+            ),
+          ),
+        );
+        return got;
+      }
+
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      expect(await compactAt(360), isTrue);
+      expect(await compactAt(479), isTrue);
+      expect(await compactAt(480), isFalse);
+    });
+  });
+
+  group('AuraInputScope（Q3 宽度与输入能力拆分）', () {
+    testWidgets('400px 鼠标窗口不隐藏徽标；触屏事件后才进入触屏语义', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final controller = HelpVisibilityController();
+      addTearDown(controller.dispose);
+      late AuraInputMode mode;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: withAuraExtension(ThemeData.dark(), auraDark),
+          home: AuraInputScope(
+            child: HelpVisibilityScope(
+              controller: controller,
+              child: Builder(
+                builder: (ctx) {
+                  mode = ctx.auraInputMode;
+                  return const InfoBadge(message: '输入判定');
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final center = tester.getCenter(find.byType(InfoBadge));
+      final mouse = await tester.startGesture(
+        center,
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      expect(mode, AuraInputMode.pointer);
+      expect(
+        tester
+            .widget<AnimatedOpacity>(
+              find.descendant(
+                of: find.byType(InfoBadge),
+                matching: find.byType(AnimatedOpacity),
+              ),
+            )
+            .opacity,
+        1.0,
+        reason: '窄桌面窗口（鼠标）不应按移动端隐藏徽标',
+      );
+      await mouse.up();
+
+      final touch = await tester.startGesture(
+        center,
+        kind: PointerDeviceKind.touch,
+      );
+      await tester.pump();
+      expect(mode, AuraInputMode.touch);
+      expect(
+        tester
+            .widget<AnimatedOpacity>(
+              find.descendant(
+                of: find.byType(InfoBadge),
+                matching: find.byType(AnimatedOpacity),
+              ),
+            )
+            .opacity,
+        0.0,
+        reason: '触屏未滑动时徽标应隐藏',
+      );
+      await touch.up();
     });
   });
 
@@ -60,8 +182,7 @@ void main() {
     testWidgets('桌面 hover 300ms 弹出、移出关闭', (tester) async {
       await tester.pumpWidget(_app(const InfoBadge(message: '混响说明')));
       final center = tester.getCenter(find.byType(InfoBadge));
-      final gesture =
-          await tester.createGesture(kind: PointerDeviceKind.mouse);
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await gesture.addPointer(location: center);
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('混响说明'), findsOneWidget);
@@ -108,15 +229,17 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(MaterialApp(
-        theme: withAuraExtension(ThemeData.dark(), auraDark),
-        home: Scaffold(
-          body: Align(
-            alignment: Alignment.bottomCenter,
-            child: const InfoBadge(message: '混响说明'),
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: withAuraExtension(ThemeData.dark(), auraDark),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomCenter,
+              child: const InfoBadge(message: '混响说明'),
+            ),
           ),
         ),
-      ));
+      );
       await tester.longPress(find.byType(InfoBadge));
       await tester.pump();
 
@@ -135,15 +258,17 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(MaterialApp(
-        theme: withAuraExtension(ThemeData.dark(), auraDark),
-        home: Scaffold(
-          body: Align(
-            alignment: Alignment.bottomCenter,
-            child: const InfoBadge(message: '混响说明'),
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: withAuraExtension(ThemeData.dark(), auraDark),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomCenter,
+              child: const InfoBadge(message: '混响说明'),
+            ),
           ),
         ),
-      ));
+      );
 
       final badge = tester.getRect(find.byType(InfoBadge));
       final g = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -151,8 +276,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 16));
       // 从上方逼近徽标中心。
       for (int i = 1; i <= 12; i++) {
-        await g.moveTo(Offset.lerp(
-            Offset(badge.center.dx, 5), badge.center, i / 12)!);
+        await g.moveTo(
+          Offset.lerp(Offset(badge.center.dx, 5), badge.center, i / 12)!,
+        );
         await tester.pump(const Duration(milliseconds: 40));
       }
 
@@ -170,8 +296,11 @@ void main() {
       // 指针保持不动：气泡一旦出现就必须持续存在，不能反复消失再出现。
       for (int i = 0; i < 30; i++) {
         await tester.pump(const Duration(milliseconds: 40));
-        expect(find.text('混响说明'), findsOneWidget,
-            reason: '气泡在出现后第 $i 步消失了（闪动）');
+        expect(
+          find.text('混响说明'),
+          findsOneWidget,
+          reason: '气泡在出现后第 $i 步消失了（闪动）',
+        );
       }
       await g.removePointer();
     });
@@ -185,22 +314,25 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(MaterialApp(
-        theme: withAuraExtension(ThemeData.dark(), auraDark),
-        home: Scaffold(
-          body: Column(
-            children: [
-              SizedBox(
-                height: 380,
-                child: Row(children: const [InfoBadge(message: 'GAP-A-混响预听说明')]),
-              ),
-              const Spacer(),
-              Row(
-                  children: const [InfoBadge(message: 'GAP-B-混响预听说明')]),
-            ],
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: withAuraExtension(ThemeData.dark(), auraDark),
+          home: Scaffold(
+            body: Column(
+              children: [
+                SizedBox(
+                  height: 380,
+                  child: Row(
+                    children: const [InfoBadge(message: 'GAP-A-混响预听说明')],
+                  ),
+                ),
+                const Spacer(),
+                Row(children: const [InfoBadge(message: 'GAP-B-混响预听说明')]),
+              ],
+            ),
           ),
         ),
-      ));
+      );
 
       await tester.longPress(find.byType(InfoBadge).at(0));
       await tester.pump();
@@ -212,9 +344,11 @@ void main() {
 
       double gapOf(String msg, int badgeIndex) {
         final badge = tester.getRect(find.byType(InfoBadge).at(badgeIndex));
-        final bubble = tester.getRect(find
-            .ancestor(of: find.text(msg), matching: find.byType(Container))
-            .first);
+        final bubble = tester.getRect(
+          find
+              .ancestor(of: find.text(msg), matching: find.byType(Container))
+              .first,
+        );
         return bubble.top > badge.center.dy
             ? bubble.top - badge.bottom
             : badge.top - bubble.bottom;
@@ -232,22 +366,20 @@ void main() {
   group('AuraChoiceChip', () {
     testWidgets('点击触发 onTap，文案可见', (tester) async {
       var tapped = 0;
-      await tester.pumpWidget(_app(AuraChoiceChip(
-        label: '动态',
-        selected: false,
-        onTap: () => tapped++,
-      )));
+      await tester.pumpWidget(
+        _app(
+          AuraChoiceChip(label: '动态', selected: false, onTap: () => tapped++),
+        ),
+      );
       expect(find.text('动态'), findsOneWidget);
       await tester.tap(find.text('动态'));
       expect(tapped, 1);
     });
 
     testWidgets('onTap 为空不断言、不崩', (tester) async {
-      await tester.pumpWidget(_app(const AuraChoiceChip(
-        label: '静态',
-        selected: true,
-        onTap: null,
-      )));
+      await tester.pumpWidget(
+        _app(const AuraChoiceChip(label: '静态', selected: true, onTap: null)),
+      );
       expect(find.text('静态'), findsOneWidget);
       await tester.tap(find.text('静态'));
       await tester.pump();
@@ -264,10 +396,14 @@ void main() {
       final controller = HelpVisibilityController();
       addTearDown(controller.dispose);
 
-      await tester.pumpWidget(_app(HelpVisibilityScope(
-        controller: controller,
-        child: const InfoBadge(message: '桌面提示测试'),
-      )));
+      await tester.pumpWidget(
+        _app(
+          HelpVisibilityScope(
+            controller: controller,
+            child: const InfoBadge(message: '桌面提示测试'),
+          ),
+        ),
+      );
 
       final opacityFinder = find.byType(AnimatedOpacity);
       expect(opacityFinder, findsOneWidget);
@@ -284,13 +420,19 @@ void main() {
       final controller = HelpVisibilityController();
       addTearDown(controller.dispose);
 
-      await tester.pumpWidget(_app(HelpVisibilityScope(
-        controller: controller,
-        child: const InfoBadge(message: '移动端提示测试'),
-      )));
+      await tester.pumpWidget(
+        _app(
+          HelpVisibilityScope(
+            controller: controller,
+            child: const InfoBadge(message: '移动端提示测试'),
+          ),
+        ),
+      );
 
       // 1. 移动端初始不滑动状态：透明度为 0.0
-      var opacityWidget = tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity));
+      var opacityWidget = tester.widget<AnimatedOpacity>(
+        find.byType(AnimatedOpacity),
+      );
       expect(opacityWidget.opacity, 0.0);
 
       // 2. 模拟滑动触发 recordScroll()
@@ -298,14 +440,18 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 250));
 
-      opacityWidget = tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity));
+      opacityWidget = tester.widget<AnimatedOpacity>(
+        find.byType(AnimatedOpacity),
+      );
       expect(opacityWidget.opacity, 1.0);
 
       // 3. 停止滑动 2600ms 后自动淡出
       await tester.pump(const Duration(milliseconds: 2700));
       await tester.pump(const Duration(milliseconds: 250));
 
-      opacityWidget = tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity));
+      opacityWidget = tester.widget<AnimatedOpacity>(
+        find.byType(AnimatedOpacity),
+      );
       expect(opacityWidget.opacity, 0.0);
     });
 
@@ -313,10 +459,14 @@ void main() {
       final controller = HelpVisibilityController();
       addTearDown(controller.dispose);
 
-      await tester.pumpWidget(_app(HelpVisibilityScope(
-        controller: controller,
-        child: const InfoBadge(message: '点击切换气泡测试'),
-      )));
+      await tester.pumpWidget(
+        _app(
+          HelpVisibilityScope(
+            controller: controller,
+            child: const InfoBadge(message: '点击切换气泡测试'),
+          ),
+        ),
+      );
 
       final badgeFinder = find.byType(InfoBadge);
       expect(badgeFinder, findsOneWidget);

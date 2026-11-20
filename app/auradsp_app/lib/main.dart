@@ -14,13 +14,13 @@ import 'core/design.dart';
 import 'core/presets.dart';
 import 'core/state.dart';
 import 'core/theme.dart';
+import 'core/ui_helpers.dart';
 import 'platform/adapters.dart';
 import 'engine/debug_log.dart';
 import 'features/debug/debug_hud.dart';
 import 'features/notice_host.dart';
 import 'features/visualizer/styles/visualizer_sprite_atlas.dart';
 import 'features/shell.dart';
-import 'features/widgets.dart';
 import 'l10n/gen/app_localizations.dart';
 
 void main(List<String> args) {
@@ -127,8 +127,9 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    PlatformAdapters.instance.window.visibleListenable
-        .removeListener(_onWindowVisibility);
+    PlatformAdapters.instance.window.visibleListenable.removeListener(
+      _onWindowVisibility,
+    );
     WidgetsBinding.instance.removeObserver(this);
     _model?.dispose();
     PlatformAdapters.instance.window.dispose();
@@ -171,7 +172,11 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
             // 引起 AnimatedSwitcher 页面切换与按钮微交互假死。
             // 显存与后台节流已由 chrome 背景光晕与音频可视化监听器精准独立接管。
             // 此处使用透明 Listener 守卫：任何指针落入均自愈拉起可见性。
-            final body = child ?? const SizedBox.shrink();
+            // AuraInputScope 必须包在 Navigator 之外：这样 AppShell 与
+            // showDialog 的 Overlay 路由都能读到同一份指针/触屏判定。
+            final body = AuraInputScope(
+              child: child ?? const SizedBox.shrink(),
+            );
             return Listener(
               behavior: HitTestBehavior.translucent,
               onPointerDown: (e) {

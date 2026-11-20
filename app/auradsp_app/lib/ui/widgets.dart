@@ -149,10 +149,7 @@ class SectionCard extends StatelessWidget {
               duration: AuraDur.fast,
               curve: AuraCurve.standard,
               opacity: collapsed ? 0.0 : 1.0,
-              child: TickerMode(
-                enabled: !collapsed,
-                child: content,
-              ),
+              child: TickerMode(enabled: !collapsed, child: content),
             ),
           ),
         ),
@@ -407,11 +404,10 @@ class MasterStatusConsole extends StatelessWidget {
                     const SizedBox(width: 6),
                     Text(
                       statusText,
-                      style: monoOf(
-                        p,
-                        size: 10.5,
-                        color: ledColor,
-                      ).copyWith(fontWeight: FontWeight.w700, letterSpacing: 0.4),
+                      style: monoOf(p, size: 10.5, color: ledColor).copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.4,
+                      ),
                     ),
                   ],
                 ),
@@ -420,11 +416,7 @@ class MasterStatusConsole extends StatelessWidget {
           ),
 
           // 中间精密标尺分割线
-          Container(
-            width: 1.0,
-            height: 14.0,
-            color: p.hairline,
-          ),
+          Container(width: 1.0, height: 14.0, color: p.hairline),
 
           // 右半部分：音频链路延迟（支持点击触发全链路测量）
           Tooltip(
@@ -512,7 +504,11 @@ class StateBadge extends StatelessWidget {
           const SizedBox(width: 5),
           Text(
             text,
-            style: monoOf(p, size: 10.5, color: color).copyWith(fontWeight: FontWeight.w600),
+            style: monoOf(
+              p,
+              size: 10.5,
+              color: color,
+            ).copyWith(fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -542,7 +538,16 @@ class LatencyBadge extends StatelessWidget {
           borderRadius: BorderRadius.circular(AuraRadius.xs),
           border: Border.all(color: p.hairline, width: 1),
         ),
-        child: Center(child: Text(text, style: monoOf(p, size: 10.5, color: c).copyWith(fontWeight: FontWeight.w600))),
+        child: Center(
+          child: Text(
+            text,
+            style: monoOf(
+              p,
+              size: 10.5,
+              color: c,
+            ).copyWith(fontWeight: FontWeight.w600),
+          ),
+        ),
       ),
     );
   }
@@ -612,10 +617,15 @@ class _AdvancedSectionState extends State<AdvancedSection> {
                   const SizedBox(width: 6),
                   InfoBadge(message: widget.helpTooltip!),
                 ],
-                const Spacer(),
-                Text(
-                  widget.summary,
-                  style: monoOf(p, size: 10, color: p.textDim),
+                const SizedBox(width: AuraSpace.sm),
+                Expanded(
+                  child: Text(
+                    widget.summary,
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: monoOf(p, size: 10, color: p.textDim),
+                  ),
                 ),
               ],
             ),
@@ -721,16 +731,17 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
     if (!widget.enabled) return const SizedBox.shrink();
 
     // 确定唯一标准显示模式
-    final effMode = widget.mode ??
+    final effMode =
+        widget.mode ??
         (widget.probing
             ? LatencyMode.probing
             : (widget.measured
-                ? LatencyMode.measured
-                : (widget.estimated
-                    ? LatencyMode.estimated
-                    : (widget.latencyMs > 0
+                  ? LatencyMode.measured
+                  : (widget.estimated
                         ? LatencyMode.estimated
-                        : LatencyMode.zero))));
+                        : (widget.latencyMs > 0
+                              ? LatencyMode.estimated
+                              : LatencyMode.zero))));
 
     final Color c = LatencyPresenter.colorByMode(
       mode: effMode,
@@ -760,7 +771,11 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
         final pulse = _pulseController.value;
         final glowAlpha = (math.sin(pulse * math.pi) * 0.45).clamp(0.0, 1.0);
         final borderColor = Color.lerp(
-          c == p.textDim ? p.hairline : c.withValues(alpha: effMode == LatencyMode.measured ? 0.55 : 0.35),
+          c == p.textDim
+              ? p.hairline
+              : c.withValues(
+                  alpha: effMode == LatencyMode.measured ? 0.55 : 0.35,
+                ),
           p.accent,
           glowAlpha,
         )!;
@@ -799,12 +814,17 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
 class LevelMeter extends StatelessWidget {
   final ValueListenable<double> level;
   final String label;
+
   /// R2（2026-10-23）：false = 宿主页离屏（IndexedStack 保活），不订阅
   /// level 通知器——离屏页不随 30fps 数据重建（SDK 实证离屏子节点仍参与
   /// layout）。回页时父级以 active=true 重建，自然恢复订阅。
   final bool active;
-  const LevelMeter(
-      {super.key, required this.level, required this.label, this.active = true});
+  const LevelMeter({
+    super.key,
+    required this.level,
+    required this.label,
+    this.active = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -961,7 +981,11 @@ class _SpectrumPainter extends CustomPainter {
     required this.gridColor,
     required this.dimColor,
     required this.showGrid,
-  }) : super(repaint: peaks != null ? Listenable.merge([spectrum, peaks]) : spectrum) {
+  }) : super(
+         repaint: peaks != null
+             ? Listenable.merge([spectrum, peaks])
+             : spectrum,
+       ) {
     _gridPaint.color = gridColor;
     _barPaint.color = spectrumColor;
     _capPaint.color = capperColor;
@@ -1024,11 +1048,7 @@ class _SpectrumPainter extends CustomPainter {
       // 峰值保持线
       if (pk != null && i < pk.length && pk[i] > 0.01) {
         final py = size.height - pk[i].clamp(0.0, 1.0) * size.height;
-        canvas.drawLine(
-          Offset(x, py),
-          Offset(x + bw, py),
-          _pkPaint,
-        );
+        canvas.drawLine(Offset(x, py), Offset(x + bw, py), _pkPaint);
       }
     }
   }

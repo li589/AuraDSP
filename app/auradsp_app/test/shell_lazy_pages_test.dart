@@ -18,12 +18,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Widget _app(AppModel model) => MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: const Locale('en'),
-      theme: withAuraExtension(ThemeData.dark(), auraDark),
-      home: AppShell(model: model),
-    );
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  locale: const Locale('en'),
+  theme: withAuraExtension(ThemeData.dark(), auraDark),
+  home: AppShell(model: model),
+);
 
 void main() {
   testWidgets('启动只实例化 Home，首次访问才构建其他页', (tester) async {
@@ -44,24 +44,27 @@ void main() {
     expect(find.byType(ChainPage), findsNothing);
     expect(find.byType(VisualizerPage), findsNothing);
 
-    // 首次访问 Effects：同一帧内实例化（无占位闪烁）
-    await tester.tap(find.byIcon(Icons.tune_outlined));
+    // 首次访问 Effects：同一帧内实例化（无占位闪烁）。
+    // 用导航 key 而非图标定位：<600 底栏与左栏同时保活时图标会重复。
+    await tester.tap(find.byKey(const ValueKey<String>('shell.railNav.1')));
     await tester.pump();
     expect(model.visiblePage.value, AppPage.effects);
     expect(find.byType(EffectsPage), findsOneWidget);
     expect(find.byType(VisualizerPage), findsNothing);
 
     // 回首页再切回：仍复用同一实例（保活语义不因惰性化而丢失）
-    await tester.tap(find.byIcon(Icons.home_outlined));
+    await tester.tap(find.byKey(const ValueKey<String>('shell.railNav.0')));
     await tester.pump();
-    final effectsWidget =
-        tester.widget(find.byType(EffectsPage, skipOffstage: false));
-    await tester.tap(find.byIcon(Icons.tune_outlined));
+    final effectsWidget = tester.widget(
+      find.byType(EffectsPage, skipOffstage: false),
+    );
+    await tester.tap(find.byKey(const ValueKey<String>('shell.railNav.1')));
     await tester.pump();
     expect(
       identical(
-          tester.widget(find.byType(EffectsPage, skipOffstage: false)),
-          effectsWidget),
+        tester.widget(find.byType(EffectsPage, skipOffstage: false)),
+        effectsWidget,
+      ),
       isTrue,
       reason: '切页必须复用既有页面实例，不得重建',
     );
@@ -77,13 +80,15 @@ void main() {
 
     final model = AppModel(testing: true);
     addTearDown(model.dispose);
-    await tester.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: const Locale('en'),
-      theme: withAuraExtension(ThemeData.dark(), auraDark),
-      home: ShellGate(model: model),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('en'),
+        theme: withAuraExtension(ThemeData.dark(), auraDark),
+        home: ShellGate(model: model),
+      ),
+    );
     await tester.pump();
     expect(find.byType(AppShell), findsOneWidget);
 

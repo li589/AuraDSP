@@ -13,17 +13,20 @@
 
 ### 1.2 跨端交互与显隐状态契约
 AuraDSP 采用跨平台自适应响应系统：
-1. **电脑端（桌面/鼠标环境，`!context.isMobile`）**：
-   - **持续常驻显示**：电脑端视口充裕，问号徽标常驻保持可见；
+1. **指针环境（`!context.usesTouchInput`；桌面与窄窗口鼠标均适用）**：
+   - **持续常驻显示**：指针环境视口充裕，问号徽标常驻保持可见；
    - **交互反馈**：鼠标悬停 300ms 自动弹出气泡；鼠标移开即隐藏；点击徽标可切换锁定显示/手动关闭。
-2. **移动端（触屏移动端环境，`context.isMobile`）**：
-   - **平时持续隐藏**：为了保持极简高阶的暗黑美学，移动端非滑动状态下问号徽标透明度为 0 并忽略指针命中 (`IgnorePointer(ignoring: true)`)；
+2. **触屏环境（`context.usesTouchInput`；Android/触屏设备，与窗口宽度解耦）**：
+   - **平时持续隐藏**：为了保持极简高阶的暗黑美学，触屏非滑动状态下问号徽标透明度为 0 并忽略指针命中 (`IgnorePointer(ignoring: true)`)；
    - **滑动唤醒机制**：用户滑动页面或列表时，触发 `recordScroll()`，问号徽标平滑淡入（`AnimatedOpacity 1.0`）；
    - **延迟自动淡出**：用户停止滑动后，延迟 **2.6 秒**，问号平滑淡出隐藏；
    - **触屏点击响应**：用户可直接点击问号弹出解释气泡。气泡弹出后若无操作，**3.5 秒后自动淡出收起**，防止遮挡关键控制项；用户再次点击徽标可立即关闭。
 3. **架构支持**：
    - 全局/页面根骨架 `PageScaffold` 已内嵌 `HelpVisibilityController` 与 `HelpVisibilityScope`，自动监听 `ScrollNotification`；
    - 新增组件只需直接放置 `InfoBadge(message: l10n.someTip)`，无需手动处理滚动监听，Scope 会自动联动生效。
+4. **宽度与输入能力分离（Q3 owner 裁定，2026-11-20）**：
+   - `AuraBreakpoint` / `isCompactWidth` 只决定布局形态；
+   - `AuraInputScope` 在 `MaterialApp.builder` 中包住 Navigator（覆盖页面与 Dialog），监听真实 `PointerDown`，以 `context.usesTouchInput` 决定交互语义；窄桌面窗口（鼠标）不得按移动端隐藏徽标。
 
 ---
 
