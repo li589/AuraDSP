@@ -2,12 +2,18 @@
 #
 # 在 ubuntu-latest 上用**合成的 fake bundle** 跑真实打包链路，不依赖
 # Flutter/cmake 构建（那由 ci.yml 的 build-app-linux / build-engine-linux
-# 负责）：本 workflow 只回答一个问题——「packkit/linux 产出的包能不能被
-# dpkg 正常读取、权限位对不对、交付清单能不能自校验」。
+# 负责）：验证 packkit/linux 产出的包能否被 dpkg 正常读取、权限位对不对、
+# 交付清单能否自校验、多档位会不会被拦。
 #
-# 刻意不跑 AppImage：appimagetool 要按 pins 从 GitHub Release 下载，
-# 在 CI 里偶发超时会把整条流水线拖红。AppImage 的逻辑（钉版解析、铁律
-# 自检、AppDir 结构）由 test_packkit_linux_unit.py 覆盖，人工发布时跑。
+# 数据流：合成 fake bundle（/bin/true 当载荷，免 Flutter 构建）
+#   → 真打 deb / 驱动 deb / tar.gz → dpkg-deb 与 tar 结构断言（含权限位）
+#   → release.py --platform linux 端到端（四件 + deliver-r1 + sha256sum -c）
+#   → 多档位请求必须被拒绝。
+#
+# 关于 AppImage：显式的「打 deb/driver/tar」步骤不含它（保持快速、零外网）；
+# 但发布编排步骤按 Linux 四模式执行，会按 tools.pins 从 GitHub Release 下载
+# appimagetool 与 type2-runtime——runner 内网可直连，实测通过。若某次下载
+# 受限，该步骤会红，重跑即可（缓存不跨 run 保留）。
 name: linux-pack
 
 on:
