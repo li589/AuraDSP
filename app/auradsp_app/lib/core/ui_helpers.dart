@@ -164,6 +164,48 @@ extension AuraInputModeX on BuildContext {
       (isMobile ? AuraInputMode.touch : AuraInputMode.pointer);
 
   bool get usesTouchInput => auraInputMode == AuraInputMode.touch;
+
+  /// R7-b：行内控件的触屏最小命中区。视觉尺寸不变，只把可点盒抬到
+  /// [AuraTouchTargets.min]（Apple HIG 44）；指针环境原样返回。
+  /// 孤立图标按钮用 48（见 [AuraTouchTargets.iconButton]）。
+  double touchTargetAtLeast(double base, [double min = AuraTouchTargets.min]) =>
+      usesTouchInput && base < min ? min : base;
+}
+
+/// 触控目标尺寸口径（R7，2026-11-20 owner 立项）。
+class AuraTouchTargets {
+  const AuraTouchTargets._();
+
+  /// 行内控件（chip / 分段 / 开关 / 下拉 / 旁路胶囊）。
+  static const min = 44.0;
+
+  /// 孤立图标按钮（顶栏动作、问号徽标）。
+  static const iconButton = 48.0;
+}
+
+/// 命中区抬升器：指针环境原样返回子树（布局与观感零变化）；
+/// 触屏环境把可点盒抬到 [min]，视觉件居中不变。
+///
+/// 注意：必须包在**手势识别器之外**（如 `InkWell(child: AuraTouchTarget(...))`）。
+/// `RenderBox` 只在自己尺寸内命中，把可点盒包在视觉件里侧收不到外圈点击。
+class AuraTouchTarget extends StatelessWidget {
+  final Widget child;
+  final double min;
+
+  const AuraTouchTarget({
+    super.key,
+    required this.child,
+    this.min = AuraTouchTargets.min,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!context.usesTouchInput) return child;
+    return SizedBox(
+      height: min,
+      child: Center(heightFactor: 1, widthFactor: 1, child: child),
+    );
+  }
 }
 
 /* ---------- 问号帮助徽标 ---------- */
@@ -439,7 +481,9 @@ class _InfoBadgeState extends State<InfoBadge> {
     final p = paletteOf(context);
     final isVisible = HelpVisibilityScope.isVisibleOf(context);
     // R7：触屏按 Material 最小触控目标 48；指针沿用 15+4×2=23 的紧凑外衬。
-    final hit = context.usesTouchInput ? 48.0 : widget.size + AuraSpace.xs * 2;
+    final hit = context.usesTouchInput
+        ? AuraTouchTargets.iconButton
+        : widget.size + AuraSpace.xs * 2;
 
     // 移动端淡出隐藏时若浮层仍在，安全关闭浮层
     if (!isVisible && _entry != null) {

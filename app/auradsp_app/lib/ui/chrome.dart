@@ -973,15 +973,17 @@ class AuraSwitch extends StatelessWidget {
     final track = value
         ? (enabled ? p.accent : p.accent.withValues(alpha: 0.4))
         : p.hairline;
+    // R7-b：触屏命中区抬到 44，视觉轨道仍 38×22。
+    final hitH = context.touchTargetAtLeast(40);
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: enabled ? () => onChanged!(!value) : null,
         child: Padding(
-          // 命中区扩展到 40×40（8pt 网格），视觉尺寸仍为 38×22
-          padding: const EdgeInsets.symmetric(
-            vertical: (40 - AuraSize.switchH) / 2,
+          // 命中区按输入能力取值（指针 40 / 触屏 44，8pt 网格）
+          padding: EdgeInsets.symmetric(
+            vertical: (hitH - AuraSize.switchH) / 2,
             horizontal: 1,
           ),
           child: AnimatedContainer(
@@ -1041,9 +1043,11 @@ class AuraSegmented<T> extends StatelessWidget {
     final enabled = onChanged != null;
     final n = segments.length;
     final i = segments.indexWhere((s) => s.value == selected);
+    // R7-b：触屏整条抬到 44，滑块与文字同步放大（分段控件是输入件，不是装饰）。
+    final h = context.touchTargetAtLeast(_h);
 
     return Container(
-      height: _h,
+      height: h,
       padding: const EdgeInsets.all(_pad),
       decoration: BoxDecoration(
         color: p.panelRaised,
@@ -1062,7 +1066,7 @@ class AuraSegmented<T> extends StatelessWidget {
                   alignment: Alignment(n == 1 ? 0.0 : -1 + 2 * i / (n - 1), 0),
                   child: Container(
                     width: w,
-                    height: _h - _pad * 2,
+                    height: h - _pad * 2,
                     decoration: BoxDecoration(
                       color: enabled ? p.accent : p.hairline,
                       borderRadius: BorderRadius.circular(AuraRadius.sm - 2),
@@ -1259,68 +1263,71 @@ class _AuraChipState extends State<AuraChip>
                 DebugTrace.instance.tap('chip', widget.label);
                 widget.onTap!();
               },
-        child: AnimatedContainer(
-          duration: AuraDur.fast,
-          curve: AuraCurve.standard,
-          height: AuraSize.chipH,
-          padding: const EdgeInsets.symmetric(horizontal: AuraSpace.md),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(AuraRadius.sm),
-            border: Border.all(color: border, width: 1),
-          ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final label = AnimatedSwitcher(
-                duration: AuraDur.fast,
-                switchInCurve: AuraCurve.standard,
-                switchOutCurve: AuraCurve.standard,
-                transitionBuilder: (child, anim) =>
-                    FadeTransition(opacity: anim, child: child),
-                child: widget.busy
-                    ? SizedBox(
-                        key: const ValueKey('busy'),
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation(tint),
+        child: AuraTouchTarget(
+          // R7-b：触屏命中盒抬到 44，视觉药丸仍 chipH（30）——居中对齐。
+          child: AnimatedContainer(
+            duration: AuraDur.fast,
+            curve: AuraCurve.standard,
+            height: AuraSize.chipH,
+            padding: const EdgeInsets.symmetric(horizontal: AuraSpace.md),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(AuraRadius.sm),
+              border: Border.all(color: border, width: 1),
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final label = AnimatedSwitcher(
+                  duration: AuraDur.fast,
+                  switchInCurve: AuraCurve.standard,
+                  switchOutCurve: AuraCurve.standard,
+                  transitionBuilder: (child, anim) =>
+                      FadeTransition(opacity: anim, child: child),
+                  child: widget.busy
+                      ? SizedBox(
+                          key: const ValueKey('busy'),
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation(tint),
+                          ),
+                        )
+                      : AnimatedDefaultTextStyle(
+                          key: const ValueKey('label'),
+                          duration: AuraDur.fast,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: widget.selected
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                            fontFamilyFallback: kBodyCjkFallback,
+                            letterSpacing: 0.1,
+                            color: tint,
+                          ),
+                          child: Text(
+                            widget.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      )
-                    : AnimatedDefaultTextStyle(
-                        key: const ValueKey('label'),
-                        duration: AuraDur.fast,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: widget.selected
-                              ? FontWeight.w600
-                              : FontWeight.w500,
-                          fontFamilyFallback: kBodyCjkFallback,
-                          letterSpacing: 0.1,
-                          color: tint,
-                        ),
-                        child: Text(
-                          widget.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-              );
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (widget.icon != null) ...[
-                    Icon(widget.icon, size: 14, color: tint),
-                    const SizedBox(width: AuraSpace.sm - 2),
+                );
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.icon != null) ...[
+                      Icon(widget.icon, size: 14, color: tint),
+                      const SizedBox(width: AuraSpace.sm - 2),
+                    ],
+                    // 有界宽度（如状态横幅右侧）允许标签省略；无界场景保持自然宽。
+                    if (constraints.maxWidth.isFinite)
+                      Flexible(child: label)
+                    else
+                      label,
                   ],
-                  // 有界宽度（如状态横幅右侧）允许标签省略；无界场景保持自然宽。
-                  if (constraints.maxWidth.isFinite)
-                    Flexible(child: label)
-                  else
-                    label,
-                ],
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -1424,6 +1431,8 @@ class _AuraDropdownState<T> extends State<AuraDropdown<T>> {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final enabled = widget.onChanged != null && widget.items.isNotEmpty;
+    // R7-b：触屏下拉本体抬到 44（输入件，视觉随高），指针保持设计高 32。
+    final h = context.touchTargetAtLeast(widget.height);
 
     final border = enabled
         ? (_hover ? p.accent.withValues(alpha: 0.6) : p.hairline)
@@ -1437,7 +1446,7 @@ class _AuraDropdownState<T> extends State<AuraDropdown<T>> {
     // 1. 无可用项时的留空占位状态
     if (widget.items.isEmpty) {
       return Container(
-        height: widget.height,
+        height: h,
         padding: const EdgeInsets.symmetric(horizontal: AuraSpace.sm + 2),
         decoration: BoxDecoration(
           color: bg,
@@ -1488,7 +1497,7 @@ class _AuraDropdownState<T> extends State<AuraDropdown<T>> {
       child: AnimatedContainer(
         duration: AuraDur.fast,
         curve: AuraCurve.standard,
-        height: widget.height,
+        height: h,
         padding: const EdgeInsets.symmetric(horizontal: AuraSpace.sm + 2),
         decoration: BoxDecoration(
           color: bg,

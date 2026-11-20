@@ -131,6 +131,7 @@ AuraDSP 采用跨平台自适应响应系统：
 
 - **尺寸按输入能力判定，不按视口宽度**：`context.usesTouchInput` 为真时，交互控件命中区 ≥48×48；指针环境保持紧凑视觉尺寸。
 - 命中区变大**必须让布局盒真的到 48**：`RenderBox` 只在自己尺寸内命中，`OverflowBox`/负偏移画出去的部分收不到点击。做法是 `SizedBox(48) + Center(视觉件)`。
-- 已达标：`InfoBadge`（23↔48）、顶栏 `_IconAction`（32↔48）、底栏六项（60）。
-- 未达标（R7-b，需单独一轮）：`AuraChip`、`AuraDropdown` 触发器、效果卡开关等 28–32 高控件。
+- 口径：**孤立图标 48**（Material）、**行内控件 44**（Apple HIG；行内排布密集，48 会把表头整体抬高一档）。
+- 已达标：`InfoBadge` 23↔48、顶栏 `_IconAction` 32↔48、底栏 60、`AuraChip` 30↔44、`AuraSegmented` 38↔44、`AuraSwitch` 40↔44、`AuraDropdown` 32↔44、链卡旁路胶囊 22↔44。
+- 新控件用 `AuraTouchTarget`（`core/ui_helpers.dart`）：指针环境原样返回子树、触屏 `SizedBox(44)+Center`；**必须包在手势识别器之外**，包在里侧收不到外圈点击。
 - 回归在 `test/touch_target_test.dart`；新增可点控件请同步加断言（widget 测试默认平台是 android，断言顺序固定「先鼠标 → 再触屏」）。

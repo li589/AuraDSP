@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import '../../core/design.dart';
 import '../../core/effect_registry.dart';
 import '../../core/nav.dart';
+import '../../core/ui_helpers.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
 import '../../engine/auradsp_ffi.dart' show kVizChannelMax;
@@ -365,38 +366,43 @@ class _StageBypassPill extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(AuraRadius.xs),
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: isEnabled ? p.accent.withValues(alpha: 0.12) : p.panelRaised,
-          borderRadius: BorderRadius.circular(AuraRadius.xs),
-          border: Border.all(
-            color: isEnabled ? p.accent.withValues(alpha: 0.45) : p.hairline,
-            width: 1.0,
+      // R7-b：触屏命中盒 44，胶囊视觉不变（InkWell 在外侧才能吃到外圈点击）。
+      child: AuraTouchTarget(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: isEnabled ? p.accent.withValues(alpha: 0.12) : p.panelRaised,
+            borderRadius: BorderRadius.circular(AuraRadius.xs),
+            border: Border.all(
+              color: isEnabled ? p.accent.withValues(alpha: 0.45) : p.hairline,
+              width: 1.0,
+            ),
           ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 5.5,
-              height: 5.5,
-              decoration: BoxDecoration(
-                color: isEnabled ? p.accent : p.textDim.withValues(alpha: 0.4),
-                shape: BoxShape.circle,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 5.5,
+                height: 5.5,
+                decoration: BoxDecoration(
+                  color: isEnabled
+                      ? p.accent
+                      : p.textDim.withValues(alpha: 0.4),
+                  shape: BoxShape.circle,
+                ),
               ),
-            ),
-            const SizedBox(width: 5),
-            Text(
-              isEnabled ? l.plugActive : l.chainBypass,
-              style: monoOf(
-                p,
-                size: 10.5,
-                color: isEnabled ? p.accent : p.textDim,
-              ).copyWith(fontWeight: FontWeight.w600),
-            ),
-          ],
+              const SizedBox(width: 5),
+              Text(
+                isEnabled ? l.plugActive : l.chainBypass,
+                style: monoOf(
+                  p,
+                  size: 10.5,
+                  color: isEnabled ? p.accent : p.textDim,
+                ).copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
         ),
       ),
     );
