@@ -29,6 +29,7 @@ import '../core/path_memory.dart';
 import '../core/notice.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../core/ui_helpers.dart';
 import '../l10n/gen/app_localizations.dart';
 import 'chrome.dart';
 import 'liveprog/code_outline_panel.dart';
@@ -57,8 +58,13 @@ class LiveprogPage extends StatefulWidget {
 }
 
 /// 状态胶囊共用体：主文案 + 可选的引擎原文第二行（与主文案不同才展示）。
-Widget _capsuleBody(AuraPalette p, Color c, IconData icon, String text,
-    {String? err}) {
+Widget _capsuleBody(
+  AuraPalette p,
+  Color c,
+  IconData icon,
+  String text, {
+  String? err,
+}) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
     decoration: BoxDecoration(
@@ -110,9 +116,11 @@ class _LiveprogPageState extends State<LiveprogPage> {
   int get _tStatus => _mc ? widget.model.lpMcStatus : widget.model.lpStatus;
   String? get _tError => _mc ? widget.model.lpMcError : widget.model.lpError;
   String? get _tCode => _mc ? widget.model.lpMcCode : widget.model.lpCode;
-  int get _tCompileMs => _mc ? widget.model.lpMcCompileMs : widget.model.lpCompileMs;
-  bool get _tMismatch =>
-      _mc ? widget.model.lpMcPresetCodeMismatch : widget.model.lpPresetCodeMismatch;
+  int get _tCompileMs =>
+      _mc ? widget.model.lpMcCompileMs : widget.model.lpCompileMs;
+  bool get _tMismatch => _mc
+      ? widget.model.lpMcPresetCodeMismatch
+      : widget.model.lpPresetCodeMismatch;
   void _tSetDraft(String t) {
     if (_mc) {
       widget.model.lpMcDraftCode = t;
@@ -128,8 +136,10 @@ class _LiveprogPageState extends State<LiveprogPage> {
     // 永不达 APO 引擎——切目标即拦截并说明（与文件型效果同口径；
     // 此前可编译可应用、状态只是影子引擎回读）。
     if (mc && !widget.model.modeCaps.mcScript) {
-      widget.model.postNotice(l10nOf(context).lpMcApoUnsupported,
-          level: NoticeLevel.warning);
+      widget.model.postNotice(
+        l10nOf(context).lpMcApoUnsupported,
+        level: NoticeLevel.warning,
+      );
       return;
     }
     _tSetDraft(_code.text);
@@ -140,8 +150,8 @@ class _LiveprogPageState extends State<LiveprogPage> {
     final text = (draft != null && draft.isNotEmpty)
         ? draft
         : ((applied != null && applied.isNotEmpty)
-            ? applied
-            : LiveprogLibrary.template);
+              ? applied
+              : LiveprogLibrary.template);
     _code.value = TextEditingValue(
       text: text,
       selection: TextSelection.collapsed(offset: 0),
@@ -220,9 +230,11 @@ class _LiveprogPageState extends State<LiveprogPage> {
   }
 
   void _onEditorPointerSignal(PointerSignalEvent event) {
-    if (event is PointerScrollEvent && HardwareKeyboard.instance.isControlPressed) {
-      final currentOffset =
-          _editorScrollCtrl.hasClients ? _editorScrollCtrl.offset : 0.0;
+    if (event is PointerScrollEvent &&
+        HardwareKeyboard.instance.isControlPressed) {
+      final currentOffset = _editorScrollCtrl.hasClients
+          ? _editorScrollCtrl.offset
+          : 0.0;
       if (event.scrollDelta.dy < 0) {
         _zoomEditor(0.5);
       } else if (event.scrollDelta.dy > 0) {
@@ -232,7 +244,10 @@ class _LiveprogPageState extends State<LiveprogPage> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_editorScrollCtrl.hasClients) {
             _editorScrollCtrl.jumpTo(
-              currentOffset.clamp(0.0, _editorScrollCtrl.position.maxScrollExtent),
+              currentOffset.clamp(
+                0.0,
+                _editorScrollCtrl.position.maxScrollExtent,
+              ),
             );
           }
         });
@@ -241,7 +256,10 @@ class _LiveprogPageState extends State<LiveprogPage> {
   }
 
   void _zoomEditor(double delta) {
-    final newSize = (_editorFontSize + delta).clamp(_kMinFontSize, _kMaxFontSize);
+    final newSize = (_editorFontSize + delta).clamp(
+      _kMinFontSize,
+      _kMaxFontSize,
+    );
     if ((newSize - _editorFontSize).abs() > 0.001) {
       setState(() {
         _editorFontSize = double.parse(newSize.toStringAsFixed(1));
@@ -260,12 +278,13 @@ class _LiveprogPageState extends State<LiveprogPage> {
   @override
   void initState() {
     super.initState();
-    final initialCode = (widget.model.lpDraftCode != null &&
+    final initialCode =
+        (widget.model.lpDraftCode != null &&
             widget.model.lpDraftCode!.isNotEmpty)
         ? widget.model.lpDraftCode!
         : ((widget.model.lpCode != null && widget.model.lpCode!.isNotEmpty)
-            ? widget.model.lpCode!
-            : LiveprogLibrary.template);
+              ? widget.model.lpCode!
+              : LiveprogLibrary.template);
     _code = EelSyntaxTextEditingController(text: initialCode);
     widget.model.addListener(_onModelTick);
     _code.addListener(_onEditorTick);
@@ -306,7 +325,10 @@ class _LiveprogPageState extends State<LiveprogPage> {
     }
     // 当模型侧代码因滑块/预设调节热更新，且编辑器未处于未编译修改状态时，平滑同步文本
     final modelCode = _tCode;
-    if (mounted && modelCode != null && modelCode.isNotEmpty && modelCode != _lastCompiledCode) {
+    if (mounted &&
+        modelCode != null &&
+        modelCode.isNotEmpty &&
+        modelCode != _lastCompiledCode) {
       if (!_isCodeDirty) {
         final oldSel = _code.selection;
         _code.value = TextEditingValue(
@@ -384,9 +406,10 @@ class _LiveprogPageState extends State<LiveprogPage> {
     if (st < 0 || (st == 0 && err != null)) {
       if (err != null) {
         // l10n-ignore
-        final match =
-            RegExp(r'(?:line|Line|\u7b2c)\s*(\d+)', caseSensitive: false)
-                .firstMatch(err);
+        final match = RegExp(
+          r'(?:line|Line|\u7b2c)\s*(\d+)',
+          caseSensitive: false,
+        ).firstMatch(err);
         if (match != null) {
           final ln = int.tryParse(match.group(1) ?? '');
           if (ln != null && ln > 0) lines.add(ln);
@@ -429,7 +452,8 @@ class _LiveprogPageState extends State<LiveprogPage> {
       selection: sel.isValid
           ? sel.copyWith(
               baseOffset: sel.baseOffset.clamp(0, formatted.length),
-              extentOffset: sel.extentOffset.clamp(0, formatted.length))
+              extentOffset: sel.extentOffset.clamp(0, formatted.length),
+            )
           : const TextSelection.collapsed(offset: 0),
     );
     _onCodeChanged(formatted);
@@ -463,28 +487,31 @@ class _LiveprogPageState extends State<LiveprogPage> {
       } else {
         final lineStart = text.lastIndexOf('\n', sel.baseOffset - 1) + 1;
         if (text.startsWith('  ', lineStart)) {
-          final newText = text.substring(0, lineStart) +
-              text.substring(lineStart + 2);
+          final newText =
+              text.substring(0, lineStart) + text.substring(lineStart + 2);
           _code.value = TextEditingValue(
             text: newText,
             selection: TextSelection.collapsed(
-                offset: (sel.baseOffset - 2).clamp(0, newText.length)),
+              offset: (sel.baseOffset - 2).clamp(0, newText.length),
+            ),
           );
         } else if (text.startsWith(' ', lineStart)) {
-          final newText = text.substring(0, lineStart) +
-              text.substring(lineStart + 1);
+          final newText =
+              text.substring(0, lineStart) + text.substring(lineStart + 1);
           _code.value = TextEditingValue(
             text: newText,
             selection: TextSelection.collapsed(
-                offset: (sel.baseOffset - 1).clamp(0, newText.length)),
+              offset: (sel.baseOffset - 1).clamp(0, newText.length),
+            ),
           );
         } else if (text.startsWith('\t', lineStart)) {
-          final newText = text.substring(0, lineStart) +
-              text.substring(lineStart + 1);
+          final newText =
+              text.substring(0, lineStart) + text.substring(lineStart + 1);
           _code.value = TextEditingValue(
             text: newText,
             selection: TextSelection.collapsed(
-                offset: (sel.baseOffset - 1).clamp(0, newText.length)),
+              offset: (sel.baseOffset - 1).clamp(0, newText.length),
+            ),
           );
         }
       }
@@ -496,18 +523,19 @@ class _LiveprogPageState extends State<LiveprogPage> {
     final lineStart = text.lastIndexOf('\n', start <= 0 ? 0 : start - 1) + 1;
     final affected = text.substring(lineStart, end);
     final lines = affected.split('\n');
-    final rebuilt = lines.map((l) {
-      if (indentLess) {
-        if (l.startsWith('  ')) return l.substring(2);
-        if (l.startsWith(' ')) return l.substring(1);
-        if (l.startsWith('\t')) return l.substring(1);
-        return l;
-      }
-      return '  $l';
-    }).join('\n');
-    final newText = text.substring(0, lineStart) +
-        rebuilt +
-        text.substring(end);
+    final rebuilt = lines
+        .map((l) {
+          if (indentLess) {
+            if (l.startsWith('  ')) return l.substring(2);
+            if (l.startsWith(' ')) return l.substring(1);
+            if (l.startsWith('\t')) return l.substring(1);
+            return l;
+          }
+          return '  $l';
+        })
+        .join('\n');
+    final newText =
+        text.substring(0, lineStart) + rebuilt + text.substring(end);
     _code.value = TextEditingValue(
       text: newText,
       selection: TextSelection(
@@ -574,8 +602,10 @@ class _LiveprogPageState extends State<LiveprogPage> {
     // 全面复审 S3（UI-3）：已在 MC 目标时切入 sysapo 的存量情形，
     // 启用方向同样拦截（关闭恒放行）。
     if (!_tEnabled && _mc && !widget.model.modeCaps.mcScript) {
-      widget.model.postNotice(l10nOf(context).lpMcApoUnsupported,
-          level: NoticeLevel.warning);
+      widget.model.postNotice(
+        l10nOf(context).lpMcApoUnsupported,
+        level: NoticeLevel.warning,
+      );
       return;
     }
     if (_tEnabled) {
@@ -689,10 +719,13 @@ dbg = 0;
   Future<void> _openApoConverter() async {
     if (!await _confirmDiscardUnsavedIfNeeded()) return;
     if (!mounted) return;
-    final generated = await EqualizerApoDialog.show(context,
-        onReadError: () => widget.model.postNotice(
-            l10nOf(context).lpFileImportFailed,
-            level: NoticeLevel.error));
+    final generated = await EqualizerApoDialog.show(
+      context,
+      onReadError: () => widget.model.postNotice(
+        l10nOf(context).lpFileImportFailed,
+        level: NoticeLevel.error,
+      ),
+    );
     if (generated != null && mounted) {
       _code.text = generated;
       _onCodeChanged(generated);
@@ -794,10 +827,7 @@ dbg = 0;
   }
 
   void _openManual() {
-    EelManualDialog.show(
-      context,
-      onInsertSnippet: _insertSnippet,
-    );
+    EelManualDialog.show(context, onInsertSnippet: _insertSnippet);
   }
 
   void _insertSnippet(String snippet) {
@@ -824,7 +854,11 @@ dbg = 0;
   }
 
   Widget _buildCompileCapsule(
-      BuildContext context, AuraPalette p, AppLocalizations l, AppModel m) {
+    BuildContext context,
+    AuraPalette p,
+    AppLocalizations l,
+    AppModel m,
+  ) {
     if (_compiling) {
       final lineCount = _code.text.split('\n').length;
       return _capsuleBody(
@@ -864,7 +898,9 @@ dbg = 0;
 
     if (ok) {
       if (_isCodeDirty) {
-        final tookPart = tookStr != null ? ' · ${l.lpCompileTook(tookStr)}' : '';
+        final tookPart = tookStr != null
+            ? ' · ${l.lpCompileTook(tookStr)}'
+            : '';
         final runningOld = _tEnabled ? ' (${l.lpRunningOldCode})' : '';
         return _capsuleBody(
           p,
@@ -887,12 +923,7 @@ dbg = 0;
         var t = l.lpCompileSuccess;
         if (tookStr != null) t = '$t ($tookStr)';
         t = '$t · ${l.lpCompiledIdle}';
-        return _capsuleBody(
-          p,
-          p.accent,
-          Icons.check_circle_outline_rounded,
-          t,
-        );
+        return _capsuleBody(p, p.accent, Icons.check_circle_outline_rounded, t);
       }
     }
 
@@ -930,19 +961,21 @@ dbg = 0;
                 ? p.accent.withValues(alpha: 0.16)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(AuraRadius.sm),
-            border: Border.all(
-                color: selected ? p.accent : p.hairline),
+            border: Border.all(color: selected ? p.accent : p.hairline),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon,
-                  size: 13, color: selected ? p.accent : p.textDim),
+              Icon(icon, size: 13, color: selected ? p.accent : p.textDim),
               const SizedBox(width: 5),
-              Text(
-                label,
-                style: captionOf(p,
-                    color: selected ? p.accent : p.textDim),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: captionOf(p, color: selected ? p.accent : p.textDim),
+                ),
               ),
             ],
           ),
@@ -950,36 +983,70 @@ dbg = 0;
       );
     }
 
-    return Row(
+    // P3：窄屏下两枚胶囊 + 提示语横排会溢出，改 Wrap 折行（桌面单行不变）。
+    final hint = mcBlocked
+        ? Text(
+            l.lpMcApoUnsupported,
+            style: captionOf(p, color: p.warning),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          )
+        : _mc
+        ? Text(
+            l.lpMcHint,
+            style: captionOf(p, color: p.textDim),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          )
+        : null;
+
+    final pills = Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         pill(false, l.lpTargetStereo, Icons.speaker_rounded),
         const SizedBox(width: 6),
         pill(true, l.lpTargetMultichannel, Icons.surround_sound_rounded),
-        const SizedBox(width: AuraSpace.sm),
-        if (mcBlocked)
-          Expanded(
-            child: Text(
-              l.lpMcApoUnsupported,
-              style: captionOf(p, color: p.warning),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          )
-        else if (_mc)
-          Expanded(
-            child: Text(
-              l.lpMcHint,
-              style: captionOf(p, color: p.textDim),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+      ],
+    );
+
+    // mobile/tablet 档（<900）一律分段控件：两枚胶囊宽度不可压缩，
+    // 只按内容宽度判断会漏掉 480 这类"视口变大但内容仍紧"的档位。
+    if (!context.isDesktop) {
+      // 窄屏：两枚胶囊等分整行（分段控件形态），文字超长各自省略。
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: pill(false, l.lpTargetStereo, Icons.speaker_rounded),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: pill(
+                  true,
+                  l.lpTargetMultichannel,
+                  Icons.surround_sound_rounded,
+                ),
+              ),
+            ],
           ),
+          if (hint != null) ...[const SizedBox(height: AuraSpace.xs), hint],
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        pills,
+        const SizedBox(width: AuraSpace.sm),
+        if (hint != null) Expanded(child: hint),
       ],
     );
   }
 
-  Widget _buildMismatchBanner(
-      AuraPalette p, AppLocalizations l, AppModel m) {
+  Widget _buildMismatchBanner(AuraPalette p, AppLocalizations l, AppModel m) {
     if (!_tMismatch) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
@@ -1044,10 +1111,7 @@ dbg = 0;
             children: [
               Icon(Icons.error_outline_rounded, size: 13, color: p.error),
               const SizedBox(width: 4),
-              Text(
-                l.lpStatusError,
-                style: monoOf(p, size: 11, color: p.error),
-              ),
+              Text(l.lpStatusError, style: monoOf(p, size: 11, color: p.error)),
             ],
           ),
         ),
@@ -1071,15 +1135,13 @@ dbg = 0;
         children: [
           Icon(Icons.check_circle_outline_rounded, size: 13, color: p.success),
           const SizedBox(width: 4),
-          Text(
-            l.lpReady,
-            style: monoOf(p, size: 11, color: p.success),
-          ),
+          Text(l.lpReady, style: monoOf(p, size: 11, color: p.success)),
         ],
       );
     }
 
-    return Row(
+    final metrics = Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           'Ln $_cursorLine, Col $_cursorCol',
@@ -1090,10 +1152,23 @@ dbg = 0;
           l.lpChars(_code.text.length),
           style: monoOf(p, size: 11, color: p.textDim),
         ),
-        const Spacer(),
-        statusBadge,
       ],
     );
+
+    // P3：非桌面档状态徽标独占第二行靠右，避免与光标/字数挤压。
+    if (!context.isDesktop) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          metrics,
+          const SizedBox(height: 2),
+          Align(alignment: Alignment.centerRight, child: statusBadge),
+        ],
+      );
+    }
+
+    return Row(children: [metrics, const Spacer(), statusBadge]);
   }
 
   @override
@@ -1102,8 +1177,11 @@ dbg = 0;
     final l = AppLocalizations.of(context)!;
     final m = widget.model;
 
-    final codeStyle = monoOf(p, size: _editorFontSize, color: p.text)
-        .copyWith(height: 1.5);
+    final codeStyle = monoOf(
+      p,
+      size: _editorFontSize,
+      color: p.text,
+    ).copyWith(height: 1.5);
     final codeStrut = StrutStyle(
       fontFamily: codeStyle.fontFamily,
       fontSize: codeStyle.fontSize,
@@ -1212,11 +1290,12 @@ dbg = 0;
                       child: LayoutBuilder(
                         builder: (context, box) {
                           // 编辑区文本可用宽度 = 内容区 − 大纲栏 − 行号栏 − 左右 contentPadding
-                          final editorTextWidth = (box.maxWidth -
-                                  (_showOutline ? 201.0 : 0.0) -
-                                  gutterWidth -
-                                  AuraSpace.md * 2)
-                              .clamp(1.0, double.infinity);
+                          final editorTextWidth =
+                              (box.maxWidth -
+                                      (_showOutline ? 201.0 : 0.0) -
+                                      gutterWidth -
+                                      AuraSpace.md * 2)
+                                  .clamp(1.0, double.infinity);
                           final lineMetrics = _resolveLineMetrics(
                             text: _code.text,
                             style: codeStyle,
@@ -1239,9 +1318,10 @@ dbg = 0;
                                   ),
                                 ),
                                 VerticalDivider(
-                                    width: 1,
-                                    thickness: 1,
-                                    color: p.hairline),
+                                  width: 1,
+                                  thickness: 1,
+                                  color: p.hairline,
+                                ),
                               ],
                               LineNumberGutter(
                                 editorScrollCtrl: _editorScrollCtrl,
@@ -1254,16 +1334,23 @@ dbg = 0;
                               Expanded(
                                 child: CallbackShortcuts(
                                   bindings: <ShortcutActivator, VoidCallback>{
-                                    const SingleActivator(LogicalKeyboardKey.keyF,
-                                        control: true): () {
-                                      setState(() =>
-                                          _showFindReplace = !_showFindReplace);
-                                    },
-                                    const SingleActivator(LogicalKeyboardKey.keyS,
-                                        control: true): _saveAs,
                                     const SingleActivator(
-                                        LogicalKeyboardKey.enter,
-                                        control: true): _compile,
+                                      LogicalKeyboardKey.keyF,
+                                      control: true,
+                                    ): () {
+                                      setState(
+                                        () => _showFindReplace =
+                                            !_showFindReplace,
+                                      );
+                                    },
+                                    const SingleActivator(
+                                      LogicalKeyboardKey.keyS,
+                                      control: true,
+                                    ): _saveAs,
+                                    const SingleActivator(
+                                      LogicalKeyboardKey.enter,
+                                      control: true,
+                                    ): _compile,
                                   },
                                   child: Actions(
                                     actions: <Type, Action<Intent>>{
@@ -1272,12 +1359,18 @@ dbg = 0;
                                     child: Shortcuts(
                                       shortcuts:
                                           const <ShortcutActivator, Intent>{
-                                        SingleActivator(LogicalKeyboardKey.tab):
-                                            _EelTabIntent(shift: false),
-                                        SingleActivator(LogicalKeyboardKey.tab,
-                                            shift: true):
-                                            _EelTabIntent(shift: true),
-                                      },
+                                            SingleActivator(
+                                              LogicalKeyboardKey.tab,
+                                            ): _EelTabIntent(
+                                              shift: false,
+                                            ),
+                                            SingleActivator(
+                                              LogicalKeyboardKey.tab,
+                                              shift: true,
+                                            ): _EelTabIntent(
+                                              shift: true,
+                                            ),
+                                          },
                                       child: TextField(
                                         controller: _code,
                                         focusNode: _editorFocus,
@@ -1289,8 +1382,9 @@ dbg = 0;
                                         decoration: const InputDecoration(
                                           isDense: true,
                                           border: InputBorder.none,
-                                          contentPadding:
-                                              EdgeInsets.all(AuraSpace.md),
+                                          contentPadding: EdgeInsets.all(
+                                            AuraSpace.md,
+                                          ),
                                         ),
                                         onChanged: _onCodeChanged,
                                       ),
@@ -1327,7 +1421,9 @@ dbg = 0;
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.35),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.35,
+                                      ),
                                       blurRadius: 4,
                                       offset: const Offset(0, 1),
                                     ),

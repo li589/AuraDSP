@@ -69,39 +69,50 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
               Icon(Icons.tune_rounded, size: 14, color: p.accent),
               const SizedBox(width: AuraSpace.xs),
               // 三类切换 Pill 页签
-              Container(
-                height: 28,
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: p.panel,
-                  borderRadius: BorderRadius.circular(AuraRadius.sm),
-                  border: Border.all(color: p.hairline),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildPillTab(
-                      index: 0,
-                      label: l.lpTabScriptSliders,
-                      count: scriptSliders.length,
-                      palette: p,
+              // P3：窄屏三枚页签会挤爆表头，改用 Expanded + FittedBox 等比缩放，
+              // 保证三档全部可见且右侧复位/折叠按钮始终可达；桌面无缩放。
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      height: 28,
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: p.panel,
+                        borderRadius: BorderRadius.circular(AuraRadius.sm),
+                        border: Border.all(color: p.hairline),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildPillTab(
+                            index: 0,
+                            label: l.lpTabScriptSliders,
+                            count: scriptSliders.length,
+                            palette: p,
+                          ),
+                          const SizedBox(width: 2),
+                          _buildPillTab(
+                            index: 1,
+                            label: l.lpTabInputChannels,
+                            palette: p,
+                          ),
+                          const SizedBox(width: 2),
+                          _buildPillTab(
+                            index: 2,
+                            label: l.lpTabOutputChannels,
+                            palette: p,
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: 2),
-                    _buildPillTab(
-                      index: 1,
-                      label: l.lpTabInputChannels,
-                      palette: p,
-                    ),
-                    const SizedBox(width: 2),
-                    _buildPillTab(
-                      index: 2,
-                      label: l.lpTabOutputChannels,
-                      palette: p,
-                    ),
-                  ],
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: AuraSpace.sm),
               if (_expanded) ...[
                 if (_selectedTab == 0 && scriptSliders.isNotEmpty) ...[
                   _buildResetButton(
@@ -110,10 +121,16 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
                     onTap: () {
                       for (final meta in scriptSliders) {
                         widget.mcTarget
-                          ? m.setLiveprogMcSliderVal(meta.index, meta.defaultVal,
-                              meta: meta)
-                          : m.setLiveprogSliderVal(meta.index, meta.defaultVal,
-                              meta: meta);
+                            ? m.setLiveprogMcSliderVal(
+                                meta.index,
+                                meta.defaultVal,
+                                meta: meta,
+                              )
+                            : m.setLiveprogSliderVal(
+                                meta.index,
+                                meta.defaultVal,
+                                meta: meta,
+                              );
                       }
                     },
                   ),
@@ -176,18 +193,10 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
                       scriptSliders: scriptSliders,
                     );
                   case 1:
-                    return _buildInputChannelsTab(
-                      p: p,
-                      l: l,
-                      m: m,
-                    );
+                    return _buildInputChannelsTab(p: p, l: l, m: m);
                   case 2:
                   default:
-                    return _buildOutputChannelsTab(
-                      p: p,
-                      l: l,
-                      m: m,
-                    );
+                    return _buildOutputChannelsTab(p: p, l: l, m: m);
                 }
               },
             ),
@@ -213,10 +222,15 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
           duration: AuraDur.fast,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: isSelected ? palette.accent.withValues(alpha: 0.16) : Colors.transparent,
+            color: isSelected
+                ? palette.accent.withValues(alpha: 0.16)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(AuraRadius.xs),
             border: isSelected
-                ? Border.all(color: palette.accent.withValues(alpha: 0.45), width: 1)
+                ? Border.all(
+                    color: palette.accent.withValues(alpha: 0.45),
+                    width: 1,
+                  )
                 : null,
           ),
           child: Row(
@@ -224,14 +238,24 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
             children: [
               Text(
                 label,
-                style: monoOf(palette, size: 11, color: isSelected ? palette.accent : palette.textDim).copyWith(
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                ),
+                style:
+                    monoOf(
+                      palette,
+                      size: 11,
+                      color: isSelected ? palette.accent : palette.textDim,
+                    ).copyWith(
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
               ),
               if (count != null) ...[
                 const SizedBox(width: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0.5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 0.5,
+                  ),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? palette.accent.withValues(alpha: 0.25)
@@ -280,17 +304,16 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
     if (scriptSliders.isEmpty) {
       return Container(
         padding: const EdgeInsets.symmetric(
-            vertical: AuraSpace.lg, horizontal: AuraSpace.sm),
+          vertical: AuraSpace.lg,
+          horizontal: AuraSpace.sm,
+        ),
         alignment: Alignment.center,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.tune_outlined, size: 28, color: p.textDim),
             const SizedBox(height: AuraSpace.xs),
-            Text(
-              l.lpNoScriptSliders,
-              style: captionOf(p),
-            ),
+            Text(l.lpNoScriptSliders, style: captionOf(p)),
           ],
         ),
       );
@@ -328,14 +351,24 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
           children: [
             Text(
               l.lpInputMasterGain,
-              style: monoOf(p, size: 11, color: p.text).copyWith(fontWeight: FontWeight.w600),
+              style: monoOf(
+                p,
+                size: 11,
+                color: p.text,
+              ).copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(width: 4),
             InfoBadge(message: l.lpInputTrimHint),
             const Spacer(),
             Text(
-              inGain > 0 ? '+${inGain.toStringAsFixed(1)} dB' : '${inGain.toStringAsFixed(1)} dB',
-              style: monoOf(p, size: 11, color: inGain.abs() > 0.01 ? p.accent : p.textDim),
+              inGain > 0
+                  ? '+${inGain.toStringAsFixed(1)} dB'
+                  : '${inGain.toStringAsFixed(1)} dB',
+              style: monoOf(
+                p,
+                size: 11,
+                color: inGain.abs() > 0.01 ? p.accent : p.textDim,
+              ),
             ),
           ],
         ),
@@ -390,16 +423,25 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
             width: 50,
             child: Text(
               channelCode,
-              style: monoOf(p, size: 11, color: (bal - 1.0).abs() > 0.01 ? p.accent : p.textDim).copyWith(
-                fontWeight: (bal - 1.0).abs() > 0.01 ? FontWeight.bold : FontWeight.normal,
-              ),
+              style:
+                  monoOf(
+                    p,
+                    size: 11,
+                    color: (bal - 1.0).abs() > 0.01 ? p.accent : p.textDim,
+                  ).copyWith(
+                    fontWeight: (bal - 1.0).abs() > 0.01
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
             ),
           ),
           Expanded(
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 trackHeight: 2.5,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5.5),
+                thumbShape: const RoundSliderThumbShape(
+                  enabledThumbRadius: 5.5,
+                ),
               ),
               child: Slider(
                 value: bal,
@@ -422,7 +464,11 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
             child: Text(
               '${bal.toStringAsFixed(2)}x',
               textAlign: TextAlign.right,
-              style: monoOf(p, size: 11, color: (bal - 1.0).abs() > 0.01 ? p.text : p.textDim),
+              style: monoOf(
+                p,
+                size: 11,
+                color: (bal - 1.0).abs() > 0.01 ? p.text : p.textDim,
+              ),
             ),
           ),
         ],
@@ -444,14 +490,24 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
           children: [
             Text(
               l.lpOutputMasterGain,
-              style: monoOf(p, size: 11, color: p.text).copyWith(fontWeight: FontWeight.w600),
+              style: monoOf(
+                p,
+                size: 11,
+                color: p.text,
+              ).copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(width: 4),
             InfoBadge(message: l.lpOutputGainHint),
             const Spacer(),
             Text(
-              postGain > 0 ? '+${postGain.toStringAsFixed(1)} dB' : '${postGain.toStringAsFixed(1)} dB',
-              style: monoOf(p, size: 11, color: postGain.abs() > 0.01 ? p.accent : p.textDim),
+              postGain > 0
+                  ? '+${postGain.toStringAsFixed(1)} dB'
+                  : '${postGain.toStringAsFixed(1)} dB',
+              style: monoOf(
+                p,
+                size: 11,
+                color: postGain.abs() > 0.01 ? p.accent : p.textDim,
+              ),
             ),
           ],
         ),
@@ -488,7 +544,9 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
     required int channelIndex,
     required String channelCode,
   }) {
-    final trim = m.mirrorFloat('post.gain.c$channelIndex', 0.0).clamp(-15.0, 15.0);
+    final trim = m
+        .mirrorFloat('post.gain.c$channelIndex', 0.0)
+        .clamp(-15.0, 15.0);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
@@ -498,16 +556,25 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
             width: 50,
             child: Text(
               channelCode,
-              style: monoOf(p, size: 11, color: trim.abs() > 0.01 ? p.accent : p.textDim).copyWith(
-                fontWeight: trim.abs() > 0.01 ? FontWeight.bold : FontWeight.normal,
-              ),
+              style:
+                  monoOf(
+                    p,
+                    size: 11,
+                    color: trim.abs() > 0.01 ? p.accent : p.textDim,
+                  ).copyWith(
+                    fontWeight: trim.abs() > 0.01
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
             ),
           ),
           Expanded(
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 trackHeight: 2.5,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5.5),
+                thumbShape: const RoundSliderThumbShape(
+                  enabledThumbRadius: 5.5,
+                ),
               ),
               child: Slider(
                 value: trim,
@@ -520,9 +587,15 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
           SizedBox(
             width: 58,
             child: Text(
-              trim > 0 ? '+${trim.toStringAsFixed(1)} dB' : '${trim.toStringAsFixed(1)} dB',
+              trim > 0
+                  ? '+${trim.toStringAsFixed(1)} dB'
+                  : '${trim.toStringAsFixed(1)} dB',
               textAlign: TextAlign.right,
-              style: monoOf(p, size: 11, color: trim.abs() > 0.01 ? p.text : p.textDim),
+              style: monoOf(
+                p,
+                size: 11,
+                color: trim.abs() > 0.01 ? p.text : p.textDim,
+              ),
             ),
           ),
         ],
@@ -556,8 +629,9 @@ class _LpSliderRow extends StatelessWidget {
     } else if (minVal == maxVal) {
       maxVal = minVal + 1.0;
     }
-    final displayName =
-        meta.displayName.isNotEmpty ? meta.displayName : meta.rawName;
+    final displayName = meta.displayName.isNotEmpty
+        ? meta.displayName
+        : meta.rawName;
     final rawName = meta.rawName;
     final currentVal = val.clamp(minVal, maxVal);
 
@@ -565,7 +639,10 @@ class _LpSliderRow extends StatelessWidget {
 
     // 枚举选项下拉框交互
     if (isEnum) {
-      final selectedInt = currentVal.round().clamp(0, meta.enumOptions.length - 1);
+      final selectedInt = currentVal.round().clamp(
+        0,
+        meta.enumOptions.length - 1,
+      );
       return Padding(
         padding: const EdgeInsets.only(bottom: AuraSpace.xs + 2),
         child: Row(
@@ -586,10 +663,7 @@ class _LpSliderRow extends StatelessWidget {
                       color: p.accent,
                     ),
                   ),
-                  Text(
-                    rawName,
-                    style: monoOf(p, size: 9.5, color: p.textDim),
-                  ),
+                  Text(rawName, style: monoOf(p, size: 9.5, color: p.textDim)),
                 ],
               ),
             ),
@@ -608,7 +682,11 @@ class _LpSliderRow extends StatelessWidget {
                     value: selectedInt,
                     isExpanded: true,
                     dropdownColor: p.panelRaised,
-                    icon: Icon(Icons.arrow_drop_down_rounded, size: 18, color: p.accent),
+                    icon: Icon(
+                      Icons.arrow_drop_down_rounded,
+                      size: 18,
+                      color: p.accent,
+                    ),
                     style: monoOf(p, size: 11.5, color: p.text),
                     items: [
                       for (int i = 0; i < meta.enumOptions.length; i++)
@@ -636,7 +714,11 @@ class _LpSliderRow extends StatelessWidget {
               child: Text(
                 '#$selectedInt',
                 textAlign: TextAlign.right,
-                style: monoOf(p, size: 11, color: p.accent).copyWith(fontWeight: FontWeight.bold),
+                style: monoOf(
+                  p,
+                  size: 11,
+                  color: p.accent,
+                ).copyWith(fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -647,7 +729,9 @@ class _LpSliderRow extends StatelessWidget {
     // 普通数值滑块交互（支持 step 步长吸附与合理 divisions）
     final step = meta.step > 0 ? meta.step : 0.01;
     final totalSteps = ((maxVal - minVal) / step).round();
-    final int? divisions = (totalSteps >= 2 && totalSteps <= 200) ? totalSteps : null;
+    final int? divisions = (totalSteps >= 2 && totalSteps <= 200)
+        ? totalSteps
+        : null;
 
     String valueDisplay;
     if (step >= 1.0 && (minVal % 1.0 == 0) && (maxVal % 1.0 == 0)) {
@@ -678,10 +762,7 @@ class _LpSliderRow extends StatelessWidget {
                     color: p.accent,
                   ),
                 ),
-                Text(
-                  rawName,
-                  style: monoOf(p, size: 9.5, color: p.textDim),
-                ),
+                Text(rawName, style: monoOf(p, size: 9.5, color: p.textDim)),
               ],
             ),
           ),
@@ -690,8 +771,9 @@ class _LpSliderRow extends StatelessWidget {
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 trackHeight: 3,
-                thumbShape:
-                    const RoundSliderThumbShape(enabledThumbRadius: 6.5),
+                thumbShape: const RoundSliderThumbShape(
+                  enabledThumbRadius: 6.5,
+                ),
               ),
               child: Slider(
                 value: currentVal,

@@ -14,7 +14,6 @@ import '../core/design.dart';
 import '../core/nav.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
-import '../core/ui_helpers.dart';
 import '../platform/adapters.dart';
 import 'chrome.dart';
 import 'widgets.dart';
@@ -224,23 +223,30 @@ class _Hero extends StatelessWidget {
         return SectionCard(
           hero: true,
           padding: const EdgeInsets.all(AuraSpace.xl),
-          child: context.isCompactWidth
-              ? Column(
+          // P3：按卡片**内容宽度**决定堆叠，而不是视口断点——480 档页面留白
+          // 更大，内容区反而比 360 更窄，只看视口会在 480 处漏判（实测溢出 89px）。
+          child: LayoutBuilder(
+            builder: (ctx, box) {
+              if (box.maxWidth < 480) {
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     info,
                     const SizedBox(height: AuraSpace.lg),
                     readouts,
                   ],
-                )
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(child: info),
-                    const SizedBox(width: AuraSpace.xl),
-                    readouts,
-                  ],
-                ),
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(child: info),
+                  const SizedBox(width: AuraSpace.xl),
+                  readouts,
+                ],
+              );
+            },
+          ),
         );
       },
     );

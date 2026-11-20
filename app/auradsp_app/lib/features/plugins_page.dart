@@ -11,6 +11,7 @@
  */
 
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
@@ -40,8 +41,7 @@ class PluginsPage extends StatefulWidget {
   State<PluginsPage> createState() => _PluginsPageState();
 }
 
-class _PluginsPageState extends State<PluginsPage>
-    with WidgetsBindingObserver {
+class _PluginsPageState extends State<PluginsPage> with WidgetsBindingObserver {
   final TextEditingController _searchCtrl = TextEditingController();
   bool _deepScan = false;
   Timer? _statusTimer;
@@ -120,8 +120,7 @@ class _PluginsPageState extends State<PluginsPage>
           SectionCard(
             child: Row(
               children: [
-                Icon(Icons.extension_off_rounded,
-                    size: 20, color: p.textDim),
+                Icon(Icons.extension_off_rounded, size: 20, color: p.textDim),
                 const SizedBox(width: AuraSpace.md),
                 Expanded(
                   child: Text(
@@ -158,225 +157,281 @@ class _PluginsPageState extends State<PluginsPage>
               onSelectSlot: (slot) => manager.selectSlot(slot),
             ),
 
-          // 1. 当前选中挂载插槽 Hero 卡片
-          _ActivePluginHero(
-            model: widget.model,
-            manager: manager,
-            slot: currentSlot,
-          ),
+            // 1. 当前选中挂载插槽 Hero 卡片
+            _ActivePluginHero(
+              model: widget.model,
+              manager: manager,
+              slot: currentSlot,
+            ),
 
-          // 2. 插件扫描目录管理（2026-10-28：多选列表 + 内置目录）
-          // 二期阶段二（2026-11-02）：Linux 宿主已转正（进程内），
-          // 目录管理恢复展示；一期 D-7 的隐藏条件随之解除。页面级
-          // 的不可用占位仍由 PluginHostPort 能力统一把关。
-          PluginScanDirsSection(
+            // 2. 插件扫描目录管理（2026-10-28：多选列表 + 内置目录）
+            // 二期阶段二（2026-11-02）：Linux 宿主已转正（进程内），
+            // 目录管理恢复展示；一期 D-7 的隐藏条件随之解除。页面级
+            // 的不可用占位仍由 PluginHostPort 能力统一把关。
+            PluginScanDirsSection(
               model: widget.model,
               onAddDir: () => _addCustomDirDialog(context),
               onRescan: () => manager.scan(deep: _deepScan),
             ),
 
-          // 3. 插件库与扫描控制中心
-          SectionCard(
-            title: l10nOf(context).plugLibTitle,
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 深度扫描勾选
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Checkbox(
-                      value: _deepScan,
-                      onChanged: manager.isScanning
-                          ? null
-                          : (v) => setState(() => _deepScan = v ?? false),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    Text(l10nOf(context).plugDeepScan, style: captionOf(p)),
-                    const SizedBox(width: 6),
-                    InfoBadge(message: l10nOf(context).plugScanNoVerify),
-                  ],
-                ),
-                const SizedBox(width: AuraSpace.sm),
-                // 扫描按钮
-                ElevatedButton.icon(
-                  onPressed: manager.isScanning
-                      ? null
-                      : () => manager.scan(deep: _deepScan),
-                  icon: manager.isScanning
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.refresh_rounded, size: 16),
-                  label: Text(manager.isScanning ? l10nOf(context).plugScanning : l10nOf(context).plugScan),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: p.accent,
-                    foregroundColor: p.accentContrast,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: AuraSpace.md, vertical: AuraSpace.xs),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // C2：扫描进行中 → Android 风格水平进度条 + 进度读数
-                if (manager.isScanning) ...[
-                  AuraScanProgress(
-                    done: manager.scanDone,
-                    total: manager.scanTotal,
-                  ),
-                  const SizedBox(height: AuraSpace.xs),
-                  Text(
-                    manager.scanTotal > 0
-                        ? l10nOf(context).plugScanProgressCount(
-                            manager.scanDone, manager.scanTotal, manager.scanFound)
-                        : l10nOf(context).plugScanPreparing,
-                    style: monoOf(p, size: 11, color: p.textDim),
-                  ),
-                  const SizedBox(height: AuraSpace.sm),
-                ],
-                // 搜索栏与分类药丸
-                Row(
-                  children: [
-                    // 搜索输入框
-                    Expanded(
-                      child: Container(
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: p.panelRaised,
-                          borderRadius: BorderRadius.circular(AuraRadius.sm),
-                          border: Border.all(color: p.hairline),
+            // 3. 插件库与扫描控制中心
+            SectionCard(
+              title: l10nOf(context).plugLibTitle,
+              // P3：窄屏动作区竖排（勾选行 + 扫描按钮），避免图标按钮被挤出边界。
+              trailing: Builder(
+                builder: (ctx) {
+                  final deepRow = Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Checkbox(
+                        value: _deepScan,
+                        onChanged: manager.isScanning
+                            ? null
+                            : (v) => setState(() => _deepScan = v ?? false),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      Flexible(
+                        child: Text(
+                          l10nOf(ctx).plugDeepScan,
+                          style: captionOf(p),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: Row(
-                          children: [
-                            Icon(Icons.search_rounded, size: 18, color: p.textDim),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: _searchCtrl,
-                                style: labelOf(p),
-                                decoration: InputDecoration(
-                                  hintText: l10nOf(context).plugSearchHint,
-                                  hintStyle: captionOf(p),
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                  contentPadding: EdgeInsets.zero,
+                      ),
+                      const SizedBox(width: 6),
+                      InfoBadge(message: l10nOf(ctx).plugScanNoVerify),
+                    ],
+                  );
+                  final scanBtn = ElevatedButton.icon(
+                    onPressed: manager.isScanning
+                        ? null
+                        : () => manager.scan(deep: _deepScan),
+                    icon: manager.isScanning
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh_rounded, size: 16),
+                    label: Text(
+                      manager.isScanning
+                          ? l10nOf(ctx).plugScanning
+                          : l10nOf(ctx).plugScan,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: p.accent,
+                      foregroundColor: p.accentContrast,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AuraSpace.md,
+                        vertical: AuraSpace.xs,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  );
+                  if (!ctx.isCompactWidth) {
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        deepRow,
+                        const SizedBox(width: AuraSpace.sm),
+                        scanBtn,
+                      ],
+                    );
+                  }
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [deepRow, const SizedBox(height: 6), scanBtn],
+                  );
+                },
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // C2：扫描进行中 → Android 风格水平进度条 + 进度读数
+                  if (manager.isScanning) ...[
+                    AuraScanProgress(
+                      done: manager.scanDone,
+                      total: manager.scanTotal,
+                    ),
+                    const SizedBox(height: AuraSpace.xs),
+                    Text(
+                      manager.scanTotal > 0
+                          ? l10nOf(context).plugScanProgressCount(
+                              manager.scanDone,
+                              manager.scanTotal,
+                              manager.scanFound,
+                            )
+                          : l10nOf(context).plugScanPreparing,
+                      style: monoOf(p, size: 11, color: p.textDim),
+                    ),
+                    const SizedBox(height: AuraSpace.sm),
+                  ],
+                  // 搜索栏与分类药丸
+                  Row(
+                    children: [
+                      // 搜索输入框
+                      Expanded(
+                        child: Container(
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: p.panelRaised,
+                            borderRadius: BorderRadius.circular(AuraRadius.sm),
+                            border: Border.all(color: p.hairline),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.search_rounded,
+                                size: 18,
+                                color: p.textDim,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: _searchCtrl,
+                                  style: labelOf(p),
+                                  decoration: InputDecoration(
+                                    hintText: l10nOf(context).plugSearchHint,
+                                    hintStyle: captionOf(p),
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  onChanged: (val) =>
+                                      manager.setSearchQuery(val),
                                 ),
-                                onChanged: (val) => manager.setSearchQuery(val),
                               ),
+                              if (_searchCtrl.text.isNotEmpty)
+                                GestureDetector(
+                                  onTap: () {
+                                    _searchCtrl.clear();
+                                    manager.setSearchQuery('');
+                                  },
+                                  child: Icon(
+                                    Icons.clear_rounded,
+                                    size: 16,
+                                    color: p.textDim,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AuraSpace.md),
+                      // 格式药丸 Filter —— 紧凑自适应宽度贴齐右边界，窄窗口下受限并可横向滚动
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.sizeOf(context).width > 700
+                              ? MediaQuery.sizeOf(context).width * 0.7
+                              : MediaQuery.sizeOf(context).width * 0.6,
+                        ),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: _FilterPills(
+                            selected: manager.filterFormat,
+                            countAll: manager.countAll,
+                            countVst3: manager.countVst3,
+                            countClap: manager.countClap,
+                            countVst2: manager.countVst2,
+                            countAu: manager.countAu,
+                            countLv2: manager.countLv2,
+                            onSelect: (fmt) => manager.setFilterFormat(fmt),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  if (manager.lastError != null) ...[
+                    const SizedBox(height: AuraSpace.sm),
+                    Container(
+                      padding: const EdgeInsets.all(AuraSpace.sm),
+                      decoration: BoxDecoration(
+                        color: p.error.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(AuraRadius.sm),
+                        border: Border.all(
+                          color: p.error.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.error_outline_rounded,
+                            size: 16,
+                            color: p.error,
+                          ),
+                          const SizedBox(width: AuraSpace.sm),
+                          Expanded(
+                            child: Text(
+                              manager.lastError!,
+                              style: captionOf(p, color: p.error),
                             ),
-                            if (_searchCtrl.text.isNotEmpty)
-                              GestureDetector(
-                                onTap: () {
-                                  _searchCtrl.clear();
-                                  manager.setSearchQuery('');
-                                },
-                                child: Icon(Icons.clear_rounded,
-                                    size: 16, color: p.textDim),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AuraSpace.md),
-                    // 格式药丸 Filter —— 紧凑自适应宽度贴齐右边界，窄窗口下受限并可横向滚动
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: MediaQuery.sizeOf(context).width > 700
-                            ? MediaQuery.sizeOf(context).width * 0.7
-                            : MediaQuery.sizeOf(context).width * 0.6,
-                      ),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: _FilterPills(
-                          selected: manager.filterFormat,
-                          countAll: manager.countAll,
-                          countVst3: manager.countVst3,
-                          countClap: manager.countClap,
-                          countVst2: manager.countVst2,
-                          countAu: manager.countAu,
-                          countLv2: manager.countLv2,
-                          onSelect: (fmt) => manager.setFilterFormat(fmt),
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
-                ),
 
-                if (manager.lastError != null) ...[
-                  const SizedBox(height: AuraSpace.sm),
-                  Container(
-                    padding: const EdgeInsets.all(AuraSpace.sm),
-                    decoration: BoxDecoration(
-                      color: p.error.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AuraRadius.sm),
-                      border: Border.all(color: p.error.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.error_outline_rounded,
-                            size: 16, color: p.error),
-                        const SizedBox(width: AuraSpace.sm),
-                        Expanded(
-                          child: Text(manager.lastError!,
-                              style: captionOf(p, color: p.error)),
+                  if (manager.lastNotice != null) ...[
+                    const SizedBox(height: AuraSpace.sm),
+                    Container(
+                      padding: const EdgeInsets.all(AuraSpace.sm),
+                      decoration: BoxDecoration(
+                        color: p.warning.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(AuraRadius.sm),
+                        border: Border.all(
+                          color: p.warning.withValues(alpha: 0.35),
                         ),
-                      ],
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            size: 16,
+                            color: p.warning,
+                          ),
+                          const SizedBox(width: AuraSpace.sm),
+                          Expanded(
+                            child: Text(
+                              manager.lastNotice!,
+                              style: captionOf(p, color: p.warning),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: manager.clearNotice,
+                            icon: Icon(
+                              Icons.close_rounded,
+                              size: 14,
+                              color: p.warning,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 24,
+                              minHeight: 24,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                  ],
+
+                  const SizedBox(height: AuraSpace.md),
+
+                  // 插件列表内容（支持加载到当前选中插槽）
+                  _PluginListView(
+                    manager: manager,
+                    slot: currentSlot,
+                    onLoad: (plugin) =>
+                        manager.loadPlugin(plugin, slot: currentSlot),
+                    onUnload: () => manager.unloadPlugin(slot: currentSlot),
                   ),
                 ],
-
-                if (manager.lastNotice != null) ...[
-                  const SizedBox(height: AuraSpace.sm),
-                  Container(
-                    padding: const EdgeInsets.all(AuraSpace.sm),
-                    decoration: BoxDecoration(
-                      color: p.warning.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AuraRadius.sm),
-                      border: Border.all(color: p.warning.withValues(alpha: 0.35)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.warning_amber_rounded,
-                            size: 16, color: p.warning),
-                        const SizedBox(width: AuraSpace.sm),
-                        Expanded(
-                          child: Text(manager.lastNotice!,
-                              style: captionOf(p, color: p.warning)),
-                        ),
-                        IconButton(
-                          onPressed: manager.clearNotice,
-                          icon: Icon(Icons.close_rounded,
-                              size: 14, color: p.warning),
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                              minWidth: 24, minHeight: 24),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: AuraSpace.md),
-
-                // 插件列表内容（支持加载到当前选中插槽）
-                _PluginListView(
-                  manager: manager,
-                  slot: currentSlot,
-                  onLoad: (plugin) => manager.loadPlugin(plugin, slot: currentSlot),
-                  onUnload: () => manager.unloadPlugin(slot: currentSlot),
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
         );
       },
     );

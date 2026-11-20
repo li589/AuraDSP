@@ -135,50 +135,52 @@ class _ChainOrderCardState extends State<ChainOrderCard> {
             ),
             child: ScrollTrap(
               child: Scrollbar(
-              controller: _chainScrollCtrl,
-              thumbVisibility: true,
-              child: ReorderableListView.builder(
-                scrollController: _chainScrollCtrl,
-                physics: const AuraListScrollPhysics(),
-                buildDefaultDragHandles: false,
-                itemCount: _order.length,
-                // ignore: deprecated_member_use
-                onReorder: (oldI, newI) {
-                  setState(() {
-                    if (newI > oldI) newI -= 1;
-                    final item = _order.removeAt(oldI);
-                    _order.insert(newI, item);
-                    // 第七轮 S1：落点只决定 vendor 段内的相对名次——
-                    // 随即按真序重新拼合（钉死级恒居其位），列表序与
-                    // 引擎执行序不再背离。拖到钉死级之前/之后等价于
-                    // 成为 vendor 段的首/末位。
-                    _order = composeTrueChainOrder(vendorSubsequenceOf(_order));
-                    // 用户移动顺序即刻自动应用，无需手动确认
-                    _applyOrder();
-                  });
-                },
-                proxyDecorator: (child, index, anim) => AnimatedBuilder(
-                  animation: anim,
-                  builder: (_, c) => Material(
-                    color: p.accent.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(AuraRadius.md),
-                    child: c,
+                controller: _chainScrollCtrl,
+                thumbVisibility: true,
+                child: ReorderableListView.builder(
+                  scrollController: _chainScrollCtrl,
+                  physics: const AuraListScrollPhysics(),
+                  buildDefaultDragHandles: false,
+                  itemCount: _order.length,
+                  // ignore: deprecated_member_use
+                  onReorder: (oldI, newI) {
+                    setState(() {
+                      if (newI > oldI) newI -= 1;
+                      final item = _order.removeAt(oldI);
+                      _order.insert(newI, item);
+                      // 第七轮 S1：落点只决定 vendor 段内的相对名次——
+                      // 随即按真序重新拼合（钉死级恒居其位），列表序与
+                      // 引擎执行序不再背离。拖到钉死级之前/之后等价于
+                      // 成为 vendor 段的首/末位。
+                      _order = composeTrueChainOrder(
+                        vendorSubsequenceOf(_order),
+                      );
+                      // 用户移动顺序即刻自动应用，无需手动确认
+                      _applyOrder();
+                    });
+                  },
+                  proxyDecorator: (child, index, anim) => AnimatedBuilder(
+                    animation: anim,
+                    builder: (_, c) => Material(
+                      color: p.accent.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(AuraRadius.md),
+                      child: c,
+                    ),
+                    child: child,
                   ),
-                  child: child,
-                ),
-                itemBuilder: (ctx, i) {
-                  final id = _order[i];
-                  final meta = kStageMeta.firstWhere(
-                    (s) => s.id == id,
-                    orElse: () => (id: id, exposed: false),
-                  );
-                  final isEnabled = widget.model.isStageEnabled(id);
+                  itemBuilder: (ctx, i) {
+                    final id = _order[i];
+                    final meta = kStageMeta.firstWhere(
+                      (s) => s.id == id,
+                      orElse: () => (id: id, exposed: false),
+                    );
+                    final isEnabled = widget.model.isStageEnabled(id);
 
-                  // 第七轮 S1：钉死级（引擎内位置固定）不给拖柄、示锁形；
-                  // 只有 vendor 级可拖动调序。
-                  final pinned = isChainPinnedStage(id);
-                  final row = Container(
-                    key: pinned ? ValueKey(id) : null,
+                    // 第七轮 S1：钉死级（引擎内位置固定）不给拖柄、示锁形；
+                    // 只有 vendor 级可拖动调序。
+                    final pinned = isChainPinnedStage(id);
+                    final row = Container(
+                      key: pinned ? ValueKey(id) : null,
                       margin: const EdgeInsets.symmetric(vertical: 3),
                       padding: const EdgeInsets.symmetric(
                         horizontal: AuraSpace.md + 2,
@@ -198,10 +200,16 @@ class _ChainOrderCardState extends State<ChainOrderCard> {
                       child: Row(
                         children: [
                           pinned
-                              ? Icon(Icons.lock_outline_rounded,
-                                  size: 15, color: p.textDim)
-                              : Icon(Icons.drag_indicator_rounded,
-                                  size: 16, color: p.textDim),
+                              ? Icon(
+                                  Icons.lock_outline_rounded,
+                                  size: 15,
+                                  color: p.textDim,
+                                )
+                              : Icon(
+                                  Icons.drag_indicator_rounded,
+                                  size: 16,
+                                  color: p.textDim,
+                                ),
                           const SizedBox(width: AuraSpace.sm),
                           Container(
                             width: 24,
@@ -216,41 +224,58 @@ class _ChainOrderCardState extends State<ChainOrderCard> {
                             ),
                           ),
                           const SizedBox(width: AuraSpace.sm + 2),
-                          Text(
-                            stageLabelOf(l10nOf(ctx), id),
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: isEnabled
-                                  ? p.text
-                                  : p.textDim.withValues(alpha: 0.8),
+                          // P3：舞台名 + 分类标记合成一个弹性组。窄屏下先截断
+                          // 名称、再截断分类，右侧旁路/电平/箭头始终可达。
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    stageLabelOf(l10nOf(ctx), id),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: isEnabled
+                                          ? p.text
+                                          : p.textDim.withValues(alpha: 0.8),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: AuraSpace.sm),
+                                // 分类方框标记
+                                Flexible(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 5,
+                                      vertical: 1.5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: p.accent.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(
+                                        AuraRadius.xs,
+                                      ),
+                                      border: Border.all(
+                                        color: p.accent.withValues(alpha: 0.35),
+                                        width: 1.0,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      stageCategoryLabelOf(ctx, id),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: monoOf(
+                                        p,
+                                        size: 10,
+                                        color: isEnabled ? p.accent : p.textDim,
+                                      ).copyWith(fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: AuraSpace.sm),
-                          // 分类方框标记
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 1.5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: p.accent.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(AuraRadius.xs),
-                              border: Border.all(
-                                color: p.accent.withValues(alpha: 0.35),
-                                width: 1.0,
-                              ),
-                            ),
-                            child: Text(
-                              stageCategoryLabelOf(ctx, id),
-                              style: monoOf(
-                                p,
-                                size: 10,
-                                color: isEnabled ? p.accent : p.textDim,
-                              ).copyWith(fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                          const Spacer(),
 
                           // 节点旁路 / 启用胶囊
                           if (meta.exposed) ...[
@@ -267,7 +292,9 @@ class _ChainOrderCardState extends State<ChainOrderCard> {
                               ),
                               decoration: BoxDecoration(
                                 color: p.panelRaised,
-                                borderRadius: BorderRadius.circular(AuraRadius.xs),
+                                borderRadius: BorderRadius.circular(
+                                  AuraRadius.xs,
+                                ),
                                 border: Border.all(color: p.hairline),
                               ),
                               child: Text(
@@ -303,15 +330,15 @@ class _ChainOrderCardState extends State<ChainOrderCard> {
                         ],
                       ),
                     );
-                  if (pinned) return row;
-                  return ReorderableDragStartListener(
-                    key: ValueKey(id),
-                    index: i,
-                    child: row,
-                  );
-                },
+                    if (pinned) return row;
+                    return ReorderableDragStartListener(
+                      key: ValueKey(id),
+                      index: i,
+                      child: row,
+                    );
+                  },
+                ),
               ),
-            ),
             ),
           ),
           const SizedBox(height: AuraSpace.md),
@@ -328,10 +355,7 @@ class _StageBypassPill extends StatelessWidget {
   final bool isEnabled;
   final VoidCallback onTap;
 
-  const _StageBypassPill({
-    required this.isEnabled,
-    required this.onTap,
-  });
+  const _StageBypassPill({required this.isEnabled, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -345,14 +369,10 @@ class _StageBypassPill extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: isEnabled
-              ? p.accent.withValues(alpha: 0.12)
-              : p.panelRaised,
+          color: isEnabled ? p.accent.withValues(alpha: 0.12) : p.panelRaised,
           borderRadius: BorderRadius.circular(AuraRadius.xs),
           border: Border.all(
-            color: isEnabled
-                ? p.accent.withValues(alpha: 0.45)
-                : p.hairline,
+            color: isEnabled ? p.accent.withValues(alpha: 0.45) : p.hairline,
             width: 1.0,
           ),
         ),
@@ -565,7 +585,9 @@ class _SynthLedPainter extends CustomPainter {
     for (var c = 0; c < chCount; c++) {
       final db = channelsDb[c];
       final normVal = _norm(db);
-      final litCount = isEnabled ? (normVal * kSegments).round().clamp(0, kSegments) : 0;
+      final litCount = isEnabled
+          ? (normVal * kSegments).round().clamp(0, kSegments)
+          : 0;
       final colLeft = c * (colW + colGap);
 
       for (var s = 0; s < kSegments; s++) {

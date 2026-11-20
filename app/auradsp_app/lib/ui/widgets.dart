@@ -276,7 +276,8 @@ class SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    return Row(
+
+    final titleRow = Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         if (index != null) ...[
@@ -311,10 +312,22 @@ class SectionTitle extends StatelessWidget {
             ],
           ),
         ),
-        if (trailing != null) ...[
+        // 窄屏：动作区另起一行靠右，避免与标题争宽（P3）。
+        if (trailing != null && !context.isCompactWidth) ...[
           const SizedBox(width: AuraSpace.md),
           trailing!,
         ],
+      ],
+    );
+
+    if (trailing == null || !context.isCompactWidth) return titleRow;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        titleRow,
+        const SizedBox(height: AuraSpace.sm),
+        Align(alignment: Alignment.centerRight, child: trailing!),
       ],
     );
   }

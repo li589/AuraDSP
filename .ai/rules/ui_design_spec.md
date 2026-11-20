@@ -113,3 +113,14 @@ AuraDSP 采用跨平台自适应响应系统：
 - 内容尺寸禁止裸写固定宽高：用 `AuraDialogConstraints(maxWidth:, maxHeight:)` 包住，内部保留显式设计尺寸；`AlertDialog` 内容含 `ListView` 等惰性视口时**不要**用 `width/height: double.infinity`（会触发 intrinsic 尺寸断言）。
 - 360px 下浮层实际矩形不得超出视口；主操作按钮命中区 ≥48×48。
 - 新增浮层必须在 `test/dialog_layout_test.dart` 或对应页面测试中补 360 回归。
+
+---
+
+## 7. 页内窄屏降级规范（P3，2026-11-20）
+
+- **判定基准是内容宽度，不是视口断点**：`PageScaffold` 在 mobile/tablet 档留白不同，480 档内容区可能比 360 更窄。凡"左右两簇争宽"的布局，用 `LayoutBuilder` 取 `maxWidth` 判定（首页 hero、视效 HUD 均已按此修正）。
+- **`Row(mainAxisSize.min)` 的子项拿到的是无界主轴约束**，内层 `Flexible`/`Expanded` 不生效。要让文本/胶囊可压缩，必须让它们处在有界父约束下（外层 `Expanded`/`Flexible`，或 `LayoutBuilder` 给出的 maxWidth）。
+- **`SectionCard.trailing` 在 <480 自动换行**（`SectionTitle` 已内建）；新增卡片不要再自己写"标题 + 动作"同排 Row。
+- **必须全部可见的等价控件**（页签、分段控件）窄屏用 `FittedBox(fit: BoxFit.scaleDown)` 等比缩小，不要藏进横向滚动。
+- **可折行的控件组**（视效 HUD、量程胶囊）窄屏用 `Wrap` 折行；禁止用 `SingleChildScrollView` 把主操作藏到视口外。
+- 降级允许压缩/截断次级文本，**不允许为了过测试隐藏主操作**。新增页面必须在 `test/narrow_pages_test.dart` 的 `_pageNames` 对应档位补 360 回归。

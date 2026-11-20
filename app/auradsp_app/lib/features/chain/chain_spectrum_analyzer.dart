@@ -11,6 +11,7 @@
  */
 
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/audio_modes.dart';
@@ -97,7 +98,8 @@ class FullChainTransferCalculator {
     final numIm = -(b1 * sinW + b2 * sin2W);
     final denRe = a0 + a1 * cosW + a2 * cos2W;
     final denIm = -(a1 * sinW + a2 * sin2W);
-    final magSq = (numRe * numRe + numIm * numIm) / (denRe * denRe + denIm * denIm);
+    final magSq =
+        (numRe * numRe + numIm * numIm) / (denRe * denRe + denIm * denIm);
     if (magSq <= 0) return 0.0;
     return 10.0 * math.log(magSq) / math.ln10;
   }
@@ -116,7 +118,8 @@ class FullChainTransferCalculator {
     final w0 = 2.0 * math.pi * cutoff / sampleRate;
     final cosW0 = math.cos(w0);
     final sinW0 = math.sin(w0);
-    final alpha = (sinW0 / 2.0) * math.sqrt((a + 1.0 / a) * (1.0 / q - 1.0) + 2.0);
+    final alpha =
+        (sinW0 / 2.0) * math.sqrt((a + 1.0 / a) * (1.0 / q - 1.0) + 2.0);
     final twoSqrtAAlpha = 2.0 * math.sqrt(a) * alpha;
 
     final b0 = a * ((a + 1.0) - (a - 1.0) * cosW0 + twoSqrtAAlpha);
@@ -135,7 +138,8 @@ class FullChainTransferCalculator {
     final numIm = -(b1 * sinW + b2 * sin2W);
     final denRe = a0 + a1 * cosW + a2 * cos2W;
     final denIm = -(a1 * sinW + a2 * sin2W);
-    final magSq = (numRe * numRe + numIm * numIm) / (denRe * denRe + denIm * denIm);
+    final magSq =
+        (numRe * numRe + numIm * numIm) / (denRe * denRe + denIm * denIm);
     if (magSq <= 0) return 0.0;
     return 10.0 * math.log(magSq) / math.ln10;
   }
@@ -186,7 +190,8 @@ class FullChainTransferCalculator {
     final numIm = -(b1 * sinW + b2 * sin2W);
     final denRe = a0 + a1 * cosW + a2 * cos2W;
     final denIm = -(a1 * sinW + a2 * sin2W);
-    final magSq = (numRe * numRe + numIm * numIm) / (denRe * denRe + denIm * denIm);
+    final magSq =
+        (numRe * numRe + numIm * numIm) / (denRe * denRe + denIm * denIm);
     if (magSq <= 1e-12) return -60.0;
     return (10.0 * math.log(magSq) / math.ln10).clamp(-60.0, 40.0);
   }
@@ -238,7 +243,10 @@ class FullChainTransferCalculator {
         }
       }
       if (targetLine.isEmpty) {
-        targetLine = lines.firstWhere((l) => l.startsWith('SR_'), orElse: () => '');
+        targetLine = lines.firstWhere(
+          (l) => l.startsWith('SR_'),
+          orElse: () => '',
+        );
       }
       if (targetLine.isNotEmpty) {
         final colonIdx = targetLine.indexOf(':');
@@ -265,7 +273,8 @@ class FullChainTransferCalculator {
   /// 全链路端到端频响与延迟分析计算（纯内存计算）
   static FullChainResponseResult compute({
     required AppModel model,
-    required String channel, // 'all', 'FL', 'FR', 'C', 'LFE', 'SL', 'SR', 'BL', 'BR'
+    required String
+    channel, // 'all', 'FL', 'FR', 'C', 'LFE', 'SL', 'SR', 'BL', 'BR'
     int? vbBusIndex,
   }) {
     final freqs = getLogFrequencies();
@@ -277,7 +286,8 @@ class FullChainTransferCalculator {
     // 端已选 Voicemeeter 时都生效——后者是计算器既有契约
     // （范式未切附加时掩码已先行，chain_spectrum_analyzer_test
     // 钉死）；总线下拉等 UI 显现仍只看 routeSelector。
-    final isVbMode = model.modeCaps.routeSelector ||
+    final isVbMode =
+        model.modeCaps.routeSelector ||
         model.attachmentMode == AudioModes.attachVoicemeeterApi;
     bool isBypassed = false;
     if (isVbMode && vbBusIndex != null) {
@@ -288,7 +298,11 @@ class FullChainTransferCalculator {
     }
 
     final isLfe = channel == 'LFE';
-    final isSurround = channel == 'SL' || channel == 'SR' || channel == 'BL' || channel == 'BR';
+    final isSurround =
+        channel == 'SL' ||
+        channel == 'SR' ||
+        channel == 'BL' ||
+        channel == 'BR';
 
     if (!isBypassed) {
       // 2. 核心滤波与前置阶段
@@ -335,7 +349,10 @@ class FullChainTransferCalculator {
         final eqFreqs = model.eqFrequencies;
         final eqGains = model.eqGains;
         final eqQs = model.eqQs;
-        final n = math.min(eqFreqs.length, math.min(eqGains.length, eqQs.length));
+        final n = math.min(
+          eqFreqs.length,
+          math.min(eqGains.length, eqQs.length),
+        );
         for (var b = 0; b < n; b++) {
           final g = eqGains[b];
           if (g.abs() < 1e-6) continue;
@@ -429,7 +446,9 @@ class FullChainTransferCalculator {
           final spec = model.convSpectrum[0];
           for (var i = 0; i < freqs.length; i++) {
             final t = i / (freqs.length - 1);
-            final idx = (t * (spec.length - 1)).clamp(0, spec.length - 1).toInt();
+            final idx = (t * (spec.length - 1))
+                .clamp(0, spec.length - 1)
+                .toInt();
             final specDb = spec[idx];
             gains[i] += (specDb * 0.5 * mix).clamp(-12.0, 12.0);
           }
@@ -438,7 +457,10 @@ class FullChainTransferCalculator {
           for (var i = 0; i < freqs.length; i++) {
             final f = freqs[i];
             if (f > 4000) {
-              final att = (math.log(f / 4000) / math.ln10 * 3.0 * mix).clamp(0.0, 9.0);
+              final att = (math.log(f / 4000) / math.ln10 * 3.0 * mix).clamp(
+                0.0,
+                9.0,
+              );
               gains[i] -= att;
             } else if (f < 200) {
               gains[i] += 1.0 * mix;
@@ -490,7 +512,8 @@ class FullChainTransferCalculator {
           }
           // 滑块联动响应（如果已设）
           if (p1.abs() > 0.01 || p2.abs() > 0.01) {
-            gains[i] += (p1 * 2.0 * math.exp(-math.pow(math.log(f / 1000), 2))).clamp(-6.0, 6.0);
+            gains[i] += (p1 * 2.0 * math.exp(-math.pow(math.log(f / 1000), 2)))
+                .clamp(-6.0, 6.0);
           }
         }
       }
@@ -515,7 +538,10 @@ class FullChainTransferCalculator {
           final f = freqs[i];
           if (channel == 'FL' || channel == 'FR') {
             if (f > 1000) {
-              final att = (math.log(f / 1000) / math.ln10 * 1.2).clamp(0.0, 2.5);
+              final att = (math.log(f / 1000) / math.ln10 * 1.2).clamp(
+                0.0,
+                2.5,
+              );
               gains[i] -= att;
             }
           } else {
@@ -527,7 +553,8 @@ class FullChainTransferCalculator {
       }
 
       // 电子管与激励器 (Tube & Exciter) - 引擎默认排除 LFE
-      if ((model.isStageEnabled('tube') || model.isStageEnabled('exciter')) && !isLfe) {
+      if ((model.isStageEnabled('tube') || model.isStageEnabled('exciter')) &&
+          !isLfe) {
         for (var i = 0; i < freqs.length; i++) {
           if (freqs[i] > 3000) {
             final t = ((freqs[i] - 3000) / 17000).clamp(0.0, 1.0);
@@ -580,16 +607,17 @@ class ChainSpectrumAnalyzer extends StatefulWidget {
 }
 
 class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
-  String _selectedChannel = 'FL'; // 'all', 'FL', 'FR', 'C', 'LFE', 'SL', 'SR', 'BL', 'BR'
+  String _selectedChannel =
+      'FL'; // 'all', 'FL', 'FR', 'C', 'LFE', 'SL', 'SR', 'BL', 'BR'
   int _selectedVbBus = 0; // Voicemeeter 总线索引 (0 = A1)
   bool _isSmoothCurve = true; // 曲线平滑 vs 折线
   Offset? _hoverPos; // 鼠标探针坐标
 
   /// 获取当前设置中支持的声道代码列表（布局唯一源见 core/channel_layout.dart）
   List<String> _getAvailableChannels() => [
-        for (final c in channelLayoutFor(widget.model.effectiveChannelCount))
-          c.code,
-      ];
+    for (final c in channelLayoutFor(widget.model.effectiveChannelCount))
+      c.code,
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -597,7 +625,8 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
     final l = l10nOf(context);
     final availableChannels = _getAvailableChannels();
     // 声道越界自愈
-    if (_selectedChannel != 'all' && !availableChannels.contains(_selectedChannel)) {
+    if (_selectedChannel != 'all' &&
+        !availableChannels.contains(_selectedChannel)) {
       _selectedChannel = availableChannels.first;
     }
 
@@ -622,6 +651,23 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
       }
     }
 
+    // 频响极值胶囊（桌面在标题行右侧；窄屏下沉到第二行，避免与标题争宽）
+    final rangeChip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: p.panelRaised,
+        borderRadius: BorderRadius.circular(AuraRadius.xs),
+        border: Border.all(color: p.hairline),
+      ),
+      child: Text(
+        '范围 ${res.minGain >= 0 ? "+" : ""}${res.minGain.toStringAsFixed(1)} ~ ${res.maxGain >= 0 ? "+" : ""}${res.maxGain.toStringAsFixed(1)} dB',
+        style: monoOf(p, size: 10, color: p.textDim),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+    final compact = context.isCompactWidth;
+
     return Container(
       margin: const EdgeInsets.only(bottom: AuraSpace.md),
       padding: const EdgeInsets.all(AuraSpace.md),
@@ -645,39 +691,35 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
                 ),
               ),
               const SizedBox(width: 8),
-              Text(
-                '处理链频响测量',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: p.text,
+              Flexible(
+                child: Text(
+                  '处理链频响测量',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: p.text,
+                  ),
                 ),
               ),
               const SizedBox(width: AuraSpace.sm),
-              // 频响极值胶囊
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: p.panelRaised,
-                  borderRadius: BorderRadius.circular(AuraRadius.xs),
-                  border: Border.all(color: p.hairline),
-                ),
-                child: Text(
-                  '范围 ${res.minGain >= 0 ? "+" : ""}${res.minGain.toStringAsFixed(1)} ~ ${res.maxGain >= 0 ? "+" : ""}${res.maxGain.toStringAsFixed(1)} dB',
-                  style: monoOf(p, size: 10, color: p.textDim),
-                ),
-              ),
+              // 频响极值胶囊（窄屏下沉，见下方 compact 分支）
+              if (!compact) rangeChip,
               const Spacer(),
 
               // 曲线/折线模式切换按钮
               IconButton(
                 tooltip: _isSmoothCurve ? '切换至几何折线模式' : '切换至平滑曲线模式',
                 icon: Icon(
-                  _isSmoothCurve ? Icons.show_chart_rounded : Icons.timeline_rounded,
+                  _isSmoothCurve
+                      ? Icons.show_chart_rounded
+                      : Icons.timeline_rounded,
                   size: 18,
                   color: p.accent,
                 ),
-                onPressed: () => setState(() => _isSmoothCurve = !_isSmoothCurve),
+                onPressed: () =>
+                    setState(() => _isSmoothCurve = !_isSmoothCurve),
                 visualDensity: VisualDensity.compact,
               ),
 
@@ -692,15 +734,18 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
                     // 全面复审 S2（UI-15）：通知按成分分级——含估算
                     // 成分时明示，不再一律宣称「测定完成」。
                     final m = widget.model;
-                    final hasEstimate = kFullChainStageIds.any((id) =>
-                            m.isStageEnabled(id) &&
-                            m.componentLatency(id).estimated) ||
+                    final hasEstimate =
+                        kFullChainStageIds.any(
+                          (id) =>
+                              m.isStageEnabled(id) &&
+                              m.componentLatency(id).estimated,
+                        ) ||
                         (m.limiterOn &&
                             m.componentLatency('limiter').estimated);
                     widget.model.postNotice(
                       (hasEstimate
-                              ? l.chainLatencyMeasuredPartialMsg
-                              : l.chainLatencyMeasuredMsg)(
+                          ? l.chainLatencyMeasuredPartialMsg
+                          : l.chainLatencyMeasuredMsg)(
                         LatencyPresenter.number(
                           widget.model.fullChainLatencyMs,
                         ),
@@ -712,6 +757,13 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
               ),
             ],
           ),
+
+          // 窄屏：量程胶囊独占一行，全部信息保留
+          if (compact)
+            Padding(
+              padding: const EdgeInsets.only(top: AuraSpace.xs),
+              child: Align(alignment: Alignment.centerLeft, child: rangeChip),
+            ),
 
           const SizedBox(height: AuraSpace.sm),
 
@@ -756,7 +808,10 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
               // Voicemeeter 专属总线下拉菜单（严格仅在 isVbMode 下显现）
               if (isVb) ...[
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: p.panelRaised,
                     borderRadius: BorderRadius.circular(AuraRadius.sm),
@@ -774,12 +829,18 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
                           value: _selectedVbBus,
                           dropdownColor: p.panelRaised,
                           isDense: true,
-                          style: monoOf(p, size: 11, color: p.text).copyWith(fontWeight: FontWeight.w600),
+                          style: monoOf(
+                            p,
+                            size: 11,
+                            color: p.text,
+                          ).copyWith(fontWeight: FontWeight.w600),
                           items: enabledVbBuses.map((b) {
                             final isMaster = b.index == 0;
                             return DropdownMenuItem<int>(
                               value: b.index,
-                              child: Text('${b.name}${isMaster ? " (Master)" : ""}'),
+                              child: Text(
+                                '${b.name}${isMaster ? " (Master)" : ""}',
+                              ),
                             );
                           }).toList(),
                           onChanged: (val) {
@@ -811,7 +872,11 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
                     const SizedBox(width: 4),
                     Text(
                       'PDC 延迟: ${res.totalLatencyMs.toStringAsFixed(1)} ms',
-                      style: monoOf(p, size: 11, color: p.accent).copyWith(fontWeight: FontWeight.w600),
+                      style: monoOf(
+                        p,
+                        size: 11,
+                        color: p.accent,
+                      ).copyWith(fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -878,17 +943,20 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: isSelected ? p.accent.withValues(alpha: 0.16) : Colors.transparent,
+          color: isSelected
+              ? p.accent.withValues(alpha: 0.16)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(AuraRadius.xs),
-          border: isSelected ? Border.all(color: p.accent.withValues(alpha: 0.6)) : null,
+          border: isSelected
+              ? Border.all(color: p.accent.withValues(alpha: 0.6))
+              : null,
         ),
         child: Text(
           label,
-          style: monoOf(
-            p,
-            size: 11,
-            color: isSelected ? p.accent : p.textDim,
-          ).copyWith(fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal),
+          style: monoOf(p, size: 11, color: isSelected ? p.accent : p.textDim)
+              .copyWith(
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+              ),
         ),
       ),
     );
@@ -903,7 +971,16 @@ class _SpectrumGraphPainter extends CustomPainter {
   final Offset? hoverPos;
 
   static const List<double> kFreqGrid = [
-    20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000
+    20,
+    50,
+    100,
+    200,
+    500,
+    1000,
+    2000,
+    5000,
+    10000,
+    20000,
   ];
   static const List<double> kDbGrid = [-30, -20, -10, 0, 10, 20];
 
@@ -929,7 +1006,12 @@ class _SpectrumGraphPainter extends CustomPainter {
     final logMax = math.log(FullChainTransferCalculator.kMaxFreq);
 
     double freqToX(double f) {
-      final lf = math.log(f.clamp(FullChainTransferCalculator.kMinFreq, FullChainTransferCalculator.kMaxFreq));
+      final lf = math.log(
+        f.clamp(
+          FullChainTransferCalculator.kMinFreq,
+          FullChainTransferCalculator.kMaxFreq,
+        ),
+      );
       final t = (lf - logMin) / (logMax - logMin);
       return padLeft + t * plotWidth;
     }
@@ -970,12 +1052,23 @@ class _SpectrumGraphPainter extends CustomPainter {
       final y = dbToY(db);
       if (db == 0.0) {
         // 0 dB 基准线：明显的高亮发光线
-        canvas.drawLine(Offset(padLeft, y), Offset(padLeft + plotWidth, y), zeroLinePaint);
+        canvas.drawLine(
+          Offset(padLeft, y),
+          Offset(padLeft + plotWidth, y),
+          zeroLinePaint,
+        );
       } else {
-        canvas.drawLine(Offset(padLeft, y), Offset(padLeft + plotWidth, y), gridPaint);
+        canvas.drawLine(
+          Offset(padLeft, y),
+          Offset(padLeft + plotWidth, y),
+          gridPaint,
+        );
       }
 
-      final textSpan = TextSpan(text: '${db > 0 ? "+" : ""}${db.toInt()}', style: textStyle);
+      final textSpan = TextSpan(
+        text: '${db > 0 ? "+" : ""}${db.toInt()}',
+        style: textStyle,
+      );
       final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
       tp.layout();
       tp.paint(canvas, Offset(padLeft - tp.width - 4, y - tp.height / 2));
@@ -984,7 +1077,11 @@ class _SpectrumGraphPainter extends CustomPainter {
     // X 轴对数频率刻度线
     for (final f in kFreqGrid) {
       final x = freqToX(f);
-      canvas.drawLine(Offset(x, padTop), Offset(x, padTop + plotHeight), gridPaint);
+      canvas.drawLine(
+        Offset(x, padTop),
+        Offset(x, padTop + plotHeight),
+        gridPaint,
+      );
 
       final label = f >= 1000 ? '${(f / 1000).toInt()}k' : '${f.toInt()}';
       final textSpan = TextSpan(text: label, style: textStyle);
@@ -1117,8 +1214,16 @@ class _SpectrumGraphPainter extends CustomPainter {
         ..color = palette.textDim.withValues(alpha: 0.5)
         ..strokeWidth = 1.0;
 
-      canvas.drawLine(Offset(hx, padTop), Offset(hx, padTop + plotHeight), crosshairPaint);
-      canvas.drawLine(Offset(padLeft, hy), Offset(padLeft + plotWidth, hy), crosshairPaint);
+      canvas.drawLine(
+        Offset(hx, padTop),
+        Offset(hx, padTop + plotHeight),
+        crosshairPaint,
+      );
+      canvas.drawLine(
+        Offset(padLeft, hy),
+        Offset(padLeft + plotWidth, hy),
+        crosshairPaint,
+      );
 
       final pointPaint = Paint()
         ..color = palette.accent
@@ -1128,7 +1233,8 @@ class _SpectrumGraphPainter extends CustomPainter {
       final fStr = hoverFreq >= 1000
           ? '${(hoverFreq / 1000).toStringAsFixed(2)} kHz'
           : '${hoverFreq.toStringAsFixed(0)} Hz';
-      final dbStr = '${hoverDb >= 0 ? "+" : ""}${hoverDb.toStringAsFixed(1)} dB';
+      final dbStr =
+          '${hoverDb >= 0 ? "+" : ""}${hoverDb.toStringAsFixed(1)} dB';
       final tooltipText = '$fStr  ·  $dbStr';
 
       final tipSpan = TextSpan(

@@ -33,10 +33,7 @@ class ChainPluginSlotsCard extends StatelessWidget {
         children: [
           // 4 槽位独立控制卡片列表（插入阶段由卡片内下拉菜单精确调整）
           for (var s = 0; s < PluginManager.kMaxSlots; s++) ...[
-            _PluginSlotChainCard(
-              model: model,
-              slot: s,
-            ),
+            _PluginSlotChainCard(model: model, slot: s),
             if (s < PluginManager.kMaxSlots - 1)
               const SizedBox(height: AuraSpace.sm),
           ],
@@ -53,10 +50,7 @@ class _PluginSlotChainCard extends StatelessWidget {
   final AppModel model;
   final int slot;
 
-  const _PluginSlotChainCard({
-    required this.model,
-    required this.slot,
-  });
+  const _PluginSlotChainCard({required this.model, required this.slot});
 
   @override
   Widget build(BuildContext context) {
@@ -77,8 +71,8 @@ class _PluginSlotChainCard extends StatelessWidget {
         border: Border.all(
           color: isActive
               ? (isBypassed
-                  ? p.warning.withValues(alpha: 0.4)
-                  : p.accent.withValues(alpha: 0.4))
+                    ? p.warning.withValues(alpha: 0.4)
+                    : p.accent.withValues(alpha: 0.4))
               : p.hairline,
         ),
       ),
@@ -114,22 +108,31 @@ class _PluginSlotChainCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text(
-                      isActive
-                          ? l10nOf(context).chainSlotActive(
-                              slot + 1, active!.name, active.format.label)
-                          : l10nOf(context).chainSlotEmpty(slot + 1),
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: p.text,
+                    Flexible(
+                      child: Text(
+                        isActive
+                            ? l10nOf(context).chainSlotActive(
+                                slot + 1,
+                                active!.name,
+                                active.format.label,
+                              )
+                            : l10nOf(context).chainSlotEmpty(slot + 1),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: p.text,
+                        ),
                       ),
                     ),
                     if (isActive && active != null) ...[
                       const SizedBox(width: AuraSpace.sm),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 1),
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: p.hairline,
                           borderRadius: BorderRadius.circular(3),
@@ -148,10 +151,11 @@ class _PluginSlotChainCard extends StatelessWidget {
                       ? l10nOf(context).chainSlotStatusLine(
                           isBypassed
                               ? (remoteFailed
-                                  ? l10nOf(context).chainSlotRemoteFailed
-                                  : l10nOf(context).chainSlotBypassed)
+                                    ? l10nOf(context).chainSlotRemoteFailed
+                                    : l10nOf(context).chainSlotBypassed)
                               : l10nOf(context).chainSlotProcessing,
-                          manager.getSlotLatency(slot))
+                          manager.getSlotLatency(slot),
+                        )
                       : l10nOf(context).chainSlotHint,
                   style: captionOf(p, color: p.textDim),
                 ),
@@ -193,7 +197,8 @@ class _PluginSlotChainCard extends StatelessWidget {
               onPressed: () => manager.showEditor(
                 slot: slot,
                 title: active != null
-                    ? l10nOf(context).plugEditorTitleNamed(slot + 1, active.name)
+                    ? l10nOf(context)
+                          .plugEditorTitleNamed(slot + 1, active.name)
                     : null,
               ),
               visualDensity: VisualDensity.compact,
@@ -236,8 +241,8 @@ class _PdcToggleRow extends StatelessWidget {
     // （VAIO/ASIO，声音在桥进程内处理、桥 FFI 无 PDC 面）与 APO
     // 影子链下拨动无效——置灰并给说明，不再假装功能正常。
     final chain = model.pipelineChain;
-    final pdcSupported = model.modeCaps.pluginProcessing ==
-            PluginProcessing.local &&
+    final pdcSupported =
+        model.modeCaps.pluginProcessing == PluginProcessing.local &&
         chain != PipelineChain.vaio &&
         chain != PipelineChain.asio;
     return Column(
@@ -248,10 +253,7 @@ class _PdcToggleRow extends StatelessWidget {
             Icon(Icons.timeline_rounded, size: 16, color: p.accent),
             const SizedBox(width: 6),
             Expanded(
-              child: Text(
-                l10nOf(context).chainPdcLabel,
-                style: captionOf(p),
-              ),
+              child: Text(l10nOf(context).chainPdcLabel, style: captionOf(p)),
             ),
             AuraSwitch(
               value: manager.pdcEnabled,

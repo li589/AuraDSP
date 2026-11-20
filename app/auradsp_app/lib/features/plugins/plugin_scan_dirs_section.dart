@@ -72,7 +72,14 @@ class PluginScanDirsSection extends StatelessWidget {
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
-              Text(l.plugScanDirsSelectAll, style: captionOf(p)),
+              Flexible(
+                child: Text(
+                  l.plugScanDirsSelectAll,
+                  style: captionOf(p),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               const SizedBox(width: 4),
               IconButton(
                 tooltip: l.plugScanDirsClear,
@@ -85,16 +92,21 @@ class PluginScanDirsSection extends StatelessWidget {
                 icon: const Icon(Icons.deselect_rounded, size: 16),
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 26, minHeight: 26),
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
               ),
+              // 计数贴右：Spacer 让位，仅计数文本可弹性收缩（窄屏只截断计数）。
               const Spacer(),
-              Text(
-                l.plugScanDirsEnabledCount(
-                  entries.where((e) => e.enabled).length,
-                  entries.length,
+              Flexible(
+                child: Text(
+                  l.plugScanDirsEnabledCount(
+                    entries.where((e) => e.enabled).length,
+                    entries.length,
+                  ),
+                  style: captionOf(p, color: p.textDim),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
                 ),
-                style: captionOf(p, color: p.textDim),
               ),
             ],
           ),
@@ -203,8 +215,7 @@ class _ScanDirRow extends StatelessWidget {
             Tooltip(
               message: l.plugScanDirsBuiltinHint,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(
                   color: p.accent.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(4),
@@ -248,7 +259,9 @@ class _ScanDirRow extends StatelessWidget {
                 : l.plugScanDirsRemove,
             onPressed: onRemove,
             icon: const Icon(Icons.remove_circle_outline_rounded, size: 15),
-            color: onRemove == null ? p.textDim.withValues(alpha: 0.35) : p.error,
+            color: onRemove == null
+                ? p.textDim.withValues(alpha: 0.35)
+                : p.error,
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
@@ -257,6 +270,4 @@ class _ScanDirRow extends StatelessWidget {
       ),
     );
   }
-
 }
-

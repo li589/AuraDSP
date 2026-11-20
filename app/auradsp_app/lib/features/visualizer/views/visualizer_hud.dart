@@ -88,56 +88,59 @@ class _VisualizerHudState extends State<VisualizerHud> {
                         padding: const EdgeInsets.only(bottom: 6),
                         child: _GlassSurface(
                           borderRadius: BorderRadius.circular(AuraRadius.md),
-                            child: Container(
-                              // F-02：ja 的风格名日译较长，固定 175 会被 ellipsis
-                              // 截断；按语言放宽（其他语言 190，ja 205）。
-                              width:
-                                  Localizations.localeOf(context).languageCode ==
-                                          'ja'
-                                      ? 205
-                                      : 190,
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              decoration: BoxDecoration(
-                                color: p.panel.withValues(alpha: 0.94),
-                                borderRadius: BorderRadius.circular(AuraRadius.md),
-                                border: Border.all(
-                                  color: p.hairline.withValues(alpha: 0.85),
-                                  width: 1,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.5),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 8),
-                                  ),
-                                ],
+                          child: Container(
+                            // F-02：ja 的风格名日译较长，固定 175 会被 ellipsis
+                            // 截断；按语言放宽（其他语言 190，ja 205）。
+                            width:
+                                Localizations.localeOf(context).languageCode ==
+                                    'ja'
+                                ? 205
+                                : 190,
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            decoration: BoxDecoration(
+                              color: p.panel.withValues(alpha: 0.94),
+                              borderRadius: BorderRadius.circular(
+                                AuraRadius.md,
                               ),
-                              child: ConstrainedBox(
-                                // 小屏（手机横屏/窄窗）时风格列表可滚动，避免溢出裁切
-                                constraints: BoxConstraints(
-                                  maxHeight:
-                                      MediaQuery.sizeOf(context).height * 0.45,
+                              border: Border.all(
+                                color: p.hairline.withValues(alpha: 0.85),
+                                width: 1,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.5),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 8),
                                 ),
-                                child: SingleChildScrollView(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      for (final style in VisualizerStyle.values)
-                                        VisualizerMenuItem(
-                                          style: style,
-                                          isSelected: widget.config.style == style,
-                                          onTap: () {
-                                            widget.onStyleChanged(style);
-                                            _closeMenu();
-                                          },
-                                        ),
-                                    ],
-                                  ),
+                              ],
+                            ),
+                            child: ConstrainedBox(
+                              // 小屏（手机横屏/窄窗）时风格列表可滚动，避免溢出裁切
+                              constraints: BoxConstraints(
+                                maxHeight:
+                                    MediaQuery.sizeOf(context).height * 0.45,
+                              ),
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    for (final style in VisualizerStyle.values)
+                                      VisualizerMenuItem(
+                                        style: style,
+                                        isSelected:
+                                            widget.config.style == style,
+                                        onTap: () {
+                                          widget.onStyleChanged(style);
+                                          _closeMenu();
+                                        },
+                                      ),
+                                  ],
                                 ),
                               ),
                             ),
                           ),
-                        )
+                        ),
+                      )
                     : const SizedBox.shrink(
                         key: ValueKey('visualizer-style-menu-closed'),
                       ),
@@ -146,43 +149,47 @@ class _VisualizerHudState extends State<VisualizerHud> {
               // 主底栏容器（毛玻璃悬浮效果）
               _GlassSurface(
                 borderRadius: BorderRadius.circular(AuraRadius.lg),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: p.panel.withValues(alpha: 0.86),
+                    borderRadius: BorderRadius.circular(AuraRadius.lg),
+                    border: Border.all(
+                      color: p.hairline.withValues(alpha: 0.65),
+                      width: 1,
                     ),
-                    decoration: BoxDecoration(
-                      color: p.panel.withValues(alpha: 0.86),
-                      borderRadius: BorderRadius.circular(AuraRadius.lg),
-                      border: Border.all(
-                        color: p.hairline.withValues(alpha: 0.65),
-                        width: 1,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.38),
+                        blurRadius: 18,
+                        offset: const Offset(0, 6),
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.38),
-                          blurRadius: 18,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+                    ],
+                  ),
+                  // P3：窄屏横排会溢出（360px 下约 479px 内容），改 Wrap 折行，
+                  // 全部控件保持可见；桌面仍是单行 Row，观感不变。
+                  child: Builder(
+                    builder: (ctx) {
+                      // mobile 档（<600）折行：整条 HUD 实宽约 480px，
+                      // 只按 480 视口判断会低估浮层内边距后的可用宽度。
+                      final compact = ctx.isMobile;
+                      final sep = Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                        height: 20,
+                        width: 1,
+                        color: p.hairline,
+                      );
+                      final items = <Widget>[
                         // 模式下拉激活按钮
                         VisualizerStyleDropdownButton(
                           selectedStyle: widget.config.style,
                           isOpen: _menuOpen,
                           onTap: _toggleMenu,
                         ),
-
-                        Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 8),
-                          height: 20,
-                          width: 1,
-                          color: p.hairline,
-                        ),
-
+                        if (!compact) sep,
                         // 歌词显示开关
                         VisualizerActionButton(
                           icon: Icons.lyrics_rounded,
@@ -195,8 +202,7 @@ class _VisualizerHudState extends State<VisualizerHud> {
                             widget.onToggleLyrics();
                           },
                         ),
-                        const SizedBox(width: 4),
-
+                        if (!compact) const SizedBox(width: 4),
                         // 复位峰值
                         VisualizerActionButton(
                           icon: Icons.refresh_rounded,
@@ -206,8 +212,7 @@ class _VisualizerHudState extends State<VisualizerHud> {
                             widget.onResetPeaks();
                           },
                         ),
-                        const SizedBox(width: 4),
-
+                        if (!compact) const SizedBox(width: 4),
                         // 展开参数抽屉
                         VisualizerActionButton(
                           icon: Icons.tune_rounded,
@@ -217,14 +222,7 @@ class _VisualizerHudState extends State<VisualizerHud> {
                             widget.onOpenDrawer();
                           },
                         ),
-
-                        Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 8),
-                          height: 20,
-                          width: 1,
-                          color: p.hairline,
-                        ),
-
+                        if (!compact) sep,
                         // 三档全屏：还原 / 软件全屏 / 仅视效沉浸
                         VisualizerDisplayModeSwitcher(
                           mode: widget.displayMode,
@@ -233,8 +231,22 @@ class _VisualizerHudState extends State<VisualizerHud> {
                             widget.onDisplayModeChanged(mode);
                           },
                         ),
-                      ],
-                    ),
+                      ];
+                      if (!compact) {
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: items,
+                        );
+                      }
+                      return Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: items,
+                      );
+                    },
+                  ),
                 ),
               ),
             ],
@@ -244,7 +256,6 @@ class _VisualizerHudState extends State<VisualizerHud> {
     );
   }
 }
-
 
 /// 平台自适应磨砂面板容器。
 /// P0-3：全平台走无模糊路径。BackdropFilter 每次合成都要对整块背景做
@@ -258,9 +269,6 @@ class _GlassSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: borderRadius,
-      child: child,
-    );
+    return ClipRRect(borderRadius: borderRadius, child: child);
   }
 }

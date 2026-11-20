@@ -65,8 +65,9 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
     _transCtrl.addListener(_onTransformChanged);
     // 窗口可见性门控：展开态的电流脉冲在托盘/最小化时停转，
     // 恢复可见且仍展开时续转（2026-11-12 优化指令）。
-    PlatformAdapters.instance.window.visibleListenable
-        .addListener(_onVisibilityChanged);
+    PlatformAdapters.instance.window.visibleListenable.addListener(
+      _onVisibilityChanged,
+    );
   }
 
   void _onVisibilityChanged() {
@@ -88,8 +89,9 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
 
   @override
   void dispose() {
-    PlatformAdapters.instance.window.visibleListenable
-        .removeListener(_onVisibilityChanged);
+    PlatformAdapters.instance.window.visibleListenable.removeListener(
+      _onVisibilityChanged,
+    );
     _transCtrl.removeListener(_onTransformChanged);
     _expandCtrl.dispose();
     _circuitPulseCtrl.dispose();
@@ -187,65 +189,87 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
                     ),
                   ),
                   const SizedBox(width: AuraSpace.sm + 2),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '全局信号流顺序',
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w600,
-                          color: p.text,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '全链路 24 节点拓扑 · 实时 Stage 0~4 插件注入 · 支持平移缩放',
-                        style: monoOf(p, size: 10, color: p.textDim),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-
-                  // 节点简要统计
-                  Container(
-                    margin: const EdgeInsets.only(right: AuraSpace.sm),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: p.bg.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(AuraRadius.xs),
-                      border: Border.all(color: p.hairline.withValues(alpha: 0.5)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                  // P3：标题块改为弹性，窄屏截断而不是把右侧操作挤出边界。
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '$activeCount 活跃',
-                          style: monoOf(p, size: 10.5, color: p.accent),
+                          '全局信号流顺序',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: p.text,
+                            letterSpacing: 0.3,
+                          ),
                         ),
-                        if (pluginCount > 0) ...[
-                          Text(' · ', style: TextStyle(color: p.textDim, fontSize: 10)),
-                          Text(
-                            '$pluginCount 插件',
-                            style: monoOf(p, size: 10.5, color: p.accent2),
-                          ),
-                        ],
-                        if (bypassedCount > 0) ...[
-                          Text(' · ', style: TextStyle(color: p.textDim, fontSize: 10)),
-                          Text(
-                            '$bypassedCount 旁路',
-                            style: monoOf(p, size: 10.5, color: p.textDim),
-                          ),
-                        ],
+                        const SizedBox(height: 2),
+                        Text(
+                          '全链路 24 节点拓扑 · 实时 Stage 0~4 插件注入 · 支持平移缩放',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: monoOf(p, size: 10, color: p.textDim),
+                        ),
                       ],
                     ),
                   ),
+                  const Spacer(),
+
+                  // 节点简要统计（窄屏让位给标题与展开按钮，展开面板内仍有全景）
+                  if (!context.isCompactWidth)
+                    Container(
+                      margin: const EdgeInsets.only(right: AuraSpace.sm),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: p.bg.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(AuraRadius.xs),
+                        border: Border.all(
+                          color: p.hairline.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '$activeCount 活跃',
+                            style: monoOf(p, size: 10.5, color: p.accent),
+                          ),
+                          if (pluginCount > 0) ...[
+                            Text(
+                              ' · ',
+                              style: TextStyle(color: p.textDim, fontSize: 10),
+                            ),
+                            Text(
+                              '$pluginCount 插件',
+                              style: monoOf(p, size: 10.5, color: p.accent2),
+                            ),
+                          ],
+                          if (bypassedCount > 0) ...[
+                            Text(
+                              ' · ',
+                              style: TextStyle(color: p.textDim, fontSize: 10),
+                            ),
+                            Text(
+                              '$bypassedCount 旁路',
+                              style: monoOf(p, size: 10.5, color: p.textDim),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
 
                   // 右侧科幻胶囊展开按钮
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 250),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: _isExpanded
                           ? p.accent.withValues(alpha: 0.16)
@@ -329,10 +353,8 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
                           onPointerSignal: (pointerSignal) {
                             if (pointerSignal is PointerScrollEvent) {
                               // 独占消费滚轮事件，阻止冒泡到外层可滚动页面
-                              GestureBinding.instance.pointerSignalResolver.register(
-                                pointerSignal,
-                                (_) {},
-                              );
+                              GestureBinding.instance.pointerSignalResolver
+                                  .register(pointerSignal, (_) {});
                             }
                           },
                           child: InteractiveViewer(
@@ -365,7 +387,9 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
                           children: [
                             // 动态比例复位按钮
                             InkWell(
-                              borderRadius: BorderRadius.circular(AuraRadius.xs),
+                              borderRadius: BorderRadius.circular(
+                                AuraRadius.xs,
+                              ),
                               onTap: _resetZoom,
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
@@ -374,7 +398,9 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
                                 ),
                                 decoration: BoxDecoration(
                                   color: p.panelRaised.withValues(alpha: 0.85),
-                                  borderRadius: BorderRadius.circular(AuraRadius.xs),
+                                  borderRadius: BorderRadius.circular(
+                                    AuraRadius.xs,
+                                  ),
                                   border: Border.all(color: p.hairline),
                                 ),
                                 child: Row(
@@ -388,9 +414,11 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
                                     const SizedBox(width: 4),
                                     Text(
                                       '${(_currentScale * 100).toInt()}% 复位',
-                                      style: monoOf(p, size: 10.5, color: p.accent).copyWith(
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                      style: monoOf(
+                                        p,
+                                        size: 10.5,
+                                        color: p.accent,
+                                      ).copyWith(fontWeight: FontWeight.w600),
                                     ),
                                   ],
                                 ),
@@ -406,7 +434,11 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
                         right: 14,
                         child: Text(
                           '鼠标左键/触屏拖拽平移 · 滚轮独立缩放',
-                          style: monoOf(p, size: 9.5, color: p.textDim.withValues(alpha: 0.5)),
+                          style: monoOf(
+                            p,
+                            size: 9.5,
+                            color: p.textDim.withValues(alpha: 0.5),
+                          ),
                         ),
                       ),
                     ],
@@ -438,7 +470,9 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
         if (pm.isSlotActive(s) && pm.getSlotStage(s) == stageIndex) {
           final isBypassed = pm.isSlotBypassed(s);
           final active = pm.getSlotPlugin(s);
-          final slotName = active != null ? active.name : 'Plugin Slot ${s + 1}';
+          final slotName = active != null
+              ? active.name
+              : 'Plugin Slot ${s + 1}';
           final slotFmt = active != null ? active.format.label : 'VST';
           final latency = pm.getSlotLatency(s);
 
@@ -458,32 +492,33 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
     }
 
     // 1. Audio Input
-    widgets.add(_PinnedNode(
-      name: 'Audio In',
-      desc: '系统音频输入',
-      icon: Icons.login_rounded,
-      palette: p,
-      accentColor: p.accent,
-    ));
+    widgets.add(
+      _PinnedNode(
+        name: 'Audio In',
+        desc: '系统音频输入',
+        icon: Icons.login_rounded,
+        palette: p,
+        accentColor: p.accent,
+      ),
+    );
     addArrow();
 
     // 2. Input Gate
-    widgets.add(_PinnedNode(
-      name: 'Input Gate',
-      desc: '输入物理门控',
-      icon: Icons.shield_outlined,
-      palette: p,
-      isBypassed: false,
-    ));
+    widgets.add(
+      _PinnedNode(
+        name: 'Input Gate',
+        desc: '输入物理门控',
+        icon: Icons.shield_outlined,
+        palette: p,
+        isBypassed: false,
+      ),
+    );
     addArrow();
 
     void addCoreNode(String id) {
-      widgets.add(_CoreEffectNode(
-        id: id,
-        model: widget.model,
-        palette: p,
-        l10n: l,
-      ));
+      widgets.add(
+        _CoreEffectNode(id: id, model: widget.model, palette: p, l10n: l),
+      );
       addArrow();
     }
 
@@ -531,36 +566,42 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
     }
 
     // 12. Output Gate
-    widgets.add(_PinnedNode(
-      name: 'Output Gate',
-      desc: '输出物理门控',
-      icon: Icons.shield_outlined,
-      palette: p,
-      isBypassed: false,
-    ));
+    widgets.add(
+      _PinnedNode(
+        name: 'Output Gate',
+        desc: '输出物理门控',
+        icon: Icons.shield_outlined,
+        palette: p,
+        isBypassed: false,
+      ),
+    );
     addArrow();
 
     // 13. 前瞻限幅器 (Limiter)
-    widgets.add(_PinnedNode(
-      name: 'Limiter',
-      desc: '1.5ms 前瞻限幅',
-      icon: Icons.speed_rounded,
-      palette: p,
-      isBypassed: !widget.model.limiterOn,
-    ));
+    widgets.add(
+      _PinnedNode(
+        name: 'Limiter',
+        desc: '1.5ms 前瞻限幅',
+        icon: Icons.speed_rounded,
+        palette: p,
+        isBypassed: !widget.model.limiterOn,
+      ),
+    );
     addArrow();
 
     // 14. Stage 4: Post-Limiter 插件槽位
     addPluginSlotsForStage(4);
 
     // 15. Audio Output
-    widgets.add(_PinnedNode(
-      name: 'Audio Out',
-      desc: '后级音频输出',
-      icon: Icons.logout_rounded,
-      palette: p,
-      accentColor: p.accent,
-    ));
+    widgets.add(
+      _PinnedNode(
+        name: 'Audio Out',
+        desc: '后级音频输出',
+        icon: Icons.logout_rounded,
+        palette: p,
+        accentColor: p.accent,
+      ),
+    );
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -767,9 +808,11 @@ class _PluginChipNode extends StatelessWidget {
                   'SLOT $slot · $format',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: monoOf(palette, size: 9, color: chipColor).copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: monoOf(
+                    palette,
+                    size: 9,
+                    color: chipColor,
+                  ).copyWith(fontWeight: FontWeight.w700),
                 ),
               ),
             ],
@@ -812,9 +855,7 @@ class _ScifiEnergyArrow extends StatelessWidget {
       child: SizedBox(
         width: 22,
         height: 28,
-        child: CustomPaint(
-          painter: _EnergyArrowPainter(palette: p),
-        ),
+        child: CustomPaint(painter: _EnergyArrowPainter(palette: p)),
       ),
     );
   }
@@ -949,18 +990,14 @@ class _CircuitBoardPainter extends CustomPainter {
     final p1x = t1 * w;
     final p1y = p1x < w * 0.35
         ? 24.0
-        : (p1x < w * 0.35 + 20
-            ? 24.0 + (p1x - w * 0.35)
-            : 44.0);
+        : (p1x < w * 0.35 + 20 ? 24.0 + (p1x - w * 0.35) : 44.0);
     canvas.drawCircle(Offset(p1x, p1y), 4.2, pulseGlowPaint);
     canvas.drawCircle(Offset(p1x, p1y), 2.0, pulsePaint);
 
     // 分支 2：沿中间走线反向流动
     final t2 = (pulseProgress + 0.5) % 1.0;
     final p2x = w * (1.0 - t2);
-    final p2y = (p2x > w * 0.25 && p2x < w * 0.75)
-        ? h * 0.45 + 18
-        : h * 0.45;
+    final p2y = (p2x > w * 0.25 && p2x < w * 0.75) ? h * 0.45 + 18 : h * 0.45;
     canvas.drawCircle(Offset(p2x, p2y), 4.0, pulseGlowPaint);
     canvas.drawCircle(Offset(p2x, p2y), 1.8, pulsePaint);
 
@@ -969,16 +1006,16 @@ class _CircuitBoardPainter extends CustomPainter {
     final p3x = t3 * w;
     final p3y = p3x < w * 0.65
         ? h - 24.0
-        : (p3x < w * 0.65 + 20
-            ? h - 24.0 - (p3x - w * 0.65)
-            : h - 44.0);
+        : (p3x < w * 0.65 + 20 ? h - 24.0 - (p3x - w * 0.65) : h - 44.0);
     canvas.drawCircle(Offset(p3x, p3y), 4.2, pulseGlowPaint);
     canvas.drawCircle(Offset(p3x, p3y), 2.0, pulsePaint);
 
     // 分支 4：纵向支线快速脉冲
     final t4 = (pulseProgress + 0.75) % 1.0;
     final p4y = t4 * h;
-    final p4x = w * 0.15 + (p4y > 30 && p4y < 45 ? (p4y - 30) : (p4y >= 45 ? 15.0 : 0.0));
+    final p4x =
+        w * 0.15 +
+        (p4y > 30 && p4y < 45 ? (p4y - 30) : (p4y >= 45 ? 15.0 : 0.0));
     canvas.drawCircle(Offset(p4x, p4y), 3.5, pulseGlowPaint);
     canvas.drawCircle(Offset(p4x, p4y), 1.6, pulsePaint);
   }
