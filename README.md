@@ -104,6 +104,7 @@ vendor/        第三方接口头只读（CLAP / VST3 / VST2 净室头）
 assets/        运行资源（convolver / ddc / liveprog + manifest.json）
 core/desktop/  windows CMake 与构建脚本 · windows-drivers/ VAIO/VM/APO/ASIO 与三桥 · linux CMake
 app/auradsp_app/  Flutter UI（效果卡 / 处理链 / 插件页 / 脚本 IDE / 可视化）
+promo-site/     AuraDSP 产品主页：单文件、零依赖静态 HTML；设计契约见 `promo-site/DESIGN.md`
 installer/     双平台安装器：windows 单文件向导 · linux deb/AppImage 打包链
 test/          smoke/ 冒烟门禁脚本 · ui/ UI 自动化
 tools/         bin 门禁工具 · resource_pipeline 资源包流水线
@@ -130,8 +131,9 @@ source/        第三方参考仓库只读快照 · dist/ 发布产物（不进 
 | [`docs/00-总览/产品架构总览.md`](docs/00-总览/产品架构总览.md) | 产品与品牌真相源：命名体系 / 形态矩阵 |
 | [`docs/30-审查/`](docs/30-审查/) | 历轮审查报告（全项目深审、三面审计等，均已结案） |
 | [`installer/docs/01_distribution_architecture.md`](installer/docs/01_distribution_architecture.md) | 发行架构：版本规范 / 双平台产物 / 资源包独立版本线 |
+| [`promo-site/DESIGN.md`](promo-site/DESIGN.md) | 产品主页设计契约：视觉、排版、交互、性能与静态发布约束 |
 
-架构决策记录见 `docs/adr/`。
+`promo-site/index.html` 可直接在浏览器打开预览；该站点无构建步骤和运行时依赖。架构决策记录见 `docs/adr/`。
 
 ## 许可证与致谢
 

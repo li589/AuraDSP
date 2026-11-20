@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AuraDSP — 系统级实时音频处理引擎</title>
+<meta name="description" content="AuraDSP 接管系统整条音频输出，把它拆成 23 个可单独调节的单元：四段链路、12 级可重排算法、插件宿主与一条 C ABI 边界。" />
+<meta name="theme-color" content="#0A0B0D" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="AuraDSP" />
+<meta property="og:title" content="AuraDSP — 系统级实时音频处理引擎" />
+<meta property="og:description" content="系统级实时音频处理引擎：23 个单元、12 级可重排算法链、VST3 / CLAP 插件宿主。" />
+<meta property="og:locale" content="zh_CN" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="AuraDSP — 系统级实时音频处理引擎" />
+<meta name="twitter:description" content="系统级实时音频处理引擎：23 个单元、12 级可重排算法链、VST3 / CLAP 插件宿主。" />
+<meta name="author" content="AuraDSP" />
+<meta name="color-scheme" content="dark" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230A0B0D'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23D4FF3F' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23D4FF3F'/%3E%3C/svg%3E" />
+<style>
+  :root{
+    --ink:#0A0B0D;
+    --paper:#F6F4EE;
+    --body:rgba(246,244,238,.76);
+    --dim:rgba(246,244,238,.54);
+    --faint:rgba(246,244,238,.34);
+    --ghost:rgba(246,244,238,.17);
+    --line:rgba(246,244,238,.11);
+    --line-soft:rgba(246,244,238,.065);
+    --accent:#D4FF3F;
+    --accent-dim:rgba(212,255,63,.42);
+
+    /* 字号阶：显示 / 二级 / 三级 / 导语 / 正文 / 小字 / 界面 / 标签 / 微型 */
+    --fs-display:clamp(35px,4.92vw,65px);
+    --fs-h2:clamp(25px,2.86vw,38px);
+    --fs-h3:clamp(16.5px,1.42vw,20px);
+    --fs-lead:clamp(15.8px,1.16vw,17.4px);
+    --fs-body:16px;
+    --fs-sm:14.4px;
+    --fs-ui:13.6px;
+    --fs-label:11px;
+    --fs-micro:10.4px;
+
+    /* 字体栈：拉丁优先叙事体，中文落到宋体系；正文用可变无衬线 */
+    --serif:"Source Han Serif SC","Source Han Serif CN","Noto Serif SC","Noto Serif CJK SC","Songti SC",STSong,"Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;
+    --sans:"Inter","Inter Variable","Segoe UI Variable Text","Segoe UI","Helvetica Neue","PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
+
+    --ease:cubic-bezier(.16,1,.3,1);
+    --ease-io:cubic-bezier(.62,.02,.32,1);
+    --pad:clamp(22px,5.6vw,104px);
+    --maxw:1260px;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html{scroll-behavior:smooth;-webkit-text-size-adjust:100%;scrollbar-color:rgba(246,244,238,.16) #08090B;scrollbar-width:thin}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{
+    margin:0;background:var(--ink);color:var(--body);
+    font-family:var(--sans);font-size:var(--fs-body);line-height:1.88;font-weight:300;
+    font-optical-sizing:auto;
+    -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+    text-rendering:optimizeLegibility;
+    font-feature-settings:"palt" 1,"kern" 1,"lnum" 1;
+    font-kerning:normal;
+    hanging-punctuation:allow-end;
+    text-spacing-trim:space-first;
+    overflow-x:hidden;
+  }
+  ::selection{background:var(--accent);color:#0A0B0D}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-track{background:#08090B}
+  ::-webkit-scrollbar-thumb{background:rgba(246,244,238,.14);border:2px solid #08090B}
+  ::-webkit-scrollbar-thumb:hover{background:rgba(212,255,63,.5)}
+  a{color:inherit;text-decoration:none}
+  h1,h2,h3,p,figure,blockquote{margin:0}
+  ul{margin:0;padding:0;list-style:none}
+  img,svg,canvas{display:block}
+  :focus-visible{outline:1px solid var(--accent);outline-offset:4px}
+
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 var(--pad)}
+  section[id],main[id]{scroll-margin-top:78px}
+  @media (max-width:900px){section[id],main[id]{scroll-margin-top:66px}}
+  .rule{height:1px;background:var(--line);border:0;margin:0}
+
+  /* ---------- 全局质感 ---------- */
+  .grain{
+    position:fixed;inset:0;z-index:80;pointer-events:none;opacity:.045;mix-blend-mode:screen;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+  }
+  .prog{position:fixed;top:0;left:0;right:0;height:2px;z-index:90;pointer-events:none}
+  .prog i{display:block;height:100%;width:100%;background:linear-gradient(90deg,rgba(212,255,63,.12),var(--accent));transform:scaleX(0);transform-origin:0 50%}
+
+  /* ---------- 导航 ---------- */
+  header{
+    position:fixed;inset:0 0 auto 0;z-index:70;
+    transition:background .55s var(--ease),border-color .55s var(--ease),backdrop-filter .55s;
+    border-bottom:1px solid transparent;
+  }
+  header.scrolled{background:rgba(10,11,13,.93);border-bottom-color:var(--line-soft);backdrop-filter:blur(16px) saturate(1.25)}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:78px;gap:34px}
+
+  .mark{display:flex;align-items:center;gap:12px;color:var(--paper)}
+  .mark svg{width:21px;height:21px;flex:none;overflow:visible}
+  .mark .ring{transform-origin:12px 12px;animation:spin 26s linear infinite}
+  .mark b{font-family:var(--serif);font-weight:400;font-size:20.5px;letter-spacing:.015em;line-height:1}
+  .mark small{
+    font-family:var(--sans);font-size:9.6px;letter-spacing:.3em;color:var(--faint);text-transform:uppercase;
+    border-left:1px solid var(--line);padding-left:12px;line-height:1;margin-top:2px;
+  }
+  .navlinks{display:flex;align-items:center;gap:clamp(18px,2.5vw,40px)}
+  .navlinks a{
+    font-size:var(--fs-ui);letter-spacing:.1em;color:var(--dim);
+    padding:9px 0;position:relative;transition:color .4s var(--ease);
+  }
+  .navlinks a::after{
+    content:"";position:absolute;left:0;right:0;bottom:2px;height:1px;background:var(--accent);
+    transform:scaleX(0);transform-origin:left;transition:transform .5s var(--ease);
+  }
+  .navlinks a:hover,.navlinks a[aria-current="true"]{color:var(--paper)}
+  .navlinks a:hover::after,.navlinks a[aria-current="true"]::after{transform:scaleX(1)}
+  .nav-cta{
+    border:1px solid var(--line);padding:10px 20px!important;color:var(--paper)!important;
+    transition:border-color .4s,color .4s,background .4s;
+  }
+  .nav-cta::after{display:none}
+  .nav-cta:hover{border-color:var(--accent);color:var(--accent)!important;background:rgba(212,255,63,.05)}
+  @media (max-width:920px){.navlinks a:not(.nav-cta){display:none}}
+
+  /* ---------- 首屏 ---------- */
+  .hero{position:relative;padding:calc(78px + clamp(52px,9vh,112px)) 0 clamp(12px,1.8vw,20px);overflow:hidden}
+  .hero .aura{
+    position:absolute;inset:-30% -20% auto -20%;height:130%;pointer-events:none;z-index:0;
+    background:
+      radial-gradient(46% 40% at 84% 10%, rgba(212,255,63,.055), transparent 68%),
+      radial-gradient(42% 36% at 6% 0%, rgba(150,175,255,.030), transparent 66%);
+    animation:drift 26s var(--ease-io) infinite alternate;
+  }
+  .hero::after{
+    content:"";position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.55;
+    background:repeating-linear-gradient(90deg,var(--line-soft) 0 1px,transparent 1px 20%);
+    mask-image:linear-gradient(180deg,rgba(0,0,0,.9),transparent 78%);
+    -webkit-mask-image:linear-gradient(180deg,rgba(0,0,0,.9),transparent 78%);
+  }
+  .heroGrid{
+    position:relative;z-index:2;display:grid;
+    grid-template-columns:minmax(0,1.04fr) minmax(0,.96fr);
+    gap:clamp(30px,4.4vw,72px);align-items:center;
+  }
+  @media (max-width:980px){.heroGrid{grid-template-columns:1fr;gap:clamp(38px,6.4vw,56px)}}
+
+  .eyebrow{
+    display:flex;align-items:center;gap:15px;
+    font-size:var(--fs-label);letter-spacing:.32em;text-transform:uppercase;color:var(--dim);
+    margin-bottom:clamp(22px,3.2vw,36px);
+    animation:fadeUp 1.1s var(--ease) .1s both;
+  }
+  .eyebrow::before{content:"";width:clamp(26px,4vw,52px);height:1px;background:var(--accent);opacity:.85}
+
+  h1{
+    font-family:var(--serif);font-weight:400;color:var(--paper);
+    font-size:var(--fs-display);line-height:1.18;letter-spacing:-.018em;
+    text-wrap:balance;word-break:keep-all;
+    font-synthesis:none;font-variant-ligatures:common-ligatures;
+  }
+  .h1 .ln{display:block;overflow:hidden;padding:.02em .1em .1em 0;margin:0 -.1em -.1em 0}
+  .h1 .ln>span{display:block;animation:rise 1.3s var(--ease) both}
+  .h1 .ln:nth-child(2)>span{animation-delay:.1s}
+
+  .lede{
+    margin-top:clamp(22px,2.8vw,34px);max-width:32em;
+    font-size:var(--fs-lead);line-height:2.02;color:var(--body);letter-spacing:.005em;
+    text-wrap:pretty;animation:fadeUp 1.2s var(--ease) .32s both;
+  }
+  .lede b{font-weight:400;color:var(--paper)}
+
+  .actions{display:flex;flex-wrap:wrap;align-items:center;gap:clamp(16px,2.4vw,32px);margin-top:clamp(28px,3.4vw,42px);animation:fadeUp 1.2s var(--ease) .44s both}
+  .btn{
+    position:relative;display:inline-flex;align-items:center;gap:13px;overflow:hidden;
+    background:var(--accent);color:#0A0B0D;font-size:14.4px;letter-spacing:.09em;font-weight:500;
+    padding:17px 30px;line-height:1;
+    transition:transform .5s var(--ease),box-shadow .5s var(--ease);
+  }
+  .btn::after{
+    content:"";position:absolute;inset:0;
+    background:linear-gradient(115deg,transparent 25%,rgba(255,255,255,.5),transparent 75%);
+    transform:translateX(-130%);transition:transform .85s var(--ease);
+  }
+  .btn:hover{transform:translateY(-2px);box-shadow:0 16px 42px -20px rgba(212,255,63,.72)}
+  .btn:active{transform:translateY(0)}
+  .btn:hover::after{transform:translateX(130%)}
+  .btn span{position:relative;z-index:1;transition:transform .5s var(--ease)}
+  .btn .arw{font-size:15px}
+  .btn:hover .arw{transform:translateX(5px)}
+
+  .quiet{display:inline-flex;align-items:center;gap:12px;font-size:14.2px;letter-spacing:.08em;color:var(--paper);padding:6px 0}
+  .quiet .ln{width:26px;height:1px;background:var(--dim);transition:width .5s var(--ease),background .5s}
+  .quiet:hover .ln{width:44px;background:var(--accent)}
+
+  .facts{display:flex;flex-wrap:wrap;gap:9px 20px;margin-top:clamp(30px,4vw,48px);animation:fadeUp 1.2s var(--ease) .56s both}
+  .facts li{
+    display:flex;align-items:center;gap:8px;font-size:10.9px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--faint);white-space:nowrap;
+  }
+  .facts li::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--accent);opacity:.75}
+  .facts li:nth-child(n+2)::before{background:var(--ghost);opacity:1}
+
+  /* ---------- 图版 ---------- */
+  .plate{
+    position:relative;padding:18px 18px 12px;border:1px solid var(--line);
+    background:
+      radial-gradient(130% 90% at 100% 0%, rgba(212,255,63,.05), transparent 56%),
+      linear-gradient(166deg,#101318 0%,#0B0C0F 56%,#0A0B0E 100%);
+    animation:plateIn 1.5s var(--ease) .24s both;
+    will-change:transform;
+    transition:transform .7s var(--ease);
+  }
+  .plate::before,.plate::after{content:"";position:absolute;width:10px;height:10px;border:1px solid var(--accent-dim)}
+  .plate::before{top:-1px;left:-1px;border-right:0;border-bottom:0}
+  .plate::after{bottom:-1px;right:-1px;border-left:0;border-top:0}
+  .plate svg{width:100%;height:auto;display:block;overflow:visible}
+  .plate figcaption{
+    display:flex;align-items:center;justify-content:space-between;gap:14px;
+    margin-top:11px;padding-top:10px;border-top:1px solid var(--line-soft);
+    font-size:var(--fs-micro);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);
+  }
+  .plate .live{display:inline-flex;align-items:center;gap:8px}
+  .plate .live i{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:beat 2.6s var(--ease-io) infinite}
+  .plate figcaption b{
+    font-weight:400;color:var(--body);letter-spacing:.04em;text-transform:none;
+    font-family:var(--serif);font-size:12.6px;transition:color .3s;
+  }
+
+  /* SVG 内部元素 */
+  .pframe{fill:none;stroke:rgba(246,244,238,.13);stroke-width:1}
+  .pcrop{fill:none;stroke:rgba(246,244,238,.2);stroke-width:1}
+  .psep{stroke:rgba(246,244,238,.07);stroke-width:1}
+  .pgrid{stroke:rgba(246,244,238,.032);stroke-width:1}
+  .sp{stroke:rgba(246,244,238,.3);stroke-width:1}
+  .stk{stroke:rgba(246,244,238,.115);stroke-width:1}
+  .pin{fill:rgba(246,244,238,.26)}  .px{fill:rgba(246,244,238,.52)}
+  .env{fill:none;stroke:rgba(246,244,238,.66);stroke-width:1;stroke-linejoin:round}
+  .envA{fill:url(#areaG);stroke:none}
+  .bp{animation:pulse var(--dur,7.4s) var(--eo,ease-in-out) var(--dl,0s) infinite alternate}
+  .nd{fill:#0A0B0D;fill-opacity:.75;stroke:rgba(212,255,63,.42);stroke-width:1;transition:fill-opacity .25s,stroke .25s}
+  g.node{cursor:default}
+  g.node:hover .nd{fill:var(--accent);stroke:var(--accent)}
+  .hit{fill:transparent}
+  /* 图版文字：标签栏与绘图区互不侵占 */
+  .pm{font-family:var(--sans);font-size:8.2px;letter-spacing:.34em;fill:rgba(246,244,238,.28);text-transform:uppercase}
+  .pi{font-family:var(--serif);font-size:10.2px;letter-spacing:.05em;fill:rgba(212,255,63,.5)}
+  .pnm{font-family:var(--sans);font-size:10.4px;letter-spacing:.1em;fill:rgba(246,244,238,.8)}
+  .pen{font-family:var(--sans);font-size:7.4px;letter-spacing:.09em;fill:rgba(246,244,238,.3);text-transform:uppercase}
+  .pcnt{font-family:var(--serif);font-size:11.4px;letter-spacing:.05em;fill:rgba(246,244,238,.4)}
+  @media (prefers-reduced-motion:reduce){.bp{animation:none}.mark .ring{animation:none}}
+
+  /* 窄屏：图版内的英文子标签与图头收起，避免字号缩到不可读 */
+  @media (max-width:680px){
+    .pm,.pen{display:none}
+    .pnm{font-size:11.6px;letter-spacing:.06em}
+    .pi{font-size:10.8px}
+    .pcnt{font-size:12.6px}
+  }
+
+  /* ---------- 信号场 ---------- */
+  .field{position:relative;margin-top:clamp(32px,4.2vw,52px);border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}
+  .fcap{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:11px 0 9px;font-size:var(--fs-micro);letter-spacing:.24em;text-transform:uppercase;color:var(--ghost)}
+  .field canvas{
+    display:block;width:100%;height:clamp(126px,15vw,186px);
+    mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);
+  }
+  .cue{display:flex;align-items:center;gap:10px;margin-top:clamp(16px,2.2vw,26px);font-size:var(--fs-micro);letter-spacing:.26em;text-transform:uppercase;color:var(--ghost)}
+  .cue i{position:relative;width:1px;height:26px;background:var(--line);overflow:hidden}
+  .cue i::after{content:"";position:absolute;left:0;top:0;width:1px;height:9px;background:var(--accent);animation:drip 2.6s var(--ease) infinite}
+
+  /* ---------- 名录跑马灯 ---------- */
+  .ticker{
+    position:relative;overflow:hidden;padding:clamp(18px,2.4vw,28px) 0;border-bottom:1px solid var(--line-soft);
+    mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);
+  }
+  .ticker .track{display:flex;width:max-content;animation:slide 76s linear infinite}
+  .ticker:hover .track{animation-play-state:paused}
+  .ticker span{
+    display:flex;align-items:center;gap:clamp(18px,2.2vw,30px);padding-right:clamp(18px,2.2vw,30px);
+    font-family:var(--serif);font-size:clamp(15px,1.45vw,18.5px);letter-spacing:.05em;
+    color:rgba(246,244,238,.36);white-space:nowrap;
+  }
+  .ticker span::after{content:"";width:3px;height:3px;border-radius:50%;background:var(--accent);opacity:.6;flex:none}
+
+  /* ---------- 区块 ---------- */
+  .sec{padding:clamp(66px,8.8vh,112px) 0;position:relative}
+  .sec-head{display:grid;grid-template-columns:minmax(88px,142px) 1fr;gap:clamp(16px,3.8vw,56px);align-items:start;margin-bottom:clamp(34px,4.8vw,60px)}
+  @media (max-width:820px){.sec-head{grid-template-columns:1fr;gap:16px}}
+  .label{display:flex;align-items:baseline;gap:11px;font-size:var(--fs-label);letter-spacing:.3em;text-transform:uppercase;color:var(--dim);padding-top:.85em}
+  .label b{color:var(--accent);font-weight:400;font-family:var(--serif);font-size:12.4px;letter-spacing:.1em}
+  h2{
+    font-family:var(--serif);font-weight:400;color:var(--paper);
+    font-size:var(--fs-h2);line-height:1.4;letter-spacing:-.012em;max-width:19em;
+    text-wrap:balance;word-break:keep-all;font-synthesis:none;
+  }
+
+  /* 01 */
+  .phi{display:grid;grid-template-columns:minmax(88px,142px) 1fr;gap:clamp(16px,3.8vw,56px)}
+  @media (max-width:820px){.phi{grid-template-columns:1fr}}
+  .phi-body{max-width:36em}
+  .phi-body p{font-size:var(--fs-body);line-height:2.04;text-wrap:pretty}
+  .phi-body p+p{margin-top:1.4em}
+  .phi-body strong{font-weight:400;color:var(--paper);position:relative;white-space:nowrap}
+  .phi-body strong::after{
+    content:"";position:absolute;left:0;right:0;bottom:-2px;height:1px;background:var(--accent-dim);
+    transform:scaleX(0);transform-origin:left;transition:transform .9s var(--ease) .25s;
+  }
+  .rv.in .phi-body strong::after{transform:scaleX(1)}
+  .pull{
+    margin-top:clamp(40px,5.4vw,62px);padding-left:clamp(18px,2.4vw,32px);border-left:1px solid var(--accent);
+    font-family:var(--serif);color:var(--paper);font-size:clamp(20px,2.3vw,30px);line-height:1.58;
+    letter-spacing:-.006em;max-width:21em;text-wrap:balance;
+  }
+  .pull small{display:block;margin-top:13px;font-family:var(--sans);font-size:var(--fs-micro);letter-spacing:.26em;text-transform:uppercase;color:var(--faint)}
+  .ruler{
+    height:9px;margin-top:clamp(30px,3.6vw,46px);opacity:.7;
+    background:
+      repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px 13px),
+      repeating-linear-gradient(90deg,rgba(246,244,238,.15) 0 1px,transparent 1px 65px);
+    background-size:100% 4px,100% 9px;background-repeat:repeat-x;
+  }
+
+  /* 02 单元浏览器 */
+  .ex-tabs{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  @media (max-width:760px){.ex-tabs{grid-template-columns:repeat(2,1fr)}}
+  .ex-tabs button{
+    appearance:none;background:none;border:0;border-right:1px solid var(--line-soft);
+    padding:clamp(15px,2vw,22px) clamp(11px,1.6vw,20px);text-align:left;cursor:pointer;
+    color:var(--dim);position:relative;font-family:inherit;
+    transition:color .4s var(--ease),background .5s var(--ease);
+  }
+  .ex-tabs button:last-child{border-right:0}
+  .ex-tabs button::before{
+    content:"";position:absolute;left:0;right:0;top:-1px;height:1px;background:var(--accent);
+    transform:scaleX(0);transform-origin:left;transition:transform .55s var(--ease);
+  }
+  .ex-tabs button i{display:block;font-style:normal;font-family:var(--serif);font-size:10.6px;letter-spacing:.16em;color:rgba(246,244,238,.32);margin-bottom:8px;transition:color .4s}
+  .ex-tabs button b{display:block;font-family:var(--serif);font-weight:400;font-size:clamp(15.5px,1.42vw,18.4px);letter-spacing:.02em;color:inherit;transition:color .4s}
+  .ex-tabs button em{display:block;font-style:normal;font-size:10.4px;letter-spacing:.17em;color:rgba(246,244,238,.26);margin-top:6px}
+  .ex-tabs button:hover{color:var(--paper);background:rgba(246,244,238,.015)}
+  .ex-tabs button[aria-selected="true"]{color:var(--paper);background:rgba(212,255,63,.03)}
+  .ex-tabs button[aria-selected="true"]::before{transform:scaleX(1)}
+  .ex-tabs button[aria-selected="true"] i{color:var(--accent)}
+
+  .ex-grid{display:grid;grid-template-columns:minmax(0,1.48fr) minmax(0,1fr);gap:clamp(22px,3.8vw,60px);padding-top:clamp(26px,3.4vw,42px)}
+  @media (max-width:900px){.ex-grid{grid-template-columns:1fr;gap:30px}}
+
+  .ex-units{border-top:1px solid var(--line-soft)}
+  .ex-units li{
+    display:grid;grid-template-columns:34px minmax(96px,auto) 1fr;gap:clamp(10px,1.5vw,20px);
+    align-items:baseline;padding:clamp(11px,1.4vw,14px) 0;border-bottom:1px solid var(--line-soft);
+    position:relative;transition:padding-left .45s var(--ease);
+  }
+  .ex-units li::before{content:"";position:absolute;left:0;top:0;bottom:0;width:1px;background:var(--accent);transform:scaleY(0);transform-origin:top;transition:transform .45s var(--ease)}
+  .ex-units li:hover{padding-left:12px}
+  .ex-units li:hover::before{transform:scaleY(1)}
+  .ex-units .u-i{font-family:var(--serif);font-size:10.6px;letter-spacing:.08em;color:rgba(246,244,238,.34);font-variant-numeric:tabular-nums}
+  .ex-units .u-n{font-family:var(--serif);font-size:clamp(15.4px,1.32vw,17.4px);color:var(--paper);letter-spacing:.02em;transition:color .4s}
+  .ex-units .u-d{font-size:13.6px;line-height:1.72;color:var(--dim);text-wrap:pretty}
+  @media (max-width:640px){
+    .ex-units li{grid-template-columns:28px 1fr}
+    .ex-units .u-d{grid-column:2;color:var(--faint);margin-top:3px}
+  }
+  .ex-units li.anim{animation:fadeUp .68s var(--ease) both}
+
+  .ex-note{border-left:1px solid var(--line);padding-left:clamp(18px,2.2vw,28px);align-self:start;position:sticky;top:112px}
+  @media (max-width:900px){.ex-note{position:static;border-left:0;padding-left:0;border-top:1px solid var(--line);padding-top:22px}}
+  .ex-idx{font-family:var(--serif);font-size:11px;letter-spacing:.22em;color:var(--accent);font-variant-numeric:tabular-nums}
+  .ex-note h3{margin-top:13px;font-family:var(--serif);font-weight:400;color:var(--paper);font-size:clamp(18px,1.7vw,22px);letter-spacing:.02em;font-synthesis:none}
+  .ex-note p{margin-top:11px;font-size:13.9px;line-height:1.9;color:var(--body);text-wrap:pretty}
+  .ex-bar{display:flex;gap:5px;margin-top:20px}
+  .ex-bar i{flex:1;height:2px;background:var(--ghost);transition:background .5s var(--ease)}
+  .ex-bar i.on{background:var(--accent)}
+  .ex-meta{margin-top:16px;font-size:10.4px;letter-spacing:.19em;text-transform:uppercase;color:var(--faint)}
+
+  .host{
+    display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 20px;
+    margin-top:clamp(30px,4vw,50px);padding-top:22px;border-top:1px solid var(--line);
+    font-size:13.9px;color:var(--dim);line-height:1.85;
+  }
+  .host b{font-weight:400;color:var(--paper);letter-spacing:.02em;font-family:var(--serif);font-size:15.6px}
+
+  /* 03 形态 */
+  .matrix{border-top:1px solid var(--line)}
+  .row{
+    display:grid;grid-template-columns:1fr .95fr 2.1fr auto;gap:clamp(14px,2.4vw,32px);
+    align-items:baseline;padding:clamp(19px,2.3vw,27px) 0;border-bottom:1px solid var(--line-soft);
+    position:relative;transition:background .5s var(--ease),padding-left .5s var(--ease);
+  }
+  .row::before{content:"";position:absolute;left:0;top:0;bottom:0;width:1px;background:var(--accent);transform:scaleY(0);transform-origin:center;transition:transform .5s var(--ease)}
+  .row:hover{background:rgba(246,244,238,.02);padding-left:14px}
+  .row:hover::before{transform:scaleY(1)}
+  .row .form{font-family:var(--serif);font-size:clamp(17px,1.44vw,19.8px);color:var(--paper);letter-spacing:.02em}
+  .row .plat{font-size:12.4px;color:var(--dim);letter-spacing:.03em;line-height:1.7}
+  .row .how{font-size:13.9px;line-height:1.82;color:var(--body);text-wrap:pretty}
+  .st{
+    display:inline-flex;align-items:center;gap:8px;justify-self:end;
+    font-size:11.2px;letter-spacing:.13em;color:var(--body);white-space:nowrap;
+    border:1px solid var(--line);padding:6px 12px;transition:border-color .4s,color .4s;
+  }
+  .st i{width:5px;height:5px;border-radius:50%;background:var(--accent);flex:none;box-shadow:0 0 8px rgba(212,255,63,.55);animation:beat 3.2s var(--ease-io) infinite}
+  .st.behind{color:var(--dim);border-style:dashed}
+  .st.behind i{background:var(--ghost);box-shadow:none;animation:none}
+  .row:hover .st{border-color:rgba(246,244,238,.2)}
+  @media (max-width:980px){
+    .row{grid-template-columns:1fr auto;gap:8px 16px}
+    .row .how{grid-column:1/-1;color:var(--dim);font-size:13.4px}
+    .st{grid-row:1;grid-column:2}
+  }
+  .matrix-note{margin-top:24px;font-size:13.6px;color:var(--faint);max-width:47em;line-height:1.9;text-wrap:pretty}
+
+  /* 04 工程 */
+  .principles{border-top:1px solid var(--line)}
+  .principles>div{
+    display:grid;grid-template-columns:minmax(48px,76px) 1fr;gap:clamp(14px,2.8vw,38px);
+    padding:clamp(19px,2.4vw,28px) 0;border-bottom:1px solid var(--line-soft);
+    position:relative;transition:padding-left .5s var(--ease);
+  }
+  .principles>div:hover{padding-left:12px}
+  .principles span{font-family:var(--serif);font-size:11.6px;letter-spacing:.14em;color:rgba(246,244,238,.4);padding-top:.5em;transition:color .4s}
+  .principles>div:hover span{color:var(--accent)}
+  .principles p{font-size:clamp(15.4px,1.32vw,18.2px);line-height:1.82;color:var(--body);max-width:30em;text-wrap:pretty}
+  .principles p b{font-weight:400;color:var(--paper)}
+
+  .figures{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line-soft);margin-top:clamp(36px,4.6vw,58px)}
+  @media (max-width:820px){.figures{grid-template-columns:repeat(2,1fr)}}
+  .figures>div{background:var(--ink);padding:clamp(17px,2.2vw,28px) 0 0}
+  .figures strong{
+    display:block;font-family:var(--serif);font-weight:400;color:var(--paper);
+    font-size:clamp(29px,3.3vw,43px);line-height:1.08;letter-spacing:-.015em;
+    font-variant-numeric:tabular-nums lining-nums;
+  }
+  .figures strong i{font-style:normal;color:var(--accent);font-size:.4em;vertical-align:.3em;margin-left:3px;letter-spacing:0}
+  .figures small{display:block;margin-top:9px;font-size:10.4px;letter-spacing:.19em;text-transform:uppercase;color:var(--faint)}
+
+  /* 05 开始 */
+  .start{background:linear-gradient(180deg,rgba(246,244,238,.022),transparent 55%)}
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(22px,3.8vw,50px)}
+  @media (max-width:820px){.steps{grid-template-columns:1fr;gap:24px}}
+  .steps article{padding-top:22px;border-top:1px solid var(--line);position:relative}
+  .steps article::before{content:"";position:absolute;top:-1px;left:0;width:28px;height:1px;background:var(--accent);transform:scaleX(0);transform-origin:left;transition:transform .7s var(--ease)}
+  .steps article:hover::before{transform:scaleX(1)}
+  .steps em{display:block;font-family:var(--serif);font-style:normal;font-size:11px;letter-spacing:.22em;color:var(--accent);margin-bottom:12px}
+  .steps h3{font-family:var(--serif);font-weight:400;color:var(--paper);font-size:var(--fs-h3);letter-spacing:.02em;margin-bottom:9px;font-synthesis:none}
+  .steps p{font-size:13.7px;line-height:1.9;color:var(--dim);text-wrap:pretty}
+
+  .start-links{display:flex;flex-wrap:wrap;gap:12px;margin-top:clamp(32px,4.2vw,52px)}
+  .start-links a{
+    border:1px solid var(--line);padding:15px 26px;font-size:13.4px;letter-spacing:.07em;color:var(--body);
+    transition:border-color .4s,color .4s,background .4s;
+  }
+  .start-links a:hover{border-color:rgba(212,255,63,.55);color:var(--paper);background:rgba(212,255,63,.045)}
+  .start-links a.primary{border-color:var(--accent);color:var(--accent)}
+  .start-links a.primary:hover{background:var(--accent);color:#0A0B0D}
+  .start-note{margin-top:20px;font-size:12.4px;color:var(--faint);letter-spacing:.02em}
+
+  /* 页脚 */
+  footer{border-top:1px solid var(--line);position:relative;overflow:hidden;padding-bottom:clamp(18px,2.6vw,30px)}
+  .foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:28px;align-items:flex-start;padding-top:clamp(38px,5vw,62px)}
+  .foot .mark b{font-size:17.4px}
+  .foot .mark svg{width:18px;height:18px}
+  .foot-meta{display:flex;flex-wrap:wrap;gap:8px 24px;font-size:11.4px;letter-spacing:.1em;color:var(--faint)}
+  .foot-meta .ver{letter-spacing:.02em;color:rgba(246,244,238,.44);font-variant-numeric:tabular-nums}
+  .foot-note{width:100%;margin-top:26px;font-size:12px;color:rgba(246,244,238,.27);line-height:1.92;max-width:52em}
+  .wordmark{display:block;width:100%;height:auto;margin-top:clamp(24px,3.2vw,38px);user-select:none;pointer-events:none}
+  .wordmark text{font-family:var(--serif);font-weight:400;fill:none;stroke:rgba(246,244,238,.075);stroke-width:1;letter-spacing:0}
+
+  /* 回到顶部 */
+  .totop{
+    position:fixed;right:clamp(16px,2.4vw,28px);bottom:clamp(16px,2.4vw,28px);z-index:75;
+    display:inline-flex;align-items:center;gap:8px;
+    border:1px solid var(--line);background:rgba(10,11,13,.82);backdrop-filter:blur(10px);
+    color:var(--dim);font-size:10.6px;letter-spacing:.2em;text-transform:uppercase;
+    padding:11px 15px;cursor:pointer;font-family:inherit;
+    opacity:0;transform:translateY(10px);pointer-events:none;
+    transition:opacity .5s var(--ease),transform .5s var(--ease),color .4s,border-color .4s;
+  }
+  .totop.show{opacity:1;transform:none;pointer-events:auto}
+  .totop:hover{color:var(--paper);border-color:rgba(212,255,63,.5)}
+
+  /* ---------- 动效 ---------- */
+  @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  @keyframes rise{from{transform:translateY(112%)}to{transform:none}}
+  @keyframes plateIn{from{opacity:0;transform:translateY(24px) scale(.988)}to{opacity:1;transform:none}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes breathe{from{transform:scaleY(1)}to{transform:scaleY(.72)}}
+  @keyframes pulse{from{opacity:.74}to{opacity:1}}
+  @keyframes beat{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.82)}}
+  @keyframes drift{from{transform:translate3d(-1.5%,-1%,0) scale(1)}to{transform:translate3d(1.5%,1.5%,0) scale(1.05)}}
+  @keyframes slide{from{transform:translate3d(0,0,0)}to{transform:translate3d(-50%,0,0)}}
+  @keyframes drip{0%{transform:translateY(-10px);opacity:0}35%{opacity:1}100%{transform:translateY(26px);opacity:0}}
+
+  .rv{opacity:0;transform:translateY(20px);transition:opacity 1s var(--ease),transform 1s var(--ease);transition-delay:var(--d,0s)}
+  .rv.in{opacity:1;transform:none}
+
+  @media (prefers-reduced-motion:reduce){
+    .rv{opacity:1;transform:none;transition:none}
+    .eyebrow,.lede,.actions,.facts,.h1 .ln>span,.plate{animation:none!important}
+    .ticker .track,.hero .aura,.st i,.plate .live i{animation:none}
+    .cue i::after{animation:none}
+  }
+</style>
+</head>
+<body>
+
+<div class="grain" aria-hidden="true"></div>
+<div class="prog" aria-hidden="true"><i id="prog"></i></div>
+
+<header id="hdr">
+  <div class="wrap nav">
+    <a class="mark" href="#top" aria-label="AuraDSP 首页">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="9.4" fill="none" stroke="#D4FF3F" stroke-width="1" opacity=".4"/>
+        <circle class="ring" cx="12" cy="12" r="7.2" fill="none" stroke="#D4FF3F" stroke-width="1.4"
+                stroke-dasharray="11 8" opacity=".8"/>
+        <circle cx="12" cy="12" r="3.1" fill="none" stroke="#D4FF3F" stroke-width="1.3"/>
+        <circle cx="12" cy="12" r="1.3" fill="#D4FF3F"/>
+      </svg>
+      <b>AuraDSP</b><small>Engine</small>
+    </a>
+    <nav class="navlinks" aria-label="主导航">
+      <a href="#believe">定位</a>
+      <a href="#anatomy">结构</a>
+      <a href="#platforms">形态</a>
+      <a href="#engineering">工程</a>
+      <a href="#start" class="nav-cta">开始使用</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ========== 首屏 ========== -->
+  <section class="hero">
+    <div class="aura" aria-hidden="true"></div>
+    <div class="wrap heroGrid">
+      <div>
+        <p class="eyebrow">系统级实时音频处理引擎</p>
+        <h1 class="h1">
+          <span class="ln"><span>整条音频链路，</span></span>
+          <span class="ln"><span>拆成 23 个单元</span></span>
+        </h1>
+        <p class="lede">
+          AuraDSP 接管系统音频输出，把它拆成 <b>23 个可以单独调节的单元</b>。噪声门、滤波、动态、限幅，中间夹着 12 级可以自己排顺序的经典算法。装好之后所有单元都在旁路状态，你打开哪个，它才开始处理。
+        </p>
+        <div class="actions">
+          <a class="btn" href="#anatomy"><span>看看链路</span><span class="arw" aria-hidden="true">→</span></a>
+          <a class="quiet" href="https://github.com/li589/AuraDSP" target="_blank" rel="noopener"><span class="ln"></span>查看源码</a>
+        </div>
+        <ul class="facts">
+          <li>23 个单元</li>
+          <li>12 级可重排</li>
+          <li>4 槽 × 5 级插件</li>
+          <li>三平台一套代码</li>
+        </ul>
+      </div>
+
+      <figure class="plate" id="plate">
+        <svg id="plateSvg" viewBox="0 0 600 436" role="img"
+             aria-label="AuraDSP 信号链路示意：前级、经典算法链、后级、输出四段共 23 个单元"></svg>
+        <figcaption>
+          <span class="live"><i aria-hidden="true"></i>信号链路</span>
+          <b id="plateCap">23 个单元 · 4 段</b>
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="wrap" style="position:relative;z-index:2">
+      <div class="field">
+        <div class="fcap"><span>Output · 48 kHz</span><span>Stereo · L / R</span></div>
+        <canvas id="field" aria-hidden="true"></canvas>
+      </div>
+      <div class="cue"><i aria-hidden="true"></i><span>往下</span></div>
+    </div>
+  </section>
+
+  <div class="ticker" aria-hidden="true"><div class="track" id="ticker"></div></div>
+
+  <!-- ========== 01 定位 ========== -->
+  <section class="sec" id="believe">
+    <div class="wrap">
+      <div class="sec-head rv">
+        <p class="label"><b>01</b> 定位</p>
+        <h2>设计出发点</h2>
+      </div>
+
+      <div class="phi">
+        <div></div>
+        <div class="phi-body rv" style="--d:.06s">
+          <p>
+            大部分音效软件卖的是预设：装好，挑一个「流行」或「人声」，声音就变了。AuraDSP 不做这种一键结果。它给的是一条完整通路：四段，二十三个单元，段与段之间还留着插件的插入点。
+          </p>
+          <p>
+            改动可以只发生在某一个单元上：只开噪声门和限幅，中间全部旁路；也可以把某一段整个换成人家的插件。同一个播放器，开哪几个单元，出来的声音就不一样。
+          </p>
+          <p>
+            如果你知道自己房间低频多、耳机中频凹、某首歌齿音重，这些都能对应到链路上的某一段。改完再听一遍，有没有用当场就能判断。
+          </p>
+        </div>
+      </div>
+
+      <blockquote class="pull rv" style="--d:.1s">
+        刚装好时，23 个单元都是旁路状态。<small>默认状态</small>
+      </blockquote>
+
+      <div class="ruler rv" style="--d:.16s" aria-hidden="true"></div>
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- ========== 02 结构 ========== -->
+  <section class="sec" id="anatomy">
+    <div class="wrap">
+      <div class="sec-head rv">
+        <p class="label"><b>02</b> 结构</p>
+        <h2>四段结构</h2>
+      </div>
+
+      <div class="rv" style="--d:.06s">
+        <div class="ex-tabs" role="tablist" aria-label="链路段落" id="exTabs"></div>
+        <div class="ex-grid">
+          <ul class="ex-units" id="exUnits" role="tabpanel" aria-live="polite"></ul>
+          <aside class="ex-note">
+            <p class="ex-idx" id="exIdx">01 / 04</p>
+            <h3 id="exName">前级</h3>
+            <p id="exDesc"></p>
+            <div class="ex-bar" id="exBar" aria-hidden="true"></div>
+            <p class="ex-meta" id="exMeta"></p>
+          </aside>
+        </div>
+      </div>
+
+      <div class="host rv" style="--d:.1s">
+        <b>插件宿主</b>
+        <span>VST3 / CLAP / VST2 · 四槽 × 五级插入点 · 64 位插件进程内加载，32 位插件经位桥隔离 · 插件自带的界面在 Windows 和 Linux 上都能打开</span>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- ========== 03 形态 ========== -->
+  <section class="sec" id="platforms">
+    <div class="wrap">
+      <div class="sec-head rv">
+        <p class="label"><b>03</b> 形态</p>
+        <h2>平台与接法</h2>
+      </div>
+
+      <div class="matrix">
+        <div class="row rv">
+          <div class="form">Desktop</div>
+          <div class="plat">Windows 10 / 11</div>
+          <div class="how">引擎以 DLL 跑在进程内。输出侧可选系统 APO、AuraVAIO 虚拟声卡、Voicemeeter 回调，或直接用 ASIO（2 / 4 / 6 / 8 声道）。</div>
+          <div class="st"><i></i>主力形态</div>
+        </div>
+        <div class="row rv" style="--d:.05s">
+          <div class="form">Linux</div>
+          <div class="plat">Ubuntu · PulseAudio / PipeWire</div>
+          <div class="how">同一份 C ABI 的原生库，三种接法都能用：系统输出、虚拟设备、回环驱动。也可以直接挂 ALSA。</div>
+          <div class="st"><i></i>功能对等</div>
+        </div>
+        <div class="row rv" style="--d:.1s">
+          <div class="form">Root</div>
+          <div class="plat">Android · KSU / Magisk</div>
+          <div class="how">效果注入系统音频 HAL，全局生效。重启之后依然在位。</div>
+          <div class="st"><i></i>端到端打通</div>
+        </div>
+        <div class="row rv" style="--d:.15s">
+          <div class="form">Rootless</div>
+          <div class="plat">Android · APK</div>
+          <div class="how">以会话级 AudioEffect 前台服务运行，不需要 root。作用范围限于当前会话。</div>
+          <div class="st behind"><i></i>蓝本阶段</div>
+        </div>
+      </div>
+
+      <p class="matrix-note rv" style="--d:.08s">
+        界面和引擎之间只隔一层 C ABI。界面拿到的只是函数调用，不区分引擎跑在哪个进程、哪个平台上，同一份二进制在四个平台都能加载。
+      </p>
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- ========== 04 工程 ========== -->
+  <section class="sec" id="engineering">
+    <div class="wrap">
+      <div class="sec-head rv">
+        <p class="label"><b>04</b> 工程</p>
+        <h2>实时回调的约束</h2>
+      </div>
+
+      <div class="principles">
+        <div class="rv">
+          <span>第一</span>
+          <p>音频回调里<b>不分配内存、不加锁、不做 IO</b>。调参数时不直接改引擎正在读的那份，先写一份副本，等一个块处理完再整体换过去。</p>
+        </div>
+        <div class="rv" style="--d:.05s">
+          <span>第二</span>
+          <p><b>界面和引擎之间只有一份头文件</b>。两边的函数签名对不上，构建脚本会直接拦下来，不靠谁去记。</p>
+        </div>
+        <div class="rv" style="--d:.1s">
+          <span>第三</span>
+          <p><b>参数、预设、效果表都不写死在代码里</b>。它们放在引擎的参数表和 JSON 文件里，界面读同一份，改一处两边都跟着变。</p>
+        </div>
+      </div>
+
+      <div class="figures rv" style="--d:.06s">
+        <div><strong data-count="23">0</strong><small>效果单元</small></div>
+        <div><strong data-count="144">0</strong><small>冒烟登记项</small></div>
+        <div><strong data-count="8">0</strong><small>CI 作业</small></div>
+        <div><strong>0<i>次</i></strong><small>回调内分配</small></div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- ========== 05 开始 ========== -->
+  <section class="sec start" id="start">
+    <div class="wrap">
+      <div class="sec-head rv">
+        <p class="label"><b>05</b> 开始</p>
+        <h2>安装与首次运行</h2>
+      </div>
+
+      <div class="steps">
+        <article class="rv">
+          <em>第一步</em>
+          <h3>安装</h3>
+          <p>Windows 是单文件向导；Linux 有 deb、AppImage 与 tar.gz。装完不到一分钟，不用重启系统。</p>
+        </article>
+        <article class="rv" style="--d:.06s">
+          <em>第二步</em>
+          <h3>挂上输出</h3>
+          <p>默认接管系统音频。想只处理某个播放器，就把它挂到虚拟声卡上。所有单元默认旁路，不会突然改变你的声音。</p>
+        </article>
+        <article class="rv" style="--d:.12s">
+          <em>第三步</em>
+          <h3>逐段调</h3>
+          <p>从第一段开始往下开。每个单元都能单独旁路，改错了关掉就行，不牵连其他段。预设随时保存。</p>
+        </article>
+      </div>
+
+      <div class="start-links rv" style="--d:.08s">
+        <a class="primary" href="https://github.com/li589/AuraDSP/releases" target="_blank" rel="noopener">下载安装包</a>
+        <a href="https://github.com/li589/AuraDSP" target="_blank" rel="noopener">阅读源码</a>
+        <a href="https://github.com/li589/AuraDSP/tree/main/docs" target="_blank" rel="noopener">架构文档</a>
+      </div>
+
+      <p class="start-note rv" style="--d:.12s">首个正式版 v0.1.0 面向 Windows 与 Linux，只从 main 分支构建。</p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <a class="mark" href="#top">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="9.4" fill="none" stroke="#D4FF3F" stroke-width="1" opacity=".38"/>
+          <circle cx="12" cy="12" r="4.6" fill="none" stroke="#D4FF3F" stroke-width="1.3"/>
+          <circle cx="12" cy="12" r="1.4" fill="#D4FF3F"/>
+        </svg>
+        <b>AuraDSP</b>
+      </a>
+      <div class="foot-meta">
+        <span class="ver">v0.1.0</span>
+        <span>GPL-3.0</span>
+        <span class="ver">C ABI v1</span>
+        <span>48000 Hz · 2 ch</span>
+      </div>
+      <p class="foot-note">
+        跨平台的全局音频效果处理。界面和引擎之间只有一层 C ABI，效果和预设都放在数据文件里。代码基础来自 JamesDSP，按 GPL-3.0 分发。
+      </p>
+    </div>
+    <svg class="wordmark" viewBox="0 0 1000 150" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
+      <text x="0" y="120" font-size="148" textLength="1000" lengthAdjust="spacingAndGlyphs">AuraDSP</text>
+    </svg>
+  </div>
+</footer>
+
+<button class="totop" id="toTop" type="button" aria-label="回到顶部">↑ 顶部</button>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ================= 数据：四段 / 23 单元 ================= */
+  var STAGES = [
+    {
+      id: "pre", num: "01", name: "前级", en: "Pre",
+      desc: "先清理再修饰：划出通带边界，把低频收到中轴。后面的单元都建立在这一段之上。",
+      units: [
+        ["噪声门", "低于门槛的声音，不再进入后面的链"],
+        ["滤波", "高通、低通和搁架，划出通带边界"],
+        ["低频单声道化", "把低频收到中轴，减少左右差异"],
+        ["心理声学低频", "用谐波补出听感低频，不抬实际能量"],
+        ["搁架", "整段一起抬或一起降"],
+        ["动态均衡", "按电平自动修频响"]
+      ]
+    },
+    {
+      id: "vendor", num: "02", name: "经典算法链", en: "Vendor × 12",
+      desc: "12 个经典 DSP 算法，顺序可以自己拖。同一组单元换个排列，出来就是另一种声音。",
+      units: [
+        ["真空管", "偶次谐波与轻微压缩，给出暖色"],
+        ["低频", "二级低频搁架，补量感"],
+        ["均衡", "多段参数均衡"],
+        ["压缩", "单段动态控制"],
+        ["任意幅频响应", "由曲线或实测数据驱动的频响"],
+        ["卷积", "加载脉冲响应，做线性染色"],
+        ["DDC", "按设备校正曲线自动补偿"],
+        ["EEL2 实时脚本", "用脚本写自己的算法"],
+        ["串扰消除", "处理左右声道之间的渗漏"],
+        ["立体声展宽", "以 M/S 处理拓宽声场"],
+        ["混响", "可选的房间与尾音"],
+        ["限幅", "在这一段末尾压住峰值"]
+      ]
+    },
+    {
+      id: "post", num: "03", name: "后级", en: "Post",
+      desc: "这一段处理空间：展宽、定位和激励，决定声音听起来站在哪里、房间里留多少尾巴。",
+      units: [
+        ["Haas 展宽", "用左右延迟差造出包围感"],
+        ["空间化", "把声源放到虚拟位置"],
+        ["激励器", "补高频谐波，提高清晰度"]
+      ]
+    },
+    {
+      id: "out", num: "04", name: "输出", en: "Out",
+      desc: "最后一段处理响度和峰值：不同音量听感一致，信号越界之前先压住。",
+      units: [
+        ["等响度补偿", "小音量下保持听感平衡"],
+        ["前瞻限幅", "预读信号，在越界前按住峰值"]
+      ]
+    }
+  ];
+
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ================= 图版 ================= */
+  /* 版面分三栏：左标签栏 24–96 / 绘图区 104–560 / 右侧计数栏 564–588。任何文字都不进入绘图区，任何曲线都不越出绘图区。 */
+  /* 四段曲线用四种不同的形态，读图时一眼能分开：
+     01 前级   细密抖动，像滤波与门限在不停地小幅修正；
+     02 算法链 十二级台阶，直接对应「12 级可重排」这件事；
+     03 后级   两个宽缓的隆起，对应空间与展宽；
+     04 输出   升到天花板就被压平（削顶），对应限幅器。 */
+  var PROF = [
+    function (u) {   /* 抖动 */
+      return 0.46 + 0.20 * Math.sin(u * 11.2 + 0.5)
+                  + 0.13 * Math.sin(u * 23.7 + 2.1)
+                  + 0.05 * Math.sin(u * 5.1 + 1.4);
+    },
+    function (u) {   /* 十二级台阶：升到顶、平走一段、再按台阶落下 */
+      var lv, mid;
+      if (u < 0.46) {
+        lv = Math.floor((u / 0.46) * 8) / 8;          /* 前 8 级上行 */
+      } else if (u < 0.78) {
+        lv = 1;                                        /* 平顶：并联运行 */
+      } else {
+        lv = 1 - Math.floor(((u - 0.78) / 0.22) * 4) / 4;  /* 后 4 级回落 */
+      }
+      return 0.12 + 0.70 * lv;
+    },
+    function (u) {   /* 双隆起 */
+      return 0.27 + 0.40 * Math.abs(Math.sin(u * Math.PI * 2))
+                  + 0.06 * Math.sin(u * 9.4 + 0.8);
+    },
+    function (u) {   /* 削顶：整体抬到天花板，只剩细小的坑洼 */
+      var t = 0.34 + 0.30 * Math.abs(Math.sin(u * Math.PI * 1.7 + 0.18))
+                    + 0.14 * Math.sin(u * 5.4 + 0.9)
+                    + 0.05 * Math.sin(u * 13.1 + 2.2);
+      return t > 0.60 ? 0.60 : t;
+    }
+  ];
+
+  /* 各段相对高度：算法链最高，前级次之，后级再低，输出最矮 */
+  var PSCALE = [0.78, 1, 0.66, 0.46];
+
+  /* 把 0..1 上的轮廓采样成表，绘制与节点共用 */
+  var CURVE = (function () {
+    var all = [], i, x, t, max, raw;
+    for (i = 0; i < PROF.length; i++) {
+      raw = []; max = 0;
+      for (x = 0; x <= 160; x++) {
+        t = PROF[i](x / 160);
+        if (t < 0) t = 0;
+        raw.push(t);
+        if (t > max) max = t;
+      }
+      for (x = 0; x < raw.length; x++) raw[x] = max > 0 ? (raw[x] / max) * PSCALE[i] : 0;
+      all.push(raw);
+    }
+    return all;
+  })();
+
+  function normAt(i, u) {
+    var a = CURVE[i], p, k, f;
+    if (u <= 0) return a[0];
+    if (u >= 1) return a[a.length - 1];
+    p = u * (a.length - 1);
+    k = Math.floor(p); f = p - k;
+    return a[k] + (a[k + 1] - a[k]) * f;
+  }
+
+  var PL = { W: 600, H: 436, L: 104, R: 62, T: 56, B: 22 };
+
+  function buildPlate(svg) {
+    var W = PL.W, H = PL.H, L = PL.L, R = PL.R, T = PL.T, B = PL.B;
+    var plotR = W - R, span = plotR - L;
+    var bandH = (H - T - B) / STAGES.length;
+    var gx, tx, tk, un, cx, cy, u, win, g, k, x;
+    var out;
+
+    function pad2(v) { return (v < 10 ? "0" : "") + v; }
+
+    /* 两端归零的窗：让曲线从基线升起、最后回到基线 */
+    function curveY(px, i, base, amp) {
+      u = (px - L) / span;
+      if (u < 0) u = 0; else if (u > 1) u = 1;
+      /* 首尾各 16% 用 smoothstep 缓入缓出。smoothstep 两端导数为 0，
+         曲线离开或回到基线时是相切的，不会出现垂直切边。 */
+      var e = Math.min(1, Math.min(u / 0.16, (1 - u) / 0.16));
+      if (e < 0) e = 0;
+      win = e * e * (3 - 2 * e);
+      return base - normAt(i, u) * win * amp;
+    }
+
+    out = '<defs>' +
+        '<linearGradient id="sweepG" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0" stop-color="#D4FF3F" stop-opacity="0"/>' +
+          '<stop offset=".2" stop-color="#D4FF3F" stop-opacity=".42"/>' +
+          '<stop offset=".5" stop-color="#D4FF3F" stop-opacity=".8"/>' +
+          '<stop offset=".8" stop-color="#D4FF3F" stop-opacity=".42"/>' +
+          '<stop offset="1" stop-color="#D4FF3F" stop-opacity="0"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="trailG" x1="0" y1="0" x2="1" y2="0">' +
+          '<stop offset="0" stop-color="#D4FF3F" stop-opacity="0"/>' +
+          '<stop offset="1" stop-color="#D4FF3F" stop-opacity=".06"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="areaG" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0" stop-color="#D4FF3F" stop-opacity=".115"/>' +
+          '<stop offset=".62" stop-color="#D4FF3F" stop-opacity=".075"/>' +
+          '<stop offset="1" stop-color="#D4FF3F" stop-opacity=".048"/>' +
+        '</linearGradient>' +
+        '<clipPath id="plotClip"><rect x="' + L + '" y="' + (T - 12) + '" width="' + span +
+          '" height="' + (H - B - T + 24) + '"/></clipPath>' +
+      '</defs>';
+
+    /* 外框 + 四角裁切标记 */
+    out += '<rect class="pframe" x=".5" y=".5" width="' + (W - 1) + '" height="' + (H - 1) + '"/>';
+    [[9, 9, 1, 1], [W - 9, 9, -1, 1], [9, H - 9, 1, -1], [W - 9, H - 9, -1, -1]].forEach(function (c) {
+      out += '<path class="pcrop" d="M' + c[0] + ' ' + c[1] + 'h' + (12 * c[2]) +
+             'M' + c[0] + ' ' + c[1] + 'v' + (12 * c[3]) + '"/>';
+    });
+
+    /* 图头 */
+    out += '<text class="pm" x="24" y="28">signal chain</text>';
+    out += '<text class="pm" x="' + (W - 24) + '" y="28" text-anchor="end">4 stages · 23 units</text>';
+    out += '<line class="psep" x1="0" y1="44" x2="' + W + '" y2="44"/>';
+
+    /* 纵向网格 */
+    out += '<g class="pgrid">';
+    for (g = 0; g <= 6; g++) {
+      gx = (L + span * g / 6).toFixed(1);
+      out += '<line x1="' + gx + '" y1="' + T + '" x2="' + gx + '" y2="' + (H - B) + '"/>';
+    }
+    out += '</g>';
+
+    for (var si = 0; si < STAGES.length; si++) {
+      var st = STAGES[si];
+      var top = T + si * bandH;
+      var base = +(top + bandH - 13).toFixed(1);
+      var amp = (bandH - 24).toFixed(1);
+
+      if (si > 0) {
+        out += '<line class="psep" x1="0" y1="' + top.toFixed(1) + '" x2="' + W + '" y2="' + top.toFixed(1) + '"/>';
+      }
+
+      /* 左标签栏：序号 / 段名 / 英文 */
+      out += '<text class="pi" x="24" y="' + Math.round(top + 22) + '">' + st.num + '</text>';
+      out += '<text class="pnm" x="24" y="' + Math.round(top + 39) + '">' + st.name + '</text>';
+      out += '<text class="pen" x="24" y="' + Math.round(top + 53) + '">' + st.en + '</text>';
+
+      /* 右计数栏 */
+      out += '<text class="pcnt" x="' + (W - 16) + '" y="' + Math.round(base + 4) +
+             '" text-anchor="end">' + pad2(st.units.length) + '</text>';
+
+      /* 包络 + 面积 */
+      var pts = [];
+      for (x = 0; x <= span; x += 3) {
+        pts.push((L + x).toFixed(1) + ',' + curveY(L + x, si, base, amp).toFixed(1));
+      }
+      var line = pts.join(' ');
+      out += '<g class="bp" style="--dur:' +
+             (6.8 + si * 0.5).toFixed(2) + 's;--dl:' + (si * 0.35).toFixed(2) + 's">';
+      out += '<polygon class="envA" points="' + line + ' ' + plotR + ',' + base + ' ' + L + ',' + base + '"/>';
+      out += '<polyline class="env" points="' + line + '"/>';
+      out += '</g>';
+
+      /* 基线 + 刻度 */
+      out += '<line class="sp" x1="' + L + '" y1="' + base + '" x2="' + plotR + '" y2="' + base + '"/>';
+      for (tk = 0; tk <= 24; tk++) {
+        tx = (L + span * tk / 24).toFixed(1);
+        out += '<line class="stk" x1="' + tx + '" y1="' + (base - 2.2) + '" x2="' + tx +
+               '" y2="' + (base + 2.2) + '"/>';
+      }
+
+      /* 进 / 出：两端各一个实心小三角 */
+      out += '<path class="pin" d="M' + (L - 8) + ' ' + (base - 2.9) + 'L' + (L - 1.5) + ' ' + base +
+             'L' + (L - 8) + ' ' + (base + 2.9) + 'Z"/>';
+      out += '<path class="px" d="M' + (plotR - 6.5) + ' ' + (base - 2.9) + 'L' + plotR + ' ' + base +
+             'L' + (plotR - 6.5) + ' ' + (base + 2.9) + 'Z"/>';
+
+      /* 节点：落在包络上 */
+      un = st.units.length;
+      for (k = 0; k < un; k++) {
+        cx = +(L + span * (k + 0.5) / un).toFixed(1);
+        cy = +curveY(cx, si, base, amp).toFixed(1);
+        out += '<g class="node" data-x="' + cx + '" data-name="' + st.units[k][0] + '">' +
+               '<circle class="hit" cx="' + cx + '" cy="' + cy + '" r="8"/>' +
+               '<circle class="nd" cx="' + cx + '" cy="' + cy + '" r="1.65"/>' +
+               '</g>';
+      }
+    }
+
+    /* 扫描：裁切在绘图区内 */
+    out += '<g clip-path="url(#plotClip)">' +
+             '<g id="sweep" opacity=".85">' +
+               '<rect x="-46" y="' + (T - 12) + '" width="46" height="' + (H - B - T + 24) +
+                 '" fill="url(#trailG)"/>' +
+               '<line x1="0" y1="' + (T - 12) + '" x2="0" y2="' + (H - B + 12) +
+                 '" stroke="url(#sweepG)" stroke-width="1"/>' +
+             '</g>' +
+           '</g>';
+
+    svg.innerHTML = out;
+    return svg;
+  }
+
+  var plate = document.getElementById("plate");
+  var plateSvg = document.getElementById("plateSvg");
+  buildPlate(plateSvg);
+
+  var sweep = plateSvg.querySelector("#sweep");
+  var nodeGs = Array.prototype.slice.call(plateSvg.querySelectorAll("g.node"));
+  var capEl = document.getElementById("plateCap");
+  var capBase = "23 个单元 · 4 段";
+
+  /* 悬停读数 */
+  plateSvg.addEventListener("mouseover", function (e) {
+    var g = e.target.closest ? e.target.closest("g.node") : null;
+    if (!g) return;
+    capEl.textContent = g.getAttribute("data-name");
+    capEl.style.color = "#D4FF3F";
+  });
+  plateSvg.addEventListener("mouseleave", function () {
+    capEl.textContent = capBase;
+    capEl.style.color = "";
+  });
+
+  /* ================= 名录跑马灯 ================= */
+  (function () {
+    var names = [];
+    STAGES.forEach(function (s) { s.units.forEach(function (u) { names.push(u[0]); }); });
+    var html = "";
+    for (var pass = 0; pass < 2; pass++) {
+      names.forEach(function (n) { html += "<span>" + n + "</span>"; });
+    }
+    document.getElementById("ticker").innerHTML = html;
+  })();
+
+  /* ================= 分段浏览器 ================= */
+  (function () {
+    var tabs = document.getElementById("exTabs");
+    var unitsEl = document.getElementById("exUnits");
+    var idxEl = document.getElementById("exIdx");
+    var nameEl = document.getElementById("exName");
+    var descEl = document.getElementById("exDesc");
+    var barEl = document.getElementById("exBar");
+    var metaEl = document.getElementById("exMeta");
+    var current = 0;
+
+    tabs.innerHTML = STAGES.map(function (s, i) {
+      return '<button type="button" role="tab" id="tab-' + s.id + '" aria-controls="exUnits" aria-selected="' +
+        (i === 0) + '" data-i="' + i + '">' +
+        '<i>' + s.num + '</i><b>' + s.name + '</b><em>' + s.en + '</em></button>';
+    }).join("");
+
+    barEl.innerHTML = STAGES.map(function () { return "<i></i>"; }).join("");
+
+    function render(i, animate) {
+      current = i;
+      var s = STAGES[i];
+      var buttons = tabs.querySelectorAll("button");
+      for (var b = 0; b < buttons.length; b++) buttons[b].setAttribute("aria-selected", String(b === i));
+      var bars = barEl.querySelectorAll("i");
+      for (var j = 0; j < bars.length; j++) bars[j].classList.toggle("on", j === i);
+
+      idxEl.textContent = s.num + " / 04";
+      nameEl.textContent = s.name;
+      descEl.textContent = s.desc;
+      metaEl.textContent = s.units.length + " 个单元 · " + s.en;
+
+      unitsEl.innerHTML = s.units.map(function (u, k) {
+        var delay = animate && !reduce
+          ? ' class="anim" style="animation-delay:' + (k * 0.032).toFixed(3) + 's"'
+          : "";
+        var no = (k + 1) < 10 ? "0" + (k + 1) : String(k + 1);
+        return "<li" + delay + ">" +
+          '<span class="u-i">' + no + "</span>" +
+          '<span class="u-n">' + u[0] + "</span>" +
+          '<span class="u-d">' + u[1] + "</span></li>";
+      }).join("");
+    }
+
+    tabs.addEventListener("click", function (e) {
+      var btn = e.target.closest("button[data-i]");
+      if (!btn) return;
+      var i = parseInt(btn.getAttribute("data-i"), 10);
+      if (i !== current) render(i, true);
+    });
+
+    tabs.addEventListener("keydown", function (e) {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      e.preventDefault();
+      var n = STAGES.length;
+      var next = e.key === "ArrowRight" ? (current + 1) % n : (current - 1 + n) % n;
+      render(next, true);
+      tabs.querySelectorAll("button")[next].focus();
+    });
+
+    render(0, false);
+  })();
+
+  /* ================= 顶栏 / 进度 / 回顶 / 高亮 ================= */
+  var hdr = document.getElementById("hdr");
+  var prog = document.getElementById("prog");
+  var toTop = document.getElementById("toTop");
+  var links = Array.prototype.slice.call(document.querySelectorAll(".navlinks a"));
+
+  function onScroll() {
+    var y = window.scrollY || window.pageYOffset;
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    hdr.classList.toggle("scrolled", y > 20);
+    prog.style.transform = "scaleX(" + (h > 0 ? Math.min(1, y / h).toFixed(4) : 0) + ")";
+    toTop.classList.toggle("show", y > window.innerHeight * 1.15);
+  }
+  onScroll();
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+
+  toTop.addEventListener("click", function () {
+    window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+  });
+
+  if ("IntersectionObserver" in window) {
+    var spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        links.forEach(function (a) {
+          if (a.getAttribute("href") === "#" + en.target.id) a.setAttribute("aria-current", "true");
+          else a.removeAttribute("aria-current");
+        });
+      });
+    }, { rootMargin: "-46% 0px -50% 0px", threshold: 0 });
+    ["believe", "anatomy", "platforms", "engineering", "start"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) spy.observe(el);
+    });
+  }
+
+  /* ================= 入场 ================= */
+  var rvs = document.querySelectorAll(".rv");
+  if ("IntersectionObserver" in window && !reduce) {
+    var rev = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add("in"); rev.unobserve(en.target); }
+      });
+    }, { rootMargin: "0px 0px -10% 0px", threshold: 0.06 });
+    rvs.forEach(function (el) { rev.observe(el); });
+  } else {
+    rvs.forEach(function (el) { el.classList.add("in"); });
+  }
+
+  /* ================= 数字 ================= */
+  (function () {
+    var els = document.querySelectorAll("[data-count]");
+    if (reduce || !("IntersectionObserver" in window)) {
+      els.forEach(function (e) { e.textContent = e.getAttribute("data-count"); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        var el = en.target, target = parseInt(el.getAttribute("data-count"), 10), t0 = 0;
+        io.unobserve(el);
+        function step(ts) {
+          if (!t0) t0 = ts;
+          var p = Math.min(1, (ts - t0) / 1150);
+          el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
+          if (p < 1) requestAnimationFrame(step);
+          else el.textContent = target;
+        }
+        requestAnimationFrame(step);
+      });
+    }, { threshold: 0.5 });
+    els.forEach(function (e) { io.observe(e); });
+  })();
+
+  /* ================= 指针视差 ================= */
+  (function () {
+    if (!plate || reduce) return;
+    var hero = document.querySelector(".hero");
+    if (!hero || window.matchMedia("(max-width: 980px)").matches) return;
+    var tx = 0, ty = 0, cx = 0, cy = 0, raf = 0;
+    function loop() {
+      cx += (tx - cx) * 0.08;
+      cy += (ty - cy) * 0.08;
+      plate.style.transform = "translate3d(" + cx.toFixed(2) + "px," + cy.toFixed(2) + "px,0)";
+      if (Math.abs(tx - cx) > 0.1 || Math.abs(ty - cy) > 0.1) raf = requestAnimationFrame(loop);
+      else raf = 0;
+    }
+    hero.addEventListener("mousemove", function (e) {
+      var r = hero.getBoundingClientRect();
+      tx = ((e.clientX - r.left) / r.width - 0.5) * 11;
+      ty = ((e.clientY - r.top) / r.height - 0.5) * 8;
+      if (!raf) raf = requestAnimationFrame(loop);
+    }, { passive: true });
+    hero.addEventListener("mouseleave", function () {
+      tx = 0; ty = 0;
+      if (!raf) raf = requestAnimationFrame(loop);
+    });
+  })();
+
+  /* ================= 持续动效：扫描 + 波形 ================= */
+  (function () {
+    var Lx = PL.L, spanX = PL.W - PL.R - PL.L;
+    var PERIOD = 12000;
+    var visible = true;
+    if ("IntersectionObserver" in window && plate) {
+      new IntersectionObserver(function (e) { visible = e[0].isIntersecting; }, { threshold: 0 }).observe(plate);
+    }
+
+    var cv = document.getElementById("field");
+    var ctx = cv && cv.getContext ? cv.getContext("2d") : null;
+    var W = 0, H = 0, dpr = 1, N = 13, fieldVisible = true;
+
+    function size() {
+      if (!ctx) return;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      var r = cv.getBoundingClientRect();
+      W = r.width; H = r.height;
+      cv.width = Math.max(1, Math.round(W * dpr));
+      cv.height = Math.max(1, Math.round(H * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    size();
+    window.addEventListener("resize", size);
+    if ("IntersectionObserver" in window && cv) {
+      new IntersectionObserver(function (e) { fieldVisible = e[0].isIntersecting; }, { threshold: 0 }).observe(cv);
+    }
+
+    function drawSweep(now) {
+      if (!sweep) return;
+      var p = ((now % PERIOD) / PERIOD);
+      var x = Lx + spanX * p;
+      sweep.setAttribute("transform", "translate(" + x.toFixed(1) + ",0)");
+      for (var i = 0; i < nodeGs.length; i++) {
+        var g = nodeGs[i];
+        var dx = Math.abs(parseFloat(g.getAttribute("data-x")) - x);
+        var t = dx < 30 ? 1 - dx / 30 : 0;
+        var c = g.firstChild.nextSibling; /* .nd */
+        c.setAttribute("r", (2.3 + 2.2 * t).toFixed(2));
+        c.setAttribute("stroke-opacity", (0.5 + 0.5 * t).toFixed(2));
+        c.setAttribute("fill-opacity", (0.85 * t).toFixed(3));
+      }
+    }
+
+    var t0 = performance.now();
+    function frame(now) {
+      requestAnimationFrame(frame);
+      if (reduce || document.hidden) return;
+      var el = now - t0;
+      if (visible) drawSweep(el);
+      if (ctx && fieldVisible) drawField(el);
+    }
+
+    function drawField(t) {
+      ctx.clearRect(0, 0, W, H);
+      for (var i = 0; i < N; i++) {
+        var k = i / (N - 1);
+        var y0 = 14 + k * (H - 28);
+        var amp = (H * 0.135) * (1 - Math.abs(k - 0.5) * 1.25);
+        var ph = t * 0.00016 + k * 2.3;
+        var hot = (i === 4 || i === 7);
+        ctx.beginPath();
+        for (var x = 0; x <= W; x += 5) {
+          var u = x / W;
+          var decay = Math.sin(u * Math.PI);
+          var y = y0
+            + Math.sin(u * 5.1 + ph) * amp * decay
+            + Math.sin(u * 12.6 + ph * 1.62) * amp * 0.26 * decay;
+          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        if (hot) {
+          ctx.strokeStyle = "rgba(212,255,63,.42)";
+          ctx.lineWidth = 1.1;
+        } else {
+          var a = 0.09 + 0.15 * (1 - Math.abs(k - 0.5) * 1.5);
+          ctx.strokeStyle = "rgba(246,244,238," + a.toFixed(3) + ")";
+          ctx.lineWidth = 1;
+        }
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2);
+      ctx.strokeStyle = "rgba(246,244,238,.05)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    if (reduce) { drawSweep(0); if (ctx) drawField(0); }
+    else requestAnimationFrame(frame);
+  })();
+})();
+</script>
+</body>
+</html>
