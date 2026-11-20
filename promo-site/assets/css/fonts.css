@@ -1,0 +1,55 @@
+/* ============================================================
+   自托管字体（子集化 WOFF2，按本站语料裁剪，零外部请求）
+   - Aura Serif：Noto Serif SC 子集，标题 / 名词 / 数字
+   - Aura Sans ：Noto Sans SC 子集，正文中文
+   - Inter     ：可变字体子集，拉丁字母 / 数字优先于 Aura Sans
+   缺字时按各栈回退到系统字体，不影响可读性。
+   ============================================================ */
+
+@font-face {
+  font-family: "Aura Serif";
+  src: url("../fonts/aura-serif-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Aura Serif";
+  src: url("../fonts/aura-serif-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Aura Sans";
+  src: url("../fonts/aura-sans-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Aura Sans";
+  src: url("../fonts/aura-sans-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Aura Sans";
+  src: url("../fonts/aura-sans-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/inter-var.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}

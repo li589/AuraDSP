@@ -1,8 +1,15 @@
-# AuraDSP 产品主页 · 设计契约 v5
+# AuraDSP 产品主页 · 设计契约 v6
 
-单文件、零依赖、纯静态：`promo-site/index.html`。深色仪器面板语汇的编辑式版面，
-用于商用发布级产品主页。v5 在 v4 基础上做五维度精修：文案、SVG 细节、
-文字与控件相对尺寸、字体、持续动效。
+零依赖、纯静态、多文件：`promo-site/index.html` + `assets/`（css / js / fonts）。
+深色仪器面板语汇的编辑式版面，用于商用发布级产品主页。
+
+**v6 修订（2026-11-20，用户反馈「廉价感、AI 味、单文件难改」后重构）**：
+结构由单文件拆为 index.html + css 四件（fonts/base/home/motion）+ js 四件
+（data/plate/field/site），可分文件维护；字体改为**自托管子集**（见 §2.2）；
+文案按 §8 原则再收紧一轮并订正过期事实（冒烟登记 144→170、CI 作业 8→9、
+页脚 ABI v1→v2、首屏「三平台」与四形态矩阵的自相矛盾已消除）；
+图版几何规则（§5）全部保留，生成器移入 `assets/js/plate.js` 并有脚本校验
+（三栏不越界、节点数 23）；包络呼吸统一为 opacity（§5.4 口径，§6 旧表述作废）。
 
 ---
 
@@ -45,20 +52,29 @@
 
 display : body ≈ **4.3 : 1**，label 与 body 之间留出 1.45× 间隔，避免中间层拥挤。
 
-### 2.2 字体栈
+### 2.2 字体（v6：自托管子集）
+
+字体文件在 `assets/fonts/`，按本站语料子集化（pyftsubset + woff2），零外部请求：
+
+| 族名 | 源 | 权重 | 体积 |
+|---|---|---|---|
+| `Aura Serif` | Noto Serif SC | 600 / 700 | ≈180 KB ×2 |
+| `Aura Sans` | Noto Sans SC | 400 / 500 / 700 | ≈128 KB ×3 |
+| `Inter` | Inter 可变字体 | 400–700 | ≈74 KB |
 
 ```css
---serif: "Source Han Serif SC","Source Han Serif CN","Noto Serif SC",
-         "Noto Serif CJK SC","Songti SC",STSong,
-         "Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;
---sans:  "Inter","Inter Variable","Segoe UI Variable Text","Segoe UI",
-         "Helvetica Neue","PingFang SC","Hiragino Sans GB","Noto Sans SC",
-         "Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
+--serif: "Aura Serif","Source Han Serif SC","Noto Serif SC",
+         "Songti SC",STSong,Georgia,serif;
+--sans:  "Inter","Aura Sans","Noto Sans SC","PingFang SC",
+         "Hiragino Sans GB","Microsoft YaHei UI","Microsoft YaHei",
+         system-ui,sans-serif;
 ```
 
-- 思源宋体（CN + CJK 双名）优先，避免直接落到 SimSun 的僵硬字形
-- 拉丁侧引入 Inter / Inter Variable，中文侧到苹方 / 思源黑体
-- **衬线只用于标题、名词、数字、引文**；正文一律无衬线，避免长文疲劳
+- 子集语料 = index.html 与四个 js 的全部可见文本 + ASCII + 常用标点；
+  **文案增删字后必须重跑子集化**，缺字自动回退系统字体（不缺行、不报错，
+  只是字形不一致，所以改文案时记得带上这一步）
+- Inter 子集不含汉字，中文自动落到 Aura Sans；衬线只用于标题、名词、
+  数字、引文，正文一律无衬线
 
 ### 2.3 排印参数
 
@@ -187,8 +203,8 @@ smoothstep 在两端导数为 0，曲线离开与回到基线时都是**相切**
 
 | 动效 | 实现 | 周期 | 意图 |
 |---|---|---|---|
-| 图版扫描线 | JS rAF，`translate(x,0)` | 12s | 模拟信号穿过链路，经过的节点放大点亮 |
-| 包络呼吸 | CSS `breathe`，`scaleY(1→.72)` | 6.6–8.85s 错峰 | 四段独立节奏，像四条正在运行的通道 |
+| 图版扫描线 | JS rAF，`translate(x,0)` | 14s | 模拟信号穿过链路，经过的节点点亮 |
+| 包络呼吸 | CSS `breathe`，只动 opacity（.68↔1） | 7.2–8.85s 错峰 | 四段独立节奏，像四条正在运行的通道 |
 | 波形场 | Canvas 2D，13 线相位差 `k*2.3` | 连续 | 两条酸绿高亮线暗示被处理的通道 |
 | 品牌环 | CSS `spin` | 26s | 极慢旋转，几乎察觉不到但有生命感 |
 | 光晕漂移 | CSS `drift`，`translate+scale` | 26s alternate | 首屏右上角酸绿雾轻微游移 |
@@ -241,7 +257,8 @@ smoothstep 在两端导数为 0，曲线离开与回到基线时都是**相切**
 
 ## 9. 已知约束
 
-- 单文件、无外链资源；字体依赖系统可得，思源宋体缺失时回退宋体 / Georgia
+- 多文件静态站，无构建步骤、无外链资源；字体自托管子集（§2.2），
+  部署时整目录原样托管即可（相对路径引用 assets/）
 - 响应式断点：980px（首屏转单栏）、920px（导航收敛）、900px（详情面板转静态）、
   820px（标题双栏转单栏）、760px（tab 转 2×2）、640px（单元列表两层）
 - 图版与波形在移动端仍运行，但视差关闭；图版 viewBox 600×436，三栏互不越界
