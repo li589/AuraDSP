@@ -1,7 +1,8 @@
 # Windows 安装程序验证（独立于 ci.yml，设计文档
 # docs/20-执行/Windows安装程序与打包脚本实施设计-2026-11-06.md §7）：
-# 在 windows-latest 上编译引导壳（MSVC）+ 向导（Flutter），并以
-# fixture staging 跑 pack.py 全模式逻辑冒烟 + Setup 单体校验。
+# 在 windows-latest 上编译引导壳（MSVC）+ 向导（Flutter），随后跑
+# packkit 内核单测、release.py 只读计划冒烟，并以 fixture staging 跑
+# pack.py 全模式逻辑冒烟 + Setup 单体校验。
 name: windows-installer
 
 on:
@@ -10,6 +11,9 @@ on:
     paths:
       - 'installer/windows/**'
       - 'installer/shared/**'
+      - 'installer/packkit/**'
+      - 'installer/tests/**'
+      - 'installer/release.py'
       - '.github/workflows/windows-installer.yml'
   workflow_dispatch:
 
@@ -63,6 +67,23 @@ jobs:
           New-Item -ItemType Directory -Force build/installer/dist/wizard | Out-Null
           Copy-Item build/installer/bootstrapper/Release/bootstrapper.exe build/installer/dist/
           Copy-Item -Recurse -Force installer/windows/custom_installer/wizard/build/windows/x64/runner/Release/* build/installer/dist/wizard/
+
+      - name: packkit 内核单测 + 发布计划冒烟
+        shell: pwsh
+        run: |
+          $unit = python installer/tests/test_packkit_unit.py 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          $unit | Write-Host
+          if ($code -ne 0) {
+            ($unit -split "`n") |
+              Where-Object { $_ -match 'FAIL' } |
+              Select-Object -First 40 |
+              ForEach-Object { Write-Host "::error::$($_.Trim() -replace '%', '%25')" }
+            throw "packkit unit tests failed"
+          }
+          # --plan 在无 staging 的 CI 上会把缺件标 FAIL 但退出 0（只读门禁表）。
+          python installer/release.py --plan
+          if ($LASTEXITCODE -ne 0) { throw "release plan failed" }
 
       - name: pack.py fixture 全模式冒烟（含 Setup 拼装与 --verify）
         shell: pwsh

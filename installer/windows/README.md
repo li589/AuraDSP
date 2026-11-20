@@ -19,8 +19,8 @@ Windows 平台支持两种平行的分发模式：
 
 ## 2. 目录结构
 
-- `pack.py`：**打包总入口**（全量可传参：`--mode driver,portable,setup,staging`（staging 就地补齐 dist 绿色目录的 driver 资产；portable/setup 后亦自动补齐）、`--resources core|full|addons|none`、`--build-staging`、`--build-installer`、`--sign` 钩子、`--verify` 自检）；逻辑自测在 `tests/test_pack_fixture.py`。
-- `portable/`：便携版说明（归档逻辑在 pack.py 的 portable 模式内）。
+- `pack.py`：**Windows 打包 CLI 薄壳**（2026-11-20 起实现拆到 `installer/packkit/`，本文件只保留命令行契约）。参数不变：`--mode driver,portable,setup,staging`（staging 就地补齐 dist 绿色目录的 driver 资产；portable/setup 后亦自动补齐）、`--resources core|full|light|addons|none`、`--build-staging`、`--build-installer`、`--sign` 钩子、`--verify` 自检。CLI 行为契约自测在 `tests/test_pack_fixture.py`；内核纯函数单测在 `installer/tests/test_packkit_unit.py`。
+- `portable/`：便携版说明（归档逻辑在 `packkit/windows/modes.py` 的 portable 模式内）。
 - `custom_installer/`：自研安装程序子项目——`bootstrapper/`（C++ 引导壳）+ `wizard/`（Flutter 向导 auradsp_setup）。
 
 ## 3. 一键构建三件（Windows 本机）
@@ -37,6 +37,22 @@ python installer/windows/pack.py --build-installer --mode all --resources core
 ```
 
 要点：ASIO 驱动的规范文件名是 `auraasio_driver.dll`（ADR-008；pack.py 按此名收集、入包归一化，`AuraAsioDriver.dll` 别名仅兼容识别）；setup 模式缺该 DLL 或 VAIO 产物会直接报错并指明构建路径。驱动正式签名（Attestation/EV）未完成前，产物为测试签名口径，见 05 号规划风险项。编译与打包逻辑的持续验证见 `.github/workflows/windows-installer.yml`。
+
+### 3.1 一轮完整交付（推荐入口）
+
+```powershell
+# 只读：打印轮次、交付目录与门禁表
+python installer/release.py --plan --out-root D:\temp_desktop
+# 资产探测：各模式 --what-if，不落产物、不触发构建
+python installer/release.py --dry-run --out-root D:\temp_desktop
+# 真打一轮：复用现有 staging，先 light 后 full，归集 deliver-rNN 并出哈希清单
+python installer/release.py --round 60 --out-root D:\temp_desktop
+```
+
+`release.py` 会自动跑驱动新鲜度/签名门、校验资源包档位、按交付名归集四件、
+写 `SHA256SUMS-rNN.txt`（大写、LF）与 `RELEASE-rNN.txt`，并对 Setup 做尾块自检。
+**发布未接线**：`--publish` 明确失败，投放仍需手工执行并复核哈希。
+分层与命名规范见 `installer/docs/07_打包工具链分层与发布编排-2026-11-20.md`。
 
 ## 4. 覆盖升级与驱动签名（2026-11-06 追加）
 

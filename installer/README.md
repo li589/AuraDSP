@@ -4,7 +4,7 @@
 
 本项目目录汇总了 AuraDSP 面向所有支持平台的安装包制作、打包脚本、元数据管理，以及**自主研发的 Windows 安装向导子项目**。所有发行产物均遵循统一的工程标准，最终成果集中输出至根目录下的 `dist/` 目录。
 
-> **当前状态（2026-11-06）**：**发布规范已裁定**（版本号 `vXX.XX.X`、首版 v0.1.0、仅 Win+Linux、只从 `main` 构建、门禁全绿、每平台驱动包+便携包+正式安装包三件齐备，见 `docs/01_distribution_architecture.md` 发布总则）。**双侧均已落地到「拉取即可构建发行包」**：Linux 入口 `linux/pack.sh --build`（一键：引擎→bundle→同步→deb / 驱动配置包 / AppImage / tar.gz）；Windows 入口 `windows/pack.py`（全量可传参，driver/portable/setup 三模式 + 资源自动合并），配自研两段式安装程序（C++ 引导壳 + Flutter 极光向导，见 `docs/02_windows_installer_design.md` 与 `docs/20-执行/Windows安装程序与打包脚本实施设计-2026-11-06.md`），由 `.github/workflows/windows-installer.yml` 在 windows-latest 持续验证编译与打包逻辑。资源包独立版本线（`resources-v*`，从 0.0.1 起）见 01 §2.4。未决外部项：Windows 驱动正式签名（Attestation/EV，现为测试签名，见 05 号规划风险项）。
+> **当前状态（2026-11-20）**：**发布规范已裁定**（版本号 `vXX.XX.X`、首版 v0.1.0、仅 Win+Linux、只从 `main` 构建、门禁全绿、每平台驱动包+便携包+正式安装包三件齐备，见 `docs/01_distribution_architecture.md` 发布总则）。**双侧均已落地到「拉取即可构建发行包」**：Linux 入口 `linux/pack.sh --build`（一键：引擎→bundle→同步→deb / 驱动配置包 / AppImage / tar.gz）；Windows 打包入口 `windows/pack.py`（CLI 契约不变，实现见 `packkit/windows/`）——**一轮完整交付**统一走 `release.py`（预检→分档打包→交付归集→哈希清单→Setup 自检；发布通道未接线），配自研两段式安装程序（C++ 引导壳 + Flutter 极光向导，见 `docs/02_windows_installer_design.md` 与 `docs/20-执行/Windows安装程序与打包脚本实施设计-2026-11-06.md`），由 `.github/workflows/windows-installer.yml` 在 windows-latest 持续验证编译与打包逻辑。资源包独立版本线（`resources-v*`，从 0.0.1 起）见 01 §2.4。未决外部项：Windows 驱动正式签名（Attestation/EV，现为测试签名，见 05 号规划风险项）。
 
 ---
 
@@ -13,12 +13,16 @@
 ```text
 installer/
 ├── README.md                      # 本文档：发行与安装工程总纲
+├── release.py                     # 统一发布编排（预检→构建→分档打包→交付归集；本轮不发布）
+├── packkit/                       # 打包工具链内核（平台无关内核 + windows 平台层，见 docs/07）
+├── tests/                         # packkit 内核单测（CI 同跑）
 ├── docs/                          # 详细架构与技术设计文档
 │   ├── 01_distribution_architecture.md   # 发行架构总纲与跨平台分发规范
 │   ├── 02_windows_installer_design.md     # 自研 Windows 安装程序设计方案
 │   ├── 03_linux_packaging_spec.md        # Linux (DEB/AppImage/Flatpak/Snap) 打包规格
 │   ├── 04_mobile_macos_spec.md           # Android & macOS 打包与签名规范
-│   └── 05_installer设计与实施规划-2026-11-06.md  # 子项目总体设计、选型调研与阶段计划
+│   ├── 05_installer设计与实施规划-2026-11-06.md  # 子项目总体设计、选型调研与阶段计划
+│   └── 07_打包工具链分层与发布编排-2026-11-20.md # 工具链分层、命名规范、驱动门禁、发布编排
 ├── shared/                        # 跨平台共享资源与元数据
 │   ├── README.md                  # 共享资源说明
 │   ├── assets/                    # 图标、横幅、徽标 (.ico, .png, .svg)
@@ -26,8 +30,8 @@ installer/
 │   └── metadata/                  # 应用元数据 (app_info.json, 多语言描述)
 ├── windows/                       # Windows 发行与打包体系
 │   ├── README.md                  # Windows 打包体系说明
-│   ├── pack.py                    # Windows 全量可传参打包入口（三模式，见 windows/README.md）
-│   ├── tests/                     # pack.py fixture 自测（CI 同跑）
+│   ├── pack.py                    # Windows 打包 CLI 薄壳（四模式，实现见 packkit/windows）
+│   ├── tests/                     # pack.py CLI 契约自测（CI 同跑）
 │   ├── portable/                  # 便携版 (Portable Zip) 说明
 │   │   └── README.md
 │   └── custom_installer/          # 自研安装程序子项目 (AuraDSP Setup Wizard)
@@ -85,6 +89,13 @@ installer/
 4. **统一命名与版本真相源 (Single Version Source)**：
    - 应用版本号统一从 `app/auradsp_app/pubspec.yaml`（或统一的 version 配置文件）动态解析提取，杜绝各平台打包脚本内硬编码版本号导致的分歧。
 
+### 发布入口（2026-11-20 收敛）
+
+- **单平台打包**：`python installer/windows/pack.py ...`，命令行契约不变（四个模式 + 资源档位 + `--verify`）。
+- **一轮完整交付**：`python installer/release.py --round <NN>` —— 预检门禁 → 分档打包（**light 先、full 后**）→ 归集 `deliver-r<NN>/` → 大写哈希清单 + 说明卡 → Setup 自检。`--plan` 只读，`--dry-run` 只做资产探测。
+- **发布未接线**：`--publish` 会明确失败。本轮（2026-11-20）只落工具，不产出、不上传、不投放。
+- 分层、命名规范与驱动门禁细则见 `docs/07_打包工具链分层与发布编排-2026-11-20.md`。
+
 ---
 
 ## 4. 详细技术方案导航
@@ -95,4 +106,5 @@ installer/
 - [03. Linux (DEB / AppImage / Flatpak / Snap) 规格方案](docs/03_linux_packaging_spec.md)
 - [04. Android 与 macOS 发行与签名规格方案](docs/04_mobile_macos_spec.md)
 - [05. installer 子项目设计与实施规划](docs/05_installer设计与实施规划-2026-11-06.md)
+- [07. 打包工具链分层与发布编排](docs/07_打包工具链分层与发布编排-2026-11-20.md)
 
