@@ -31,14 +31,6 @@ bool SelfModuleDir(std::wstring& out) {
     return true;
 }
 
-std::wstring ParentDir(const std::wstring& dir) {
-    if (dir.size() <= 3) return dir;  // 盘根
-    std::wstring d = dir.substr(0, dir.size() - 1);  // 去尾斜杠
-    size_t slash = d.find_last_of(L"\\/");
-    if (slash == std::wstring::npos) return dir;
-    return d.substr(0, slash + 1);
-}
-
 // ---- 文件中转围栏（资源计划 P4）--------------------------------
 // 参数块里的文件型路径（convolver.ir.path / ddc.load）只接受
 // 中转根 %ProgramData%\AuraDSP\apo-assets 下的路径：App 发布者
@@ -189,8 +181,12 @@ void ApoEngineHost::ReleaseSeat() {
 }
 
 // ---------------------------------------------------------------------------
-// 引擎加载（D1 搜索序：纪律版同目录 → 主引擎同目录 → 主引擎上一级）
+// 引擎加载（A2 收紧，2026-11-20 user 裁定：仅纪律版同目录一份）
 // ---------------------------------------------------------------------------
+// 原 D1 三候选序（纪律版同目录 → 主引擎同目录 → 主引擎上一级）会让 APO 在
+// 纪律版缺失时回退加载非纪律版主引擎（/MD），与 P0「只有 /MT + /guard:cf
+// 纪律版可进 audiodg」的纪律相悖。收紧后只认同目录 auradsp_engine_apo.dll
+// 一份：缺失/损坏即加载失败、上层闩锁透传，由 App 侧检出并提示修复安装。
 void ApoEngineHost::PublishLoadDiag() {
     if (!tele_) return;
     tele_->loadStage = loadStage_;
@@ -204,22 +200,14 @@ bool ApoEngineHost::LoadEngine() {
         loadErr_ = GetLastError();
         return false;
     }
-    const std::wstring parent = ParentDir(dir);
-    const std::wstring candidates[3] = {
-        dir + L"auradsp_engine_apo.dll",
-        dir + L"auradsp_engine.dll",
-        parent + L"auradsp_engine.dll",
-    };
-    bool anyLoaded = false;
-    DWORD firstErr = 0;
-    for (size_t ci = 0; ci < 3; ci++) {
-        const auto& path = candidates[ci];
+    const std::wstring path = dir + L"auradsp_engine_apo.dll";
+    {
         HMODULE h = LoadLibraryW(path.c_str());
         if (!h) {
-            if (ci == 0) firstErr = GetLastError();
-            continue;
+            loadStage_ = APO_LOAD_STAGE_LOAD_FAILED;
+            loadErr_ = GetLastError();
+            return false;
         }
-        anyLoaded = true;
         auto fnAbi = (FnAbi)GetProcAddress(h, "auradsp_abi");
         fnCreate_ = (FnCreate)GetProcAddress(h, "auradsp_create");
         fnDestroy_ = (FnDestroy)GetProcAddress(h, "auradsp_destroy");
@@ -240,8 +228,8 @@ bool ApoEngineHost::LoadEngine() {
         if (fnAbi && fnAbi() == 2 && fnCreate_ && fnDestroy_ && fnProcess_ &&
             fnSetParam_ && fnLatency_ && fnVizRead_) {
             hEngineDll_ = h;
-            // 插件通道是可选能力：符号全齐才启用（Q1 起 APO 风味
-            // 恒齐；回退候选若为 stub 风味则整通道静默禁用）。
+            // 插件通道是可选能力：符号全齐才启用（纪律版风味
+            // 恒齐；若某构建缺符号则整通道静默禁用）。
             fnSlotLoad_ = pSlotLoad;
             fnSlotUnload_ = pSlotUnload;
             fnSlotBypass_ = pSlotBypass;
@@ -267,15 +255,10 @@ bool ApoEngineHost::LoadEngine() {
         fnVizRead_ = nullptr;
         FreeLibrary(h);
     }
-    // 全候选落空：分得清「根本没加载上」（含 DLL 缺失/依赖缺失，
-    // err 记首候选——纪律版所在）与「加载上了但 ABI/符号不符」。
-    if (anyLoaded) {
-        loadStage_ = APO_LOAD_STAGE_ABI;
-        loadErr_ = 0;
-    } else {
-        loadStage_ = APO_LOAD_STAGE_LOAD_FAILED;
-        loadErr_ = firstErr;
-    }
+    // 加载上了但 ABI/符号不符（DLL 缺失/依赖缺失已在上方以
+    // LOAD_FAILED + GetLastError 先行返回，二者由此分得清）。
+    loadStage_ = APO_LOAD_STAGE_ABI;
+    loadErr_ = 0;
     return false;
 }
 

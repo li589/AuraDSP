@@ -223,7 +223,7 @@ struct ApoTelemetryBlock {
 // loadStage 取值（ApoTelemetryBlock.loadStage）。
 #define APO_LOAD_STAGE_NONE 0u        // 尚未尝试（块初建）
 #define APO_LOAD_STAGE_NO_DIR 1u      // 取 APO 自身目录失败
-#define APO_LOAD_STAGE_LOAD_FAILED 2u // 三候选 DLL 均加载失败
+#define APO_LOAD_STAGE_LOAD_FAILED 2u // 纪律版引擎 DLL 加载失败
 #define APO_LOAD_STAGE_ABI 3u         // 有 DLL 加载成功但符号/ABI 不符
 #define APO_LOAD_STAGE_CREATE 4u      // auradsp_create 返回空
 #define APO_LOAD_STAGE_READY 5u       // 引擎就绪（座位实例处理中/曾就绪）
