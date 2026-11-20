@@ -86,5 +86,25 @@ void main() {
       }
       await _parkOnHome(tester);
     });
+
+    // P4：桌面结构回归（非像素基线）。页内降级都按宽度分支，必须验证
+    // ≥900 仍走宽布局且不因新分支产生溢出。
+    testWidgets('1200x900 六页巡回无布局异常（桌面结构回归）', (tester) async {
+      final model = await _pumpAt(tester, const Size(1200, 900));
+      for (var i = 0; i < _pageNames.length; i++) {
+        await tester.tap(find.byKey(ValueKey<String>('shell.railNav.$i')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(model.visiblePage.value, AppPage.values[i]);
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: '1200x900 下 ${_pageNames[i]} 页出现布局异常',
+        );
+      }
+      await tester.tap(find.byKey(const ValueKey<String>('shell.railNav.0')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+    });
   });
 }
