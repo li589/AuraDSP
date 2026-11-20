@@ -109,6 +109,8 @@ void main() {
           'attachmentMode': 'voicemeeter_api',
           'pipelineInput': 'vaio',
           'pipelineOutput': 'asio_client',
+          // ASIO 重构 S1 新增键：默认 'client'，哨兵取非默认 'virtual'。
+          'asioFlavor': 'virtual',
           'pipelineInputDevice': 'sentinel-in-device',
           'pipelineOutputDevice': 'sentinel-out-device',
           'pipelineInputEnabled': false,

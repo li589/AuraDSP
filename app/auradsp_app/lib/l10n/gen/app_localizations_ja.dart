@@ -1184,13 +1184,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get audioParadigmHint =>
-      'オーディオ接続形態の選択：アタッチメントモードはインプレース傍受、パイプラインモードはエンドツーエンド転送';
+      'オーディオ接続形態の選択：アタッチメントモードはインプレース傍受、パイプラインモードはエンドツーエンド転送、ASIOモードはプロ向けホストとデバイスに接続';
 
   @override
   String get paradigmAttachment => 'アタッチメントモード';
 
   @override
   String get paradigmPipeline => 'パイプラインモード';
+
+  @override
+  String get paradigmAsio => 'ASIOモード';
+
+  @override
+  String get asioFlavorVirtual => '仮想 ASIO';
+
+  @override
+  String get asioFlavorClient => 'ASIO Client';
 
   @override
   String get modeVoicemeeterApi => 'Voicemeeter API';

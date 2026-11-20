@@ -1258,13 +1258,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get audioParadigmHint =>
-      'Select audio topology: Attachment Mode intercepts in-place; Pipeline Mode flows end-to-end';
+      'Select audio topology: Attachment Mode intercepts in-place; Pipeline Mode flows end-to-end; ASIO Mode connects pro hosts and devices';
 
   @override
   String get paradigmAttachment => 'Attachment Mode';
 
   @override
   String get paradigmPipeline => 'Pipeline Mode';
+
+  @override
+  String get paradigmAsio => 'ASIO Mode';
+
+  @override
+  String get asioFlavorVirtual => 'Virtual ASIO';
+
+  @override
+  String get asioFlavorClient => 'ASIO Client';
 
   @override
   String get modeVoicemeeterApi => 'Voicemeeter API';

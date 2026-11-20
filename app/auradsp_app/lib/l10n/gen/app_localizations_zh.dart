@@ -1163,13 +1163,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioParadigm => '处理范式';
 
   @override
-  String get audioParadigmHint => '选择音频接入形态：附加模式原地挂载处理，普通管线模式端到端流转';
+  String get audioParadigmHint =>
+      '选择音频接入形态：附加模式原地挂载处理，普通管线模式端到端流转，ASIO 模式对接专业宿主与设备';
 
   @override
   String get paradigmAttachment => '附加模式';
 
   @override
   String get paradigmPipeline => '普通管线模式';
+
+  @override
+  String get paradigmAsio => 'ASIO 模式';
+
+  @override
+  String get asioFlavorVirtual => '虚拟 ASIO';
+
+  @override
+  String get asioFlavorClient => 'ASIO Client';
 
   @override
   String get modeVoicemeeterApi => 'Voicemeeter API';

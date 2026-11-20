@@ -2233,7 +2233,7 @@ abstract class AppLocalizations {
   /// No description provided for @audioParadigmHint.
   ///
   /// In zh, this message translates to:
-  /// **'选择音频接入形态：附加模式原地挂载处理，普通管线模式端到端流转'**
+  /// **'选择音频接入形态：附加模式原地挂载处理，普通管线模式端到端流转，ASIO 模式对接专业宿主与设备'**
   String get audioParadigmHint;
 
   /// No description provided for @paradigmAttachment.
@@ -2247,6 +2247,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'普通管线模式'**
   String get paradigmPipeline;
+
+  /// No description provided for @paradigmAsio.
+  ///
+  /// In zh, this message translates to:
+  /// **'ASIO 模式'**
+  String get paradigmAsio;
+
+  /// No description provided for @asioFlavorVirtual.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟 ASIO'**
+  String get asioFlavorVirtual;
+
+  /// No description provided for @asioFlavorClient.
+  ///
+  /// In zh, this message translates to:
+  /// **'ASIO Client'**
+  String get asioFlavorClient;
 
   /// No description provided for @modeVoicemeeterApi.
   ///
