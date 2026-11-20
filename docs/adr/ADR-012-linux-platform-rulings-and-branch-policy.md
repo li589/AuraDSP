@@ -69,6 +69,13 @@ Linux 上保留与 Windows 同构的三种模式语义，**不裁剪、不留空
   （`platform_profile.dart:25`）⇒ 现状是「能看不能用」。裁定要求：**首期在 Linux 上不展示插件目录**，
   消除预期落差。
 
+> **【2026-11-02 后续变更】** 本条「必须隐藏 Linux 的插件目录 UI」已被
+> owner 的后续立项取代：《Linux插件宿主实施方案-2026-11-02》把 Linux 插件
+> 宿主转正为**进程内**（VST3 + CLAP 与 Windows 同进度），`supportsPlugins`
+> 放开 Linux、插件目录区恢复展示。**本段原文按 2026-11-01 当日裁定保留不改**
+> （ADR 记录的是当时的裁定），但其后果与 §4.2 代价、§4.3 门禁口径已按
+> 现行边界修订——详见 §7 后续变更记录。
+
 ---
 
 ## 3. 分支策略（2026-11-01 owner 裁定）
@@ -111,16 +118,33 @@ feature/linux  ──(Linux 代码，验证通过)──▶  dev  ──(dev 验
 | `pipewire-pulse` 未运行时静默失败 | PA API 调用无显式错误 | 实现期把「连接失败」与「无设备」分成两个错误码，并写入诊断日志 |
 | 插件目录 UI 隐藏 ⇒ Linux 首期插件能力为 0 | 用户在 Linux 上无法使用任何 VST3/CLAP/LV2 插件 | 属首期**已知取舍**；后续立项补 formats 层 Win32 剥离 + ELF 元数据端口（CP-24） |
 
-### 4.3 门禁（待 `feature/linux` 落地）
+> **【2026-11-02 后续变更】** 上表末行的代价**已不再承担**：《Linux插件宿主
+> 实施方案-2026-11-02》立项后 Linux 插件宿主转正进程内，插件目录区恢复展示，
+> Linux 首期插件能力不再为 0。其余四行代价不受影响。
 
-本 ADR 的门禁在 `feature/linux` 分支随实现落地（**本轮不改代码**）：
+### 4.3 门禁（**已落地并逐条复核**，2026-11-20）
 
-| 门禁 | 断言 |
-|---|---|
-| `smoke_linux_source_table.py` | Linux 源表可编译闭包：不含 `jamesdsp.c`、不引 Win32 头、`-include stdint.h` 生效 |
-| `abi_consistency.py`（扩展） | Linux version script 符号集 == `engine/auradsp_engine.def` 的 56 符号 |
-| `smoke_audio_modes_linux.py` | Linux 三模式 id（`system`/`virtual`/`driver`）均能由 `composeMode()` 产出且语义不落到 Windows id；设置页不出现 Windows 专有选项 |
-| `smoke_linux_plugin_ui.py` | Linux 上插件目录 UI 不展示（`plugin_dirs_desktop.dart` 的 Linux 分支被条件关闭） |
+四条门禁的落地状态（2026-11-20 逐条回代码取证复核，非采信文档口径）：
+
+| 门禁 | 落地状态 | 实际断言 |
+|---|---|---|
+| `smoke_linux_source_table.py` | **已重校**（初版模型过期） | Linux 源表闭包（**从 CMake 派生**，134 文件）+ 66 个可达本地头：守卫感知 Win32 头零泄漏、插件子系统默认 ON、`jamesdsp.c` 排除、`-include stdint.h`、`--version-script`、`.map` 与 `.def` 同源 |
+| `abi_consistency.py`（扩展） | **已落地**（S4） | Linux version script（`.map` global）符号集 == `engine/auradsp_engine.def` 的 56 符号（双向比对） |
+| `smoke_audio_modes_linux.py` | **2026-11-20 补件** | Linux 三模式 id 均能由 `composeMode(os:'linux')` 产出且不落 Windows id；`normalize` 对 Windows id 回落；设置页按 `PlatformProfile.isLinux` 门控，Linux 卡只含 system/virtual/driver |
+| `smoke_linux_plugin_ui.py` | **2026-11-20 补件（原口径作废，按现行边界重写）** | Linux 插件能力边界：目录区可见性由 `PluginHostPort` 能力把关而非硬编码平台；Linux 目录发现已恢复且经 `discoverFrom` 过滤；**D-7 仍成立的一半**：不导出自身 LV2/CLAP |
+
+> **初版 `smoke_linux_source_table.py` 是假绿**（2026-11-20 实测）：它按 D-7
+> 「一期 `AURADSP_ENABLE_PLUGINS=OFF` 整体裁掉」建模闭包（只含 2 个 stub），
+> 而 2026-11-02《Linux插件宿主实施方案》立项后 Linux 默认已启用插件子系统，
+> 真实闭包多出 20 余个插件源，且这些源**从未被 Win32 头扫描覆盖**。重校后
+> 闭包 134 文件 + 66 个可达本地头全部纳入监控（其中 5 处
+> `#if defined(_WIN32)` 守卫原先无门禁守护）。
+
+> **门禁 4 的原口径已作废**：ADR-012 §4.3 原写「Linux 上插件目录 UI 不展示」，
+> 与 2026-11-02 立项后的现行代码**相反**（`plugins_page.dart` 无条件构造
+> `PluginScanDirsSection`，`plugin_dirs_desktop.dart` 的 Linux 分支照常发现
+> 标准目录）。按原口径建门禁会固化已被推翻的行为且必然误红，故按现行边界
+> 重写，并在脚本头注明原口径与作废依据。
 
 ---
 
@@ -130,9 +154,9 @@ feature/linux  ──(Linux 代码，验证通过)──▶  dev  ──(dev 验
 |---|---|
 | `app/auradsp_app/lib/core/audio_modes.dart:67,121-136` | 三个 Linux id 需真正可由 `composeMode()` 产出（当前是语义死路） |
 | `app/auradsp_app/lib/features/settings/settings_audio_tab.dart:36-37,55-60,77-82` | 改为按 OS 过滤 + 渲染 Linux 三模式 |
-| `app/auradsp_app/lib/platform/plugins/plugin_dirs_desktop.dart:34-51` | Linux 分支按 D-7 关闭 |
+| `app/auradsp_app/lib/platform/plugins/plugin_dirs_desktop.dart:34-51` | ~~Linux 分支按 D-7 关闭~~ → **2026-11-02 立项后已恢复**：Linux 目录发现照常工作，目录区可见性改由插件宿主能力把关 |
 | `app/auradsp_app/lib/engine/audio_out/` | 新增 `audio_out_linux.dart`（PulseAudio simple API）+ `createAudioOut()` 按 OS 分派 |
-| `app/auradsp_app/lib/platform/platform_profile.dart:25,32` | `supportsPlugins` 在 Linux 恒 false；`supportsLocalDevice` 扩为 Windows \|\| Linux |
+| `app/auradsp_app/lib/platform/platform_profile.dart:25,32` | ~~`supportsPlugins` 在 Linux 恒 false~~ → **2026-11-02 立项后为 Windows \|\| Linux**；`supportsLocalDevice` 扩为 Windows \|\| Linux |
 | `engine/platform/linux/` | 新增 4 个端口实现（`fs`/`env`/`log`/`module`） |
 | `engine/auradsp_engine.map`（新） | Linux version script，由 `.def` 同源生成 |
 | `core/desktop/linux/`（新） | Linux 构建目标 + `build_engine.sh`（Ninja，去 `pwd -W`） |
@@ -149,3 +173,12 @@ feature/linux  ──(Linux 代码，验证通过)──▶  dev  ──(dev 验
 **本 ADR 只记录裁定，不含任何代码实现。** 代码实施全部在 `feature/linux` 分支上进行，
 按 [Linux 适配方案](../10-架构/Linux适配方案-2026-11-01.md) §4 的 S0~S5c 分期推进，
 每期独立提交、验证通过后合入 `dev`；`dev` 验证合并后由 `dev` 决定是否合入 `main`。
+
+---
+
+## 7. 后续变更记录（ADR 修订）
+
+| 日期 | 变更 | 依据 |
+|---|---|---|
+| 2026-11-02 | **D-7 的「隐藏 Linux 插件目录 UI」被后续立项取代**：Linux 插件宿主转正为进程内（`AURADSP_ENABLE_PLUGINS` 默认 ON、`supportsPlugins` 放开 Linux、插件目录区恢复展示）。§2 D-7 原文**按当日裁定保留不改**，但 §4.2 对应代价与 §4.3 对应门禁口径**已不成立**，按现行边界重写 | 《Linux插件宿主实施方案-2026-11-02》（owner 2026-11-02 立项，已执行） |
+| 2026-11-20 | **§4.3 四条门禁逐条复核并补件**：门禁 1 重校（模型过期导致假绿）、门禁 2 确认已落地、门禁 3 与门禁 4 补建（门禁 4 原口径作废、按现行边界重写）。三条新增/重校门禁均带反向自检 | 本轮实测取证，见各门禁脚本头注与《未决问题登记-2026-11-13.md》 |

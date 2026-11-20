@@ -7,6 +7,8 @@
 // 本文件只读环境与编译期常量，无 IO 副作用，可安全被 UI / isolate 引用。
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 abstract final class PlatformProfile {
   /// 归一化平台标识：windows / android / linux / macos / other。
   static String get os {
@@ -60,6 +62,16 @@ abstract final class PlatformProfile {
 
   static bool get isWindows => Platform.isWindows;
   static bool get isLinux => Platform.isLinux;
+
+  /// 默认输入能力（首个指针事件到达前的首帧默认值）：触屏平台按触屏起，
+  /// 其余按指针（鼠标）起。
+  ///
+  /// 平台判定按 M4 铁律只许落在本文件——业务层（含 `core/ui_helpers.dart`）
+  /// 一律经此门面取，不得直读 `defaultTargetPlatform` / `Platform.is*`
+  /// （门禁 `smoke_dart_platform_quarantine.py` 守护）。
+  static bool get prefersTouchInput =>
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
 
   static bool get supportsBridges => Platform.isWindows;
 

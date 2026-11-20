@@ -16,10 +16,9 @@ import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 
+import '../platform/platform_profile.dart';
 import 'design.dart';
 import 'theme.dart';
 
@@ -114,10 +113,13 @@ class _AuraInputScopeState extends State<AuraInputScope> {
   void initState() {
     super.initState();
     // 首帧先按平台给一个合理默认；首个 PointerDown 会立即校正。
-    _mode = ValueNotifier(switch (defaultTargetPlatform) {
-      TargetPlatform.android || TargetPlatform.iOS => AuraInputMode.touch,
-      _ => AuraInputMode.pointer,
-    });
+    // 平台默认输入能力经 PlatformProfile 取（M4 铁律：平台判定只许落在
+    // lib/platform/platform_profile.dart，业务层不得直读 defaultTargetPlatform）。
+    _mode = ValueNotifier(
+      PlatformProfile.prefersTouchInput
+          ? AuraInputMode.touch
+          : AuraInputMode.pointer,
+    );
   }
 
   void _handlePointerDown(PointerDownEvent event) {

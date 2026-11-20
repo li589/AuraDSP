@@ -56,7 +56,14 @@ PLATFORM_ANY = {
     "smoke_r49_vb_testfile_channels.py",
     "smoke_dart_chcap_authority.py",
     # S2（2026-11-01）：Linux 源表闭包门禁，纯文本/源表扫描，任意平台可跑。
+    # 2026-11-20 重校：源表改从 CMake 派生（初版按 D-7 裁剪建模，已随
+    # 2026-11-02 插件宿主立项过期），真实闭包 134 文件 + 可达头 66 纳入扫描。
     "smoke_linux_source_table.py",
+    # ADR-012 §4.3 补件（2026-11-20）：Linux 音频模式三 id 语义 + 设置页
+    # OS 门控、Linux 插件能力现行边界（2026-11-02 立项后口径）。纯源码
+    # 扫描，任意平台可跑。
+    "smoke_audio_modes_linux.py",
+    "smoke_linux_plugin_ui.py",
     # S1（2026-11-01）：Linux 引擎信号链功能门禁（产物缺失时自 SKIP）。
     "smoke_linux_engine_process.py",
     # S4 补强（2026-11-01）：同步工具与 CI 骨架门禁，两平台可跑。
@@ -485,7 +492,15 @@ def run_smoke_tests():
         "smoke_dart_test_wave.py",
         # S2 Linux 源表门禁（2026-11-01，ADR-012 §4.3）：Linux 编译闭包不含
         # jamesdsp.c / Win32 源、gcc shim 与 stdint 前置注入在场、.map 同源。
+        # 2026-11-20 重校：闭包从 CMake 派生（插件子系统 2026-11-02 立项后
+        # 默认 ON），真实源表 + 可达本地头的守卫感知 Win32 扫描。
         "smoke_linux_source_table.py",
+        # ADR-012 §4.3 补件（2026-11-20）：Linux 音频模式三 id 由 composeMode
+        # 产出且不落 Windows id、设置页按 OS 门控不出现 Windows 专有选项；
+        # Linux 插件能力现行边界（2026-11-02 立项后 D-7 隐藏已解除，改钉
+        # 「能力把关不硬编码平台」+「不导出自身 LV2/CLAP」）。纯源码扫描。
+        "smoke_audio_modes_linux.py",
+        "smoke_linux_plugin_ui.py",
         # S1 Linux 引擎功能门禁（2026-11-01）：.so 信号链真实跑通（EQ tap
         # 非零，与 verify_dll_copies 同口径）；产物经 engine_artifact 解析，
         # 缺失时自 SKIP。Windows 上该产物不存在 → 自 SKIP 不误红。
