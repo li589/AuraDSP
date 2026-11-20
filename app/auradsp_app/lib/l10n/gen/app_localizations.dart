@@ -964,11 +964,11 @@ abstract class AppLocalizations {
   /// **'在 DAW (FL Studio / Cubase / Reaper / Ableton) 的 Audio Device 中选择 \"AuraDSP Virtual ASIO\" 即可将工程音频路由至此。'**
   String get ioAsioGuide;
 
-  /// No description provided for @ioWasapiRenderDesc.
+  /// No description provided for @ioModeLabel.
   ///
   /// In zh, this message translates to:
-  /// **'WASAPI 物理渲染 (扬声器/耳机)'**
-  String get ioWasapiRenderDesc;
+  /// **'模式'**
+  String get ioModeLabel;
 
   /// No description provided for @ioNoOutputDevices.
   ///
@@ -1021,7 +1021,7 @@ abstract class AppLocalizations {
   /// No description provided for @ioAutoSelect.
   ///
   /// In zh, this message translates to:
-  /// **'自动选择（非VAIO扬声器）'**
+  /// **'自动选择（非AuraVAIO）'**
   String get ioAutoSelect;
 
   /// No description provided for @ioNoPhysicalOutputs.

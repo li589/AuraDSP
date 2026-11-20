@@ -519,8 +519,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'In your DAW (FL Studio / Cubase / Reaper / Ableton) select \"AuraDSP Virtual ASIO\" as Audio Device to route project audio here.';
 
   @override
-  String get ioWasapiRenderDesc =>
-      'WASAPI physical render (speakers/headphones)';
+  String get ioModeLabel => 'Mode';
 
   @override
   String get ioNoOutputDevices => 'No output devices available';
@@ -552,7 +551,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ioPhysicalOutput => 'Physical output';
 
   @override
-  String get ioAutoSelect => 'Auto select (non-VAIO speaker)';
+  String get ioAutoSelect => 'Auto select (non-AuraVAIO)';
 
   @override
   String get ioNoPhysicalOutputs => 'No physical output devices available';

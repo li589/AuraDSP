@@ -479,7 +479,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '在 DAW (FL Studio / Cubase / Reaper / Ableton) 的 Audio Device 中选择 \"AuraDSP Virtual ASIO\" 即可将工程音频路由至此。';
 
   @override
-  String get ioWasapiRenderDesc => 'WASAPI 物理渲染 (扬声器/耳机)';
+  String get ioModeLabel => '模式';
 
   @override
   String get ioNoOutputDevices => '无可用输出设备';
@@ -508,7 +508,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ioPhysicalOutput => '物理输出';
 
   @override
-  String get ioAutoSelect => '自动选择（非VAIO扬声器）';
+  String get ioAutoSelect => '自动选择（非AuraVAIO）';
 
   @override
   String get ioNoPhysicalOutputs => '无可用物理输出设备';

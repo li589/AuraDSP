@@ -468,10 +468,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get ioChannelStatus => 'チャンネル状態';
 
   @override
-  String get ioVaioActive => '転送中（全二重 DMA リングバッファ）';
+  String get ioVaioActive => '転送中';
 
   @override
-  String get ioVaioReady => '準備完了（システム/アプリのストリーム待ち）';
+  String get ioVaioReady => '準備完了';
 
   @override
   String get ioVaioGuideShort =>
@@ -491,7 +491,7 @@ class AppLocalizationsJa extends AppLocalizations {
       'DAW（FL Studio / Cubase / Reaper / Ableton）の Audio Device で「AuraDSP Virtual ASIO」を選択すると、プロジェクトの音声がここにルーティングされます。';
 
   @override
-  String get ioWasapiRenderDesc => 'WASAPI 物理レンダリング（スピーカー/ヘッドホン）';
+  String get ioModeLabel => 'モード';
 
   @override
   String get ioNoOutputDevices => '利用可能な出力デバイスがありません';
@@ -521,7 +521,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get ioPhysicalOutput => '物理出力';
 
   @override
-  String get ioAutoSelect => '自動選択（非 VAIO スピーカー）';
+  String get ioAutoSelect => '自動選択（非 AuraVAIO）';
 
   @override
   String get ioNoPhysicalOutputs => '利用可能な物理出力デバイスがありません';
