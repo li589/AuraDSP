@@ -614,9 +614,11 @@ void AuraAsioDriver::PullParamsFromBlock() {
                           ASIO_DRIVER_PARAMS_PAYLOAD_OFFSET;
     std::string snapshot(payload, payload + bytes);
     const long bypass = m_params->bypass;
+    const long mute = m_params->mute;
     if (m_params->seq != seq) return;  // 拷贝期间写者已更新，下块重试
     m_lastParamSeq = seq;
     m_pendingParamString = snapshot;
+    m_paramsMuted = (mute != 0);
     m_bypass.store(bypass != 0, std::memory_order_relaxed);
     if (m_engine && !snapshot.empty()) {
         m_engineLoader.ApplyParamsString(m_engine, snapshot.c_str());
@@ -741,7 +743,11 @@ DWORD AuraAsioDriver::PumpLoop() {
                 }
             }
 
-            if (m_engine && !m_bypass.load(std::memory_order_relaxed)) {
+            if (m_paramsMuted) {
+                // 链路总闸静音（参数块 mute）：汇与回环均零，
+                // 遥测峰值随折叠归零、频谱走清零分支。
+                memset(m_proc, 0, (size_t)m_bufferSize * (size_t)ch * sizeof(float));
+            } else if (m_engine && !m_bypass.load(std::memory_order_relaxed)) {
                 // 交织 DAW 输出送入 DSP 处理
                 m_engineLoader.Process(m_engine, m_interleavedIn, m_interleavedOut, (int)m_bufferSize);
                 memcpy(m_proc, m_interleavedOut, (size_t)m_bufferSize * (size_t)ch * sizeof(float));
@@ -807,7 +813,8 @@ DWORD AuraAsioDriver::PumpLoop() {
             // S4 频谱：取引擎 viz 环最新一帧。旁路（引擎不处理）
             // 或引擎缺席/viz 未绑定时写全零，不留陈旧频谱误导
             // UI；处理中但本块无新帧则保留上一帧（防闪烁）。
-            if (!m_bypass.load(std::memory_order_relaxed) && m_engine &&
+            if (!m_paramsMuted &&
+                !m_bypass.load(std::memory_order_relaxed) && m_engine &&
                 m_engineLoader.HasViz()) {
                 auradsp_viz_frame frame;
                 int guard = 0;

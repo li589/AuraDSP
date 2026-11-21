@@ -34,9 +34,12 @@ class _DriverLayer extends StatelessWidget {
         _VirtualAsioDriverCard(model: model),
         const SizedBox(height: AuraSpace.sm),
         _WasapiDriverRow(model: model),
-        const SizedBox(height: AuraSpace.sm),
-        // 引擎生效值收尾块（第三十七轮移位裁定沿用）。
-        _EngineEffectiveBlock(model: model),
+        // 引擎生效值收尾块：r61 验收修复（user 裁定）——仅调试
+        // 模式开启时显示（config.debugMode，测试页开关）。
+        if (model.config.debugMode) ...[
+          const SizedBox(height: AuraSpace.sm),
+          _EngineEffectiveBlock(model: model),
+        ],
       ],
     );
   }
@@ -565,16 +568,21 @@ class _AsioClientDriverRow extends StatelessWidget {
             if (info['sr'] is num)
               _InfoRow(
                 l.sampleRate,
-                '${(info['sr'] as num).toInt()} Hz / ${info['nbs'] ?? '?'} frames',
+                '${(info['sr'] as num).toInt()} Hz',
               ),
+            if (info['nbs'] is num)
+              _InfoRow(l.buffer, '${info['nbs']} frames'),
             if ((info['dropouts'] as int? ?? 0) > 0)
               _InfoRow(l.asioDropouts, '${info['dropouts']}'),
             if ((info['latenciesChanged'] as int? ?? 0) == 1)
               _InfoRow('ASIO', l.asioLatChanged),
             if (info['sr'] is num &&
                 (info['sr'] as num).toInt() != model.config.sampleRate)
+              // 不一致提示行借 'ASIO' 标签（与 note/延迟变更行同
+              // 口径）：曾误用采样率标签，与上方回读行并列成
+              // 「两个采样率」（r61 验收修复）。
               _InfoRow(
-                l.sampleRate,
+                'ASIO',
                 l.asioSrMismatch(
                   '${(info['sr'] as num).toInt()}',
                   '${model.config.sampleRate}',
@@ -815,8 +823,8 @@ class _VirtualAsioDriverCard extends StatelessWidget {
 
     // 版式统一（2026-11-10 用户裁定）：检测/注册/注销与状态文字同行，
     // 按钮在文字栏右侧右对齐（此前为卡底独占一行）。文字走
-    // _DriverKv 紧凑键值行。第三十七轮（业主目检裁定）：DAW 状态
-    // 仅在有活跃连接时显示——空闲（等待 DAW 接入）不占行。
+    // _DriverKv 紧凑键值行。本卡只管驱动注册：DAW 状态与声道
+    // 档位已归 ASIO 模式 I/O 面板（r61 验收修复去重）。
     return _DriverBlock(
       title: l.asioDriverCardTitle,
       lines: [
@@ -826,13 +834,8 @@ class _VirtualAsioDriverCard extends StatelessWidget {
               ? l.asioDriverRegistered
               : l.asioDriverNotRegistered,
         ),
-        // S3 起 DAW 状态以驱动遥测为准（桥 daw* 字段）；桥无
-        // 遥测字段时回落 App 自身会话口径（与 ASIO I/O 面板同规）。
-        if (model.asioInfo.containsKey('dawSeen')
-            ? (model.asioInfo['dawSeen'] == 1 &&
-                model.asioInfo['dawActive'] == 1)
-            : model.asioActive)
-          _DriverKv(l.asioDawStatus, l.asioDawConnected),
+        // DAW 状态行已撤（r61 验收修复）：与 ASIO 模式 I/O 面板
+        // 的虚拟形态重复，状态呈现归面板一处；本卡只管注册。
       ],
       actions: [
         if (!model.asioDriverInstalled)
@@ -882,10 +885,9 @@ class _VirtualAsioDriverCard extends StatelessWidget {
               message: model.lastAsioError!,
               onDismiss: () => model.clearAsioError(),
             ),
-          const SizedBox(height: AuraSpace.xs),
-          _AsioDriverChannelsRow(model: model),
-          // 第三十七轮（业主目检裁定）：原「写入注册表，DAW 下次
-          // 连接时生效」提示行删除——档位行本身已自明。
+          // 声道档位行已撤（r61 验收修复）：与 ASIO 模式 I/O 面
+          // 板的虚拟形态重复，档位设置归面板一处（行组件共用
+          // 不动，面板侧仍在）。
         ],
       ),
     );

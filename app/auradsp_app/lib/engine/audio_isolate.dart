@@ -211,11 +211,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // ASIO S4 通道：参数块发布者 + 遥测读者（虚拟形态控制模式下
   // 激活；Client 形态走桥会话、两者恒空操作）。与 APO 发布者共
   // 用同一份参数镜像。
+  // 链路总闸静音（主状态 asiomode 的 muted 键维护）：发布者经
+  // 参数块 mute 字段下发驱动（r61 验收修复）。
+  bool asioMuted = false;
   final asioPublisher = AsioParamPublisher()
     ..bind(
         mirror: paramMirror,
         strMirror: paramStrMirror,
-        bypassOf: () => bypass);
+        bypassOf: () => bypass,
+        muteOf: () => asioMuted);
   final asioTelemetry = AsioTelemetryReader();
   // 虚拟形态控制模式在场标志（asiomode 分支维护）：为真时不存
   // 在桥会话，asiorestart 只重发参数块。
@@ -1771,6 +1775,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               // 遥测读者即全部通道；残留的 Client 会话先收掉。
               // 对账重发（asioActive 恒假）会重复命中本分支：
               // 已在控制模式时只重发参数块，不重建读者。
+              asioMuted = m['muted'] == true;
               if (!asioControlMode) {
                 if (bridgeManager.isActive('asio')) stopAsioBridge();
                 asioControlMode = true;
@@ -1794,6 +1799,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
           } else {
             if (asioControlMode) {
+              // 离开 ASIO 模式前先解静音再撤发布：驱动不留在
+              // mute 态（App 已无控制台可解，r61 验收修复）。
+              asioMuted = false;
+              asioPublisher.flushAll();
               asioControlMode = false;
               asioPublisher.active = false;
               asioTelemetry.stop();

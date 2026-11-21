@@ -91,32 +91,11 @@ class _AsioClientPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l = l10nOf(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _AsioClientOutputSubpanel(model: model),
-        HbBuilder(
-          tick: model.hbTick,
-          builder: (_) {
-            if (!model.asioActive) return const SizedBox.shrink();
-            final info = model.asioInfo;
-            final sr = (info['sr'] as num?)?.toDouble() ?? 0;
-            final nbs = (info['nbs'] as num?)?.toInt() ?? 0;
-            final ioCh = (info['ioCh'] as num?)?.toInt() ?? 0;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (sr > 0)
-                  _InfoRow(l.sampleRate,
-                      '${sr.toInt()} Hz${ioCh > 0 ? ' / $ioCh ch' : ''}'),
-                if (nbs > 0) _InfoRow(l.buffer, '$nbs frames'),
-              ],
-            );
-          },
-        ),
-      ],
-    );
+    // 协商回读（采样率/缓冲/设备声道/传输声道/切换计数）全在
+    // _AsioClientDriverRow 的活跃块内（子面板已复用之）——本面
+    // 板不再另加回读行（r61 验收修复：曾与驱动行重复显示两处
+    // 采样率）。
+    return _AsioClientOutputSubpanel(model: model);
   }
 }
 

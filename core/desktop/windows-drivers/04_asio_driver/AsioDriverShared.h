@@ -35,7 +35,9 @@
 // 序列化为引擎 ApplyParamsString 同格式的 "id=value;..." 载荷
 // 写入 payload，写毕才递增 seq（驱动以 seq 变化为应用触发，
 // 应用前后再读 seq 复核载荷稳定）。bypass 独立成字段（不经
-// 参数串）。字符串型参数 v1 只携带 graph.order，其余（脚本
+// 参数串）。mute 同为独立字段（r61 验收修复）：App 在 ASIO
+// 模式内关链路总闸时置 1，驱动泵整体静音——与 bypass 分工
+// （bypass 是处理直通，mute 是无声）。字符串型参数 v1 只携带 graph.order，其余（脚本
 // 代码、文件路径类）不经本块——分隔格式承载不了任意文本，
 // 属已知约束（见方案附记）。
 #define ASIO_DRIVER_PARAMS_NAME L"Global\\AuraDSP_AsioDriverParams"
@@ -52,7 +54,7 @@ struct AsioDriverParamsBlock {
     volatile long seq;       // 写者递增：载荷 + bypass 的版本号
     volatile long bypass;    // 0 = 处理中，1 = 旁路
     uint32_t payloadBytes;   // payload 有效字节数（不含 NUL）
-    uint32_t reserved0;
+    volatile long mute;      // 1 = 链路总闸静音（原 reserved0）
     uint32_t reserved1[10];  // 凑 payload 偏移至 64
     // char payload[PAYLOAD_CAP + 1]：NUL 结尾的 UTF-8 参数串，
     // 位于偏移 ASIO_DRIVER_PARAMS_PAYLOAD_OFFSET。

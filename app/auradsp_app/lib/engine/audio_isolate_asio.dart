@@ -36,6 +36,7 @@ class AsioParamPublisher {
   Map<String, ({bool isFloat, double value})>? _mirror;
   Map<String, String>? _strMirror;
   bool Function()? _bypassOf;
+  bool Function()? _muteOf;
 
   /// 虚拟形态控制模式开关（isolate 的 asiomode 分支维护）。
   bool active = false;
@@ -52,10 +53,12 @@ class AsioParamPublisher {
     required Map<String, ({bool isFloat, double value})> mirror,
     required Map<String, String> strMirror,
     required bool Function() bypassOf,
+    required bool Function() muteOf,
   }) {
     _mirror = mirror;
     _strMirror = strMirror;
     _bypassOf = bypassOf;
+    _muteOf = muteOf;
   }
 
   Pointer<Void> _createMapping(_ApoWin32 w, Pointer<Utf16> name) {
@@ -187,6 +190,7 @@ class AsioParamPublisher {
     view[_asioParamsPayloadOffset + bytes.length] = 0;
     _u32![4] = bytes.length;
     _i32![3] = (_bypassOf?.call() ?? false) ? 1 : 0;
+    _i32![5] = (_muteOf?.call() ?? false) ? 1 : 0;
     _seq += 1;
     _i32![2] = _seq;
   }

@@ -92,6 +92,7 @@ private:
     const AsioDriverParamsBlock* m_params = nullptr;
     long m_lastParamSeq = 0;
     int m_paramsRetry = 0;
+    bool m_paramsMuted = false;  // 泵线程独占（Pull 与消费同线程）
 
     std::atomic<long> m_refCount{1};
 

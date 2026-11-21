@@ -133,6 +133,7 @@ extension AudioModesState on AppModel {
           'bufSize': config.asioBufSize,
           'outPair': config.asioOutPair,
           'flavor': config.asioFlavor,
+          'muted': _asioVirtualMuted,
         });
       }
       if (!isAsio) {
@@ -402,6 +403,7 @@ extension AudioModesState on AppModel {
           'bufSize': config.asioBufSize,
           'outPair': config.asioOutPair,
           'flavor': config.asioFlavor,
+          'muted': _asioVirtualMuted,
         });
       }
       _sendChCap();
@@ -417,6 +419,12 @@ extension AudioModesState on AppModel {
       (config.modeCategory == AudioModes.categoryPipeline ||
           config.modeCategory == AudioModes.categoryAsio) &&
       (!config.pipelineInputEnabled || !config.pipelineOutputEnabled);
+
+  /// ASIO 虚拟形态的链路静音（r61 验收修复）：总闸压下时不拆
+  /// 控制模式，改经参数块 mute 字段令驱动泵静音（Client 形态
+  /// 仍走 asiomode off 停桥）。
+  bool get _asioVirtualMuted =>
+      config.asioFlavor == AudioModes.asioVirtual && _pipelineIoSuppressed;
 
   /// 当前管线链路（仅管线/ASIO 类别内有意义；其余类别返回
   /// null）。ASIO 范式恒 asio 链（子形态差异在管线对与桥的
@@ -626,7 +634,22 @@ extension AudioModesState on AppModel {
         _disarmVaioGuard();
         dbgLog('pipeline.chain: vaiomode off (io switch)');
       }
-      if (asioActive) {
+      if (config.modeCategory == AudioModes.categoryAsio &&
+          config.asioFlavor == AudioModes.asioVirtual) {
+        // r61 验收修复：虚拟形态总闸不拆控制模式——拆会话拆不
+        // 掉 DAW 进程内的驱动（声音与遥测照旧，宾机实报缺陷），
+        // 改经参数块 mute 字段令驱动泵整体静音。
+        _toIso?.send({
+          'cmd': 'asiomode',
+          'on': true,
+          'driver': config.asioDriver,
+          'bufSize': config.asioBufSize,
+          'outPair': config.asioOutPair,
+          'flavor': config.asioFlavor,
+          'muted': true,
+        });
+        dbgLog('pipeline.chain: asiomode virtual muted (io switch)');
+      } else if (asioActive) {
         _toIso?.send({
           'cmd': 'asiomode',
           'on': false,
@@ -687,8 +710,11 @@ extension AudioModesState on AppModel {
         'monitorMirror': config.monitorMirroring,
       });
       _armVaioGuard();
-    } else if (chain == PipelineChain.asio && !asioActive) {
-      dbgLog('pipeline.reconcile: resend asiomode (asioActive=false)');
+    } else if (chain == PipelineChain.asio &&
+        (!asioActive || config.asioFlavor == AudioModes.asioVirtual)) {
+      // 虚拟形态恒重发：控制模式无会话活标志，总闸的静音/解静
+      // 音状态只能靠重发 asiomode 携带（isolate 侧幂等）。
+      dbgLog('pipeline.reconcile: resend asiomode');
       _toIso?.send({
         'cmd': 'asiomode',
         'on': true,
@@ -696,6 +722,7 @@ extension AudioModesState on AppModel {
         'bufSize': config.asioBufSize,
         'outPair': config.asioOutPair,
         'flavor': config.asioFlavor,
+        'muted': _asioVirtualMuted,
       });
     }
   }

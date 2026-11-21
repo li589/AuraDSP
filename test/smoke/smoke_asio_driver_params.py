@@ -78,6 +78,18 @@ check("publisher carries graph.order only",
       "_strMirror?['graph.order']" in dart_asio)
 check("publisher debounced", "noteChanged" in dart_asio)
 
+# ---- 总闸静音（r61 验收修复） ----
+check("header mute field", "volatile long mute;" in shared)
+check("driver reads mute", "m_params->mute" in driver and
+      "m_paramsMuted = (mute != 0)" in driver)
+check("driver pump zeroes when muted", "if (m_paramsMuted)" in driver)
+check("publisher writes mute at i32[5]",
+      "_i32![5] = (_muteOf?.call() ?? false) ? 1 : 0;" in dart_asio)
+check("isolate tracks asioMuted from asiomode",
+      "asioMuted = m['muted'] == true;" in dart_iso)
+check("isolate un-mutes before leaving control mode",
+      "asioMuted = false;" in dart_iso)
+
 # ---- isolate 控制模式（去假会话） ----
 i_virtual = dart_iso.find("if ((m['flavor'] as String?) == 'virtual')")
 i_else = dart_iso.find("} else {", i_virtual)

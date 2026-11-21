@@ -138,6 +138,7 @@ extension StateEvents on AppModel {
             'bufSize': config.asioBufSize,
             'outPair': config.asioOutPair,
             'flavor': config.asioFlavor,
+            'muted': _asioVirtualMuted,
           });
         }
         // 持久化的是 AuraVAIO 模式：就绪后自动进桥。
