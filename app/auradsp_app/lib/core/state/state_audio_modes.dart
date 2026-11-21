@@ -1385,6 +1385,20 @@ extension AudioModesState on AppModel {
     return d.ch;
   }
 
+  /// 端点 id 能否在本地设备表认出（大小写不敏感；id 或名称皆可）。
+  /// 虚拟 ASIO 的汇端点 id 由驱动遥测给出，名字只能靠设备表映射。
+  bool _knownEndpointId(String id) {
+    if (id.isEmpty) return false;
+    final t = id.toLowerCase();
+    for (final d in wasapiDevices) {
+      if (d.id.toLowerCase() == t || d.name.toLowerCase() == t) return true;
+    }
+    for (final d in vaioPhysicalEndpoints) {
+      if (d.id.toLowerCase() == t || d.name.toLowerCase() == t) return true;
+    }
+    return false;
+  }
+
   /// 第四十五轮 S2：分模式声道能力（**设备事实**，状态侧唯一
   /// 权威计算点；user 裁定 2026-11-17）。返回 null = 状态侧无
   /// 确知量、不下发——由 isolate 侧真源决定（ASIO 起桥预置 /
@@ -1397,14 +1411,27 @@ extension AudioModesState on AppModel {
   ///   扫描声道，单侧未知取已知侧，全未知 → 8；
   /// - 管线 vaio 链：VAIO 本体 8，上限 = 其 WASAPI 输出端点
   ///   （vaioOutputEndpoint）扫描声道，未选/未知 → 8；
-  /// - 管线 asio 链 / auto：null。
+  /// - 管线 asio 链：虚拟形态取驱动档位/DAW 协商值（见
+  ///   [_asioVirtualWorkCh]），Client 形态 null（isolate 起桥预置）；
+  /// - auto：null。
   int? _capabilityChForMode() {
     if (!PlatformProfile.isWindows) return null;
     if (audioMode == 'sysapo') return _selectedApoEndpointCh() ?? 8;
     if (audioMode == 'vbcallback') return vbNegotiatedCh ?? 8;
-    if (modeCategory == AudioModes.categoryPipeline) {
+    // ASIO 范式与管线范式共用同一合成链（ASIO 只是管线形态的一对
+    // 特例值）。此前只判 categoryPipeline，ASIO 范式整块被跳过 →
+    // 能力恒 null、chcap 从不下发，isolate 侧保留上一模式的旧值。
+    if (modeCategory == AudioModes.categoryPipeline ||
+        modeCategory == AudioModes.categoryAsio) {
       final chain = AudioModes.composeChain(
           input: config.pipelineInput, output: config.pipelineOutput);
+      // ASIO 范式只认 asio 链：启动早期管线对尚未按子形态拨形时，
+      // 旧存量值可能合成出 capture/vaio，此时不越权给能力（等
+      // setAsioFlavor 拨形后自会重算）。
+      if (modeCategory == AudioModes.categoryAsio &&
+          chain != PipelineChain.asio) {
+        return null;
+      }
       switch (chain) {
         case PipelineChain.capture:
           final i = _scanChOf(config.pipelineInputDevice);
@@ -1416,10 +1443,40 @@ extension AudioModesState on AppModel {
           if (o == null) return 8;
           return o < 8 ? o : 8;
         case PipelineChain.asio:
-          return null;
+          return _asioVirtualWorkCh();
       }
     }
     return null;
+  }
+
+  /// 虚拟 ASIO 形态的工作声道数（状态侧唯一口径）。
+  ///
+  /// 虚拟形态下 App 自身不跑处理引擎——DAW 进程内的引擎实例才是真
+  /// 处理者，其宽度由驱动档位（HKCU Channels）决定，运行期再受 DAW
+  /// 协商值约束。因此：
+  /// - DAW 活着（遥测活跃且有合法 dawCh）→ 用协商值；
+  /// - 否则用档位镜像 [asioDriverChannels]（2/4/6/8）。
+  ///
+  /// 注意必须要求「活跃」：驱动遥测块会跨 DAW 会话驻留，块里留着
+  /// 上次会话的 dawCh（常见 2）。若只要块在就采信，关掉 DAW 后
+  /// 档位改了也会被残留值钉在 2——正是本次要修的症状之一。
+  ///
+  /// ASIO Client 形态与其它模式返回 null——那边由 isolate 起桥预置
+  /// 与协商结果自行供给，状态侧不得越权钳制。
+  ///
+  /// 必要性（真机 2026-11-21）：此前 asio 链恒返回 null，`_sendChCap`
+  /// 走空分支不发命令，isolate 侧 [capabilityCh] 保留上一模式（常见
+  /// 2ch）的旧值 → 用户设 7.1 被钳回 2ch、回读再把界面拉回 2.0，
+  /// 可视化/电平与 DAW 实际处理宽度一起塌成 2。
+  int? _asioVirtualWorkCh() {
+    if (audioMode != 'asio') return null;
+    if (config.asioFlavor != AudioModes.asioVirtual) return null;
+    final dawLive = asioActive ||
+        ((asioInfo['dawActive'] as num?)?.toInt() ?? 0) == 1;
+    final daw = (asioInfo['dawCh'] as num?)?.toInt() ?? 0;
+    if (dawLive && (daw == 2 || daw == 4 || daw == 6 || daw == 8)) return daw;
+    final d = asioDriverChannels;
+    return (d == 4 || d == 6 || d == 8) ? d : 2;
   }
 
   /// 把分模式能力发给 isolate 钳制器（第四十二轮 S1 立 chcap，
@@ -1493,6 +1550,10 @@ extension AudioModesState on AppModel {
       }
       return _normCh(want);
     }
+    // 虚拟 ASIO：自动档不再看 App 自身引擎镜像（该引擎不参与处理，
+    // 镜像常年是 2）——直接采用驱动档位/DAW 协商宽度。
+    final asioCh = _asioVirtualWorkCh();
+    if (asioCh != null) return _normCh(asioCh);
     if (audioMode == 'sysapo') {
       final devCh = _selectedApoEndpointCh();
       if (devCh != null) return _normCh(devCh);
@@ -1614,12 +1675,24 @@ extension AudioModesState on AppModel {
         r'HKLM\SOFTWARE\ASIO\AuraDSP Driver',
       );
       // 声道档位镜像同步（ASIO-4）：非法/缺失与驱动同口径回落 2。
+      // 读失败（reg.exe 缺失/瞬时无权限）时保留现有镜像，不回落——
+      // 真机 2026-11-21：此处把读失败当「没设过」写过一次 2，用户
+      // 刚设的 7.1 会在下次状态复查时被抹回 2.0。
       final ch = registry.readDword(
         r'HKCU\SOFTWARE\AuraDSP\AsioDriver',
         'Channels',
       );
-      asioDriverChannels =
-          (ch != null && const {2, 4, 6, 8}.contains(ch)) ? ch : 2;
+      if (ch != null) {
+        final next = const {2, 4, 6, 8}.contains(ch) ? ch : 2;
+        if (next != asioDriverChannels) {
+          asioDriverChannels = next;
+          // 档位是虚拟形态的能力上限：变了必须重算并下发，否则
+          // isolate 侧仍按旧档位钳制 channels.count。
+          _displayGen++;
+          _sendChCap();
+          refreshDisplayChannelCount();
+        }
+      }
       // S3：汇后端端点以 config 为真相、注册表为驱动消费面——
       // 不一致时把 config 值推回注册表（覆盖新装/还原/手改注册
       // 表的漂移），驱动下次 Open 即按指定端点打开。
@@ -1653,6 +1726,20 @@ extension AudioModesState on AppModel {
     );
     if (ok) {
       asioDriverChannels = ch;
+      // 虚拟 ASIO：档位即工作宽度，声道数量镜像同步跟随（两控件
+      // 同说一件事，避免「档位 8 / 声道数 2」自相矛盾）。
+      if (audioMode == 'asio' &&
+          config.asioFlavor == AudioModes.asioVirtual &&
+          channelsCount != ch) {
+        channelsCount = ch;
+        config.channelsCount = ch;
+        ConfigManager.save(config);
+      }
+      // 档位即虚拟形态的声道能力（见 _asioVirtualWorkCh）：改档后
+      // 立即重算能力并下发，让 isolate 解除旧档钳制、显示面同步。
+      _displayGen++;
+      _sendChCap();
+      refreshDisplayChannelCount();
       _notifyUi();
     }
     return ok;

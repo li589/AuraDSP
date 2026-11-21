@@ -1168,6 +1168,8 @@ extension StateEvents on AppModel {
         break;
       case 'asiostatus':
         final wasA = asioActive;
+        final prevSink = (asioInfo['dawSinkEndpoint'] as String?) ?? '';
+        final prevDawCh = (asioInfo['dawCh'] as num?)?.toInt() ?? 0;
         asioActive = (raw['running'] as bool?) ?? false;
         asioInfo = Map<String, dynamic>.from(raw);
         // 全面复审 S1（ASIO-3）：起桥失败 note 此前无任何用户可见
@@ -1199,6 +1201,25 @@ extension StateEvents on AppModel {
           }
         } else {
           asioResetRestartInFlight = false;
+        }
+        // 声道面（真机 2026-11-21）：虚拟形态的引擎宽度由 DAW 协商
+        // 值决定，App 自身镜像不作数——协商宽度变化即重算显示面，
+        // 否则设了 7.1 仍按 2.0 显示电平/可视化。
+        final dawCh = (raw['dawCh'] as num?)?.toInt() ?? 0;
+        if (dawCh != prevDawCh) {
+          _displayGen++;
+          refreshDisplayChannelCount();
+        }
+        // 端点面：汇实际端点 id 变化而本地设备表认不出它 → 主动重扫
+        // 一次设备表（同一 id 只扫一次），让「实际生效端点」立刻显示
+        // 友好名而不是裸 GUID（此前要等 DAW 重开触发系统事件才有名字）。
+        final sinkId = (raw['dawSinkEndpoint'] as String?) ?? '';
+        if (sinkId.isNotEmpty &&
+            sinkId != prevSink &&
+            !_knownEndpointId(sinkId) &&
+            sinkId != asioSinkRefreshedFor) {
+          asioSinkRefreshedFor = sinkId;
+          refreshAudioDevices();
         }
         hbTick.value++;
         if (wasA != asioActive) _notifyUi();

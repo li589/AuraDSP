@@ -178,11 +178,17 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
       return SectionCard(
         title: l.channelCardTitle,
         // 全面复审 S2（UI-4）：sysapo 下补归属说明（声道由端点
-        // 流格式决定 / 全局设置对所有已附加端点一致）。
+        // 流格式决定 / 全局设置对所有已附加端点一致）。虚拟 ASIO
+        // 下声道数量与驱动档位同源，补一句写注册表、DAW 重连生效
+        // （真机 2026-11-21：用户改 7.1 后不知为何仍是 2.0）。
         hint: model.audioMode == 'sysapo'
             ? '${l.channelCountHint}\n${l.channelsFollowApo}\n'
                 '${l.channelPhaseA}\n${l.apoChannelsGlobal}'
-            : '${l.channelCountHint}\n${l.channelPhaseA}',
+            : (model.audioMode == 'asio' &&
+                    model.asioFlavor == AudioModes.asioVirtual)
+                ? '${l.channelCountHint}\n${l.channelPhaseA}\n'
+                    '${l.asioDriverChannelsHint}'
+                : '${l.channelCountHint}\n${l.channelPhaseA}',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

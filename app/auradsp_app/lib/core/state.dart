@@ -295,6 +295,9 @@ class AppModel extends ChangeNotifier {
   // ASIO 常驻桥状态（04 桥；isolate 回推，与 VB 桥互斥——一次只跑一个后端）。
   bool asioActive = false;
   Map<String, dynamic> asioInfo = {};
+  /// 已为哪个汇端点 id 触发过一次设备表重扫（虚拟 ASIO 端点名解析
+  /// 用；同一 id 只扫一次，避免遥测心跳把扫描打成循环）。
+  String asioSinkRefreshedFor = '';
   // asio_detect 驱动清单（isolate 回推；[{name,dll,clsid}]，name 为 UTF-8 显示名）。
   List<Map<String, String>> asioDrivers = [];
   String asioDriversNote = ''; // 桥缺失/无驱动时的原因（设置页展示）

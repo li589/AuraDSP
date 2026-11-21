@@ -116,20 +116,41 @@ class _AsioVirtualPanel extends StatelessWidget {
     final p = paletteOf(context);
     final endpoints = model.vaioPhysicalEndpoints;
     final curEndpoint = model.config.asioRenderEndpoint;
-    final matched = endpoints.cast<AudioDeviceItem?>().firstWhere(
-        (e) => e?.id == curEndpoint, orElse: () => null);
+    // 端点 id → 设备项：大小写不敏感，先 VAIO 探测表再 WASAPI 渲染表。
+    // 虚拟 ASIO 的汇端点 id 来自驱动遥测，而名字只能靠本地设备表映射；
+    // 严格相等匹配在 id 大小写/前后缀不一致时会失配，退化成裸 GUID。
+    AudioDeviceItem? findEp(String id) {
+      if (id.isEmpty) return null;
+      final t = id.toLowerCase();
+      for (final e in endpoints) {
+        if (e.id.toLowerCase() == t || e.name.toLowerCase() == t) return e;
+      }
+      for (final e in model.wasapiDevices) {
+        if (e.isRender &&
+            (e.id.toLowerCase() == t || e.name.toLowerCase() == t)) {
+          return e;
+        }
+      }
+      return null;
+    }
+
+    final matched = findEp(curEndpoint);
     final info = model.asioInfo;
     final hasDaw = info.containsKey('dawSeen');
     final dawSeen = hasDaw && info['dawSeen'] == 1;
     final dawLive = hasDaw ? (dawSeen && info['dawActive'] == 1) : model.asioActive;
     final sinkId = (info['dawSinkEndpoint'] as String?) ?? '';
-    final sinkEp = endpoints.cast<AudioDeviceItem?>().firstWhere(
-        (e) => e?.id == sinkId, orElse: () => null);
+    final sinkEp = findEp(sinkId);
     final sinkRate = (info['dawSinkRate'] as num?)?.toInt() ?? 0;
     final sinkBits = (info['dawSinkBits'] as num?)?.toInt() ?? 0;
-    final sinkName = sinkEp != null
-        ? sinkEp.friendlyName
-        : (sinkId.length > 18
+    // 名解析兜底链：端点表命中 → 驱动走系统默认时用当前默认渲染端点名
+    // → 最后才是 id 尾段（可读性优先，但绝不伪造名字）。
+    final fallbackName = (info['dawSinkConfigured'] == 1)
+        ? null
+        : findEp(model.defaultRenderId)?.friendlyName;
+    final sinkName = sinkEp?.friendlyName ??
+        fallbackName ??
+        (sinkId.length > 18
             ? '…${sinkId.substring(sinkId.length - 18)}'
             : sinkId);
 

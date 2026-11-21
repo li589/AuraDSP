@@ -1046,6 +1046,14 @@ extension StateCore on AppModel {
       config.channelsCount = count;
       ConfigManager.save(config);
       setInt('channels.count', count);
+      // 虚拟 ASIO：声道数量与驱动档位是同一事实——驱动 getChannels()
+      // 报的就是这个宽度，DAW 据此分配缓冲。只改声道数量而档位仍是
+      // 2，DAW 只会拿到 2 通道（真机 2026-11-21：设 7.1 实际仍 2.0）。
+      // 反向由 setAsioDriverChannels 维护镜像，两控件不各说一套。
+      if (audioMode == 'asio' &&
+          config.asioFlavor == AudioModes.asioVirtual) {
+        setAsioDriverChannels(count);
+      }
     }
   }
 }
