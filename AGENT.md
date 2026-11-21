@@ -110,6 +110,13 @@ feature/linux  ──(实现代码，验证通过)──▶  dev  ──(dev 验
   3. **许可红线先行**：与 GPL-3.0 不兼容者（如 MS-PL、All Rights Reserved、无 LICENSE）只许阅读参考、严禁并入主库，登记时明示；可并入者从 `source/` 提取整合，禁止预编译包（见开发规范 §3 整合铁律）。
 - **先例**：2026-11-14 VAIO 驱动 0x7A 定罪期间登记 Virtual-Audio-Driver 与 SynchronousAudioRouter 两仓（`8092bed6`）即按本条执行。
 
+## 3.8 CodeGraph 使用规矩（2026-11-21 实测立规）
+
+- **定位**：CodeGraph（`@colbymchenry/codegraph`）可用作**同语言内**的快速导航：符号定位、调用链追踪、成员速览、影响面的静态直调部分——Dart 与 C/C++ 各自语言内实测准确（行号抽查全中）。
+- **盲区（缺边且不报警）**：三类跨界接线在图中**完全不存在**，查询为空不代表无调用方：①宿主以 `GetProcAddress` 按字符串名动态加载的引擎/桥导出符号；②Dart↔C 的 FFI 按名绑定（`lookupFunction`）；③共享内存块名等字符串契约。这三类恰是本仓主干接线。
+- **铁律**：凡评估引擎/桥 ABI 导出符号的改动影响面，**禁止**以 CodeGraph 的 callers/impact 为依据；必须另行按符号字符串名 grep 宿主侧全部 `GetProcAddress` / `lookupFunction` 加载点逐个核对（实测先例：`auradsp_set_param` 的真实宿主调用方图中一条未抓到，impact 仅给出引擎内部符号）。
+- **索引归属**：索引是本地状态（`.codegraph/`，已被 `.gitignore` 忽略），不入仓、不作交付证据；换机或换克隆后按需重建。
+
 ## 4. 常用命令速查
 
 ```powershell
