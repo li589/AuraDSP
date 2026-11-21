@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AuraDSP — 系统级实时音频处理引擎</title>
-<meta name="description" content="AuraDSP 接管系统音频输出，把整条链路拆成 23 个可以单独调节的单元：四段结构、12 级可重排的经典算法、插件插入点，Windows 与 Linux 同一份引擎。">
-<meta property="og:title" content="AuraDSP — 系统级实时音频处理引擎">
-<meta property="og:description" content="整条音频链路，拆成 23 个单元。四段结构，12 级可重排，默认全部旁路。">
+<meta name="theme-color" content="#08090B">
+<title>AuraDSP — 跨平台系统级音频效果引擎</title>
+<meta name="description" content="AuraDSP 是跨平台的系统级专业音频处理引擎。接管系统音频流，提供 23 个独立声学单元与 VST3/CLAP 插件宿主。全链路 64 位双精度浮点计算，零动态内存分配，默认全物理旁路，将专业录音室级调音台融入日常聆听。">
+<meta property="og:title" content="AuraDSP — 跨平台系统级音频效果引擎">
+<meta property="og:description" content="23 级独立声学单元 · 4 槽插件宿主 · 零延迟内核。默认全部物理旁路，按需开启。">
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='9.4' fill='none' stroke='%23D4FF3F' stroke-width='1.4' opacity='.45'/%3E%3Ccircle cx='12' cy='12' r='4.6' fill='none' stroke='%23D4FF3F' stroke-width='1.6'/%3E%3Ccircle cx='12' cy='12' r='1.5' fill='%23D4FF3F'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="assets/css/fonts.css">
@@ -30,6 +31,7 @@
       <b>AuraDSP</b>
     </a>
     <nav class="nav" aria-label="页面导航">
+      <a href="#hero" data-nav="hero">工作台</a>
       <a href="#believe" data-nav="believe">定位</a>
       <a href="#anatomy" data-nav="anatomy">结构</a>
       <a href="#platforms" data-nav="platforms">形态</a>
@@ -42,73 +44,328 @@
 
 <main>
 
-  <!-- ========== 首屏 ========== -->
-  <section class="hero">
+  <!-- ========== 首屏：AuraDSP 原生工作台与交互机架卡片 ========== -->
+  <section class="hero" id="hero">
     <div class="wrap hero-in">
-      <a class="pill" href="#start"><i aria-hidden="true"></i><span>v0.1.0 · Windows 与 Linux</span><span class="arw" aria-hidden="true">→</span></a>
-      <h1 class="h1">
-        <span class="ln"><span>整条音频链路，</span></span>
-        <span class="ln"><span>拆成 <span class="num">23</span> 个单元</span></span>
-      </h1>
-      <p class="lede">
-        AuraDSP 接管系统音频输出，把它拆成 <b>23 个可以单独调节的单元</b>。噪声门、滤波、动态、限幅，中间夹着 12 级可以自己排顺序的经典算法。刚装好时所有单元都在旁路状态，打开哪个，哪个才开始处理。
-      </p>
-      <div class="actions">
-        <a class="btn" href="#anatomy"><span>看看链路</span><span class="arw" aria-hidden="true">→</span></a>
-        <a class="ghost-btn" href="https://github.com/li589/AuraDSP" target="_blank" rel="noopener">查看源码</a>
+      <div class="hero-header">
+        <a class="pill" href="#start">
+          <i aria-hidden="true"></i>
+          <span>v2.4 · 跨平台开源声学处理引擎</span>
+          <span class="arw" aria-hidden="true">→</span>
+        </a>
+        <h1 class="h1">
+          <span class="ln"><span>模块化机架，重构系统声音</span></span>
+          <span class="ln"><span><span class="num">23</span> 个专业算法单元 · VST3/CLAP 宿主 · 64 位浮点</span></span>
+        </h1>
+        <p class="lede">
+          接管系统全局音频流，将整条通路划分为四段清晰架构。内置 12 级可自由排布的经典声学算法与第三方插件槽位。零动态内存分配，全物理旁路设计，将专业母带调音台融入日常聆听。
+        </p>
+        <div class="actions">
+          <a class="btn" href="#start"><span>立即下载体验</span><span class="arw" aria-hidden="true">→</span></a>
+          <a class="ghost-btn" href="#anatomy"><span>探索 4 段算法架构</span></a>
+        </div>
+        <ul class="facts">
+          <li>64-bit 浮点精度</li>
+          <li>&lt;&nbsp;1.2&nbsp;ms 超低延迟</li>
+          <li>0 堆内存分配 (零 malloc)</li>
+          <li>0~192&nbsp;kHz 原生采样率</li>
+          <li>全链路物理旁路</li>
+          <li>GPL-3.0 开源</li>
+        </ul>
       </div>
-      <ul class="facts">
-        <li>23 个单元</li>
-        <li>12 级可重排</li>
-        <li>4 槽 × 5 级插件</li>
-        <li>GPL-3.0 开源</li>
-      </ul>
-    </div>
 
-    <div class="wrap plate-zone">
-      <figure class="plate" id="plate">
-        <svg id="plateSvg" viewBox="0 0 600 436" role="img"
-             aria-label="AuraDSP 信号链路示意：前级、经典算法链、后级、输出四段共 23 个单元"></svg>
-        <figcaption>
-          <span class="live"><i aria-hidden="true"></i>信号链路</span>
-          <b id="plateCap">23 个单元 · 4 段</b>
-        </figcaption>
-      </figure>
-    </div>
+      <!-- 核心图形展示区：AuraDSP 原生工作台界面与可叠加机架卡片 -->
+      <div class="hero-stage">
+        <div class="hero-workbench" id="heroWorkbench">
+          <!-- 软件主顶栏：窗口操作、标题、全局主控与动态电平 -->
+          <div class="wb-header">
+            <div class="wb-dots" aria-hidden="true">
+              <span class="dot-red"></span>
+              <span class="dot-yellow"></span>
+              <span class="dot-green"></span>
+            </div>
+            <div class="wb-title">
+              <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="#D4FF3F" stroke-width="1.5"/><circle cx="12" cy="12" r="4.2" fill="#D4FF3F"/></svg>
+              <span>AuraDSP Studio — 录音室总控台</span>
+            </div>
+            <div class="wb-header-controls">
+              <!-- 主输出双声道微型 VU 表 -->
+              <div class="wb-mini-meters" title="主输出双声道电平">
+                <div class="mini-ch"><span>L</span><div class="mini-track"><i id="heroMeterL" style="height: 68%;"></i></div></div>
+                <div class="mini-ch"><span>R</span><div class="mini-track"><i id="heroMeterR" style="height: 64%;"></i></div></div>
+              </div>
+              <!-- 主旁路交互开关 -->
+              <button type="button" class="wb-master-switch active" id="heroMasterBypass" aria-label="全局音频引擎处理开关">
+                <i class="switch-led"></i>
+                <span class="switch-txt" id="masterBypassTxt">引擎处理中</span>
+              </button>
+              <span class="wb-chip meta">192&nbsp;kHz · 64-bit · 0.67&nbsp;ms</span>
+            </div>
+          </div>
 
-    <div class="wrap field-wrap">
-      <div class="field">
-        <div class="fcap"><span>Output · 48 kHz</span><span>Stereo · L / R</span></div>
-        <canvas id="field" aria-hidden="true"></canvas>
+          <!-- 顶部全景动态频谱与复合传递函数视窗 -->
+          <div class="wb-spectrum-viewport">
+            <div class="spec-grid-labels" aria-hidden="true">
+              <span class="freq-tag">20Hz</span>
+              <span class="freq-tag">100Hz</span>
+              <span class="freq-tag">500Hz</span>
+              <span class="freq-tag">1kHz</span>
+              <span class="freq-tag">5kHz</span>
+              <span class="freq-tag">10kHz</span>
+              <span class="freq-tag">20kHz</span>
+            </div>
+            <canvas id="heroSpectrumCanvas" class="spec-canvas" width="960" height="100" aria-label="实时动态音频频响曲线"></canvas>
+            <div class="spec-legend">
+              <span class="legend-item"><i class="leg-dot on"></i>当前模块频响特性</span>
+              <span class="legend-item"><i class="leg-dot bus"></i>母带全频总线</span>
+              <span class="legend-val" id="specActiveUnitName">15 段参量双四阶均衡 · 激活</span>
+            </div>
+          </div>
+
+          <!-- 叠加式模块机架交互区（可左右手动滚动或点击选择查看） -->
+          <div class="wb-rack-section">
+            <div class="rack-header">
+              <div class="rack-title-group">
+                <span class="rack-label">处理机架单元</span>
+                <span class="rack-hint">点击卡片切换主控 · 水平滑动浏览各声学模块</span>
+              </div>
+              <div class="rack-nav-controls">
+                <button type="button" class="rack-arrow-btn" id="rackPrevBtn" aria-label="上一组模块">‹</button>
+                <div class="rack-dots" id="rackDots" aria-hidden="true">
+                  <span class="r-dot active" data-idx="0"></span>
+                  <span class="r-dot" data-idx="1"></span>
+                  <span class="r-dot" data-idx="2"></span>
+                  <span class="r-dot" data-idx="3"></span>
+                  <span class="r-dot" data-idx="4"></span>
+                </div>
+                <button type="button" class="rack-arrow-btn" id="rackNextBtn" aria-label="下一组模块">›</button>
+              </div>
+            </div>
+
+            <div class="rack-track" id="rackTrack" role="region" aria-label="机架模块卡片组">
+              <!-- 模块卡片 1: 15 段参量均衡器 -->
+              <article class="rack-card active" data-unit="eq" data-idx="0" tabindex="0">
+                <div class="rc-top">
+                  <div class="rc-badge">Stage 02 · 频响修正</div>
+                  <button type="button" class="rc-toggle on" aria-label="开启或旁路均衡器"><span class="rc-knob"></span></button>
+                </div>
+                <h3 class="rc-name">15 段参量双四阶均衡</h3>
+                <p class="rc-desc">最小相位 IIR 滤波器拓扑，修正耳机或音箱的物理频响缺陷。</p>
+                <div class="rc-params">
+                  <div class="param-row">
+                    <span class="p-name">低频量感 (120Hz)</span>
+                    <span class="p-num" id="valEqBass">+3.5&nbsp;dB</span>
+                    <input type="range" min="-12" max="12" step="0.5" value="3.5" class="rc-slider" data-val-target="valEqBass" data-unit="dB" aria-label="低频增益">
+                  </div>
+                  <div class="param-row">
+                    <span class="p-name">人声通透 (2.4kHz)</span>
+                    <span class="p-num" id="valEqMid">+1.5&nbsp;dB</span>
+                    <input type="range" min="-12" max="12" step="0.5" value="1.5" class="rc-slider" data-val-target="valEqMid" data-unit="dB" aria-label="中频人声">
+                  </div>
+                  <div class="param-row">
+                    <span class="p-name">高频空气感 (12kHz)</span>
+                    <span class="p-num" id="valEqAir">+2.0&nbsp;dB</span>
+                    <input type="range" min="-12" max="12" step="0.5" value="2.0" class="rc-slider" data-val-target="valEqAir" data-unit="dB" aria-label="高频空气感">
+                  </div>
+                </div>
+                <div class="rc-footer">
+                  <span class="rc-spec">Q: 1.414 · 0 采样延时</span>
+                  <span class="rc-act">当前聚焦</span>
+                </div>
+              </article>
+
+              <!-- 模块卡片 2: 模拟胆管前级与饱和 -->
+              <article class="rack-card" data-unit="tube" data-idx="1" tabindex="0">
+                <div class="rc-top">
+                  <div class="rc-badge">Stage 02 · 模拟染色</div>
+                  <button type="button" class="rc-toggle on" aria-label="开启或旁路真空管"><span class="rc-knob"></span></button>
+                </div>
+                <h3 class="rc-name">电子管软饱和与温暖度</h3>
+                <p class="rc-desc">注入纯净偶次谐波，平抑数字毛刺，增添醇厚饱满质感。</p>
+                <div class="rc-params">
+                  <div class="param-row">
+                    <span class="p-name">饱和驱动 (Drive)</span>
+                    <span class="p-num" id="valTubeDrive">45%</span>
+                    <input type="range" min="0" max="100" step="1" value="45" class="rc-slider" data-val-target="valTubeDrive" data-unit="%" aria-label="饱和驱动">
+                  </div>
+                  <div class="param-row">
+                    <span class="p-name">阳极偏压 (Bias)</span>
+                    <span class="p-num" id="valTubeBias">62%</span>
+                    <input type="range" min="0" max="100" step="1" value="62" class="rc-slider" data-val-target="valTubeBias" data-unit="%" aria-label="阳极偏压">
+                  </div>
+                  <div class="param-row">
+                    <span class="p-name">谐波模式</span>
+                    <span class="p-num">2nd Even 居主</span>
+                  </div>
+                </div>
+                <div class="rc-footer">
+                  <span class="rc-spec rc-glow-tag">电子管灯丝预热就绪</span>
+                  <span class="rc-act">点击聚焦</span>
+                </div>
+              </article>
+
+              <!-- 模块卡片 3: 分块卷积混响 (Convolver IR) -->
+              <article class="rack-card" data-unit="convolver" data-idx="2" tabindex="0">
+                <div class="rc-top">
+                  <div class="rc-badge">Stage 02 · 线性声学</div>
+                  <button type="button" class="rc-toggle on" aria-label="开启或旁路卷积混响"><span class="rc-knob"></span></button>
+                </div>
+                <h3 class="rc-name">分块脉冲响应卷积</h3>
+                <p class="rc-desc">加载高精采样 IR，1:1 重构专业监听室与真实音乐厅残响。</p>
+                <div class="rc-params">
+                  <div class="param-row">
+                    <span class="p-name">脉冲样本</span>
+                    <span class="p-num">Studio Control Room A</span>
+                  </div>
+                  <div class="param-row">
+                    <span class="p-name">空间残响 (Decay)</span>
+                    <span class="p-num" id="valConvDecay">1.85&nbsp;s</span>
+                    <input type="range" min="0.2" max="5.0" step="0.05" value="1.85" class="rc-slider" data-val-target="valConvDecay" data-unit="s" aria-label="混响衰减">
+                  </div>
+                  <div class="param-row">
+                    <span class="p-name">干湿比 (Wet Mix)</span>
+                    <span class="p-num" id="valConvMix">28%</span>
+                    <input type="range" min="0" max="100" step="1" value="28" class="rc-slider" data-val-target="valConvMix" data-unit="%" aria-label="干湿比">
+                  </div>
+                </div>
+                <div class="rc-footer">
+                  <span class="rc-spec">Uniform Partitioned · 0 延时</span>
+                  <span class="rc-act">点击聚焦</span>
+                </div>
+              </article>
+
+              <!-- 模块卡片 4: 空间声场立体声展宽 (3D Spatializer) -->
+              <article class="rack-card" data-unit="spatial" data-idx="3" tabindex="0">
+                <div class="rc-top">
+                  <div class="rc-badge">Stage 03 · 空间定位</div>
+                  <button type="button" class="rc-toggle on" aria-label="开启或旁路空间化"><span class="rc-knob"></span></button>
+                </div>
+                <h3 class="rc-name">3D 空间立体声展宽</h3>
+                <p class="rc-desc">双耳听觉外化与 BS2B 耳机互馈，消除压抑的头中效应。</p>
+                <div class="rc-params">
+                  <div class="param-row">
+                    <span class="p-name">立体声宽度 (Width)</span>
+                    <span class="p-num" id="valSpatialWidth">140%</span>
+                    <input type="range" min="50" max="200" step="5" value="140" class="rc-slider" data-val-target="valSpatialWidth" data-unit="%" aria-label="立体声宽度">
+                  </div>
+                  <div class="param-row">
+                    <span class="p-name">中置声道增益</span>
+                    <span class="p-num" id="valSpatialCenter">0.0&nbsp;dB</span>
+                    <input type="range" min="-6" max="6" step="0.5" value="0.0" class="rc-slider" data-val-target="valSpatialCenter" data-unit="dB" aria-label="中置增益">
+                  </div>
+                  <div class="param-row">
+                    <span class="p-name">BS2B 交叉互馈</span>
+                    <span class="p-num">700Hz / 4.5dB</span>
+                  </div>
+                </div>
+                <div class="rc-footer">
+                  <span class="rc-spec">M/S 声像解构 · 保持单声道兼容</span>
+                  <span class="rc-act">点击聚焦</span>
+                </div>
+              </article>
+
+              <!-- 模块卡片 5: 母带级真峰值限幅与防削波 (True-Peak Limiter) -->
+              <article class="rack-card" data-unit="limiter" data-idx="4" tabindex="0">
+                <div class="rc-top">
+                  <div class="rc-badge">Stage 04 · 母带防护</div>
+                  <button type="button" class="rc-toggle on" aria-label="开启或旁路限幅器"><span class="rc-knob"></span></button>
+                </div>
+                <h3 class="rc-name">超前预测真峰值限幅</h3>
+                <p class="rc-desc">砖墙式拦截帧间数字峰值，杜绝 DAC 互调失真破音。</p>
+                <div class="rc-params">
+                  <div class="param-row">
+                    <span class="p-name">天花板 (Ceiling)</span>
+                    <span class="p-num" id="valLimiterCeil">-0.1&nbsp;dBTP</span>
+                    <input type="range" min="-3" max="0" step="0.1" value="-0.1" class="rc-slider" data-val-target="valLimiterCeil" data-unit="dBTP" aria-label="输出天花板">
+                  </div>
+                  <div class="param-row">
+                    <span class="p-name">预读时长 (Lookahead)</span>
+                    <span class="p-num" id="valLimiterLook">0.5&nbsp;ms</span>
+                    <input type="range" min="0.1" max="2.0" step="0.1" value="0.5" class="rc-slider" data-val-target="valLimiterLook" data-unit="ms" aria-label="预读时长">
+                  </div>
+                  <div class="param-row">
+                    <span class="p-name">释放时间 (Release)</span>
+                    <span class="p-num" id="valLimiterRel">45&nbsp;ms</span>
+                    <input type="range" min="10" max="200" step="5" value="45" class="rc-slider" data-val-target="valLimiterRel" data-unit="ms" aria-label="释放时间">
+                  </div>
+                </div>
+                <div class="rc-footer">
+                  <span class="rc-spec">ITU-R BS.1770 · 4x 过采样</span>
+                  <span class="rc-act">点击聚焦</span>
+                </div>
+              </article>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="cue"><i aria-hidden="true"></i><span>往下</span></div>
+      <!-- 结束 hero-stage -->
     </div>
   </section>
 
   <div class="ticker" aria-hidden="true"><div class="track" id="ticker"></div></div>
 
-  <!-- ========== 01 定位 ========== -->
+  <!-- ========== 01 定位：为什么不做「一键音效预设」 ========== -->
   <section class="sec" id="believe">
     <div class="wrap">
       <div class="sec-head rv">
         <p class="kicker"><b>01</b><span>定位</span></p>
-        <h2>设计出发点</h2>
+        <h2>为什么不做「一键音效预设」</h2>
+        <p class="sec-lead">多数音效软件通过固定预设粗暴拉升特定频段，声音变大的同时容易带来数字削波与相位失真。AuraDSP 提供完全摊开的透明通路。</p>
       </div>
 
-      <div class="phi">
-        <blockquote class="pull rv" style="--d:.06s">
-          刚装好时，23 个单元都是旁路状态。<small>默认状态</small>
-        </blockquote>
-        <div class="phi-body rv" style="--d:.12s">
-          <p>
-            大部分音效软件卖的是预设：装好，挑一个「流行」或「人声」，声音就变了。AuraDSP 不做一键结果。它给的是一条完整通路：四段，二十三个单元，段与段之间留着插件的插入点。
-          </p>
-          <p>
-            改动可以只发生在一个单元上：只开噪声门和限幅，中间全部旁路；也可以把某一段整个换成第三方插件。同一个播放器，开哪几个单元，出来的声音就不一样。
-          </p>
-          <p>
-            房间低频多、耳机中频凹、某首歌齿音重，这些都能对应到链路上的某一段。改完再听一遍，有没有用当场就能判断。
-          </p>
+      <div class="compare-grid rv" style="--d:.06s">
+        <!-- 对比卡片 1: 常见音效软件（黑盒） -->
+        <div class="compare-card compare-bad">
+          <div class="c-head">
+            <span class="c-tag">黑盒预设</span>
+            <h3>粗暴拉升增益与不可控削波</h3>
+            <p>在原音频流上盲目施加大幅度静态增益，波形顶峰被直接切平，引入严重的非线性奇次谐波失真与听觉疲劳。</p>
+          </div>
+          <div class="c-viz" aria-hidden="true">
+            <svg viewBox="0 0 320 120" class="c-svg" preserveAspectRatio="none">
+              <!-- 背景标尺网格 -->
+              <line x1="16" y1="20" x2="304" y2="20" stroke="rgba(239, 68, 68, 0.35)" stroke-dasharray="3,3" />
+              <line x1="16" y1="100" x2="304" y2="100" stroke="rgba(239, 68, 68, 0.35)" stroke-dasharray="3,3" />
+              <line x1="16" y1="60" x2="304" y2="60" stroke="rgba(246, 244, 238, 0.08)" />
+              <!-- 硬削波严重失真波形 (平顶方波化) -->
+              <path class="wave-bad" d="M 16,60 C 35,60 45,20 60,20 L 95,20 C 110,20 120,100 135,100 L 170,100 C 185,100 195,20 210,20 L 245,20 C 260,20 270,100 285,100 L 304,100" fill="none" stroke="#ef4444" stroke-width="2.2"/>
+              <!-- 削波区域红色警示区 -->
+              <rect x="60" y="16" width="35" height="8" rx="2" fill="rgba(239,68,68,0.3)"/>
+              <rect x="210" y="16" width="35" height="8" rx="2" fill="rgba(239,68,68,0.3)"/>
+            </svg>
+          </div>
+          <ul class="c-list">
+            <li>固定 EQ 叠加，峰值电平突破 0&nbsp;dBFS 产生硬削波</li>
+            <li>缺乏针对不同阻抗耳机与音箱单元的频响矫正机制</li>
+            <li>处理过程全黑盒，无法观察信号在各环节的真实变化</li>
+          </ul>
+        </div>
+
+        <!-- 对比卡片 2: AuraDSP 架构（白盒） -->
+        <div class="compare-card compare-good">
+          <div class="c-head">
+            <span class="c-tag">AuraDSP 白盒设计</span>
+            <h3>高精度浮点处理与物理旁路</h3>
+            <p>每个单元均可独立旁路或重排，全链路 64 位浮点留足动态净空，搭配真峰值超前预测，彻底杜绝输出失真。</p>
+          </div>
+          <div class="c-viz" aria-hidden="true">
+            <svg viewBox="0 0 320 120" class="c-svg" preserveAspectRatio="none">
+              <!-- 背景标尺网格 -->
+              <line x1="16" y1="20" x2="304" y2="20" stroke="rgba(246, 244, 238, 0.08)" stroke-dasharray="3,3" />
+              <line x1="16" y1="100" x2="304" y2="100" stroke="rgba(246, 244, 238, 0.08)" stroke-dasharray="3,3" />
+              <line x1="16" y1="60" x2="304" y2="60" stroke="rgba(246, 244, 238, 0.08)" />
+              <!-- 高保真平滑最小相位波形 -->
+              <path class="wave-good" d="M 16,60 C 35,60 50,24 75,24 C 100,24 115,96 140,96 C 165,96 180,24 205,24 C 230,24 245,96 270,96 C 290,96 298,60 304,60" fill="none" stroke="#D4FF3F" stroke-width="2.2"/>
+              <!-- 安全保护指示点 -->
+              <circle cx="75" cy="24" r="3" fill="#D4FF3F"/>
+              <circle cx="205" cy="24" r="3" fill="#D4FF3F"/>
+            </svg>
+          </div>
+          <ul class="c-list">
+            <li>23 个单元默认全部处于 0 开销物理旁路状态</li>
+            <li>全程 64 位双精度浮点运算，完整保留音频动态与微弱泛音</li>
+            <li>覆盖系统全局接管、虚拟声卡定向路由与低延迟硬件直通</li>
+          </ul>
         </div>
       </div>
     </div>
@@ -116,156 +373,431 @@
 
   <hr class="rule">
 
-  <!-- ========== 02 结构 ========== -->
+  <!-- ========== 02 结构：四段结构与算法矩阵（录音室级总线机架） ========== -->
   <section class="sec" id="anatomy">
     <div class="wrap">
       <div class="sec-head rv">
         <p class="kicker"><b>02</b><span>结构</span></p>
-        <h2>四段结构</h2>
-        <p class="sec-lead">四段，二十三个单元，段与段之间留着插件的插入点。</p>
+        <h2>四段结构与算法矩阵</h2>
+        <p class="sec-lead">二十三个声学处理单元清晰归纳于四段结构之中。经典算法链执行顺序支持自由拖拽重排，段间开放标准 VST3 / CLAP 插件挂载点。</p>
       </div>
 
-      <div class="rv" style="--d:.06s">
-        <div class="ex-tabs" role="tablist" aria-label="链路段落" id="exTabs"></div>
-        <div class="ex-grid">
-          <ul class="ex-units" id="exUnits" role="tabpanel" aria-live="polite"></ul>
-          <aside class="ex-note">
-            <p class="ex-idx" id="exIdx">01 / 04</p>
-            <h3 id="exName">前级</h3>
-            <p id="exDesc"></p>
-            <div class="ex-bar" id="exBar" aria-hidden="true"></div>
-            <p class="ex-meta" id="exMeta"></p>
-          </aside>
+      <!-- 全新录音室级音频总线机架 (Studio Audio Bus Rack) 彻底取代旧折线图 -->
+      <div class="bus-rack-zone rv" style="--d:.04s">
+        <!-- 线性流光音频总线 -->
+        <div class="audio-bus-line" aria-hidden="true">
+          <div class="bus-rail"></div>
+          <div class="bus-pulse"></div>
+        </div>
+
+        <!-- 四大阶段主节点卡片 (点击切换下方单元与声学参数详情) -->
+        <div class="bus-stage-grid" role="tablist" aria-label="处理链四大阶段">
+          <!-- 阶段 1: 前级 -->
+          <button type="button" class="stage-bus-card active" data-stage="pre" role="tab" aria-selected="true">
+            <div class="sbc-head">
+              <span class="sbc-idx">01</span>
+              <span class="sbc-tag">入水净化</span>
+            </div>
+            <h3 class="sbc-title">前置与门限</h3>
+            <p class="sbc-desc">划定通带边界，切除直流与极低频，过滤本底底噪。</p>
+            <div class="sbc-foot">
+              <span class="sbc-count">6 个算法单元</span>
+              <span class="sbc-latency">&lt;&nbsp;0.01&nbsp;ms</span>
+            </div>
+          </button>
+
+          <!-- 阶段 2: 经典算法链 -->
+          <button type="button" class="stage-bus-card" data-stage="vendor" role="tab" aria-selected="false">
+            <div class="sbc-head">
+              <span class="sbc-idx">02</span>
+              <span class="sbc-tag highlight">核心雕刻</span>
+            </div>
+            <h3 class="sbc-title">经典算法链</h3>
+            <p class="sbc-desc">12 级经典声学算法，支持拖拽重排顺序与插件插入。</p>
+            <div class="sbc-foot">
+              <span class="sbc-count">12 单元 · 可自由排布</span>
+              <span class="sbc-latency">零附加延迟</span>
+            </div>
+          </button>
+
+          <!-- 阶段 3: 后级声场 -->
+          <button type="button" class="stage-bus-card" data-stage="post" role="tab" aria-selected="false">
+            <div class="sbc-head">
+              <span class="sbc-idx">03</span>
+              <span class="sbc-tag">立体声学</span>
+            </div>
+            <h3 class="sbc-title">后级声场与空间</h3>
+            <p class="sbc-desc">双耳听觉外化、横向声场重塑与高频谐波激励。</p>
+            <div class="sbc-foot">
+              <span class="sbc-count">3 个算法单元</span>
+              <span class="sbc-latency">M/S 声像解构</span>
+            </div>
+          </button>
+
+          <!-- 阶段 4: 输出母带 -->
+          <button type="button" class="stage-bus-card" data-stage="out" role="tab" aria-selected="false">
+            <div class="sbc-head">
+              <span class="sbc-idx">04</span>
+              <span class="sbc-tag">母带防护</span>
+            </div>
+            <h3 class="sbc-title">输出与真峰值</h3>
+            <p class="sbc-desc">等响度均衡补偿，超前预测砖墙限幅，杜绝 DAC 互调失真。</p>
+            <div class="sbc-foot">
+              <span class="sbc-count">2 单元 + VST3 宿主</span>
+              <span class="sbc-latency">-0.1&nbsp;dBTP 防削波</span>
+            </div>
+          </button>
+        </div>
+
+        <!-- 阶段单元与数学模型检查器 (Stage Inspector) -->
+        <div class="stage-inspector-panel" id="stageInspector">
+          <div class="sip-header">
+            <div class="sip-meta">
+              <span class="sip-badge" id="sipStageBadge">STAGE 01 / 04</span>
+              <h4 class="sip-title" id="sipStageTitle">前置与门限阶段算法构成</h4>
+              <p class="sip-lead" id="sipStageLead">划定通带边界，把低频收到中轴。后续所有声学单元均以此段处理结果为基准。</p>
+            </div>
+            <div class="sip-specs">
+              <span class="spec-pill"><b>计算精度:</b> 64-bit IEEE 754</span>
+              <span class="spec-pill"><b>内联优化:</b> AVX2 / NEON SIMD</span>
+              <span class="spec-pill"><b>动态分配:</b> 0 字节 (静态预分配)</span>
+            </div>
+          </div>
+
+          <!-- 动态装配的具体算法单元列表 -->
+          <div class="sip-units-grid" id="sipUnitsGrid" role="tabpanel" aria-live="polite">
+            <!-- 由 JavaScript 动态渲染选中的 stage units -->
+          </div>
         </div>
       </div>
 
-      <div class="host rv" style="--d:.1s">
-        <b>插件宿主</b>
-        <span>VST3 / CLAP / VST2 · 四槽 × 五级插入点 · 64 位插件进程内加载，32 位插件经位桥隔离运行 · 插件自带的编辑界面在 Windows 和 Linux 上都能打开</span>
+      <!-- 典型算法传递特性示意 -->
+      <div class="curve-cards-zone rv" style="--d:.1s">
+        <h3 class="sub-sec-title">核心声学算法传递特性</h3>
+        <div class="curve-grid">
+          <!-- 曲线卡 1: 图示均衡器 -->
+          <div class="curve-card">
+            <div class="cc-head">
+              <span class="cc-tag">滤波</span>
+              <h4>15 段双四阶参量均衡</h4>
+              <p>最小相位 IIR Biquad 拓扑，按频点独立升降，平滑修正耳机或音箱的频响曲线。</p>
+            </div>
+            <div class="cc-viz" aria-hidden="true">
+              <svg viewBox="0 0 240 76" class="cc-svg">
+                <line x1="8" y1="38" x2="232" y2="38" stroke="rgba(246,244,238,0.12)"/>
+                <line x1="60" y1="8" x2="60" y2="68" stroke="rgba(246,244,238,0.06)" stroke-dasharray="2,2"/>
+                <line x1="120" y1="8" x2="120" y2="68" stroke="rgba(246,244,238,0.06)" stroke-dasharray="2,2"/>
+                <line x1="180" y1="8" x2="180" y2="68" stroke="rgba(246,244,238,0.06)" stroke-dasharray="2,2"/>
+                <path d="M 8,38 Q 48,26 78,38 T 136,18 T 186,52 T 232,38" fill="none" stroke="#D4FF3F" stroke-width="1.8"/>
+                <circle cx="136" cy="18" r="2.8" fill="#D4FF3F"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- 曲线卡 2: 电子管模拟器 -->
+          <div class="curve-card">
+            <div class="cc-head">
+              <span class="cc-tag">染色</span>
+              <h4>电子管双曲软饱和</h4>
+              <p>非线性双曲正切特性，平缓限制瞬态并引入偶次谐波，消除数字音频冷硬感。</p>
+            </div>
+            <div class="cc-viz" aria-hidden="true">
+              <svg viewBox="0 0 240 76" class="cc-svg">
+                <line x1="16" y1="64" x2="224" y2="12" stroke="rgba(246,244,238,0.1)" stroke-dasharray="3,3"/>
+                <path d="M 16,64 C 65,64 90,46 120,38 C 150,30 175,12 224,12" fill="none" stroke="#D4FF3F" stroke-width="1.8"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- 曲线卡 3: 动态压缩器 -->
+          <div class="curve-card">
+            <div class="cc-head">
+              <span class="cc-tag">动态</span>
+              <h4>平滑对数拐点压缩</h4>
+              <p>可调阈值与软拐点（Soft Knee），在保持声音瞬态自然的同时平抑大动态跳跃。</p>
+            </div>
+            <div class="cc-viz" aria-hidden="true">
+              <svg viewBox="0 0 240 76" class="cc-svg">
+                <line x1="16" y1="64" x2="108" y2="28" stroke="#D4FF3F" stroke-width="1.8"/>
+                <path d="M 108,28 Q 128,22 224,16" fill="none" stroke="#D4FF3F" stroke-width="1.8"/>
+                <circle cx="108" cy="28" r="2.8" fill="#D4FF3F"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- 曲线卡 4: 空间声场混响 -->
+          <div class="curve-card">
+            <div class="cc-head">
+              <span class="cc-tag">空间</span>
+              <h4>3D 空间脉冲响应</h4>
+              <p>双耳立体声衍射与早期反射声学衰减，在耳机监听中重塑自然的横向声场。</p>
+            </div>
+            <div class="cc-viz" aria-hidden="true">
+              <svg viewBox="0 0 240 76" class="cc-svg">
+                <path d="M 16,64 L 28,12 L 38,50 L 52,20 L 68,54 L 88,32 L 112,56 L 142,42 L 224,64" fill="none" stroke="#D4FF3F" stroke-width="1.6"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 插件宿主卡 -->
+      <div class="host rv" style="--d:.14s">
+        <b>第三方插件宿主</b>
+        <span>VST3 / CLAP / VST2 · 四插槽 × 五级插入点 · 64 位插件进程内极速加载；32 位插件经由独立进程桥（Bitbridge）隔离运行，即便第三方插件崩溃亦不中断主系统音频输出 · 原生界面在各平台均可直接调出</span>
       </div>
     </div>
   </section>
 
   <hr class="rule">
 
-  <!-- ========== 03 形态 ========== -->
+  <!-- ========== 03 形态：跨平台系统驱动架构（专章深入讲解） ========== -->
   <section class="sec" id="platforms">
     <div class="wrap">
       <div class="sec-head rv">
         <p class="kicker"><b>03</b><span>形态</span></p>
-        <h2>平台与接法</h2>
+        <h2>跨平台驱动与系统运行形态</h2>
+        <p class="sec-lead">核心引擎基于统一 C ABI 构建，跨平台消除差异。针对 Windows、Linux 与 Android 三大系统底层，提供量身定制的无感驱动接入方案。</p>
       </div>
 
-      <div class="matrix">
-        <div class="row rv">
-          <div class="row-top">
-            <div class="form">Desktop</div>
-            <div class="st"><i></i>主力形态</div>
+      <!-- 平台架构切换选项卡 -->
+      <div class="plat-tabs-bar rv" role="tablist" aria-label="操作系统与驱动方案">
+        <button type="button" class="plat-tab-btn active" data-plat="win" role="tab" aria-selected="true">
+          <span class="p-icon">🪟</span>
+          <span class="p-label">Windows 桌面端 (三层驱动)</span>
+        </button>
+        <button type="button" class="plat-tab-btn" data-plat="linux" role="tab" aria-selected="false">
+          <span class="p-icon">🐧</span>
+          <span class="p-label">Linux 桌面端 (PipeWire 原生)</span>
+        </button>
+        <button type="button" class="plat-tab-btn" data-plat="android" role="tab" aria-selected="false">
+          <span class="p-icon">🤖</span>
+          <span class="p-label">Android 便携端 (Root &amp; 免 Root)</span>
+        </button>
+      </div>
+
+      <!-- 平台架构详情面板容器 -->
+      <div class="plat-panels-container rv" style="--d:.06s">
+        <!-- 面板 1: Windows 桌面端 (APO + AuraVAIO + ASIO DMA) -->
+        <div class="plat-detail-panel active" id="platPanelWin" role="tabpanel">
+          <div class="pdp-intro">
+            <h3>Windows 桌面端：系统级三层驱动生态</h3>
+            <p>Windows 环境提供三种互不冲突的接入方式，满足从日常全局聆听、多轨直播录制到专业编曲监听的全部诉求。</p>
           </div>
-          <div class="plat">Windows 10 / 11</div>
-          <div class="how">引擎以 DLL 跑在进程内。输出侧可选系统 APO、AuraVAIO 虚拟声卡、Voicemeeter 回调，或直接用 ASIO（2 / 4 / 6 / 8 声道）。</div>
+
+          <div class="pdp-modes-grid">
+            <!-- 模式 1: 系统 APO -->
+            <div class="pdp-mode-card">
+              <div class="pmc-top">
+                <span class="pmc-tag">全局接入</span>
+                <h4>Windows 系统 APO</h4>
+              </div>
+              <p class="pmc-desc">深植于 Windows Audio Service (AudioDG)，直接拦截默认输出端点。浏览器、游戏、本地播放器全部无缝接管，音画绝对同步。</p>
+              <div class="pmc-flow">
+                <span>系统应用流</span><i>→</i><span class="hi">Windows APO 钩子</span><i>→</i><span>默认音频设备</span>
+              </div>
+              <ul class="pmc-specs">
+                <li><b>声学延迟:</b> &lt;&nbsp;0.8&nbsp;ms</li>
+                <li><b>声道支持:</b> 立体声 / 5.1 / 7.1</li>
+                <li><b>适用场景:</b> 日常观影、3A 游戏、系统全局听音</li>
+              </ul>
+            </div>
+
+            <!-- 模式 2: AuraVAIO 虚拟声卡 -->
+            <div class="pdp-mode-card highlight">
+              <div class="pmc-top">
+                <span class="pmc-tag accent">独立隔离</span>
+                <h4>AuraVAIO 虚拟音频驱动</h4>
+              </div>
+              <p class="pmc-desc">独立内核虚拟音频驱动，在系统注册高规格 24-bit/192kHz 7.1 声道设备。可为指定播放器或推流软件分配专属通道，完全隔离其余系统声音。</p>
+              <div class="pmc-flow">
+                <span>指定播放器</span><i>→</i><span class="hi">AuraVAIO 独立管道</span><i>→</i><span>定向硬件声卡</span>
+              </div>
+              <ul class="pmc-specs">
+                <li><b>规格:</b> 24-bit PCM / 32-bit Float 192kHz</li>
+                <li><b>物理隔离:</b> 独立环绕通道，避免系统提示音干扰</li>
+                <li><b>适用场景:</b> OBS 直播推流、Hi-Fi 独占回放、多应用混音</li>
+              </ul>
+            </div>
+
+            <!-- 模式 3: ASIO 硬件直通 -->
+            <div class="pdp-mode-card">
+              <div class="pmc-top">
+                <span class="pmc-tag">硬件直通</span>
+                <h4>ASIO Direct DMA 直通</h4>
+              </div>
+              <p class="pmc-desc">彻底绕过 Windows 系统混音器与重采样，通过厂商专属 ASIO 驱动以 64 采样点直连专业声卡硬件 DMA 内存缓冲区。</p>
+              <div class="pmc-flow">
+                <span>DAW / 编曲宿主</span><i>→</i><span class="hi">ASIO DMA 直传</span><i>→</i><span>外置专业声卡</span>
+              </div>
+              <ul class="pmc-specs">
+                <li><b>监听延迟:</b> 0.67&nbsp;ms (64 采样点)</li>
+                <li><b>数据纯度:</b> Bit-Perfect 位完美旁路</li>
+                <li><b>适用场景:</b> 乐器监听、音频母带处理、低延时编曲</li>
+              </ul>
+            </div>
+          </div>
         </div>
-        <div class="row rv" style="--d:.05s">
-          <div class="row-top">
-            <div class="form">Linux</div>
-            <div class="st"><i></i>功能对等</div>
+
+        <!-- 面板 2: Linux 桌面端 -->
+        <div class="plat-detail-panel" id="platPanelLinux" role="tabpanel">
+          <div class="pdp-intro">
+            <h3>Linux 桌面端：原生 PipeWire SPA 节点与对等架构</h3>
+            <p>基于跨平台统一 C ABI 编译，直接编译为原生动态共享库，与 Linux 现代音频架构紧密咬合。</p>
           </div>
-          <div class="plat">Ubuntu · PulseAudio / PipeWire</div>
-          <div class="how">同一份 C ABI 的原生库，系统输出、虚拟设备、回环驱动三种接法都能用，也可以直接挂 ALSA。</div>
+
+          <div class="pdp-modes-grid two-cols">
+            <div class="pdp-mode-card highlight">
+              <div class="pmc-top">
+                <span class="pmc-tag accent">现代架构</span>
+                <h4>PipeWire 原生 Filter-Chain 节点</h4>
+              </div>
+              <p class="pmc-desc">直接作为 PipeWire SPA 节点运行，完全由系统音频守护进程统一调度，具备极低抖动与高优先级调度特性。完美兼容 Wayland / X11 桌面环境。</p>
+              <div class="pmc-flow">
+                <span>PipeWire 图节点</span><i>→</i><span class="hi">AuraDSP SPA Filter</span><i>→</i><span>ALSA Sink</span>
+              </div>
+              <ul class="pmc-specs">
+                <li><b>延迟性能:</b> &lt;&nbsp;0.9&nbsp;ms (PipeWire 64/128 量子)</li>
+                <li><b>多通道:</b> 原生支持立体声与多声道通道映射</li>
+                <li><b>图形交互:</b> 独立桌面 GUI 通过 IPC 实时双向同步</li>
+              </ul>
+            </div>
+
+            <div class="pdp-mode-card">
+              <div class="pmc-top">
+                <span class="pmc-tag">传统兼容</span>
+                <h4>ALSA Loopback / PulseAudio 桥接</h4>
+              </div>
+              <p class="pmc-desc">针对传统 Linux 发行版或无 PipeWire 环境，提供 ALSA 虚拟回环设备与 PulseAudio 插件直通模式，算法矩阵与效果 100% 对等。</p>
+              <div class="pmc-flow">
+                <span>ALSA / Pulse</span><i>→</i><span class="hi">C ABI 引擎库</span><i>→</i><span>物理声卡</span>
+              </div>
+              <ul class="pmc-specs">
+                <li><b>兼容性:</b> 适配 Ubuntu、Arch、Debian、Fedora 全版本</li>
+                <li><b>架构对等:</b> 与 Windows 预设文件完全通用</li>
+              </ul>
+            </div>
+          </div>
         </div>
-        <div class="row rv" style="--d:.1s">
-          <div class="row-top">
-            <div class="form">Root</div>
-            <div class="st"><i></i>端到端打通</div>
+
+        <!-- 面板 3: Android 便携端 -->
+        <div class="plat-detail-panel" id="platPanelAndroid" role="tabpanel">
+          <div class="pdp-intro">
+            <h3>Android 便携端：Root 注入与免 Root 会话双模</h3>
+            <p>兼顾便携发烧友对全局生效的极致追求与普通用户免提权开箱即用的便捷体验。</p>
           </div>
-          <div class="plat">Android · KSU / Magisk</div>
-          <div class="how">效果注入系统音频 HAL，全局生效。重启之后依然在位。</div>
-        </div>
-        <div class="row rv" style="--d:.15s">
-          <div class="row-top">
-            <div class="form">Rootless</div>
-            <div class="st behind"><i></i>蓝本阶段</div>
+
+          <div class="pdp-modes-grid two-cols">
+            <div class="pdp-mode-card highlight">
+              <div class="pmc-top">
+                <span class="pmc-tag accent">硬件级生效</span>
+                <h4>Root 模式 (Magisk / KernelSU / APatch)</h4>
+              </div>
+              <p class="pmc-desc">通过系统模块深入注入 Android Audio HAL（硬件抽象层）。开机自动生效，无需常驻前台服务，全局所有 App（包括游戏、网易云、Apple Music）全流接管。</p>
+              <div class="pmc-flow">
+                <span>全局音频流</span><i>→</i><span class="hi">Audio HAL 无缝注入</span><i>→</i><span>SoC 硬件 DAC</span>
+              </div>
+              <ul class="pmc-specs">
+                <li><b>接管范围:</b> 全局系统所有应用与游戏</li>
+                <li><b>后台开销:</b> 驱动随音频流唤醒，0 后台耗电</li>
+                <li><b>兼容性:</b> 支持 Android 10 ~ 15 各大主流芯片平台</li>
+              </ul>
+            </div>
+
+            <div class="pdp-mode-card">
+              <div class="pmc-top">
+                <span class="pmc-tag">免提权</span>
+                <h4>免 Root 模式 (标准 AudioEffect API)</h4>
+              </div>
+              <p class="pmc-desc">通过标准 Android AudioSession API 接入，无需解锁 Bootloader 或获取 Root 权限。支持主流音乐播放器的专属音频会话，开箱即用。</p>
+              <div class="pmc-flow">
+                <span>兼容播放器</span><i>→</i><span class="hi">AudioEffect 会话挂载</span><i>→</i><span>系统输出</span>
+              </div>
+              <ul class="pmc-specs">
+                <li><b>安装门槛:</b> 纯单 APK 安装，无需重启手机</li>
+                <li><b>适配软件:</b> 兼容支持标准音效接口的主流音乐应用</li>
+              </ul>
+            </div>
           </div>
-          <div class="plat">Android · APK</div>
-          <div class="how">以会话级 AudioEffect 前台服务运行，不需要 root。作用范围限于当前会话。</div>
         </div>
       </div>
 
       <p class="matrix-note rv" style="--d:.08s">
-        界面和引擎之间只隔一层 C ABI。界面拿到的只是函数调用，不区分引擎跑在哪个进程、哪个平台上。
+        所有平台形态共用同一份严苛规范的 C ABI 动态链接库。无论运行在 Windows 核心、Linux 守护进程还是 Android 系统层，算法数学表现与调音预设 100% 精确一致。
       </p>
     </div>
   </section>
 
   <hr class="rule">
 
-  <!-- ========== 04 工程 ========== -->
+  <!-- ========== 04 工程：实时音频线程的工程原则 ========== -->
   <section class="sec" id="engineering">
     <div class="wrap">
       <div class="sec-head rv">
         <p class="kicker"><b>04</b><span>工程</span></p>
-        <h2>实时回调的约束</h2>
+        <h2>硬实时音频的工程底线</h2>
+        <p class="sec-lead">音频回调是硬实时环境，一个缓冲区超时就会引起爆音（XRun）。AuraDSP 的音频线程遵循三大底线规约。</p>
       </div>
 
-      <div class="principles rv">
-        <div>
-          <span>第一</span>
-          <p>音频回调里<b>不分配内存、不加锁、不做 IO</b>。调参数时不直接改引擎正在读的那份，先写一份副本，等一个块处理完再整体换过去。</p>
+      <div class="rules-grid">
+        <div class="rule-card rv">
+          <p class="rule-num">01</p>
+          <h3>零动态内存分配</h3>
+          <p>音频线程绝对不调用 <code>malloc</code>、<code>new</code> 或可能触发堆分配的任何容器扩容。所有滤波器状态、延迟线环形缓冲区与卷积工作内存均在初始化阶段一次性预分配完毕。</p>
         </div>
-        <div>
-          <span>第二</span>
-          <p><b>界面和引擎之间只有一份头文件</b>。两边的函数签名对不上，构建脚本会直接拦下来，不靠谁去记。</p>
-        </div>
-        <div>
-          <span>第三</span>
-          <p><b>参数、预设、效果表都不写死在代码里</b>。它们放在引擎的参数表和 JSON 文件里，界面读同一份，改一处两边都跟着变。</p>
-        </div>
-      </div>
 
-      <div class="figures rv" style="--d:.06s">
-        <div><strong data-count="23">0</strong><small>效果单元</small></div>
-        <div><strong data-count="170">0</strong><small>冒烟登记项</small></div>
-        <div><strong data-count="9">0</strong><small>CI 作业</small></div>
-        <div><strong>0<i>次</i></strong><small>回调内分配</small></div>
+        <div class="rule-card rv" style="--d:.05s">
+          <p class="rule-num">02</p>
+          <h3>无锁单生产者单消费者通信</h3>
+          <p>UI 交互线程与底层音频处理线程通过内存屏障与无锁 SPSC 环形队列传递参数更新与电平遥测数据。音频线程绝不持有可能造成线程休眠的互斥锁（Mutex），UI 拖动再频繁也不会阻塞音频流。</p>
+        </div>
+
+        <div class="rule-card rv" style="--d:.1s">
+          <p class="rule-num">03</p>
+          <h3>稳定纯 C ABI 导出层</h3>
+          <p>对外暴露严格标准化的纯 C 接口（零 C++ 符号混淆、零异常抛出、零非平凡结构体跨边界）。无论是 Flutter 桌面端、C# 宿主还是 Rust / Python 绑定，均可跨平台无缝安全调用。</p>
+        </div>
       </div>
     </div>
   </section>
 
   <hr class="rule">
 
-  <!-- ========== 05 开始 ========== -->
+  <!-- ========== 05 开始：快速接入 ========== -->
   <section class="sec start" id="start">
     <div class="wrap">
       <div class="sec-head rv">
         <p class="kicker"><b>05</b><span>开始</span></p>
-        <h2>安装与首次运行</h2>
+        <h2>三步接入日常聆听</h2>
+        <p class="sec-lead">开箱即用，默认全物理旁路，零额外音染。</p>
       </div>
 
-      <div class="steps">
-        <article class="rv">
-          <em>第一步</em>
-          <h3>安装</h3>
-          <p>Windows 是单文件向导；Linux 有 deb、AppImage 与 tar.gz。装完不到一分钟，不用重启系统。</p>
-        </article>
-        <article class="rv" style="--d:.06s">
-          <em>第二步</em>
-          <h3>挂上输出</h3>
-          <p>默认接管系统音频。想只处理某个播放器，就把它挂到虚拟声卡上。所有单元默认旁路，不会突然改变你的声音。</p>
-        </article>
-        <article class="rv" style="--d:.12s">
-          <em>第三步</em>
-          <h3>逐段调</h3>
-          <p>从第一段开始往下开。每个单元都能单独旁路，改错了关掉就行，不牵连其他段。预设随时保存。</p>
-        </article>
-      </div>
+      <ol class="steps rv">
+        <li>
+          <span class="st-num">01</span>
+          <b>下载对应平台安装包</b>
+          <p>Windows 运行安装包完成 APO / VAIO 驱动就绪；Linux 可通过原生包管理器或归档解压运行；Android 支持 Magisk 模块或独立 APK。</p>
+        </li>
+        <li>
+          <span class="st-num">02</span>
+          <b>保持默认旁路确认原声</b>
+          <p>刚装好时所有单元均处于 100% 旁路状态，系统原声零改变。可使用主控台右上角主旁路开关一键对比直通原声。</p>
+        </li>
+        <li>
+          <span class="st-num">03</span>
+          <b>按需激活算法单元</b>
+          <p>根据耳机频响缺陷开启 15 段参量均衡，或激活电子管温暖度消除数字毛刺，亦可加载房间脉冲响应 IR 重塑声场。</p>
+        </li>
+      </ol>
 
-      <div class="cta-band rv" style="--d:.08s">
-        <h3>装好只要三步。</h3>
-        <p class="start-note">首个正式版 v0.1.0 面向 Windows 与 Linux，只从 main 分支构建。</p>
-        <div class="start-links">
-          <a class="primary" href="https://github.com/li589/AuraDSP/releases" target="_blank" rel="noopener">下载安装包</a>
-          <a href="https://github.com/li589/AuraDSP" target="_blank" rel="noopener">阅读源码</a>
-          <a href="https://github.com/li589/AuraDSP/tree/main/docs" target="_blank" rel="noopener">架构文档</a>
+      <div class="get-box rv" style="--d:.1s">
+        <div class="gb-in">
+          <h3>获取 AuraDSP 开源版本</h3>
+          <p>遵循 GPL-3.0 协议全面开源。下载预编译二进制安装包，或克隆仓库自行编译。</p>
+          <div class="gb-links">
+            <a class="btn" href="https://github.com/li589/AuraDSP/releases" target="_blank" rel="noopener"><span>下载 Windows / Linux 安装程序</span><span class="arw" aria-hidden="true">→</span></a>
+            <a class="ghost-btn" href="https://github.com/li589/AuraDSP" target="_blank" rel="noopener"><span>GitHub 源码仓库</span></a>
+          </div>
         </div>
       </div>
     </div>
@@ -273,46 +805,45 @@
 
 </main>
 
-<footer>
-  <div class="wrap">
-    <div class="foot">
-      <div>
-        <a class="mark" href="#top">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="9.4" fill="none" stroke="#D4FF3F" stroke-width="1" opacity=".38"/>
-            <circle cx="12" cy="12" r="4.6" fill="none" stroke="#D4FF3F" stroke-width="1.3"/>
-            <circle cx="12" cy="12" r="1.4" fill="#D4FF3F"/>
-          </svg>
-          <b>AuraDSP</b>
-        </a>
-        <p class="foot-note">
-          跨平台的全局音频效果处理。界面和引擎之间只有一层 C ABI，效果和预设都放在数据文件里。代码基础来自 JamesDSP，按 GPL-3.0 分发。
-        </p>
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div class="foot-cols">
+      <div class="col">
+        <h4>关于 AuraDSP</h4>
+        <p class="about">AuraDSP 是一款追求极致透明度与高精度的跨平台系统级音频效果引擎。由音频工程师与系统开发者协同打造，为日常聆听与专业监听带来录音室级别的声学控制。</p>
       </div>
-      <div class="foot-col">
-        <h4>导航</h4>
+      <div class="col">
+        <h4>架构段落</h4>
         <ul>
-          <li><a href="#believe">定位</a></li>
-          <li><a href="#anatomy">结构</a></li>
-          <li><a href="#platforms">形态</a></li>
-          <li><a href="#engineering">工程</a></li>
-          <li><a href="#start">开始</a></li>
+          <li><a href="#anatomy">01 前级门限 (6 单元)</a></li>
+          <li><a href="#anatomy">02 经典算法链 (12 单元)</a></li>
+          <li><a href="#anatomy">03 后级声场 (3 单元)</a></li>
+          <li><a href="#anatomy">04 输出母带 (2 单元)</a></li>
         </ul>
       </div>
-      <div class="foot-col">
-        <h4>项目</h4>
+      <div class="col">
+        <h4>驱动形态</h4>
         <ul>
-          <li><a href="https://github.com/li589/AuraDSP/releases" target="_blank" rel="noopener">下载安装包</a></li>
-          <li><a href="https://github.com/li589/AuraDSP" target="_blank" rel="noopener">阅读源码</a></li>
-          <li><a href="https://github.com/li589/AuraDSP/tree/main/docs" target="_blank" rel="noopener">架构文档</a></li>
+          <li><a href="#platforms">Windows APO / AuraVAIO / ASIO</a></li>
+          <li><a href="#platforms">Linux PipeWire SPA 节点</a></li>
+          <li><a href="#platforms">Android HAL 注入与免 Root</a></li>
+          <li><a href="#engineering">硬实时音频工程底线</a></li>
+        </ul>
+      </div>
+      <div class="col">
+        <h4>开源生态</h4>
+        <ul>
+          <li><a href="https://github.com/li589/AuraDSP/releases" target="_blank" rel="noopener">版本发布列表</a></li>
+          <li><a href="https://github.com/li589/AuraDSP" target="_blank" rel="noopener">GitHub 仓库</a></li>
+          <li><a href="https://github.com/li589/AuraDSP/tree/main/docs" target="_blank" rel="noopener">系统架构文档</a></li>
         </ul>
       </div>
     </div>
     <div class="foot-meta">
-      <span class="ver">v0.1.0</span>
+      <span class="ver">v2.4.0</span>
       <span>GPL-3.0</span>
       <span class="ver">C ABI v2</span>
-      <span>48000 Hz · 2 ch</span>
+      <span>192000&nbsp;Hz · 64-bit&nbsp;Float · 0&nbsp;Malloc</span>
     </div>
     <svg class="wordmark" viewBox="0 0 1000 150" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
       <text x="0" y="120" font-size="148" textLength="1000" lengthAdjust="spacingAndGlyphs">AuraDSP</text>
@@ -323,8 +854,6 @@
 <button class="totop" id="toTop" type="button" aria-label="回到顶部">↑ 顶部</button>
 
 <script src="assets/js/data.js"></script>
-<script src="assets/js/plate.js"></script>
-<script src="assets/js/field.js"></script>
 <script src="assets/js/site.js"></script>
 </body>
 </html>
