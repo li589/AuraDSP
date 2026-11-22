@@ -18,6 +18,7 @@
 
 #include "PluginBridge.h"
 #include "VizSilence.h"
+#include "JsonEscape.h"
 #include "../../04_asio_client/AsioHost.h"
 #include "AsioDriverShared.h"  // 虚拟 ASIO 驱动遥测契约（S3）
 #include "../../02_voicemeeter_client/VmPumpCore.h"  // TryLoadEngine / FillTestSignal / FnEng*
@@ -128,20 +129,7 @@ void PathForJsonA(const std::string& in, char* out, size_t cap) {
 // Dart 侧 jsonDecode 抛错被吞、detect/status 整体按缺失
 // 处理（误报未检测到/状态丢失）。名称类自由文本一律走本
 // 函数；路径仍用 PathForJsonA 的斜杠式（既有口径）。
-void EscapeJsonA(const std::string& in, char* out, size_t cap) {
-    size_t j = 0;
-    auto put = [&](char c) { if (j + 1 < cap) out[j++] = c; };
-    for (size_t i = 0; i < in.size(); ++i) {
-        const unsigned char c = (unsigned char)in[i];
-        if (c == '"' || c == '\\') { put('\\'); put((char)c); }
-        else if (c < 0x20) {
-            char u[8];
-            snprintf(u, sizeof(u), "\u%04x", c);
-            for (const char* p = u; *p; ++p) put(*p);
-        } else put((char)c);
-    }
-    out[j] = '\0';
-}
+using aurabridge::EscapeJsonA;  // single impl: bridge/common/JsonEscape.h (D2)
 
 using vmcore::FnEngCreate;
 using vmcore::FnEngAbi;
