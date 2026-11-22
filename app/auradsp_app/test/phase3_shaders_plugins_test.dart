@@ -172,7 +172,7 @@ per_pixel_1=rot = rot + 0.02*sin(rad*3.14);
       expect(bridge, isA<ProjectMBridge>());
       expect(bridge.isAvailable, isFalse);
       expect(bridge.statusDescription, isNot(contains('ready')));
-      await bridge.dispose();
+      bridge.dispose();
     });
 
     test('native bridge fails closed without verified host context', () async {
