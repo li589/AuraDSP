@@ -21,15 +21,19 @@
 #define AURA_APO_PARAMS_NAME L"Global\\AuraDSP_ApoParams"
 #define AURA_APO_TELEMETRY_NAME L"Global\\AuraDSP_ApoTelemetry"
 #define AURA_APO_PLUGINS_NAME L"Global\\AuraDSP_ApoPlugins"
-// 与心跳映射同一 SDDL（LS=LocalService / WD=Everyone / 两个 LPAC
-// 包 SID 全 GA）：audiodg 的 LPAC 沙箱只能穿透显式授权的对象。
-#define AURA_APO_SHARED_SDDL L"D:(A;;GA;;;LS)(A;;GA;;;WD)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)"
+// 与心跳映射同一 SDDL（LS=LocalService / IU=Interactive User /
+// 两个 LPAC 包 SID 全 GA）：audiodg 的 LPAC 沙箱只能穿透显式授
+// 权的对象。2026-11-22 审查 N1 裁定：原 WD=Everyone 全权过宽——
+// 任意本地进程（含低完整性/其它用户）可写插件块令 audiodg 加载
+// 任意 DLL（提权面）；收紧为 IU（本机交互登录用户，即 App 的
+// 运行身份），跨用户/服务身份写入面关闭。
+#define AURA_APO_SHARED_SDDL L"D:(A;;GA;;;LS)(A;;GA;;;IU)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)"
 
 // Win7 退路口径：AppContainer 机构（S-1-15-2-*）为 Win8+ 概念
 // （微软 WELL_KNOWN_SID_TYPE 文档标 Win7 不可用；含该 ACE 的
 // SDDL 在 Win7 上的解析成败文档未载）。转换失败时退回本口径
-// ——LS/WD 两条在 Win7 语义完整，功能不受影响。
-#define AURA_APO_SHARED_SDDL_FALLBACK L"D:(A;;GA;;;LS)(A;;GA;;;WD)"
+// ——LS/IU 两条在 Win7 语义完整，功能不受影响。
+#define AURA_APO_SHARED_SDDL_FALLBACK L"D:(A;;GA;;;LS)(A;;GA;;;IU)"
 
 // ---- 参数块（App → APO） ----
 // 写协议（seqlock）：写者先令 writeSeq 为奇数（写入中），写完全部

@@ -926,7 +926,16 @@ void ApoEngineHost::ApplyPlugins() {
                                APO_PLUGIN_PATH_BYTES,
                        in);
                 id[in] = '\0';
-                int rc = fnSlotLoad_(engine_, (int)slot, path, id);
+                // 中转围栏（2026-11-22 审查 N1 裁定，与文件效果
+                // 同口径）：插件二进制路径必须在中转根下才准加载
+                // ——发布侧（App）先经 ApoTransit 把插件复制进
+                // %ProgramData%\AuraDSP\apo-assets 再下发路径；
+                // 块里出现根外路径一律拒绝（视为本代次加载失败，
+                // telemetry 如实回传），防任意写块者令 LocalService
+                // 加载任意 DLL。
+                int rc = IsUnderTransitRoot(path)
+                    ? fnSlotLoad_(engine_, (int)slot, path, id)
+                    : -1;
                 ap.loadGen = want.loadGen;
                 if (rc == 1) {
                     ap.loaded = true;

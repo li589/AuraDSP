@@ -105,9 +105,10 @@ String apoTelemetryNameFor(String endpointId) {
   }
   return sb.toString();
 }
-// 与心跳/ApoShared.h 同一穿透 SDDL（LS + Everyone + LPAC 包 SID）。
+// 与心跳/ApoShared.h 同一穿透 SDDL（LS + 交互用户 IU + LPAC 包
+// SID）。2026-11-22 审查 N1：原 Everyone(WD) 全权过宽已收紧为 IU。
 const String _apoSharedSddl =
-    'D:(A;;GA;;;LS)(A;;GA;;;WD)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)';
+    'D:(A;;GA;;;LS)(A;;GA;;;IU)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)';
 
 /// 参数块发布者：镜像 → 共享块（seqlock 单写者）。
 ///
@@ -818,6 +819,10 @@ class ApoPluginPublisher {
 
   final List<_ApoPluginSlotPub> _pub =
       List.generate(kApoPluginSlots, (_) => _ApoPluginSlotPub());
+
+  /// 原始插件路径 → 中转路径缓存（N1 围栏：块里只写中转路径）。
+  /// 只缓存成功结果；失败每次同步重试（源文件补齐后可自愈）。
+  final Map<String, String> _transitCache = {};
   bool _hdrSeen = false;
   bool _pubChain = true;
   bool _pubPdc = false;
@@ -975,9 +980,27 @@ class ApoPluginPublisher {
     for (var slot = 0; slot < kApoPluginSlots; slot++) {
       final cfg = slot < mirror.length ? mirror[slot] : null;
       final p = _pub[slot];
-      final occupied = cfg != null && cfg.loaded && cfg.path.isNotEmpty;
-      final path = occupied ? cfg.path : '';
-      final id = occupied ? cfg.id : '';
+      // N1 中转围栏（2026-11-22）：块里只下发中转根下的插件路径
+      // （宿主 ApoEngineHost 同口径校验）。中转失败 → 本槽按未占
+      // 用下发（空路径），绝不把原始路径写进块里假装可用——与
+      // 文件效果中转失败口径一致；UI 与配置仍保留原始路径。
+      final raw =
+          (cfg != null && cfg.loaded && cfg.path.isNotEmpty) ? cfg : null;
+      var path = '';
+      if (raw != null) {
+        var t = _transitCache[raw.path];
+        if (t == null) {
+          t = ApoTransit.transitPluginPathFor(raw.path);
+          if (t != null && t.isNotEmpty) _transitCache[raw.path] = t;
+        }
+        path = t ?? '';
+        if (path.isEmpty) {
+          dbgLog('apo plugin publisher: transit failed, slot $slot '
+              'withheld: ${raw.path}');
+        }
+      }
+      final occupied = path.isNotEmpty;
+      final id = occupied ? raw!.id : '';
       final format = occupied ? _formatOf(path) : 0;
       final identityChanged =
           occupied != p.occupied || path != p.path || id != p.id ||
@@ -1003,9 +1026,9 @@ class ApoPluginPublisher {
         _writeSlotHeader(slot);
         wrote = true;
       }
-      final stage = occupied ? cfg.stage : p.stage;
-      final mask = occupied ? cfg.channels : p.mask;
-      final bypass = occupied ? (cfg.bypass ? 1 : 0) : p.bypass;
+      final stage = occupied ? raw!.stage : p.stage;
+      final mask = occupied ? raw!.channels : p.mask;
+      final bypass = occupied ? (raw!.bypass ? 1 : 0) : p.bypass;
       if (stage != p.stage || mask != p.mask || bypass != p.bypass) {
         p.stage = stage;
         p.mask = mask;
