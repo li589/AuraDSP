@@ -118,7 +118,8 @@ abstract final class ApoTransit {
       if (!destDir.existsSync()) {
         destDir.createSync(recursive: true);
         for (final e in dir.listSync(recursive: true)) {
-          final rel = e.path.substring(source.length);
+          var rel = e.path.substring(source.length);
+          if (!rel.startsWith(sep)) rel = '$sep$rel';
           final target = '$dest$rel';
           if (e is Directory) {
             Directory(target).createSync(recursive: true);
