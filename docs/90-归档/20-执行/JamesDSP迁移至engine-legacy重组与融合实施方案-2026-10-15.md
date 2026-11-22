@@ -106,15 +106,15 @@ AuraDSP/
 
 | 文件路径 | 原引用写法 | 目标引用写法 | 变更原因 |
 |---|---|---|---|
-| [engine/engine_internal.h](file:///d:/temp_desktop/Proj/JamesDSP/engine/engine_internal.h) L34-L35 | `#include "jdsp/jdsp_header.h"`<br/>`#include "jdsp/Effects/eel2/fft.h"` | `#include "legacy/jdsp/jdsp_header.h"`<br/>`#include "legacy/jdsp/Effects/eel2/fft.h"` | 语义显式化，避免裸 include 造成命名污染 |
-| [engine/chain/engine_audiofile.cpp](file:///d:/temp_desktop/Proj/JamesDSP/engine/chain/engine_audiofile.cpp) L12 | `#include "jdsp/Effects/eel2/dr_mp3.h"`（`DRMP3_IMPLEMENTATION` 单实例化） | `#include "legacy/jdsp/Effects/eel2/dr_mp3.h"` | 同上；vendor 头文件经 `LEGACY` 包含目录可见 |
-| [engine/chain/engine_convolver.cpp](file:///d:/temp_desktop/Proj/JamesDSP/engine/chain/engine_convolver.cpp) L3-L4 | `#include "jdsp/Effects/eel2/dr_wav.h"`<br/>`#include "jdsp/Effects/eel2/dr_flac.h"` | `#include "legacy/jdsp/Effects/eel2/dr_wav.h"`<br/>`#include "legacy/jdsp/Effects/eel2/dr_flac.h"` | 同上；IR 文件解码用的 dr_* 系列头 |
-| [engine/auradsp_engine.cpp](file:///d:/temp_desktop/Proj/JamesDSP/engine/auradsp_engine.cpp) L4 | 注释提到 `vendor/libjamesdsp` | 更新注释指向 `engine/legacy/` | 保持文档真实性 |
-| [engine/auradsp_msvc_shim.h](file:///d:/temp_desktop/Proj/JamesDSP/engine/auradsp_msvc_shim.h) L5 | 注释提到 `libjamesdsp` 的 `essential.h` 行为 | 更新注释指引 | 保持文档真实性 |
-| [engine/AGENT.md](file:///d:/temp_desktop/Proj/JamesDSP/engine/AGENT.md) L52、L60 | `vendor/libjamesdsp/jamesdsp/jdsp/jdspController.c`、`vendor/libjamesdsp/PATCHES.md` 补丁纪律指引 | 全部改为 `engine/legacy/…` 对应路径 | 补丁登记纪律的引用路径必须随迁 |
-| [core/desktop/windows/build_engine.sh](file:///d:/temp_desktop/Proj/JamesDSP/core/desktop/windows/build_engine.sh) L5（注释） | `../../../vendor/libjamesdsp/  JamesDSP C engine` | `engine/legacy/` | 构建脚本注释真实性（脚本本身不编译 vendor） |
-| [tools/probe/fft_probe.cpp](file:///d:/temp_desktop/Proj/JamesDSP/tools/probe/fft_probe.cpp) L5-L6 | `#include "jdsp/jdsp_header.h"`、`#include "jdsp/Effects/eel2/fft.h"`（依赖手工编译时 `-I vendor/libjamesdsp/jamesdsp`） | `#include "legacy/jdsp/jdsp_header.h"`、`#include "legacy/jdsp/Effects/eel2/fft.h"`；编译参数 `-I` 改指 `engine/`（或 `engine/legacy` 且保留 `jdsp/` 前缀） | 与 engine 侧口径统一；该文件不在 CMake 目标内，仓库内无固化编译命令，随实际编译参数同步即可 |
-| [tools/probe/emit_probe.cpp](file:///d:/temp_desktop/Proj/JamesDSP/tools/probe/emit_probe.cpp) L6 | `#include "jdsp/Effects/eel2/fft.h"` | `#include "legacy/jdsp/Effects/eel2/fft.h"` | 同上 |
+| [engine/engine_internal.h](engine/engine_internal.h) L34-L35 | `#include "jdsp/jdsp_header.h"`<br/>`#include "jdsp/Effects/eel2/fft.h"` | `#include "legacy/jdsp/jdsp_header.h"`<br/>`#include "legacy/jdsp/Effects/eel2/fft.h"` | 语义显式化，避免裸 include 造成命名污染 |
+| [engine/chain/engine_audiofile.cpp](engine/chain/engine_audiofile.cpp) L12 | `#include "jdsp/Effects/eel2/dr_mp3.h"`（`DRMP3_IMPLEMENTATION` 单实例化） | `#include "legacy/jdsp/Effects/eel2/dr_mp3.h"` | 同上；vendor 头文件经 `LEGACY` 包含目录可见 |
+| [engine/chain/engine_convolver.cpp](engine/chain/engine_convolver.cpp) L3-L4 | `#include "jdsp/Effects/eel2/dr_wav.h"`<br/>`#include "jdsp/Effects/eel2/dr_flac.h"` | `#include "legacy/jdsp/Effects/eel2/dr_wav.h"`<br/>`#include "legacy/jdsp/Effects/eel2/dr_flac.h"` | 同上；IR 文件解码用的 dr_* 系列头 |
+| [engine/auradsp_engine.cpp](engine/auradsp_engine.cpp) L4 | 注释提到 `vendor/libjamesdsp` | 更新注释指向 `engine/legacy/` | 保持文档真实性 |
+| [engine/auradsp_msvc_shim.h](engine/auradsp_msvc_shim.h) L5 | 注释提到 `libjamesdsp` 的 `essential.h` 行为 | 更新注释指引 | 保持文档真实性 |
+| [engine/AGENT.md](engine/AGENT.md) L52、L60 | `vendor/libjamesdsp/jamesdsp/jdsp/jdspController.c`、`vendor/libjamesdsp/PATCHES.md` 补丁纪律指引 | 全部改为 `engine/legacy/…` 对应路径 | 补丁登记纪律的引用路径必须随迁 |
+| [core/desktop/windows/build_engine.sh](core/desktop/windows/build_engine.sh) L5（注释） | `../../../vendor/libjamesdsp/  JamesDSP C engine` | `engine/legacy/` | 构建脚本注释真实性（脚本本身不编译 vendor） |
+| [tools/probe/fft_probe.cpp](tools/probe/fft_probe.cpp) L5-L6 | `#include "jdsp/jdsp_header.h"`、`#include "jdsp/Effects/eel2/fft.h"`（依赖手工编译时 `-I vendor/libjamesdsp/jamesdsp`） | `#include "legacy/jdsp/jdsp_header.h"`、`#include "legacy/jdsp/Effects/eel2/fft.h"`；编译参数 `-I` 改指 `engine/`（或 `engine/legacy` 且保留 `jdsp/` 前缀） | 与 engine 侧口径统一；该文件不在 CMake 目标内，仓库内无固化编译命令，随实际编译参数同步即可 |
+| [tools/probe/emit_probe.cpp](tools/probe/emit_probe.cpp) L6 | `#include "jdsp/Effects/eel2/fft.h"` | `#include "legacy/jdsp/Effects/eel2/fft.h"` | 同上 |
 | AGENT.md / CLAUDE.md / README.md | 目录结构清单含 `vendor/libjamesdsp` | 更新为 `engine/legacy` | 见 Phase 4 文档同步 |
 
 **明确不改的提及（语义性引用，迁移后依然准确）**：
@@ -122,7 +122,7 @@ AuraDSP/
 
 ### 3.2 构建系统（CMakeLists.txt）变更
 
-修改 [core/desktop/windows/CMakeLists.txt](file:///d:/temp_desktop/Proj/JamesDSP/core/desktop/windows/CMakeLists.txt)：
+修改 [core/desktop/windows/CMakeLists.txt](core/desktop/windows/CMakeLists.txt)：
 
 ```cmake
 # ==================== 原配置（2026-10-15 已逐项核对与现状一致） ====================
@@ -163,7 +163,7 @@ target_include_directories(auradsp_engine PRIVATE
 
 ### 3.3 测试用例与自动化门禁影响
 
-* **测试用例（`test/smoke/*.py`，经 [test/runner.py](file:///d:/temp_desktop/Proj/JamesDSP/test/runner.py) 调度）**：**0 影响**。所有单测脚本均通过 `ctypes` 调用导出的 C ABI（`auradsp_create`、`auradsp_set_param`、`auradsp_process`），对底层物理源码位置完全透明。
+* **测试用例（`test/smoke/*.py`，经 [test/runner.py](test/runner.py) 调度）**：**0 影响**。所有单测脚本均通过 `ctypes` 调用导出的 C ABI（`auradsp_create`、`auradsp_set_param`、`auradsp_process`），对底层物理源码位置完全透明。
 * **计数更正（2026-10-15 实测）**：`test/smoke/` 实有 **57** 个脚本；`runner.py` 注册表共 **54** 条——其中 **49 个 `smoke_*`**、3 个 `test_*`、2 个 `bench_*`。原方案所写“20 个测试”为过时估计，**以 runner 注册表实跑结果为准**：`python test/runner.py --smoke`（`--smoke` 参数已核验存在于 runner.py L162）执行的全部用例必须 **0 FAIL**。
 * **编译产物路径**：产物依然统一输出到 `core/desktop/windows/out/Release/auradsp_engine.dll`，下游自动化流程零冲击。`test/runner.py` 本身**不含** cmake 构建步骤（v3 实测：直接加载预编译 DLL），因此 Phase 2 构建 + DLL 同步到 `test/` 侧是 Phase 3 的**前置人工步骤**，路径迁移的正确性由构建阶段暴露（一票否决）。
 
@@ -244,9 +244,9 @@ python test/runner.py --smoke
 
 #### 步骤 4：元数据与文档登记
 **同步（活跃文档，改引用路径）**：
-1. 顶层 [AGENT.md](file:///d:/temp_desktop/Proj/JamesDSP/AGENT.md) 与 [CLAUDE.md](file:///d:/temp_desktop/Proj/JamesDSP/CLAUDE.md)、[README.md](file:///d:/temp_desktop/Proj/JamesDSP/README.md) 的目录结构清单；
-2. [engine/AGENT.md](file:///d:/temp_desktop/Proj/JamesDSP/engine/AGENT.md) 中指向 vendor 的补丁纪律与结构描述（L52、L60）；
-3. [vendor/ORIGIN.md](file:///d:/temp_desktop/Proj/JamesDSP/vendor/ORIGIN.md)，声明 `libjamesdsp` 已正式吸收入内建代码库（保留来源考古记录）；
+1. 顶层 [AGENT.md](AGENT.md) 与 [CLAUDE.md](CLAUDE.md)、[README.md](README.md) 的目录结构清单；
+2. [engine/AGENT.md](engine/AGENT.md) 中指向 vendor 的补丁纪律与结构描述（L52、L60）；
+3. [vendor/ORIGIN.md](vendor/ORIGIN.md)，声明 `libjamesdsp` 已正式吸收入内建代码库（保留来源考古记录）；
 4. 活跃架构文档中的路径引用：`docs/00-总览/项目架构与开发规范.md`、`docs/10-架构/APP-架构与设计方案.md`、`docs/10-架构/UI与音频效果深度重构与体验优化方案.md`；
 5. 视需要同步 `.ai/memory/MEMORY.md`（按 §05 载体规则更新）。
 
@@ -317,7 +317,7 @@ python test/runner.py --smoke
    void legacy_eq_process(auradsp_handle h, float* dst, int frames);
    ```
 2. **处理链平级调度**：
-   在 [engine/chain/engine_chain.cpp](file:///d:/temp_desktop/Proj/JamesDSP/engine/chain/engine_chain.cpp) 中，不再调用整块黑盒 `h->jdsp.processFloatMultiplexd(...)`，而是像调度自研的 `dyneq_process` 和 `gate_process` 一样，**逐个节点平级调用**。
+   在 [engine/chain/engine_chain.cpp](engine/chain/engine_chain.cpp) 中，不再调用整块黑盒 `h->jdsp.processFloatMultiplexd(...)`，而是像调度自研的 `dyneq_process` 和 `gate_process` 一样，**逐个节点平级调用**。
 3. **收益**：
    * 任意自研效果（如动态 EQ）可以随意插入到 JamesDSP 的经典效果之间（例如插入到管味模拟与 EQ 之间）；
    * 彻底实现真正自由的**任意拓扑音频处理图（Arbitrary Routing Graph）**！

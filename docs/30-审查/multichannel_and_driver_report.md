@@ -99,7 +99,7 @@ flowchart TD
 ### 3.3 源码中发现的重大数学与逻辑缺陷
 
 #### 缺陷 1：下混阶段环绕声严重串扰（方位感坍缩为中置单声道）
-- **代码位置**：[`engine/chain/engine_chain.cpp:318-328`](file:///d:/temp_desktop/Proj/JamesDSP/engine/chain/engine_chain.cpp#L318-L328)
+- **代码位置**：[`engine/chain/engine_chain.cpp:318-328`](engine/chain/engine_chain.cpp#L318-L328)
 - **代码片段**：
   ```cpp
   for (int k = 0; k < ch; ++k) {
@@ -120,7 +120,7 @@ flowchart TD
   - **后果**：5.1/7.1 游戏中后方敌人的脚步声、电影中从左后向右后的环绕声声相，在进入 DSP 前就已经在 L/R 中等量混合，立体声处理链接收到的是一个“完全居中、失去左右分离度”的环绕声信号。
 
 #### 缺陷 2：上混回填逻辑严重错位（左右相位反转）
-- **代码位置**：[`engine/chain/engine_chain.cpp:343-349`](file:///d:/temp_desktop/Proj/JamesDSP/engine/chain/engine_chain.cpp#L343-L349)
+- **代码位置**：[`engine/chain/engine_chain.cpp:343-349`](engine/chain/engine_chain.cpp#L343-L349)
 - **代码片段**：
   ```cpp
   for (int k = 0; k < ch; ++k) {
@@ -137,7 +137,7 @@ flowchart TD
 - **后果**：多声道音箱用户在播放 5.1/7.1 音频时，左侧/左后环绕喇叭发出的是右声道内容，造成严重的声像撕裂和心理声学混乱。
 
 #### 缺陷 3：前端 UI 与引擎声道参数断连
-- **代码位置**：[`engine/engine_param_table.h:454-471`](file:///d:/temp_desktop/Proj/JamesDSP/engine/engine_param_table.h#L454-L471)
+- **代码位置**：[`engine/engine_param_table.h:454-471`](engine/engine_param_table.h#L454-L471)
 - **现象**：
   - 前端 UI 的 `settings_page.dart` 中放置了 `channelsStereo` / `channels51` / `channels71` 三段按钮，调用 `model.setInt('channels.mode', v)`。
   - 但引擎中的 `set_channels_mode` 硬编码规定：`if (v != 0) return AURADSP_E_UNSUPPORTED;`。

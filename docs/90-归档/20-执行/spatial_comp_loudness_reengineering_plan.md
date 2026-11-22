@@ -17,13 +17,13 @@
 ## 一、 核心痛点与技术根因深度解剖
 
 ### 1. 动态压限器缺失参数调节底层与 UI
-- **底层现状**：在 [`engine_chain.cpp:205`](file:///d:/temp_desktop/Proj/JamesDSP/engine/chain/engine_chain.cpp#L205) 中，底层写死了 `CompressorSetGain(&h->jdsp, 0, 0, 0);`。
+- **底层现状**：在 [`engine_chain.cpp:205`](engine/chain/engine_chain.cpp#L205) 中，底层写死了 `CompressorSetGain(&h->jdsp, 0, 0, 0);`。
 - **机理分析**：JamesDSP 的动态压限器底层是 7 频带频域动态压扩器（`NUMPTS_DRS = 7`，默认中心频点：`95, 200, 400, 800, 1600, 3400, 7500 Hz`）。`CompressorSetGain` 接收各频点的频率与压扩增益（`-1.2 ~ +1.2`，正值为动态向上扩展，负值为向下压缩限幅）。由于 AuraDSP 原引擎参数表完全未暴露频段中心频率与增益压限值，导致用户完全无法修改压限幅度和频率！
-- **UI 现状**：[`comp_card.dart`](file:///d:/temp_desktop/Proj/JamesDSP/app/auradsp_app/lib/features/effects/comp_card.dart) 目前仅有时间常数一个主滑块和两个下拉框，没有提供多频段压限均衡或总压缩强度的直观调节控件。
+- **UI 现状**：[`comp_card.dart`](app/auradsp_app/lib/features/effects/comp_card.dart) 目前仅有时间常数一个主滑块和两个下拉框，没有提供多频段压限均衡或总压缩强度的直观调节控件。
 
 ### 2. 压限器示波器偶尔停滞冻结（依然有声音）
 - **根因分析**：
-  1. [`comp_card.dart:134`](file:///d:/temp_desktop/Proj/JamesDSP/app/auradsp_app/lib/features/effects/comp_card.dart#L134) 中 `_CompressorTransferScope` **仅**监听了 `Listenable.merge([model.levelL, model.levelR])`，未监听 `model` 自身变化；
+  1. [`comp_card.dart:134`](app/auradsp_app/lib/features/effects/comp_card.dart#L134) 中 `_CompressorTransferScope` **仅**监听了 `Listenable.merge([model.levelL, model.levelR])`，未监听 `model` 自身变化；
   2. 视觉衰减跟踪算法（Ballistics）是在 `build()` 内部计算的：
      ```dart
      _smoothGr = _smoothGr * 0.85 + targetGr * 0.15;
@@ -33,16 +33,16 @@
 
 ### 3. 空间音效面板效果器一打开/调参就自动关闭
 - **根因分析**：
-  1. **双击/归零误关开关**：例如在 [`state.dart:2222`](file:///d:/temp_desktop/Proj/JamesDSP/app/auradsp_app/lib/core/state.dart#L2222) 的 `resetStereoWiden()` 内部，竟然硬编码了 `stereoOn = false;`！用户双击重置滑块时直接将开关关闭，而卡片绑定了 `collapsed: !model.stereoOn`，导致整张卡片瞬间缩回自闭；
+  1. **双击/归零误关开关**：例如在 [`state.dart:2222`](app/auradsp_app/lib/core/state.dart#L2222) 的 `resetStereoWiden()` 内部，竟然硬编码了 `stereoOn = false;`！用户双击重置滑块时直接将开关关闭，而卡片绑定了 `collapsed: !model.stereoOn`，导致整张卡片瞬间缩回自闭；
   2. **混响开关状态判断脆弱**：`isSpatialReverbOn` 定义为 `reverbPreset >= 0 || fvOn`。当在子卡调自定义滑块时触发 `selectReverbPreset(-2)`，如果在异步流中 `fvOn` 未原子就绪，`isSpatialReverbOn` 瞬间判定为 false，卡片立刻收起；
-  3. **防抖全量回读（Readback）覆盖竞态**：[`state.dart:1055`](file:///d:/temp_desktop/Proj/JamesDSP/app/auradsp_app/lib/core/state.dart#L1055) 在调参 500ms 后触发 `scheduleReadback()`，引擎 `getParams` 返回所有参数。若底层某模块在特定模式下未能持久写入（或默认值为 0），回读事件就会将 UI 的开关变量强行改回 false，造成用户“一调参数，过半秒卡片就自己关闭”的诡异手感；
+  3. **防抖全量回读（Readback）覆盖竞态**：[`state.dart:1055`](app/auradsp_app/lib/core/state.dart#L1055) 在调参 500ms 后触发 `scheduleReadback()`，引擎 `getParams` 返回所有参数。若底层某模块在特定模式下未能持久写入（或默认值为 0），回读事件就会将 UI 的开关变量强行改回 false，造成用户“一调参数，过半秒卡片就自己关闭”的诡异手感；
   4. **嵌套卡层级与文案混乱**：空间面板包含了空间主体、混响、脉冲、串扰、Haas、立体声 5 个大子卡，彼此的声学定位缺乏清晰说明，部分文案生硬。
 
 ### 4. 调音效伴随剧烈改变音量（滑块感觉像音量调节器）
 - **根因分析**：
-  1. **空间音频 HRTF 上混能量超载**：[`dsp_spatial.cpp:113-145`](file:///d:/temp_desktop/Proj/JamesDSP/engine/dsp/dsp_spatial.cpp#L113-L145) 将立体声上混为 5 声道，近耳直达声、远耳延迟声、中置声全都是无归一化直接 `+=` 累加，再加上早期反射 `eL, eR` 和高频双二阶峰值，导致信号总能量暴增 +8dB ~ +10dB！虽然有慢速 AGC，但 AGC 时间常数极长（0.05/0.1），用户拉动滑块时音量忽大忽小、剧烈漂移；
-  2. **立体声展宽 (Stereo Widen) 增益突变**：[`stereoEnhancement.c:21-25`](file:///d:/temp_desktop/Proj/JamesDSP/engine/legacy/jdsp/Effects/stereoEnhancement.c#L21-L25) 的增益公式在 `mix=0.5` 处硬生生放大了 2.0 倍（+6dB），在 `mix=0` 与 `1.0` 处又是 1.0 倍，拉滑块就像在坐音量过山车；
-  3. **混响 (Freeverb) 直达声未衰减**：[`dsp_mc_reverb.cpp`](file:///d:/temp_desktop/Proj/JamesDSP/engine/dsp/dsp_mc_reverb.cpp)（原 `dsp_freeverb.cpp:89`，WP1 后并入该文件） 直达声 `dryG` 在预设中恒为 1.0，湿声直接加上去，缺乏专业的恒能量交叉淡入淡出（Constant-Power Crossfade $\cos/\sin$），越加混响整体音量越响。
+  1. **空间音频 HRTF 上混能量超载**：[`dsp_spatial.cpp:113-145`](engine/dsp/dsp_spatial.cpp#L113-L145) 将立体声上混为 5 声道，近耳直达声、远耳延迟声、中置声全都是无归一化直接 `+=` 累加，再加上早期反射 `eL, eR` 和高频双二阶峰值，导致信号总能量暴增 +8dB ~ +10dB！虽然有慢速 AGC，但 AGC 时间常数极长（0.05/0.1），用户拉动滑块时音量忽大忽小、剧烈漂移；
+  2. **立体声展宽 (Stereo Widen) 增益突变**：[`stereoEnhancement.c:21-25`](engine/legacy/jdsp/Effects/stereoEnhancement.c#L21-L25) 的增益公式在 `mix=0.5` 处硬生生放大了 2.0 倍（+6dB），在 `mix=0` 与 `1.0` 处又是 1.0 倍，拉滑块就像在坐音量过山车；
+  3. **混响 (Freeverb) 直达声未衰减**：[`dsp_mc_reverb.cpp`](engine/dsp/dsp_mc_reverb.cpp)（原 `dsp_freeverb.cpp:89`，WP1 后并入该文件） 直达声 `dryG` 在预设中恒为 1.0，湿声直接加上去，缺乏专业的恒能量交叉淡入淡出（Constant-Power Crossfade $\cos/\sin$），越加混响整体音量越响。
 
 ### 5. 空间音频图示过于“AI 化”、简陋不优雅
 - **根因分析**：
