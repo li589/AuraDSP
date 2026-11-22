@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../core/error_sink.dart';
 import '../../../engine/native_library_loader.dart';
 import '../../../platform/platform_profile.dart';
 import 'milkdrop_preset.dart';
@@ -168,7 +169,8 @@ class NativeProjectMBridge implements ProjectMBridge {
       _handle = _createFn(_width, _height, fps);
       _allocatePixelBuffer(_width, _height);
       return _handle != null && _handle != nullptr;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }
@@ -357,7 +359,8 @@ abstract final class ProjectMBridgeFactory {
         onOpened: (name) => matched = name,
       );
       return NativeProjectMBridge(lib, libraryName: matched ?? candidates.first);
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return MockProjectMBridge(
         statusDescription: 'Native library not found (procedural simulation)',
       );

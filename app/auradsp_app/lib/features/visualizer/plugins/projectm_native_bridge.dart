@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../core/error_sink.dart';
 import '../../../platform/platform_profile.dart';
 import '../../../engine/native_library_loader.dart';
 import 'milkdrop_preset.dart';
@@ -137,7 +138,8 @@ class ProjectMNativeBridge implements ProjectMBridge {
         return false;
       }
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       if (_handle != nullptr && _destroy(_handle) == 0) {
         _handle = nullptr;
       }
