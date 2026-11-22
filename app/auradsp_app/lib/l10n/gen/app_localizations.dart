@@ -3517,7 +3517,7 @@ abstract class AppLocalizations {
   /// No description provided for @visualizerStyleNebulaFlow.
   ///
   /// In zh, this message translates to:
-  /// **'星云流'**
+  /// **'星云'**
   String get visualizerStyleNebulaFlow;
 
   /// No description provided for @visualizerThemeSystem.

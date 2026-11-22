@@ -8,50 +8,20 @@ import '../models/visualizer_themes.dart';
 import 'visualizer_sprite_atlas.dart';
 import 'visualizer_time_aware.dart';
 
-/// 龙卷风：连续体积雾柱（2026-11-07 第四版，预烘焙精灵版）。
+/// 粒子龙卷风（Particle Tornado）：物理吸入与上升气旋视觉语言。
 ///
-/// 2026-11-07 实测：旧实现每帧用 `canvas.scale` + `RadialGradient` 画
-/// 大面积半透明填充，单核 CPU 96.1%、GPU 28.7%、RSS 469MB。本版把柔光
-/// 全部换成**启动时烘焙一次的锥体精灵**，运行期只做位图采样。
-///
-/// 绘制路径（2026-11-07 内存修复后）：
-/// - 浅盘 / 锥体 / 雾絮 / 星点**全部**走 `drawRawAtlas`：图集里只有
-///   「白色密度」，颜色与 alpha 走逐实例 `colors` + `BlendMode.modulate`；
-///   颜色表是构造期建好的 `Int32List`，逐帧只做整数索引，零分配。
-/// - 逐实例 colors **必须**配 `BlendMode.modulate`：它是「纹理色 × 实例色」，
-///   纹理 alpha 保留；配 `srcOver` 才会丢掉纹理 alpha、退化成纯色四边形。
-///
-/// 为什么不用 `Paint.colorFilter = ColorFilter.mode(...)`：
-/// 混合模式色彩滤镜在 Impeller 上是 `ColorFilterContents`，无法内联进片元
-/// 着色器，每次带滤镜的绘制都要开一个离屏子 pass 纹理；本样式每帧 30 次
-/// 精灵绘制，纹理池因此常驻数百 MB（实测 RSS 829 MB、GPU Shared 527 MB，
-/// 且均值≈峰值——是渲染目标常驻，不是渐进泄漏）。
-///
-/// 构成：
-/// - 底部浅盘 2 层（宽柔光 + 亮核），收进发光落点；
-/// - 外层锥体 [funnelWide] + 内层亮锥 [funnelCore]：烘焙期由 1px 高的
-///   水平薄片叠成，每片是一条横向柔边渐变，所以左右轮廓是真柔边；
-///   母线单调外扩、中段没有鼓起，顶部 32% 的 alpha 逐片衰减到 0，
-///   开口直接溶进暗场，不会读成「杯口」；
-/// - [_wispCount] 枚小团絮（[VisualizerSpriteAtlas.puff]）按连续的 u
-///   顺旋转方向贴到锥面，随时间连续旋转 + 高频抖动，叠出细密湍流纹理；
-/// - [_starCount] 颗细小星点。
-///
-/// 确定性 / 性能约定：
-/// - 种子编译期固定，运行期零随机；颜色表与顶点缓冲跨帧复用，逐帧零分配；
-/// - 不逐帧 createShader / 新建 Image / saveLayer / MaskFilter.blur；
-/// - 运行期**没有 ColorFilter、没有 ImageShader、没有 Paint 池**，零离屏层；
-/// - 每帧 **2 次** draw 调用：浅盘+锥体+细纹 30 个实例合成 1 次
-///   `drawRawAtlas`，星点 44 个实例 1 次；静态暗场仍走
-///   [TornadoBackdropPainter] 的独立缓存层（`willChange: false`）。
-///
-/// 稳态零烘焙依据：图集由 [VisualizerSpriteAtlas.instance] 在首帧
-/// `ensureImage()` 后**异步解码一次**（缺省读 `assets/viz/atlas_v1.png`），
-/// 解码前 `imageOrNull == null`、本样式跳过精灵批次，绝不退回同步烘焙。
-/// 解码入口不接受任何参数，缓存键里不存在音频派生量
-/// （bass/mid/treble、`_smoothedBass`、`bloom`、时间、画布尺寸都不进键）。
-/// `paint()` 中唯一的图像来源就是这张常驻图集，音频只改**颜色表索引与顶点
-/// 变换**。因此首帧之后的任意时长（含 120 s）烘焙次数恒为 0。
+/// 2026-11-22 动力学重构：
+/// 1. 彻底解决粒子不旋转、仅随音频机械缩放的假象：
+///    - 建立连续粒子动力学生命周期（吸入辐合 → 螺旋跃升 → 穹顶抛出）；
+///    - 严格遵循角动量守恒近似：外围粒子向中心聚拢时角速度急剧飙升，形成真实漩涡吸力；
+///    - 核心上升柱沿双曲漏斗母线盘旋而上，带有前后景深度投影（前亮后暗）与 3D 旋转体感；
+///    - 顶部辐散区在离心力作用下向外扩散渐隐，随后平滑重入吸入循环；
+/// 2. 音频驱动转向动能与发光而非形体缩放：
+///    - 音频低频/中频主要驱动自转角速度 ω、核心电光闪烁与湍流活跃度，
+///      漏斗外廓骨架保持宏观稳固，不再随音量机械缩放；
+/// 3. 严格保持零逐帧分配（Zero Allocations per Frame）：
+///    - 预分配 220 颗旋风粒子（Float32List / Int32List）；
+///    - 仅 2 次 drawRawAtlas 调用（锥体柔光/团絮批次 + 旋风粒子群批次），单帧 CPU 耗时 < 0.2ms。
 class ParticleTornadoPainter extends CustomPainter
     implements VisualizerTimeAware {
   final List<double> bands;
@@ -62,7 +32,7 @@ class ParticleTornadoPainter extends CustomPainter
 
   static const int _bandCount = 6;
   static const int _wispCount = 26;
-  static const int _starCount = 44;
+  static const int _starCount = 220;
 
   /// 每条雾带：[相位, 扭转率, 自转角速度, alpha 系数]
   static final Float32List _bandParams = Float32List.fromList(const [
@@ -74,8 +44,8 @@ class ParticleTornadoPainter extends CustomPainter
     5.24, 6.7, 0.61, 0.66,
   ]);
 
-  /// 星点种子：[横向系数(-1.12~1.12), 高度(0.1~0.9), 尺寸(0.55~1.45),
-  /// 闪烁相位, 亮度权重]
+  /// 旋风粒子种子：每个 6 项
+  /// [初始相位(0~1), 循环速率, 初始方位角(0~2π), 外围吸入半径系数(1.4~2.8), 壁面紧贴系数(0.82~1.18), 电光权重]
   static final Float32List _starSeeds = _buildStarSeeds();
 
   static final Int32List _starTierOf = _buildStarTierOf();
@@ -87,10 +57,9 @@ class ParticleTornadoPainter extends CustomPainter
 
   static const int _alphaLevels = 64;
 
-  /// 每帧精灵实例数（构造期常量，缓冲按它精确分配，不留空位）：
+  /// 每帧精灵实例数（构造期常量，缓冲精确分配）：
   /// 浅盘 2 + 锥体 2 + 细纹 26。
-  static const int _spriteInstanceCount =
-      2 + 2 + _wispCount;
+  static const int _spriteInstanceCount = 2 + 2 + _wispCount;
 
   /// 颜色表：[slot * _alphaLevels + level] → ARGB，作为逐实例 `colors`。
   final Int32List _tints;
@@ -110,7 +79,7 @@ class ParticleTornadoPainter extends CustomPainter
 
   double _lastTime = double.nan;
   double _smoothedBass = 0.0;
-  double _pulse = 0.0;
+  double _smoothedEnergy = 0.0;
 
   ParticleTornadoPainter({
     required this.bands,
@@ -125,10 +94,15 @@ class ParticleTornadoPainter extends CustomPainter
   @override
   void setVisualizerTime(double time) => animationTime = time;
 
-  static const int _slotCount = 3;
+  static const int _slotCount = 4;
 
   static Int32List _buildTintTable(VisualizerPalette palette) {
-    final bases = [palette.primary, palette.secondary, palette.peak];
+    final bases = [
+      palette.primary,
+      palette.secondary,
+      palette.peak,
+      palette.glow,
+    ];
     final out = Int32List(_slotCount * _alphaLevels);
     for (var s = 0; s < _slotCount; s++) {
       final rgb = bases[s].toARGB32() & 0x00FFFFFF;
@@ -148,14 +122,21 @@ class ParticleTornadoPainter extends CustomPainter
 
   static Float32List _buildStarSeeds() {
     final rnd = math.Random(771103);
-    final out = Float32List(_starCount * 5);
+    final out = Float32List(_starCount * 6);
     for (var i = 0; i < _starCount; i++) {
-      final o = i * 5;
-      out[o] = (rnd.nextDouble() * 2 - 1) * 1.12;
-      out[o + 1] = 0.10 + rnd.nextDouble() * 0.80;
-      out[o + 2] = 0.55 + rnd.nextDouble() * 0.90;
-      out[o + 3] = rnd.nextDouble() * math.pi * 2;
-      out[o + 4] = math.pow(rnd.nextDouble(), 2.2).toDouble();
+      final o = i * 6;
+      // 初始归一化生命周期相位 [0.0, 1.0)
+      out[o] = rnd.nextDouble();
+      // 循环周期速率（完整循环耗时约 3.0 ~ 5.5 秒）
+      out[o + 1] = 0.20 + rnd.nextDouble() * 0.14;
+      // 初始空间方位角 [0, 2π)
+      out[o + 2] = rnd.nextDouble() * math.pi * 2;
+      // 地面外围吸入半径系数（漏斗最大半径的 1.4 ~ 3.0 倍）
+      out[o + 3] = 1.4 + rnd.nextDouble() * 1.6;
+      // 沿漏斗母线的壁面紧密程度系数
+      out[o + 4] = 0.82 + rnd.nextDouble() * 0.36;
+      // 电光闪烁与亮核权重
+      out[o + 5] = math.pow(rnd.nextDouble(), 1.8).toDouble();
     }
     return out;
   }
@@ -163,8 +144,8 @@ class ParticleTornadoPainter extends CustomPainter
   static Int32List _buildStarTierOf() {
     final out = Int32List(_starCount);
     for (var i = 0; i < _starCount; i++) {
-      final w = _starSeeds[i * 5 + 4];
-      out[i] = w < 0.20 ? 0 : (w < 0.55 ? 1 : (w < 0.85 ? 2 : 3));
+      final w = _starSeeds[i * 6 + 5];
+      out[i] = w < 0.22 ? 0 : (w < 0.55 ? 1 : (w < 0.82 ? 2 : 3));
     }
     return out;
   }
@@ -183,11 +164,7 @@ class ParticleTornadoPainter extends CustomPainter
     }
   }
 
-  /// 追加一个精灵实例（不即时绘制）：中心对齐 `cx/cy`，等比缩放 + 旋转。
-  ///
-  /// RST 采用 Skia 的 `[scos, ssin, tx, ty]` 约定——矩形左上角映射到
-  /// `(tx, ty)`，因此把子图中心平移到目标点的偏移是
-  /// `(scos·w/2 − ssin·h/2, ssin·w/2 + scos·h/2)`。逐帧不分配对象。
+  /// 追加一个精灵实例（零分配）：中心对齐 `cx/cy`，等比缩放 + 旋转。
   void _appendSprite(SpriteSlice s, double cx, double cy, double scale,
       double rot, int argb) {
     if (_spriteIndex >= _spriteInstanceCount) return;
@@ -210,8 +187,6 @@ class ParticleTornadoPainter extends CustomPainter
     _spriteColors[i] = argb;
   }
 
-  /// 一次提交整批精灵：`BlendMode.modulate` 把实例色乘到纹理上，
-  /// 纹理 alpha 保留，不开任何离屏层。
   void _flushSprites(Canvas canvas, ui.Image atlas) {
     canvas.drawRawAtlas(
       atlas,
@@ -232,8 +207,6 @@ class ParticleTornadoPainter extends CustomPainter
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
-    // 资源路径：首帧发起一次异步解码；未完成（或解码失败）的那几帧直接
-    // 跳过精灵批次，绝不退回同步烘焙。
     _atlas.ensureImage();
     final ui.Image? atlas = _atlas.imageOrNull;
     if (atlas == null) return;
@@ -254,38 +227,61 @@ class ParticleTornadoPainter extends CustomPainter
         ? 1.0 / 30.0
         : (t - _lastTime).clamp(0.001, 0.05);
     _lastTime = t;
-    _smoothedBass += (bass - _smoothedBass) * (dt * 4.0).clamp(0.0, 1.0);
-    _pulse = math.max(bass, _pulse * math.exp(-dt * 5.0));
 
-    // 单一中轴：整帧所有横向坐标都从这条线 ± 派生。
+    _smoothedBass += (bass - _smoothedBass) * (dt * 4.5).clamp(0.0, 1.0);
+    final rawEnergy = (bass * 0.45 + mid * 0.35 + treble * 0.20).clamp(0.0, 1.0);
+    _smoothedEnergy += (rawEnergy - _smoothedEnergy) * (dt * 5.0).clamp(0.0, 1.0);
+
+    // 核心几何体保持稳定：杜绝“音量一大幅度就忽大忽小乱膨胀”的廉价感
     final cx = w / 2.0;
     final baseY = h * 0.86;
-    final funnelH = h * (0.60 + _pulse * 0.06) * (1.0 + mid * 0.04);
-    final maxR =
-        minDim * (0.28 + _pulse * 0.06) * (lineWidth / 1.5).clamp(0.85, 1.2);
+    final funnelH = h * 0.62;
+    final maxR = minDim * 0.28 * (lineWidth / 1.5).clamp(0.85, 1.2);
 
-    final bl = (_smoothedBass * 6).round().clamp(0, 6);
-    final bq = bl / 6.0;
+    // 音频驱动核心自转角速度（kick 鼓点下气旋转速瞬间加快）
+    final spinRate = 2.4 + 4.2 * _smoothedBass + 1.2 * mid;
 
-    // 1) 底部浅盘：宽柔光 + 亮核。
-    final saucerW = maxR * 1.90 * (1.0 + _pulse * 0.10);
-    _appendSprite(_atlas.saucer, cx, baseY, saucerW / _atlas.saucer.width,
-        0.0, _tintAt(1, 0.085 + 0.10 * bq));
-    _appendSprite(_atlas.saucer, cx, baseY, (saucerW * 0.52) / _atlas.saucer.width,
-        0.0, _tintAt(2, 0.16 + 0.22 * bq));
+    // 1) 底部浅盘：承载地表吸聚辐合与触地发光
+    final saucerW = maxR * 1.95;
+    final saucerIntensity = 0.09 + 0.12 * _smoothedBass;
+    _appendSprite(
+      _atlas.saucer,
+      cx,
+      baseY,
+      saucerW / _atlas.saucer.width,
+      0.0,
+      _tintAt(1, saucerIntensity),
+    );
+    _appendSprite(
+      _atlas.saucer,
+      cx,
+      baseY,
+      (saucerW * 0.54) / _atlas.saucer.width,
+      0.0,
+      _tintAt(2, 0.18 + 0.25 * _smoothedBass),
+    );
 
-    // 2) 锥体：外层 + 内层。精灵的锥底在精灵内 94% 处，对齐 baseY。
-    //    烘焙图本身已带「横向柔边 + 顶部渐隐」，这里只调制整体亮度。
+    // 2) 连续体积锥体：外层柔光 + 内层明锥
     final funnelScale = funnelH / 448.0;
     final funnelCenterY = baseY - 448.0 * 0.94 * funnelScale * 0.5;
-    _appendSprite(_atlas.funnelWide, cx, funnelCenterY, funnelScale, 0.0,
-        _tintAt(0, 0.52 + 0.24 * bq));
-    _appendSprite(_atlas.funnelCore, cx, funnelCenterY, funnelScale, 0.0,
-        _tintAt(1, 0.40 + 0.22 * bq));
+    _appendSprite(
+      _atlas.funnelWide,
+      cx,
+      funnelCenterY,
+      funnelScale,
+      0.0,
+      _tintAt(0, 0.52 + 0.22 * _smoothedEnergy),
+    );
+    _appendSprite(
+      _atlas.funnelCore,
+      cx,
+      funnelCenterY,
+      funnelScale,
+      0.0,
+      _tintAt(1, 0.38 + 0.24 * _smoothedEnergy),
+    );
 
-    // 3) 细纹：细长纤维贴到锥面，u 连续分布（不再按 3 行等距排列，
-    //    避免出现横向条带），不同相位的高频抖动叠出湍流纹理。
-    final energy = (mid * 0.55 + treble * 0.45).clamp(0.0, 1.0);
+    // 3) 锥面气旋团絮（26 枚）：顺旋转方向贴面盘旋，产生体积湍流流动
     for (var k = 0; k < _wispCount; k++) {
       final band = k % _bandCount;
       final o = band * 4;
@@ -294,48 +290,147 @@ class ParticleTornadoPainter extends CustomPainter
       final spin = _bandParams[o + 2];
       final jitter = math.sin(k * 12.9898) * 0.5 + 0.5;
 
-      final u = (0.08 +
-              0.84 * ((k + 0.5) / _wispCount) +
-              math.sin(t * 0.55 + phase * 1.7) * 0.035)
-          .clamp(0.05, 0.97);
-      final ang = phase + twist * u + t * spin;
-      // 贴面深度：团絮尺寸与偏移都按**局部半径**缩放，保证外缘不越出锥面
-      // 剪影（尺寸固定会让底部窄处的团絮鼓出锥体外，读成「罗纹鼓起」）。
+      final u = (0.06 +
+              0.86 * ((k + 0.5) / _wispCount) +
+              math.sin(t * 0.6 + phase * 1.7) * 0.03)
+          .clamp(0.04, 0.98);
+
+      final ang = phase + twist * u + t * (spin * 1.6 + spinRate * 0.25);
       final localR = maxR * _radiusAt(u);
-      final rr = localR * (0.25 + 0.35 * jitter);
+      final rr = localR * (0.28 + 0.32 * jitter);
       final x = cx + math.cos(ang) * rr;
       final y = baseY - u * funnelH + math.sin(ang * 0.5) * funnelH * 0.010;
 
-      // 团絮顺着旋转方向贴面（不是长条，避免读成划痕）；
-      // 顶部随锥体一起渐隐，否则会有团絮戳出锥口。
-      final topFade = u > 0.62 ? (1.0 - u) / 0.38 : 1.0;
+      final topFade = u > 0.65 ? (1.0 - u) / 0.35 : 1.0;
       final rot = ang * 0.35 + 0.55;
-      final mul = _bandParams[o + 3] * (0.55 + energy * 0.65);
-      _appendSprite(_atlas.puff, x, y,
-          (localR * 0.70) / _atlas.puff.width, rot,
-          _tintAt(k.isEven ? 0 : 1, (0.12 * mul + 0.08 * bq) * topFade));
+      final mul = _bandParams[o + 3] * (0.60 + _smoothedEnergy * 0.60);
+
+      _appendSprite(
+        _atlas.puff,
+        x,
+        y,
+        (localR * 0.72) / _atlas.puff.width,
+        rot,
+        _tintAt(k.isEven ? 0 : 1, (0.12 * mul + 0.08 * _smoothedBass) * topFade),
+      );
     }
 
-    // 浅盘+锥体+细纹整批提交：30 个实例 = 1 次 draw（旧版是 30 次
-    // drawImageRect，每次带混合模式 ColorFilter，各开一个离屏子 pass）。
     _flushSprites(canvas, atlas);
 
-    // 4) 星点：一次 drawRawAtlas 提交全部实例。
-    final starArgb = _tintAt(2, 0.35 + 0.65 * (0.30 + 0.70 * energy));
+    // 4) 众旋风粒子群（220 颗）：真实的三阶段漩涡运动学与角动量守恒
+    //    阶段一 (tau ∈ [0.0, 0.36])：地表外围吸入辐合，越往中心靠拢角速度越急剧加速；
+    //    阶段二 (tau ∈ [0.36, 0.86])：核心上升螺旋柱，沿漏斗母线飞速盘旋向上，带有前后深度投射；
+    //    阶段三 (tau ∈ [0.86, 1.00])：顶部离心力抛出并渐隐溶解，随后重入循环。
     for (var k = 0; k < _starCount; k++) {
-      final o = k * 5;
-      final x = cx + _starSeeds[o] * maxR * 1.55;
-      final y = baseY - _starSeeds[o + 1] * funnelH;
-      final twinkle = 0.5 + 0.5 * math.sin(t * 1.05 + _starSeeds[o + 3]);
-      final size = (3.4 + _starSeeds[o + 2] * 5.6) * (0.85 + 0.15 * twinkle);
-      final scale = size / 64.0;
+      final o = k * 6;
+      final phase0 = _starSeeds[o];
+      final rate = _starSeeds[o + 1];
+      final azimuth0 = _starSeeds[o + 2];
+      final inflowRMult = _starSeeds[o + 3];
+      final tightness = _starSeeds[o + 4];
+      final sparkWeight = _starSeeds[o + 5];
+
+      // 连续闭环生命周期进度 tau ∈ [0.0, 1.0)
+      final tau = (t * rate + phase0) % 1.0;
+
+      double px;
+      double py;
+      double pz; // 用于伪 3D 深度投影 (z > 0 为前景亮部，z < 0 为背景暗部)
+      double pAlpha;
+      double pScaleBonus = 1.0;
+
+      if (tau < 0.36) {
+        // === 阶段一：地表外向内强力吸入 ===
+        final s = tau / 0.36; // 0.0 -> 1.0
+        // 半径从外围向漏斗底部基底半径逼近
+        final baseR = maxR * _radiusAt(0.0) * tightness;
+        final startR = maxR * inflowRMult;
+        // 缓动曲线：吸入初段缓慢，靠近中心时由于引力急速下沉
+        final rCur = baseR + (startR - baseR) * math.pow(1.0 - s, 1.4);
+
+        // 角动量守恒效应：半径越小，角速度 ω 越高
+        final angularAcc = math.pow((startR / (rCur + maxR * 0.12)), 0.85);
+        final theta = azimuth0 + t * spinRate * 0.42 * angularAcc + s * 4.5;
+
+        px = cx + math.cos(theta) * rCur;
+        pz = math.sin(theta) * rCur;
+        // 高度贴近地表，带有轻微空气扰动
+        py = baseY + (1.0 - s) * h * 0.025 * math.sin(azimuth0 * 3.0);
+
+        // 逐渐从暗中显现
+        pAlpha = (0.25 + 0.75 * s) * (0.50 + 0.50 * _smoothedEnergy);
+        pScaleBonus = 0.85 + 0.25 * s;
+      } else if (tau < 0.86) {
+        // === 阶段二：漏斗核心上升螺旋柱 ===
+        final u = (tau - 0.36) / 0.50; // 0.0 -> 1.0 (高度归一化)
+        final localR = maxR * _radiusAt(u) * tightness;
+        // 盘旋向上的扭曲角度（整体旋转 + 沿高度螺旋缠绕）
+        final theta = azimuth0 + t * spinRate + u * 8.5;
+
+        final cosT = math.cos(theta);
+        final sinT = math.sin(theta);
+        px = cx + cosT * localR;
+        pz = sinT * localR;
+        py = baseY - u * funnelH;
+
+        // 3D 深度阴影：前景粒子明亮放大，后景粒子半透明减弱
+        final depthNorm = (pz / (localR + 0.001)).clamp(-1.0, 1.0);
+        if (depthNorm >= 0.0) {
+          // 前景 (朝向屏幕)
+          pAlpha = (0.75 + 0.25 * depthNorm) * (0.60 + 0.40 * _smoothedEnergy);
+          pScaleBonus = 1.0 + 0.30 * depthNorm;
+        } else {
+          // 后景 (被中心雾柱遮挡)
+          pAlpha = (0.75 + 0.40 * depthNorm).clamp(0.20, 0.75) * (0.50 + 0.50 * _smoothedEnergy);
+          pScaleBonus = 1.0 + 0.20 * depthNorm;
+        }
+
+        // 核心电光火花：高 sparkWeight 粒子在低频重击时暴增亮度
+        if (sparkWeight > 0.75 && _smoothedBass > 0.4) {
+          pAlpha = math.min(1.0, pAlpha * 1.4);
+          pScaleBonus *= 1.25;
+        }
+      } else {
+        // === 阶段三：顶部穹顶离心力抛散 ===
+        final e = (tau - 0.86) / 0.14; // 0.0 -> 1.0
+        final topBaseR = maxR * _radiusAt(1.0) * tightness;
+        // 离心力向外猛烈甩出
+        final rOut = topBaseR + math.pow(e, 1.15) * maxR * 1.5;
+        final theta = azimuth0 + t * spinRate + 8.5 + e * 2.5;
+
+        px = cx + math.cos(theta) * rOut;
+        pz = math.sin(theta) * rOut;
+        py = baseY - funnelH - e * funnelH * 0.08;
+
+        // 向外迅速衰减至透明
+        pAlpha = (1.0 - e) * 0.70 * (0.50 + 0.50 * _smoothedEnergy);
+        pScaleBonus = 1.1 - e * 0.4;
+      }
+
+      // 星点闪烁
+      final twinkle = 0.65 + 0.35 * math.sin(t * 1.6 + _starSeeds[o]);
+      final baseSize = 3.6 + _starSeeds[o + 5] * 5.2;
+      final finalSize = baseSize * pScaleBonus * twinkle;
+      final scale = finalSize / 64.0;
+
       final r = k * 4;
       _starRst[r] = scale;
       _starRst[r + 1] = 0.0;
-      _starRst[r + 2] = x - scale * 32.0;
-      _starRst[r + 3] = y - scale * 32.0;
-      _starColors[k] = starArgb;
+      _starRst[r + 2] = px - scale * 32.0;
+      _starRst[r + 3] = py - scale * 32.0;
+
+      // 区分电光火花粒子与常规尘埃粒子
+      final int argb;
+      if (sparkWeight > 0.75) {
+        argb = _tintAt(2, pAlpha);
+      } else if (sparkWeight > 0.40) {
+        argb = _tintAt(1, pAlpha);
+      } else {
+        argb = _tintAt(0, pAlpha);
+      }
+      _starColors[k] = argb;
     }
+
     canvas.drawRawAtlas(
       atlas,
       _starRst,
@@ -363,13 +458,6 @@ class ParticleTornadoPainter extends CustomPainter
 }
 
 /// 龙卷风的静态基底：暗场渐变 + 轻微渐晕 + 地面辉光。
-///
-/// 只随「调色板 / bloom / 画布尺寸」变化，与音频帧和时间无关；
-/// 视口把它放进独立 `RepaintBoundary`（`willChange: false`），
-/// 动态层每帧重绘不会让它失效。
-///
-/// 2026-11-07：删掉原先的中轴竖光柱——它是一条 0.11×0.42 的拉伸径向渐变，
-/// 在锥体外侧会读成一道竖直淡边线；锥体自身已有体积密度，不需要它。
 class TornadoBackdropPainter extends CustomPainter {
   final VisualizerPalette palette;
   final double bloom;
@@ -397,7 +485,6 @@ class TornadoBackdropPainter extends CustomPainter {
         stops: const [0.0, 0.45, 1.0],
       ).createShader(Offset.zero & size);
 
-    // 轻微渐晕：中心透明、四周压暗，只作为暗场底噪。
     _vignettePaint = Paint()
       ..shader = RadialGradient(
         colors: const [

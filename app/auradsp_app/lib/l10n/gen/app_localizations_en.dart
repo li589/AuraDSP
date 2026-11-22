@@ -1958,7 +1958,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get visualizerStyleTornado => 'Particle Tornado';
 
   @override
-  String get visualizerStyleNebulaFlow => 'Nebula Flow';
+  String get visualizerStyleNebulaFlow => 'Nebula';
 
   @override
   String get visualizerThemeSystem => 'System Theme';

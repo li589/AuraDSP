@@ -11,6 +11,7 @@ import 'package:auradsp_app/features/visualizer/plugins/milkdrop_preset.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_atmosphere.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_fluid.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_milkdrop.dart';
+import 'package:auradsp_app/features/visualizer/styles/style_nebula_flow.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_tornado.dart';
 import 'package:auradsp_app/features/visualizer/styles/visualizer_painter_dispatcher.dart';
 import 'package:auradsp_app/features/visualizer/views/visualizer_drawer.dart';
@@ -192,6 +193,7 @@ void main() {
         VisualizerStyle.pulseOrb,
         VisualizerStyle.fluidDynamics,
         VisualizerStyle.tornado,
+        VisualizerStyle.nebulaFlow,
       ]) {
         final recorder = ui.PictureRecorder();
         final canvas = Canvas(recorder);
@@ -353,6 +355,43 @@ void main() {
       ));
       expect(changedPixels(a, b), greaterThan(120),
           reason: 'MilkDrop 必须缓慢持续旋转，而不是静止/跳变');
+    });
+
+    test('NebulaFlow：星云重命名与多语言本地化正确', () {
+      expect(VisualizerStyle.nebulaFlow.label, 'Nebula');
+      final zh = lookupAppLocalizations(const Locale('zh'));
+      final en = lookupAppLocalizations(const Locale('en'));
+      final ja = lookupAppLocalizations(const Locale('ja'));
+      expect(VisualizerStyle.nebulaFlow.labelOf(zh), '星云');
+      expect(VisualizerStyle.nebulaFlow.labelOf(en), 'Nebula');
+      expect(VisualizerStyle.nebulaFlow.labelOf(ja), '星雲');
+    });
+
+    test('NebulaFlow 与 ParticleTornado 零错误绘制且边界安全', () {
+      final palette = VisualizerPalette.resolve(VisualizerColorTheme.aurora, auraDark);
+      final testBands = bands();
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+
+      // 零尺寸与正常尺寸边界测试
+      final nebula = NebulaFlowPainter(
+        bands: testBands,
+        palette: palette,
+        bloom: 0.5,
+        animationTime: 2.5,
+      );
+      nebula.paint(canvas, Size.zero);
+      nebula.paint(canvas, const Size(1920, 1080));
+
+      final tornado = ParticleTornadoPainter(
+        bands: testBands,
+        palette: palette,
+        bloom: 0.5,
+        animationTime: 2.5,
+        lineWidth: 1.5,
+      );
+      tornado.paint(canvas, Size.zero);
+      tornado.paint(canvas, const Size(1920, 1080));
     });
   });
 

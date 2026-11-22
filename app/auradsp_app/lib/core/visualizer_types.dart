@@ -93,12 +93,12 @@ enum VisualizerStyle {
     description: 'Coherent particle funnel vortex with depth-sorted orbiting dust',
   ),
 
-  /// 星云流：WMP 经典柔雾星云（低频云团 + 稀疏星点）
+  /// 星云：经典深空柔雾星云与漂移尘埃（多层流场漂移 + 恒星光芒）
   nebulaFlow(
     id: 'nebulaFlow',
-    label: 'Nebula Flow',
+    label: 'Nebula',
     icon: Icons.cloud_rounded,
-    description: 'Soft volumetric cloud drift with sparse twinkling stars',
+    description: 'Deep cosmic nebula with drifting interstellar dust clouds and pulsating stellar fields',
   );
 
   final String id;

@@ -8,52 +8,17 @@ import '../models/visualizer_themes.dart';
 import 'visualizer_sprite_atlas.dart';
 import 'visualizer_time_aware.dart';
 
-/// 星云流（Nebula Flow）：WMP 经典「柔雾星云」视觉语言。
+/// 星云（Nebula）：深空柔雾星云与星际尘埃视觉语言。
 ///
-/// 2026-11-07 性能改造：所有云体/雾絮/星点改为**预烘焙精灵**。
-/// 旧实现每帧用 `canvas.scale` + `RadialGradient` 画大面积极坐标填充，
-/// 实测单核 CPU 96%、GPU 28.7%；换成位图采样后只剩纹理采样 + 混合。
-///
-/// 绘制路径（2026-11-07 内存修复后）：
-/// - 云体 / 雾絮 / 星点**全部**走 `drawRawAtlas`：图集里只有「白色密度」，
-///   颜色与 alpha 走逐实例 `colors` + `BlendMode.modulate`；颜色表是
-///   构造期建好的 `Int32List`，逐帧只做整数索引，零分配。
-/// - 逐实例 colors **必须**配 `BlendMode.modulate`：它是「纹理色 × 实例色」，
-///   纹理 alpha 保留；配 `srcOver` 才会丢掉纹理 alpha、退化成纯色四边形
-///   （旧版曾把 `srcOver` 的这个语义误判成「colors 不能用」）。
-///
-/// 为什么不用 `Paint.colorFilter = ColorFilter.mode(...)`：
-/// 混合模式色彩滤镜在 Impeller 上是 `ColorFilterContents`，无法内联进片元
-/// 着色器，每次带滤镜的绘制都要开一个离屏子 pass 纹理；本样式每帧 100+ 次
-/// 精灵绘制，纹理池因此常驻数百 MB（实测 RSS 829 MB、GPU Shared 527 MB，
-/// 且均值≈峰值——是渲染目标常驻，不是渐进泄漏）。顶点色属于图集绘制本身，
-/// **不开任何离屏层**。
-///
-/// 构成：
-/// - [_veilCount] 张大幕布云，铺满画面做低频云底；
-/// - [_billowCount] 个云团，每个两瓣错位叠加，剪影不是标准椭圆；
-/// - 1 枚中央柔光，让云层有共同光源；
-/// - [_wispCount] 枚小团絮（[VisualizerSpriteAtlas.puff]），
-///   宽 30~105 px、高 11~38 px，低 alpha 的不规则剪影 + 内部细颗粒，
-///   高频错位 + 缓慢旋转，给云体叠出肉眼可辨的湍流纹理；
-/// - [_starCount] 颗细小星点，尺寸 5.5~12 px（带十字芒）、亮核 0.9~1.9 px。
-///
-/// 确定性 / 性能约定：
-/// - 种子编译期固定（`Float32List` + 固定 `math.Random`），运行期零随机；
-/// - 颜色表、顶点缓冲、实例色缓冲都在构造期分配、跨帧复用，逐帧堆分配为零；
-/// - 不逐帧 createShader / 新建 Image / 使用 saveLayer / MaskFilter.blur；
-/// - 运行期**没有 ColorFilter、没有 ImageShader、没有 Paint 池**，全样式零离屏层；
-/// - 每帧 **2 次** draw 调用：云体+雾絮 101 个实例合成 1 次 `drawRawAtlas`，
-///   星点 190 个实例 1 次；静态暗场仍走 [NebulaBackdropPainter] 的独立缓存层
-///   （`willChange: false`）。
-///
-/// 稳态零烘焙依据：图集由 [VisualizerSpriteAtlas.instance] 在首帧
-/// `ensureImage()` 后**异步解码一次**（缺省读 `assets/viz/atlas_v1.png`），
-/// 解码前 `imageOrNull == null`、本样式跳过精灵批次，绝不退回同步烘焙。
-/// 解码入口不接受任何参数，缓存键里不存在音频派生量
-/// （bass/mid/treble、`_energy`、`bloom`、时间、画布尺寸都不进键）。`paint()`
-/// 中唯一的图像来源就是这张常驻图集，音频只改**颜色表索引与顶点变换**。
-/// 因此首帧之后的任意时长（含 120 s）烘焙次数恒为 0。
+/// 2026-11-22 动力学重构：
+/// 1. 彻底解除云团定点锚定——引入环形坐标漂移空间（Toroidal Cosmic Space），
+///    大幕布底云与主体云团以多层视差速率在宇宙视口中自由飘动，穿出边界平滑回环；
+/// 2. 彻底移除云内圆周绕转的“转圈轮子”假象——雾絮（puff）作为星际气体纤维（Filament）
+///    与电离脊线，顺着星云流场方向展布，随宇宙潮汐轻微呼吸起伏，呈现真实的星云纤维纹理；
+/// 3. 严格保持零逐帧分配（Zero Allocations per Frame）：
+///    - 预烘焙精灵图集（VisualizerSpriteAtlas）；
+///    - 预分配 Float32List / Int32List 顶点与颜色表；
+///    - 逐帧仅 2 次 drawRawAtlas 调用（云体/雾絮批次 + 星点批次），零离屏 pass。
 class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
   final List<double> bands;
   final VisualizerPalette palette;
@@ -70,15 +35,15 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
   static const int _sliceWide = 1;
   static const int _sliceTall = 2;
 
-  /// 云体种子：每个 11 项
-  /// [x, y, 半径, 横向漂移速度, 纵向漂移速度, 漂移相位,
-  ///  呼吸相位, 呼吸速度, 颜色档(0~3), 纵向拉长系数, 类型(0=幕布 1=云团)]
+  /// 云体种子：每个 12 项
+  /// [x0, y0, 半径, 漂移速度vx, 漂移速度vy, 蜿蜒频率,
+  ///  蜿蜒幅度, 呼吸频率, 呼吸相位, 颜色档(0~3), 纵横比(0.7~1.3), 基础旋转]
   static final Float32List _cloudSeeds = _buildCloudSeeds();
 
   /// 星点种子：每个 5 项 [x, y, 尺寸系数, 闪烁相位, 亮度权重]
   static final Float32List _starSeeds = _buildStarSeeds();
 
-  /// 雾絮种子：每个 4 项 [相位, 旋转相位, 错位相位, alpha 系数]
+  /// 雾絮纤维种子：每个 5 项 [沿流向偏移, 垂直流向偏移, 姿态微倾, 波动频率, alpha系数]
   static final Float32List _wispSeeds = _buildWispSeeds();
 
   /// 每个云实例用哪块子图（构造期固定）。
@@ -95,11 +60,11 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
   static const int _alphaLevels = 64;
 
   /// 每帧精灵实例数（构造期常量，缓冲按它精确分配，不留空位）：
-  /// 幕布 10 + 云团主副瓣 18×2 + 中央柔光 1 + 雾絮 54。
+  /// 幕布 10 + 云团主副瓣 18×2 + 中央柔光 1 + 雾絮纤维 54。
   static const int _cloudInstanceCount =
       _veilCount + _billowCount * 2 + _haloCount + _wispCount;
 
-  /// 颜色表：[slot * _alphaLevels + level] → ARGB。颜色与 alpha 都编成整数，
+  /// 颜色表：[slot * _alphaLevels + level] → ARGB。颜色与 alpha 编成整数，
   /// 作为 `drawRawAtlas` 的逐实例 `colors`，运行期只做整数索引。
   final Int32List _tints;
 
@@ -155,8 +120,6 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
             ? palette.gradient[2]
             : palette.secondary,
         4 => palette.glow,
-        // 星点必须用最亮的 peak：旧版误用 gradient.first（深色底），
-        // 星点乘上深色后比云体更暗，会读成「暗十字」。
         _ => palette.peak,
       };
 
@@ -168,23 +131,33 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
 
   static Float32List _buildCloudSeeds() {
     final rnd = math.Random(20261107);
-    final out = Float32List((_veilCount + _billowCount) * 11);
-    for (var i = 0; i < _veilCount + _billowCount; i++) {
-      final o = i * 11;
-      final billow = i >= _veilCount;
-      out[o] = (rnd.nextDouble() * 2 - 1) * 1.05;
-      out[o + 1] = 0.04 + rnd.nextDouble() * 0.92;
-      out[o + 2] = billow
-          ? 0.13 + rnd.nextDouble() * 0.14
-          : 0.28 + rnd.nextDouble() * 0.16;
-      out[o + 3] = 0.05 + rnd.nextDouble() * 0.10;
-      out[o + 4] = 0.03 + rnd.nextDouble() * 0.07;
-      out[o + 5] = rnd.nextDouble() * math.pi * 2;
-      out[o + 6] = rnd.nextDouble() * math.pi * 2;
-      out[o + 7] = 0.09 + rnd.nextDouble() * 0.13;
-      out[o + 8] = (rnd.nextDouble() * 4).floorToDouble().clamp(0, 3);
-      out[o + 9] = 0.70 + rnd.nextDouble() * 0.55;
-      out[o + 10] = billow ? 1.0 : 0.0;
+    final count = _veilCount + _billowCount;
+    final out = Float32List(count * 12);
+    for (var i = 0; i < count; i++) {
+      final o = i * 12;
+      final isBillow = i >= _veilCount;
+      // 初始归一化坐标 [0.0, 1.0]
+      out[o] = rnd.nextDouble();
+      out[o + 1] = rnd.nextDouble();
+      // 云团尺寸
+      out[o + 2] = isBillow
+          ? 0.16 + rnd.nextDouble() * 0.15
+          : 0.32 + rnd.nextDouble() * 0.18;
+      // 漂移速度：深层幕布缓慢庄严，前景云团平稳前行
+      final speedScale = isBillow ? 0.022 : 0.010;
+      final driftAngle = rnd.nextDouble() * math.pi * 2;
+      out[o + 3] = math.cos(driftAngle) * (speedScale + rnd.nextDouble() * speedScale * 0.8);
+      out[o + 4] = math.sin(driftAngle) * (speedScale * 0.6 + rnd.nextDouble() * speedScale * 0.5);
+      // 蜿蜒参数：平滑正弦扰动，避免机械直线运动
+      out[o + 5] = 0.15 + rnd.nextDouble() * 0.20; // meander freq
+      out[o + 6] = 0.04 + rnd.nextDouble() * 0.05; // meander amp
+      // 呼吸起伏参数
+      out[o + 7] = 0.10 + rnd.nextDouble() * 0.15; // breathe freq
+      out[o + 8] = rnd.nextDouble() * math.pi * 2; // breathe phase
+      // 颜色档位与几何形态
+      out[o + 9] = (rnd.nextDouble() * 4).floorToDouble().clamp(0, 3);
+      out[o + 10] = 0.72 + rnd.nextDouble() * 0.56; // aspect
+      out[o + 11] = rnd.nextDouble() * math.pi * 2; // base rot
     }
     return out;
   }
@@ -194,10 +167,8 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
     final out = Float32List(_starCount * 5);
     for (var i = 0; i < _starCount; i++) {
       final o = i * 5;
-      out[o] = (rnd.nextDouble() * 2 - 1) * 0.96;
-      out[o + 1] = 0.03 + rnd.nextDouble() * 0.94;
-      // 尺寸分布偏小：多数微星、少量稍大的星，避免「雨点」感。
-      // 指数 > 1 才会把分布压向 0；指数 < 1 反而让大多数星偏大。
+      out[o] = rnd.nextDouble();
+      out[o + 1] = rnd.nextDouble();
       out[o + 2] = math.pow(rnd.nextDouble(), 1.8).toDouble();
       out[o + 3] = rnd.nextDouble() * math.pi * 2;
       out[o + 4] = math.pow(rnd.nextDouble(), 2.2).toDouble();
@@ -207,29 +178,32 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
 
   static Float32List _buildWispSeeds() {
     final rnd = math.Random(3141592);
-    final out = Float32List(_wispCount * 4);
+    final out = Float32List(_wispCount * 5);
     for (var i = 0; i < _wispCount; i++) {
-      final o = i * 4;
-      out[o] = rnd.nextDouble() * math.pi * 2;
-      out[o + 1] = rnd.nextDouble() * math.pi * 2;
-      out[o + 2] = rnd.nextDouble() * math.pi * 2;
-      out[o + 3] = 0.55 + rnd.nextDouble() * 0.65;
+      final o = i * 5;
+      // 沿流场轴向的相对偏移与横向展布（-0.45 ~ +0.45）
+      out[o] = (rnd.nextDouble() * 2 - 1) * 0.45;
+      out[o + 1] = (rnd.nextDouble() * 2 - 1) * 0.28;
+      // 纤维微倾角（-0.35 ~ +0.35 rad）
+      out[o + 2] = (rnd.nextDouble() * 2 - 1) * 0.35;
+      // 波动频率与 alpha
+      out[o + 3] = 0.4 + rnd.nextDouble() * 0.6;
+      out[o + 4] = 0.6 + rnd.nextDouble() * 0.5;
     }
     return out;
   }
 
   static Int32List _buildCloudSliceOf() {
-    final out =
-        Int32List(_veilCount + _billowCount * 2 + _haloCount);
+    final out = Int32List(_veilCount + _billowCount * 2 + _haloCount);
     var i = 0;
-    // 幕布：全部用横向云，覆盖画面宽度。
+    // 幕布：全部用横向云，覆盖画面低频底质
     for (var k = 0; k < _veilCount; k++, i++) {
       out[i] = _sliceWide;
     }
-    // 云团：主瓣 + 副瓣，按种子的拉长系数选不同的剪影。
+    // 云团：主瓣 + 副瓣
     for (var k = 0; k < _billowCount; k++) {
-      final o = (_veilCount + k) * 11;
-      final aspect = _cloudSeeds[o + 9];
+      final o = (_veilCount + k) * 12;
+      final aspect = _cloudSeeds[o + 10];
       final main = aspect < 0.86
           ? _sliceWide
           : (aspect > 1.12 ? _sliceTall : _sliceBlob);
@@ -238,7 +212,7 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
           ? _sliceTall
           : (main == _sliceWide ? _sliceBlob : _sliceWide);
     }
-    // 中央柔光。
+    // 中央柔光
     out[i] = _sliceBlob;
     return out;
   }
@@ -272,12 +246,7 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
     }
   }
 
-  /// 追加一个精灵实例（不即时绘制）：中心对齐 `cx/cy`，等比缩放 + 旋转。
-  ///
-  /// 等价于旧实现的 `translate/rotate/scale + drawImageRect(localRect)`，
-  /// 但只写顶点缓冲：RST 采用 Skia 的 `[scos, ssin, tx, ty]` 约定——矩形
-  /// 左上角映射到 `(tx, ty)`，因此把子图中心平移到目标点的偏移是
-  /// `(scos·w/2 − ssin·h/2, ssin·w/2 + scos·h/2)`。逐帧不分配对象。
+  /// 追加一个精灵实例（零分配）：中心对齐 `cx/cy`，等比缩放 + 旋转。
   void _appendSprite(SpriteSlice s, double cx, double cy, double scale,
       double rot, int argb) {
     if (_spriteIndex >= _cloudInstanceCount) return;
@@ -300,8 +269,6 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
     _spriteColors[i] = argb;
   }
 
-  /// 一次提交整批精灵：`BlendMode.modulate` 把实例色乘到纹理上，
-  /// 纹理 alpha 保留，不开任何离屏层。
   void _flushSprites(Canvas canvas, ui.Image atlas) {
     canvas.drawRawAtlas(
       atlas,
@@ -316,11 +283,15 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
     _spriteIndex = 0;
   }
 
+  /// 环形宇宙坐标包装：将任意实数坐标映射到 [minVal, minVal + span]
+  static double _wrap(double val, double minVal, double span) {
+    final d = (val - minVal) % span;
+    return minVal + (d < 0.0 ? d + span : d);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
-    // 资源路径：首帧发起一次异步解码；未完成（或解码失败）的那几帧直接
-    // 跳过精灵批次，绝不退回同步烘焙。
     _atlas.ensureImage();
     final ui.Image? atlas = _atlas.imageOrNull;
     if (atlas == null) return;
@@ -343,133 +314,181 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
         ? 1.0 / 30.0
         : (t - _lastTime).clamp(0.001, 0.1);
     _lastTime = t;
-    // 亮度只在低频平滑，避免高频把云团闪成噪点。
+
     final target = (bass * 0.35 + mid * 0.40 + treble * 0.25).clamp(0.0, 1.0);
     _energy += (target - _energy) * (dt * 3.2).clamp(0.0, 1.0);
 
-    final pulse = 1.0 + _energy * 0.10 + bass * 0.06;
-    final fieldR = minDim * (0.60 + _energy * 0.12);
+    final pulse = 1.0 + _energy * 0.12 + bass * 0.08;
 
-    // 1) 大幕布：铺满画面的低频云底，亮度最低。
+    // 宇宙漂移视口空间（比屏幕外延 35% 边缘，保证出入边界完全平滑无突兀裁切）
+    final wrapMinX = -w * 0.35;
+    final wrapSpanX = w * 1.70;
+    final wrapMinY = -h * 0.25;
+    final wrapSpanY = h * 1.50;
+
+    // 1) 大幕布：10 张深层超大云团，以宁静低速在背景自由漂游
     for (var i = 0; i < _veilCount; i++) {
-      final o = i * 11;
-      final driftX =
-          math.sin(t * _cloudSeeds[o + 3] + _cloudSeeds[o + 5]) * fieldR * 0.10;
-      final driftY =
-          math.cos(t * _cloudSeeds[o + 4] + _cloudSeeds[o + 5]) * fieldR * 0.06;
-      final breathe =
-          1.0 + 0.14 * math.sin(t * _cloudSeeds[o + 7] + _cloudSeeds[o + 6]);
-      final x = cx + _cloudSeeds[o] * fieldR * 1.08 + driftX;
-      final y = cy + (_cloudSeeds[o + 1] - 0.5) * h * 1.06 + driftY;
+      final o = i * 12;
+      final rawX = _cloudSeeds[o] * w +
+          _cloudSeeds[o + 3] * t * w +
+          math.sin(t * _cloudSeeds[o + 5] + _cloudSeeds[o + 8]) * w * _cloudSeeds[o + 6];
+      final rawY = _cloudSeeds[o + 1] * h +
+          _cloudSeeds[o + 4] * t * h +
+          math.cos(t * _cloudSeeds[o + 5] + _cloudSeeds[o + 8]) * h * _cloudSeeds[o + 6];
+
+      final x = _wrap(rawX, wrapMinX, wrapSpanX);
+      final y = _wrap(rawY, wrapMinY, wrapSpanY);
+
+      final breathe = 1.0 + 0.12 * math.sin(t * _cloudSeeds[o + 7] + _cloudSeeds[o + 8]);
       final r = minDim * _cloudSeeds[o + 2] * breathe * pulse;
       final slice = _sliceAt(_cloudSliceOf[i]);
+
       _appendSprite(
         slice,
         x,
         y,
-        (2.0 * r) / slice.height,
-        _cloudSeeds[o + 5] * 0.22,
-        _tintAt(_cloudSeeds[o + 8].toInt(), 0.075 + 0.10 * _energy),
+        (2.2 * r) / slice.height,
+        _cloudSeeds[o + 11] + t * 0.005,
+        _tintAt(_cloudSeeds[o + 9].toInt(), 0.080 + 0.10 * _energy),
       );
     }
 
-    // 2) 云团：主瓣 + 一瓣错位副瓣，剪影不再是标准椭圆。
+    // 2) 主体星云团：18 个云团自由飘移，每个包含主瓣 + 沿流向拉伸的副瓣
     var idx = _veilCount;
     for (var k = 0; k < _billowCount; k++, idx += 2) {
-      final o = (_veilCount + k) * 11;
-      final driftX =
-          math.sin(t * _cloudSeeds[o + 3] + _cloudSeeds[o + 5]) * fieldR * 0.10;
-      final driftY =
-          math.cos(t * _cloudSeeds[o + 4] + _cloudSeeds[o + 5]) * fieldR * 0.06;
-      final breathe =
-          1.0 + 0.14 * math.sin(t * _cloudSeeds[o + 7] + _cloudSeeds[o + 6]);
-      final x = cx + _cloudSeeds[o] * fieldR * 0.78 + driftX;
-      final y = cy + (_cloudSeeds[o + 1] - 0.5) * h * 1.02 + driftY;
+      final o = (_veilCount + k) * 12;
+      final vx = _cloudSeeds[o + 3];
+      final vy = _cloudSeeds[o + 4];
+
+      final rawX = _cloudSeeds[o] * w +
+          vx * t * w +
+          math.sin(t * _cloudSeeds[o + 5] + _cloudSeeds[o + 8]) * w * _cloudSeeds[o + 6];
+      final rawY = _cloudSeeds[o + 1] * h +
+          vy * t * h +
+          math.cos(t * _cloudSeeds[o + 5] + _cloudSeeds[o + 8]) * h * _cloudSeeds[o + 6];
+
+      final x = _wrap(rawX, wrapMinX, wrapSpanX);
+      final y = _wrap(rawY, wrapMinY, wrapSpanY);
+
+      final breathe = 1.0 + 0.15 * math.sin(t * _cloudSeeds[o + 7] + _cloudSeeds[o + 8]);
       final r = minDim * _cloudSeeds[o + 2] * breathe * pulse;
-      final slot = _cloudSeeds[o + 8].toInt();
-      final alpha = 0.15 + 0.22 * _energy;
+      final slot = _cloudSeeds[o + 9].toInt();
+      final alpha = 0.16 + 0.24 * _energy;
 
+      // 主瓣
       final mainSlice = _sliceAt(_cloudSliceOf[idx]);
-      _appendSprite(mainSlice, x, y, (2.0 * r) / mainSlice.height,
-          _cloudSeeds[o + 6] * 0.30, _tintAt(slot, alpha));
+      final flowAngle = math.atan2(vy, vx);
+      _appendSprite(
+        mainSlice,
+        x,
+        y,
+        (2.0 * r) / mainSlice.height,
+        flowAngle * 0.25 + _cloudSeeds[o + 11],
+        _tintAt(slot, alpha),
+      );
 
-      // 副瓣：偏移 + 更小 + 更淡，把圆形剪影打散。
-      final ang = _cloudSeeds[o + 5] + k * 0.73;
-      final lx = x + math.cos(ang) * r * 0.44;
-      final ly = y + math.sin(ang) * r * 0.34;
+      // 副瓣：顺着云团流场延伸，形成飘逸的不对称尾迹
+      final tailAng = flowAngle + math.pi + 0.2 * math.sin(t * 0.3 + k);
+      final lx = x + math.cos(tailAng) * r * 0.42;
+      final ly = y + math.sin(tailAng) * r * 0.32;
       final lobeSlice = _sliceAt(_cloudSliceOf[idx + 1]);
-      _appendSprite(lobeSlice, lx, ly, (2.0 * r * 0.70) / lobeSlice.height,
-          ang * 0.5 + 0.6, _tintAt(slot, alpha * 0.72));
+      _appendSprite(
+        lobeSlice,
+        lx,
+        ly,
+        (1.4 * r) / lobeSlice.height,
+        tailAng * 0.3 + 0.4,
+        _tintAt(slot, alpha * 0.70),
+      );
     }
 
-    // 3) 中央柔光：给云层一个共同的光源，避免整屏平铺。
+    // 3) 中央柔光源：锚定于场景宏观核心，提供宇宙星系核发光
     _appendSprite(
       _atlas.blob,
       cx,
-      cy * 0.86,
-      (fieldR * 1.30) / _atlas.blob.height,
+      cy * 0.88,
+      (minDim * 0.95 * (1.0 + _energy * 0.15)) / _atlas.blob.height,
       0.0,
-      _tintAt(0, 0.09 + 0.11 * _energy),
+      _tintAt(0, 0.09 + 0.12 * _energy),
     );
 
-    // 4) 雾絮：贴在云团/幕布上做高频错位叠加，形成细密湍流纹理。
+    // 4) 雾絮纤维（Puff Filaments）：不再在云内做机械圆周绕转！
+    //    按流向与纤维坐标依附在各个主体云团的边缘与脊线上，随星际风暴柔和起伏。
     for (var k = 0; k < _wispCount; k++) {
-      final so = k * 4;
-      // 全部贴到云团上：幕布太淡，纤维落在幕布上会脱离云体、读成一道划痕。
-      final cloudIndex = _veilCount + (k % _billowCount);
-      final o = cloudIndex * 11;
-      final driftX =
-          math.sin(t * _cloudSeeds[o + 3] + _cloudSeeds[o + 5]) * fieldR * 0.10;
-      final driftY =
-          math.cos(t * _cloudSeeds[o + 4] + _cloudSeeds[o + 5]) * fieldR * 0.06;
-      final x = cx +
-          _cloudSeeds[o] * fieldR * 0.78 +
-          driftX +
-          math.sin(t * 1.35 + _wispSeeds[so + 2]) * fieldR * 0.055;
-      final y = cy +
-          (_cloudSeeds[o + 1] - 0.5) * h * 1.02 +
-          driftY +
-          math.cos(t * 1.10 + _wispSeeds[so + 2]) * fieldR * 0.040;
-      final r = minDim * _cloudSeeds[o + 2] * 0.42;
-      // 小团絮：宽度 ≈ r（30~105 px）、高度 0.36r（11~38 px），剪影不规则；
-      // 保持低 alpha，让它读作云体内部的湍流纹，而不是一块独立色斑。
+      final so = k * 5;
+      final cloudIdx = _veilCount + (k % _billowCount);
+      final o = cloudIdx * 12;
+
+      final vx = _cloudSeeds[o + 3];
+      final vy = _cloudSeeds[o + 4];
+
+      final rawX = _cloudSeeds[o] * w +
+          vx * t * w +
+          math.sin(t * _cloudSeeds[o + 5] + _cloudSeeds[o + 8]) * w * _cloudSeeds[o + 6];
+      final rawY = _cloudSeeds[o + 1] * h +
+          vy * t * h +
+          math.cos(t * _cloudSeeds[o + 5] + _cloudSeeds[o + 8]) * h * _cloudSeeds[o + 6];
+
+      final cloudX = _wrap(rawX, wrapMinX, wrapSpanX);
+      final cloudY = _wrap(rawY, wrapMinY, wrapSpanY);
+
+      final r = minDim * _cloudSeeds[o + 2] * pulse;
+      final flowAngle = math.atan2(vy, vx);
+
+      // 沿气体流向与正交法向定位纤维，绝不在圆圈里自转
+      final uAlong = _wispSeeds[so] * r * 0.85;
+      final vCross = _wispSeeds[so + 1] * r * 0.65;
+      final cosF = math.cos(flowAngle);
+      final sinF = math.sin(flowAngle);
+
+      final wispX = cloudX + (cosF * uAlong - sinF * vCross);
+      final wispY = cloudY + (sinF * uAlong + cosF * vCross);
+
+      // 纤维姿态：顺着流向展布，叠加微小的正弦柔和呼吸起伏（绝非 360 度自转）
+      final undulation = math.sin(t * _wispSeeds[so + 3] + k * 0.8) * 0.12;
+      final wispRot = flowAngle + _wispSeeds[so + 2] + undulation;
+
+      final wispScale = (r * 0.48) / _atlas.puff.width;
+      final slot = _cloudSeeds[o + 9].toInt();
+      final alpha = (0.075 + 0.11 * _energy) * _wispSeeds[so + 4];
+
       _appendSprite(
         _atlas.puff,
-        x,
-        y,
-        (r * 1.0) / _atlas.puff.width,
-        _wispSeeds[so + 1] + t * 0.16,
-        _tintAt(
-          _cloudSeeds[o + 8].toInt(),
-          (0.07 + 0.10 * _energy) * _wispSeeds[so + 3],
-        ),
+        wispX,
+        wispY,
+        wispScale,
+        wispRot,
+        _tintAt(slot, alpha),
       );
     }
 
-    // 云体+雾絮整批提交：101 个实例 = 1 次 draw（旧版是 101 次 drawImageRect，
-    // 每次带混合模式 ColorFilter，在 Impeller 上各开一个离屏子 pass）。
     _flushSprites(canvas, atlas);
 
-    // 5) 星点：一次 drawRawAtlas 提交全部实例。
-    //    亮度分布来自四档烘焙精灵（按固定种子挑选），闪烁只改变尺寸；
-    //    alpha 走逐实例 colors（整批同值），不挂 ColorFilter。
-    final starArgb =
-        _tintAt(5, 0.30 + 0.70 * (0.35 + 0.65 * treble) * (0.30 + 0.70 * _energy));
+    // 5) 深空星点（190 颗）：细小晶莹，高频闪烁，受高频音频调制
+    final starArgb = _tintAt(
+      5,
+      0.35 + 0.65 * (0.35 + 0.65 * treble) * (0.30 + 0.70 * _energy),
+    );
+
     for (var k = 0; k < _starCount; k++) {
       final o = k * 5;
-      final x = cx + _starSeeds[o] * w * 0.48;
-      final y = _starSeeds[o + 1] * h;
-      final twinkle = 0.5 + 0.5 * math.sin(t * 0.85 + _starSeeds[o + 3]);
-      // 5.5~12 px（含十字芒）：亮核落在 0.9~1.9 px，读作细颗粒而不是雨点。
-      final size = (5.5 + _starSeeds[o + 2] * 6.5) * (0.85 + 0.15 * twinkle);
+      // 微小视差漂移：恒星极远，仅随深空缓慢位移
+      final starRawX = _starSeeds[o] * w + t * 0.002 * w;
+      final starX = _wrap(starRawX, 0.0, w);
+      final starY = _starSeeds[o + 1] * h;
+
+      final twinkle = 0.5 + 0.5 * math.sin(t * 1.1 + _starSeeds[o + 3]);
+      final size = (4.8 + _starSeeds[o + 2] * 6.2) * (0.85 + 0.15 * twinkle);
       final scale = size / 64.0;
       final r = k * 4;
+
       _starRst[r] = scale;
       _starRst[r + 1] = 0.0;
-      _starRst[r + 2] = x - scale * 32.0;
-      _starRst[r + 3] = y - scale * 32.0;
+      _starRst[r + 2] = starX - scale * 32.0;
+      _starRst[r + 3] = starY - scale * 32.0;
       _starColors[k] = starArgb;
     }
+
     canvas.drawRawAtlas(
       atlas,
       _starRst,
@@ -496,10 +515,7 @@ class NebulaFlowPainter extends CustomPainter implements VisualizerTimeAware {
   bool shouldRepaint(covariant NebulaFlowPainter oldDelegate) => true;
 }
 
-/// 星云流的静态基底：暗场 + 轻微渐晕。
-///
-/// 只随「调色板 / bloom / 画布尺寸」变化，与音频帧和时间无关；
-/// 视口把它放进独立 `RepaintBoundary`（`willChange: false`）。
+/// 星云的静态基底：暗场 + 轻微渐晕。
 class NebulaBackdropPainter extends CustomPainter {
   final VisualizerPalette palette;
   final double bloom;
@@ -527,7 +543,6 @@ class NebulaBackdropPainter extends CustomPainter {
         stops: const [0.0, 0.52, 1.0],
       ).createShader(Offset.zero & size);
 
-    // 轻微渐晕：中心几乎透明，四周压暗，给云体一个「暗腔」。
     _vignettePaint = Paint()
       ..shader = RadialGradient(
         colors: const [

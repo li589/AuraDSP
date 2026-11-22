@@ -1856,7 +1856,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get visualizerStyleTornado => 'パーティクル竜巻';
 
   @override
-  String get visualizerStyleNebulaFlow => 'ネビュラフロー';
+  String get visualizerStyleNebulaFlow => '星雲';
 
   @override
   String get visualizerThemeSystem => 'システムテーマ';
