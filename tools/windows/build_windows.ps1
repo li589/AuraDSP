@@ -344,7 +344,7 @@ if (-not $SkipDrivers) {
         "rt_drain_test", "vaio_pump_wait_test", "vm_detect",
         "vm_pump_test", "vm_parallel_test", "apo_inspect",
         "silence_gate_test", "AuraApo", "apo_config",
-        "channel_map_test"
+        "channel_map_test", "auradsp_test_latency"
     )
     Invoke-Clean (@("cmake", "--build", "--preset", $BuildPreset, "--target") + $TestTargets + "--", "-m:$BuildJobs") `
         -Log (Join-Path $ProjectRoot "build\reports\build_test_targets.log")
