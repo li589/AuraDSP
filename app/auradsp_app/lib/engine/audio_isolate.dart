@@ -3073,7 +3073,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                       srcBuf.take(math.min(frames, 512) * 2));
               if (!srcPaused && pcmReadUsable) {
                 try {
-                  final got = lib!.pcmRead(handle!, pcmBufEng, 512);
+                  final got = lib.pcmRead(handle, pcmBufEng, 512);
                   if (got > 0) {
                     pcmSnapshot =
                         List<double>.of(pcmBufEng.asTypedList(got * 2));
