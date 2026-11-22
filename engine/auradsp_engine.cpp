@@ -134,19 +134,21 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     /* [EQ tap] 第二条环形历史。分配失败不算致命：emit_viz 里对 nullptr
      * 已有分支，eq_in_spectrum 保持全 0，UI 会退回旧的全链输出谱。 */
     h->eq_in_hist = new (std::nothrow) float[kVizFftMax * 2]();
+    /* [PCM tap] same non-fatal policy as eq_in_hist (pcm_read stays 0). */
+    h->pcm_hist = new (std::nothrow) float[kPcmHistFrames * 2]();
     h->shelf_scratch = new (std::nothrow) float[(size_t)max_block_frames * 2]();
     if (!h->shelf_scratch) {
-        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete[] h->eq_in_hist; delete h; return nullptr;
+        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete[] h->eq_in_hist; delete[] h->pcm_hist; delete h; return nullptr;
     }
     h->conv_scratch = new (std::nothrow) float[(size_t)max_block_frames * 2]();
     if (!h->conv_scratch) {
-        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete[] h->eq_in_hist;
+        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete[] h->eq_in_hist; delete[] h->pcm_hist;
         delete[] h->shelf_scratch; delete h; return nullptr;
     }
     h->mx_scratch = new (std::nothrow) float[(size_t)max_block_frames * kMxMaxChannels]();
     h->mx_stereo = new (std::nothrow) float[(size_t)max_block_frames * 2]();
     if (!h->mx_scratch || !h->mx_stereo) {
-        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete[] h->eq_in_hist;
+        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete[] h->eq_in_hist; delete[] h->pcm_hist;
         delete[] h->shelf_scratch; delete[] h->conv_scratch;
         delete[] h->mx_scratch; delete[] h->mx_stereo;
         delete h; return nullptr;
@@ -155,7 +157,7 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     h->haas_ring_len = (int)(0.025 * sample_rate) + max_block_frames + 64;
     h->haas_ring = new (std::nothrow) float[(size_t)h->haas_ring_len]();
     if (!h->haas_ring) {
-        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete[] h->eq_in_hist;
+        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete[] h->eq_in_hist; delete[] h->pcm_hist;
         delete[] h->shelf_scratch; delete[] h->conv_scratch;
         delete[] h->mx_scratch; delete[] h->mx_stereo;
         delete h; return nullptr;
@@ -270,7 +272,7 @@ void auradsp_destroy(auradsp_handle h) {
     eq_pool_free(h);
     delete[] h->fft_scratch;
     delete[] h->hann;
-    delete[] h->viz_hist; delete[] h->eq_in_hist;
+    delete[] h->viz_hist; delete[] h->eq_in_hist; delete[] h->pcm_hist;
     delete[] h->shelf_scratch;
     delete[] h->conv_scratch;
     delete[] h->mx_scratch;
@@ -640,6 +642,24 @@ const char* auradsp_last_error(auradsp_handle h) {
 uint32_t auradsp_viz_read(auradsp_handle h, auradsp_viz_frame* out, uint32_t max_frames) {
     if (!h || !out || !max_frames) return 0;
     return h->viz.read(out, max_frames);
+}
+
+uint32_t auradsp_pcm_read(auradsp_handle h, float* out, uint32_t frames) {
+    if (!h || !out || !frames || !h->pcm_hist) return 0;
+    const uint64_t total = h->pcm_frames_written.load(std::memory_order_acquire);
+    if (total == 0) return 0;
+    uint32_t want = frames;
+    if ((uint64_t)want > total) want = (uint32_t)total;
+    if (want > (uint32_t)kPcmHistFrames) want = (uint32_t)kPcmHistFrames;
+    const uint64_t start = total - want;
+    for (uint32_t i = 0; i < want; ++i) {
+        const size_t slot = (size_t)((start + i) & (uint64_t)(kPcmHistFrames - 1)) * 2;
+        out[i * 2]     = h->pcm_hist[slot];
+        out[i * 2 + 1] = h->pcm_hist[slot + 1];
+    }
+    const uint64_t total2 = h->pcm_frames_written.load(std::memory_order_acquire);
+    if (total2 - start > (uint64_t)kPcmHistFrames) return 0;
+    return want;
 }
 
 } /* extern "C" */

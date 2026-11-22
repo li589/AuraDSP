@@ -39,6 +39,11 @@ void viz_write(auradsp_handle h, const float* out, int frames, int ch) {
         h->viz_hist[h->viz_hist_pos * 2]     = mean;
         h->viz_hist[h->viz_hist_pos * 2 + 1] = r;
         h->viz_hist_pos = (h->viz_hist_pos + 1) & mask;
+        if (h->pcm_hist) {
+            h->pcm_hist[h->pcm_hist_pos * 2]     = l;
+            h->pcm_hist[h->pcm_hist_pos * 2 + 1] = r;
+            h->pcm_hist_pos = (h->pcm_hist_pos + 1) & (kPcmHistFrames - 1);
+        }
         const float a = fabsf(l), b = fabsf(r);
         if (a > lvl_l) lvl_l = a;
         if (b > lvl_r) lvl_r = b;
@@ -46,6 +51,9 @@ void viz_write(auradsp_handle h, const float* out, int frames, int ch) {
             const float ac = fabsf(out[i * ch + c]);
             if (ac > pk_ch[c]) pk_ch[c] = ac;
         }
+    }
+    if (h->pcm_hist) {
+        h->pcm_frames_written.fetch_add((uint64_t)frames, std::memory_order_release);
     }
     h->viz_lvl_l = lvl_l > 1e-6f ? 20.0f * log10f(lvl_l) : -120.0f;
     h->viz_lvl_r = lvl_r > 1e-6f ? 20.0f * log10f(lvl_r) : -120.0f;

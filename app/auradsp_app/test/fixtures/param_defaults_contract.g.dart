@@ -442,5 +442,5 @@ const List<ParamRangeRow> kEngineRangeRows = [
 
 /// 引擎源码行数哨兵（param_table / internal / create 的行数）。
 /// header/create 变更而未重生 fixture → param_contract_test 行数断言失败。
-const String kContractLineCounts = 'param_table:1539;internal:977;create:645';
+const String kContractLineCounts = 'param_table:1539;internal:986;create:665';
 

@@ -77,7 +77,8 @@ constexpr int kMxMaxChannels = 8;
 /* [WP8 M-8/M-11] 8 声道位掩码与音箱布局定义（SpeakerLayout / layout_for / kChMask*） */
 #include "chain/speaker_layout.h"
 
-constexpr int kVizFftMax = 8192;   /* 2 的幂；缓冲区按此上限一次性分配 */
+constexpr int kVizFftMax = 8192;
+constexpr int kPcmHistFrames = 8192;  /* PCM tap 环长（2 的幂，掩码环绕） */   /* 2 的幂；缓冲区按此上限一次性分配 */
 /* 默认使用长度。11.7Hz/bin @48k：20~50Hz 的前几个对数带才分得到 bin。
  * 曾用 1024（46.9Hz/bin），表现为"低音区几根柱子永远不动"。
  * 可由参数 viz.fftSize 在 [1024, kVizFftMax] 内调整（不重分配缓冲区）。 */
@@ -573,6 +574,14 @@ struct auradsp_handle_s {
     float* fft_scratch = nullptr;     /* kVizFftMax floats */
     float* hann = nullptr;            /* kVizFftMax floats */
     float* viz_hist = nullptr;        /* kVizFftMax*2，交织环形历史窗：0 槽全声道均值、1 槽 R（第四十轮） */
+    /* [PCM tap]（2026-11-23 projectM 接线 W2）：viz_write 在同一趟
+     * 遍历里旁路记录处理后立体声 L/R 原样——viz_hist 是均值/R 的
+     * 分析窗、不是 PCM，波形消费者（projectM 喂入）必须走本环。
+     * 定长环 + 累计帧计数，auradsp_pcm_read 按 SPSC 口径读最近
+     * N 帧；分配失败不致命（pcm_read 恒返 0），与 eq_in_hist 同款。 */
+    float* pcm_hist = nullptr;        /* kPcmHistFrames*2，L/R 交织 */
+    int    pcm_hist_pos = 0;          /* 下一个写入帧位 */
+    std::atomic<uint64_t> pcm_frames_written{0};  /* 累计写入帧（读端一致性校验） */
     std::atomic<int> viz_fft_size{kVizFftDefault};  /* 实际使用长度（2 的幂，<= kVizFftMax） */
     std::atomic<int> viz_interval{1600};             /* 产出间隔（帧）= fs/30，约 33ms */
     std::atomic<bool> viz_emitted{false};           /* 是否已产出过频谱帧（窗体重建的安全闸） */

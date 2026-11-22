@@ -515,6 +515,17 @@ final class AuraDspLib {
                       Uint32)>>('auradsp_viz_read')
           .asFunction();
 
+  /// [PCM tap]（2026-11-23 W2）：最近 frames 帧处理后立体声
+  /// PCM（L/R 交织），返回实际帧数；旧引擎无此导出时绑定即抛
+  /// （加载侧按在场性降级，见 projectM 喂入路径）。
+  late final int Function(Pointer<Void>, Pointer<Float>, int) pcmRead =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Uint32 Function(Pointer<Void>, Pointer<Float>,
+                      Uint32)>>('auradsp_pcm_read')
+          .asFunction();
+
   late final Pointer<Utf8> Function() version = dylib
       .lookup<NativeFunction<Pointer<Utf8> Function()>>('auradsp_version')
       .asFunction();

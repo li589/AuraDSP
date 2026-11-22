@@ -227,6 +227,15 @@ const char*    auradsp_last_error(auradsp_handle h);
 /* ---- 可视化（UI 线程；返回实际读取帧数） ---- */
 uint32_t auradsp_viz_read(auradsp_handle h, auradsp_viz_frame* out, uint32_t max_frames);
 
+/* [PCM tap]（2026-11-23 W2）：读最近 frames 帧的处理后立体声
+ * PCM（L/R 交织 float，out 容量 frames*2）。供 projectM 等波形
+ * 消费者喂入——viz 频谱是仪表数据、不可当 PCM 用。SPSC：写侧
+ * 在 RT 的 viz_write 内旁路记录，读侧（UI 线程）按累计帧计数
+ * 做一致性校验，拷贝期间被写端绕圈（数据已覆写）时返回 0，
+ * 调用方下一 tick 重试。附加导出：auradsp_abi() 不变，宿主以
+ * GetProcAddress 在场性判可用（旧引擎无此符号即不可用）。 */
+uint32_t auradsp_pcm_read(auradsp_handle h, float* out, uint32_t frames);
+
 /* ---- 测试放音用的音频文件解码（isolate 线程；允许分配，非 RT 路径） ----
  * MP3（dr_mp3，vendor 自带头单实例化）。WAV 仍走 Dart 自解码，此处只做 MP3。
  * 成功返回 stereo interleave float32 缓冲（调用方 ownership），附采样率与总帧数；

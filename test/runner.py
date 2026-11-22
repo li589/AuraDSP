@@ -546,6 +546,7 @@ def run_smoke_tests():
         "smoke_xdg_paths.py",
     "smoke_ir_block_jitter.py",
     "smoke_eq_viz_tap.py",
+    "smoke_pcm_tap.py",
     "smoke_bassmono.py",
     "smoke_haas.py",
     "smoke_spatial.py",

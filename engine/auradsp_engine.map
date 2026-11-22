@@ -14,6 +14,7 @@
     auradsp_get_latency_ms;
     auradsp_last_error;
     auradsp_viz_read;
+    auradsp_pcm_read;
     auradsp_version;
     auradsp_abi;
     auradsp_plugin_scan;
