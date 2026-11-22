@@ -63,7 +63,7 @@ class _TornadoVortexSim {
   static const int _floorRings = 6;
   static const int _floorRingPoints = 24;
   static const int _floorCount = _floorRings * _floorRingPoints; // 144
-  static const int _totalInstances = _particleCount + _floorCount + 1; // +1 中心柔核
+  static const int _totalInstances = _particleCount + _floorCount; // 844
 
   static const double _distributionRadius = 800.0;
   static final double _maxDist = math.sqrt(_distributionRadius); // ~28.28
@@ -263,27 +263,26 @@ class _TornadoVortexSim {
     final h = size.height;
     final minDim = math.min(w, h);
     final cx = w / 2.0;
-    final cy = h * 0.52; // 略微居中偏下
+    final cy = h * 0.50; // 居中稳定
 
     final t = _lastTime.isFinite ? _lastTime : 0.0;
 
-    // 3D 摄像机平滑轨道游弋与俯仰
-    final camOrbitAngle = t * 0.22;
-    final camDist = 14.8 + 1.2 * math.sin(t * 0.35);
+    // 3D 摄像机平滑轨道游弋与微俯视视角（俯视风暴漏斗与吸积盘）
+    final camOrbitAngle = t * 0.20;
+    const camDist = 22.0;
     final camX = math.sin(camOrbitAngle) * camDist;
     final camZ = math.cos(camOrbitAngle) * camDist;
-    final camY = -math.sin(t * 0.40) * 5.5 - 2.5;
+    const camY = 6.5; // 位于上空，俯视风暴中心
 
-    final yaw = math.pi + camOrbitAngle;
-    final lookTargetY = -2.0;
-    final pitch = math.atan2(camY - lookTargetY, camDist) * 0.85;
+    const targetY = -1.0;
+    final pitch = math.atan2(camY - targetY, camDist);
 
-    final cosYaw = math.cos(-yaw);
-    final sinYaw = math.sin(-yaw);
-    final cosPitch = math.cos(-pitch);
-    final sinPitch = math.sin(-pitch);
+    final cosYaw = math.cos(camOrbitAngle);
+    final sinYaw = math.sin(camOrbitAngle);
+    final cosPitch = math.cos(pitch);
+    final sinPitch = math.sin(pitch);
 
-    final projScale = minDim * 0.76 * (lineWidth / 1.5).clamp(0.85, 1.2);
+    final projScale = minDim * 0.55 * (lineWidth / 1.5).clamp(0.85, 1.2);
 
     var spriteIdx = 0;
 
@@ -297,7 +296,7 @@ class _TornadoVortexSim {
       final fz = _floorBaseZ[i];
       final d = _floorDist[i];
       // 中心向漏斗下沉的时空引力凹陷
-      final fy = floorY - (d * d) / 95.0 * (1.0 + 0.15 * _smoothedBass);
+      final fy = floorY - (d * d) / 110.0 * (1.0 + 0.15 * _smoothedBass);
 
       // 3D 变换
       final dx = fx - camX;
@@ -305,15 +304,15 @@ class _TornadoVortexSim {
       final dz = fz - camZ;
 
       final x1 = dx * cosYaw - dz * sinYaw;
-      final z1 = dx * sinYaw + dz * cosYaw;
+      final z1 = -(dx * sinYaw + dz * cosYaw);
 
-      final y2 = dy * cosPitch - z1 * sinPitch;
-      final z2 = dy * sinPitch + z1 * cosPitch;
+      final y2 = dy * cosPitch + z1 * sinPitch;
+      final z2 = -dy * sinPitch + z1 * cosPitch;
 
-      if (z2 > 0.4) {
+      if (z2 > 1.0) {
         final invZ = 1.0 / z2;
         final sx = cx + x1 * invZ * projScale;
-        final sy = cy + y2 * invZ * projScale;
+        final sy = cy - y2 * invZ * projScale;
 
         if (sx > -40 && sx < w + 40 && sy > -40 && sy < h + 40) {
           final distSq = x1 * x1 + y2 * y2 + z2 * z2;
@@ -353,15 +352,15 @@ class _TornadoVortexSim {
       final dz = pz - camZ;
 
       final x1 = dx * cosYaw - dz * sinYaw;
-      final z1 = dx * sinYaw + dz * cosYaw;
+      final z1 = -(dx * sinYaw + dz * cosYaw);
 
-      final y2 = dy * cosPitch - z1 * sinPitch;
-      final z2 = dy * sinPitch + z1 * cosPitch;
+      final y2 = dy * cosPitch + z1 * sinPitch;
+      final z2 = -dy * sinPitch + z1 * cosPitch;
 
-      if (z2 > 0.4) {
+      if (z2 > 1.0) {
         final invZ = 1.0 / z2;
         final sx = cx + x1 * invZ * projScale;
-        final sy = cy + y2 * invZ * projScale;
+        final sy = cy - y2 * invZ * projScale;
 
         if (sx > -60 && sx < w + 60 && sy > -60 && sy < h + 60) {
           final distSq = x1 * x1 + y2 * y2 + z2 * z2;
@@ -394,27 +393,6 @@ class _TornadoVortexSim {
           spriteIdx++;
         }
       }
-    }
-
-    // 3) 中心微光柔核（增加立体核心漫射氛围）
-    if (spriteIdx < _totalInstances) {
-      final blobSlice = _atlas.blob;
-      final r = spriteIdx * 4;
-      _rects[r] = blobSlice.rect[0];
-      _rects[r + 1] = blobSlice.rect[1];
-      _rects[r + 2] = blobSlice.rect[2];
-      _rects[r + 3] = blobSlice.rect[3];
-
-      final coreSize = minDim * (0.35 + 0.15 * _smoothedBass);
-      final scale = coreSize / blobSlice.height;
-
-      _rst[r] = scale;
-      _rst[r + 1] = 0.0;
-      _rst[r + 2] = cx - scale * (blobSlice.width * 0.5);
-      _rst[r + 3] = cy * 0.98 - scale * (blobSlice.height * 0.5);
-
-      _colors[spriteIdx] = _tintFromLut(128, 0.06 + 0.08 * _smoothedBass);
-      spriteIdx++;
     }
 
     // 单批次 GPU 提交全部 3D 风暴粒子与地面引力网格

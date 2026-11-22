@@ -39,17 +39,17 @@ import 'visualizer/views/visualizer_stage.dart';
 
 class VisualizerPage extends StatefulWidget {
   final AppModel model;
-  const VisualizerPage({super.key, required this.model});
+  final MediaSyncService? mediaSync;
+  const VisualizerPage({super.key, required this.model, this.mediaSync});
 
   @override
   State<VisualizerPage> createState() => _VisualizerPageState();
 }
 
 class _VisualizerPageState extends State<VisualizerPage> {
-  /// 媒体同步服务：构造时带上配置里的歌词来源（预置在首次访问页面时创建）。
-  late final MediaSyncService _mediaSync = MediaSyncService(
-    lyricsSource: widget.model.visualizerConfig.value.lyricsSource,
-  );
+  /// 媒体同步服务：优先使用注入实例（测试），默认使用全局共享单例常驻监听。
+  late final MediaSyncService _mediaSync =
+      widget.mediaSync ?? MediaSyncService.instance;
   bool _drawerOpen = false;
   VisualizerDisplayMode _displayMode = VisualizerDisplayMode.restore;
   final FocusNode _focusNode = FocusNode();
@@ -80,11 +80,10 @@ class _VisualizerPageState extends State<VisualizerPage> {
     final cfg = widget.model.visualizerConfig.value;
     _lyricsEnabled = cfg.showLyrics;
     _lastLyricsSource = cfg.lyricsSource;
+    _mediaSync.setLyricsSource(_lastLyricsSource);
     widget.model.visualizerConfig.addListener(_onVisualizerConfigChanged);
-    // 页面初始即为可视页时（如应用直接恢复到可视化页）不会触发变更回调，这里兜底启动
-    if (widget.model.visiblePage.value == AppPage.visualizer) {
-      _mediaSync.startAutoSync();
-    }
+    // 确保媒体监听已启动（启动时常驻开启，此处保证状态）
+    _mediaSync.startAutoSync();
   }
 
   @override
@@ -99,7 +98,9 @@ class _VisualizerPageState extends State<VisualizerPage> {
     }
     _focusNode.dispose();
     _helpController.dispose();
-    _mediaSync.dispose();
+    if (widget.mediaSync != null) {
+      widget.mediaSync!.dispose();
+    }
     super.dispose();
   }
 
@@ -111,8 +112,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
     }
   }
 
-  /// 可视化配置变化：歌词开关翻转 → 启停媒体监听；歌词来源切换 → 换源重试。
-  /// 这样预设载入 / 会话恢复 / 抽屉修改三条路径都走同一反应逻辑。
+  /// 可视化配置变化：歌词来源切换 → 换源重试；歌词显示开关切换仅控制舞台覆盖层。
   void _onVisualizerConfigChanged() {
     final cfg = widget.model.visualizerConfig.value;
     if (cfg.lyricsSource != _lastLyricsSource) {
@@ -121,26 +121,18 @@ class _VisualizerPageState extends State<VisualizerPage> {
     }
     if (cfg.showLyrics != _lyricsEnabled) {
       _lyricsEnabled = cfg.showLyrics;
-      if (cfg.showLyrics) {
-        _mediaSync.startAutoSync();
-      } else {
-        _mediaSync.stopAutoSync();
-      }
     }
   }
 
   void _onVisiblePageChanged() {
     if (!mounted) return;
     if (widget.model.visiblePage.value == AppPage.visualizer) {
-      // 首次进入页面才启动系统媒体监听，避免应用启动即拉起常驻进程
       _mediaSync.startAutoSync();
       // 回到页面时恢复键盘焦点，F11 / Esc 立即可用
       _focusNode.requestFocus();
       return;
     }
-    // 离开页面即停媒体监听：旧实现只在关闭歌词时停订阅，切页后
-    // SMTC PowerShell 子进程仍每秒轮询（审查发现的后台空转）。
-    _mediaSync.stopAutoSync();
+    // 离开页面时保持后台媒体与时间轴追踪不中断，以便随时切回时已同步进度
     if (_displayMode != VisualizerDisplayMode.restore) {
       _applyDisplayMode(VisualizerDisplayMode.restore);
     }

@@ -40,6 +40,14 @@ enum LyricsSyncState { idle, noMedia, searching, ready, notFound, unsupported }
 
 /// 统一媒体时钟同步与歌词编排调度服务
 class MediaSyncService {
+  static MediaSyncService? _instance;
+
+  /// 全局共享单例：启动即在后台监听系统媒体会话（Windows SMTC / Linux MPRIS）
+  static MediaSyncService get instance => _instance ??= MediaSyncService();
+
+  @visibleForTesting
+  static set instance(MediaSyncService val) => _instance = val;
+
   final MediaSessionProvider _provider;
   final OnlineLyricsService _onlineService;
 
@@ -132,13 +140,14 @@ class MediaSyncService {
   /// 平台媒体会话是否可用（UI 状态文案据此区分 unsupported 与 noMedia）。
   bool get hasSystemMediaSession => _hasSystemMediaSession;
 
-  /// 启动系统媒体传输控制 (SMTC) 监听，自动绑定歌词
+  /// 启动系统媒体传输控制 (SMTC / MPRIS) 监听，自动绑定歌词
   void startAutoSync() {
-    _sessionSub?.cancel();
-    _provider.start();
-    _sessionSub = _provider.trackStream.listen((track) {
-      updateTrack(track);
-    });
+    if (_sessionSub == null) {
+      _provider.start();
+      _sessionSub = _provider.trackStream.listen((track) {
+        updateTrack(track);
+      });
+    }
 
     // 无系统媒体会话服务（Linux/Android 等）：干净标注「暂不支持」，
     // 仍保留本地 LRC 手动加载能力。
@@ -452,5 +461,8 @@ class MediaSyncService {
     currentLyrics.dispose();
     activeLineIndex.dispose();
     lyricsState.dispose();
+    if (identical(_instance, this)) {
+      _instance = null;
+    }
   }
 }

@@ -26,6 +26,7 @@ import 'home_page.dart';
 import 'liveprog_page.dart';
 import 'plugins_page.dart';
 import 'settings_page.dart';
+import 'visualizer/lyrics/services/media_sync_service.dart';
 import 'visualizer_page.dart';
 import 'widgets.dart';
 
@@ -96,6 +97,19 @@ class _AppShellState extends State<AppShell> {
       null, // Chain
       null, // Visualizer
     ];
+    if (PlatformProfile.os == 'windows' || PlatformProfile.os == 'linux') {
+      MediaSyncService.instance
+          .setLyricsSource(m.visualizerConfig.value.lyricsSource);
+      MediaSyncService.instance.startAutoSync();
+    }
+  }
+
+  @override
+  void dispose() {
+    if (PlatformProfile.os == 'windows' || PlatformProfile.os == 'linux') {
+      MediaSyncService.instance.dispose();
+    }
+    super.dispose();
   }
 
   /// 取（必要时创建）指定页实例；创建结果写回缓存，后续切页零重建。
