@@ -180,6 +180,26 @@
   "ioExclusiveDesc": "選択したハードウェア/仮想ポートから低レイテンシの WASAPI 排他/共有キャプチャ",
   "ioInputLabel": "入力エンドポイント",
   "ioVaioEndpointDesc": "AuraVAIO 仮想入力エンドポイント（Stereo / 7.1 ch）",
+  "ioVaioEndpointDescLayout": "AuraVAIO 虚拟输入端点 ({layout})",
+  "@ioVaioEndpointDescLayout": {
+    "placeholders": {
+      "layout": {
+        "type": "String"
+      }
+    }
+  },
+  "ioWorkFormat": "工作格式",
+  "ioWorkFormatValue": "{bits} 位 / {rate}",
+  "@ioWorkFormatValue": {
+    "placeholders": {
+      "bits": {
+        "type": "int"
+      },
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
   "ioChannelStatus": "チャンネル状態",
   "ioVaioActive": "転送中",
   "ioVaioReady": "準備完了",
@@ -569,6 +589,7 @@
   "asioDeviceChannels": "デバイスチャンネル",
   "asioTransportChannels": "伝送チャンネル",
   "asioRefresh": "更新",
+  "vaioDeviceInUse": "该设备正在被另一个人使用",
   "asioSwitches": "コールバック",
   "asioSrMismatch": "ドライバーは {sr} Hz で動作中（グローバル設定 {cfg} Hz と不一致、ASIO はドライバーに従います）",
   "@asioSrMismatch": {
