@@ -162,6 +162,19 @@ per_pixel_1=rot = rot + 0.02*sin(rad*3.14);
   });
 
   group('ProjectM Bridge Contract Tests', () {
+    test('factory returns a bridge that never claims acceleration '
+        'before initialization', () async {
+      // 工厂是生产侧唯一入口（2026-11-22 N2 统一后）：探针在
+      // 无桥库环境回落 Mock，在有桥库环境返回原生桥——两种
+      // 结果都必须满足：未 initialize 前 isAvailable=false，
+      // 且状态文案不得宣称硬件加速已就绪。
+      final bridge = ProjectMBridgeFactory.create();
+      expect(bridge, isA<ProjectMBridge>());
+      expect(bridge.isAvailable, isFalse);
+      expect(bridge.statusDescription, isNot(contains('ready')));
+      await bridge.dispose();
+    });
+
     test('native bridge fails closed without verified host context', () async {
       final missingVerifier = ProjectMNativeBridge();
       expect(await missingVerifier.initialize(), isFalse);

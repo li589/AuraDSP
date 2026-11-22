@@ -45,7 +45,7 @@ void main() {
     File('$outDir/defaults.json').writeAsStringSync(enc.convert({
       '_comment': 'AuraDSP 出厂默认基线（ParamDefaults 的全量展开）。'
           '由 test/zz_gen_factory_presets.dart 生成，勿手改。',
-      'schemaVersion': 1,
+      'schemaVersion': 3,
       'params': base,
     }));
 
@@ -53,7 +53,7 @@ void main() {
       final merged = _deepMerge(base, Map<dynamic, dynamic>.of(p.params));
       File('$outDir/factory/${p.name}.json').writeAsStringSync(enc.convert({
         'name': p.name,
-        'schemaVersion': 1,
+        'schemaVersion': 3,
         'isFactory': true,
         'category': p.category,
         'description': p.description,

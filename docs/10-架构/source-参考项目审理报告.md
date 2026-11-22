@@ -413,3 +413,20 @@
    - 渲染层迁往 FragmentShader（GPU GLSL）：重写原生样式预设，降低 CPU 绘图负荷与内存占用，将原内置 "MilkDrop" 样式重命名为 "Harmonic Warp / 极坐标谐波" 消除歧义。
    - 接入 libprojectm 核心引擎：以独立 C-ABI 适配器桥接 projectM-4，桌面端（Windows/Linux）通过纹理共享或高效像素交换驱动原生 `.milk` 脚本；预设系统统一支持原生 GLSL 预设与 MilkDrop 脚本预设，并以统一资源选择器（`ResourcePicker`）接管文件/目录加载与歌词视窗图层融合。
 
+
+---
+
+## 勘误附记（2026-11-23，全量代码审查小件批次）
+
+本报告正文按仓库规矩不回改，以下两处以本附记为准：
+
+1. **§2.14 的 `projectm_reset()` 不存在**：libprojectM v4 的 C API
+   只有 `projectm_create()` / `projectm_destroy()` 生命周期对，
+   另有 `projectm_reset_textures()`（纹理重置，非实例重置）——
+   已对 `vendor/libprojectm/include/projectM-4/core.h` 逐字核实。
+   正文「实例生命周期控制」一句中的 `projectm_reset()` 应删去。
+2. **§2.14 的最高级措辞无实证**：「全球唯一能 100% 忠实解析并
+   渲染数十万个社区 .milk 预设的工业级引擎」属营销式表述，未经
+   核实。实情口径：libprojectM 是当前主要的开源 MilkDrop 兼容
+   引擎，社区预设规模大但无审计计数；渲染保真度以预设逐个兼容
+   为准，不存在「100%」保证。后续文档引用本节时按此口径。

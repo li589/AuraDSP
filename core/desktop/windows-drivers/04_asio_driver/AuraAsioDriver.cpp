@@ -69,10 +69,10 @@ void AuraAsioDriver::LoadConfiguredChannels() {
     DWORD sz = sizeof(val);
     const std::wstring clsidKey =
         std::wstring(L"CLSID\\") + kAuraAsioClsidString;
-    if (RegGetValueW(HKEY_CURRENT_USER, L"SOFTWARE\\AuraDSP\\AsioDriver",
-                     L"Channels", RRF_RT_REG_DWORD, nullptr, &val, &sz) == ERROR_SUCCESS ||
+    if (RegGetValueW(HKEY_CURRENT_USER, ASIO_DRIVER_REG_KEY,
+                     ASIO_DRIVER_REG_CHANNELS, RRF_RT_REG_DWORD, nullptr, &val, &sz) == ERROR_SUCCESS ||
         RegGetValueW(HKEY_CLASSES_ROOT, clsidKey.c_str(),
-                     L"Channels", RRF_RT_REG_DWORD, nullptr, &val, &sz) == ERROR_SUCCESS) {
+                     ASIO_DRIVER_REG_CHANNELS, RRF_RT_REG_DWORD, nullptr, &val, &sz) == ERROR_SUCCESS) {
         if (IsValidChannelCount((long)val)) {
             m_channels = (long)val;
             return;
