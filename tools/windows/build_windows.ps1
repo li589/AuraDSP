@@ -455,6 +455,35 @@ else {
     Write-Host "  -> 警告: 未找到 python，跳过 driver 资产补齐（dist 目录缺 driver/）" -ForegroundColor DarkYellow
 }
 
+# projectM 桥（可选件）：环境变量 AURADSP_PROJECTM_SDK 指向
+# libprojectM 安装 SDK 时，构建桥并把 auradsp_projectm_bridge.dll
+# 与 projectM-4.dll 放进 staging 根（与主程序同目录，符合 DLL
+# 落点规矩），MilkDrop 原生渲染随包可用。SDK 缺失或构建失败时
+# 仅警告跳过——App 无桥时自动回落程序化样式，不阻断发行。
+$PmSdk = $env:AURADSP_PROJECTM_SDK
+if ($PmSdk -and (Test-Path (Join-Path $PmSdk "lib\projectM-4.lib"))) {
+    Write-Host "  构建 projectM 桥 (SDK: $PmSdk)..."
+    $PmSrc = Join-Path $ProjectRoot "core\desktop\visualizer\projectm_bridge"
+    $PmBuild = Join-Path $ProjectRoot "build\projectm-bridge"
+    cmake -S $PmSrc -B $PmBuild -G "Visual Studio 18 2026" -A x64 -DAURADSP_BUILD_PROJECTM_BRIDGE=ON -DAURADSP_PROJECTM_ROOT=$PmSdk | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        cmake --build $PmBuild --config Release -j 4 | Out-Null
+    }
+    $PmBridgeDll = Join-Path $PmBuild "Release\auradsp_projectm_bridge.dll"
+    $PmCoreDll = Join-Path $PmSdk "bin\projectM-4.dll"
+    if ((Test-Path $PmBridgeDll) -and (Test-Path $PmCoreDll)) {
+        Copy-Item $PmBridgeDll $DistPortable -Force
+        Copy-Item $PmCoreDll $DistPortable -Force
+        Write-Host "  -> projectM 桥已随包 (auradsp_projectm_bridge.dll + projectM-4.dll)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  -> 警告: projectM 桥构建未产出，包内无 MilkDrop 原生渲染" -ForegroundColor DarkYellow
+    }
+}
+else {
+    Write-Host "  -> 跳过 projectM 桥 (未设置 AURADSP_PROJECTM_SDK 或 SDK 不完整)" -ForegroundColor DarkGray
+}
+
 # 产物的规范化（2026-11-05）：写 build-info.txt（版本 / 提交 / 分支 /
 # 工作区状态 / 顶层二进制 SHA256），使绿色包可追溯。
 Write-Host "  写入发行产物清单 (build-info.txt)..."
