@@ -206,9 +206,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         bypassOf: () => bypass);
   // Part I Q2：插件块发布者（sysapo 激活时把 pluginMirror 同步进
   // AuraDSP_ApoPlugins；未激活时全部方法为空操作）。中转落定
-  // 回调接 syncApoPlugins 补同步（2026-11-23 异步中转）。
-  final apoPluginPublisher = ApoPluginPublisher()
-    ..onTransitSettled = (() => syncApoPlugins());
+  // 回调在 syncApoPlugins 声明后以语句接上（2026-11-23 异步
+  // 中转）——不能写进本初始化式：syncApoPlugins 是本作用域的
+  // 局部函数，初始化式在声明点之前引用它会让整个声明失效
+  // （gate_final 实测：全部调用点 Method not found）。
+  final apoPluginPublisher = ApoPluginPublisher();
   final apoTelemetry = ApoTelemetryReader();
   // ASIO S4 通道：参数块发布者 + 遥测读者（虚拟形态控制模式下
   // 激活；Client 形态走桥会话、两者恒空操作）。与 APO 发布者共
@@ -254,6 +256,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           : false,
     );
   }
+
+  // 中转落定 → 补同步（声明点之后赋值，初始化期执行、消息
+  // 循环开始前已接好）。
+  apoPluginPublisher.onTransitSettled = () => syncApoPlugins();
 
   // P1 桥治理：注册表 + 惰性加载 + 当前后端（vm/asio/vaio）。
   // 未选中的桥全程不 load；同一时刻只有一个后端出声（互斥见 stopOtherBridges）。
