@@ -2,7 +2,7 @@
 """smoke_linux_engine_exports — Linux 引擎导出集门禁（S4 后补强，2026-11-01）。
 
 方案 §5.2 验收口径：Linux 产出 libauradsp_engine.so 的动态导出集必须
-与 engine/auradsp_engine.def 的 56 符号**恒等**，且无内部符号泄漏。
+与 engine/auradsp_engine.def 的 57 符号**恒等**，且无内部符号泄漏。
 S2 起靠人工 nm 核查，本门禁把它固化：纯 Python 解析 ELF64 .dynsym
 （不依赖 nm/readelf 是否安装），取 DEFINED + GLOBAL/WEAK 的符号名集
 与 .def 导出集逐一比对（双向差集都判 FAIL）。
@@ -90,7 +90,7 @@ def main():
     expected = parse_def_exports(os.path.join(ROOT, "engine",
                                               "auradsp_engine.def"))
     actual = elf_dynsym_names(lib_path)
-    check(len(expected) == 56, f".def 导出集为 56 符号（实际 {len(expected)}）")
+    check(len(expected) == 57, f".def 导出集为 57 符号（实际 {len(expected)}）")
     missing = sorted(expected - actual)
     leaked = sorted(actual - expected)
     check(not missing, f".so 缺失导出：{missing if missing else '无'}")
