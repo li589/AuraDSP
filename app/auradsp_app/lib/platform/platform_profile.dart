@@ -28,9 +28,10 @@ abstract final class PlatformProfile {
   /// 引号，直接上屏即 user 报告的「为什么还有引号」；此处
   /// 清洗后展示。Linux 的 Dart 串为内核版本串（无引号问题），
   /// 原样清洗展示。
-  static String get osDisplay =>
-      cleanOsVersion(Platform.operatingSystemVersion,
-          isWindows: Platform.isWindows);
+  static String get osDisplay => cleanOsVersion(
+    Platform.operatingSystemVersion,
+    isWindows: Platform.isWindows,
+  );
 
   /// 纯函数（可单测）：去掉 Windows 产品名外层的引号，其余
   /// 平台仅作兜底去引号。
@@ -76,15 +77,13 @@ abstract final class PlatformProfile {
   static bool get supportsBridges => Platform.isWindows;
 
   /// VST3/CLAP 插件宿主管线可用（Windows 先行；其它平台后续独立立项）。
-  static bool get supportsPlugins =>
-      Platform.isWindows || Platform.isLinux;
+  static bool get supportsPlugins => Platform.isWindows || Platform.isLinux;
 
   /// 本地设备泵循环（AudioOut）可用。
   /// R4（M6 审查遗留）：与实现保持一致——Windows 走 WASAPI，Linux 走
   /// PulseAudio simple API（`audio_out_linux.dart`，S3 / ADR-012 D-6 起），
   /// `createAudioOut()` 工厂按 OS 分派，两边能力位与实现一致。
-  static bool get supportsLocalDevice =>
-      Platform.isWindows || Platform.isLinux;
+  static bool get supportsLocalDevice => Platform.isWindows || Platform.isLinux;
 
   /// 是否支持系统桌面窗口管理与真全屏切换。
   static bool get supportsWindowManagement =>
@@ -142,8 +141,8 @@ abstract final class PlatformProfile {
     final sep = Platform.pathSeparator;
     final xdg = Platform.environment['XDG_DATA_HOME'];
     if (xdg != null && xdg.startsWith('/')) {
-        return [xdg, 'auradsp'].join(sep);
-      }
+      return [xdg, 'auradsp'].join(sep);
+    }
     final home = Platform.environment['HOME'];
     if (home == null || home.isEmpty) {
       return [Directory.systemTemp.path, 'auradsp'].join(sep);
@@ -152,7 +151,8 @@ abstract final class PlatformProfile {
   }
 
   /// 当前可执行文件所在目录（安装目录；资源探测的基线）。
-  static String get executableDir => File(Platform.resolvedExecutable).parent.path;
+  static String get executableDir =>
+      File(Platform.resolvedExecutable).parent.path;
 
   /// 是否运行在 `flutter test` 沙箱（测试进程自带 FLUTTER_TEST=true）。
   static bool get isTestRun => Platform.environment['FLUTTER_TEST'] == 'true';
@@ -162,10 +162,7 @@ abstract final class PlatformProfile {
       Platform.isWindows ? path.toLowerCase() : path;
 
   /// 路径输入框占位示例。
-  static String pathPlaceholder({
-    required bool directory,
-    String? extension,
-  }) {
+  static String pathPlaceholder({required bool directory, String? extension}) {
     if (Platform.isWindows) {
       return directory
           ? r'C:\Path\To\Folder'
@@ -199,10 +196,7 @@ abstract final class PlatformProfile {
       ];
     }
     if (Platform.isMacOS) {
-      return const [
-        'auradsp_engine.dylib',
-        'engine/auradsp_engine.dylib',
-      ];
+      return const ['auradsp_engine.dylib', 'engine/auradsp_engine.dylib'];
     }
     return const [];
   }
@@ -238,5 +232,32 @@ abstract final class PlatformProfile {
     final name = bridgeLibraryName(id);
     if (name.isEmpty) return const [];
     return [name, Platform.isWindows ? 'engine\\$name' : 'engine/$name'];
+  }
+
+  /// Optional libprojectM bridge library candidates. The bridge is only
+  /// enabled when the native build explicitly links an external projectM SDK.
+  static List<String> get projectMBridgeLibraryCandidates {
+    if (Platform.isWindows) {
+      return const [
+        'auradsp_projectm_bridge.dll',
+        'engine\\auradsp_projectm_bridge.dll',
+      ];
+    }
+    if (Platform.isLinux) {
+      return const [
+        'auradsp_projectm_bridge.so',
+        'libauradsp_projectm_bridge.so',
+        'engine/auradsp_projectm_bridge.so',
+        'engine/libauradsp_projectm_bridge.so',
+      ];
+    }
+    if (Platform.isMacOS) {
+      return const [
+        'auradsp_projectm_bridge.dylib',
+        'libauradsp_projectm_bridge.dylib',
+        'engine/auradsp_projectm_bridge.dylib',
+      ];
+    }
+    return const [];
   }
 }

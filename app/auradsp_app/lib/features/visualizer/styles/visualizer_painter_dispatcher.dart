@@ -4,7 +4,9 @@ import '../controllers/waveform_synthesizer.dart';
 import '../models/visualizer_themes.dart';
 import '../models/visualizer_types.dart';
 import '../plugins/milkdrop_preset.dart';
+import '../plugins/projectm_bridge_contract.dart';
 import '../shaders/gpu_shader_service.dart';
+import 'style_projectm.dart';
 import 'style_cyber_grid.dart';
 import 'style_fluid.dart';
 import 'style_goniometer.dart';
@@ -27,6 +29,7 @@ CustomPainter buildVisualizerPainter({
   required WaveformSynthesizer waveformSynth,
   required double time,
   bool? showGrid,
+  ProjectMBridge? projectMBridge,
 }) {
   final grid = showGrid ?? config.showGrid;
   switch (style) {
@@ -131,10 +134,25 @@ CustomPainter buildVisualizerPainter({
       );
 
     case VisualizerStyle.projectM:
-      final preset = (config.milkdropPresetPath != null &&
+      final preset =
+          (config.milkdropPresetPath != null &&
               config.milkdropPresetPath!.isNotEmpty)
           ? MilkdropPreset.parseFile(config.milkdropPresetPath!)
           : MilkdropPreset.builtInPresets.first;
+      final bridge = projectMBridge;
+      if (bridge != null && bridge.isAvailable) {
+        return ProjectMPainter(
+          bridge: bridge,
+          fallbackPainter: MilkdropPainter(
+            preset: preset,
+            bands: rawBands,
+            palette: palette,
+            time: time,
+            sensitivity: config.sensitivity,
+            lineWidth: config.lineWidth,
+          ),
+        );
+      }
       return MilkdropPainter(
         preset: preset,
         bands: rawBands,

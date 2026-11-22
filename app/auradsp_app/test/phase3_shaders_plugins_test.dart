@@ -9,6 +9,7 @@ import 'package:auradsp_app/features/visualizer/plugins/projectm_bridge_contract
 import 'package:auradsp_app/features/visualizer/shaders/gpu_shader_service.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_gpu_shader.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_milkdrop.dart';
+import 'package:auradsp_app/features/visualizer/styles/style_projectm.dart';
 import 'package:auradsp_app/features/visualizer/styles/visualizer_painter_dispatcher.dart';
 
 void main() {
@@ -155,6 +156,27 @@ per_pixel_1=rot = rot + 0.02*sin(rad*3.14);
 
       bridge.feedPcm(List.filled(512, 0.0));
       bridge.resize(2560, 1440);
+
+      final painter = ProjectMPainter(
+        bridge: bridge,
+        fallbackPainter: MilkdropPainter(
+          preset: MilkdropPreset.builtInPresets.first,
+          bands: List.filled(32, 0.5),
+          palette: testPalette,
+          time: 0.0,
+          sensitivity: 1.0,
+        ),
+      );
+      final recorder = PictureRecorder();
+      painter.paint(Canvas(recorder), const Size(400, 300));
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(400, 300);
+      final pixels = await image.toByteData();
+      expect(pixels, isNotNull);
+      expect(pixels!.getUint32(0), isNot(0));
+      image.dispose();
+      picture.dispose();
+
       bridge.dispose();
       expect(bridge.isLoaded, isFalse);
     });

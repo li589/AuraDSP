@@ -33,10 +33,8 @@ class _CompositeVisualizerPainter extends CustomPainter {
   final CustomPainter mainPainter;
   final ValueListenable<double>? mainTime;
 
-  _CompositeVisualizerPainter({
-    required this.mainPainter,
-    this.mainTime,
-  }) : super(repaint: mainTime);
+  _CompositeVisualizerPainter({required this.mainPainter, this.mainTime})
+    : super(repaint: mainTime);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -182,17 +180,16 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   static const double _ambiencePeriod = 0.1;
 
   bool _usesAmbience(VisualizerStyle style) => switch (style) {
-        // 自带完整背景构图（光晕/地面雾气）的风格不再叠加星尘氛围层，避免双层噪点
-        VisualizerStyle.auroraShader ||
-        VisualizerStyle.tunnelShader ||
-        VisualizerStyle.harmonicWarp ||
-        VisualizerStyle.fluidDynamics ||
-        VisualizerStyle.tornado ||
-        VisualizerStyle.nebulaFlow ||
-        VisualizerStyle.projectM =>
-          false,
-        _ => true,
-      };
+    // 自带完整背景构图（光晕/地面雾气）的风格不再叠加星尘氛围层，避免双层噪点
+    VisualizerStyle.auroraShader ||
+    VisualizerStyle.tunnelShader ||
+    VisualizerStyle.harmonicWarp ||
+    VisualizerStyle.fluidDynamics ||
+    VisualizerStyle.tornado ||
+    VisualizerStyle.nebulaFlow ||
+    VisualizerStyle.projectM => false,
+    _ => true,
+  };
 
   /// 仅在「风格/配置/调色板/数据缓冲身份」变化时重建画笔；常规频谱帧
   /// 只触发重绘（数据列表是原地复用的，画笔持有同一引用即可看到新值）。
@@ -244,7 +241,8 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   /// 每风格静态基底：龙卷风与星云流各自带一层可烘焙的暗场/渐晕。
   CustomPainter? _backdropFor() {
     final style = widget.config.style;
-    if (style != VisualizerStyle.tornado && style != VisualizerStyle.nebulaFlow) {
+    if (style != VisualizerStyle.tornado &&
+        style != VisualizerStyle.nebulaFlow) {
       return null;
     }
     final key = (widget.palette, widget.config.bloom, style);
@@ -314,7 +312,9 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
           separateGrid: gridPainter != null,
         );
         final bool usesAmbience = _usesAmbience(widget.config.style);
-        final ambiencePainter = usesAmbience ? _ambienceFor(renderedBands) : null;
+        final ambiencePainter = usesAmbience
+            ? _ambienceFor(renderedBands)
+            : null;
         final backdropPainter = _backdropFor();
 
         final bool hasStaticLayer =
@@ -402,15 +402,9 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
           switchOutCurve: Curves.easeInCubic,
           layoutBuilder: (currentChild, previousChildren) => Stack(
             fit: StackFit.expand,
-            children: [
-              ...previousChildren,
-              ?currentChild,
-            ],
+            children: [...previousChildren, ?currentChild],
           ),
-          child: KeyedSubtree(
-            key: ValueKey(widget.config.style),
-            child: body,
-          ),
+          child: KeyedSubtree(key: ValueKey(widget.config.style), child: body),
         );
       },
     );
@@ -421,10 +415,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
 class VisualizerIdlePlaceholder extends StatelessWidget {
   final String emptyText;
 
-  const VisualizerIdlePlaceholder({
-    super.key,
-    required this.emptyText,
-  });
+  const VisualizerIdlePlaceholder({super.key, required this.emptyText});
 
   @override
   Widget build(BuildContext context) {

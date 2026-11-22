@@ -1,36 +1,38 @@
-import '../../../../platform/platform_profile.dart';
+import 'dart:ui' as ui;
+
+import 'package:flutter/foundation.dart';
+
+import '../../../platform/platform_profile.dart';
 import 'milkdrop_preset.dart';
 
-/// External projectM (MilkDrop 2) C ABI specification:
+/// Dart contract for the AuraDSP projectM C ABI.
 ///
-/// ```c
-/// typedef void* auradsp_projectm_t;
-///
-/// auradsp_projectm_t auradsp_projectm_create(int width, int height, float fps);
-/// void               auradsp_projectm_destroy(auradsp_projectm_t handle);
-/// void               auradsp_projectm_resize(auradsp_projectm_t handle, int width, int height);
-/// int                auradsp_projectm_feed_pcm(auradsp_projectm_t handle, const float* pcm, int frames, int channels);
-/// int                auradsp_projectm_load_preset(auradsp_projectm_t handle, const char* preset_path);
-/// int64_t            auradsp_projectm_render_to_texture(auradsp_projectm_t handle);
-/// ```
-
-/// High-level Dart interface contract for libprojectM external visualizer engine
+/// The native bridge owns the OpenGL context-bound projectM instance. Pixel
+/// frames are exposed as a listenable image so the Flutter painter never calls
+/// asynchronous image decoding from its paint method.
 abstract interface class ProjectMBridge {
   bool get isAvailable;
   bool get isLoaded;
   MilkdropPreset? get currentPreset;
+  ui.Image? get currentFrame;
+  ValueListenable<ui.Image?> get frameListenable;
 
-  Future<bool> initialize({int width = 1280, int height = 720, double fps = 60.0});
+  Future<bool> initialize({
+    int width = 1280,
+    int height = 720,
+    double fps = 60.0,
+  });
   void resize(int width, int height);
   bool loadPreset(MilkdropPreset preset);
-  void feedPcm(List<double> pcmFrames);
-  int? renderFrame();
+  void feedPcm(List<double> pcmFrames, {int channels = 2});
+  int renderFrame();
   void dispose();
 }
 
-/// Fallback / mock bridge when native libprojectM is unlinked or on unsupported OS
+/// Fallback bridge used when the optional native library is unavailable.
 class MockProjectMBridge implements ProjectMBridge {
   MilkdropPreset? _preset;
+  final ValueNotifier<ui.Image?> _frame = ValueNotifier<ui.Image?>(null);
 
   @override
   bool get isAvailable => PlatformProfile.supportsPlugins;
@@ -42,9 +44,17 @@ class MockProjectMBridge implements ProjectMBridge {
   MilkdropPreset? get currentPreset => _preset;
 
   @override
-  Future<bool> initialize({int width = 1280, int height = 720, double fps = 60.0}) async {
-    return true;
-  }
+  ui.Image? get currentFrame => _frame.value;
+
+  @override
+  ValueListenable<ui.Image?> get frameListenable => _frame;
+
+  @override
+  Future<bool> initialize({
+    int width = 1280,
+    int height = 720,
+    double fps = 60.0,
+  }) async => true;
 
   @override
   void resize(int width, int height) {}
@@ -56,13 +66,14 @@ class MockProjectMBridge implements ProjectMBridge {
   }
 
   @override
-  void feedPcm(List<double> pcmFrames) {}
+  void feedPcm(List<double> pcmFrames, {int channels = 2}) {}
 
   @override
-  int? renderFrame() => null;
+  int renderFrame() => -2;
 
   @override
   void dispose() {
     _preset = null;
+    _frame.dispose();
   }
 }
