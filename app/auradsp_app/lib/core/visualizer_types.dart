@@ -330,6 +330,7 @@ class VisualizerConfig {
     bool? showTranslation,
     LyricsSource? lyricsSource,
     String? milkdropPresetPath,
+    bool clearMilkdropPresetPath = false,
   }) {
     return VisualizerConfig(
       style: style ?? this.style,
@@ -346,7 +347,9 @@ class VisualizerConfig {
       showLyrics: showLyrics ?? this.showLyrics,
       showTranslation: showTranslation ?? this.showTranslation,
       lyricsSource: lyricsSource ?? this.lyricsSource,
-      milkdropPresetPath: milkdropPresetPath ?? this.milkdropPresetPath,
+      milkdropPresetPath: clearMilkdropPresetPath
+          ? null
+          : (milkdropPresetPath ?? this.milkdropPresetPath),
     );
   }
 

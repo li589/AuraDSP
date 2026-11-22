@@ -117,6 +117,7 @@ const Set<String> kNoEngineWriteSpecIds = {
   'visualizer.lineWidth', 'visualizer.bloom', 'visualizer.showGrid',
   'visualizer.showPeaks', 'visualizer.showDbScale', 'visualizer.showLyrics',
   'visualizer.showTranslation', 'visualizer.lyricsSource',
+  'visualizer.milkdropPresetPath',
 };
 
 /// Part A（getter/setter 运行时闭环）排除项：setter 写入门槛非对称或空实现，
@@ -160,6 +161,7 @@ const Set<String> kUiOnlySpecIds = {
   'visualizer.lineWidth', 'visualizer.bloom', 'visualizer.showGrid',
   'visualizer.showPeaks', 'visualizer.showDbScale', 'visualizer.showLyrics',
   'visualizer.showTranslation', 'visualizer.lyricsSource',
+  'visualizer.milkdropPresetPath',
   // 压缩器宏控（2026-10-31 接线进 registry）：阈值经 alias 归一为
   // comp.gain1..7（引擎侧有对应参数，故不入 uiOnly）；比率仅 UI 传递曲线。
   'comp.ratio',

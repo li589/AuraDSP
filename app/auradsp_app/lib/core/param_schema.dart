@@ -1767,8 +1767,9 @@ abstract final class ParamRegistry {
     type: ParamType.string, defaultValue: '',
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.milkdropPresetPath ?? '',
-    setter: (m, v) => m.setVisualizerConfig(m.visualizerConfig.value
-        .copyWith(milkdropPresetPath: v.isEmpty ? null : v)),
+    setter: (m, v) => m.setVisualizerConfig(v.isEmpty
+        ? m.visualizerConfig.value.copyWith(clearMilkdropPresetPath: true)
+        : m.visualizerConfig.value.copyWith(milkdropPresetPath: v)),
   );
 
   /* =========================================================================
