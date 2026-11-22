@@ -487,6 +487,20 @@ set_property(TARGET test_plugin_chain PROPERTY CXX_STANDARD 20)
 set_property(TARGET test_plugin_chain PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(test_plugin_chain PRIVATE auradsp_engine auradsp_wincompat version)
 
+# AUD-01 动态复现夹具（2026-11-23）：延迟随 state（预设）变化的
+# 最小 CLAP 插件。smoke_aud01_pdc_repro.py 以进程外模式加载，
+# 判别 loadPreset 后上报延迟的记账口径（见夹具源注释）。
+add_library(auradsp_test_latency SHARED
+    "${API}/plugins/tests/test_latency_plugin_clap.cpp"
+)
+target_include_directories(auradsp_test_latency PRIVATE "${PLUGIN_API}")
+target_compile_definitions(auradsp_test_latency PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS)
+target_compile_options(auradsp_test_latency PRIVATE /utf-8 /W1 /EHsc)
+set_target_properties(auradsp_test_latency PROPERTIES
+    OUTPUT_NAME "auradsp_test_latency" PREFIX "" SUFFIX ".clap"
+    CXX_STANDARD 20
+    MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
 # B3 验收（2026-10-24）：RT 异常滞留时卸载必须隔离实例而不是硬清零后销毁。
 # 假实例 process() 阻塞注入"插件死锁在音频线程内"，断言 dtor 未跑、
 # 实例方法未被调用、计数清零且不下溢、槽可复用（smoke_plugin_quarantine.py）。

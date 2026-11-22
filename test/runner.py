@@ -159,6 +159,7 @@ PLATFORM_WINDOWS = {
     "smoke_plugin_izotope_setproc.py",
     "smoke_three_key_plugins.py",
     "smoke_plugin_pdc.py",
+    "smoke_aud01_pdc_repro.py",
     "smoke_plugin_bus.py",
     "smoke_plugin_chain.py",
     "smoke_plugin_chain_stages.py",
@@ -337,6 +338,7 @@ def run_smoke_tests():
         # 全链路。默认无 GUI（`--gui` 才开编辑器）；本机未安装目标插件时 SKIP。
         "smoke_three_key_plugins.py",
         "smoke_plugin_pdc.py",
+        "smoke_aud01_pdc_repro.py",
         "smoke_plugin_bus.py",
         "smoke_plugin_chain.py",
         "smoke_plugin_chain_stages.py",
