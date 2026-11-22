@@ -1308,6 +1308,7 @@ class AppModel extends ChangeNotifier {
   /// 这里解决的是另一半：真 isolate（拉 DLL + 开 WASAPI 设备）与竞态回读。
   /// 生产代码一律默认 false，行为零变化。
   final bool _testing;
+  bool get isTesting => _testing;
 
   /// [PATCHED-AuraDSP P-032] testing 模式下记录已下发的 setParam 载荷。
   /// 供回归测试断言"参数确实发到了引擎"——此前 testing 模式下 _toIso

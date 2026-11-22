@@ -3,18 +3,14 @@ import 'package:flutter/material.dart';
 import '../controllers/waveform_synthesizer.dart';
 import '../models/visualizer_themes.dart';
 import '../models/visualizer_types.dart';
-import '../plugins/milkdrop_preset.dart';
 import '../shaders/gpu_shader_service.dart';
 import 'style_cyber_grid.dart';
 import 'style_fluid.dart';
 import 'style_goniometer.dart';
 import 'style_gpu_shader.dart';
-import 'style_milkdrop.dart';
-import 'style_nebula_flow.dart';
 import 'style_oscilloscope.dart';
 import 'style_pulse_orb.dart';
 import 'style_spectrum_bars.dart';
-import 'style_tornado.dart';
 
 /// 可视化画笔分发器：按选中风格将音频特征状态路由至对应高性能 CustomPainter
 ///
@@ -87,14 +83,13 @@ CustomPainter buildVisualizerPainter({
         sensitivity: config.sensitivity,
       );
 
-    case VisualizerStyle.milkDrop:
-      return MilkdropPainter(
-        preset: MilkdropPreset.builtInPresets.first,
+    case VisualizerStyle.harmonicWarp:
+      return GpuShaderPainter(
+        shaderType: GpuShaderType.harmonicWarp,
         bands: rawBands,
         palette: palette,
         time: time,
         sensitivity: config.sensitivity,
-        lineWidth: config.lineWidth,
       );
 
     case VisualizerStyle.bars:
@@ -116,20 +111,21 @@ CustomPainter buildVisualizerPainter({
       );
 
     case VisualizerStyle.tornado:
-      return ParticleTornadoPainter(
+      return GpuShaderPainter(
+        shaderType: GpuShaderType.tornado,
         bands: rawBands,
         palette: palette,
-        bloom: config.bloom,
-        animationTime: time,
-        lineWidth: config.lineWidth,
+        time: time,
+        sensitivity: config.sensitivity,
       );
 
     case VisualizerStyle.nebulaFlow:
-      return NebulaFlowPainter(
+      return GpuShaderPainter(
+        shaderType: GpuShaderType.nebula,
         bands: rawBands,
         palette: palette,
-        bloom: config.bloom,
-        animationTime: time,
+        time: time,
+        sensitivity: config.sensitivity,
       );
   }
 }

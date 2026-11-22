@@ -1733,7 +1733,7 @@ extension AudioModesState on AppModel {
           channelsCount != ch) {
         channelsCount = ch;
         config.channelsCount = ch;
-        ConfigManager.save(config);
+        persistRoutingChange();
       }
       // 档位即虚拟形态的声道能力（见 _asioVirtualWorkCh）：改档后
       // 立即重算能力并下发，让 isolate 解除旧档钳制、显示面同步。

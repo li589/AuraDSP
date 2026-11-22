@@ -1847,6 +1847,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get visualizerStyleTunnel => 'ネオンタワー';
 
   @override
+  String get visualizerStyleHarmonicWarp => 'ハーモニック・ワープ';
+
+  @override
   String get visualizerStyleMilkdrop => 'MilkDrop';
 
   @override

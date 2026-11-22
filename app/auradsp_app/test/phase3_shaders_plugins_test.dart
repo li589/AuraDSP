@@ -25,15 +25,18 @@ void main() {
     test('GpuShaderType asset paths invariant', () {
       expect(GpuShaderType.aurora.assetPath, 'shaders/aurora_wave.frag');
       expect(GpuShaderType.tunnel.assetPath, 'shaders/neon_tunnel.frag');
+      expect(GpuShaderType.tornado.assetPath, 'shaders/particle_tornado.frag');
+      expect(GpuShaderType.nebula.assetPath, 'shaders/nebula_flow.frag');
+      expect(GpuShaderType.harmonicWarp.assetPath, 'shaders/harmonic_warp.frag');
     });
 
-    test('VisualizerStyle includes GPU shader modes and MilkDrop', () {
+    test('VisualizerStyle includes GPU shader modes and Harmonic Warp', () {
       expect(VisualizerStyle.values.contains(VisualizerStyle.auroraShader), isTrue);
       expect(VisualizerStyle.values.contains(VisualizerStyle.tunnelShader), isTrue);
-      expect(VisualizerStyle.values.contains(VisualizerStyle.milkDrop), isTrue);
+      expect(VisualizerStyle.values.contains(VisualizerStyle.harmonicWarp), isTrue);
       expect(VisualizerStyle.auroraShader.label, 'Aurora Ribbon');
       expect(VisualizerStyle.tunnelShader.label, 'Neon Tunnel');
-      expect(VisualizerStyle.milkDrop.label, 'MilkDrop');
+      expect(VisualizerStyle.harmonicWarp.label, 'Harmonic Warp');
     });
 
     test('GpuShaderPainter draws fallback when shader is uncompiled', () {

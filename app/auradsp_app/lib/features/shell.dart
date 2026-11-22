@@ -97,7 +97,8 @@ class _AppShellState extends State<AppShell> {
       null, // Chain
       null, // Visualizer
     ];
-    if (PlatformProfile.os == 'windows' || PlatformProfile.os == 'linux') {
+    if (!m.isTesting &&
+        (PlatformProfile.os == 'windows' || PlatformProfile.os == 'linux')) {
       MediaSyncService.instance
           .setLyricsSource(m.visualizerConfig.value.lyricsSource);
       MediaSyncService.instance.startAutoSync();
@@ -106,7 +107,8 @@ class _AppShellState extends State<AppShell> {
 
   @override
   void dispose() {
-    if (PlatformProfile.os == 'windows' || PlatformProfile.os == 'linux') {
+    if (!widget.model.isTesting &&
+        (PlatformProfile.os == 'windows' || PlatformProfile.os == 'linux')) {
       MediaSyncService.instance.dispose();
     }
     super.dispose();

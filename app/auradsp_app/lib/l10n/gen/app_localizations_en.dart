@@ -1949,6 +1949,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get visualizerStyleTunnel => 'Neon Tunnel';
 
   @override
+  String get visualizerStyleHarmonicWarp => 'Harmonic Warp';
+
+  @override
   String get visualizerStyleMilkdrop => 'MilkDrop';
 
   @override

@@ -68,12 +68,12 @@ enum VisualizerStyle {
     description: 'GPU fragment shader rendering infinite audio-reactive warp tunnel',
   ),
 
-  /// Winamp MilkDrop 2 / projectM 外部视效引擎
-  milkDrop(
-    id: 'milkDrop',
-    label: 'MilkDrop',
+  /// 极坐标谐波射线 (原错名 MilkDrop，现更名为 Harmonic Warp 消除与 projectM 引擎歧义)
+  harmonicWarp(
+    id: 'harmonicWarp',
+    label: 'Harmonic Warp',
     icon: Icons.album_rounded,
-    description: 'Winamp MilkDrop 2 procedural music visualizer engine',
+    description: 'Polar spectrum harmonic rays and pulsing radial wave warp',
   ),
 
   /// 流体动力学：频谱驱动的二维不可压流场（Stable Fluids）
@@ -119,6 +119,7 @@ enum VisualizerStyle {
   /// 保证用户已保存的配置 / 预设 / 会话记忆仍可读回。
   static VisualizerStyle fromId(String? id) {
     if (id == 'mirrorWeave') return VisualizerStyle.nebulaFlow;
+    if (id == 'milkDrop') return VisualizerStyle.harmonicWarp;
     return VisualizerStyle.values
         .firstWhere((e) => e.id == id, orElse: () => VisualizerStyle.bars);
   }
@@ -442,7 +443,7 @@ extension VisualizerStyleL10n on VisualizerStyle {
         VisualizerStyle.pulseOrb => l.visualizerStylePulseOrb,
         VisualizerStyle.auroraShader => l.visualizerStyleAurora,
         VisualizerStyle.tunnelShader => l.visualizerStyleTunnel,
-        VisualizerStyle.milkDrop => l.visualizerStyleMilkdrop,
+        VisualizerStyle.harmonicWarp => l.visualizerStyleHarmonicWarp,
         VisualizerStyle.fluidDynamics => l.visualizerStyleFluid,
         VisualizerStyle.tornado => l.visualizerStyleTornado,
         VisualizerStyle.nebulaFlow => l.visualizerStyleNebulaFlow,

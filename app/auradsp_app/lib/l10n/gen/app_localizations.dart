@@ -3496,6 +3496,12 @@ abstract class AppLocalizations {
   /// **'霓虹隧道'**
   String get visualizerStyleTunnel;
 
+  /// No description provided for @visualizerStyleHarmonicWarp.
+  ///
+  /// In zh, this message translates to:
+  /// **'极坐标谐波'**
+  String get visualizerStyleHarmonicWarp;
+
   /// No description provided for @visualizerStyleMilkdrop.
   ///
   /// In zh, this message translates to:

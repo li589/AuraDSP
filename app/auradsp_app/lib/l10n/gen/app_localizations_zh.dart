@@ -1821,6 +1821,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get visualizerStyleTunnel => '霓虹隧道';
 
   @override
+  String get visualizerStyleHarmonicWarp => '极坐标谐波';
+
+  @override
   String get visualizerStyleMilkdrop => 'MilkDrop';
 
   @override

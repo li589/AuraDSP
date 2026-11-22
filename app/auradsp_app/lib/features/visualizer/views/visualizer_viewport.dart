@@ -181,7 +181,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         // 自带完整背景构图（光晕/地面雾气）的风格不再叠加星尘氛围层，避免双层噪点
         VisualizerStyle.auroraShader ||
         VisualizerStyle.tunnelShader ||
-        VisualizerStyle.milkDrop ||
+        VisualizerStyle.harmonicWarp ||
         VisualizerStyle.fluidDynamics ||
         VisualizerStyle.tornado ||
         VisualizerStyle.nebulaFlow =>

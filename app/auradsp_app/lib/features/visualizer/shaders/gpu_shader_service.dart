@@ -5,7 +5,10 @@ import '../../../core/error_sink.dart';
 /// Available hardware-accelerated fragment shader types
 enum GpuShaderType {
   aurora('shaders/aurora_wave.frag'),
-  tunnel('shaders/neon_tunnel.frag');
+  tunnel('shaders/neon_tunnel.frag'),
+  tornado('shaders/particle_tornado.frag'),
+  nebula('shaders/nebula_flow.frag'),
+  harmonicWarp('shaders/harmonic_warp.frag');
 
   final String assetPath;
   const GpuShaderType(this.assetPath);
@@ -16,8 +19,7 @@ class GpuShaderService {
   static final GpuShaderService instance = GpuShaderService._();
   GpuShaderService._();
 
-  FragmentProgram? _auroraProgram;
-  FragmentProgram? _tunnelProgram;
+  final Map<GpuShaderType, FragmentProgram> _programs = {};
   bool _initialized = false;
   bool _failed = false;
 
@@ -28,14 +30,7 @@ class GpuShaderService {
 
   bool get isReady => _initialized && !_failed;
 
-  FragmentProgram? getProgram(GpuShaderType type) {
-    switch (type) {
-      case GpuShaderType.aurora:
-        return _auroraProgram;
-      case GpuShaderType.tunnel:
-        return _tunnelProgram;
-    }
-  }
+  FragmentProgram? getProgram(GpuShaderType type) => _programs[type];
 
   /// 复用型 FragmentShader：调用方每帧只更新 uniform，不再新建对象。
   FragmentShader? shaderFor(GpuShaderType type) {
@@ -53,8 +48,9 @@ class GpuShaderService {
     if (_initialized) return isReady;
 
     try {
-      _auroraProgram = await FragmentProgram.fromAsset(GpuShaderType.aurora.assetPath);
-      _tunnelProgram = await FragmentProgram.fromAsset(GpuShaderType.tunnel.assetPath);
+      for (final type in GpuShaderType.values) {
+        _programs[type] = await FragmentProgram.fromAsset(type.assetPath);
+      }
       _initialized = true;
       _failed = false;
       return true;
