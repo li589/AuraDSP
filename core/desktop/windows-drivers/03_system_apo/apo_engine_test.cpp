@@ -95,6 +95,29 @@ void FillSine(float* b, int frames, int startIdx) {
 
 }  // namespace
 
+// N1 transit fence (2026-11-22): the APO host only loads plugin
+// binaries from under %ProgramData%\AuraDSP\apo-assets - the
+// production App transit-copies them there before publishing.
+// The test mirrors that contract: copy the probe fixtures into
+// the transit root and publish the TRANSIT paths, never the
+// build-tree originals. Returns false when the copy fails.
+bool TransitCopy(const wchar_t* srcPath, wchar_t* outPath, size_t cap) {
+    wchar_t pd[MAX_PATH] = {};
+    DWORD n = GetEnvironmentVariableW(L"ProgramData", pd, MAX_PATH);
+    std::wstring root = (n > 0 && n < MAX_PATH) ? pd : L"C:\\ProgramData";
+    root += L"\\AuraDSP";
+    CreateDirectoryW(root.c_str(), nullptr);
+    root += L"\\apo-assets";
+    CreateDirectoryW(root.c_str(), nullptr);
+    root += L"\\apo_engine_test";
+    CreateDirectoryW(root.c_str(), nullptr);
+    const wchar_t* slash = wcsrchr(srcPath, L'\\');
+    root += slash ? slash : L"\\fixture.clap";
+    if (root.size() + 1 > cap) return false;
+    wcscpy(outPath, root.c_str());
+    return CopyFileW(srcPath, outPath, FALSE) != 0;
+}
+
 int main() {
     const bool local = !HasGlobalPrivilege();
     if (local) {
@@ -323,8 +346,15 @@ int main() {
         wcscpy(plugPath, self);
         wchar_t* pslash = wcsrchr(plugPath, L'\\');
         wcscpy(pslash ? pslash + 1 : plugPath, L"probe_gain.clap");
-        const bool haveProbe =
+        bool haveProbe =
             GetFileAttributesW(plugPath) != INVALID_FILE_ATTRIBUTES;
+        if (haveProbe) {
+            wchar_t transitPath[MAX_PATH];
+            if (TransitCopy(plugPath, transitPath, MAX_PATH))
+                wcscpy(plugPath, transitPath);
+            else
+                haveProbe = false;
+        }
         if (!haveProbe) {
             printf("[SKIP] plugin section (probe_gain.clap absent)\n");
         } else {
@@ -447,9 +477,19 @@ int main() {
         wcscpy(crashPath, self);
         wchar_t* cs = wcsrchr(crashPath, L'\\');
         wcscpy(cs ? cs + 1 : crashPath, L"probe_crash.clap");
-        const bool haveCrash =
+        bool haveCrash =
             GetFileAttributesW(crashPath) != INVALID_FILE_ATTRIBUTES &&
             GetFileAttributesW(gainPath) != INVALID_FILE_ATTRIBUTES;
+        if (haveCrash) {
+            wchar_t tGain[MAX_PATH], tCrash[MAX_PATH];
+            if (TransitCopy(gainPath, tGain, MAX_PATH) &&
+                TransitCopy(crashPath, tCrash, MAX_PATH)) {
+                wcscpy(gainPath, tGain);
+                wcscpy(crashPath, tCrash);
+            } else {
+                haveCrash = false;
+            }
+        }
         // 本段自测单位基线（增益已在 Q2 段恢复 0dB、两槽皆空）。
         double q4Unity = 0;
         runBlocks(2 * kBlocks, q4Unity);
