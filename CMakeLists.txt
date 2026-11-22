@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 project(auradsp LANGUAGES C CXX)
 
+option(AURADSP_BUILD_PROJECTM_BRIDGE
+       "Build the optional libprojectM visualizer bridge"
+       OFF)
+
 # ============================================================================
 # AuraDSP 统一构建入口（M3，2026-10-29；S2 Linux 接入，2026-11-01）
 #
@@ -20,17 +24,21 @@ project(auradsp LANGUAGES C CXX)
 # ============================================================================
 
 if(WIN32)
-    # 桥/驱动套件需要 Steinberg ASIO SDK（路径由子工程的 ASIO_SDK_ROOT 缓存变量指定）。
-    # build_windows.ps1 -SkipDrivers 会传 OFF 以保留「不碰驱动套件」语义。
     option(AURADSP_BUILD_BRIDGES "Build Windows bridge/driver targets (requires ASIO SDK)" ON)
 
     add_subdirectory(core/desktop/windows)
+    if(AURADSP_BUILD_PROJECTM_BRIDGE)
+        add_subdirectory(core/desktop/visualizer/projectm_bridge)
+    endif()
 
     if(AURADSP_BUILD_BRIDGES)
         add_subdirectory(core/desktop/windows-drivers)
     endif()
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_subdirectory(core/desktop/linux)
+    if(AURADSP_BUILD_PROJECTM_BRIDGE)
+        add_subdirectory(core/desktop/visualizer/projectm_bridge)
+    endif()
 else()
     message(FATAL_ERROR
         "AuraDSP 根构建当前支持 Windows 与 Linux；Android 接入见 "

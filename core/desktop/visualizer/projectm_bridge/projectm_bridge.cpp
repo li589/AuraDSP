@@ -1,28 +1,49 @@
 /*
- * projectm_bridge.cpp — libprojectM v4 C-ABI 跨平台实现与离屏桥接
+ * projectm_bridge.cpp - libprojectM v4 C-ABI bridge.
  *
- * 桥接 projectM-4 C-API 核心，向 Flutter 桌面端暴露统一的 PCM 投递与离屏像素/纹理渲染。
+ * The caller owns the current OpenGL context. All calls on one handle are
+ * serialized because projectM and its OpenGL state are not thread-safe.
  */
-
 #include "projectm_bridge_api.h"
 
-#include <projectM-4/core.h>
 #include <projectM-4/audio.h>
+#include <projectM-4/callbacks.h>
+#include <projectM-4/core.h>
 #include <projectM-4/render_opengl.h>
 
-#include <stdlib.h>
-#include <string.h>
+#include <GL/gl.h>
+
+#include <atomic>
+#include <cstdint>
 #include <mutex>
 
 struct auradsp_projectm_context {
-    projectm_handle pm;
-    int width;
-    int height;
-    float fps;
+    projectm_handle pm = nullptr;
+    int width = 0;
+    int height = 0;
+    float fps = 0.0f;
+    std::atomic<bool> preset_load_failed{false};
     std::mutex mtx;
 };
 
-PROJECTM_EXPORT auradsp_projectm_t auradsp_projectm_create(int width, int height, float fps) {
+namespace {
+
+void on_preset_load_failed(const char*, const char*, void* user_data) {
+    auto* ctx = static_cast<auradsp_projectm_context*>(user_data);
+    if (ctx != nullptr) {
+        ctx->preset_load_failed.store(true, std::memory_order_release);
+    }
+}
+
+void clear_gl_errors() {
+    while (glGetError() != GL_NO_ERROR) {
+    }
+}
+
+}  // namespace
+
+AURADSP_PROJECTM_EXPORT auradsp_projectm_t
+    auradsp_projectm_create(int width, int height, float fps) {
     if (width <= 0) width = 1280;
     if (height <= 0) height = 720;
     if (fps <= 0.0f) fps = 60.0f;
@@ -32,71 +53,112 @@ PROJECTM_EXPORT auradsp_projectm_t auradsp_projectm_create(int width, int height
     ctx->height = height;
     ctx->fps = fps;
 
-    // 创建 projectM 核心实例 (需要已有或绑定的 OpenGL 上下文)
     ctx->pm = projectm_create();
-    if (ctx->pm) {
-        projectm_set_window_size(ctx->pm, (size_t)width, (size_t)height);
-        projectm_set_fps(ctx->pm, (int)fps);
+    if (ctx->pm == nullptr) {
+        delete ctx;
+        return nullptr;
     }
 
-    return (auradsp_projectm_t)ctx;
+    projectm_set_window_size(ctx->pm, static_cast<size_t>(width),
+                             static_cast<size_t>(height));
+    projectm_set_fps(ctx->pm, static_cast<int>(fps));
+    projectm_set_preset_switch_failed_event_callback(
+        ctx->pm, on_preset_load_failed, ctx);
+    return static_cast<auradsp_projectm_t>(ctx);
 }
 
-PROJECTM_EXPORT void auradsp_projectm_destroy(auradsp_projectm_t handle) {
-    if (!handle) return;
-    auto* ctx = (auradsp_projectm_context*)handle;
-    std::lock_guard<std::mutex> lock(ctx->mtx);
-    if (ctx->pm) {
-        projectm_destroy(ctx->pm);
-        ctx->pm = nullptr;
+AURADSP_PROJECTM_EXPORT void
+    auradsp_projectm_destroy(auradsp_projectm_t handle) {
+    if (handle == nullptr) return;
+    auto* ctx = static_cast<auradsp_projectm_context*>(handle);
+    {
+        std::lock_guard<std::mutex> lock(ctx->mtx);
+        if (ctx->pm != nullptr) {
+            projectm_set_preset_switch_failed_event_callback(ctx->pm, nullptr,
+                                                              nullptr);
+            projectm_destroy(ctx->pm);
+            ctx->pm = nullptr;
+        }
     }
     delete ctx;
 }
 
-PROJECTM_EXPORT void auradsp_projectm_resize(auradsp_projectm_t handle, int width, int height) {
-    if (!handle || width <= 0 || height <= 0) return;
-    auto* ctx = (auradsp_projectm_context*)handle;
+AURADSP_PROJECTM_EXPORT void
+    auradsp_projectm_resize(auradsp_projectm_t handle, int width, int height) {
+    if (handle == nullptr || width <= 0 || height <= 0) return;
+    auto* ctx = static_cast<auradsp_projectm_context*>(handle);
     std::lock_guard<std::mutex> lock(ctx->mtx);
     ctx->width = width;
     ctx->height = height;
-    if (ctx->pm) {
-        projectm_set_window_size(ctx->pm, (size_t)width, (size_t)height);
+    if (ctx->pm != nullptr) {
+        projectm_set_window_size(ctx->pm, static_cast<size_t>(width),
+                                 static_cast<size_t>(height));
     }
 }
 
-PROJECTM_EXPORT int auradsp_projectm_feed_pcm(auradsp_projectm_t handle,
-                                              const float* pcm,
-                                              int frames_per_channel,
-                                              int channels) {
-    if (!handle || !pcm || frames_per_channel <= 0) return -1;
-    auto* ctx = (auradsp_projectm_context*)handle;
+AURADSP_PROJECTM_EXPORT int
+    auradsp_projectm_get_width(auradsp_projectm_t handle) {
+    if (handle == nullptr) return 0;
+    auto* ctx = static_cast<auradsp_projectm_context*>(handle);
     std::lock_guard<std::mutex> lock(ctx->mtx);
-    if (!ctx->pm) return -2;
+    return ctx->width;
+}
 
-    // 投递 PCM 浮点音频样本
-    projectm_channels ch = (channels == 1) ? PROJECTM_MONO : PROJECTM_STEREO;
-    projectm_pcm_add_float(ctx->pm, pcm, (unsigned int)frames_per_channel, ch);
+AURADSP_PROJECTM_EXPORT int
+    auradsp_projectm_get_height(auradsp_projectm_t handle) {
+    if (handle == nullptr) return 0;
+    auto* ctx = static_cast<auradsp_projectm_context*>(handle);
+    std::lock_guard<std::mutex> lock(ctx->mtx);
+    return ctx->height;
+}
+
+AURADSP_PROJECTM_EXPORT int auradsp_projectm_feed_pcm(
+    auradsp_projectm_t handle, const float* pcm, int frames_per_channel,
+    int channels) {
+    if (handle == nullptr || pcm == nullptr || frames_per_channel <= 0 ||
+        (channels != 1 && channels != 2)) {
+        return -1;
+    }
+    auto* ctx = static_cast<auradsp_projectm_context*>(handle);
+    std::lock_guard<std::mutex> lock(ctx->mtx);
+    if (ctx->pm == nullptr) return -2;
+
+    const projectm_channels ch =
+        channels == 1 ? PROJECTM_MONO : PROJECTM_STEREO;
+    projectm_pcm_add_float(ctx->pm, pcm,
+                           static_cast<unsigned int>(frames_per_channel), ch);
     return 0;
 }
 
-PROJECTM_EXPORT int auradsp_projectm_load_preset(auradsp_projectm_t handle, const char* preset_path) {
-    if (!handle || !preset_path) return -1;
-    auto* ctx = (auradsp_projectm_context*)handle;
+AURADSP_PROJECTM_EXPORT int auradsp_projectm_load_preset(
+    auradsp_projectm_t handle, const char* preset_path) {
+    if (handle == nullptr || preset_path == nullptr || preset_path[0] == '\0') {
+        return -1;
+    }
+    auto* ctx = static_cast<auradsp_projectm_context*>(handle);
     std::lock_guard<std::mutex> lock(ctx->mtx);
-    if (!ctx->pm) return -2;
+    if (ctx->pm == nullptr) return -2;
 
-    // 平滑过渡加载 .milk 预设文件
+    ctx->preset_load_failed.store(false, std::memory_order_release);
     projectm_load_preset_file(ctx->pm, preset_path, true);
-    return 0;
+    return ctx->preset_load_failed.load(std::memory_order_acquire) ? -3 : 0;
 }
 
-PROJECTM_EXPORT int auradsp_projectm_render_pixels(auradsp_projectm_t handle, uint8_t* out_rgba_pixels) {
-    if (!handle || !out_rgba_pixels) return -1;
-    auto* ctx = (auradsp_projectm_context*)handle;
+AURADSP_PROJECTM_EXPORT int auradsp_projectm_render_pixels(
+    auradsp_projectm_t handle, uint8_t* out_rgba_pixels) {
+    if (handle == nullptr || out_rgba_pixels == nullptr) return -1;
+    auto* ctx = static_cast<auradsp_projectm_context*>(handle);
     std::lock_guard<std::mutex> lock(ctx->mtx);
-    if (!ctx->pm) return -2;
+    if (ctx->pm == nullptr) return -2;
 
-    // 执行一帧 OpenGL 渲染
+    clear_gl_errors();
     projectm_opengl_render_frame(ctx->pm);
-    return 0;
+
+    GLint old_pack_alignment = 4;
+    glGetIntegerv(GL_PACK_ALIGNMENT, &old_pack_alignment);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, ctx->width, ctx->height, GL_RGBA, GL_UNSIGNED_BYTE,
+                 out_rgba_pixels);
+    glPixelStorei(GL_PACK_ALIGNMENT, old_pack_alignment);
+    return glGetError() == GL_NO_ERROR ? 0 : -3;
 }
