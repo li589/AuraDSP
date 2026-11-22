@@ -1874,6 +1874,27 @@ class AppLocalizationsJa extends AppLocalizations {
   String get visualizerPickMilkdropFolder => 'プリセットフォルダをインポート';
 
   @override
+  String get visualizerCategoryNative => 'ネイティブ';
+
+  @override
+  String get visualizerCategoryMilkdrop => 'MilkDrop プリセット';
+
+  @override
+  String get visualizerEngineNativeActive => 'libprojectM ハードウェアアクセラレーション';
+
+  @override
+  String get visualizerEngineFallbackActive => '内蔵プロシージャルシミュレーション';
+
+  @override
+  String get visualizerDrawerSectionStyle => 'ビジュアライザスタイル＆プリセット';
+
+  @override
+  String get visualizerMilkdropPresetEmpty => '上のボタンから .milk プリセットやフォルダをインポート';
+
+  @override
+  String get visualizerMilkdropPresetBuiltin => '内蔵';
+
+  @override
   String get visualizerThemeSystem => 'システムテーマ';
 
   @override

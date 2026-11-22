@@ -240,6 +240,8 @@ class VisualizerDrawerOverlay extends StatelessWidget {
   final VoidCallback? onPickMilkdropFile;
   final VoidCallback? onPickMilkdropFolder;
   final List<MilkdropPreset>? milkdropPresets;
+  final ValueChanged<MilkdropPreset>? onSelectMilkdropPreset;
+  final bool isProjectMNative;
 
   const VisualizerDrawerOverlay({
     super.key,
@@ -251,6 +253,8 @@ class VisualizerDrawerOverlay extends StatelessWidget {
     this.onPickMilkdropFile,
     this.onPickMilkdropFolder,
     this.milkdropPresets,
+    this.onSelectMilkdropPreset,
+    this.isProjectMNative = false,
   });
 
   @override
@@ -296,6 +300,8 @@ class VisualizerDrawerOverlay extends StatelessWidget {
                       onPickMilkdropFile: onPickMilkdropFile,
                       onPickMilkdropFolder: onPickMilkdropFolder,
                       milkdropPresets: milkdropPresets,
+                      onSelectMilkdropPreset: onSelectMilkdropPreset,
+                      isProjectMNative: isProjectMNative,
                     ),
                   ),
                 ],

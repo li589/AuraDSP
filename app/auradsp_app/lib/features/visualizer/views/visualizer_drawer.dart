@@ -21,6 +21,8 @@ class VisualizerConfigDrawer extends StatelessWidget {
   final VoidCallback? onPickMilkdropFile;
   final VoidCallback? onPickMilkdropFolder;
   final List<MilkdropPreset>? milkdropPresets;
+  final ValueChanged<MilkdropPreset>? onSelectMilkdropPreset;
+  final bool isProjectMNative;
 
   const VisualizerConfigDrawer({
     super.key,
@@ -31,6 +33,8 @@ class VisualizerConfigDrawer extends StatelessWidget {
     this.onPickMilkdropFile,
     this.onPickMilkdropFolder,
     this.milkdropPresets,
+    this.onSelectMilkdropPreset,
+    this.isProjectMNative = false,
   });
 
   @override
@@ -103,6 +107,10 @@ class VisualizerConfigDrawer extends StatelessWidget {
                 ),
                 children: [
                   // 1. 色彩主题选择
+                  VisualizerDrawerSectionTitle(
+                    title: l.visualizerSectionPalette,
+                    info: l.visualizerSectionPaletteInfo,
+                  ),
                   VisualizerDrawerSectionTitle(
                     title: l.visualizerSectionPalette,
                     info: l.visualizerSectionPaletteInfo,
@@ -315,6 +323,43 @@ class VisualizerConfigDrawer extends StatelessWidget {
                       info: l.visualizerStyleProjectM,
                     ),
                     const SizedBox(height: 8),
+                    // MilkDrop 硬件加速/内置模拟诚实状态徽标
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: (isProjectMNative ? p.accent : p.textDim).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(AuraRadius.xs),
+                        border: Border.all(
+                          color: (isProjectMNative ? p.accent : p.hairline).withValues(alpha: 0.4),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isProjectMNative ? Icons.bolt_rounded : Icons.info_outline_rounded,
+                            size: 14,
+                            color: isProjectMNative ? p.accent : p.textDim,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              isProjectMNative
+                                  ? l.visualizerEngineNativeActive
+                                  : l.visualizerEngineFallbackActive,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isProjectMNative ? p.accent : p.textDim,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
@@ -416,7 +461,7 @@ class VisualizerConfigDrawer extends StatelessWidget {
                             isDense: true,
                             value: config.milkdropPresetPath,
                             hint: Text(
-                              '${milkdropPresets!.length} 预设',
+                              '${milkdropPresets!.length} ${l.visualizerCategoryMilkdrop}',
                               style: TextStyle(fontSize: 12, color: p.textDim),
                             ),
                             dropdownColor: p.panelRaised,

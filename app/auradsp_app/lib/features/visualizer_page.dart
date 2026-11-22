@@ -34,6 +34,7 @@ import 'chrome.dart';
 import 'visualizer/lyrics/parsers/lrc_parser.dart';
 import 'visualizer/lyrics/services/media_sync_service.dart';
 import 'visualizer/plugins/milkdrop_preset.dart';
+import 'visualizer/plugins/projectm_bridge_contract.dart';
 import 'visualizer/views/visualizer_drawer_widgets.dart';
 import 'visualizer/views/visualizer_meters.dart';
 import 'visualizer/views/visualizer_stage.dart';
@@ -425,6 +426,19 @@ class _VisualizerPageState extends State<VisualizerPage> {
                             onOpenDrawer: _openDrawer,
                             onOpenLocalLrc: _pickLocalLrc,
                             onPickMilkdropFile: _pickMilkdropPreset,
+                            onPickMilkdropFolder: _pickMilkdropDirectory,
+                            milkdropPresets: _milkdropPresets,
+                            onSelectMilkdropPreset: (preset) {
+                              final cfg = widget.model.visualizerConfig.value;
+                              widget.model.setVisualizerConfig(
+                                cfg.copyWith(
+                                  style: VisualizerStyle.projectM,
+                                  milkdropPresetPath: preset.filePath,
+                                ),
+                              );
+                            },
+                            isProjectMNative:
+                                ProjectMBridgeFactory.instance.isNative,
                             mediaSync: _mediaSync,
                             emptyText: l.noAudio,
                             active: active,
@@ -480,6 +494,16 @@ class _VisualizerPageState extends State<VisualizerPage> {
             onPickMilkdropFile: _pickMilkdropPreset,
             onPickMilkdropFolder: _pickMilkdropDirectory,
             milkdropPresets: _milkdropPresets,
+            onSelectMilkdropPreset: (preset) {
+              final cfg = widget.model.visualizerConfig.value;
+              widget.model.setVisualizerConfig(
+                cfg.copyWith(
+                  style: VisualizerStyle.projectM,
+                  milkdropPresetPath: preset.filePath,
+                ),
+              );
+            },
+            isProjectMNative: ProjectMBridgeFactory.instance.isNative,
           ),
             ],
           ),

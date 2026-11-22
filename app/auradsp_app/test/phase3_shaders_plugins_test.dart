@@ -1,7 +1,11 @@
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:auradsp_app/core/design.dart';
+import 'package:auradsp_app/core/theme.dart';
+import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 import 'package:auradsp_app/features/visualizer/controllers/waveform_synthesizer.dart';
 import 'package:auradsp_app/features/visualizer/models/visualizer_themes.dart';
 import 'package:auradsp_app/features/visualizer/models/visualizer_types.dart';
@@ -13,6 +17,8 @@ import 'package:auradsp_app/features/visualizer/styles/style_gpu_shader.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_milkdrop.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_projectm.dart';
 import 'package:auradsp_app/features/visualizer/styles/visualizer_painter_dispatcher.dart';
+import 'package:auradsp_app/features/visualizer/views/visualizer_hud.dart';
+import 'package:auradsp_app/features/visualizer/views/visualizer_hud_buttons.dart';
 
 void main() {
   const testPalette = VisualizerPalette(
@@ -269,5 +275,85 @@ per_pixel_1=rot = rot + 0.02*sin(rad*3.14);
         }
       },
     );
+  });
+
+  group('ProjectM Bridge Honesty & Categorized HUD Tests', () {
+    test('ProjectMBridge contracts honestly declare native vs mock status', () {
+      final mock = MockProjectMBridge();
+      expect(mock.isNative, isFalse);
+      expect(mock.isAvailable, isFalse);
+      expect(mock.statusDescription, contains('Procedural simulation'));
+
+      final native = ProjectMNativeBridge();
+      expect(native.isNative, isTrue);
+      expect(native.isAvailable, isFalse);
+      expect(native.statusDescription, contains('libprojectM hardware accelerated'));
+    });
+
+    testWidgets('VisualizerHud categorized tabs switch between Native and MilkDrop presets', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      VisualizerStyle currentStyle = VisualizerStyle.bars;
+      MilkdropPreset? selectedPreset;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: withAuraExtension(ThemeData.dark(), auraDark),
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: Stack(
+              children: [
+                VisualizerHud(
+                  config: VisualizerConfig(style: currentStyle),
+                  displayMode: VisualizerDisplayMode.restore,
+                  visible: true,
+                  onStyleChanged: (s) => currentStyle = s,
+                  onDisplayModeChanged: (_) {},
+                  onToggleLyrics: () {},
+                  onOpenDrawer: () {},
+                  onResetPeaks: () {},
+                  milkdropPresets: MilkdropPreset.builtInPresets,
+                  onSelectMilkdropPreset: (p) => selectedPreset = p,
+                  isProjectMNative: false,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap HUD dropdown button to open menu
+      await tester.tap(find.byType(VisualizerStyleDropdownButton));
+      await tester.pumpAndSettle();
+
+      // Check category tabs exist
+      expect(find.byType(CategoryTabButton), findsNWidgets(2));
+      expect(find.byType(VisualizerMenuItem), findsNWidgets(VisualizerStyle.values.length - 1));
+
+      // Switch to MilkDrop tab
+      final milkdropTab = find.widgetWithText(CategoryTabButton, 'MilkDrop 预设');
+      expect(milkdropTab, findsOneWidget);
+      await tester.tap(milkdropTab);
+      await tester.pumpAndSettle();
+
+      // Honesty badge: indicates procedural simulation because isProjectMNative is false
+      expect(find.text('内置着色器拓扑模拟'), findsOneWidget);
+
+      // Presets are listed
+      expect(find.byType(MilkdropPresetMenuItem), findsWidgets);
+
+      // Select preset
+      final firstPreset = find.byType(MilkdropPresetMenuItem).first;
+      await tester.tap(firstPreset);
+      await tester.pumpAndSettle();
+
+      expect(currentStyle, VisualizerStyle.projectM);
+      expect(selectedPreset, isNotNull);
+    });
   });
 }

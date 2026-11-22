@@ -3550,6 +3550,48 @@ abstract class AppLocalizations {
   /// **'导入预设包文件夹'**
   String get visualizerPickMilkdropFolder;
 
+  /// No description provided for @visualizerCategoryNative.
+  ///
+  /// In zh, this message translates to:
+  /// **'原生视效'**
+  String get visualizerCategoryNative;
+
+  /// No description provided for @visualizerCategoryMilkdrop.
+  ///
+  /// In zh, this message translates to:
+  /// **'MilkDrop 预设'**
+  String get visualizerCategoryMilkdrop;
+
+  /// No description provided for @visualizerEngineNativeActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'libprojectM 硬件加速已就绪'**
+  String get visualizerEngineNativeActive;
+
+  /// No description provided for @visualizerEngineFallbackActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'内置着色器拓扑模拟'**
+  String get visualizerEngineFallbackActive;
+
+  /// No description provided for @visualizerDrawerSectionStyle.
+  ///
+  /// In zh, this message translates to:
+  /// **'视效模式与预设'**
+  String get visualizerDrawerSectionStyle;
+
+  /// No description provided for @visualizerMilkdropPresetEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'点击上方按钮导入 .milk 预设脚本或预设包文件夹'**
+  String get visualizerMilkdropPresetEmpty;
+
+  /// No description provided for @visualizerMilkdropPresetBuiltin.
+  ///
+  /// In zh, this message translates to:
+  /// **'内置精选'**
+  String get visualizerMilkdropPresetBuiltin;
+
   /// No description provided for @visualizerThemeSystem.
   ///
   /// In zh, this message translates to:

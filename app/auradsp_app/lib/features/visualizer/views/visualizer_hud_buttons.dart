@@ -4,16 +4,19 @@ import '../../../core/design.dart';
 import '../../../core/theme.dart';
 import '../../../core/ui_helpers.dart';
 import '../models/visualizer_types.dart';
+import '../plugins/milkdrop_preset.dart';
 
 /// 模式下拉选择触发按钮
 class VisualizerStyleDropdownButton extends StatelessWidget {
   final VisualizerStyle selectedStyle;
+  final String? activeMilkdropPresetName;
   final bool isOpen;
   final VoidCallback onTap;
 
   const VisualizerStyleDropdownButton({
     super.key,
     required this.selectedStyle,
+    this.activeMilkdropPresetName,
     required this.isOpen,
     required this.onTap,
   });
@@ -22,6 +25,12 @@ class VisualizerStyleDropdownButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);
+
+    final title = (selectedStyle == VisualizerStyle.projectM &&
+            activeMilkdropPresetName != null &&
+            activeMilkdropPresetName!.isNotEmpty)
+        ? 'MilkDrop · $activeMilkdropPresetName'
+        : selectedStyle.labelOf(l);
 
     return InkWell(
       onTap: onTap,
@@ -44,14 +53,25 @@ class VisualizerStyleDropdownButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(selectedStyle.icon, size: 16, color: p.accent),
+            Icon(
+              selectedStyle == VisualizerStyle.projectM
+                  ? Icons.auto_awesome_motion_rounded
+                  : selectedStyle.icon,
+              size: 16,
+              color: p.accent,
+            ),
             const SizedBox(width: 8),
-            Text(
-              selectedStyle.labelOf(l),
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: p.text,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 180),
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: p.text,
+                ),
               ),
             ),
             const SizedBox(width: 6),
@@ -116,6 +136,157 @@ class VisualizerMenuItem extends StatelessWidget {
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                   color: isSelected ? p.accent : p.text,
                 ),
+              ),
+            ),
+            if (isSelected)
+              Icon(Icons.check_rounded, size: 15, color: p.accent),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 分类选项卡按钮 (原生视效 vs MilkDrop 预设)
+class CategoryTabButton extends StatelessWidget {
+  final String title;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const CategoryTabButton({
+    super.key,
+    required this.title,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AuraRadius.xs),
+      child: AnimatedContainer(
+        duration: AuraDur.fast,
+        padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+        decoration: BoxDecoration(
+          color: selected
+              ? p.accent.withValues(alpha: 0.18)
+              : p.panelRaised.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(AuraRadius.xs),
+          border: Border.all(
+            color: selected
+                ? p.accent.withValues(alpha: 0.6)
+                : p.hairline.withValues(alpha: 0.5),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  color: selected ? p.accent : p.textDim,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0.5),
+              decoration: BoxDecoration(
+                color: selected
+                    ? p.accent.withValues(alpha: 0.25)
+                    : p.hairline.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w600,
+                  color: selected ? p.accent : p.textDim,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// MilkDrop 脚本预设项
+class MilkdropPresetMenuItem extends StatelessWidget {
+  final MilkdropPreset preset;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const MilkdropPresetMenuItem({
+    super.key,
+    required this.preset,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AuraRadius.sm),
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? p.accent.withValues(alpha: 0.16)
+              : Colors.transparent,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.auto_awesome_motion_rounded,
+              size: 15,
+              color: isSelected ? p.accent : p.textDim,
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    preset.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.normal,
+                      color: isSelected ? p.accent : p.text,
+                    ),
+                  ),
+                  if (preset.author != 'Unknown' && preset.author.isNotEmpty)
+                    Text(
+                      preset.author,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: p.textDim.withValues(alpha: 0.8),
+                      ),
+                    ),
+                ],
               ),
             ),
             if (isSelected)

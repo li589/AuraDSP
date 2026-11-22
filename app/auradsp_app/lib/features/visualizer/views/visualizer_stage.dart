@@ -15,6 +15,7 @@ import '../lyrics/views/lyric_view.dart';
 import '../models/visualizer_themes.dart';
 import '../models/visualizer_types.dart';
 import '../shaders/gpu_shader_service.dart';
+import '../plugins/milkdrop_preset.dart';
 import '../plugins/projectm_bridge_contract.dart';
 import 'visualizer_hud.dart';
 import 'visualizer_viewport.dart';
@@ -36,6 +37,10 @@ class VisualizerStage extends StatefulWidget {
   final VoidCallback onOpenDrawer;
   final VoidCallback? onOpenLocalLrc;
   final VoidCallback? onPickMilkdropFile;
+  final VoidCallback? onPickMilkdropFolder;
+  final List<MilkdropPreset>? milkdropPresets;
+  final ValueChanged<MilkdropPreset>? onSelectMilkdropPreset;
+  final bool isProjectMNative;
   final MediaSyncService? mediaSync;
   final String emptyText;
   final bool active;
@@ -57,6 +62,10 @@ class VisualizerStage extends StatefulWidget {
     required this.onOpenDrawer,
     this.onOpenLocalLrc,
     this.onPickMilkdropFile,
+    this.onPickMilkdropFolder,
+    this.milkdropPresets,
+    this.onSelectMilkdropPreset,
+    this.isProjectMNative = false,
     this.mediaSync,
     required this.emptyText,
     required this.active,
@@ -584,6 +593,10 @@ class _VisualizerStageState extends State<VisualizerStage> {
                         _resetPeaks();
                       },
                       onPickMilkdropFile: widget.onPickMilkdropFile,
+                      onPickMilkdropFolder: widget.onPickMilkdropFolder,
+                      milkdropPresets: widget.milkdropPresets,
+                      onSelectMilkdropPreset: widget.onSelectMilkdropPreset,
+                      isProjectMNative: widget.isProjectMNative,
                     ),
                   ),
                 ),

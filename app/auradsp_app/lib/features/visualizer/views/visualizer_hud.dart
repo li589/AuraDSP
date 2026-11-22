@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/design.dart';
 import '../../../core/theme.dart';
 import '../../../core/ui_helpers.dart';
 import '../models/visualizer_types.dart';
+import '../plugins/milkdrop_preset.dart';
 import 'visualizer_hud_buttons.dart';
 
 /// 视效舞台悬浮控制岛 (Floating HUD Dock)
@@ -17,6 +20,10 @@ class VisualizerHud extends StatefulWidget {
   final VoidCallback onOpenDrawer;
   final VoidCallback onResetPeaks;
   final VoidCallback? onPickMilkdropFile;
+  final VoidCallback? onPickMilkdropFolder;
+  final List<MilkdropPreset>? milkdropPresets;
+  final ValueChanged<MilkdropPreset>? onSelectMilkdropPreset;
+  final bool isProjectMNative;
 
   const VisualizerHud({
     super.key,
@@ -29,6 +36,10 @@ class VisualizerHud extends StatefulWidget {
     required this.onOpenDrawer,
     required this.onResetPeaks,
     this.onPickMilkdropFile,
+    this.onPickMilkdropFolder,
+    this.milkdropPresets,
+    this.onSelectMilkdropPreset,
+    this.isProjectMNative = false,
   });
 
   @override
@@ -37,6 +48,7 @@ class VisualizerHud extends StatefulWidget {
 
 class _VisualizerHudState extends State<VisualizerHud> {
   bool _menuOpen = false;
+  int _categoryTab = 0;
 
   @override
   void didUpdateWidget(VisualizerHud oldWidget) {
@@ -48,11 +60,27 @@ class _VisualizerHudState extends State<VisualizerHud> {
   }
 
   void _toggleMenu() {
-    setState(() => _menuOpen = !_menuOpen);
+    setState(() {
+      _menuOpen = !_menuOpen;
+      if (_menuOpen) {
+        _categoryTab = widget.config.style == VisualizerStyle.projectM ? 1 : 0;
+      }
+    });
   }
 
   void _closeMenu() {
     if (_menuOpen) setState(() => _menuOpen = false);
+  }
+
+  String? get _activeMilkdropPresetName {
+    final path = widget.config.milkdropPresetPath;
+    if (path != null && path.isNotEmpty) {
+      return path.split(RegExp(r'[/\\]')).last.replaceAll('.milk', '');
+    }
+    if (widget.milkdropPresets != null && widget.milkdropPresets!.isNotEmpty) {
+      return widget.milkdropPresets!.first.name;
+    }
+    return null;
   }
 
   @override
@@ -91,16 +119,12 @@ class _VisualizerHudState extends State<VisualizerHud> {
                         child: _GlassSurface(
                           borderRadius: BorderRadius.circular(AuraRadius.md),
                           child: Container(
-                            // F-02：ja 的风格名日译较长，固定 175 会被 ellipsis
-                            // 截断；按语言放宽（其他语言 190，ja 205）。
-                            width:
-                                Localizations.localeOf(context).languageCode ==
-                                    'ja'
-                                ? 205
-                                : 190,
-                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            width: math.min(
+                              270.0,
+                              MediaQuery.sizeOf(context).width * 0.92,
+                            ),
                             decoration: BoxDecoration(
-                              color: p.panel.withValues(alpha: 0.94),
+                              color: p.panel.withValues(alpha: 0.96),
                               borderRadius: BorderRadius.circular(
                                 AuraRadius.md,
                               ),
@@ -116,29 +140,311 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                 ),
                               ],
                             ),
-                            child: ConstrainedBox(
-                              // 小屏（手机横屏/窄窗）时风格列表可滚动，避免溢出裁切
-                              constraints: BoxConstraints(
-                                maxHeight:
-                                    MediaQuery.sizeOf(context).height * 0.45,
-                              ),
-                              child: SingleChildScrollView(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    for (final style in VisualizerStyle.values)
-                                      VisualizerMenuItem(
-                                        style: style,
-                                        isSelected:
-                                            widget.config.style == style,
-                                        onTap: () {
-                                          widget.onStyleChanged(style);
-                                          _closeMenu();
-                                        },
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // 分类选择器选项卡 (Native vs MilkDrop)
+                                Container(
+                                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: p.hairline.withValues(alpha: 0.6),
                                       ),
-                                  ],
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: CategoryTabButton(
+                                          title: l.visualizerCategoryNative,
+                                          count: VisualizerStyle.values
+                                              .where(
+                                                (s) =>
+                                                    s != VisualizerStyle.projectM,
+                                              )
+                                              .length,
+                                          selected: _categoryTab == 0,
+                                          onTap: () =>
+                                              setState(() => _categoryTab = 0),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: CategoryTabButton(
+                                          title: l.visualizerCategoryMilkdrop,
+                                          count:
+                                              widget.milkdropPresets?.length ?? 3,
+                                          selected: _categoryTab == 1,
+                                          onTap: () =>
+                                              setState(() => _categoryTab = 1),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
+
+                                // 列表内容
+                                ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxHeight:
+                                        MediaQuery.sizeOf(context).height * 0.44,
+                                  ),
+                                  child: _categoryTab == 0
+                                      // Tab 0: 原生视效
+                                      ? SingleChildScrollView(
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              for (final style in VisualizerStyle.values)
+                                                if (style != VisualizerStyle.projectM)
+                                                  VisualizerMenuItem(
+                                                    style: style,
+                                                    isSelected:
+                                                        widget.config.style == style,
+                                                    onTap: () {
+                                                      widget.onStyleChanged(style);
+                                                      _closeMenu();
+                                                    },
+                                                  ),
+                                            ],
+                                          ),
+                                        )
+                                      // Tab 1: MilkDrop 预设
+                                      : Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            // 诚实状态指示徽章 (Honesty badge)
+                                            Container(
+                                              margin: const EdgeInsets.fromLTRB(
+                                                8,
+                                                6,
+                                                8,
+                                                4,
+                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 4,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: (widget.isProjectMNative
+                                                        ? p.accent
+                                                        : p.textDim)
+                                                    .withValues(alpha: 0.12),
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                  AuraRadius.xs,
+                                                ),
+                                                border: Border.all(
+                                                  color: (widget.isProjectMNative
+                                                          ? p.accent
+                                                          : p.hairline)
+                                                      .withValues(alpha: 0.4),
+                                                  width: 0.8,
+                                                ),
+                                              ),
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    widget.isProjectMNative
+                                                        ? Icons.bolt_rounded
+                                                        : Icons
+                                                            .info_outline_rounded,
+                                                    size: 13,
+                                                    color: widget.isProjectMNative
+                                                        ? p.accent
+                                                        : p.textDim,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Expanded(
+                                                    child: Text(
+                                                      widget.isProjectMNative
+                                                          ? l
+                                                              .visualizerEngineNativeActive
+                                                          : l
+                                                              .visualizerEngineFallbackActive,
+                                                      style: TextStyle(
+                                                        fontSize: 10.5,
+                                                        color: widget
+                                                                .isProjectMNative
+                                                            ? p.accent
+                                                            : p.textDim,
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+
+                                            // 预设列表
+                                            Flexible(
+                                              child: SingleChildScrollView(
+                                                child: Column(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    if (widget.milkdropPresets !=
+                                                            null &&
+                                                        widget.milkdropPresets!
+                                                            .isNotEmpty)
+                                                      for (final preset
+                                                          in widget.milkdropPresets!)
+                                                        MilkdropPresetMenuItem(
+                                                          preset: preset,
+                                                          isSelected: widget
+                                                                      .config
+                                                                      .style ==
+                                                                  VisualizerStyle
+                                                                      .projectM &&
+                                                              ((widget.config
+                                                                          .milkdropPresetPath ==
+                                                                      preset
+                                                                          .filePath) ||
+                                                                  (widget.config
+                                                                              .milkdropPresetPath ==
+                                                                          null &&
+                                                                      preset ==
+                                                                          widget
+                                                                              .milkdropPresets!
+                                                                              .first)),
+                                                          onTap: () {
+                                                            widget
+                                                                .onSelectMilkdropPreset
+                                                                ?.call(preset);
+                                                            widget.onStyleChanged(
+                                                              VisualizerStyle
+                                                                  .projectM,
+                                                            );
+                                                            _closeMenu();
+                                                          },
+                                                        )
+                                                    else
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets.all(
+                                                          12,
+                                                        ),
+                                                        child: Text(
+                                                          l
+                                                              .visualizerMilkdropPresetEmpty,
+                                                          textAlign:
+                                                              TextAlign.center,
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            color: p.textDim,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+
+                                            // 底部快速操作栏：打开预设 / 导入目录
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 6,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                border: Border(
+                                                  top: BorderSide(
+                                                    color: p.hairline
+                                                        .withValues(alpha: 0.6),
+                                                  ),
+                                                ),
+                                              ),
+                                              child: Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: OutlinedButton.icon(
+                                                      icon: const Icon(
+                                                        Icons.file_open_rounded,
+                                                        size: 13,
+                                                      ),
+                                                      label: Text(
+                                                        l
+                                                            .visualizerPickMilkdropFile,
+                                                        style: const TextStyle(
+                                                          fontSize: 10.5,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow:
+                                                            TextOverflow.ellipsis,
+                                                      ),
+                                                      style:
+                                                          OutlinedButton.styleFrom(
+                                                        visualDensity:
+                                                            VisualDensity.compact,
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 4,
+                                                          vertical: 6,
+                                                        ),
+                                                        foregroundColor: p.text,
+                                                        side: BorderSide(
+                                                          color: p.hairline,
+                                                        ),
+                                                      ),
+                                                      onPressed: () {
+                                                        _closeMenu();
+                                                        widget.onPickMilkdropFile
+                                                            ?.call();
+                                                      },
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Expanded(
+                                                    child: OutlinedButton.icon(
+                                                      icon: const Icon(
+                                                        Icons.folder_open_rounded,
+                                                        size: 13,
+                                                      ),
+                                                      label: Text(
+                                                        l
+                                                            .visualizerPickMilkdropFolder,
+                                                        style: const TextStyle(
+                                                          fontSize: 10.5,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow:
+                                                            TextOverflow.ellipsis,
+                                                      ),
+                                                      style:
+                                                          OutlinedButton.styleFrom(
+                                                        visualDensity:
+                                                            VisualDensity.compact,
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 4,
+                                                          vertical: 6,
+                                                        ),
+                                                        foregroundColor: p.text,
+                                                        side: BorderSide(
+                                                          color: p.hairline,
+                                                        ),
+                                                      ),
+                                                      onPressed: () {
+                                                        _closeMenu();
+                                                        widget.onPickMilkdropFolder
+                                                            ?.call();
+                                                      },
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -188,6 +494,7 @@ class _VisualizerHudState extends State<VisualizerHud> {
                         // 模式下拉激活按钮
                         VisualizerStyleDropdownButton(
                           selectedStyle: widget.config.style,
+                          activeMilkdropPresetName: _activeMilkdropPresetName,
                           isOpen: _menuOpen,
                           onTap: _toggleMenu,
                         ),

@@ -52,10 +52,16 @@ class ProjectMNativeBridge implements ProjectMBridge {
   ProjectMNativeBridge({this.currentContextVerifier});
 
   @override
+  bool get isNative => true;
+
+  @override
   bool get isAvailable => _library != null && _handle != nullptr;
 
   @override
   bool get isLoaded => _preset != null && isAvailable;
+
+  @override
+  String get statusDescription => 'libprojectM hardware accelerated';
 
   @override
   MilkdropPreset? get currentPreset => _preset;

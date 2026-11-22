@@ -450,8 +450,8 @@ void main() {
       await tester.tap(find.byType(VisualizerStyleDropdownButton));
       await tester.pumpAndSettle();
 
-      // Menu items are now visible
-      expect(find.byType(VisualizerMenuItem), findsNWidgets(VisualizerStyle.values.length));
+      // Menu items are now visible (Native category tab shows all native styles, projectM is in MilkDrop tab)
+      expect(find.byType(VisualizerMenuItem), findsNWidgets(VisualizerStyle.values.length - 1));
 
       // Tap Oscilloscope item
       final oscilloscopeItem = find.widgetWithText(VisualizerMenuItem, VisualizerStyle.oscilloscope.label);
@@ -475,7 +475,7 @@ void main() {
       // Open menu again
       await tester.tap(find.byType(VisualizerStyleDropdownButton));
       await tester.pumpAndSettle();
-      expect(find.byType(VisualizerMenuItem), findsNWidgets(VisualizerStyle.values.length));
+      expect(find.byType(VisualizerMenuItem), findsNWidgets(VisualizerStyle.values.length - 1));
 
       // Make HUD invisible -> menu should automatically close
       hudVisible = false;

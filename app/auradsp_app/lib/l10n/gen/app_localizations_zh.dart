@@ -1848,6 +1848,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get visualizerPickMilkdropFolder => '导入预设包文件夹';
 
   @override
+  String get visualizerCategoryNative => '原生视效';
+
+  @override
+  String get visualizerCategoryMilkdrop => 'MilkDrop 预设';
+
+  @override
+  String get visualizerEngineNativeActive => 'libprojectM 硬件加速已就绪';
+
+  @override
+  String get visualizerEngineFallbackActive => '内置着色器拓扑模拟';
+
+  @override
+  String get visualizerDrawerSectionStyle => '视效模式与预设';
+
+  @override
+  String get visualizerMilkdropPresetEmpty => '点击上方按钮导入 .milk 预设脚本或预设包文件夹';
+
+  @override
+  String get visualizerMilkdropPresetBuiltin => '内置精选';
+
+  @override
   String get visualizerThemeSystem => '跟随系统';
 
   @override

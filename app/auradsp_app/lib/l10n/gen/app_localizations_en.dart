@@ -1976,6 +1976,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get visualizerPickMilkdropFolder => 'Import Preset Directory';
 
   @override
+  String get visualizerCategoryNative => 'Native Styles';
+
+  @override
+  String get visualizerCategoryMilkdrop => 'MilkDrop Presets';
+
+  @override
+  String get visualizerEngineNativeActive => 'libprojectM Hardware Accelerated';
+
+  @override
+  String get visualizerEngineFallbackActive => 'Built-in Procedural Simulation';
+
+  @override
+  String get visualizerDrawerSectionStyle => 'Visualizer Style & Presets';
+
+  @override
+  String get visualizerMilkdropPresetEmpty =>
+      'Import .milk preset scripts or folders using the buttons above';
+
+  @override
+  String get visualizerMilkdropPresetBuiltin => 'Built-in';
+
+  @override
   String get visualizerThemeSystem => 'System Theme';
 
   @override
