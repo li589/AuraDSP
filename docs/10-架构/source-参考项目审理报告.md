@@ -1,14 +1,14 @@
 # source/ 参考项目审理报告
 
-> 版本：**v2.9**（2026-11-14，新增 Windows 驱动双参考：MikeTheTech `Virtual-Audio-Driver` 与 eiz `SynchronousAudioRouter`，扩充 §1 / §2.12 / §4）
-> 范围：`source/` 下全部 21 个第三方参考克隆/归档（19 个顶层目录，含 `ViPER4Windows/ViPERDSP` 与 `vst2sdk/vstsdk2.4` 两个嵌套项）的实测结构、源码完整性、磁盘占用、许可证与算法价值。
-> 定位：只读参考区（.gitignore 排除，不入主库）；本报告为 M1 插件宿主 / Phase 5~8 / 算法对照（M5 细化）提供完整决策依据。
+> 版本：**v3.0**（2026-11-22，新增音频可视化双参考：karlstav `cava` 与 projectM-visualizer `projectm`，扩充 §1 / §2.13 / §2.14 / §4 / §5 / §6）
+> 范围：`source/` 下全部 23 个第三方参考克隆/归档（21 个顶层目录，含 `ViPER4Windows/ViPERDSP` 与 `vst2sdk/vstsdk2.4` 两个嵌套项）的实测结构、源码完整性、磁盘占用、许可证与算法价值。
+> 定位：只读参考区（.gitignore 排除，不入主库）；本报告为 M1 插件宿主 / Phase 5~8 / 算法对照（M5 细化）与新一代音频可视化系统重构提供完整决策依据。
 
 ---
 
 ## 1. 资产总览（实测基线）
 
-截至 2026-11-14，`source/` 下全部 21 个参考项目/归档均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 整体 gitignore，仅 `ORIGIN.md` 白名单入库；从参考仓提取进主库的第三方资产登记见 [`vendor/ORIGIN.md`](../../vendor/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
+截至 2026-11-22，`source/` 下全部 23 个参考项目/归档均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 整体 gitignore，仅 `ORIGIN.md` 白名单入库；从参考仓提取进主库的第三方资产登记见 [`vendor/ORIGIN.md`](../../vendor/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
 
 | # | 目录 | 对应上游仓库 | 平台 / 技术栈 | 许可证 | 实测体积 / 文件数 | 对 AuraDSP 的参考价值与对齐里程碑 |
 |---|---|---|---|---|---|---|
@@ -33,8 +33,10 @@
 | 19 | **vstsdk2.4** | archive.org vstsdk2_4.zip (v2.4 官方归档) | 跨平台 / C++ 官方 SDK | Steinberg Proprietary（**严禁并入主库**） | 21.18 MB (609 文件) | ★★★ **VST 2.4 原厂金标准对照**（官方 doc 详述结构体内存对齐、MIDI 事件、时钟与 Dispatcher 语义，为排查第三方老插件兼容性问题的权威真相源） |
 | 20 | **Virtual-Audio-Driver** | `VirtualDrivers/Virtual-Audio-Driver` (main@bb34fba) | Windows / C++, WDK PortCls+WaveRT | MIT（驱动代码派生自 WDK Sysvad 示例 → 该部分 **MS-PL**） | 717 KB (53 文件) | ★★★ **VAIO 驱动 Capture 侧与空间音效的直接补齐参考**。与本仓 `01_vaio_driver/src/` 同源（皆源自 WDK Sysvad），文件结构几乎一一对应：`Source/Main/minwavert*.cpp` ↔ 本仓 `MiniportWaveRT*.cpp`、`Source/Filters/speakertopo.cpp` ↔ `Topology.cpp`、`Source/Filters/micarraytopo.cpp` + `micarraywavtable.h` ↔ 本仓**缺失的 capture/麦克风阵列端点**、`Source/Inc/endpoints.h` ↔ `AuraVaoTables.h`。另含 Windows Sonic 空间音效挂载、独占模式、应用优先级的驱动侧实现 |
 | 21 | **SynchronousAudioRouter** | `eiz/SynchronousAudioRouter` (master@494ed9a) | Windows / C++, PortCls + ASIO + COM | GPL-3.0（另附 GPL-2.0 文本） | 1.4 MB (129 文件) | ★★★ **「虚拟设备↔ASIO↔物理接口」主时钟同步与多设备编排的正典参考**。`SynchronousAudioRouter/SarWaveFilterDescriptor.cpp` 为 PortCls 过滤器描述符式驱动；`SarAsio/` 是配套 ASIO 驱动（`wrapper.cpp` COM 包装、`mmwrapper.cpp` MMDevice 代理、`sarclient.cpp` 客户端、`ActivateAudioInterfaceWorker.idl` 音频接口激活 worker）—— 对应本仓 `auraasio_bridge`；`SarCtl`/`SarConfigure` 为控制面板；`RioPing`/`nm_ping` 为往返延迟测量工具。核心价值：虚拟流**统一同步到物理接口时钟**以消除漂移与欠载 |
+| 22 | **cava** | `karlstav/cava` (master@505cbf6) | 跨平台 / 纯 C (cavacore, FFTW/iniparser) | MIT | 5.38 MB (157 文件) | ★★★ **音频可视化特征层与物理平滑滤波正典真相源**。其核心核 `cavacore` 提供了对数自适应分频（支持 16~128 条可配频带）、感知等响加权（Acoustic weighting）、重力跌落（gravity fall-off）+ 积分平滑（integral noise reduction）以及实时动态范围自动增益（autosens），彻底解决传统原始 FFT 噪点大、频段拥挤、动感生硬的技术顽疾 |
+| 23 | **projectm** | `projectM-visualizer/projectm` (master@9e26f5b5b) | 跨平台 / C++, C-API (libprojectM v4) | LGPL-2.1 | 43.38 MB (901 文件) | ★★★ **Winamp MilkDrop 预设跨平台渲染引擎金标准**。libprojectM v4 提供了纯 C 外部 API（`projectM-4`）、完整的 `.milk` 预设方程式解析器（Per-frame / Per-pixel EEL 代码编译执行）、Warp 网格形变计算、着色器生成与跨平台 OpenGL/GLES/Metal 离屏渲染管线，是 AuraDSP 原生 MilkDrop 脚本预设引擎接入蓝本 |
 
-总计占用：**~835 MB**，约 **14,953** 个源文件与资源（2026-11-14 复测；较 v2.8 的 801 MB 增加约 34 MB，其中本轮新增两仓净增 2.1 MB）。
+总计占用：**~884 MB**，约 **16,011** 个源文件与资源（2026-11-22 复测；较 v2.9 的 835 MB 净增 48.76 MB / 1,058 文件）。
 
 ---
 
@@ -286,6 +288,43 @@
 - 若推进"虚拟麦克风"与"多设备/ASIO 时钟统一"两件事，这两个仓分别提供**可编译的代码骨架**（前者）与**系统级方案**（后者），且都在 testsigning 前提下与本仓部署方式兼容。
 - 两者均不入主库、不作编译依赖；任何借鉴均按"读懂→按本仓规范重写→独立实现"的净室路径处理。
 
+### 2.13 cava（可视化频谱特征提取与平滑物理层正典真相源，2026-11-22 新增）
+
+- **背景与定位**：karlstav 的 `cava` 是 Linux/跨平台控制台与桌面端声名显赫的音频频谱可视化工具。其核心精华在于独立纯 C 模块 **`cavacore`**（`cavacore.c` / `cavacore.h`），它彻底解决了传统原始 FFT 频谱在可视化中呈现的“高频挤作一团、低频反应迟钝、噪声闪烁剧烈、动态范围忽大忽小”的根本缺陷。
+- **核心算法机制**：
+  1. **自适应对数分频**：不再硬编码频段数量，支持 16~128 条可配频带；根据输入采样率与目标频段数，精确计算每个频带对应的低/高频截止频率 `cut_off_frequency`，并以对数比例切分 FFT bins（`FFTbuffer_lower_cut_off` ~ `upper_cut_off`）。
+  2. **等响度感知加权（Acoustic Weighting）**：人类听觉对高频和超低频敏感度不同，cavacore 在生成 `multiplier` 表时引入了基于人耳感知的非线性增强乘数，保证全频段能量在视觉呈现上均衡。
+  3. **重力跌落（Gravity Fall-off）与积分平滑（Integral Smoothing）**：
+     - 当新一帧能量低于上一帧时，采用自适应重力衰减曲线 `cava_fall` 平滑回落，避免视觉硬切；
+     - 结合历史多帧加权积分（`noise_reduction` 系数，默认 0.77），滤除 FFT 高频微颤噪声，确保柱状图与粒子平滑如丝。
+  4. **动态自动增益（Autosens / AGC）**：实时监测全局峰值能量，自动平缓缩放灵敏度 `sens`，使得无论歌曲是低电平清唱还是高动态交响，频段高度均能优雅填满视口且永不顶格过曝。
+- **对 AuraDSP 的直接价值**：
+  - AuraDSP 现有的 32 频段硬编码提取与 Dart 侧 `PeakPhysicsEngine` 存在部分重叠且动态范围不够自然。参考 `cavacore` 的算法口径，重构特征层为**支持动态可变频带、感知加权、积分+重力双滤波、自动灵敏度**的工业级特征提取引擎，输出统一的 viz+ring / 遥测契约。
+- **许可与隔离**：**MIT 许可证**（高度宽松，完全兼容 GPL-3.0）；依铁律保持在 `source/cava/` 作为只读参考，净室复刻或抽取独立平滑核，严禁主库产生隐式直接构建依赖。
+
+### 2.14 projectm（Winamp MilkDrop 预设跨平台渲染引擎金标准，2026-11-22 新增）
+
+- **背景与定位**：`projectM` 是 Winamp 传奇视效 MilkDrop 的现代跨平台 C/C++ 开源重写版。当前主线为 **libprojectM v4**（`source/projectm/`），支持 Windows、Linux、macOS、Android 等多平台，是全球唯一能 100% 忠实解析并渲染数十万个社区 `.milk` 复杂动态着色器预设的工业级引擎。
+- **核心架构剖析**：
+  1. **纯 C 外部 API 契约（`src/api/include/projectM-4/`）**：
+     - `core.h`：`projectm_create()` / `projectm_destroy()` / `projectm_reset()` 实例生命周期控制。
+     - `audio.h`：`projectm_pcm_add_float()` 线程安全音频 PCM 注入接口，直接喂入立体声浮点采样。
+     - `parameters.h` / `callbacks.h`：预设加载、平滑过渡时间、渲染器状态与回调函数。
+     - `render_opengl.h`：`projectm_opengl_render_frame()` 提供标准 OpenGL / GLES 视口与离屏 FBO 渲染。
+  2. **MilkDropPreset 解析与表达式执行内核**：
+     - 完整实现 MilkDrop 2.x 的 Per-Frame / Per-Vertex 脚本编译器与数学虚拟机（含三角函数、波形变形、随机漂移与网格扭曲 Warp Mesh）；
+     - 动态将预设脚本编译为底层片元着色器（Fragment Shader）与顶点流水线。
+- **对 AuraDSP 的重构战略价值**：
+  - 目前 AuraDSP 内置的画笔“MilkDrop”实际上只是用 CustomPainter 绘制的三种简单极坐标几何图形（容易引起误解与命名混淆）。
+  - 引入真正的 `libprojectm` 原生渲染引擎后，AuraDSP 的预设系统将正式晋升为**双轨架构**：
+    1. **原生 GPU FragmentShader 预设**（轻量极速，由 Flutter 着色器驱动，原内置 MilkDrop 改名为“Harmonic Warp”并 GLSL 化）；
+    2. **MilkDrop 脚本预设引擎**（由 libprojectm 驱动，支持导入海量第三方 `.milk` 预设文件与预设包）。
+- **跨平台接线考量**：
+  - Windows: 基于 OpenGL 上下文离屏渲染至 FBO，经由 Flutter 外部纹理（External Texture）或共享内存传至 Flutter 视图渲染；
+  - Linux: 基于 EGL / OpenGL 离屏 FBO 绑定 Flutter 纹理；
+  - UI 统一性：集成 `PlatformAdapters.instance.picker` 统一文件/文件夹打开交互。
+- **许可与合规**：**LGPL-2.1**（`source/projectm/LICENSE.txt`）。LGPL-2.1 与主库 GPL-3.0 兼容，但需保持动态链接或清晰的 C ABI 隔离，严禁将未封装源码混入主业务树。
+
 ---
 
 ## 3. 算法与系统能力对照矩阵
@@ -315,6 +354,8 @@
 | **虚拟流主时钟同步 / 时钟漂移消除** | 未实现——`auravm_bridge`/`auraasio_bridge`/VAIO 三套时钟域并存，PDC 实测 74.7 ms 量级 | `SynchronousAudioRouter`（新增 #21） | `SynchronousAudioRouter/SarWaveFilterDescriptor.cpp`（PortCls 过滤器描述符式驱动）；`SarAsio/wrapper.cpp`（ASIO 侧时钟与 v-bl 处理） |
 | **多路虚拟流 ↔ 单一多声道 ASIO 聚合** | `auraasio_bridge` 单接口，未做多虚拟流聚合 | `SynchronousAudioRouter`（新增 #21） | `SarAsio/sarclient.cpp`（客户端协议）+ `SarAsio/wrapper.cpp`；通道合并含物理设备全通道 |
 | **应用级音频路由（按进程覆盖默认设备）** | **未实现** | `SynchronousAudioRouter`（新增 #21） | `SarAsio/mmwrapper.cpp`（MMDevice 代理）+ `config.cpp`（正则规则持久化）；`SarCtl/` 控制面板 |
+| **音频可视化特征提取（动态对数频带/等响加权/平滑/AGC）** | 现有 32 段硬编码 FFT + 基础峰值衰减 | `cava`（新增 #22） | `cavacore.c` / `cavacore.h`（可变频带划分、等响度感知倍率、重力衰减+多帧积分平滑、动态自动增益 autosens） |
+| **MilkDrop 脚本预设引擎与离屏渲染** | 原内置 MilkDrop 仅为 CustomPainter 几何近似 | `projectm`（新增 #23） | `src/api/include/projectM-4/`（纯 C 导出 API）+ `src/libprojectM/`（MilkDrop 2.x 方程式与 Warp Mesh 引擎）；跨平台 OpenGL/GLES 渲染管线 |
 
 ---
 
@@ -327,6 +368,7 @@
    - **v2.7 更新（2026-10-25）**：新增 `PeaceTXT-to-EEL-converter/` 克隆（main@5de0462）在登记前已剥除嵌套 `.git`（约 129 KB）；剥除后递归复核仍为 **0**，铁律持续有效。
    - **v2.8 更新（2026-11-02）**：新增 `source/vst2sdk/`，内部包含 Xaymar clean-room 逆向库（vst2sdk）与 Steinberg 官方 2.4 归档（vstsdk2.4）。已彻底剥除 `vst2sdk/vst2sdk/.git` 目录（剥除前约 1.6 MB，剥除后净体积仅 245 KB）；递归复核 `source/` 下 `.git` 数量严格维持为 **0**。已确立法律隔离红线：官方 SDK 仅驻留 `source/` 作只读参考，严禁并入主库；净室库准许作为编译依赖。
    - **v2.9 更新（2026-11-14）**：新增 `source/Virtual-Audio-Driver/`（main@bb34fba）与 `source/SynchronousAudioRouter/`（master@494ed9a）两个克隆。两者在登记前均已剥除嵌套 `.git`：前者剥除前 63 MB（含 `.git`）→ 剥离后 **717 KB / 53 文件**；后者剥除前 6.5 MB → 剥离后 **1.4 MB / 129 文件**。剥除后递归复核 `source/` 下 `.git` 数量严格维持为 **0**，铁律持续有效。附带记录：前者驱动代码派生自微软 WDK Sysvad 示例，仓内自带 `THIRD_PARTY_NOTICES.md` 声明 **MS-PL** 部分；后者树内 `SarAsio/glog` 为 Google logging 库副本（BSD 系），二者均随参考区只读保留，不入主库。
+    - **v3.0 更新（2026-11-22）**：新增 `source/cava/`（master@505cbf6）与 `source/projectm/`（master@9e26f5b5b）两个克隆。两者在登记前均已彻底剥除嵌套 `.git`：cava 剥离前 6.7 MB → 剥离后 **5.38 MB / 157 文件**；projectm 剥离前 242.3 MB → 剥离后 **43.38 MB / 901 文件**。剥除后递归复核 `source/` 下 `.git` 数量严格维持为 **0**，铁律持续有效。两仓许可证分别为 MIT 与 LGPL-2.1，与主库 GPL-3.0 兼容。严守“source/ 只读快照、禁直接链接与代码依赖、所需核心净室抽取或置入独立 bridge/vendor”的工程铁律。
 2. **构建缓存审计**：
    - `source/RootJamesDSP/` 与 `source/RootlessJamesDSP/` 下存在由构建/导入自动生成的 `.gradle/` 目录。该目录仅为本地临时索引，建议后续可选择性清理或保留在本地。
 3. **大文件与二进制包审计**：
@@ -352,6 +394,7 @@
 | **P-10** | ✅ 已闭环 | 新增 LiveprogIDE 参考仓（timschneeb/LiveprogIDE，master@b2f3924） | 2026-10-24 克隆至 `source/`；嵌套 `.git` 已剥除（递归复核 `source/` 下 `.git` 数量 = 0），HEAD 锁定 `b2f3924`，已于 `source/ORIGIN.md` 追加 #16 登记、本报告升版 v2.6（§1 扩至 16 项、新增 §2.9、§3 补充一行、§4 审计更新）。许可研判：根目录**无 LICENSE 文件** → 按 **All Rights Reserved** 处理（timschneeb 作者，与 RootlessJamesDSP 同主；子依赖 QCodeEditor MIT / docking-system LGPL-2.1 各自带许可）。**根无 LICENSE → 代码禁并入 GPL-3.0 主库，仅作 EEL2/Liveprog 脚本编辑器 UX 的阅读参考**（对齐引擎 `engine/legacy/` 的 liveprog 可编程级），维持只读、禁搬运定位。 |
 | **P-11** | ✅ 已闭环 | 新增 PeaceTXT-to-EEL-converter 参考仓（nanbeimerco，main@5de0462） | 2026-10-25 克隆至 `source/`；嵌套 `.git` 已剥除（递归复核 `source/` 下 `.git` 数量 = 0），HEAD 锁定 `5de0462`，已于 `source/ORIGIN.md` 追加 #17 登记、本报告升版 v2.7（§1 扩至 17 项、新增 §2.10、§3 补充一行、§4 审计更新）。许可研判：README 的「ライセンス」章节**声明 MIT**，但**仓库无 LICENSE 文件** → 保守记为「声明 MIT、未落文件」；MIT 与 GPL-3.0 单向兼容，**风险显著低于 #16 LiveprogIDE（ARR，禁并入）**。结论：阅读参考与算法对照无碍；并入代码前须请上游补 LICENSE 或按 RBJ 公式自研重写。随仓 `jszip.min.js`（JSZip v3.10.1）为 MIT/GPLv3 双许可，可自由使用。 |
 | **P-12** | ✅ 已闭环 | 新增 VST2 SDK 双轨参考资产（Xaymar clean-room 与 Steinberg 官方归档） | 2026-11-02 用户置入 `source/vst2sdk/`；嵌套 `.git` 已剥除（递归复核 `source/` 下 `.git` 数量 = 0），HEAD 锁定 `root@339d4f3`，已于 `source/ORIGIN.md` 追加登记、本报告升版 v2.8（§1 扩至 19 项、新增 §2.11、§3 补充一行、§4 审计更新）。确立「编译走 Xaymar Clean-Room BSD-3-Clause、排错对照官方归档、官方源码绝不进主库」的双轨合规准则。 |
+| **P-13** | ✅ 已闭环 | 新增可视化参考仓（karlstav/cava 与 projectM-visualizer/projectm） | 2026-11-22 克隆至 `source/`；二者嵌套 `.git` 已剥除（递归复核 `source/` 下 `.git` 数量 = 0），cava 锁定 `505cbf6`（MIT），projectm 锁定 `9e26f5b5b`（LGPL-2.1），已于 `source/ORIGIN.md` 追加 #22 / #23 登记、本报告升版 v3.0（§1 扩至 23 项、新增 §2.13/§2.14、§3 补充两行、§4 审计更新）。遵循本仓「严禁向 `source/` 添加代码依赖」的准则，重构所需算法与 C-ABI 头文件将通过独立适配层迁移到 `core/desktop/visualizer/`，二者维持只读参考区定位。 |
 
 ---
 
@@ -365,4 +408,8 @@
 6. **Windows APO 路线四维对照（tympan-apo / virtual-surround-sound / equalizerAPO64 / ViPER4Windows）**：Phase 7b 立项时，以 `equalizerAPO64` 为工程主蓝本、`ViPER4Windows` 为轻量闭环对照；`tympan-apo` 用于评估"Rust 重写 APO 层"可行性与 `IAudioSystemEffects v3` / AEC 槽位契约；`virtual-surround-sound` 的 `apo-forwarder-internals.md` 与 SPSC ring 范式作为"RT 线程内转发 + 设备热切换"的实战参考。所有参考维持只读、禁搬运（§2.8）。
 7. **virtual-surround-sound 专有二进制隔离**：将 `tools/SoundVolumeView.exe`（NIRSOFT 专有闭源）纳入本地不入库清单，避免随参考区误提交或分发；该工具仅用于本地端点调试，不参与 AuraDSP 任何构建或分发。
 8. **VAIO 驱动能力扩展（v2.9 新增：capture 端点 / 时钟同步）**：若要推进"虚拟麦克风"与"多路虚拟流时钟统一"两件事——前者以 `source/Virtual-Audio-Driver` 的 `Source/Filters/micarraytopo.cpp` + `micarraywavtable.h` 对照本仓缺失的 capture 端点结构（两仓同源 WDK Sysvad，可直接对读；**其驱动代码含 MS-PL 派生部分，禁复制、只能读懂后重写**）；后者以 `source/SynchronousAudioRouter` 的 `SarAsio/wrapper.cpp`（ASIO 侧时钟与 v-bl 处理）与 `SarWaveFilterDescriptor.cpp`（过滤器描述符式驱动组织）作为主时钟同步与多虚拟流聚合的方案参考。两者均属只读参考区，任何借鉴按"读懂→按本仓规范独立实现"的净室路径处理。
+9. **可视化系统双轨重构与 projectM 引入（v3.0 新增）**：
+   - 特征层按 CAVA 口径升级：对数分频（可变频段 16~128）、感知等响度加权、重力平滑积分与动态 AGC 自适应灵敏度，建立独立跨平台特征引擎并走 `auradsp_viz_frame` / ring 遥测契约。
+   - 渲染层迁往 FragmentShader（GPU GLSL）：重写原生样式预设，降低 CPU 绘图负荷与内存占用，将原内置 "MilkDrop" 样式重命名为 "Harmonic Warp / 极坐标谐波" 消除歧义。
+   - 接入 libprojectm 核心引擎：以独立 C-ABI 适配器桥接 projectM-4，桌面端（Windows/Linux）通过纹理共享或高效像素交换驱动原生 `.milk` 脚本；预设系统统一支持原生 GLSL 预设与 MilkDrop 脚本预设，并以统一资源选择器（`ResourcePicker`）接管文件/目录加载与歌词视窗图层融合。
 
