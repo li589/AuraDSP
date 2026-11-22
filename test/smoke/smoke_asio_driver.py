@@ -257,27 +257,16 @@ class ASIOCallbacks(ctypes.Structure):
         ('bufferSwitchTimeInfo', BufferSwitchTimeInfoProto)
     ]
 
-# Phase 2 诊断选择子
+# 诊断 Future 选择子（只读；2026-11-22 审查 N5 裁定保留）。
+# 控制类选择子（SetBypass/GetBypass/SetParam/GetParam/
+# ApplyParamsString/SetChannels/GetChannels）已删除——控制面
+# 走参数块（生产 App 同一通道，见下方 params_publish）。
 kAuraAsioFutureGetWasapiRenderedFrames = 0x41555201
 kAuraAsioFutureGetWasapiTargetRate      = 0x41555202
 kAuraAsioFutureIsWasapiOpen             = 0x41555203
-
-# Phase 3 DSP 扩展与诊断选择子
 kAuraAsioFutureIsDspLoaded              = 0x41555210
-kAuraAsioFutureSetBypass                = 0x41555211
-kAuraAsioFutureGetBypass                = 0x41555212
-kAuraAsioFutureSetParam                 = 0x41555213
-kAuraAsioFutureGetParam                 = 0x41555214
-kAuraAsioFutureApplyParamsString        = 0x41555215
 kAuraAsioFutureGetDspProcessedFrames    = 0x41555216
 kAuraAsioFutureCopyLastOutputBlock      = 0x41555217
-
-class AuraAsioParamIo(ctypes.Structure):
-    _fields_ = [
-        ('id', ctypes.c_char_p),
-        ('value', ctypes.c_void_p),
-        ('bytes', ctypes.c_uint32)
-    ]
 
 class AuraAsioBlockCopy(ctypes.Structure):
     _fields_ = [
@@ -288,6 +277,63 @@ class AuraAsioBlockCopy(ctypes.Structure):
     ]
 
 FutureFunc = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_long, ctypes.c_void_p)(pAsioVtbl[22])
+
+# ---- 参数块（S4 生产控制面）：本冒烟扮演 App 写者 ----
+# 布局与 AsioDriverShared.h 的 AsioDriverParamsBlock 逐字对齐：
+# magic@0 version@4 seq@8 bypass@12 payloadBytes@16 mute@20，
+# payload@64（NUL 结尾 UTF-8 参数串）。写序与 Dart 发布者一致：
+# 载荷 -> 字节数 -> bypass/mute -> seq 最后递增（驱动以 seq
+# 变化为应用触发）。驱动只 Open 不 Create，本冒烟负责创建。
+_kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+_kernel32.CreateFileMappingW.restype = ctypes.c_void_p
+_kernel32.MapViewOfFile.restype = ctypes.c_void_p
+_kernel32.OpenFileMappingW.restype = ctypes.c_void_p
+_PARAMS_MAGIC = 0x50444141  # 'AADP'
+_params_buf = None
+_params_seq = [0]
+
+def params_ensure():
+    global _params_buf
+    if _params_buf is not None:
+        return True
+    h = _kernel32.CreateFileMappingW(ctypes.c_void_p(-1), None, 0x04, 0, 8192,
+                                     'Global\\AuraDSP_AsioDriverParams')
+    if not h:
+        return False
+    already = ctypes.get_last_error() == 183  # ERROR_ALREADY_EXISTS
+    view = _kernel32.MapViewOfFile(h, 0x000F001F, 0, 0, 8192)
+    if not view:
+        return False
+    _params_buf = (ctypes.c_char * 8192).from_address(view)
+    if not already:
+        ctypes.memset(view, 0, 8192)
+        struct.pack_into('<II', _params_buf, 0, _PARAMS_MAGIC, 1)
+    else:
+        _params_seq[0] = struct.unpack_from('<i', _params_buf, 8)[0]
+    return True
+
+def params_publish(payload, bypass):
+    assert params_ensure()
+    data = payload.encode('utf-8')
+    ctypes.memmove(ctypes.addressof(_params_buf) + 64, data + b'\x00', len(data) + 1)
+    struct.pack_into('<I', _params_buf, 16, len(data))
+    struct.pack_into('<i', _params_buf, 12, bypass)
+    struct.pack_into('<i', _params_buf, 20, 0)
+    _params_seq[0] += 1
+    struct.pack_into('<i', _params_buf, 8, _params_seq[0])
+
+def telemetry_u32(offset):
+    h = _kernel32.OpenFileMappingW(0x0004, False, 'Global\\AuraDSP_AsioDriverTelemetry')
+    if not h:
+        return None
+    view = _kernel32.MapViewOfFile(h, 0x0004, 0, 0, 4096)
+    if not view:
+        return None
+    buf = (ctypes.c_char * 4096).from_address(view)
+    magic = struct.unpack_from('<I', buf, 0)[0]
+    if magic != 0x54444141:  # 'AADT'
+        return None
+    return struct.unpack_from('<I', buf, offset)[0]
 
 switch_count = 0
 test_mode = 'sine'
@@ -339,6 +385,7 @@ StartFunc = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p)(pAsioVtbl[7])
 StopFunc = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p)(pAsioVtbl[8])
 DisposeFunc = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p)(pAsioVtbl[20])
 
+check('params block writer ready (smoke acts as App writer)', params_ensure())
 check('IASIO::start S_OK', StartFunc(pAsio.value) == 0)
 
 # 256 采样 @ 48kHz = 5.333ms / 块；100ms 应收到 18~20 次回调
@@ -374,30 +421,11 @@ check('IASIO::future(kAuraAsioFutureIsDspLoaded) ASE_SUCCESS & loaded==1',
       res_dsp == ASE_SUCCESS and is_dsp_loaded.value == 1,
       f'res={hex(res_dsp)}, loaded={is_dsp_loaded.value}')
 
-# 旁路切换测试
-bypass_val = ctypes.c_long(-1)
-res_gb = FutureFunc(pAsio.value, kAuraAsioFutureGetBypass, ctypes.byref(bypass_val))
-check('IASIO::future(kAuraAsioFutureGetBypass) default is 0 (processing)',
-      res_gb == ASE_SUCCESS and bypass_val.value == 0)
-
-set_bp = ctypes.c_long(1)
-res_sb = FutureFunc(pAsio.value, kAuraAsioFutureSetBypass, ctypes.byref(set_bp))
-check('IASIO::future(kAuraAsioFutureSetBypass(1)) S_OK', res_sb == ASE_SUCCESS)
-
-FutureFunc(pAsio.value, kAuraAsioFutureGetBypass, ctypes.byref(bypass_val))
-check('IASIO::future(kAuraAsioFutureGetBypass) now 1 (bypassed)', bypass_val.value == 1)
-
-# 参数下发与回读测试（使用 post.gain = 6.0dB）
-val_gain = ctypes.c_float(6.0)
-param_set = AuraAsioParamIo(b'post.gain', ctypes.cast(ctypes.byref(val_gain), ctypes.c_void_p), 4)
-res_sp = FutureFunc(pAsio.value, kAuraAsioFutureSetParam, ctypes.byref(param_set))
-check('IASIO::future(kAuraAsioFutureSetParam "post.gain"=6.0) S_OK', res_sp == ASE_SUCCESS)
-
-val_read = ctypes.c_float(0.0)
-param_get = AuraAsioParamIo(b'post.gain', ctypes.cast(ctypes.byref(val_read), ctypes.c_void_p), 4)
-res_gp = FutureFunc(pAsio.value, kAuraAsioFutureGetParam, ctypes.byref(param_get))
-check('IASIO::future(kAuraAsioFutureGetParam "post.gain") returns 6.0',
-      res_gp == ASE_SUCCESS and abs(val_read.value - 6.0) < 1e-4, f'val={val_read.value}')
+# 旁路与参数：改走参数块（生产控制面）。先清场——空参数集的
+# 起点由发布 post.gain=0 + bypass=0 钉住（块 seq 触发整串替换
+# 应用，未列出的参数保持引擎现值，故显式复位用过的参数）。
+params_publish('post.gain=0.0', 0)
+time.sleep(0.06)
 
 # 波形 A/B 实测：注入 0.1 直流测试信号
 test_mode = 'dc'
@@ -407,37 +435,40 @@ out_l = (ctypes.c_float * 256)()
 out_r = (ctypes.c_float * 256)()
 blk = AuraAsioBlockCopy(out_l, out_r, 256, 0)
 
-# 测试 A：Bypass = 1 时输出应完全等于干声 0.1
-time.sleep(0.04)
+# 测试 A：参数块 bypass=1 时输出应完全等于干声 0.1
+params_publish('post.gain=0.0', 1)
+time.sleep(0.06)
 res_cp1 = FutureFunc(pAsio.value, kAuraAsioFutureCopyLastOutputBlock, ctypes.byref(blk))
 check('kAuraAsioFutureCopyLastOutputBlock S_OK', res_cp1 == ASE_SUCCESS and blk.copiedSamples == 256)
-check('Bypass=1 dry waveform matches input 0.1 (+-1%)', abs(out_l[10] - 0.1) < 0.002, f'val={out_l[10]}')
+check('Bypass=1 (via params block) dry waveform matches input 0.1 (+-1%)',
+      abs(out_l[10] - 0.1) < 0.002, f'val={out_l[10]}')
 
-# 测试 B：Bypass = 0（开 DSP），在 post.gain = +6dB 下幅值应精确翻倍至 ~0.2 (ratio=2.0)
-set_bp0 = ctypes.c_long(0)
-FutureFunc(pAsio.value, kAuraAsioFutureSetBypass, ctypes.byref(set_bp0))
-time.sleep(0.04)
+# 测试 B：bypass=0 + 参数块 post.gain=+6dB，幅值应精确翻倍至 ~0.2
+params_publish('post.gain=6.0', 0)
+time.sleep(0.06)
 FutureFunc(pAsio.value, kAuraAsioFutureCopyLastOutputBlock, ctypes.byref(blk))
 ratio = out_l[10] / 0.1 if out_l[10] != 0 else 0.0
-check('Bypass=0 DSP post.gain +6dB doubles amplitude to ~0.2 (ratio ~2.0 +-2%)',
+check('Bypass=0 DSP post.gain +6dB (via params block) doubles amplitude to ~0.2 (ratio ~2.0 +-2%)',
       abs(ratio - 2.0) < 0.04, f'out={out_l[10]}, ratio={ratio}')
 
-# 测试 C：重置 post.gain = 0.0dB，输出恢复至 0.1
-val_zero = ctypes.c_float(0.0)
-param_set_zero = AuraAsioParamIo(b'post.gain', ctypes.cast(ctypes.byref(val_zero), ctypes.c_void_p), 4)
-FutureFunc(pAsio.value, kAuraAsioFutureSetParam, ctypes.byref(param_set_zero))
-time.sleep(0.04)
+# 测试 C：参数块复位 post.gain=0.0dB，输出恢复至 0.1
+params_publish('post.gain=0.0', 0)
+time.sleep(0.06)
 FutureFunc(pAsio.value, kAuraAsioFutureCopyLastOutputBlock, ctypes.byref(blk))
-check('DSP post.gain 0dB returns amplitude to 0.1 (+-1%)', abs(out_l[10] - 0.1) < 0.002, f'val={out_l[10]}')
+check('DSP post.gain 0dB (via params block) returns amplitude to 0.1 (+-1%)',
+      abs(out_l[10] - 0.1) < 0.002, f'val={out_l[10]}')
 
-# 测试 D：字符串参数下发与回读校验
-res_str = FutureFunc(pAsio.value, kAuraAsioFutureApplyParamsString, ctypes.c_char_p(b"bass.enable=1;bass.gain=10.0"))
-check('IASIO::future(kAuraAsioFutureApplyParamsString) S_OK', res_str == ASE_SUCCESS)
-
-val_bass = ctypes.c_float(0.0)
-param_bass = AuraAsioParamIo(b'bass.gain', ctypes.cast(ctypes.byref(val_bass), ctypes.c_void_p), 4)
-FutureFunc(pAsio.value, kAuraAsioFutureGetParam, ctypes.byref(param_bass))
-check('Param "bass.gain" applied via string verified 10.0', abs(val_bass.value - 10.0) < 1e-4, f'val={val_bass.value}')
+# 测试 D：多对参数串整串应用——bass 对随串下发，post.gain 项
+# 以波形翻倍验证整串已生效（单对回读面已随控制选择子删除，
+# 波形即端到端证据）。
+params_publish('bass.enable=1;bass.gain=10.0;post.gain=6.0', 0)
+time.sleep(0.06)
+FutureFunc(pAsio.value, kAuraAsioFutureCopyLastOutputBlock, ctypes.byref(blk))
+ratio_d = out_l[10] / 0.1 if out_l[10] != 0 else 0.0
+check('Multi-pair params string applied via block (post.gain term doubles amplitude)',
+      abs(ratio_d - 2.0) < 0.04, f'out={out_l[10]}, ratio={ratio_d}')
+params_publish('post.gain=0.0', 0)
+time.sleep(0.06)
 
 # 测试 E：DSP 累计处理帧数统计
 dsp_frames = ctypes.c_uint64(0)
@@ -451,32 +482,43 @@ test_mode = 'sine'
 check('IASIO::stop S_OK', StopFunc(pAsio.value) == 0)
 check('IASIO::disposeBuffers S_OK', DisposeFunc(pAsio.value) == 0)
 
-# 测试 F：B2c 多声道档位（2 -> 6）。SetChannels 须在 createBuffers 之前；
-# disposeBuffers 之后 m_buffersAllocated 已复位，可复用同一实例切换档位。
-kAuraAsioFutureSetChannels = 0x41555218
-kAuraAsioFutureGetChannels = 0x41555219
+# 先释放实例一：测试 F 用注册表档位新建实例二（档位在 init 时
+# 读定，同实例无法热切换——与真实 DAW 重开设备同语义）。
+ReleaseFunc = ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(pAsioVtbl[2])
+ref_asio = ReleaseFunc(pAsio.value)
+check('IASIO object released cleanly (ref=0)', ref_asio == 0, f'ref={ref_asio}')
 
-nch6 = ctypes.c_long(6)
-res_set = FutureFunc(pAsio.value, kAuraAsioFutureSetChannels, ctypes.byref(nch6))
-check('future(SetChannels(6)) ASE_SUCCESS', res_set == ASE_SUCCESS)
+# 测试 F：多声道档位（2 -> 6）经注册表档位（生产口径，替代已
+# 删的 SetChannels 选择子）：写 HKCU Channels=6 后新建实例，
+# init 按档位定宽；引擎实际宽度以遥测块 channels 回读为准。
+import winreg
+REG_PATH = r'SOFTWARE\AuraDSP\AsioDriver'
+try:
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_PATH) as _k:
+        _saved_ch = winreg.QueryValueEx(_k, 'Channels')[0]
+except OSError:
+    _saved_ch = None
+with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REG_PATH) as _k:
+    winreg.SetValueEx(_k, 'Channels', 0, winreg.REG_DWORD, 6)
 
-nch_get = ctypes.c_long(0)
-FutureFunc(pAsio.value, kAuraAsioFutureGetChannels, ctypes.byref(nch_get))
-check('future(GetChannels) == 6', nch_get.value == 6, f'{nch_get.value}')
+pAsio2 = ctypes.c_void_p()
+hr2 = CreateInstanceFunc(pFactory.value, None, ctypes.byref(CLSID_AuraAsioDriver), ctypes.byref(pAsio2))
+check('IClassFactory::CreateInstance (tier-6 instance) S_OK', hr2 == 0)
+check('IASIO::init (tier-6) returned true', InitFunc(pAsio2.value, None) == 1)
 
 n_in6 = ctypes.c_long(0)
 n_out6 = ctypes.c_long(0)
-res_ch6 = GetChannelsFunc(pAsio.value, ctypes.byref(n_in6), ctypes.byref(n_out6))
-check('getChannels now (6, 6)', res_ch6 == 0 and n_in6.value == 6 and n_out6.value == 6,
+res_ch6 = GetChannelsFunc(pAsio2.value, ctypes.byref(n_in6), ctypes.byref(n_out6))
+check('getChannels follows registry tier (6, 6)', res_ch6 == 0 and n_in6.value == 6 and n_out6.value == 6,
       f'in={n_in6.value} out={n_out6.value}')
 
 ci5 = ASIOChannelInfo(5, 1, 0, 0, 0, b'')   # channel=5, isInput=1
-res_ci5 = GetChInfoFunc(pAsio.value, ctypes.byref(ci5))
+res_ci5 = GetChInfoFunc(pAsio2.value, ctypes.byref(ci5))
 check('getChannelInfo(In 6) valid Float32LSB',
       res_ci5 == 0 and ci5.type == 19 and ci5.name.decode('ascii').startswith('In 6'),
       f'res={res_ci5} name={ci5.name}')
 ci6 = ASIOChannelInfo(6, 0, 0, 0, 0, b'')   # channel=6, isInput=0（越界）
-check('getChannelInfo(Out 7) out-of-range rejected', GetChInfoFunc(pAsio.value, ctypes.byref(ci6)) != 0)
+check('getChannelInfo(Out 7) out-of-range rejected', GetChInfoFunc(pAsio2.value, ctypes.byref(ci6)) != 0)
 
 buf6 = (ASIOBufferInfo * 12)(
     *[ASIOBufferInfo(1, c, (ctypes.c_void_p * 2)()) for c in range(6)],
@@ -499,37 +541,43 @@ def py_buffer_switch6(idx, direct):
 cb6 = BufferSwitchProto(py_buffer_switch6)
 callbacks6 = ASIOCallbacks(cb6, cb_sr, cb_msg, BufferSwitchTimeInfoProto())
 
-res_create6 = CreateBuffersFunc(pAsio.value, buf6, 12, 256, ctypes.byref(callbacks6))
+res_create6 = CreateBuffersFunc(pAsio2.value, buf6, 12, 256, ctypes.byref(callbacks6))
 check('createBuffers 6in+6out S_OK', res_create6 == 0)
 check('6ch double-buffers allocated non-null',
       all(bool(buf6[i].buffers[0] and buf6[i].buffers[1]) for i in range(12)))
-check('start (6ch) S_OK', StartFunc(pAsio.value) == 0)
+check('start (6ch) S_OK', StartFunc(pAsio2.value) == 0)
 time.sleep(0.12)
 check(f'6ch pump active: {mch_switches[0]} switches (expected ~22)',
       12 <= mch_switches[0] <= 30)
 
-val_cc = ctypes.c_int(0)
-param_cc = AuraAsioParamIo(b'channels.count', ctypes.cast(ctypes.byref(val_cc), ctypes.c_void_p), 4)
-res_cc = FutureFunc(pAsio.value, kAuraAsioFutureGetParam, ctypes.byref(param_cc))
-check('engine channels.count==6 (driver authoritative)',
-      res_cc == ASE_SUCCESS and val_cc.value == 6, f'cc={val_cc.value}')
+# 引擎宽度回读：遥测块 channels（dawCh）应为档位 6
+daw_ch = telemetry_u32(24)
+check('telemetry dawCh == 6 (driver tier authoritative)', daw_ch == 6, f'dawCh={daw_ch}')
 
 out_l6 = (ctypes.c_float * 256)()
 out_r6 = (ctypes.c_float * 256)()
 blk6 = AuraAsioBlockCopy(out_l6, out_r6, 256, 0)
-res_cp6 = FutureFunc(pAsio.value, kAuraAsioFutureCopyLastOutputBlock, ctypes.byref(blk6))
+res_cp6 = FutureFunc(pAsio2.value, kAuraAsioFutureCopyLastOutputBlock, ctypes.byref(blk6))
 check('6ch CopyLastOutputBlock S_OK & copiedSamples==256',
       res_cp6 == ASE_SUCCESS and blk6.copiedSamples == 256,
       f'res={res_cp6} n={blk6.copiedSamples}')
 
-check('stop (6ch) S_OK', StopFunc(pAsio.value) == 0)
-check('disposeBuffers (6ch) S_OK', DisposeFunc(pAsio.value) == 0)
+check('stop (6ch) S_OK', StopFunc(pAsio2.value) == 0)
+check('disposeBuffers (6ch) S_OK', DisposeFunc(pAsio2.value) == 0)
+ref_asio2 = ReleaseFunc(pAsio2.value)
+check('IASIO object (tier-6) released cleanly (ref=0)', ref_asio2 == 0, f'ref={ref_asio2}')
 
-# Release objects
-ReleaseFunc = ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(pAsioVtbl[2])
-ref_asio = ReleaseFunc(pAsio.value)
-check('IASIO object released cleanly (ref=0)', ref_asio == 0, f'ref={ref_asio}')
+# 复原注册表档位（冒烟不得污染用户 App 的真实配置）
+with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REG_PATH) as _k:
+    if _saved_ch is None:
+        try:
+            winreg.DeleteValue(_k, 'Channels')
+        except OSError:
+            pass
+    else:
+        winreg.SetValueEx(_k, 'Channels', 0, winreg.REG_DWORD, _saved_ch)
 
+# Release factory（两个 IASIO 实例已分别在各段末尾释放）
 FactoryRelease = ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(pVtbl[2])
 ref_fact = FactoryRelease(pFactory.value)
 check('ClassFactory released cleanly (ref=0)', ref_fact == 0, f'ref={ref_fact}')

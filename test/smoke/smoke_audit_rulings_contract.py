@@ -7,7 +7,7 @@
 #   N1 插件路径中转围栏：ApoEngineHost 加载插件前过
 #      IsUnderTransitRoot，发布侧经 ApoTransit.transitPluginPathFor；
 #   N4 ASIO 驱动引擎加载无环境变量覆盖、无裸名回落；
-#   N5 私有 future() 选择子常量整套已删。
+#   N5 私有 future() 选择子按裁定拆分：控制类已删、只读诊断类保留。
 # 纯源码契约（不构建），与 smoke_asio_* 同风格。
 import pathlib
 import sys
@@ -57,13 +57,23 @@ check('candidates.push_back(L"auradsp_engine.dll")' not in loader,
 check("windows\\\\out\\\\Release" not in loader,
       "engine loader still has development-tree relative paths")
 
-# --- N5: future() 私有选择子已删 ---
+# --- N5: future() 选择子按裁定拆分（控制删、诊断留） ---
 guid = read("core/desktop/windows-drivers/04_asio_driver/AuraAsioDriverGuid.h")
-check("kAuraAsioFuture" not in guid,
-      "AuraAsioDriverGuid.h still defines future() selectors")
 driver = read("core/desktop/windows-drivers/04_asio_driver/AuraAsioDriver.cpp")
-check("case kAuraAsioFuture" not in driver,
-      "AuraAsioDriver.cpp still handles future() selectors")
+CONTROL = ["SetBypass", "GetBypass", "SetParam", "GetParam",
+           "ApplyParamsString", "SetChannels", "GetChannels"]
+for name in CONTROL:
+    check(f"kAuraAsioFuture{name}" not in guid,
+          f"control selector {name} back in AuraAsioDriverGuid.h")
+    check(f"case kAuraAsioFuture{name}" not in driver,
+          f"control selector {name} back in future()")
+DIAG = ["GetWasapiRenderedFrames", "GetWasapiTargetRate", "IsWasapiOpen",
+        "IsDspLoaded", "GetDspProcessedFrames", "CopyLastOutputBlock"]
+for name in DIAG:
+    check(f"kAuraAsioFuture{name}" in guid,
+          f"diagnostic selector {name} missing from Guid header")
+    check(f"case kAuraAsioFuture{name}" in driver,
+          f"diagnostic selector {name} missing from future()")
 
 if failures:
     print("FAIL smoke_audit_rulings_contract:")

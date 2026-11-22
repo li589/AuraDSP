@@ -362,11 +362,60 @@ ASIOError AuraAsioDriver::future(long selector, void* opt) {
     case kAsioCanTimeCode:
         return ASE_SUCCESS;
 
-    // 2026-11-22 审查 N5 裁定：私有 future() 选择子（原 Phase 2/3
-    // 诊断与控制面，13 个 kAuraAsioFuture*）全仓零调用方——控制面
-    // 已由 S3/S4 的参数/遥测共享块取代（ADR-014），诊断量经遥测块
-    // 回传。整套删除（含 ApplyParamsString 的 += 追加语义与
-    // SetChannels 旁路改宽），未知选择子一律 ASE_NotPresent。
+    // 2026-11-22 审查 N5 裁定：私有 future() 选择子的控制面
+    // （SetBypass/GetBypass/SetParam/GetParam/ApplyParamsString/
+    // SetChannels/GetChannels）已删除——控制面由 S3/S4 参数块
+    // 单独承担（ADR-014），原 ApplyParamsString 的 += 追加语义
+    // 与块路径的替换语义冲突、SetChannels 旁路改宽与注册表档位
+    // 真相冲突。下列六个只读诊断查询保留（实机冒烟
+    // smoke_asio_driver 的驱动探针在用，无等价替代面）；其余
+    // 未知选择子一律 ASE_NotPresent。
+    case kAuraAsioFutureGetWasapiRenderedFrames:
+        if (opt) {
+            *reinterpret_cast<uint64_t*>(opt) = m_wasapiSink.GetTotalFramesRendered();
+            return ASE_SUCCESS;
+        }
+        return ASE_InvalidParameter;
+    case kAuraAsioFutureGetWasapiTargetRate:
+        if (opt) {
+            *reinterpret_cast<double*>(opt) = m_wasapiSink.GetTargetSampleRate();
+            return ASE_SUCCESS;
+        }
+        return ASE_InvalidParameter;
+    case kAuraAsioFutureIsWasapiOpen:
+        if (opt) {
+            *reinterpret_cast<long*>(opt) = m_wasapiSink.IsOpen() ? 1 : 0;
+            return ASE_SUCCESS;
+        }
+        return ASE_InvalidParameter;
+    case kAuraAsioFutureIsDspLoaded:
+        if (opt) {
+            *reinterpret_cast<long*>(opt) = m_engineLoader.IsLoaded() ? 1 : 0;
+            return ASE_SUCCESS;
+        }
+        return m_engineLoader.IsLoaded() ? ASE_SUCCESS : ASE_NotPresent;
+    case kAuraAsioFutureGetDspProcessedFrames:
+        if (opt) {
+            *reinterpret_cast<uint64_t*>(opt) = m_dspProcessedFrames.load(std::memory_order_relaxed);
+            return ASE_SUCCESS;
+        }
+        return ASE_InvalidParameter;
+    case kAuraAsioFutureCopyLastOutputBlock:
+        if (opt) {
+            auto* p = reinterpret_cast<AuraAsioBlockCopy*>(opt);
+            if (p && p->outL && p->outR && p->maxSamples > 0 && m_proc) {
+                const long ch = m_channels;
+                long toCopy = (m_bufferSize < p->maxSamples) ? m_bufferSize : p->maxSamples;
+                // 取处理后块的前两个通道（与历史立体声语义一致，多声道下为 ch0/ch1）
+                for (long i = 0; i < toCopy; ++i) {
+                    p->outL[i] = m_proc[i * ch + 0];
+                    p->outR[i] = (ch > 1) ? m_proc[i * ch + 1] : m_proc[i * ch + 0];
+                }
+                p->copiedSamples = toCopy;
+                return ASE_SUCCESS;
+            }
+        }
+        return ASE_InvalidParameter;
 
     case kAsioCanInputMonitor:
     default:
