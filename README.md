@@ -21,7 +21,7 @@ UI 与引擎之间只有一层 **C ABI**（`engine/auradsp_engine.h`）：UI 不
 - **真插件宿主**：VST3 / CLAP / VST2 三格式、4 槽 × 5 级插入；64 位进程内加载，
   32 位自动经 `plugin_host_x86` 位桥隔离；原生编辑器窗口在 Windows 与 Linux（X11）双平台对等开放。
 - **系统级集成**：自研 AuraVAIO 内核虚拟声卡（多声道 WaveRT）、虚拟 ASIO、系统 APO、Voicemeeter 回调桥。
-- **工程纪律**：RT 线程零分配零锁零 IO；CI 八 job；140+ 冒烟门禁与多道脚本门禁常绿。
+- **工程纪律**：RT 线程零分配零锁零 IO；CI 九 job；170+ 冒烟门禁与多道脚本门禁常绿。
 
 三条贯穿全仓的约束（细节见 [`AGENT.md`](AGENT.md)）：
 
@@ -100,7 +100,7 @@ bash installer/linux/pack.sh --build        # Linux 一键打包（deb / AppImag
 ```text
 engine/        桌面引擎（C++20）：auradsp_engine.{h,cpp,def} C ABI · chain/ 信号链与 IO
                · dsp/ 11 个自研效果 TU · plugins/ 插件宿主 · legacy/ JamesDSP 核 + PATCHES.md
-vendor/        第三方接口头只读（CLAP / VST3 / VST2 净室头）
+vendor/        第三方接口头只读（CLAP / VST3 / VST2 净室头 + libprojectM 头）
 assets/        运行资源（convolver / ddc / liveprog + manifest.json）
 core/desktop/  windows CMake 与构建脚本 · windows-drivers/ VAIO/VM/APO/ASIO 与三桥 · linux CMake
 app/auradsp_app/  Flutter UI（效果卡 / 处理链 / 插件页 / 脚本 IDE / 可视化）
@@ -117,7 +117,7 @@ source/        第三方参考仓库只读快照 · dist/ 发布产物（不进 
 | 门禁 | 覆盖 |
 |---|---|
 | `flutter analyze` / Dart 单测 | 全量 lib + test 零问题；单测按文件串行跑（CI J6） |
-| 引擎冒烟 `test/runner.py` | 144 项登记：DSP 正确性、插件生命周期、桥 ABI、竞态；按平台自动切换 |
+| 引擎冒烟 `test/runner.py` | 174 项登记（2026-11-22 实点）：DSP 正确性、插件生命周期、桥 ABI、竞态；按平台自动切换 |
 | 脚本门禁 | ABI 一致性 · 补丁编号 P-NNN · 静默异常留痕 · EEL 手册↔VM 对账 · 硬编码中文棘轮 |
 | CI（`ci.yml` + `windows-installer.yml`） | 八 job：静态门禁 / 双平台引擎构建 / Linux 冒烟 / ABI / Dart 测试 / 资源守卫 / Linux App 打包 / 安装器 |
 

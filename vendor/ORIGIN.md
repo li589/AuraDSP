@@ -10,8 +10,9 @@
 | clap-api | https://github.com/free-audio/clap（源自 `source/lsp-plugins/modules/lsp-3rd-party/include/clap/`） | `clap/` | 2026-10-10 提取 | CLAP 纯 C ABI 宿主接口头文件（MIT 许可，跨平台一等公民） | 原样未改 |
 | steinberg-vst3 | https://github.com/steinbergmedia/vst3sdk（源自 `source/lsp-plugins/modules/lsp-3rd-party/include/steinberg/`） | `steinberg/` | 2026-10-10 提取 | Steinberg VST3 C++ 宿主接口头文件（GPLv3 路线） | 原样未改 |
 | vst2 | https://github.com/Xaymar/vst2sdk（本地 `source/vst2sdk/vst2sdk`，HEAD `root@339d4f3`） | `vst2/vst.h` + `vst2/LICENSE` | 2026-11-03 收编 | **VST2 宿主唯一编译源**：净室逆向 VST 2.x C ABI（`vst_effect_t` / `VstPluginMain` / opcode），BSD-3-Clause | 原样未改。**注意**：`vst_host_callback_t` 的 `p_int2` 声明为 `int64_t`，32 位宿主必须自定义 `intptr_t` 回调签名，见 `docs/20-执行/VST2插件适配实施计划-2026-11-03.md` D-1a |
+| libprojectm | https://github.com/projectM-visualizer/projectm（本地克隆 `source/projectm`，HEAD `9e26f5b5b`） | `libprojectm/include/projectM-4/`（仅头文件） | v4.2.0，2026-11-22 提取 | libprojectM 公开 C-API 头，供 `core/desktop/visualizer/projectm_bridge/` 与 Dart FFI 编译期引用（LGPL-2.1，动态链接） | 原样未改。**预编译库不在仓内**：桥以 `find_library(REQUIRED)` 依赖外部安装的 libprojectM，且桥构建选项默认 OFF、发行打包未纳入——当前发行实态为桥不可用、走程序化近似回退（详见 `vendor/libprojectm/ORIGIN.md` 与设计方案 2026-11-22 审查附记） |
 
-> **注**：`vendor/` 现已纯化为「行业接口标准只读区」，当前为 `plugin-api/{clap,steinberg,vst2}`。
+> **注**：`vendor/` 为「第三方接口只读区」，当前为 `plugin-api/{clap,steinberg,vst2}` 与 `libprojectm/`（仅头文件，见上表）两部分。
 > libjamesdsp 虽已迁至 `engine/legacy/`，但其「第三方来源 + 深度打补丁」的双重属性不变——
 > `engine/legacy/` 继续视同 vendor 只读，补丁纪律见 `engine/AGENT.md` §4。
 
