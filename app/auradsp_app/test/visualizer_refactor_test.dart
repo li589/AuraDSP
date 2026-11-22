@@ -314,26 +314,6 @@ void main() {
           reason: '流体背景必须整屏在动（当前变化像素=$changed）');
     });
 
-    test('ParticleTornado：随时间旋转且画面有实质变化', () async {
-      final palette = VisualizerPalette.resolve(VisualizerColorTheme.aurora, auraDark);
-      final a = await rasterize(ParticleTornadoPainter(
-        bands: bands(),
-        palette: palette,
-        bloom: 0.5,
-        animationTime: 1.0,
-        lineWidth: 1.5,
-      ));
-      final b = await rasterize(ParticleTornadoPainter(
-        bands: bands(),
-        palette: palette,
-        bloom: 0.5,
-        animationTime: 3.0,
-        lineWidth: 1.5,
-      ));
-      expect(changedPixels(a, b), greaterThan(300),
-          reason: '龙卷风必须持续旋转/上升');
-    });
-
     test('MilkDrop：拓扑缓慢连续旋转（相隔 2 秒仍有明显位移）', () async {
       final palette = VisualizerPalette.resolve(VisualizerColorTheme.neonCyber, auraDark);
       final preset = MilkdropPreset.builtInPresets.first;
@@ -367,29 +347,21 @@ void main() {
       expect(VisualizerStyle.nebulaFlow.labelOf(ja), '星雲');
     });
 
-    test('NebulaFlow 与 ParticleTornado 零错误绘制且边界安全', () {
+    test('Backdrop 基底画笔零错误绘制且边界安全', () {
+      // tornado/nebulaFlow 样式本体已由 GPU 着色器路径承担
+      // （分发器路由有独立覆盖）；本文件只保留两个样式的静态
+      // 基底画笔（viewport 实际在用）的边界安全断言。原
+      // ParticleTornadoPainter/NebulaFlowPainter 已于 2026-11-23
+      // 作为死代码删除（分发器改道后零生产引用）。
       final palette = VisualizerPalette.resolve(VisualizerColorTheme.aurora, auraDark);
-      final testBands = bands();
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
 
-      // 零尺寸与正常尺寸边界测试
-      final nebula = NebulaFlowPainter(
-        bands: testBands,
-        palette: palette,
-        bloom: 0.5,
-        animationTime: 2.5,
-      );
+      final nebula = NebulaBackdropPainter(palette: palette, bloom: 0.5);
       nebula.paint(canvas, Size.zero);
       nebula.paint(canvas, const Size(1920, 1080));
 
-      final tornado = ParticleTornadoPainter(
-        bands: testBands,
-        palette: palette,
-        bloom: 0.5,
-        animationTime: 2.5,
-        lineWidth: 1.5,
-      );
+      final tornado = TornadoBackdropPainter(palette: palette, bloom: 0.5);
       tornado.paint(canvas, Size.zero);
       tornado.paint(canvas, const Size(1920, 1080));
     });
