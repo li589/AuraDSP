@@ -34,16 +34,17 @@ public:
     bool Load(const std::wstring& hint = L"") {
         if (m_hModule && m_pfnProcess) return true;
 
+        // 加载纪律（2026-11-22 审查 N4 裁定，与 APO 侧 A2 对齐）：
+        // 候选只许两处——① 本驱动 DLL 同目录；② 安装目录
+        // （Program Files\AuraDSP）。旧版的环境变量覆盖、开发树
+        // 相对路径、宿主 EXE 目录与裸名回落已全部删除：本 DLL 跑在
+        // DAW 进程内，上述任一路径都等于让宿主目录/环境决定加载
+        // 哪份引擎，属于 DLL 劫持面。两处皆缺 → 装载失败、驱动
+        // 直通（fail-closed），不做任何全局搜索。
         std::vector<std::wstring> candidates;
         if (!hint.empty()) candidates.push_back(hint);
 
-        // 1. 环境变量显式指定优先
-        wchar_t envBuf[MAX_PATH] = {0};
-        if (GetEnvironmentVariableW(L"AURADSP_ENGINE_DLL", envBuf, MAX_PATH) > 0) {
-            candidates.push_back(envBuf);
-        }
-
-        // 2. 本驱动 DLL 所在目录及工程相对路径
+        // 1. 本驱动 DLL 所在目录
         HMODULE hThisMod = nullptr;
         GetModuleHandleExW(
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -56,25 +57,12 @@ public:
                 size_t k = s.find_last_of(L"\\/");
                 std::wstring dir = (k == std::wstring::npos) ? L"." : s.substr(0, k);
                 candidates.push_back(dir + L"\\auradsp_engine.dll");
-                // windows-drivers/out/Release -> windows/out/Release
-                candidates.push_back(dir + L"\\..\\..\\..\\windows\\out\\Release\\auradsp_engine.dll");
             }
         }
 
-        // 3. 当前主进程 EXE 所在目录
-        wchar_t exePath[MAX_PATH] = {0};
-        if (GetModuleFileNameW(nullptr, exePath, MAX_PATH) > 0) {
-            std::wstring s(exePath);
-            size_t k = s.find_last_of(L"\\/");
-            std::wstring dir = (k == std::wstring::npos) ? L"." : s.substr(0, k);
-            candidates.push_back(dir + L"\\auradsp_engine.dll");
-            candidates.push_back(dir + L"\\..\\..\\..\\windows\\out\\Release\\auradsp_engine.dll");
-        }
-
-        // 4. 标准安装路径与全局搜索
+        // 2. 标准安装目录（至多到此为止）
         candidates.push_back(L"C:\\Program Files\\AuraDSP\\auradsp_engine.dll");
         candidates.push_back(L"C:\\Program Files\\AuraDSP\\bin\\auradsp_engine.dll");
-        candidates.push_back(L"auradsp_engine.dll");
 
         for (const auto& path : candidates) {
             HMODULE h = LoadLibraryW(path.c_str());
