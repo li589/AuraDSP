@@ -1631,7 +1631,9 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
 
     g_vaio.pMappedRing = mapResp.UserAddress;
     g_vaio.pRingHeader = reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(mapResp.UserAddress);
-    g_vaio.pRingPayload = (BYTE*)mapResp.UserAddress + g_vaio.pRingHeader->DataOffsetBytes;
+    g_vaio.pRingPayload = (BYTE*)mapResp.UserAddress +
+        (mapResp.HeaderSizeBytes ? mapResp.HeaderSizeBytes
+                                 : g_vaio.pRingHeader->DataOffsetBytes);
     // 工作几何以 MAP 应答的内核真值为准（第四轮项 3 / DRV-03 口径）：
     // 此前读共享头副本——头由内核在格式变更时同锁同写、实践中不
     // 分歧，但应答是 IOCTL 当场从内核全局读出的权威值；头字段留

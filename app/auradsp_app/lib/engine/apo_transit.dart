@@ -36,6 +36,10 @@ abstract final class ApoTransit {
 
   static bool isTransitPath(String path) {
     final norm = path.replaceAll('/', r'\').toLowerCase();
+    // A ".." segment would resolve outside the root while passing
+    // the prefix test; the host fence canonicalizes, this side
+    // rejects outright so such a path is re-copied, not trusted.
+    if (norm.split(r'\').contains('..')) return false;
     final r = root.replaceAll('/', r'\').toLowerCase();
     return norm == r || norm.startsWith('$r\\');
   }

@@ -34,6 +34,13 @@ check("GA;;;WD" not in aura_apo, "AuraApo.cpp heartbeat SDDL still grants Everyo
 check("GA;;;IU" in aura_apo, "AuraApo.cpp heartbeat SDDL missing Interactive User")
 dart_apo = read("app/auradsp_app/lib/engine/audio_isolate_apo.dart")
 check("GA;;;WD" not in dart_apo, "Dart _apoSharedSddl still grants Everyone")
+
+asio_drv = read("core/desktop/windows-drivers/04_asio_driver/AuraAsioDriver.cpp")
+check("GA;;;WD" not in asio_drv, "ASIO telemetry SDDL still grants Everyone")
+check("GA;;;IU" in asio_drv, "ASIO telemetry SDDL missing Interactive User")
+dart_asio = read("app/auradsp_app/lib/engine/audio_isolate_asio.dart")
+check("GA;;;WD" not in dart_asio, "Dart _asioSharedSddl still grants Everyone")
+check("GA;;;IU" in dart_asio, "Dart _asioSharedSddl missing Interactive User")
 check("GA;;;IU" in dart_apo, "Dart _apoSharedSddl missing Interactive User")
 
 # --- N1: 插件围栏（宿主校验 + 发布侧中转） ---

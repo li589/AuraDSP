@@ -63,7 +63,16 @@ bool IsUnderTransitRoot(const std::string& utf8Path) {
     std::wstring w((size_t)len, L'\0');
     MultiByteToWideChar(CP_UTF8, 0, utf8Path.c_str(), (int)utf8Path.size(),
                         w.data(), len);
-    const std::wstring p = NormalizeForCompare(w);
+    // Canonicalize lexically before the prefix test:
+    // GetFullPathNameW resolves "." / ".." segments without
+    // touching the filesystem. A raw prefix test passes
+    // "apo-assets\..\..\Users\x\evil.dll", which the loader
+    // then resolves OUTSIDE the transit root - the fence would
+    // be decorative for exactly the paths it exists to reject.
+    wchar_t canon[MAX_PATH] = {};
+    const DWORD cn = GetFullPathNameW(w.c_str(), MAX_PATH, canon, nullptr);
+    if (cn == 0 || cn >= MAX_PATH) return false;
+    const std::wstring p = NormalizeForCompare(std::wstring(canon, cn));
     return p.size() > rootNorm.size() &&
            p.compare(0, rootNorm.size(), rootNorm) == 0;
 }
@@ -73,7 +82,7 @@ HANDLE CreateSharedMapping(const wchar_t* name, DWORD bytes) {
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
             AURA_APO_SHARED_SDDL, SDDL_REVISION_1, &sd, nullptr) &&
         // Win7 退路（见 ApoShared.h 的 FALLBACK 注）：含
-        // AppContainer ACE 的 SDDL 若解析失败，退回 LS/WD 口径。
+        // AppContainer ACE 的 SDDL 若解析失败，退回 LS/IU 口径。
         !ConvertStringSecurityDescriptorToSecurityDescriptorW(
             AURA_APO_SHARED_SDDL_FALLBACK, SDDL_REVISION_1, &sd, nullptr))
         return nullptr;
@@ -587,7 +596,7 @@ void ApoEngineHost::WorkerLoop() {
             const auto* hdr = (const ApoParamBlockHeader*)paramView_;
             uint32_t s1 = hdr->writeSeq;
             if ((s1 & 1u) == 0 && hdr->magic == APO_PARAMS_MAGIC &&
-                hdr->version >= 2 && hdr->version <= APO_PARAMS_VERSION) {
+                hdr->version == APO_PARAMS_VERSION) {
                 memcpy(snap.data(), paramView_, APO_BLOCK_USED_BYTES);
                 if (hdr->writeSeq == s1) ApplySnapshot(snap.data(), (const uint32_t*)snap.data());
             }

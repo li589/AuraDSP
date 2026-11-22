@@ -437,7 +437,7 @@ void AuraAsioDriver::OpenTelemetry() {
     CloseTelemetry();
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            L"D:(A;;GA;;;WD)", SDDL_REVISION_1, &sd, nullptr)) {
+            L"D:(A;;GA;;;IU)", SDDL_REVISION_1, &sd, nullptr)) {
         return;
     }
     SECURITY_ATTRIBUTES sa{};
@@ -677,7 +677,7 @@ DWORD AuraAsioDriver::PumpLoop() {
                 memset(m_proc, 0, (size_t)m_bufferSize * (size_t)ch * sizeof(float));
             } else if (m_engine && !m_bypass.load(std::memory_order_relaxed)) {
                 // 交织 DAW 输出送入 DSP 处理
-                m_engineLoader.Process(m_engine, m_interleavedIn, m_interleavedOut, (int)m_bufferSize);
+                m_engineLoader.Process(m_engine, m_interleavedIn, m_interleavedOut, (int)m_bufferSize, (int)m_channels);
                 memcpy(m_proc, m_interleavedOut, (size_t)m_bufferSize * (size_t)ch * sizeof(float));
                 m_dspProcessedFrames.fetch_add((uint64_t)m_bufferSize, std::memory_order_relaxed);
             } else {

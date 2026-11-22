@@ -237,10 +237,14 @@ void AuraAsioWasapiSink::DrainToWasapi() {
             m_fifoRead = (m_fifoRead + 1) % kFifoCapacity;
             m_fifoCount--;
 
-            dst[i * m_targetChannels + 0] = L;
-            dst[i * m_targetChannels + 1] = R;
-            for (int c = 2; c < m_targetChannels; ++c) {
-                dst[i * m_targetChannels + c] = 0.0f;
+            if (m_targetChannels == 1) {
+                dst[i] = (L + R) * 0.5f;
+            } else {
+                dst[i * m_targetChannels + 0] = L;
+                dst[i * m_targetChannels + 1] = R;
+                for (int c = 2; c < m_targetChannels; ++c) {
+                    dst[i * m_targetChannels + c] = 0.0f;
+                }
             }
         }
     } else if (m_bitsPerSample == 16) {
@@ -254,10 +258,14 @@ void AuraAsioWasapiSink::DrainToWasapi() {
             if (L > 1.0f) L = 1.0f; else if (L < -1.0f) L = -1.0f;
             if (R > 1.0f) R = 1.0f; else if (R < -1.0f) R = -1.0f;
 
-            dst[i * m_targetChannels + 0] = (int16_t)(L * 32767.0f);
-            dst[i * m_targetChannels + 1] = (int16_t)(R * 32767.0f);
-            for (int c = 2; c < m_targetChannels; ++c) {
-                dst[i * m_targetChannels + c] = 0;
+            if (m_targetChannels == 1) {
+                dst[i] = (int16_t)((L + R) * 0.5f * 32767.0f);
+            } else {
+                dst[i * m_targetChannels + 0] = (int16_t)(L * 32767.0f);
+                dst[i * m_targetChannels + 1] = (int16_t)(R * 32767.0f);
+                for (int c = 2; c < m_targetChannels; ++c) {
+                    dst[i * m_targetChannels + c] = 0;
+                }
             }
         }
     } else if (m_bitsPerSample == 24 || m_bitsPerSample == 32) {

@@ -31,7 +31,7 @@ public:
         Unload();
     }
 
-    bool Load(const std::wstring& hint = L"") {
+    bool Load() {
         if (m_hModule && m_pfnProcess) return true;
 
         // 加载纪律（2026-11-22 审查 N4 裁定，与 APO 侧 A2 对齐）：
@@ -42,7 +42,6 @@ public:
         // 哪份引擎，属于 DLL 劫持面。两处皆缺 → 装载失败、驱动
         // 直通（fail-closed），不做任何全局搜索。
         std::vector<std::wstring> candidates;
-        if (!hint.empty()) candidates.push_back(hint);
 
         // 1. 本驱动 DLL 所在目录
         HMODULE hThisMod = nullptr;
@@ -138,11 +137,12 @@ public:
 
     bool HasViz() const { return m_pfnVizRead != nullptr; }
 
-    void Process(void* handle, const float* in, float* out, int frames) {
+    void Process(void* handle, const float* in, float* out, int frames,
+                 int channels) {
         if (m_pfnProcess && handle) {
             m_pfnProcess(handle, in, out, frames);
-        } else if (out && in && frames > 0) {
-            memcpy(out, in, (size_t)frames * 2 * sizeof(float));
+        } else if (out && in && frames > 0 && channels > 0) {
+            memcpy(out, in, (size_t)frames * (size_t)channels * sizeof(float));
         }
     }
 
@@ -162,7 +162,10 @@ public:
 
     int ApplyParamsString(void* handle, const char* s) {
         if (!s || !*s || !handle || !m_pfnSetParam) return -1;
-        char buf[4096] = {0};
+        // Sized from the params-block contract cap: a smaller
+        // fixed buffer silently truncated long payloads and the
+        // tail parameters never reached the DAW-side engine.
+        char buf[ASIO_DRIVER_PARAMS_PAYLOAD_CAP + 1] = {0};
         strncpy_s(buf, s, sizeof(buf) - 1);
         int applied = 0;
         char* nextTok = nullptr;

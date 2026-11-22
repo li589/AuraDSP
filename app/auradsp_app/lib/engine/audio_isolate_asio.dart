@@ -27,9 +27,12 @@ const int _asioParamsPayloadOffset = 64;
 const int _asioParamsPayloadCap = _asioParamsBytes - _asioParamsPayloadOffset - 1;
 const int _asioTelemetryMagic = 0x54444141; // 'AADT'
 const int _asioTelemetryBytes = 4096;
-// 参数块读者是同用户的 DAW 进程：全员可读写描述符足够（与驱动
-// 遥测块的 SDDL 同口径），不需 APO 的 LPAC 穿透描述符。
-const String _asioSharedSddl = 'D:(A;;GA;;;WD)';
+// 参数块读者是同用户的 DAW 进程：IU（交互用户）口径——App 与
+// DAW 都以同一交互用户运行，IU 足够且必要；WD（Everyone）会让
+// 任意本地进程/用户都能向 DAW 侧引擎注入参数串（N1 在 APO 块
+// 上已关掉的同类面，2026-11-23 审查补齐到 ASIO 两块）。不需
+// APO 的 LPAC 穿透描述符（读者不是 AppContainer）。
+const String _asioSharedSddl = 'D:(A;;GA;;;IU)';
 
 /// 参数块发布者（虚拟形态激活；Client 形态下恒空操作）。
 class AsioParamPublisher {

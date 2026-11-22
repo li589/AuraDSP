@@ -897,6 +897,7 @@ void arbmag_pool_process_strided(auradsp_handle h, float* io, int frames,
  * 定义置于 MC 链之前：调用点在定义前，static inline 亦须先声明后使用。 */
 static inline void sample_stage_peak_mc(auradsp_handle h, int stage_idx,
                                         const float* interleaved, int frames, int ch) {
+    if (ch > AURADSP_CH_MAX) ch = AURADSP_CH_MAX;
     float pk[AURADSP_CH_MAX] = {};
     for (int i = 0; i < frames; ++i) {
         const float* row = interleaved + (size_t)i * ch;
