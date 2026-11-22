@@ -351,7 +351,7 @@ if (-not $SkipDrivers) {
     # 校验产物：多数是 .exe，AuraApo 是 DLL（APO 驱动），按实际扩展名找。
     $Missing = @()
     foreach ($t in $TestTargets) {
-        $ext = if ($t -eq "AuraApo") { ".dll" } else { ".exe" }
+        $ext = if ($t -eq "AuraApo") { ".dll" } elseif ($t -eq "auradsp_test_latency") { ".clap" } else { ".exe" }
         $hit = @(Get-ChildItem -Path (Join-Path $ProjectRoot "core\desktop") -Filter "$t$ext" `
             -Recurse -File -ErrorAction SilentlyContinue)
         if ($hit.Count -eq 0) { $Missing += "$t$ext" }
