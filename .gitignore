@@ -20,6 +20,7 @@ venv/
 .codegraph/
 .v2c/
 .video_agent/
+.mcp.json
 
 # --- 构建产物 ---
 **/out/
