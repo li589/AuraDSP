@@ -414,6 +414,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
                             spectrum: widget.model.spectrum,
                             levelL: widget.model.levelL,
                             levelR: widget.model.levelR,
+                            projectmPcm: widget.model.projectmPcmSnapshot,
                             config: config,
                             displayMode: _displayMode,
                             onStyleChanged: (st) => widget.model

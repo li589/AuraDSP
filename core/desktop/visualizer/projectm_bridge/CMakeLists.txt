@@ -10,8 +10,25 @@ if(NOT AURADSP_BUILD_PROJECTM_BRIDGE)
     return()
 endif()
 
+set(AURADSP_PROJECTM_ROOT "" CACHE PATH
+    "Root of an installed projectM SDK")
+set(AURADSP_PROJECTM_INCLUDE_DIR "" CACHE PATH
+    "Directory containing projectM-4 headers")
+
+if(NOT AURADSP_PROJECTM_INCLUDE_DIR)
+    if(AURADSP_PROJECTM_ROOT AND EXISTS "${AURADSP_PROJECTM_ROOT}/include/projectM-4/core.h")
+        set(AURADSP_PROJECTM_INCLUDE_DIR "${AURADSP_PROJECTM_ROOT}/include")
+    else()
+        set(AURADSP_PROJECTM_INCLUDE_DIR
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../../../vendor/libprojectm/include")
+    endif()
+endif()
+
 find_library(AURADSP_PROJECTM_LIBRARY
     NAMES projectM-4 projectM-4d projectM
+    HINTS
+        "${AURADSP_PROJECTM_ROOT}/lib"
+        "${AURADSP_PROJECTM_ROOT}/bin"
     REQUIRED)
 find_package(OpenGL REQUIRED)
 
@@ -24,15 +41,13 @@ add_library(projectm_bridge SHARED
 
 target_include_directories(projectm_bridge PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../vendor/libprojectm/include
+    "${AURADSP_PROJECTM_INCLUDE_DIR}"
 )
 
 target_link_libraries(projectm_bridge PRIVATE
     "${AURADSP_PROJECTM_LIBRARY}"
     OpenGL::GL
 )
-
-target_compile_definitions(projectm_bridge PRIVATE projectM_EXPORTS)
 
 target_compile_options(projectm_bridge PRIVATE
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fvisibility=default>

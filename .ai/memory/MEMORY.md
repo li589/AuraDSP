@@ -532,3 +532,9 @@ tools/sync_artifacts.ps1 分发 test/ 等三处。
   扫描口径（11-04 起）——快扫本地、深扫按位数进对应宿主，**进程内/外结果一致**；
   `AURA_PLUGIN_DEEP_SCAN=inproc` 回退引擎内深扫（此时 VST2 仍只快扫，安全铁律）。
   AU 未规划，LV2 暂缓。
+
+## projectM 可视化桥（2026-11-22 阶段状态）
+- projectM 是可选能力，`AURADSP_BUILD_PROJECTM_BRIDGE` 默认关闭；无 native frame 时必须保留 `MilkdropPainter` fallback。
+- 安全 PCM 只能取自本地 `Source.fill()` 原始交错双声道样本，不能从桥接 telemetry、频谱或电平反推。消息快照上限 512 stereo frames；Dart 与 native ABI 均校验通道数、偶数样本、帧上限、finite 与 [-1,1] 范围，非法整批拒绝。
+- portable OpenGL `glGetString(GL_VERSION)` 只能证明当前线程存在某个 GL context，不能证明它与 Flutter/Skia 或创建时 context 相同。Native bridge 调用须保持创建线程及同一已验证 context；宿主未提供 context identity verifier 时禁止初始化，继续 fallback。
+- Flutter viewport 预留可选 bridge/PCM 注入点，但应用组合根尚未注入 native bridge；widget/build/render 路径不直接调用 FFI。没有经验证的 Flutter context provider 时生产路径继续使用 MilkDrop。真实 SDK/context 下的 native 构建和运行验证仍待完成。

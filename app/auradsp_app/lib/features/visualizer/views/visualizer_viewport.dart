@@ -14,6 +14,7 @@ import '../styles/style_tornado.dart';
 import '../styles/visualizer_painter_dispatcher.dart';
 import '../styles/visualizer_static_grid.dart';
 import '../styles/visualizer_time_aware.dart';
+import '../plugins/projectm_bridge_contract.dart';
 import 'visualizer_db_scale.dart';
 
 /// 画笔包装：数据驱动风格（频谱柱/示波器/相位仪）不挂时间监听，
@@ -103,6 +104,8 @@ class VisualizerCanvasViewport extends StatefulWidget {
   final ValueListenable<List<double>> spectrum;
   final ValueListenable<double> levelL;
   final ValueListenable<double> levelR;
+  final ValueListenable<List<double>>? projectmPcm;
+  final ProjectMBridge? projectMBridge;
   final VisualizerConfig config;
   final VisualizerPalette palette;
   final PeakPhysicsEngine peakEngine;
@@ -114,6 +117,8 @@ class VisualizerCanvasViewport extends StatefulWidget {
     required this.spectrum,
     required this.levelL,
     required this.levelR,
+    this.projectmPcm,
+    this.projectMBridge,
     required this.config,
     required this.palette,
     required this.peakEngine,
@@ -204,6 +209,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
       renderedBands,
       peaks,
       separateGrid,
+      widget.projectMBridge,
     );
     if (_delegate == null || _delegateKey != key) {
       _delegateKey = key;
@@ -216,6 +222,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         waveformSynth: widget.waveformSynth,
         time: widget.time.value,
         showGrid: separateGrid ? false : null,
+        projectMBridge: widget.projectMBridge,
       );
     }
     return _delegate!;

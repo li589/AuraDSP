@@ -21,6 +21,7 @@ extension StateEvents on AppModel {
   /// 态（count=0，UI 回退 L/R 两柱）。
   void _clearVizState() {
     spectrum.value = List<double>.filled(32, 0.0);
+    projectmPcmSnapshot.value = <double>[];
     eqInSpectrum.value = List<double>.filled(32, 0.0);
     levelL.value = -90.0;
     levelR.value = -90.0;
@@ -1040,6 +1041,30 @@ extension StateEvents on AppModel {
           _vizDisplayCleared = false;
         }
         spectrum.value = (raw['spectrum'] as List).cast<double>();
+        final pcm = raw['pcm'];
+        if (vizBackend == 'local' && raw['pcmSource'] == 'source' && pcm is List) {
+          if (pcm.length <= 1024 && pcm.length.isEven) {
+            final samples = <double>[];
+            var valid = true;
+            for (final value in pcm) {
+              if (value is! num) {
+                valid = false;
+                break;
+              }
+              final sample = value.toDouble();
+              if (!sample.isFinite || sample < -1.0 || sample > 1.0) {
+                valid = false;
+                break;
+              }
+              samples.add(sample);
+            }
+            projectmPcmSnapshot.value = valid ? samples : <double>[];
+          } else {
+            projectmPcmSnapshot.value = <double>[];
+          }
+        } else {
+          projectmPcmSnapshot.value = <double>[];
+        }
         if (raw['eqIn'] != null) {
           eqInSpectrum.value = (raw['eqIn'] as List).cast<double>();
         }

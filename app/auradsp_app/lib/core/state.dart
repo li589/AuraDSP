@@ -1120,6 +1120,7 @@ class AppModel extends ChangeNotifier {
     connTick.value++;
   }
   final spectrum = ValueNotifier<List<double>>(List.filled(32, 0));
+  final projectmPcmSnapshot = ValueNotifier<List<double>>(<double>[]);
 
   /// vendor 链入口（= 均衡器输入）的 32 段频谱，口径与 [spectrum] 相同。
   ///
@@ -1723,6 +1724,7 @@ class AppModel extends ChangeNotifier {
     _iso?.kill(priority: Isolate.beforeNextEvent);
     _fromIso?.close();
     spectrum.dispose();
+    projectmPcmSnapshot.dispose();
     eqInSpectrum.dispose();
     levelL.dispose();
     levelR.dispose();

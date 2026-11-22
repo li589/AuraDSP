@@ -3017,6 +3017,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               final sp = fr.spectrumToList();
               final eqIn = fr.eqInSpectrumToList();
               final stageL = fr.stageLevelsLToList();
+              final pcmFrames = math.min(frames, 512);
+              final pcmSnapshot = srcPaused
+                  ? const <double>[]
+                  : List<double>.of(srcBuf.take(pcmFrames * 2));
               lastSpectrumLen = sp.length;
               lastStageLen = stageL.length;
               if (vizCount <= 5 || vizCount % 100 == 0) {
@@ -3028,6 +3032,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               send({
                 'evt': 'viz',
                 'spectrum': sp,
+                'pcmSource': pcmSnapshot.isEmpty ? null : 'source',
+                'pcm': pcmSnapshot,
                 'eqIn': eqIn,
                 'l': fr.levelLDbfs,
                 'r': fr.levelRDbfs,

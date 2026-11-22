@@ -5,6 +5,20 @@ import 'package:flutter/foundation.dart';
 import '../../../platform/platform_profile.dart';
 import 'milkdrop_preset.dart';
 
+/// Dart-side mirror of the projectM PCM ABI guard.
+///
+/// PCM is interleaved and bounded before it reaches FFI. Native code repeats
+/// the same checks because Dart validation is not a substitute for an ABI
+/// boundary check.
+bool isValidProjectMPcm(List<double> pcmFrames, {int channels = 2}) {
+  if (pcmFrames.isEmpty || (channels != 1 && channels != 2)) return false;
+  if (pcmFrames.length % channels != 0) return false;
+  if (pcmFrames.length ~/ channels > 2048) return false;
+  return pcmFrames.every(
+    (sample) => sample.isFinite && sample >= -1.0 && sample <= 1.0,
+  );
+}
+
 /// Dart contract for the AuraDSP projectM C ABI.
 ///
 /// The native bridge owns the OpenGL context-bound projectM instance. Pixel
@@ -66,7 +80,9 @@ class MockProjectMBridge implements ProjectMBridge {
   }
 
   @override
-  void feedPcm(List<double> pcmFrames, {int channels = 2}) {}
+  void feedPcm(List<double> pcmFrames, {int channels = 2}) {
+    if (!isValidProjectMPcm(pcmFrames, channels: channels)) return;
+  }
 
   @override
   int renderFrame() => -2;

@@ -17,10 +17,14 @@ Map<String, dynamic> _viz({
   String? backend,
   double fill = 0.5,
   int chCount = 2,
+  List<double>? pcm,
+  String? pcmSource,
 }) =>
     {
       'evt': 'viz',
       'backend': ?backend,
+      'pcm': ?pcm,
+      'pcmSource': ?pcmSource,
       'spectrum': List<double>.filled(32, fill),
       'eqIn': List<double>.filled(32, fill),
       'l': -6.0,
@@ -127,17 +131,43 @@ void main() {
       expect(model.vizSource, 'local');
     }, testOn: 'windows');
 
-    test('capture chain accepts untagged (local) frames only', () {
+    test('capture chain accepts PCM only from a validated local source frame', () {
       final model = AppModel(testing: true);
       model.setAudioMode('vaio');
       model.setPipelineInput(AudioModes.inputWasapi);
       model.setPipelineOutput(AudioModes.outputWasapi);
       expect(model.expectedVizBackend, 'local');
-      model.handleMessageForTesting(_viz(backend: 'vaio'));
+      model.handleMessageForTesting(
+        _viz(backend: 'vaio', pcm: [0.1, -0.1], pcmSource: 'source'),
+      );
       expect(_spectrumZero(model), isTrue);
+      expect(model.projectmPcmSnapshot.value, isEmpty);
+
       model.handleMessageForTesting(_viz()); // 无 backend 键 = local
       expect(_spectrumHot(model), isTrue);
       expect(model.vizSource, 'local');
+      expect(model.projectmPcmSnapshot.value, isEmpty,
+          reason: 'telemetry without a source marker is not PCM');
+
+      model.handleMessageForTesting(_viz(
+        pcm: [0.1, -0.1, 0.2, -0.2],
+        pcmSource: 'source',
+      ));
+      expect(model.projectmPcmSnapshot.value, [0.1, -0.1, 0.2, -0.2]);
+
+      for (final invalid in <List<double>>[
+        List<double>.filled(1026, 0.0),
+        [double.nan, 0.0],
+        [double.infinity, 0.0],
+        [-1.01, 0.0],
+        [0.0],
+      ]) {
+        model.handleMessageForTesting(
+          _viz(pcm: invalid, pcmSource: 'source'),
+        );
+        expect(model.projectmPcmSnapshot.value, isEmpty,
+            reason: 'invalid PCM must clear the snapshot');
+      }
     });
   });
 }

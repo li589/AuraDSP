@@ -9,13 +9,29 @@
 #include <projectM-4/audio.h>
 #include <projectM-4/callbacks.h>
 #include <projectM-4/core.h>
+#include <projectM-4/parameters.h>
 #include <projectM-4/render_opengl.h>
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 #include <GL/gl.h>
 
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <mutex>
+#include <thread>
+
+namespace {
+
+constexpr int kMaxPcmFrames = 2048;
+
+bool has_current_gl_context_impl() {
+    return glGetString(GL_VERSION) != nullptr;
+}
+
+}  // namespace
 
 struct auradsp_projectm_context {
     projectm_handle pm = nullptr;
@@ -24,6 +40,7 @@ struct auradsp_projectm_context {
     float fps = 0.0f;
     std::atomic<bool> preset_load_failed{false};
     std::mutex mtx;
+    std::thread::id owner_thread;
 };
 
 namespace {
@@ -40,6 +57,14 @@ void clear_gl_errors() {
     }
 }
 
+// This is deliberately a conservative thread/context-presence guard. The
+// bridge cannot identify a Flutter/Skia context through the portable OpenGL C
+// API, so the host must provide that identity guarantee before calling us.
+bool has_allowed_current_context(const auradsp_projectm_context* ctx) {
+    return ctx != nullptr && has_current_gl_context_impl() &&
+           ctx->owner_thread == std::this_thread::get_id();
+}
+
 }  // namespace
 
 AURADSP_PROJECTM_EXPORT auradsp_projectm_t
@@ -47,11 +72,13 @@ AURADSP_PROJECTM_EXPORT auradsp_projectm_t
     if (width <= 0) width = 1280;
     if (height <= 0) height = 720;
     if (fps <= 0.0f) fps = 60.0f;
+    if (!has_current_gl_context_impl()) return nullptr;
 
     auto* ctx = new auradsp_projectm_context();
     ctx->width = width;
     ctx->height = height;
     ctx->fps = fps;
+    ctx->owner_thread = std::this_thread::get_id();
 
     ctx->pm = projectm_create();
     if (ctx->pm == nullptr) {
@@ -67,12 +94,13 @@ AURADSP_PROJECTM_EXPORT auradsp_projectm_t
     return static_cast<auradsp_projectm_t>(ctx);
 }
 
-AURADSP_PROJECTM_EXPORT void
+AURADSP_PROJECTM_EXPORT int
     auradsp_projectm_destroy(auradsp_projectm_t handle) {
-    if (handle == nullptr) return;
+    if (handle == nullptr) return 0;
     auto* ctx = static_cast<auradsp_projectm_context*>(handle);
     {
         std::lock_guard<std::mutex> lock(ctx->mtx);
+        if (ctx->pm != nullptr && !has_allowed_current_context(ctx)) return -4;
         if (ctx->pm != nullptr) {
             projectm_set_preset_switch_failed_event_callback(ctx->pm, nullptr,
                                                               nullptr);
@@ -81,19 +109,21 @@ AURADSP_PROJECTM_EXPORT void
         }
     }
     delete ctx;
+    return 0;
 }
 
-AURADSP_PROJECTM_EXPORT void
+AURADSP_PROJECTM_EXPORT int
     auradsp_projectm_resize(auradsp_projectm_t handle, int width, int height) {
-    if (handle == nullptr || width <= 0 || height <= 0) return;
+    if (handle == nullptr || width <= 0 || height <= 0) return -1;
     auto* ctx = static_cast<auradsp_projectm_context*>(handle);
     std::lock_guard<std::mutex> lock(ctx->mtx);
+    if (ctx->pm != nullptr && !has_allowed_current_context(ctx)) return -4;
+    if (ctx->pm == nullptr) return -2;
     ctx->width = width;
     ctx->height = height;
-    if (ctx->pm != nullptr) {
-        projectm_set_window_size(ctx->pm, static_cast<size_t>(width),
-                                 static_cast<size_t>(height));
-    }
+    projectm_set_window_size(ctx->pm, static_cast<size_t>(width),
+                             static_cast<size_t>(height));
+    return 0;
 }
 
 AURADSP_PROJECTM_EXPORT int
@@ -116,12 +146,21 @@ AURADSP_PROJECTM_EXPORT int auradsp_projectm_feed_pcm(
     auradsp_projectm_t handle, const float* pcm, int frames_per_channel,
     int channels) {
     if (handle == nullptr || pcm == nullptr || frames_per_channel <= 0 ||
+        frames_per_channel > kMaxPcmFrames ||
         (channels != 1 && channels != 2)) {
         return -1;
+    }
+    const size_t sample_count =
+        static_cast<size_t>(frames_per_channel) * static_cast<size_t>(channels);
+    for (size_t i = 0; i < sample_count; ++i) {
+        if (!std::isfinite(pcm[i]) || pcm[i] < -1.0f || pcm[i] > 1.0f) {
+            return -1;
+        }
     }
     auto* ctx = static_cast<auradsp_projectm_context*>(handle);
     std::lock_guard<std::mutex> lock(ctx->mtx);
     if (ctx->pm == nullptr) return -2;
+    if (!has_allowed_current_context(ctx)) return -4;
 
     const projectm_channels ch =
         channels == 1 ? PROJECTM_MONO : PROJECTM_STEREO;
@@ -138,10 +177,15 @@ AURADSP_PROJECTM_EXPORT int auradsp_projectm_load_preset(
     auto* ctx = static_cast<auradsp_projectm_context*>(handle);
     std::lock_guard<std::mutex> lock(ctx->mtx);
     if (ctx->pm == nullptr) return -2;
+    if (!has_allowed_current_context(ctx)) return -4;
 
     ctx->preset_load_failed.store(false, std::memory_order_release);
     projectm_load_preset_file(ctx->pm, preset_path, true);
     return ctx->preset_load_failed.load(std::memory_order_acquire) ? -3 : 0;
+}
+
+AURADSP_PROJECTM_EXPORT int auradsp_projectm_has_current_gl_context(void) {
+    return has_current_gl_context_impl() ? 1 : 0;
 }
 
 AURADSP_PROJECTM_EXPORT int auradsp_projectm_render_pixels(
@@ -150,6 +194,7 @@ AURADSP_PROJECTM_EXPORT int auradsp_projectm_render_pixels(
     auto* ctx = static_cast<auradsp_projectm_context*>(handle);
     std::lock_guard<std::mutex> lock(ctx->mtx);
     if (ctx->pm == nullptr) return -2;
+    if (!has_allowed_current_context(ctx)) return -4;
 
     clear_gl_errors();
     projectm_opengl_render_frame(ctx->pm);

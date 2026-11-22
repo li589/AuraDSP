@@ -15,6 +15,7 @@ import '../lyrics/views/lyric_view.dart';
 import '../models/visualizer_themes.dart';
 import '../models/visualizer_types.dart';
 import '../shaders/gpu_shader_service.dart';
+import '../plugins/projectm_bridge_contract.dart';
 import 'visualizer_hud.dart';
 import 'visualizer_viewport.dart';
 
@@ -24,6 +25,8 @@ class VisualizerStage extends StatefulWidget {
   final ValueListenable<List<double>> spectrum;
   final ValueListenable<double> levelL;
   final ValueListenable<double> levelR;
+  final ValueListenable<List<double>>? projectmPcm;
+  final ProjectMBridge? projectMBridge;
   final VisualizerConfig config;
   final VisualizerDisplayMode displayMode;
   final ValueChanged<VisualizerStyle> onStyleChanged;
@@ -43,6 +46,8 @@ class VisualizerStage extends StatefulWidget {
     required this.spectrum,
     required this.levelL,
     required this.levelR,
+    this.projectmPcm,
+    this.projectMBridge,
     required this.config,
     this.displayMode = VisualizerDisplayMode.restore,
     required this.onStyleChanged,
@@ -103,8 +108,9 @@ class _VisualizerStageState extends State<VisualizerStage> {
   void initState() {
     super.initState();
     widget.spectrum.addListener(_onSpectrumFrame);
-    PlatformAdapters.instance.window.visibleListenable
-        .addListener(_onWindowVisibility);
+    PlatformAdapters.instance.window.visibleListenable.addListener(
+      _onWindowVisibility,
+    );
     // 默认静止：只有收到真实有声帧后时间轴才启动。
     _syncTimeline();
     _startHudTimer();
@@ -190,8 +196,7 @@ class _VisualizerStageState extends State<VisualizerStage> {
       if (!mounted) return;
       final last = _lastFrameAt;
       if (last == null) return;
-      if (DateTime.now().difference(last) <
-          const Duration(milliseconds: 250)) {
+      if (DateTime.now().difference(last) < const Duration(milliseconds: 250)) {
         return;
       }
       if (_peakSettled()) {
@@ -269,8 +274,9 @@ class _VisualizerStageState extends State<VisualizerStage> {
     _silenceTimer?.cancel();
     _stallTimer?.cancel();
     widget.spectrum.removeListener(_onSpectrumFrame);
-    PlatformAdapters.instance.window.visibleListenable
-        .removeListener(_onWindowVisibility);
+    PlatformAdapters.instance.window.visibleListenable.removeListener(
+      _onWindowVisibility,
+    );
     _gatedSpectrum.dispose();
     _time.dispose();
     super.dispose();
@@ -336,20 +342,21 @@ class _VisualizerStageState extends State<VisualizerStage> {
         final state = sync.lyricsState.value;
 
         final statusTitle = switch (state) {
-          LyricsSyncState.idle || LyricsSyncState.noMedia =>
-            l.visualizerLyricsNoMedia,
+          LyricsSyncState.idle ||
+          LyricsSyncState.noMedia => l.visualizerLyricsNoMedia,
           LyricsSyncState.searching => l.visualizerLyricsSearching,
           LyricsSyncState.ready => l.visualizerLyricsReady,
           LyricsSyncState.notFound => l.visualizerLyricsNotFound,
           LyricsSyncState.unsupported => l.visualizerLyricsUnsupported,
         };
         final statusHint = switch (state) {
-          LyricsSyncState.idle || LyricsSyncState.noMedia =>
-            l.visualizerLyricsNoMediaHint,
+          LyricsSyncState.idle ||
+          LyricsSyncState.noMedia => l.visualizerLyricsNoMediaHint,
           LyricsSyncState.searching => l.visualizerLyricsSearchingHint,
-          LyricsSyncState.ready => doc.artist?.isNotEmpty == true
-              ? doc.artist!
-              : l.visualizerLyricsReady,
+          LyricsSyncState.ready =>
+            doc.artist?.isNotEmpty == true
+                ? doc.artist!
+                : l.visualizerLyricsReady,
           LyricsSyncState.notFound => l.visualizerLyricsNotFoundHint,
           LyricsSyncState.unsupported => l.visualizerLyricsUnsupportedHint,
         };
@@ -370,10 +377,8 @@ class _VisualizerStageState extends State<VisualizerStage> {
                 statusTitle,
               ].join(' · ')
             : (docTitle.isNotEmpty
-                ? (docArtist.isNotEmpty
-                    ? docArtist
-                    : l.visualizerLyricsReady)
-                : statusHint);
+                  ? (docArtist.isNotEmpty ? docArtist : l.visualizerLyricsReady)
+                  : statusHint);
 
         final searching = state == LyricsSyncState.searching;
 
@@ -468,13 +473,14 @@ class _VisualizerStageState extends State<VisualizerStage> {
                     ? _LyricsEmptyState(
                         busy: searching,
                         icon: switch (state) {
-                          LyricsSyncState.searching => Icons.hourglass_top_rounded,
+                          LyricsSyncState.searching =>
+                            Icons.hourglass_top_rounded,
                           LyricsSyncState.notFound => Icons.search_off_rounded,
                           LyricsSyncState.ready => Icons.lyrics_outlined,
                           LyricsSyncState.unsupported =>
                             Icons.desktop_access_disabled_rounded,
-                          LyricsSyncState.idle || LyricsSyncState.noMedia =>
-                            Icons.music_off_rounded,
+                          LyricsSyncState.idle ||
+                          LyricsSyncState.noMedia => Icons.music_off_rounded,
                         },
                         title: statusTitle,
                         hint: statusHint,
@@ -529,6 +535,8 @@ class _VisualizerStageState extends State<VisualizerStage> {
                   spectrum: _gatedSpectrum,
                   levelL: widget.levelL,
                   levelR: widget.levelR,
+                  projectmPcm: widget.projectmPcm,
+                  projectMBridge: widget.projectMBridge,
                   config: widget.config,
                   palette: palette,
                   peakEngine: _peakEngine,
@@ -654,9 +662,7 @@ class _LyricsEmptyState extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: p.accent.withValues(alpha: 0.08),
-                border: Border.all(
-                  color: p.accent.withValues(alpha: 0.22),
-                ),
+                border: Border.all(color: p.accent.withValues(alpha: 0.22)),
               ),
               child: Center(
                 child: busy
@@ -686,11 +692,7 @@ class _LyricsEmptyState extends StatelessWidget {
             Text(
               hint,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                height: 1.45,
-                color: p.textDim,
-              ),
+              style: TextStyle(fontSize: 12, height: 1.45, color: p.textDim),
             ),
           ],
         ),

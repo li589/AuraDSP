@@ -11,10 +11,12 @@ import 'projectm_bridge_contract.dart';
 
 typedef _CreateC = Pointer<Void> Function(Int32, Int32, Float);
 typedef _CreateDart = Pointer<Void> Function(int, int, double);
-typedef _DestroyC = Void Function(Pointer<Void>);
-typedef _DestroyDart = void Function(Pointer<Void>);
-typedef _ResizeC = Void Function(Pointer<Void>, Int32, Int32);
-typedef _ResizeDart = void Function(Pointer<Void>, int, int);
+typedef _DestroyC = Int32 Function(Pointer<Void>);
+typedef _DestroyDart = int Function(Pointer<Void>);
+typedef _ResizeC = Int32 Function(Pointer<Void>, Int32, Int32);
+typedef _ResizeDart = int Function(Pointer<Void>, int, int);
+typedef _HasContextC = Int32 Function();
+typedef _HasContextDart = int Function();
 typedef _GetSizeC = Int32 Function(Pointer<Void>);
 typedef _GetSizeDart = int Function(Pointer<Void>);
 typedef _FeedC = Int32 Function(Pointer<Void>, Pointer<Float>, Int32, Int32);
@@ -26,6 +28,10 @@ typedef _RenderDart = int Function(Pointer<Void>, Pointer<Uint8>);
 
 /// Real FFI implementation of the optional libprojectM bridge.
 class ProjectMNativeBridge implements ProjectMBridge {
+  /// The host must prove that the current GL context is the same context used
+  /// for this bridge instance. A non-null verifier is deliberately required;
+  /// the native glGetString check alone cannot establish context identity.
+  final bool Function()? currentContextVerifier;
   final ValueNotifier<ui.Image?> _frame = ValueNotifier<ui.Image?>(null);
   DynamicLibrary? _library;
   Pointer<Void> _handle = nullptr;
@@ -41,6 +47,9 @@ class ProjectMNativeBridge implements ProjectMBridge {
   late final _FeedDart _feed;
   late final _LoadDart _load;
   late final _RenderDart _render;
+  late final _HasContextDart _hasCurrentGlContext;
+
+  ProjectMNativeBridge({this.currentContextVerifier});
 
   @override
   bool get isAvailable => _library != null && _handle != nullptr;
@@ -65,6 +74,8 @@ class ProjectMNativeBridge implements ProjectMBridge {
   }) async {
     if (_disposed) return false;
     if (isAvailable) return true;
+    final verifier = currentContextVerifier;
+    if (verifier == null || !verifier()) return false;
     try {
       final library = NativeLibraryLoader.openFirst(
         PlatformProfile.projectMBridgeLibraryCandidates,
@@ -80,6 +91,10 @@ class ProjectMNativeBridge implements ProjectMBridge {
       _resize = library.lookupFunction<_ResizeC, _ResizeDart>(
         'auradsp_projectm_resize',
       );
+      _hasCurrentGlContext = library
+          .lookupFunction<_HasContextC, _HasContextDart>(
+            'auradsp_projectm_has_current_gl_context',
+          );
       _getWidth = library.lookupFunction<_GetSizeC, _GetSizeDart>(
         'auradsp_projectm_get_width',
       );
@@ -95,6 +110,12 @@ class ProjectMNativeBridge implements ProjectMBridge {
       _render = library.lookupFunction<_RenderC, _RenderDart>(
         'auradsp_projectm_render_pixels',
       );
+      // Native probing only confirms that *some* GL context is current.
+      // Identity remains a host responsibility and is checked above.
+      if (_hasCurrentGlContext() == 0 || !verifier()) {
+        _library = null;
+        return false;
+      }
       _handle = _create(width, height, fps);
       if (_handle == nullptr) {
         _library = null;
@@ -102,13 +123,19 @@ class ProjectMNativeBridge implements ProjectMBridge {
       }
       _width = _getWidth(_handle);
       _height = _getHeight(_handle);
-      return _width > 0 && _height > 0;
+      if (_width <= 0 || _height <= 0) {
+        if (_destroy(_handle) == 0) {
+          _handle = nullptr;
+          _library = null;
+        }
+        return false;
+      }
+      return true;
     } catch (_) {
-      if (_handle != nullptr) {
-        _destroy(_handle);
+      if (_handle != nullptr && _destroy(_handle) == 0) {
         _handle = nullptr;
       }
-      _library = null;
+      if (_handle == nullptr) _library = null;
       return false;
     }
   }
@@ -116,14 +143,19 @@ class ProjectMNativeBridge implements ProjectMBridge {
   @override
   void resize(int width, int height) {
     if (!isAvailable || width <= 0 || height <= 0) return;
-    _resize(_handle, width, height);
+    final verifier = currentContextVerifier;
+    if (verifier == null || !verifier()) return;
+    if (_resize(_handle, width, height) != 0) return;
     _width = width;
     _height = height;
   }
 
   @override
   bool loadPreset(MilkdropPreset preset) {
+    final verifier = currentContextVerifier;
     if (!isAvailable ||
+        verifier == null ||
+        !verifier() ||
         preset.filePath.isEmpty ||
         preset.filePath.startsWith('builtin:')) {
       return false;
@@ -140,17 +172,20 @@ class ProjectMNativeBridge implements ProjectMBridge {
 
   @override
   void feedPcm(List<double> pcmFrames, {int channels = 2}) {
-    if (!isAvailable || pcmFrames.isEmpty || channels < 1 || channels > 2) {
+    final verifier = currentContextVerifier;
+    if (!isAvailable ||
+        verifier == null ||
+        !verifier() ||
+        !isValidProjectMPcm(pcmFrames, channels: channels)) {
       return;
     }
+    final frames = pcmFrames.length ~/ channels;
     final pcm = calloc<Float>(pcmFrames.length);
     try {
       for (var i = 0; i < pcmFrames.length; i++) {
-        pcm[i] = pcmFrames[i].clamp(-1.0, 1.0);
+        pcm[i] = pcmFrames[i];
       }
-      final sampleCount = pcmFrames.length - pcmFrames.length % channels;
-      if (sampleCount == 0) return;
-      _feed(_handle, pcm, sampleCount ~/ channels, channels);
+      _feed(_handle, pcm, frames, channels);
     } finally {
       calloc.free(pcm);
     }
@@ -158,7 +193,14 @@ class ProjectMNativeBridge implements ProjectMBridge {
 
   @override
   int renderFrame() {
-    if (!isAvailable || _width <= 0 || _height <= 0) return -2;
+    final verifier = currentContextVerifier;
+    if (!isAvailable ||
+        verifier == null ||
+        !verifier() ||
+        _width <= 0 ||
+        _height <= 0) {
+      return -2;
+    }
     final pixels = calloc<Uint8>(_width * _height * 4);
     try {
       final result = _render(_handle, pixels);
@@ -191,11 +233,9 @@ class ProjectMNativeBridge implements ProjectMBridge {
   @override
   void dispose() {
     if (_disposed) return;
+    if (_handle != nullptr && _destroy(_handle) != 0) return;
+    _handle = nullptr;
     _disposed = true;
-    if (_handle != nullptr) {
-      _destroy(_handle);
-      _handle = nullptr;
-    }
     _preset = null;
     final image = _frame.value;
     _frame.value = null;

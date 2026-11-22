@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'dart:ui';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:auradsp_app/features/visualizer/controllers/waveform_synthesizer.dart';
 import 'package:auradsp_app/features/visualizer/models/visualizer_themes.dart';
 import 'package:auradsp_app/features/visualizer/models/visualizer_types.dart';
 import 'package:auradsp_app/features/visualizer/plugins/milkdrop_preset.dart';
 import 'package:auradsp_app/features/visualizer/plugins/projectm_bridge_contract.dart';
+import 'package:auradsp_app/features/visualizer/plugins/projectm_native_bridge.dart';
 import 'package:auradsp_app/features/visualizer/shaders/gpu_shader_service.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_gpu_shader.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_milkdrop.dart';
@@ -28,13 +30,25 @@ void main() {
       expect(GpuShaderType.tunnel.assetPath, 'shaders/neon_tunnel.frag');
       expect(GpuShaderType.tornado.assetPath, 'shaders/particle_tornado.frag');
       expect(GpuShaderType.nebula.assetPath, 'shaders/nebula_flow.frag');
-      expect(GpuShaderType.harmonicWarp.assetPath, 'shaders/harmonic_warp.frag');
+      expect(
+        GpuShaderType.harmonicWarp.assetPath,
+        'shaders/harmonic_warp.frag',
+      );
     });
 
     test('VisualizerStyle includes GPU shader modes and Harmonic Warp', () {
-      expect(VisualizerStyle.values.contains(VisualizerStyle.auroraShader), isTrue);
-      expect(VisualizerStyle.values.contains(VisualizerStyle.tunnelShader), isTrue);
-      expect(VisualizerStyle.values.contains(VisualizerStyle.harmonicWarp), isTrue);
+      expect(
+        VisualizerStyle.values.contains(VisualizerStyle.auroraShader),
+        isTrue,
+      );
+      expect(
+        VisualizerStyle.values.contains(VisualizerStyle.tunnelShader),
+        isTrue,
+      );
+      expect(
+        VisualizerStyle.values.contains(VisualizerStyle.harmonicWarp),
+        isTrue,
+      );
       expect(VisualizerStyle.auroraShader.label, 'Aurora Ribbon');
       expect(VisualizerStyle.tunnelShader.label, 'Neon Tunnel');
       expect(VisualizerStyle.harmonicWarp.label, 'Harmonic Warp');
@@ -142,19 +156,58 @@ per_pixel_1=rot = rot + 0.02*sin(rad*3.14);
   });
 
   group('ProjectM Bridge Contract Tests', () {
+    test('native bridge fails closed without verified host context', () async {
+      final missingVerifier = ProjectMNativeBridge();
+      expect(await missingVerifier.initialize(), isFalse);
+      missingVerifier.dispose();
+
+      var verifierCalls = 0;
+      final rejectedContext = ProjectMNativeBridge(
+        currentContextVerifier: () {
+          verifierCalls++;
+          return false;
+        },
+      );
+      expect(await rejectedContext.initialize(), isFalse);
+      expect(verifierCalls, 1);
+      rejectedContext.dispose();
+    });
+
     test('Mock bridge lifecycle and preset binding', () async {
       final bridge = MockProjectMBridge();
 
       final initOk = await bridge.initialize(width: 1920, height: 1080);
       expect(initOk, isTrue);
 
-      const preset = MilkdropPreset(name: 'Starfield', filePath: '/path/starfield.milk');
+      const preset = MilkdropPreset(
+        name: 'Starfield',
+        filePath: '/path/starfield.milk',
+      );
       final loadOk = bridge.loadPreset(preset);
       expect(loadOk, isTrue);
       expect(bridge.isLoaded, isTrue);
       expect(bridge.currentPreset?.name, 'Starfield');
 
-      bridge.feedPcm(List.filled(512, 0.0));
+      expect(isValidProjectMPcm([0.0, 0.0]), isTrue);
+      expect(isValidProjectMPcm([1.0, -1.0]), isTrue);
+      expect(isValidProjectMPcm(List.filled(4096, 0.0)), isTrue);
+      expect(
+        isValidProjectMPcm(List.filled(4098, 0.0)),
+        isFalse,
+        reason: 'more than 2048 stereo frames',
+      );
+      expect(
+        isValidProjectMPcm(List.filled(1025, 0.0)),
+        isFalse,
+        reason: 'odd interleaved sample count',
+      );
+      expect(isValidProjectMPcm(List.filled(513, 0.0), channels: 2), isFalse);
+      expect(isValidProjectMPcm(List.filled(512, 0.0), channels: 3), isFalse);
+      expect(isValidProjectMPcm([1.01, 0.0]), isFalse);
+      expect(isValidProjectMPcm([double.nan, 0.0]), isFalse);
+      expect(isValidProjectMPcm([double.infinity, 0.0]), isFalse);
+      bridge.feedPcm([0.0, 0.0]);
+      bridge.feedPcm([1.01, 0.0]);
       bridge.resize(2560, 1440);
 
       final painter = ProjectMPainter(
@@ -183,31 +236,38 @@ per_pixel_1=rot = rot + 0.02*sin(rad*3.14);
   });
 
   group('VisualizerPainterDispatcher Routing Tests', () {
-    test('Routes all VisualizerStyle values to valid CustomPainter instances', () {
-      final synth = WaveformSynthesizer();
-      synth.update(List.filled(32, 0.5), levelLDbfs: -12.0, levelRDbfs: -12.0);
-
-      const config = VisualizerConfig();
-      final rawBands = List.filled(32, 0.5);
-      final peaks = List.filled(32, 0.6);
-
-      for (final style in VisualizerStyle.values) {
-        final painter = buildVisualizerPainter(
-          style: style,
-          config: config,
-          palette: testPalette,
-          rawBands: rawBands,
-          peaks: peaks,
-          waveformSynth: synth,
-          time: 1.0,
+    test(
+      'Routes all VisualizerStyle values to valid CustomPainter instances',
+      () {
+        final synth = WaveformSynthesizer();
+        synth.update(
+          List.filled(32, 0.5),
+          levelLDbfs: -12.0,
+          levelRDbfs: -12.0,
         );
-        expect(painter, isNotNull);
 
-        final recorder = PictureRecorder();
-        final canvas = Canvas(recorder);
-        painter.paint(canvas, const Size(400, 300));
-        expect(recorder.endRecording(), isNotNull);
-      }
-    });
+        const config = VisualizerConfig();
+        final rawBands = List.filled(32, 0.5);
+        final peaks = List.filled(32, 0.6);
+
+        for (final style in VisualizerStyle.values) {
+          final painter = buildVisualizerPainter(
+            style: style,
+            config: config,
+            palette: testPalette,
+            rawBands: rawBands,
+            peaks: peaks,
+            waveformSynth: synth,
+            time: 1.0,
+          );
+          expect(painter, isNotNull);
+
+          final recorder = PictureRecorder();
+          final canvas = Canvas(recorder);
+          painter.paint(canvas, const Size(400, 300));
+          expect(recorder.endRecording(), isNotNull);
+        }
+      },
+    );
   });
 }
