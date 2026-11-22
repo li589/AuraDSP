@@ -322,7 +322,7 @@ per_pixel_1=rot = rot + 0.02*sin(rad*3.14);
                   onResetPeaks: () {},
                   milkdropPresets: MilkdropPreset.builtInPresets,
                   onSelectMilkdropPreset: (p) => selectedPreset = p,
-                  isProjectMNative: false,
+                  isProjectMNativeActive: false,
                 ),
               ],
             ),
@@ -345,7 +345,7 @@ per_pixel_1=rot = rot + 0.02*sin(rad*3.14);
       await tester.tap(milkdropTab);
       await tester.pumpAndSettle();
 
-      // Honesty badge: indicates procedural simulation because isProjectMNative is false
+      // Honesty badge: indicates procedural simulation because isProjectMNativeActive is false
       expect(find.text('内置着色器拓扑模拟'), findsOneWidget);
 
       // Presets are listed

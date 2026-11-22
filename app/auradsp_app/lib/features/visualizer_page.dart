@@ -34,7 +34,6 @@ import 'chrome.dart';
 import 'visualizer/lyrics/parsers/lrc_parser.dart';
 import 'visualizer/lyrics/services/media_sync_service.dart';
 import 'visualizer/plugins/milkdrop_preset.dart';
-import 'visualizer/plugins/projectm_bridge_contract.dart';
 import 'visualizer/plugins/projectm_native_bridge.dart';
 import 'visualizer/views/visualizer_drawer_widgets.dart';
 import 'visualizer/views/visualizer_meters.dart';
