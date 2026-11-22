@@ -1411,8 +1411,9 @@ extension AudioModesState on AppModel {
   ///   扫描声道，单侧未知取已知侧，全未知 → 8；
   /// - 管线 vaio 链：VAIO 本体 8，上限 = 其 WASAPI 输出端点
   ///   （vaioOutputEndpoint）扫描声道，未选/未知 → 8；
-  /// - 管线 asio 链：虚拟形态取驱动档位/DAW 协商值（见
-  ///   [_asioVirtualWorkCh]），Client 形态 null（isolate 起桥预置）；
+  /// - 管线 asio 链：虚拟形态取驱动档位宽度（遥测活跃时以 dawCh
+  ///   回读为准，见 [_asioVirtualWorkCh]），Client 形态 null
+  ///   （isolate 起桥预置）；
   /// - auto：null。
   int? _capabilityChForMode() {
     if (!PlatformProfile.isWindows) return null;
@@ -1452,9 +1453,11 @@ extension AudioModesState on AppModel {
   /// 虚拟 ASIO 形态的工作声道数（状态侧唯一口径）。
   ///
   /// 虚拟形态下 App 自身不跑处理引擎——DAW 进程内的引擎实例才是真
-  /// 处理者，其宽度由驱动档位（HKCU Channels）决定，运行期再受 DAW
-  /// 协商值约束。因此：
-  /// - DAW 活着（遥测活跃且有合法 dawCh）→ 用协商值；
+  /// 处理者，其宽度恒由驱动档位（HKCU Channels）决定：标准 ASIO
+  /// 路径下 DAW 不能改宽，驱动 createBuffers 按档位交织。因此：
+  /// - DAW 活着（遥测活跃且有合法 dawCh）→ 用 dawCh 回读值（档位
+  ///   在驱动实例侧实际生效的回声；档位变更后旧实例未重建时以
+  ///   它为准）；
   /// - 否则用档位镜像 [asioDriverChannels]（2/4/6/8）。
   ///
   /// 注意必须要求「活跃」：驱动遥测块会跨 DAW 会话驻留，块里留着
@@ -1551,7 +1554,7 @@ extension AudioModesState on AppModel {
       return _normCh(want);
     }
     // 虚拟 ASIO：自动档不再看 App 自身引擎镜像（该引擎不参与处理，
-    // 镜像常年是 2）——直接采用驱动档位/DAW 协商宽度。
+    // 镜像常年是 2）——直接采用驱动档位宽度（遥测活跃时经 dawCh 回读）。
     final asioCh = _asioVirtualWorkCh();
     if (asioCh != null) return _normCh(asioCh);
     if (audioMode == 'sysapo') {
