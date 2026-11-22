@@ -42,10 +42,7 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
   Rect? _fullRect;
   Size _fullRectSize = Size.zero;
 
-  /// 旋转角 16 档量化下的对齐向量，构造时预计算，消除每帧 2 个 Alignment。
   static const int _rotSteps = 16;
-  final List<Alignment> _shimmerBegin;
-  final List<Alignment> _shimmerEnd;
 
   /// 同心环颜色：8 环 × 16 档 mid，构造时预计算（旧实现每帧 Color.lerp）
   static const int _energyLevels = 16;
@@ -54,21 +51,19 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
   /// 星芒射线颜色缓存：[(rotStep,rayIndex)][alphaLevel]，懒填充后整场复用。
   final List<List<Color?>> _rayFadeCache;
 
-  /// 着色器缓存：按尺寸与低音离散量化复用，彻底消灭逐帧创建 SkShader
-  static final Map<String, Shader> _shaderCache = {};
+  /// 背景色晕与柔光梯度（32 阶高密度预计算，零逐帧创建，消除突变卡顿）
+  static const int _haloSteps = 32;
+  List<Shader>? _bgShaders;
 
-  static Shader _getOrCreateShader(String key, Shader Function() factory) {
-    var s = _shaderCache[key];
-    if (s == null) {
-      if (_shaderCache.length > 32) {
-        _shaderCache.clear();
-      }
-      s = factory();
-      _shaderCache[key] = s;
-    }
-    return s;
-  }
+  List<Shader>? _glowShaders;
+  double _glowShaderRadius = 0.0;
 
+  Shader? _shimmerShader;
+  Size _shimmerShaderSize = Size.zero;
+
+  double _smoothedBass = 0.0;
+  double _smoothedMid = 0.0;
+  double _lastPaintTime = double.nan;
 
   MilkdropPainter({
     required this.preset,
@@ -77,15 +72,7 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
     required this.time,
     required this.sensitivity,
     this.lineWidth = 1.5,
-  })  : _shimmerBegin = List.generate(_rotSteps, (s) {
-          final a = s * math.pi / 8;
-          return Alignment(math.cos(a) * 0.8, math.sin(a) * 0.8);
-        }),
-        _shimmerEnd = List.generate(_rotSteps, (s) {
-          final a = s * math.pi / 8;
-          return Alignment(-math.cos(a) * 0.8, -math.sin(a) * 0.8);
-        }),
-        _ringColors = List.generate(8, (i) {
+  })  : _ringColors = List.generate(8, (i) {
           final frac = (i + 1) / 8.0;
           final base = Color.lerp(palette.primary, palette.secondary, frac)!;
           return List<Color>.generate(_energyLevels, (l) {
@@ -138,60 +125,76 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
           .clamp(0.0, 2.0);
     }
 
-    final bassLvl = (bass * 4.0).round().clamp(0, 4);
-    final midLvl = (mid * 4.0).round().clamp(0, 4);
+    final dt = (!time.isFinite || !_lastPaintTime.isFinite || time < _lastPaintTime)
+        ? 1.0 / 30.0
+        : (time - _lastPaintTime).clamp(0.001, 0.1);
+    _lastPaintTime = time;
 
-    // 1. 背景：径向衰减 + 缓慢旋转的椭圆微光（Shader 复用，整屏流动且零内存泄漏）
-    if (_fullRect == null || _fullRectSize != size) {
+    // 低通柔化音频能量，使得背景光晕自然伴随音乐缓慢起伏呼吸，根除突变卡顿
+    _smoothedBass += (bass - _smoothedBass) * (dt * 2.5).clamp(0.0, 1.0);
+    _smoothedMid += (mid - _smoothedMid) * (dt * 2.5).clamp(0.0, 1.0);
+
+    // 1. 背景：32 阶自然微调径向衰减 + 连续无级旋转椭圆微光（零逐帧分配，伴随主体优雅呼吸）
+    if (_fullRect == null || _fullRectSize != size || _bgShaders == null) {
       _fullRectSize = size;
       _fullRect = Rect.fromLTWH(0, 0, size.width, size.height);
+      _bgShaders = List<Shader>.generate(_haloSteps, (i) {
+        final t = i / (_haloSteps - 1);
+        final zoomFactor = preset.zoom.clamp(0.8, 1.4) + t * 0.08;
+        return RadialGradient(
+          center: Alignment.center,
+          radius: 0.9 * zoomFactor,
+          colors: [
+            palette.secondary.withValues(
+              alpha: (0.12 * preset.decay + t * 0.16).clamp(0.0, 0.55),
+            ),
+            palette.primary.withValues(
+              alpha: (0.05 * preset.decay + t * 0.05).clamp(0.0, 0.35),
+            ),
+            const Color(0x00000000),
+          ],
+        ).createShader(_fullRect!);
+      });
     }
     final fullRect = _fullRect!;
 
-    final qW = (size.width / 32).round() * 32;
-    final qH = (size.height / 32).round() * 32;
-
-    final zoomFactor = preset.zoom.clamp(0.8, 1.4) + (bassLvl / 4.0) * 0.08;
-    final bgKey = 'milk_bg_${qW}x${qH}_b$bassLvl';
-    _bgPaint.shader = _getOrCreateShader(bgKey, () => RadialGradient(
-      center: Alignment.center,
-      radius: 0.9 * zoomFactor,
-      colors: [
-        palette.secondary
-            .withValues(alpha: (0.12 * preset.decay + (bassLvl / 4.0) * 0.18).clamp(0.0, 0.6)),
-        palette.primary.withValues(alpha: (0.05 * preset.decay).clamp(0.0, 0.4)),
-        const Color(0x00000000),
-      ],
-    ).createShader(fullRect));
+    final bgStep = (_smoothedBass / 2.0 * (_haloSteps - 1)).round().clamp(0, _haloSteps - 1);
+    _bgPaint.shader = _bgShaders![bgStep];
     canvas.drawRect(fullRect, _bgPaint);
 
     final rot = _rotation;
-    // 旋转角按 16 档量化以复用旋转微光着色器
-    final rotStep = (rot * 8 / math.pi).round() % _rotSteps;
-    final shimKey = 'milk_shim_${qW}x${qH}_r${rotStep}_b${bassLvl}_m$midLvl';
-    _shimmerPaint.shader = _getOrCreateShader(shimKey, () => LinearGradient(
-      begin: _shimmerBegin[rotStep],
-      end: _shimmerEnd[rotStep],
-      colors: [
-        palette.primary.withValues(alpha: 0.05 + (midLvl / 4.0) * 0.05),
-        const Color(0x00000000),
-        palette.secondary.withValues(alpha: 0.04 + (bassLvl / 4.0) * 0.04),
-      ],
-      stops: const [0.0, 0.5, 1.0],
-    ).createShader(fullRect));
-    canvas.drawRect(fullRect, _shimmerPaint);
+    final diag = math.sqrt(size.width * size.width + size.height * size.height);
+    if (_shimmerShader == null || _shimmerShaderSize != size) {
+      _shimmerShaderSize = size;
+      _shimmerShader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          palette.primary.withValues(alpha: 0.055),
+          const Color(0x00000000),
+          palette.secondary.withValues(alpha: 0.045),
+        ],
+        stops: const [0.0, 0.5, 1.0],
+      ).createShader(Rect.fromCenter(center: Offset.zero, width: diag, height: diag));
+      _shimmerPaint.shader = _shimmerShader;
+    }
+    canvas.save();
+    canvas.translate(cx, cy);
+    canvas.rotate(rot); // 浮点连续无级旋转，彻底根除 22.5 度顿挫突跳
+    canvas.drawRect(Rect.fromCenter(center: Offset.zero, width: diag, height: diag), _shimmerPaint);
+    canvas.restore();
 
     // 2. 根据 Preset WaveMode 呈现不同 MilkDrop 经典拓扑
     switch (preset.waveMode % 3) {
       case 0:
-        _paintConcentricVortex(canvas, cx, cy, baseRadius, bass, mid);
+        _paintConcentricVortex(canvas, cx, cy, baseRadius, _smoothedBass, _smoothedMid);
         break;
       case 1:
-        _paintPolarSpiral(canvas, cx, cy, baseRadius, bass, mid, treble);
+        _paintPolarSpiral(canvas, cx, cy, baseRadius, _smoothedBass, _smoothedMid, treble);
         break;
       case 2:
       default:
-        _paintStarburstWarp(canvas, cx, cy, baseRadius, bass, mid);
+        _paintStarburstWarp(canvas, cx, cy, baseRadius, _smoothedBass, _smoothedMid);
         break;
     }
   }
@@ -297,17 +300,28 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
     final rot = _rotation;
     final rotStep = (rot * 8 / math.pi).round() % _rotSteps;
 
-    final coreBassLvl = (bass * 4.0).round().clamp(0, 4);
-    // 中心柔光（Shader 缓存复用）
-    _glowPaint.shader = _getOrCreateShader('milk_glow____', () => RadialGradient(
-      colors: [
-        palette.glow.withValues(alpha: 0.14 + (coreBassLvl / 4.0) * 0.12),
-        palette.glow.withValues(alpha: 0.0),
-      ],
-    ).createShader(
-      Rect.fromCircle(center: Offset(cx, cy), radius: r * 0.42),
-    ));
-    canvas.drawCircle(Offset(cx, cy), r * 0.42, _glowPaint);
+    final glowRadius = r * 0.42;
+    if (_glowShaders == null || (_glowShaderRadius - glowRadius).abs() > 1.0) {
+      _glowShaderRadius = glowRadius;
+      final glowRect = Rect.fromCircle(center: Offset.zero, radius: glowRadius);
+      _glowShaders = List<Shader>.generate(_haloSteps, (i) {
+        final t = i / (_haloSteps - 1);
+        return RadialGradient(
+          colors: [
+            palette.glow.withValues(alpha: 0.12 + t * 0.14),
+            palette.glow.withValues(alpha: 0.0),
+          ],
+        ).createShader(glowRect);
+      });
+    }
+
+    // 中心柔光（32 阶自然微调渐变，平滑呼吸）
+    final glowStep = (bass / 2.0 * (_haloSteps - 1)).round().clamp(0, _haloSteps - 1);
+    canvas.save();
+    canvas.translate(cx, cy);
+    _glowPaint.shader = _glowShaders![glowStep];
+    canvas.drawCircle(Offset.zero, glowRadius, _glowPaint);
+    canvas.restore();
 
     for (var i = 0; i < rays; i++) {
       final normPos = i / rays;

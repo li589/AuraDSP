@@ -103,6 +103,8 @@ class _TornadoVortexSim {
     ..color = const Color(0xFFFFFFFF);
 
   final math.Random _rnd = math.Random(880211);
+  int _activeCount = 0;
+  int _lastWallTimeMs = 0;
   double _lastTime = double.nan;
   double _smoothedBass = 0.0;
   double _smoothedEnergy = 0.0;
@@ -128,51 +130,43 @@ class _TornadoVortexSim {
   }
 
   void _initParticles() {
-    for (var i = 0; i < _particleCount; i++) {
-      _spawnParticle(i, initialSpread: true);
-    }
+    _activeCount = 0;
     _initialized = true;
   }
 
-  void _spawnParticle(int i, {bool initialSpread = false}) {
-    _pvy[i] = 0.06 + _rnd.nextDouble() * 0.14;
-    _pradius[i] = 160.0 + _rnd.nextDouble() * 700.0;
+  void _spawnParticle(int i, {double initialProgress = 0.0}) {
+    _pvy[i] = 0.07 + _rnd.nextDouble() * 0.12;
+    _pradius[i] = 160.0 + _rnd.nextDouble() * 650.0;
     _pcolorHue[i] = _rnd.nextDouble();
     _ptier[i] = (_rnd.nextDouble() * 4).floor().clamp(0, 3);
-    _pdispersal[i] = 0.82 + _rnd.nextDouble() * 0.36;
+    _pdispersal[i] = 0.85 + _rnd.nextDouble() * 0.30;
 
     final a = _rnd.nextDouble() * math.pi * 2;
     _pangle[i] = a;
 
-    if (initialSpread) {
-      final isGround = (i % 5 == 0);
-      _pground[i] = isGround ? 0 : 1;
-      if (isGround) {
-        _py[i] = _floorLevel;
-        final r = 2.5 + _rnd.nextDouble() * (_maxDist - 2.5);
-        _px[i] = math.sin(a) * r;
-        _pz[i] = math.cos(a) * r;
-      } else {
-        final u = _rnd.nextDouble();
-        _py[i] = _floorLevel + u * _vortexHeight;
-        // 大口在上，小头在下：u=0 (底部) 半径 1.6；u=1 (顶部) 半径 20.0
-        final r = (1.6 + 18.4 * math.pow(u, 1.35)) * _pdispersal[i];
-        _px[i] = math.sin(a) * r;
-        _pz[i] = math.cos(a) * r;
-      }
-    } else {
+    if (initialProgress <= 0.0) {
+      // 刚出生的粒子：分布在远处外围地表（打开动画从视口外涌入集结）
+      _pground[i] = 0;
+      final r = 14.0 + _rnd.nextDouble() * (_maxDist - 14.0);
+      _px[i] = math.sin(a) * r;
+      _pz[i] = math.cos(a) * r;
       _py[i] = _floorLevel;
-      final isGround = (_rnd.nextDouble() < 0.25);
-      _pground[i] = isGround ? 0 : 1;
-      if (isGround) {
-        final r = 6.0 + _rnd.nextDouble() * (_maxDist - 6.0);
-        _px[i] = math.sin(a) * r;
-        _pz[i] = math.cos(a) * r;
-      } else {
-        final r = 1.6 * _pdispersal[i];
-        _px[i] = math.sin(a) * r;
-        _pz[i] = math.cos(a) * r;
-      }
+    } else if (initialProgress < 0.22) {
+      // 正在向中心吸入汇聚的地表粒子
+      _pground[i] = 0;
+      final frac = initialProgress / 0.22;
+      final r = (16.0 * (1.0 - frac) + 1.4 * frac) * _pdispersal[i];
+      _px[i] = math.sin(a) * r;
+      _pz[i] = math.cos(a) * r;
+      _py[i] = _floorLevel;
+    } else {
+      // 已经进入龙卷风主柱飞旋向上的粒子
+      _pground[i] = 1;
+      final u = ((initialProgress - 0.22) / 0.78).clamp(0.0, 1.0);
+      _py[i] = _floorLevel + u * _vortexHeight;
+      final r = (1.2 + 8.6 * math.pow(u, 1.45)) * _pdispersal[i];
+      _px[i] = math.sin(a) * r;
+      _pz[i] = math.cos(a) * r;
     }
   }
 
@@ -212,6 +206,13 @@ class _TornadoVortexSim {
 
   void step(double time, List<double> bands) {
     if (!_initialized) _initParticles();
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final isNewEntry = !_lastTime.isFinite || time < _lastTime - 0.5 || (nowMs - _lastWallTimeMs) > 800;
+    _lastWallTimeMs = nowMs;
+    if (isNewEntry) {
+      _activeCount = 0; // 重新切入或初始开启时触发远处粒子汇聚特效
+    }
+
     final dt = (!time.isFinite || !_lastTime.isFinite || time < _lastTime)
         ? 1.0 / 30.0
         : (time - _lastTime).clamp(0.001, 0.1);
@@ -250,33 +251,45 @@ class _TornadoVortexSim {
     final spinBoost = 1.0 + 2.8 * _smoothedBass + 0.6 * mid;
     final liftBoost = 1.0 + 1.8 * _smoothedBass + 0.6 * _smoothedEnergy;
 
-    for (var i = 0; i < _particleCount; i++) {
+    // 打开动画与持续吸入：根据动画时间自然平滑集结 700 颗粒子
+    final animT = time.isFinite ? math.max(0.0, time) : 0.0;
+    final targetCount = (animT <= 0.0)
+        ? 20
+        : ((animT / 1.8).clamp(0.03, 1.0) * _particleCount).round();
+    while (_activeCount < targetCount) {
+      final frac = _activeCount / _particleCount;
+      _spawnParticle(_activeCount++, initialProgress: frac);
+    }
+
+    for (var i = 0; i < _activeCount; i++) {
       if (_pground[i] == 0) {
         // 1) 地面吸入阶段：沿地表向中心小头汇聚
         var r = math.sqrt(_px[i] * _px[i] + _pz[i] * _pz[i]);
-        r -= (0.10 + 0.14 * _smoothedBass) * (dt * 30.0);
-        final spinSpeed = (0.16 / (1.0 + r * 0.28)) * spinBoost;
+        r -= (0.12 + 0.16 * _smoothedBass) * (dt * 30.0);
+        final spinSpeed = (0.20 / (1.0 + r * 0.22)) * spinBoost;
         final a = _pangle[i] + spinSpeed * (dt * 30.0);
         _pangle[i] = a;
         _px[i] = math.sin(a) * r;
         _pz[i] = math.cos(a) * r;
         _py[i] = _floorLevel;
 
-        if (r <= 1.8) {
+        if (r <= 1.4) {
           _pground[i] = 1;
           _py[i] = _floorLevel;
         }
       } else {
-        // 2) 向上飞旋喷发阶段：大口在上，小头在下（随高度递增向外展开为号角形风暴口）
+        // 2) 向上飞旋喷发阶段：大口在上，小头在下（开口适度收拢，比例挺拔优雅）
         _py[i] += _pvy[i] * liftBoost * (dt * 30.0);
         if (_py[i] > _vortexHeight / 2) {
-          _spawnParticle(i);
+          // 到顶后循环重置至地表远处吸入，形成源源不断的吸聚风暴
+          _spawnParticle(i, initialProgress: 0.0);
         } else {
           final u = ((_py[i] - _floorLevel) / _vortexHeight).clamp(0.0, 1.0);
-          final omega = (0.18 / (0.30 + u * 0.85)) * spinBoost;
+          final omega = (0.20 / (0.32 + u * 0.88)) * spinBoost;
           final a = _pangle[i] + omega * (dt * 30.0);
           _pangle[i] = a;
-          final r = (1.6 + 18.4 * math.pow(u, 1.35)) * _pdispersal[i];
+          // 顶部开口收拢：基准 1.2，顶部扩展至 ~9.8，避免过宽散成大V形
+          final r = (1.2 + 8.6 * math.pow(u, 1.45)) * _pdispersal[i];
           _px[i] = math.sin(a) * r;
           _pz[i] = math.cos(a) * r;
         }
@@ -299,14 +312,14 @@ class _TornadoVortexSim {
 
     final t = _lastTime.isFinite ? _lastTime : 0.0;
 
-    // 3D 摄像机平滑轨道游弋与微俯视视角（俯视风暴漏斗与吸积盘）
-    final camOrbitAngle = t * 0.20;
+    // 3D 摄像机平滑轨道游弋与微俯视视角（摄像头高度提升至 11.5，纵览深渊涡旋）
+    final camOrbitAngle = t * 0.18;
     const camDist = 22.0;
     final camX = math.sin(camOrbitAngle) * camDist;
     final camZ = math.cos(camOrbitAngle) * camDist;
-    const camY = 6.5; // 位于上空，俯视风暴中心
+    const camY = 11.5; // 稍微抬高摄像头视角
 
-    const targetY = -1.0;
+    const targetY = -2.5;
     final pitch = math.atan2(camY - targetY, camDist);
 
     final cosYaw = math.cos(camOrbitAngle);
@@ -370,10 +383,10 @@ class _TornadoVortexSim {
       }
     }
 
-    // 2) 绘制 700 颗 3D 旋转风暴粒子
+    // 2) 绘制 3D 旋转风暴粒子（动态接纳外围汇聚粒子）
     final halfH = _vortexHeight / 2.0;
 
-    for (var i = 0; i < _particleCount; i++) {
+    for (var i = 0; i < _activeCount; i++) {
       final px = _px[i];
       final py = _py[i];
       final pz = _pz[i];

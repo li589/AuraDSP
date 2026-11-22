@@ -403,6 +403,7 @@ void main() {
 
       Widget buildHud() {
         return MaterialApp(
+          locale: const Locale('en'),
           theme: withAuraExtension(ThemeData.dark(), auraDark),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
