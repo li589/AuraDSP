@@ -5,6 +5,8 @@
 //       必须通过 LoadLibraryW/GetProcAddress 动态绑定 auradsp_engine.dll。
 #pragma once
 
+#include "AsioDriverShared.h"  // ASIO_DRIVER_PARAMS_PAYLOAD_CAP (ApplyParamsString buffer)
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
