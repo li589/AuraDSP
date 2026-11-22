@@ -28,9 +28,8 @@ class AtmospherePainter extends CustomPainter implements VisualizerTimeAware {
   final Paint _haloPaint = Paint()..style = PaintingStyle.fill;
   final Paint _horizonPaint = Paint()..style = PaintingStyle.stroke;
 
-  /// 光晕径向渐变缓存：单位圆 shader + 画布缩放，尺寸/半径变化都不重建。
-  Shader? _haloShader;
-  int _haloLevel = -1;
+  /// 光晕径向渐变预计算表：9 档激活度单位圆 shader，构造时一次性构建，整场零创建。
+  final List<Shader> _haloShaders;
 
   /// 微尘闪烁的 alpha 与地平线余晖都是连续量，按 32 档量化后预计算颜色表，
   /// 消除每帧 64 次以上 `Color.withValues` 分配（量化误差 < 0.011 alpha，不可见）。
@@ -47,12 +46,26 @@ class AtmospherePainter extends CustomPainter implements VisualizerTimeAware {
         (i) => base.withValues(alpha: i / (_alphaLevels - 1) * maxAlpha),
       );
 
+  static List<Shader> _buildHaloShaders(VisualizerPalette palette) =>
+      List<Shader>.generate(9, (level) {
+        final a = level / 8.0;
+        return RadialGradient(
+          colors: [
+            palette.glow.withValues(alpha: 0.08 + a * 0.22),
+            palette.secondary.withValues(alpha: 0.03 + a * 0.05),
+            palette.glow.withValues(alpha: 0.0),
+          ],
+          stops: const [0.0, 0.55, 1.0],
+        ).createShader(const Rect.fromLTRB(-1, -1, 1, 1));
+      });
+
   AtmospherePainter({
     required this.bands,
     required this.palette,
     required this.animationTime,
     this.intensity = 0.6,
-  })  : _speckColorsA = _buildAlphaTable(palette.primary, _speckAlphaMax),
+  })  : _haloShaders = _buildHaloShaders(palette),
+        _speckColorsA = _buildAlphaTable(palette.primary, _speckAlphaMax),
         _speckColorsB = _buildAlphaTable(palette.secondary, _speckAlphaMax),
         _horizonColors = _buildAlphaTable(palette.glow, _horizonAlphaMax);
 
@@ -83,23 +96,11 @@ class AtmospherePainter extends CustomPainter implements VisualizerTimeAware {
     final bass = n == 0 ? 0.0 : _avg(0, math.max(1, n ~/ 8));
     final activation = (0.35 + bass * 0.65) * intensity;
 
-    // 低频呼吸光晕：从底部中央缓慢起伏（shader 按激活度 8 档缓存 + 单位圆缩放）
+    // 低频呼吸光晕：从底部中央缓慢起伏（9 档预制单位圆 shader + 画布缩放）
     final center = Offset(w * 0.5, h * (0.72 + 0.03 * math.sin(t * 0.4)));
     final radius = math.max(w, h) * (0.5 + bass * 0.3);
     final level = (activation * 8).floor().clamp(0, 8);
-    if (_haloShader == null || _haloLevel != level) {
-      _haloLevel = level;
-      final a = level / 8.0;
-      _haloShader = RadialGradient(
-        colors: [
-          palette.glow.withValues(alpha: 0.08 + a * 0.22),
-          palette.secondary.withValues(alpha: 0.03 + a * 0.05),
-          palette.glow.withValues(alpha: 0.0),
-        ],
-        stops: const [0.0, 0.55, 1.0],
-      ).createShader(const Rect.fromLTRB(-1, -1, 1, 1));
-    }
-    _haloPaint.shader = _haloShader;
+    _haloPaint.shader = _haloShaders[level];
     canvas.save();
     canvas.translate(center.dx, center.dy);
     canvas.scale(radius, radius);

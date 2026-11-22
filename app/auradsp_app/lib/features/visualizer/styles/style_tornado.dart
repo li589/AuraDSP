@@ -78,6 +78,9 @@ class _TornadoVortexSim {
   final Float32List _pradius = Float32List(_particleCount);
   final Float32List _pcolorHue = Float32List(_particleCount);
   final Int32List _ptier = Int32List(_particleCount);
+  final Float32List _pangle = Float32List(_particleCount);
+  final Float32List _pdispersal = Float32List(_particleCount);
+  final Int8List _pground = Int8List(_particleCount);
 
   // 地面引力网格静态坐标
   final Float32List _floorBaseX = Float32List(_floorCount);
@@ -99,6 +102,7 @@ class _TornadoVortexSim {
     ..isAntiAlias = true
     ..color = const Color(0xFFFFFFFF);
 
+  final math.Random _rnd = math.Random(880211);
   double _lastTime = double.nan;
   double _smoothedBass = 0.0;
   double _smoothedEnergy = 0.0;
@@ -124,29 +128,52 @@ class _TornadoVortexSim {
   }
 
   void _initParticles() {
-    final rnd = math.Random(880211);
     for (var i = 0; i < _particleCount; i++) {
-      _spawnParticle(i, rnd, initialSpread: true);
+      _spawnParticle(i, initialSpread: true);
     }
     _initialized = true;
   }
 
-  void _spawnParticle(int i, math.Random rnd, {bool initialSpread = false}) {
-    final p = rnd.nextDouble() * math.pi * 2;
-    // 初始半径分布：平方根保证面积均匀，偏向外围
-    final ls = math.sqrt(rnd.nextDouble() * _distributionRadius);
-    _px[i] = math.sin(p) * ls;
-    _pz[i] = math.cos(p) * ls;
-    // 初始高度：启动时纵向错开，运行中重置则从底部起飞
+  void _spawnParticle(int i, {bool initialSpread = false}) {
+    _pvy[i] = 0.06 + _rnd.nextDouble() * 0.14;
+    _pradius[i] = 160.0 + _rnd.nextDouble() * 700.0;
+    _pcolorHue[i] = _rnd.nextDouble();
+    _ptier[i] = (_rnd.nextDouble() * 4).floor().clamp(0, 3);
+    _pdispersal[i] = 0.82 + _rnd.nextDouble() * 0.36;
+
+    final a = _rnd.nextDouble() * math.pi * 2;
+    _pangle[i] = a;
+
     if (initialSpread) {
-      _py[i] = -_vortexHeight / 2 + rnd.nextDouble() * _vortexHeight;
+      final isGround = (i % 5 == 0);
+      _pground[i] = isGround ? 0 : 1;
+      if (isGround) {
+        _py[i] = _floorLevel;
+        final r = 2.5 + _rnd.nextDouble() * (_maxDist - 2.5);
+        _px[i] = math.sin(a) * r;
+        _pz[i] = math.cos(a) * r;
+      } else {
+        final u = _rnd.nextDouble();
+        _py[i] = _floorLevel + u * _vortexHeight;
+        // 大口在上，小头在下：u=0 (底部) 半径 1.6；u=1 (顶部) 半径 20.0
+        final r = (1.6 + 18.4 * math.pow(u, 1.35)) * _pdispersal[i];
+        _px[i] = math.sin(a) * r;
+        _pz[i] = math.cos(a) * r;
+      }
     } else {
-      _py[i] = -_vortexHeight / 2;
+      _py[i] = _floorLevel;
+      final isGround = (_rnd.nextDouble() < 0.25);
+      _pground[i] = isGround ? 0 : 1;
+      if (isGround) {
+        final r = 6.0 + _rnd.nextDouble() * (_maxDist - 6.0);
+        _px[i] = math.sin(a) * r;
+        _pz[i] = math.cos(a) * r;
+      } else {
+        final r = 1.6 * _pdispersal[i];
+        _px[i] = math.sin(a) * r;
+        _pz[i] = math.cos(a) * r;
+      }
     }
-    _pvy[i] = 0.005 + rnd.nextDouble() * 0.015;
-    _pradius[i] = 160.0 + rnd.nextDouble() * 700.0;
-    _pcolorHue[i] = rnd.nextDouble();
-    _ptier[i] = (rnd.nextDouble() * 4).floor().clamp(0, 3);
   }
 
   void _updateColorLut(VisualizerPalette palette) {
@@ -219,35 +246,40 @@ class _TornadoVortexSim {
     final curEnergy = (bass * 0.4 + mid * 0.4 + treble * 0.2).clamp(0.0, 1.0);
     _smoothedEnergy += (curEnergy - _smoothedEnergy) * (dt * 4.5).clamp(0.0, 1.0);
 
-    // 音频驱动向心收拢系数与角速度激增
-    final inwardFactor = 1.0075 + 0.007 * _smoothedBass;
-    final spinBoost = 1.0 + 2.5 * _smoothedBass + 0.8 * mid;
-    final liftBoost = 1.0 + 1.6 * _smoothedBass + 0.6 * _smoothedEnergy;
+    // 音频驱动向心收拢与旋转/升力加速度
+    final spinBoost = 1.0 + 2.8 * _smoothedBass + 0.6 * mid;
+    final liftBoost = 1.0 + 1.8 * _smoothedBass + 0.6 * _smoothedEnergy;
 
-    final rnd = math.Random();
     for (var i = 0; i < _particleCount; i++) {
-      var x = _px[i];
-      var y = _py[i];
-      var z = _pz[i];
+      if (_pground[i] == 0) {
+        // 1) 地面吸入阶段：沿地表向中心小头汇聚
+        var r = math.sqrt(_px[i] * _px[i] + _pz[i] * _pz[i]);
+        r -= (0.10 + 0.14 * _smoothedBass) * (dt * 30.0);
+        final spinSpeed = (0.16 / (1.0 + r * 0.28)) * spinBoost;
+        final a = _pangle[i] + spinSpeed * (dt * 30.0);
+        _pangle[i] = a;
+        _px[i] = math.sin(a) * r;
+        _pz[i] = math.cos(a) * r;
+        _py[i] = _floorLevel;
 
-      // 1) 向心吸入与角速度急剧飙升（经典龙卷风物理公式）
-      final d = math.sqrt(x * x + z * z) / inwardFactor;
-      final tAng = (0.10 / (1.0 + (d * d) / 5.0)) * spinBoost;
-      final p = math.atan2(x, z) + tAng;
-      x = math.sin(p) * d;
-      z = math.cos(p) * d;
-
-      // 2) 靠近中心时垂直上升加速度爆发
-      final liftFactor = (_maxDist - d) * 2.0;
-      y += _pvy[i] * tAng * liftFactor * liftBoost;
-
-      // 3) 达到顶部边界或穿入死核时重置
-      if (y > _vortexHeight / 2 || d < 0.25) {
-        _spawnParticle(i, rnd);
+        if (r <= 1.8) {
+          _pground[i] = 1;
+          _py[i] = _floorLevel;
+        }
       } else {
-        _px[i] = x;
-        _py[i] = y;
-        _pz[i] = z;
+        // 2) 向上飞旋喷发阶段：大口在上，小头在下（随高度递增向外展开为号角形风暴口）
+        _py[i] += _pvy[i] * liftBoost * (dt * 30.0);
+        if (_py[i] > _vortexHeight / 2) {
+          _spawnParticle(i);
+        } else {
+          final u = ((_py[i] - _floorLevel) / _vortexHeight).clamp(0.0, 1.0);
+          final omega = (0.18 / (0.30 + u * 0.85)) * spinBoost;
+          final a = _pangle[i] + omega * (dt * 30.0);
+          _pangle[i] = a;
+          final r = (1.6 + 18.4 * math.pow(u, 1.35)) * _pdispersal[i];
+          _px[i] = math.sin(a) * r;
+          _pz[i] = math.cos(a) * r;
+        }
       }
     }
   }
@@ -295,8 +327,8 @@ class _TornadoVortexSim {
       final fx = _floorBaseX[i];
       final fz = _floorBaseZ[i];
       final d = _floorDist[i];
-      // 中心向漏斗下沉的时空引力凹陷
-      final fy = floorY - (d * d) / 110.0 * (1.0 + 0.15 * _smoothedBass);
+      // 中心向漏斗下沉的时空引力凹陷（正对风暴小头地基中心）
+      final fy = floorY - math.exp(-d / 6.0) * 2.2 * (1.0 + 0.2 * _smoothedBass);
 
       // 3D 变换
       final dx = fx - camX;
@@ -408,14 +440,13 @@ class _TornadoVortexSim {
   }
 }
 
-/// 龙卷风的静态基底：暗场渐变 + 轻微渐晕 + 地面暗光。
+/// 龙卷风的静态基底：暗场渐变 + 轻微渐晕（纯净深邃底色，不含多余假球）。
 class TornadoBackdropPainter extends CustomPainter {
   final VisualizerPalette palette;
   final double bloom;
 
   Paint? _bgPaint;
   Paint? _vignettePaint;
-  Paint? _groundPaint;
   Size? _shaderSize;
 
   TornadoBackdropPainter({required this.palette, required this.bloom});
@@ -423,7 +454,6 @@ class TornadoBackdropPainter extends CustomPainter {
   void _ensureShaders(Size size) {
     if (_bgPaint != null && _shaderSize == size) return;
     _shaderSize = size;
-    final cx = size.width / 2.0;
     _bgPaint = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
@@ -445,22 +475,6 @@ class TornadoBackdropPainter extends CustomPainter {
         ],
         stops: const [0.0, 0.55, 1.0],
       ).createShader(Offset.zero & size);
-
-    _groundPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          palette.secondary.withValues(alpha: 0.10 + bloom * 0.10),
-          palette.primary.withValues(alpha: 0.035 + bloom * 0.04),
-          palette.glow.withValues(alpha: 0.0),
-        ],
-        stops: const [0.0, 0.45, 1.0],
-      ).createShader(
-        Rect.fromCenter(
-          center: Offset(cx, size.height * 0.88),
-          width: size.width * 0.9,
-          height: size.height * 0.32,
-        ),
-      );
   }
 
   @override
@@ -469,15 +483,6 @@ class TornadoBackdropPainter extends CustomPainter {
     _ensureShaders(size);
     canvas.drawRect(Offset.zero & size, _bgPaint!);
     canvas.drawRect(Offset.zero & size, _vignettePaint!);
-    final cx = size.width / 2.0;
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(cx, size.height * 0.88),
-        width: size.width * 0.9,
-        height: size.height * 0.32,
-      ),
-      _groundPaint!,
-    );
   }
 
   @override

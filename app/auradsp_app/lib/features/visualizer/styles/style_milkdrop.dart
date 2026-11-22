@@ -148,8 +148,12 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
     }
     final fullRect = _fullRect!;
 
+    final qW = (size.width / 32).round() * 32;
+    final qH = (size.height / 32).round() * 32;
+
     final zoomFactor = preset.zoom.clamp(0.8, 1.4) + (bassLvl / 4.0) * 0.08;
-    _bgPaint.shader = _getOrCreateShader('milk_bg_x___', () => RadialGradient(
+    final bgKey = 'milk_bg_${qW}x${qH}_b$bassLvl';
+    _bgPaint.shader = _getOrCreateShader(bgKey, () => RadialGradient(
       center: Alignment.center,
       radius: 0.9 * zoomFactor,
       colors: [
@@ -164,7 +168,8 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
     final rot = _rotation;
     // 旋转角按 16 档量化以复用旋转微光着色器
     final rotStep = (rot * 8 / math.pi).round() % _rotSteps;
-    _shimmerPaint.shader = _getOrCreateShader('milk_shim_x___', () => LinearGradient(
+    final shimKey = 'milk_shim_${qW}x${qH}_r${rotStep}_b${bassLvl}_m$midLvl';
+    _shimmerPaint.shader = _getOrCreateShader(shimKey, () => LinearGradient(
       begin: _shimmerBegin[rotStep],
       end: _shimmerEnd[rotStep],
       colors: [

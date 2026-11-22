@@ -1,10 +1,10 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
 import '../models/visualizer_themes.dart';
+import 'visualizer_sprite_atlas.dart';
 import 'visualizer_time_aware.dart';
 
 /// 流体动力学：基于 Stable Fluids（Jos Stam）的二维不可压流场模拟
@@ -63,12 +63,10 @@ class _FluidField {
   double _stepEmaMs = 0;
   static const int _lutSize = 128;
 
-  // 渲染网格规格（轻量化 48×28 采样，顶点数从 9417 降至 1421，原生内存骤降 85%）
+  // 渲染网格规格（轻量化 48×28 采样，单批次 drawRawAtlas GPU 提交）
   static const int _rnx = 48;
   static const int _rny = 28;
-  static const int _renderVertexColumns = _rnx + 1;
-  static const int _renderVertexCount = _renderVertexColumns * (_rny + 1);
-  static const int _renderIndexCount = _rnx * _rny * 6;
+  static const int _maxSprites = (_rnx + 1) * (_rny + 1); // 1421
 
   // 速度场与染料场的双缓冲
   final Float32List _u = Float32List(_cells);
@@ -105,13 +103,16 @@ class _FluidField {
   final Float32List _waveYSin3 = Float32List(_ny);
   final Float32List _waveYCos3 = Float32List(_ny);
 
-  // 渲染网格（位置只在尺寸变化时重建，颜色每帧写入）
-  final Float32List _positions = Float32List(_renderVertexCount * 2);
-  final Int32List _colors = Int32List(_renderVertexCount);
-  final Uint16List _indices = Uint16List(_renderIndexCount);
-  final Paint _meshPaint = Paint();
+  // drawRawAtlas 顶点与颜色提交缓冲（零逐帧分配，零 SkVertices 原生泄漏）
+  final Float32List _rst = Float32List(_maxSprites * 4);
+  final Float32List _rects = Float32List(_maxSprites * 4);
+  final Int32List _spriteColors = Int32List(_maxSprites);
+  final VisualizerSpriteAtlas _atlas = VisualizerSpriteAtlas.instance;
+  final Paint _batchPaint = Paint()
+    ..filterQuality = FilterQuality.low
+    ..isAntiAlias = true
+    ..color = const Color(0xFFFFFFFF);
 
-  Size _geometrySize = Size.zero;
   Int32List? _colorTable;
   List<Color>? _tableColors;
   double? _tableBloom;
@@ -122,26 +123,7 @@ class _FluidField {
   bool _primed = false;
   final math.Random _rng = math.Random(0x5F3A21);
 
-  // GC 辅助触发计数器，促使 Dart VM 定期触发 Native Finalizer，杜绝显存累积
-  int _renderFrameCount = 0;
-
-  _FluidField() {
-    var cursor = 0;
-    for (var y = 0; y < _rny; y++) {
-      for (var x = 0; x < _rnx; x++) {
-        final topLeft = y * _renderVertexColumns + x;
-        final topRight = topLeft + 1;
-        final bottomLeft = topLeft + _renderVertexColumns;
-        final bottomRight = bottomLeft + 1;
-        _indices[cursor++] = topLeft;
-        _indices[cursor++] = bottomLeft;
-        _indices[cursor++] = topRight;
-        _indices[cursor++] = topRight;
-        _indices[cursor++] = bottomLeft;
-        _indices[cursor++] = bottomRight;
-      }
-    }
-  }
+  _FluidField();
 
   /// 推进一步模拟。[time] 为外部动画时间轴（秒），[bands] 为低→高排列的能量。
   void step(double time, List<double> bands) {
@@ -751,29 +733,60 @@ class _FluidField {
     return top * (1.0 - fy) + bottom * fy;
   }
 
-  /// 把染料场映射成轻量化顶点颜色并一次性同步绘制。
+  /// 把染料场映射为单批次 GPU 柔光精灵渲染（零 GC，零原生泄漏）。
   void paint(
     Canvas canvas,
     Size size,
     VisualizerPalette palette,
     double bloom,
   ) {
-    _ensureGeometry(size);
+    _atlas.ensureImage();
+    final atlas = _atlas.imageOrNull;
+    if (atlas == null) return;
+
     final table = _resolveColorTable(palette, bloom);
 
     var total = 0.0;
-    var cursor = 0;
     const double stepX = (_nx - 1.0) / _rnx;
     const double stepY = (_ny - 1.0) / _rny;
+    final cellW = size.width / _rnx;
+    final cellH = size.height / _rny;
+    // blob 预烘焙为 192×192，按 1.85 倍采样网格铺盖，重叠产生连续柔和的流体云丝
+    final spriteScale = math.max(cellW, cellH) * 1.85 / 192.0;
+    final blob = _atlas.blob;
+    final bx = blob.rect[0];
+    final by = blob.rect[1];
+    final bw = blob.rect[2];
+    final bh = blob.rect[3];
+    final halfBlobScaled = 96.0 * spriteScale;
 
+    var spriteCount = 0;
     for (var y = 0; y <= _rny; y++) {
       final sampleY = (y * stepY).clamp(0.0, _ny - 1.0);
+      final py = y * cellH;
       for (var x = 0; x <= _rnx; x++) {
         final sampleX = (x * stepX).clamp(0.0, _nx - 1.0);
         final dye = _sample(_dye, sampleX, sampleY);
         total += dye;
         final level = _gammaIndex(dye);
-        _colors[cursor++] = level <= 0 ? 0 : table[level];
+        if (level <= 0) continue;
+        final color = table[level];
+        if ((color & 0xFF000000) == 0) continue;
+
+        final px = x * cellW;
+        final o = spriteCount * 4;
+        _rects[o] = bx;
+        _rects[o + 1] = by;
+        _rects[o + 2] = bw;
+        _rects[o + 3] = bh;
+
+        _rst[o] = spriteScale;
+        _rst[o + 1] = 0.0;
+        _rst[o + 2] = px - halfBlobScaled;
+        _rst[o + 3] = py - halfBlobScaled;
+
+        _spriteColors[spriteCount] = color;
+        spriteCount++;
       }
     }
 
@@ -782,37 +795,16 @@ class _FluidField {
       return;
     }
 
-    final vertices = ui.Vertices.raw(
-      ui.VertexMode.triangles,
-      _positions,
-      colors: _colors,
-      indices: _indices,
-    );
-    canvas.drawVertices(vertices, ui.BlendMode.dst, _meshPaint);
-
-    // 每 45 帧轻微触发 Dart 堆压力感知，促使 Finalizer 准时回收底层 SkVertices，
-    // 杜绝长时间播放下 C++ 显存暴涨到 2GB+。
-    _renderFrameCount++;
-    if (_renderFrameCount % 45 == 0) {
-      // 临时分配 1MB 堆空间并立即释放，告诉 GC 及时回收 Native 显存句柄
-      final _ = Uint8List(1024 * 1024);
-    }
-  }
-
-  /// 网格位置只在画布尺寸变化时重建（颜色缓冲每帧复用）。
-  void _ensureGeometry(Size size) {
-    if (_geometrySize == size) return;
-    _geometrySize = size;
-
-    final cellWidth = size.width / _rnx;
-    final cellHeight = size.height / _rny;
-    var cursor = 0;
-    for (var y = 0; y <= _rny; y++) {
-      final py = y * cellHeight;
-      for (var x = 0; x <= _rnx; x++) {
-        _positions[cursor++] = x * cellWidth;
-        _positions[cursor++] = py;
-      }
+    if (spriteCount > 0) {
+      canvas.drawRawAtlas(
+        atlas,
+        _rst,
+        _rects,
+        _spriteColors,
+        BlendMode.modulate,
+        null,
+        _batchPaint,
+      );
     }
   }
 
