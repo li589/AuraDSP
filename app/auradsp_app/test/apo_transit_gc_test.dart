@@ -11,7 +11,10 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('ApoTransit.collectOrphans', () {
     late Directory tmp;
-    final now = DateTime(2026, 11, 23, 12);
+    // 逻辑时钟 = 真实时间 +31 天：dart:io 无目录 mtime 设置 API，
+    // 故 bundle 目录用真实创建时间、靠 nowOverride 把它推入
+    // 「老」区间；文件则可直接 setLastModifiedSync 到逻辑时刻。
+    final now = DateTime.now().add(const Duration(days: 31));
     final old = now.subtract(const Duration(days: 30));
     final young = now.subtract(const Duration(days: 1));
 
@@ -38,7 +41,6 @@ void main() {
         ..createSync();
       File('${bundle.path}${Platform.pathSeparator}mod.vst3')
           .writeAsStringSync('y');
-      bundle.setLastModifiedSync(old);
 
       final removed = ApoTransit.collectOrphans(
         {kept.path},

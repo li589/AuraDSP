@@ -98,8 +98,7 @@ bool ports_get(const clap_plugin_t*, uint32_t index, bool is_input,
     info->name[CLAP_NAME_SIZE - 1] = '\0';
     info->flags = CLAP_AUDIO_PORT_IS_MAIN;
     info->channel_count = 2;
-    std::strncpy(info->port_type, CLAP_PORT_STEREO, CLAP_NAME_SIZE - 1);
-    info->port_type[CLAP_NAME_SIZE - 1] = '\0';
+    info->port_type = CLAP_PORT_STEREO;
     info->in_place_pair = CLAP_INVALID_ID;
     return true;
 }
