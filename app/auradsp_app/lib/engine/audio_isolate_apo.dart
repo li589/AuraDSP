@@ -118,6 +118,14 @@ const String _apoSharedSddl =
 /// 放弃，后续每次参数变更都会重试（APO 首次锁定后块即出现）。
 /// 只有 Win32 本身不可用（非 Windows）才永久静默。
 class ApoParamPublisher {
+  /// 文件效果（IR/DDC）当前实际写入参数块的中转路径（按参数
+  /// id 记最近一次有效值）：中转孤儿回收的引用集来源之一。
+  final Map<String, String> _fileEffectTransit = {};
+
+  /// 当前被参数块引用的中转路径集合（孤儿回收 keep 集）。
+  Set<String> get referencedTransitPaths =>
+      _fileEffectTransit.values.where((p) => p.isNotEmpty).toSet();
+
   Map<String, ({bool isFloat, double value})>? _mirror;
   Map<String, String>? _strMirror;
   bool Function()? _bypassOf;
@@ -326,6 +334,7 @@ class ApoParamPublisher {
     var effective = text;
     if (id == ParamId.convIrPath || id == ParamId.ddcLoad) {
       effective = ApoTransit.transitPathFor(text) ?? '';
+      _fileEffectTransit[id] = effective;
     }
     if (!_ensure()) return;
     _beginWrite();
@@ -365,7 +374,16 @@ class ApoParamPublisher {
       _u32![5 + s] = 0;
     }
     for (final e in strMirror.entries) {
-      _writeString(e.key, e.value);
+      var text = e.value;
+      if (e.key == ParamId.convIrPath || e.key == ParamId.ddcLoad) {
+        // 与 onString 同口径：全量快照也必须走中转——镜像存的
+        // 是原始路径，直接写块会被 audiodg 读不到且被宿主围栏
+        // 拒绝（2026-11-23 发现：切入 APO/会话恢复时 flushAll
+        // 写原路径，文件效果静默失效，直到用户逐个重选文件）。
+        text = ApoTransit.transitPathFor(text) ?? '';
+        _fileEffectTransit[e.key] = text;
+      }
+      _writeString(e.key, text);
     }
     _writeOverrideTable();
     _endWrite();
@@ -1016,10 +1034,15 @@ class ApoPluginPublisher {
   /// 镜像同步（状态轮询/'apopublish' 调用）：仅 diff 落块；
   /// 身份（占用/路径/id/格式）变化推进 loadGen，其余字段变化
   /// 只改槽头。
+  /// 本轮同步后插件块实际引用的中转路径集合（孤儿回收 keep
+  /// 集）：每轮 syncFromMirror 按当前镜像重建。
+  final Set<String> currentTransitPaths = {};
+
   void syncFromMirror(List<PluginSlotCfg> mirror,
       {required bool chainEnabled, required bool pdcEnabled}) {
     if (!active) return;
     if (!_ensure()) return;
+    currentTransitPaths.clear();
     var wrote = false;
     _beginWrite();
     if (!_hdrSeen || chainEnabled != _pubChain) {
@@ -1047,6 +1070,7 @@ class ApoPluginPublisher {
         final t = _transitCache[raw.path];
         if (t != null) {
           path = t;
+          currentTransitPaths.add(t);
         } else if (!_transitFailed.contains(raw.path)) {
           // 异步中转（2026-11-23）：本轮先按未占用下发，复制在
           // 后台进行；落定回调 onTransitSettled 触发补同步把

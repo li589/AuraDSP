@@ -200,4 +200,46 @@ abstract final class ApoTransit {
       return null;
     }
   }
+
+  /// 中转孤儿回收（2026-11-23 后续小项轮）：中转根只进不出，
+  /// 用户换 IR/DDC/插件后旧副本永久滞留。发布者把「当前参数
+  /// 块与插件块实际引用的中转路径集合」交给本方法：不在集合
+  /// 内、且最后修改时间早于 [minAge]（默认 7 天）的条目（文件
+  /// 或 bundle 目录）删除。双条件是安全垫：audiodg 可能仍持
+  /// 有旧参数块引用近期被替换的文件，刚复制尚未下发的副本
+  /// mtime 即当前——只删「无引用且足够老」的。逐项失败吞掉
+  /// 留日志（与本类既有口径一致），返回实际删除条数。
+  /// [rootOverride]/[nowOverride] 仅供测试注入。
+  static int collectOrphans(
+    Set<String> referenced, {
+    Duration minAge = const Duration(days: 7),
+    String? rootOverride,
+    DateTime? nowOverride,
+  }) {
+    final dir = Directory(rootOverride ?? root);
+    if (!dir.existsSync()) return 0;
+    final now = nowOverride ?? DateTime.now();
+    String norm(String p) => p.replaceAll('/', r'\').toLowerCase();
+    final keep = referenced.map(norm).toSet();
+    var removed = 0;
+    for (final e in dir.listSync()) {
+      try {
+        if (keep.contains(norm(e.path))) continue;
+        if (now.difference(e.statSync().modified) < minAge) continue;
+        if (e is Directory) {
+          e.deleteSync(recursive: true);
+        } else {
+          e.deleteSync();
+        }
+        removed++;
+        dbgLog('apo transit: orphan removed ${e.path}');
+      } catch (err) {
+        dbgLog('apo transit: orphan collect failed for ${e.path}: $err');
+      }
+    }
+    if (removed > 0) {
+      dbgLog('apo transit: orphan collect removed $removed entries');
+    }
+    return removed;
+  }
 }

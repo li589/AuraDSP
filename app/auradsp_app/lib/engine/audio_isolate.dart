@@ -261,6 +261,26 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // 循环开始前已接好）。
   apoPluginPublisher.onTransitSettled = () => syncApoPlugins();
 
+  // 中转孤儿回收（2026-11-23）：'apopublish' 全量发布后，两
+  // 个发布者的当前引用集即中转根的 keep 集；30 分钟节流，
+  // 回收「无引用且 mtime 老于 7 天」的滞留副本（文件效果与
+  // 插件共用同一中转根）。声明点在此处、调用点在消息处理器
+  // 内（运行时），与 syncApoPlugins 同一接线纪律。
+  var lastOrphanCollectAt = DateTime.fromMillisecondsSinceEpoch(0);
+  void maybeCollectApoOrphans() {
+    final now = DateTime.now();
+    if (now.difference(lastOrphanCollectAt) <
+        const Duration(minutes: 30)) {
+      return;
+    }
+    lastOrphanCollectAt = now;
+    final referenced = <String>{
+      ...apoPublisher.referencedTransitPaths,
+      ...apoPluginPublisher.currentTransitPaths,
+    };
+    ApoTransit.collectOrphans(referenced);
+  }
+
   // P1 桥治理：注册表 + 惰性加载 + 当前后端（vm/asio/vaio）。
   // 未选中的桥全程不 load；同一时刻只有一个后端出声（互斥见 stopOtherBridges）。
   final BridgeManager bridgeManager = BridgeManager();
@@ -1874,6 +1894,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           // Part I Q2：插件发布者同点激活并同步镜像（身份+开关）。
           apoPluginPublisher.active = true;
           syncApoPlugins();
+          maybeCollectApoOrphans();
           break;
         case 'apotelemetry':
           // sysapo 生效期间读 APO 回传块并合成 viz 事件。
