@@ -77,7 +77,7 @@ abstract final class ApoTransit {
     try {
       if (source.isEmpty) return source;
       if (isTransitPath(source)) return source;
-      if (await File(source).exists()) return transitPathForAsync(source);
+      if (await File(source).exists()) return await transitPathForAsync(source);
       final dir = Directory(source);
       if (!await dir.exists()) {
         dbgLog('apo transit: plugin source missing: $source');
