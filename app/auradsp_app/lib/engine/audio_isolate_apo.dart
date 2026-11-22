@@ -105,10 +105,12 @@ String apoTelemetryNameFor(String endpointId) {
   }
   return sb.toString();
 }
-// 与心跳/ApoShared.h 同一穿透 SDDL（LS + 交互用户 IU + LPAC 包
-// SID）。2026-11-22 审查 N1：原 Everyone(WD) 全权过宽已收紧为 IU。
+// 与心跳/ApoShared.h 同一穿透 SDDL（LS + 交互用户 IU + OW 所有
+// 者 + LPAC 包 SID）。2026-11-22 审查 N1：原 Everyone(WD) 全权过
+// 宽已收紧为 IU；2026-11-23 补 OW（网络登录令牌无 IU，创建者打
+// 不开自建对象，见 ApoShared.h 注）。
 const String _apoSharedSddl =
-    'D:(A;;GA;;;LS)(A;;GA;;;IU)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)';
+    'D:(A;;GA;;;LS)(A;;GA;;;IU)(A;;GA;;;OW)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)';
 
 /// 参数块发布者：镜像 → 共享块（seqlock 单写者）。
 ///

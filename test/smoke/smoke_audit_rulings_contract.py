@@ -41,6 +41,15 @@ check("GA;;;IU" in asio_drv, "ASIO telemetry SDDL missing Interactive User")
 dart_asio = read("app/auradsp_app/lib/engine/audio_isolate_asio.dart")
 check("GA;;;WD" not in dart_asio, "Dart _asioSharedSddl still grants Everyone")
 check("GA;;;IU" in dart_asio, "Dart _asioSharedSddl missing Interactive User")
+
+# --- 2026-11-23: OW (OWNER RIGHTS) must ride along: tokens without
+# IU (SSH / CI service logons) otherwise cannot even open the
+# objects they created (apo_engine_test err=5, CI J5b red).
+for _name, _blob in (("ApoShared.h", apo_shared), ("AuraApo.cpp", aura_apo),
+                     ("Dart apo", dart_apo), ("ASIO driver", asio_drv),
+                     ("Dart asio", dart_asio)):
+    check("GA;;;OW" in _blob, f"{_name} SDDL missing Owner Rights (OW)")
+
 check("GA;;;IU" in dart_apo, "Dart _apoSharedSddl missing Interactive User")
 
 # --- N1: 插件围栏（宿主校验 + 发布侧中转） ---

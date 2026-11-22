@@ -437,7 +437,7 @@ void AuraAsioDriver::OpenTelemetry() {
     CloseTelemetry();
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            L"D:(A;;GA;;;IU)", SDDL_REVISION_1, &sd, nullptr)) {
+            L"D:(A;;GA;;;IU)(A;;GA;;;OW)", SDDL_REVISION_1, &sd, nullptr)) {
         return;
     }
     SECURITY_ATTRIBUTES sa{};

@@ -32,7 +32,7 @@ const int _asioTelemetryBytes = 4096;
 // 任意本地进程/用户都能向 DAW 侧引擎注入参数串（N1 在 APO 块
 // 上已关掉的同类面，2026-11-23 审查补齐到 ASIO 两块）。不需
 // APO 的 LPAC 穿透描述符（读者不是 AppContainer）。
-const String _asioSharedSddl = 'D:(A;;GA;;;IU)';
+const String _asioSharedSddl = 'D:(A;;GA;;;IU)(A;;GA;;;OW)';
 
 /// 参数块发布者（虚拟形态激活；Client 形态下恒空操作）。
 class AsioParamPublisher {
