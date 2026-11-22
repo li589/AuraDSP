@@ -339,8 +339,14 @@ class AsioTelemetryReader {
       _sendAbsent();
       return;
     }
-    _absentSent = false;
     final version = u32[1];
+    // 与桥侧读口径对齐（AsioBridge 拒绝 version <1 || >2）：未知版本
+    // 按块缺席处理，避免未来块升版改布局时静默误读频谱偏移。
+    if (version < 1 || version > 2) {
+      _sendAbsent();
+      return;
+    }
+    _absentSent = false;
     final running = _i32![3];
     final heartbeat = _i32![4];
     if (running == 1 && heartbeat != _lastHeartbeat) {

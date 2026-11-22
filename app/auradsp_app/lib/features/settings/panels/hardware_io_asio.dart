@@ -103,9 +103,10 @@ class _AsioClientPanel extends StatelessWidget {
 /// 驱动注册状态、DAW 连接状态（仅活跃时，与驱动卡同口径）与
 /// 驱动声道档位（写注册表，DAW 下次创建驱动时读取）。
 /// S3 起补：后端输出端点选择（写注册表 RenderEndpoint，驱动汇
-/// 消费）与遥测行（DAW 已处理帧 / 汇实际生效端点与格式，数据经
-/// 驱动遥测块由桥转入 asioInfo 的 daw* 字段；桥无此字段时 DAW
-/// 状态回落 App 自身会话口径）。
+/// 消费）与遥测行（DAW 已处理帧 / 汇实际生效端点与格式）。遥测
+/// 数据来源（S4 起）：虚拟形态由 isolate 的 AsioTelemetryReader
+/// 直读驱动遥测块并合成 asioInfo 的 daw* 字段；桥只在 Client
+/// 会话的状态合并中转入同名字段。
 class _AsioVirtualPanel extends StatelessWidget {
   final AppModel model;
   const _AsioVirtualPanel({required this.model});
