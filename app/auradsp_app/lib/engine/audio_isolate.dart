@@ -205,8 +205,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         strMirror: paramStrMirror,
         bypassOf: () => bypass);
   // Part I Q2：插件块发布者（sysapo 激活时把 pluginMirror 同步进
-  // AuraDSP_ApoPlugins；未激活时全部方法为空操作）。
-  final apoPluginPublisher = ApoPluginPublisher();
+  // AuraDSP_ApoPlugins；未激活时全部方法为空操作）。中转落定
+  // 回调接 syncApoPlugins 补同步（2026-11-23 异步中转）。
+  final apoPluginPublisher = ApoPluginPublisher()
+    ..onTransitSettled = (() => syncApoPlugins());
   final apoTelemetry = ApoTelemetryReader();
   // ASIO S4 通道：参数块发布者 + 遥测读者（虚拟形态控制模式下
   // 激活；Client 形态走桥会话、两者恒空操作）。与 APO 发布者共
@@ -2185,7 +2187,43 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final h = handle;
             if (l != null && h != null) {
               slotLoadInFlight.add(slot);
-              unawaited(_slotLoadAsync(l, h, slot, path, id, send).then((rc) {
+              unawaited(() async {
+                // N1 异步中转（2026-11-23 用户裁定）：APO 激活时，
+                // 插件文件先异步中转再开始影子加载——复制全程落在
+                // 槽位忙态（加载动画）窗口内，且不冻结事件循环。
+                // 中转失败 = 本次加载失败（fail-closed，与宿主围栏
+                // 同口径）：按普通加载失败的事件形状收口，镜像保
+                // 持空，绝不下发原始路径。
+                if (apoPluginPublisher.active) {
+                  final t =
+                      await apoPluginPublisher.preparePluginTransit(path);
+                  if (t == null) {
+                    pluginMirror[slot] = PluginSlotCfg();
+                    slotLoadInFlight.remove(slot);
+                    send({
+                      'evt': 'pluginSlotBusy',
+                      'slot': slot,
+                      'busy': true
+                    });
+                    send({
+                      'evt': 'pluginSlotLoaded',
+                      'slot': slot,
+                      'path': path,
+                      'rc': 0,
+                      'status':
+                          AuraDspLib.pluginSlotGetStatusJson(l, h, slot),
+                      'stage': 3,
+                      'busy': false,
+                    });
+                    send({
+                      'evt': 'pluginSlotBusy',
+                      'slot': slot,
+                      'busy': false
+                    });
+                    return;
+                  }
+                }
+                final rc = await _slotLoadAsync(l, h, slot, path, id, send);
                 if (rc == 1) {
                   pluginMirror[slot]
                     ..loaded = true
@@ -2222,7 +2260,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 } catch (e) {
                   dbgLog('plugin: pdc sync read failed: $e');
                 }
-              }));
+              }());
             }
             break;
           }

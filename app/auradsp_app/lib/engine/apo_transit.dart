@@ -61,23 +61,25 @@ abstract final class ApoTransit {
 
   static final Set<String> _copiedBundles = {};
 
-  /// 插件路径中转（2026-11-22 审查 N1，与文件效果叠加围栏）：
+  /// 插件路径中转（2026-11-22 审查 N1，与文件效果叠加围栏；
+  /// 2026-11-23 改异步——用户裁定：复制不得冻结隔离体事件
+  /// 循环，且全程应被槽位加载动画窗口包含）：
   /// APO 宿主只加载中转根下的插件二进制（ApoEngineHost 围栏），
   /// 发布侧因此必须先中转再下发路径，中转失败返回 null（发布者
   /// 写空路径、绝不下发原始路径假装可用，与文件效果同口径）。
   ///
   /// - 单文件插件（VST2 .dll / CLAP .clap / 单文件 .vst3）：
-  ///   走 [transitPathFor] 内容哈希复制；
+  ///   走 [transitPathForAsync] 内容哈希复制；
   /// - VST3 bundle（目录）：整树复制到 `<哈希>.vst3` 目录，
   ///   哈希取 bundle 内主模块（Contents\x86_64-win\*.vst3）
   ///   的内容；引擎侧 resolvePluginBundleBinary 按原布局解析。
-  static String? transitPluginPathFor(String source) {
+  static Future<String?> transitPluginPathForAsync(String source) async {
     try {
       if (source.isEmpty) return source;
       if (isTransitPath(source)) return source;
-      if (File(source).existsSync()) return transitPathFor(source);
+      if (await File(source).exists()) return transitPathForAsync(source);
       final dir = Directory(source);
-      if (!dir.existsSync()) {
+      if (!await dir.exists()) {
         dbgLog('apo transit: plugin source missing: $source');
         return null;
       }
@@ -87,8 +89,8 @@ abstract final class ApoTransit {
       // 任一 .vst3 文件，再次树内第一个普通文件。
       File? module;
       final archDir = Directory('$source${sep}Contents${sep}x86_64-win');
-      if (archDir.existsSync()) {
-        for (final e in archDir.listSync()) {
+      if (await archDir.exists()) {
+        await for (final e in archDir.list()) {
           if (e is File && e.path.toLowerCase().endsWith('.vst3')) {
             module = e;
             break;
@@ -97,7 +99,7 @@ abstract final class ApoTransit {
       }
       if (module == null) {
         File? firstFile;
-        for (final e in dir.listSync(recursive: true)) {
+        await for (final e in dir.list(recursive: true)) {
           if (e is! File) continue;
           firstFile ??= e;
           if (e.path.toLowerCase().endsWith('.vst3')) {
@@ -111,20 +113,20 @@ abstract final class ApoTransit {
         dbgLog('apo transit: plugin bundle empty: $source');
         return null;
       }
-      final hash = sha256.convert(module.readAsBytesSync()).toString();
+      final hash = sha256.convert(await module.readAsBytes()).toString();
       final dest = '$root$sep$hash.vst3';
       if (_copiedBundles.contains(dest)) return dest;
       final destDir = Directory(dest);
-      if (!destDir.existsSync()) {
-        destDir.createSync(recursive: true);
-        for (final e in dir.listSync(recursive: true)) {
+      if (!await destDir.exists()) {
+        await destDir.create(recursive: true);
+        await for (final e in dir.list(recursive: true)) {
           var rel = e.path.substring(source.length);
           if (!rel.startsWith(sep)) rel = '$sep$rel';
           final target = '$dest$rel';
           if (e is Directory) {
-            Directory(target).createSync(recursive: true);
+            await Directory(target).create(recursive: true);
           } else if (e is File) {
-            File(target).writeAsBytesSync(e.readAsBytesSync(), flush: true);
+            await File(target).writeAsBytes(await e.readAsBytes(), flush: true);
           }
         }
         dbgLog('apo transit: bundle copied $source -> $dest');
@@ -133,6 +135,37 @@ abstract final class ApoTransit {
       return dest;
     } catch (e) {
       dbgLog('apo transit: plugin copy failed for $source: $e');
+      return null;
+    }
+  }
+
+  /// [transitPathFor] 的异步孪生（插件单文件路径专用，与同步版
+  /// 共用同一份已复制缓存）：语义与同步版逐条一致。
+  static Future<String?> transitPathForAsync(String source) async {
+    try {
+      if (source.isEmpty) return source;
+      if (isTransitPath(source)) return source;
+      final f = File(source);
+      if (!await f.exists()) {
+        dbgLog('apo transit: source missing: $source');
+        return null;
+      }
+      _ensureRoot();
+      final bytes = await f.readAsBytes();
+      final hash = sha256.convert(bytes).toString();
+      final dot = source.lastIndexOf('.');
+      final ext = dot >= 0 ? source.substring(dot).toLowerCase() : '';
+      final dest = '$root${Platform.pathSeparator}$hash$ext';
+      if (_copied.contains(dest)) return dest;
+      final df = File(dest);
+      if (!await df.exists()) {
+        await df.writeAsBytes(bytes, flush: true);
+        dbgLog('apo transit: copied $source -> $dest (${bytes.length} B)');
+      }
+      _copied.add(dest);
+      return dest;
+    } catch (e) {
+      dbgLog('apo transit: copy failed for $source: $e');
       return null;
     }
   }

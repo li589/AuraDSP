@@ -823,6 +823,62 @@ class ApoPluginPublisher {
   /// 原始插件路径 → 中转路径缓存（N1 围栏：块里只写中转路径）。
   /// 只缓存成功结果；失败每次同步重试（源文件补齐后可自愈）。
   final Map<String, String> _transitCache = {};
+
+  /// 中转复制在途任务（原始路径 → 任务）。复制是异步 IO（用户
+  /// 裁定 2026-11-23）：同步复制大 bundle 会冻结隔离体事件循环
+  /// （音频泵与命令处理同循环），且不在任何加载动画窗口内。
+  final Map<String, Future<String?>> _transitTasks = {};
+
+  /// 中转失败过的原始路径：同步路径不再自动重试（避免每个轮询
+  /// 周期重复整树复制一个坏 bundle）；用户显式加载走
+  /// [preparePluginTransit] 时清记重试（新意图）。
+  final Set<String> _transitFailed = {};
+
+  /// 中转任务落定（成功/失败）后的回调：隔离体接
+  /// syncApoPlugins——成功则把刚落定的路径补发进块，失败则
+  /// 维持 withholding 口径收口。
+  void Function()? onTransitSettled;
+
+  /// 显式加载前的中转准备（pluginSlotLoad 在 APO 激活时调用）：
+  /// 返回中转路径（缓存命中即刻返回）；失败返回 null。调用方在
+  /// 槽位忙态（加载动画）窗口内 await 本方法——复制全程被加载
+  /// 动画包含，终态事件在复制落定后才发（用户裁定 2026-11-23）。
+  Future<String?> preparePluginTransit(String path) {
+    final hit = _transitCache[path];
+    if (hit != null && hit.isNotEmpty) return Future<String?>.value(hit);
+    _transitFailed.remove(path);
+    return _kickTransit(path);
+  }
+
+  /// 启动（或复用在途的）异步中转任务；落定后更新缓存/失败集
+  /// 并回调 [onTransitSettled] 触发补同步。
+  Future<String?> _kickTransit(String path) {
+    final running = _transitTasks[path];
+    if (running != null) return running;
+    final task = ApoTransit.transitPluginPathForAsync(path)
+        .then<String?>((t) {
+      _transitTasks.remove(path);
+      if (t != null && t.isNotEmpty) {
+        _transitCache[path] = t;
+        _transitFailed.remove(path);
+      } else {
+        _transitFailed.add(path);
+      }
+      onTransitSettled?.call();
+      return t;
+    }).onError((e, st) {
+      // ApoTransit 内部已吞错返回 null；此处只防契约外异常把
+      // 任务挂死（在途表残留会让该路径永不重试）。
+      _transitTasks.remove(path);
+      _transitFailed.add(path);
+      dbgLog('apo plugin publisher: transit task error for $path: $e');
+      onTransitSettled?.call();
+      return null;
+    });
+    _transitTasks[path] = task;
+    return task;
+  }
+
   bool _hdrSeen = false;
   bool _pubChain = true;
   bool _pubPdc = false;
@@ -988,13 +1044,17 @@ class ApoPluginPublisher {
           (cfg != null && cfg.loaded && cfg.path.isNotEmpty) ? cfg : null;
       var path = '';
       if (raw != null) {
-        var t = _transitCache[raw.path];
-        if (t == null) {
-          t = ApoTransit.transitPluginPathFor(raw.path);
-          if (t != null && t.isNotEmpty) _transitCache[raw.path] = t;
+        final t = _transitCache[raw.path];
+        if (t != null) {
+          path = t;
+        } else if (!_transitFailed.contains(raw.path)) {
+          // 异步中转（2026-11-23）：本轮先按未占用下发，复制在
+          // 后台进行；落定回调 onTransitSettled 触发补同步把
+          // 路径补发进块。失败路径进 _transitFailed 后不再自动
+          // 重试（显式加载经 preparePluginTransit 清记重试）。
+          _kickTransit(raw.path);
         }
-        path = t ?? '';
-        if (path.isEmpty) {
+        if (path.isEmpty && _transitFailed.contains(raw.path)) {
           dbgLog('apo plugin publisher: transit failed, slot $slot '
               'withheld: ${raw.path}');
         }
