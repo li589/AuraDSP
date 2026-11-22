@@ -15,6 +15,7 @@ import '../styles/visualizer_painter_dispatcher.dart';
 import '../styles/visualizer_static_grid.dart';
 import '../styles/visualizer_time_aware.dart';
 import '../plugins/projectm_bridge_contract.dart';
+import '../plugins/milkdrop_preset.dart';
 import 'visualizer_db_scale.dart';
 
 /// 画笔包装：数据驱动风格（频谱柱/示波器/相位仪）不挂时间监听，
@@ -157,6 +158,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
     super.initState();
     _ambienceTime.value = widget.time.value;
     widget.time.addListener(_onTime);
+    _syncProjectmSession();
   }
 
   @override
@@ -166,10 +168,83 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
       oldWidget.time.removeListener(_onTime);
       widget.time.addListener(_onTime);
     }
+    _syncProjectmSession();
+  }
+
+  // ------------------------------------------------------------------
+  // [W4] projectM 原生会话驱动（2026-11-23 接线轮）
+  //
+  // 激活三条件缺一不可：风格为 projectM、桥为原生桥、本地 PCM
+  // 正在流动。PCM 只存在于普通管线与 ASIO Client 模式（引擎在
+  // 本进程）；APO（audiodg）与虚拟 ASIO（DAW 进程）下快照恒空，
+  // 会话永不激活，舞台诚实回落程序化 MilkdropPainter 并由抽屉
+  // 徽标明示（visualizerEngineFallbackActive）。
+  // ------------------------------------------------------------------
+  Timer? _pmTimer;
+  bool _pmInitInFlight = false;
+  DateTime? _pmInitFailedAt;
+  String? _pmLoadedPath;
+  List<double>? _pmLastFed;
+
+  void _syncProjectmSession() {
+    final bridge = widget.projectMBridge;
+    final want = widget.config.style == VisualizerStyle.projectM &&
+        bridge != null &&
+        bridge.isNative;
+    if (!want) {
+      _pmTimer?.cancel();
+      _pmTimer = null;
+      return;
+    }
+    _pmTimer ??= Timer.periodic(
+        const Duration(milliseconds: 33), (_) => _pmTick());
+  }
+
+  void _pmTick() {
+    final bridge = widget.projectMBridge;
+    if (bridge == null || widget.config.style != VisualizerStyle.projectM) {
+      return;
+    }
+    final pcm = widget.projectmPcm?.value;
+    if (pcm == null || pcm.isEmpty) return; // 无本地 PCM：不激活
+    if (!bridge.isAvailable) {
+      final failedAt = _pmInitFailedAt;
+      if (_pmInitInFlight ||
+          (failedAt != null &&
+              DateTime.now().difference(failedAt) <
+                  const Duration(seconds: 5))) {
+        return;
+      }
+      _pmInitInFlight = true;
+      bridge.initialize(width: 640, height: 360, fps: 30).then((ok) {
+        _pmInitInFlight = false;
+        if (!ok) _pmInitFailedAt = DateTime.now();
+        if (ok && mounted) _pmLoadCurrentPreset();
+      });
+      return;
+    }
+    _pmLoadCurrentPreset();
+    if (!identical(pcm, _pmLastFed)) {
+      _pmLastFed = pcm;
+      bridge.feedPcm(pcm);
+    }
+    bridge.renderFrame();
+  }
+
+  void _pmLoadCurrentPreset() {
+    final bridge = widget.projectMBridge;
+    if (bridge == null || !bridge.isAvailable) return;
+    final path = widget.config.milkdropPresetPath;
+    if (path == null || path.isEmpty || path == _pmLoadedPath) return;
+    if (bridge.loadPreset(MilkdropPreset.parseFile(path))) {
+      _pmLoadedPath = path;
+    }
   }
 
   @override
   void dispose() {
+    _pmTimer?.cancel();
+    _pmTimer = null;
     widget.time.removeListener(_onTime);
     _ambienceTime.dispose();
     super.dispose();

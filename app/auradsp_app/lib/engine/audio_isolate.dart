@@ -2714,6 +2714,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   final inBufEng = inPtrEng.asTypedList(maxBlock * 8);
   final outPtrEng8 = malloc<Float>(maxBlock * 8);
   final vizBuf = malloc<VizFrame>(8); // 持久化复用，零运行时堆分配
+  final pcmBufEng = malloc<Float>(512 * 2); // [W2] PCM tap 拉取缓冲
+  var pcmReadUsable = true; // 旧引擎无 auradsp_pcm_read 时首访抛错后关停
   var lastPumpErrAt = 0;
   // 泵连续失败计数（细审 R-B 2 后为通用计数：任何泵轮异常
   // 都累计、仅成功轮清零；旧口径只认 WASAPI 死亡码两码并
@@ -3061,10 +3063,27 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               final sp = fr.spectrumToList();
               final eqIn = fr.eqInSpectrumToList();
               final stageL = fr.stageLevelsLToList();
-              final pcmFrames = math.min(frames, 512);
-              final pcmSnapshot = srcPaused
+              // [W2/W4] projectM 喂入优先取引擎处理后 PCM
+              // （auradsp_pcm_read 沿 viz 节奏拉最近 512 帧）；
+              // 旧引擎无此导出时回落输入快照（pcmSource='source'）。
+              var pcmSource = 'source';
+              var pcmSnapshot = srcPaused
                   ? const <double>[]
-                  : List<double>.of(srcBuf.take(pcmFrames * 2));
+                  : List<double>.of(
+                      srcBuf.take(math.min(frames, 512) * 2));
+              if (!srcPaused && pcmReadUsable) {
+                try {
+                  final got = lib!.pcmRead(handle!, pcmBufEng, 512);
+                  if (got > 0) {
+                    pcmSnapshot =
+                        List<double>.of(pcmBufEng.asTypedList(got * 2));
+                    pcmSource = 'engine';
+                  }
+                } catch (e, st) {
+                  swallow(e, st);
+                  pcmReadUsable = false;
+                }
+              }
               lastSpectrumLen = sp.length;
               lastStageLen = stageL.length;
               if (vizCount <= 5 || vizCount % 100 == 0) {
@@ -3076,7 +3095,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               send({
                 'evt': 'viz',
                 'spectrum': sp,
-                'pcmSource': pcmSnapshot.isEmpty ? null : 'source',
+                'pcmSource': pcmSnapshot.isEmpty ? null : pcmSource,
                 'pcm': pcmSnapshot,
                 'eqIn': eqIn,
                 'l': fr.levelLDbfs,
@@ -3197,6 +3216,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       malloc.free(inPtrEng);
       malloc.free(outPtrEng8);
       malloc.free(vizBuf);
+      malloc.free(pcmBufEng);
     }
   }
 

@@ -28,11 +28,13 @@ typedef _RenderC = Int32 Function(Pointer<Void>, Pointer<Uint8>);
 typedef _RenderDart = int Function(Pointer<Void>, Pointer<Uint8>);
 
 /// Real FFI implementation of the optional libprojectM bridge.
+///
+/// Context ownership (amended 2026-11-23, wiring round W3/W4): the
+/// native bridge owns its GL context on its own render thread, so
+/// the host no longer proves or provides any context — the previous
+/// verifier gate could never pass from a Flutter host and kept the
+/// whole chain permanently unavailable.
 class ProjectMNativeBridge implements ProjectMBridge {
-  /// The host must prove that the current GL context is the same context used
-  /// for this bridge instance. A non-null verifier is deliberately required;
-  /// the native glGetString check alone cannot establish context identity.
-  final bool Function()? currentContextVerifier;
   final ValueNotifier<ui.Image?> _frame = ValueNotifier<ui.Image?>(null);
   DynamicLibrary? _library;
   Pointer<Void> _handle = nullptr;
@@ -50,7 +52,7 @@ class ProjectMNativeBridge implements ProjectMBridge {
   late final _RenderDart _render;
   late final _HasContextDart _hasCurrentGlContext;
 
-  ProjectMNativeBridge({this.currentContextVerifier});
+  ProjectMNativeBridge();
 
   @override
   bool get isNative => true;
@@ -83,8 +85,6 @@ class ProjectMNativeBridge implements ProjectMBridge {
   }) async {
     if (_disposed) return false;
     if (isAvailable) return true;
-    final verifier = currentContextVerifier;
-    if (verifier == null || !verifier()) return false;
     try {
       final library = NativeLibraryLoader.openFirst(
         PlatformProfile.projectMBridgeLibraryCandidates,
@@ -119,9 +119,10 @@ class ProjectMNativeBridge implements ProjectMBridge {
       _render = library.lookupFunction<_RenderC, _RenderDart>(
         'auradsp_projectm_render_pixels',
       );
-      // Native probing only confirms that *some* GL context is current.
-      // Identity remains a host responsibility and is checked above.
-      if (_hasCurrentGlContext() == 0 || !verifier()) {
+      // The probe reports the bridge's own GL platform layer is
+      // compiled in (W3 amended semantics); per-instance readiness
+      // is proven by create() below.
+      if (_hasCurrentGlContext() == 0) {
         _library = null;
         return false;
       }
@@ -153,8 +154,6 @@ class ProjectMNativeBridge implements ProjectMBridge {
   @override
   void resize(int width, int height) {
     if (!isAvailable || width <= 0 || height <= 0) return;
-    final verifier = currentContextVerifier;
-    if (verifier == null || !verifier()) return;
     if (_resize(_handle, width, height) != 0) return;
     _width = width;
     _height = height;
@@ -162,10 +161,7 @@ class ProjectMNativeBridge implements ProjectMBridge {
 
   @override
   bool loadPreset(MilkdropPreset preset) {
-    final verifier = currentContextVerifier;
     if (!isAvailable ||
-        verifier == null ||
-        !verifier() ||
         preset.filePath.isEmpty ||
         preset.filePath.startsWith('builtin:')) {
       return false;
@@ -182,11 +178,7 @@ class ProjectMNativeBridge implements ProjectMBridge {
 
   @override
   void feedPcm(List<double> pcmFrames, {int channels = 2}) {
-    final verifier = currentContextVerifier;
-    if (!isAvailable ||
-        verifier == null ||
-        !verifier() ||
-        !isValidProjectMPcm(pcmFrames, channels: channels)) {
+    if (!isAvailable || !isValidProjectMPcm(pcmFrames, channels: channels)) {
       return;
     }
     final frames = pcmFrames.length ~/ channels;
@@ -203,12 +195,7 @@ class ProjectMNativeBridge implements ProjectMBridge {
 
   @override
   int renderFrame() {
-    final verifier = currentContextVerifier;
-    if (!isAvailable ||
-        verifier == null ||
-        !verifier() ||
-        _width <= 0 ||
-        _height <= 0) {
+    if (!isAvailable || _width <= 0 || _height <= 0) {
       return -2;
     }
     final pixels = calloc<Uint8>(_width * _height * 4);
@@ -260,9 +247,9 @@ class ProjectMNativeBridge implements ProjectMBridge {
 /// Probes the platform library candidates once: when a native bridge
 /// library exists, the result is the (still uninitialized)
 /// [ProjectMNativeBridge] — it opens the library itself inside
-/// `initialize`, which additionally requires a host GL-context
-/// verifier. When no library can be opened, the result is the
-/// procedural [MockProjectMBridge]. `isNative` therefore means
+/// `initialize` and creates its context-owning native instance.
+/// When no library can be opened, the result is the procedural
+/// [MockProjectMBridge]. `isNative` therefore means
 /// "native library present"; only `isAvailable` (post-initialize)
 /// means the native engine is actually rendering.
 abstract final class ProjectMBridgeFactory {

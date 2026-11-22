@@ -49,6 +49,12 @@ target_link_libraries(projectm_bridge PRIVATE
     OpenGL::GL
 )
 
+if(WIN32)
+    # W3: the bridge owns a hidden WGL context (user32 window, gdi32
+    # pixel format) on its dedicated render thread.
+    target_link_libraries(projectm_bridge PRIVATE user32 gdi32)
+endif()
+
 target_compile_options(projectm_bridge PRIVATE
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fvisibility=default>
 )

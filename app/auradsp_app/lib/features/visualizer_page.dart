@@ -416,6 +416,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
                             levelL: widget.model.levelL,
                             levelR: widget.model.levelR,
                             projectmPcm: widget.model.projectmPcmSnapshot,
+                            projectMBridge: ProjectMBridgeFactory.instance,
                             config: config,
                             displayMode: _displayMode,
                             onStyleChanged: (st) => widget.model

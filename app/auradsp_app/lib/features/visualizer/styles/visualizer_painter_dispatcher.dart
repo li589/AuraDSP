@@ -140,7 +140,7 @@ CustomPainter buildVisualizerPainter({
           ? MilkdropPreset.parseFile(config.milkdropPresetPath!)
           : MilkdropPreset.builtInPresets.first;
       final bridge = projectMBridge;
-      if (bridge != null && bridge.isAvailable) {
+      if (bridge != null && bridge.isAvailable && bridge.isLoaded) {
         return ProjectMPainter(
           bridge: bridge,
           fallbackPainter: MilkdropPainter(

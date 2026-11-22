@@ -175,21 +175,15 @@ per_pixel_1=rot = rot + 0.02*sin(rad*3.14);
       bridge.dispose();
     });
 
-    test('native bridge fails closed without verified host context', () async {
-      final missingVerifier = ProjectMNativeBridge();
-      expect(await missingVerifier.initialize(), isFalse);
-      missingVerifier.dispose();
-
-      var verifierCalls = 0;
-      final rejectedContext = ProjectMNativeBridge(
-        currentContextVerifier: () {
-          verifierCalls++;
-          return false;
-        },
-      );
-      expect(await rejectedContext.initialize(), isFalse);
-      expect(verifierCalls, 1);
-      rejectedContext.dispose();
+    test('native bridge initialize result matches availability', () async {
+      // W3/W4 口径（2026-11-23）：桥自持 GL 上下文，宿主不再提供
+      // 验证器。initialize 的成败只取决于本机是否存在桥库与其
+      // GL 平台层——两种环境都必须满足：返回值与 isAvailable
+      // 一致（成功即已创建原生实例，失败即保持不可用、不假报）。
+      final bridge = ProjectMNativeBridge();
+      final ok = await bridge.initialize();
+      expect(ok, bridge.isAvailable);
+      bridge.dispose();
     });
 
     test('Mock bridge lifecycle and preset binding', () async {

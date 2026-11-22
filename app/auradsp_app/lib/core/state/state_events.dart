@@ -1042,7 +1042,9 @@ extension StateEvents on AppModel {
         }
         spectrum.value = (raw['spectrum'] as List).cast<double>();
         final pcm = raw['pcm'];
-        if (vizBackend == 'local' && raw['pcmSource'] == 'source' && pcm is List) {
+        if (vizBackend == 'local' &&
+            (raw['pcmSource'] == 'source' || raw['pcmSource'] == 'engine') &&
+            pcm is List) {
           if (pcm.length <= 1024 && pcm.length.isEven) {
             final samples = <double>[];
             var valid = true;

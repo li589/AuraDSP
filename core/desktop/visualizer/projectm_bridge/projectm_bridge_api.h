@@ -1,11 +1,15 @@
 /*
  * projectm_bridge_api.h - libprojectM v4 C-ABI bridge.
  *
- * The bridge owns an OpenGL-backed projectM instance. The caller must make a
- * verified, identical OpenGL context current for every operation and keep all
- * calls on the creating thread. The portable ABI can only check that some
- * context is current; the host owns context identity verification. Pixel
- * readback is RGBA8 and starts at the lower-left row, matching glReadPixels.
+ * The bridge owns an OpenGL-backed projectM instance AND its OpenGL
+ * context (amended 2026-11-23, wiring round W3): a dedicated render
+ * thread inside the bridge holds a hidden WGL context (Windows) and
+ * performs every projectM/GL call; hosts never touch GL. All exports
+ * are thread-safe. render_pixels copies the newest completed frame
+ * (the render thread produces frames continuously at the configured
+ * fps) and returns -3 while no frame exists yet. Pixel readback is
+ * RGBA8 and starts at the lower-left row, matching glReadPixels.
+ * Non-Windows platforms report the core unavailable for now.
  */
 #pragma once
 
@@ -27,10 +31,9 @@ typedef void* auradsp_projectm_t;
 AURADSP_PROJECTM_EXPORT auradsp_projectm_t
     auradsp_projectm_create(int width, int height, float fps);
 /**
- * Destroy or resize only while the verified creating-thread context is current.
- * Returns 0 on success, -1 for invalid arguments, -2 for an unavailable core,
- * and -4 for a wrong thread or missing current context. A failed destroy keeps
- * the handle owned by the caller so cleanup can be retried later.
+ * Returns 0 on success and -3 when teardown failed inside the core;
+ * a failed destroy keeps the handle owned by the caller so cleanup
+ * can be retried later.
  */
 AURADSP_PROJECTM_EXPORT int auradsp_projectm_destroy(auradsp_projectm_t handle);
 AURADSP_PROJECTM_EXPORT int
@@ -43,8 +46,9 @@ AURADSP_PROJECTM_EXPORT int
 /**
  * Feed interleaved float PCM. channels must be 1 or 2 and frames_per_channel
  * must not exceed 2048. Samples must be finite and within [-1, 1].
- * Returns 0 on success, -1 for invalid arguments, -2 for an unavailable core,
- * and -4 when no current OpenGL context is bound.
+ * The chunk is queued for the render thread (bounded queue, oldest
+ * dropped under overload). Returns 0 on success, -1 for invalid
+ * arguments and -2 for an unavailable core.
  */
 AURADSP_PROJECTM_EXPORT int auradsp_projectm_feed_pcm(
     auradsp_projectm_t handle, const float* pcm, int frames_per_channel,
@@ -57,15 +61,18 @@ AURADSP_PROJECTM_EXPORT int auradsp_projectm_load_preset(
     auradsp_projectm_t handle, const char* preset_path);
 
 /**
- * Render one frame to the current OpenGL default framebuffer and copy RGBA8
- * pixels into out_rgba_pixels (at least width * height * 4 bytes).
+ * Copy the newest completed RGBA8 frame into out_rgba_pixels (at
+ * least width * height * 4 bytes). Frames are produced continuously
+ * by the bridge's render thread. Returns -3 while no frame has been
+ * produced yet (or the size changed since the last frame).
  */
 AURADSP_PROJECTM_EXPORT int auradsp_projectm_render_pixels(
     auradsp_projectm_t handle, uint8_t* out_rgba_pixels);
 
 /**
- * Returns non-zero when the caller currently has a usable OpenGL context.
- * The bridge never creates or changes a context on behalf of the caller.
+ * Amended (W3): the bridge owns its context; this returns non-zero
+ * when the bridge's GL platform layer is available in this build.
+ * Per-instance readiness is observable through create() succeeding.
  */
 AURADSP_PROJECTM_EXPORT int auradsp_projectm_has_current_gl_context(void);
 
