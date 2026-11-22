@@ -123,6 +123,11 @@ private:
     std::atomic<uint64_t> m_generation{0};
 
     mutable std::mutex m_mutex;
+    // alive() is called from the audio thread (proxy priming) and
+    // must never block on m_mutex, which control paths hold for
+    // entire pipe round trips. alive() try-locks and falls back to
+    // this last-known value when the mutex is contended.
+    mutable std::atomic<bool> m_aliveCache{false};
     std::shared_ptr<SharedRegion> m_region;
 #if defined(_WIN32)
     HANDLE m_pipe = nullptr;

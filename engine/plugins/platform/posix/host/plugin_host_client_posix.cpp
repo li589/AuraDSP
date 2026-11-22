@@ -213,12 +213,15 @@ bool PluginHostClient::start(bool allowScanHost) {
 }
 
 bool PluginHostClient::alive() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (!m_pipeHealthy || m_pipe < 0 || m_process <= 0 || !m_region) {
-        return false;
+    std::unique_lock<std::mutex> lock(m_mutex, std::try_to_lock);
+    if (!lock.owns_lock()) {
+        return m_aliveCache.load(std::memory_order_acquire);
     }
     int status = 0;
-    return ::waitpid(m_process, &status, WNOHANG) == 0;
+    const bool ok = m_pipeHealthy && m_pipe >= 0 && m_process > 0 &&
+                    m_region && ::waitpid(m_process, &status, WNOHANG) == 0;
+    m_aliveCache.store(ok, std::memory_order_release);
+    return ok;
 }
 
 bool PluginHostClient::ensureHost() {

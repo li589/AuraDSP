@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "plugins/driver/plugin_chain_component.h"
 #include "plugins/plugin_limits.h"
 
@@ -153,7 +154,8 @@ uint32_t PluginChainComponent::stageLatency(int stage) const noexcept {
             m_host->getChannelMaskSlot(slot) != 0 &&
             m_host->getInsertStageSlot(slot) == stage &&
             (pdc || !m_host->isBypassedSlot(slot))) {
-            total += m_host->getLatencySlot(slot);
+            total += (std::min)(m_host->getLatencySlot(slot),
+                                 MultiDelayLine::kMaxDelay);
         }
     }
     return total;
@@ -168,7 +170,8 @@ uint32_t PluginChainComponent::totalLatency() const noexcept {
         if (m_host->hasActivePluginSlot(slot) &&
             m_host->getChannelMaskSlot(slot) != 0 &&
             (pdc || !m_host->isBypassedSlot(slot))) {
-            total += m_host->getLatencySlot(slot);
+            total += (std::min)(m_host->getLatencySlot(slot),
+                                 MultiDelayLine::kMaxDelay);
         }
     }
     return total;

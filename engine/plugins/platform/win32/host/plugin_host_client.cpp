@@ -137,9 +137,14 @@ bool PluginHostClient::start(bool allowScanHost) {
 }
 
 bool PluginHostClient::alive() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (!m_pipeHealthy || !m_pipe || !m_process || !m_region) return false;
-    return WaitForSingleObject(m_process, 0) == WAIT_TIMEOUT;
+    std::unique_lock<std::mutex> lock(m_mutex, std::try_to_lock);
+    if (!lock.owns_lock()) {
+        return m_aliveCache.load(std::memory_order_acquire);
+    }
+    const bool ok = m_pipeHealthy && m_pipe && m_process && m_region &&
+                    WaitForSingleObject(m_process, 0) == WAIT_TIMEOUT;
+    m_aliveCache.store(ok, std::memory_order_release);
+    return ok;
 }
 
 bool PluginHostClient::ensureHost() {
@@ -379,7 +384,13 @@ bool PluginHostClient::load(uint32_t slot, const std::string& path,
     }
     std::memcpy(&outInfo, body.data(), sizeof(outInfo));
     outInfo.path[sizeof(outInfo.path) - 1] = '\0';
+    outInfo.id[sizeof(outInfo.id) - 1] = '\0';
     outInfo.name[sizeof(outInfo.name) - 1] = '\0';
+    outInfo.bundleName[sizeof(outInfo.bundleName) - 1] = '\0';
+    outInfo.vendor[sizeof(outInfo.vendor) - 1] = '\0';
+    outInfo.version[sizeof(outInfo.version) - 1] = '\0';
+    outInfo.category[sizeof(outInfo.category) - 1] = '\0';
+    outInfo.description[sizeof(outInfo.description) - 1] = '\0';
     outInfo.errorMessage[sizeof(outInfo.errorMessage) - 1] = '\0';
     outError = outInfo.errorMessage;
     return true;

@@ -10,6 +10,8 @@
 #include "vst3_metadata.h"
 #include "win32_util.h"
 
+#include <functional>
+
 #include <steinberg/vst3_static.h>
 #if defined(_WIN32)
 #include <windows.h>
@@ -151,6 +153,11 @@ public:
 
 class AuraComponentHandler : public Steinberg::Vst::IComponentHandler {
 public:
+    // Set by the owning instance: restartComponent(kLatencyChanged)
+    // must re-query the processor latency, otherwise a VST3 plugin
+    // whose latency changes via preset/parameter has no refresh
+    // path short of reactivation (CLAP and VST2 both self-refresh).
+    std::function<void(Steinberg::int32)> onRestartComponent;
     AuraComponentHandler2Impl m_handler2;
     AuraComponentHandler() {
         m_handler2.parent = this;
@@ -188,6 +195,7 @@ public:
         return Steinberg::kResultOk;
     }
     virtual Steinberg::tresult PLUGIN_API restartComponent(Steinberg::int32 flags) override {
+        if (onRestartComponent) onRestartComponent(flags);
         return Steinberg::kResultOk;
     }
 };
@@ -642,7 +650,13 @@ inline Steinberg::tresult PLUGIN_API AuraPlugInterfaceSupportImpl::queryInterfac
 
 class Vst3PluginInstance : public IPluginInstance {
 public:
-    Vst3PluginInstance() = default;
+    Vst3PluginInstance() {
+        m_componentHandler.onRestartComponent = [this](Steinberg::int32 flags) {
+            if ((flags & Steinberg::Vst::kLatencyChanged) != 0 && m_processor) {
+                m_meta.latency = m_processor->getLatencySamples();
+            }
+        };
+    }
     ~Vst3PluginInstance() override {
         // 兜底卸载（load 失败等提前析构路径）。unload 内部已释放共享泵引用
         // （C1：最后一实例时 PumpDeleter 负责停线程），故此处无需再停。

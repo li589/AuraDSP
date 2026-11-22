@@ -576,7 +576,15 @@ bool PluginHostManager::loadPresetSlot(size_t slot, const std::string& filePath)
     if (slot >= kMaxPluginSlots) return false;
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     if (m_slots[slot].instance && m_slots[slot].hasActive.load()) {
-        return m_slots[slot].instance->loadPreset(filePath);
+        const bool ok = m_slots[slot].instance->loadPreset(filePath);
+        if (ok) {
+            // A preset can change the plugin's latency; refresh the
+            // snapshot like load/updateFormat/setChannelHint do, or
+            // PDC and reported latency stay stale (in-proc AUD-01).
+            m_slots[slot].latency.store(m_slots[slot].instance->getLatency(),
+                                        std::memory_order_relaxed);
+        }
+        return ok;
     }
     return false;
 }

@@ -52,6 +52,10 @@ bool ProcessPluginProxy::load(const std::string& path, const std::string& plugin
 
     m_region = m_client->region();
     if (!m_region || m_slot >= ipc::kMaxSlots) {
+        // The remote load succeeded; release the host-side slot or
+        // it leaks for the host's lifetime (unload() below gates the
+        // remote unload on m_loaded, which is still false here).
+        m_client->unload(static_cast<uint32_t>(m_slot));
         m_failed.store(true, std::memory_order_release);
         return false;
     }
