@@ -83,6 +83,7 @@ std::vector<std::wstring> SlotKeys() {
 // 字符串转换 / 工具
 // ---------------------------------------------------------------------------
 
+// NOTE (D3): length-explicit variant -- converts exactly w.size() chars and keeps embedded NULs; deliberately NOT the NUL-terminated semantics of windows-drivers/common/TextConvert.h. Do not unify.
 std::string WideToUtf8(const std::wstring& w) {
     if (w.empty()) return {};
     const int n = WideCharToMultiByte(CP_UTF8, 0, w.data(),

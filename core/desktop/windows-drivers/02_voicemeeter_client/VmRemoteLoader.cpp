@@ -6,16 +6,10 @@
 #include <cstdio>
 #include <vector>
 
+#include "../common/TextConvert.h"
 namespace {
 
-std::string WideToUtf8(const std::wstring& w) {
-    if (w.empty()) return {};
-    const int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, nullptr, 0, nullptr, nullptr);
-    if (n <= 0) return {};
-    std::string s((size_t)n - 1, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, s.data(), n, nullptr, nullptr);
-    return s;
-}
+using auratext::WideToUtf8;  // single impl: windows-drivers/common/TextConvert.h (D3)
 
 std::wstring JoinPath(const std::wstring& dir, const wchar_t* file) {
     if (!dir.empty() && dir.back() != L'\\' && dir.back() != L'/')

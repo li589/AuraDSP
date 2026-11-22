@@ -35,6 +35,7 @@
 #include "../../02_voicemeeter_client/VmPumpCore.h"
 #include "vaio_pump_wait.h"
 
+#include "../../common/TextConvert.h"
 namespace {
 
 // JSON 路径转义
@@ -63,14 +64,7 @@ void PathForJsonA(const std::string& in, char* out, size_t cap) {
 // 函数；路径仍用 PathForJsonA 的斜杠式（既有口径）。
 using aurabridge::EscapeJsonA;  // single impl: bridge/common/JsonEscape.h (D2)
 
-std::string WideToUtf8(const wchar_t* w) {
-    if (!w || !*w) return {};
-    const int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
-    if (n <= 1) return {};
-    std::string s((size_t)n - 1, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w, -1, &s[0], n, nullptr, nullptr);
-    return s;
-}
+using auratext::WideToUtf8;  // single impl: windows-drivers/common/TextConvert.h (D3)
 
 bool ContainsCI(const std::string& hay, const std::string& needle) {
     if (needle.empty()) return true;

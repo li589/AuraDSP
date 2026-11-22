@@ -16,16 +16,10 @@
 
 #include <cstdio>
 
+#include "../common/TextConvert.h"
 namespace {
 
-std::string WideToUtf8(const wchar_t* w) {
-    if (!w || !*w) return {};
-    const int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
-    if (n <= 1) return {};
-    std::string s((size_t)n - 1, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w, -1, &s[0], n, nullptr, nullptr);
-    return s;
-}
+using auratext::WideToUtf8;  // single impl: windows-drivers/common/TextConvert.h (D3)
 
 std::string ReadRegSz(HKEY root, const std::wstring& sub, const std::wstring& val) {
     HKEY h = nullptr;
