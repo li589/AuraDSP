@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/design.dart';
 import '../../../ui/widgets.dart' show FreqAxis;
+import '../controllers/cava_feature_engine.dart';
 import '../controllers/peak_physics_engine.dart';
 import '../controllers/waveform_synthesizer.dart';
 import '../models/visualizer_themes.dart';
@@ -145,6 +146,9 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   /// 10 Hz 更新在 30 Hz 主画布上肉眼不可分辨，且零 GPU 离屏纹理分配。
   final ValueNotifier<double> _ambienceTime = ValueNotifier<double>(0.0);
 
+  /// CAVA 音频特征引擎 (对数分频、感知加权、重力平滑与 AGC 动态灵敏度)
+  final CavaFeatureEngine _cavaEngine = CavaFeatureEngine();
+
   @override
   void initState() {
     super.initState();
@@ -277,16 +281,22 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
     return ValueListenableBuilder<List<double>>(
       valueListenable: widget.spectrum,
       builder: (_, rawBands, _) {
-        final peaks = widget.peakEngine.update(
+        _cavaEngine.configure(barCount: widget.config.barCount);
+        final cavaBands = _cavaEngine.process(
           rawBands,
+          manualSensitivity: widget.config.sensitivity,
+        );
+
+        final peaks = widget.peakEngine.update(
+          cavaBands,
           targetBands: widget.config.barCount,
-          sensitivity: widget.config.sensitivity,
+          sensitivity: 1.0,
           gravity: widget.config.gravity,
           decay: widget.config.decayRate,
         );
 
         widget.waveformSynth.update(
-          rawBands,
+          cavaBands,
           levelLDbfs: widget.levelL.value,
           levelRDbfs: widget.levelR.value,
           sensitivity: widget.config.sensitivity,
@@ -294,7 +304,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
 
         final renderedBands = widget.peakEngine.renderedBands.isNotEmpty
             ? widget.peakEngine.renderedBands
-            : rawBands;
+            : cavaBands;
 
         final gridPainter = _gridFor();
         final delegate = _delegateFor(
