@@ -22,7 +22,7 @@ class VisualizerConfigDrawer extends StatelessWidget {
   final VoidCallback? onPickMilkdropFolder;
   final List<MilkdropPreset>? milkdropPresets;
   final ValueChanged<MilkdropPreset>? onSelectMilkdropPreset;
-  final bool isProjectMNative;
+  final bool isProjectMNativeActive;
 
   const VisualizerConfigDrawer({
     super.key,
@@ -34,7 +34,7 @@ class VisualizerConfigDrawer extends StatelessWidget {
     this.onPickMilkdropFolder,
     this.milkdropPresets,
     this.onSelectMilkdropPreset,
-    this.isProjectMNative = false,
+    this.isProjectMNativeActive = false,
   });
 
   @override
@@ -327,29 +327,29 @@ class VisualizerConfigDrawer extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: (isProjectMNative ? p.accent : p.textDim).withValues(alpha: 0.12),
+                        color: (isProjectMNativeActive ? p.accent : p.textDim).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(AuraRadius.xs),
                         border: Border.all(
-                          color: (isProjectMNative ? p.accent : p.hairline).withValues(alpha: 0.4),
+                          color: (isProjectMNativeActive ? p.accent : p.hairline).withValues(alpha: 0.4),
                           width: 0.8,
                         ),
                       ),
                       child: Row(
                         children: [
                           Icon(
-                            isProjectMNative ? Icons.bolt_rounded : Icons.info_outline_rounded,
+                            isProjectMNativeActive ? Icons.bolt_rounded : Icons.info_outline_rounded,
                             size: 14,
-                            color: isProjectMNative ? p.accent : p.textDim,
+                            color: isProjectMNativeActive ? p.accent : p.textDim,
                           ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              isProjectMNative
+                              isProjectMNativeActive
                                   ? l.visualizerEngineNativeActive
                                   : l.visualizerEngineFallbackActive,
                               style: TextStyle(
                                 fontSize: 11,
-                                color: isProjectMNative ? p.accent : p.textDim,
+                                color: isProjectMNativeActive ? p.accent : p.textDim,
                                 fontWeight: FontWeight.w500,
                               ),
                               maxLines: 1,

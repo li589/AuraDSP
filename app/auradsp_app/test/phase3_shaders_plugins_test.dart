@@ -287,7 +287,11 @@ per_pixel_1=rot = rot + 0.02*sin(rad*3.14);
       final native = ProjectMNativeBridge();
       expect(native.isNative, isTrue);
       expect(native.isAvailable, isFalse);
-      expect(native.statusDescription, contains('libprojectM hardware accelerated'));
+      // 未初始化不得自称硬件加速（诚实口径）：状态须明示未初始化，
+      // 'libprojectM hardware accelerated' 只在 isAvailable 后出现。
+      expect(native.statusDescription, contains('not initialized'));
+      expect(native.statusDescription,
+          isNot(contains('hardware accelerated')));
     });
 
     testWidgets('VisualizerHud categorized tabs switch between Native and MilkDrop presets', (tester) async {

@@ -40,7 +40,7 @@ class VisualizerStage extends StatefulWidget {
   final VoidCallback? onPickMilkdropFolder;
   final List<MilkdropPreset>? milkdropPresets;
   final ValueChanged<MilkdropPreset>? onSelectMilkdropPreset;
-  final bool isProjectMNative;
+  final bool isProjectMNativeActive;
   final MediaSyncService? mediaSync;
   final String emptyText;
   final bool active;
@@ -65,7 +65,7 @@ class VisualizerStage extends StatefulWidget {
     this.onPickMilkdropFolder,
     this.milkdropPresets,
     this.onSelectMilkdropPreset,
-    this.isProjectMNative = false,
+    this.isProjectMNativeActive = false,
     this.mediaSync,
     required this.emptyText,
     required this.active,
@@ -596,7 +596,7 @@ class _VisualizerStageState extends State<VisualizerStage> {
                       onPickMilkdropFolder: widget.onPickMilkdropFolder,
                       milkdropPresets: widget.milkdropPresets,
                       onSelectMilkdropPreset: widget.onSelectMilkdropPreset,
-                      isProjectMNative: widget.isProjectMNative,
+                      isProjectMNativeActive: widget.isProjectMNativeActive,
                     ),
                   ),
                 ),

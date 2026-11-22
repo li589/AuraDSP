@@ -23,7 +23,7 @@ class VisualizerHud extends StatefulWidget {
   final VoidCallback? onPickMilkdropFolder;
   final List<MilkdropPreset>? milkdropPresets;
   final ValueChanged<MilkdropPreset>? onSelectMilkdropPreset;
-  final bool isProjectMNative;
+  final bool isProjectMNativeActive;
 
   const VisualizerHud({
     super.key,
@@ -39,7 +39,7 @@ class VisualizerHud extends StatefulWidget {
     this.onPickMilkdropFolder,
     this.milkdropPresets,
     this.onSelectMilkdropPreset,
-    this.isProjectMNative = false,
+    this.isProjectMNativeActive = false,
   });
 
   @override
@@ -228,7 +228,7 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                                 vertical: 4,
                                               ),
                                               decoration: BoxDecoration(
-                                                color: (widget.isProjectMNative
+                                                color: (widget.isProjectMNativeActive
                                                         ? p.accent
                                                         : p.textDim)
                                                     .withValues(alpha: 0.12),
@@ -237,7 +237,7 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                                   AuraRadius.xs,
                                                 ),
                                                 border: Border.all(
-                                                  color: (widget.isProjectMNative
+                                                  color: (widget.isProjectMNativeActive
                                                           ? p.accent
                                                           : p.hairline)
                                                       .withValues(alpha: 0.4),
@@ -247,19 +247,19 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                               child: Row(
                                                 children: [
                                                   Icon(
-                                                    widget.isProjectMNative
+                                                    widget.isProjectMNativeActive
                                                         ? Icons.bolt_rounded
                                                         : Icons
                                                             .info_outline_rounded,
                                                     size: 13,
-                                                    color: widget.isProjectMNative
+                                                    color: widget.isProjectMNativeActive
                                                         ? p.accent
                                                         : p.textDim,
                                                   ),
                                                   const SizedBox(width: 6),
                                                   Expanded(
                                                     child: Text(
-                                                      widget.isProjectMNative
+                                                      widget.isProjectMNativeActive
                                                           ? l
                                                               .visualizerEngineNativeActive
                                                           : l
@@ -267,7 +267,7 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                                       style: TextStyle(
                                                         fontSize: 10.5,
                                                         color: widget
-                                                                .isProjectMNative
+                                                                .isProjectMNativeActive
                                                             ? p.accent
                                                             : p.textDim,
                                                         fontWeight: FontWeight.w500,

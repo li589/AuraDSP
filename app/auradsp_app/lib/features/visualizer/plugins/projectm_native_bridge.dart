@@ -62,7 +62,9 @@ class ProjectMNativeBridge implements ProjectMBridge {
   bool get isLoaded => _preset != null && isAvailable;
 
   @override
-  String get statusDescription => 'libprojectM hardware accelerated';
+  String get statusDescription => isAvailable
+      ? 'libprojectM hardware accelerated'
+      : 'libprojectM bridge not initialized (procedural fallback)';
 
   @override
   MilkdropPreset? get currentPreset => _preset;
@@ -250,5 +252,45 @@ class ProjectMNativeBridge implements ProjectMBridge {
     image?.dispose();
     _frame.dispose();
     _library = null;
+  }
+}
+
+/// Central factory for discovering and creating ProjectMBridge instances.
+///
+/// Probes the platform library candidates once: when a native bridge
+/// library exists, the result is the (still uninitialized)
+/// [ProjectMNativeBridge] — it opens the library itself inside
+/// `initialize`, which additionally requires a host GL-context
+/// verifier. When no library can be opened, the result is the
+/// procedural [MockProjectMBridge]. `isNative` therefore means
+/// "native library present"; only `isAvailable` (post-initialize)
+/// means the native engine is actually rendering.
+abstract final class ProjectMBridgeFactory {
+  static ProjectMBridge? _instance;
+
+  static ProjectMBridge get instance => _instance ??= create();
+
+  @visibleForTesting
+  static set instance(ProjectMBridge bridge) => _instance = bridge;
+
+  static ProjectMBridge create() {
+    final candidates = PlatformProfile.projectMBridgeLibraryCandidates;
+    if (candidates.isEmpty) {
+      return MockProjectMBridge(
+        statusDescription: 'Platform does not support native plugins',
+      );
+    }
+    try {
+      NativeLibraryLoader.openFirst(
+        candidates,
+        what: 'auradsp_projectm_bridge',
+      );
+      return ProjectMNativeBridge();
+    } catch (e, st) {
+      swallow(e, st);
+      return MockProjectMBridge(
+        statusDescription: 'Native library not found (procedural simulation)',
+      );
+    }
   }
 }
