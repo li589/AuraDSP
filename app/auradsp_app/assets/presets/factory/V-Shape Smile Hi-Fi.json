@@ -337,7 +337,8 @@
       "showDbScale": true,
       "showLyrics": false,
       "showTranslation": true,
-      "lyricsSource": "auto"
+      "lyricsSource": "auto",
+      "milkdropPresetPath": ""
     }
   }
 }
