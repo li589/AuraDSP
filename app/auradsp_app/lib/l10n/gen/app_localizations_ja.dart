@@ -453,15 +453,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String ioVaioEndpointDescLayout(String layout) {
-    return 'AuraVAIO 虚拟输入端点 ($layout)';
+    return 'AuraVAIO 仮想入力エンドポイント ($layout)';
   }
 
   @override
-  String get ioWorkFormat => '工作格式';
+  String get ioWorkFormat => '動作フォーマット';
 
   @override
   String ioWorkFormatValue(int bits, String rate) {
-    return '$bits 位 / $rate';
+    return '$bits ビット / $rate';
   }
 
   @override
@@ -1549,7 +1549,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get asioRefresh => '更新';
 
   @override
-  String get vaioDeviceInUse => '该设备正在被另一个人使用';
+  String get vaioDeviceInUse => 'このデバイスは別のユーザーが使用中です';
 
   @override
   String get asioSwitches => 'コールバック';
