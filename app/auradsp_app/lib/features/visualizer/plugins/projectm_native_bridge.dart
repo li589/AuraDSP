@@ -42,15 +42,17 @@ class ProjectMNativeBridge implements ProjectMBridge {
   int _height = 0;
   MilkdropPreset? _preset;
   bool _disposed = false;
-  late final _CreateDart _create;
-  late final _DestroyDart _destroy;
-  late final _ResizeDart _resize;
-  late final _GetSizeDart _getWidth;
-  late final _GetSizeDart _getHeight;
-  late final _FeedDart _feed;
-  late final _LoadDart _load;
-  late final _RenderDart _render;
-  late final _HasContextDart _hasCurrentGlContext;
+  late _CreateDart _create;
+  late _DestroyDart _destroy;
+  late _ResizeDart _resize;
+  late _GetSizeDart _getWidth;
+  late _GetSizeDart _getHeight;
+  late _FeedDart _feed;
+  late _LoadDart _load;
+  late _RenderDart _render;
+  late _HasContextDart _hasCurrentGlContext;
+
+  bool _ffiBound = false;
 
   ProjectMNativeBridge();
 
@@ -91,6 +93,7 @@ class ProjectMNativeBridge implements ProjectMBridge {
         what: 'projectM bridge',
       );
       _library = library;
+      if (!_ffiBound) {
       _create = library.lookupFunction<_CreateC, _CreateDart>(
         'auradsp_projectm_create',
       );
@@ -119,6 +122,8 @@ class ProjectMNativeBridge implements ProjectMBridge {
       _render = library.lookupFunction<_RenderC, _RenderDart>(
         'auradsp_projectm_render_pixels',
       );
+      _ffiBound = true;
+      }
       // The probe reports the bridge's own GL platform layer is
       // compiled in (W3 amended semantics); per-instance readiness
       // is proven by create() below.

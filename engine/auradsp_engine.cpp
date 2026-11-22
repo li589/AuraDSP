@@ -658,7 +658,7 @@ uint32_t auradsp_pcm_read(auradsp_handle h, float* out, uint32_t frames) {
         out[i * 2 + 1] = h->pcm_hist[slot + 1];
     }
     const uint64_t total2 = h->pcm_frames_written.load(std::memory_order_acquire);
-    if (total2 - start > (uint64_t)kPcmHistFrames) return 0;
+    if (total2 - start >= (uint64_t)kPcmHistFrames) return 0;
     return want;
 }
 

@@ -59,12 +59,15 @@ def main():
 
     apo = read("audio_isolate_apo.dart")
     flush = func_span(apo, "void flushAll()")
-    check("transitPathFor" in flush,
+    check("_convertFileEffect" in flush,
           "flushAll converts file-effect paths through the transit")
     check("ParamId.convIrPath" in flush and "ParamId.ddcLoad" in flush,
           "flushAll conversion covers IR + DDC")
     onstr = func_span(apo, "void onString(String id, String text)")
-    check("transitPathFor" in onstr, "onString converts through the transit")
+    check("_convertFileEffect" in onstr,
+          "onString converts through the transit helper")
+    conv = func_span(apo, "String _convertFileEffect(String id, String text)")
+    check("transitPathFor" in conv, "conversion helper calls transitPathFor")
     check("referencedTransitPaths" in apo,
           "param publisher exposes its referenced transit set")
     check("currentTransitPaths" in apo,

@@ -217,12 +217,21 @@ abstract final class ApoTransit {
     DateTime? nowOverride,
   }) {
     final dir = Directory(rootOverride ?? root);
-    if (!dir.existsSync()) return 0;
+    List<FileSystemEntity> entries;
+    try {
+      if (!dir.existsSync()) return 0;
+      entries = dir.listSync();
+    } catch (e) {
+      // An unguarded listing failure would abort the whole pass
+      // and surface only as a generic isolate trace.
+      dbgLog('apo transit GC: cannot list ${dir.path}: $e');
+      return 0;
+    }
     final now = nowOverride ?? DateTime.now();
     String norm(String p) => p.replaceAll('/', r'\').toLowerCase();
     final keep = referenced.map(norm).toSet();
     var removed = 0;
-    for (final e in dir.listSync()) {
+    for (final e in entries) {
       try {
         if (keep.contains(norm(e.path))) continue;
         if (now.difference(e.statSync().modified) < minAge) continue;

@@ -1048,13 +1048,27 @@ extension StateEvents on AppModel {
           if (pcm.length <= 1024 && pcm.length.isEven) {
             final samples = <double>[];
             var valid = true;
+            // 'engine' snapshots are post-processing PCM tapped
+            // verbatim: a hot chain can legitimately exceed +-1.0,
+            // and discarding the whole snapshot for one hot sample
+            // would keep the projectM session dark forever. Clamp
+            // per sample instead (visualization data; the bridge
+            // contract range is [-1, 1]). 'source' snapshots keep
+            // the strict whole-snapshot validation.
+            final fromEngine = raw['pcmSource'] == 'engine';
             for (final value in pcm) {
               if (value is! num) {
                 valid = false;
                 break;
               }
-              final sample = value.toDouble();
-              if (!sample.isFinite || sample < -1.0 || sample > 1.0) {
+              var sample = value.toDouble();
+              if (fromEngine) {
+                if (!sample.isFinite) sample = 0.0;
+                if (sample > 1.0) sample = 1.0;
+                if (sample < -1.0) sample = -1.0;
+              } else if (!sample.isFinite ||
+                  sample < -1.0 ||
+                  sample > 1.0) {
                 valid = false;
                 break;
               }

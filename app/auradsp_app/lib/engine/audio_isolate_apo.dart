@@ -122,7 +122,26 @@ class ApoParamPublisher {
   /// id 记最近一次有效值）：中转孤儿回收的引用集来源之一。
   final Map<String, String> _fileEffectTransit = {};
 
+  /// File-effect transit conversion cache: id -> (source, effective).
+  /// transitPathFor reads and SHA-256-hashes the whole file on every
+  /// call; without this, every flushAll re-reads the IR/DDC files.
+  final Map<String, (String, String)> _fileEffectConvertCache = {};
+
+  String _convertFileEffect(String id, String text) {
+    final hit = _fileEffectConvertCache[id];
+    if (hit != null && hit.$1 == text) return hit.$2;
+    final effective = ApoTransit.transitPathFor(text) ?? '';
+    _fileEffectConvertCache[id] = (text, effective);
+    _fileEffectTransit[id] = effective;
+    return effective;
+  }
+
   /// 当前被参数块引用的中转路径集合（孤儿回收 keep 集）。
+  /// True once at least one full snapshot completed; the orphan
+  /// GC trusts the keep set only then.
+  bool get hasFlushed => _hasFlushed;
+  bool _hasFlushed = false;
+
   Set<String> get referencedTransitPaths =>
       _fileEffectTransit.values.where((p) => p.isNotEmpty).toSet();
 
@@ -333,8 +352,7 @@ class ApoParamPublisher {
     // 引擎侧还有第二道围栏（ApoEngineHost 只认中转根下路径）。
     var effective = text;
     if (id == ParamId.convIrPath || id == ParamId.ddcLoad) {
-      effective = ApoTransit.transitPathFor(text) ?? '';
-      _fileEffectTransit[id] = effective;
+      effective = _convertFileEffect(id, text);
     }
     if (!_ensure()) return;
     _beginWrite();
@@ -362,6 +380,24 @@ class ApoParamPublisher {
     final mirror = _mirror;
     final strMirror = _strMirror;
     if (mirror == null || strMirror == null) return;
+    // Convert file-effect paths BEFORE _beginWrite: the conversion
+    // reads/hashes (and may copy) whole files; inside the seqlock
+    // span it would stretch the block's in-progress window from
+    // microseconds to hundreds of milliseconds. onString has always
+    // converted outside the span; flushAll now matches. The
+    // conversion is also required for correctness: the mirror holds
+    // original user paths, which audiodg cannot read and the host
+    // fence rejects (found 2026-11-23: entering APO or restoring a
+    // session wrote raw paths, file effects silently unloaded
+    // until the user re-picked each file).
+    final effectiveStrings = <String, String>{};
+    for (final e in strMirror.entries) {
+      var text = e.value;
+      if (e.key == ParamId.convIrPath || e.key == ParamId.ddcLoad) {
+        text = _convertFileEffect(e.key, text);
+      }
+      effectiveStrings[e.key] = text;
+    }
     _beginWrite();
     _u32![3] = (_bypassOf?.call() ?? false) ? 1 : 0;
     for (var i = 0; i < 64; i++) {
@@ -373,20 +409,12 @@ class ApoParamPublisher {
     for (var s = 0; s < kApoStrSlotCaps.length; s++) {
       _u32![5 + s] = 0;
     }
-    for (final e in strMirror.entries) {
-      var text = e.value;
-      if (e.key == ParamId.convIrPath || e.key == ParamId.ddcLoad) {
-        // 与 onString 同口径：全量快照也必须走中转——镜像存的
-        // 是原始路径，直接写块会被 audiodg 读不到且被宿主围栏
-        // 拒绝（2026-11-23 发现：切入 APO/会话恢复时 flushAll
-        // 写原路径，文件效果静默失效，直到用户逐个重选文件）。
-        text = ApoTransit.transitPathFor(text) ?? '';
-        _fileEffectTransit[e.key] = text;
-      }
-      _writeString(e.key, text);
+    for (final e in effectiveStrings.entries) {
+      _writeString(e.key, e.value);
     }
     _writeOverrideTable();
     _endWrite();
+    _hasFlushed = true;
     dbgLog('apo publisher: full snapshot '
         '(${mirror.length} numeric, ${strMirror.length} strings)');
   }

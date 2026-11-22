@@ -118,6 +118,26 @@ class WindowsPlan:
              "-File", str(paths.BUILD_WINDOWS_PS1), "-BuildType", "Release"],
             cwd=paths.ROOT, check=True)
         log("构建完成")
+        self._verify_projectm_bridge()
+
+    def _verify_projectm_bridge(self) -> None:
+        # projectM bridge (MilkDrop native rendering) is an optional
+        # payload gated on AURADSP_PROJECTM_SDK in the build script.
+        # Without this check a release could silently ship without
+        # it: unset variable -> one dark-gray skip line in a long
+        # build log. Set-but-missing is a hard failure (the operator
+        # asked for the bridge and the build claimed success).
+        import os
+        bridge = paths.STAGING_DIR / "auradsp_projectm_bridge.dll"
+        if os.environ.get("AURADSP_PROJECTM_SDK"):
+            if not bridge.is_file():
+                raise die("AURADSP_PROJECTM_SDK 已设置，但 staging 里没有 "
+                          "auradsp_projectm_bridge.dll — 桥构建未产出，"
+                          "拒绝带病发行（查 build_windows 输出）")
+            log("projectM 桥已确认在 staging 内")
+        else:
+            log("警告: 未设置 AURADSP_PROJECTM_SDK — 本次发行不含 "
+                "MilkDrop 原生渲染（App 自动回落程序化样式）")
 
     def run_pack(self, tier: str, modes: tuple[str, ...], out_dir: Path,
                  what_if: bool) -> None:

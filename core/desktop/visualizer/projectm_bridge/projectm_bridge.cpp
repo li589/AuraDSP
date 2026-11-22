@@ -409,21 +409,39 @@ private:
             }
             while (glGetError() != GL_NO_ERROR) {
             }
-            if (!ctx->target.ensure(ctx->width, ctx->height)) return;
+            // Snapshot the size once per frame: resize() writes
+            // width/height from the caller thread, and sizing the
+            // pixel buffer from one read but reading pixels with
+            // another could overrun the buffer mid-resize.
+            const int w = ctx->width;
+            const int h = ctx->height;
+            if (w <= 0 || h <= 0) return;
+            if (!ctx->target.ensure(w, h)) return;
             projectm_opengl_render_frame_fbo(
                 ctx->pm, static_cast<uint32_t>(ctx->target.fbo));
-            std::vector<uint8_t> pixels(
-                static_cast<size_t>(ctx->width) * ctx->height * 4);
+            std::vector<uint8_t> pixels(static_cast<size_t>(w) * h * 4);
             GLint old_alignment = 4;
             glGetIntegerv(GL_PACK_ALIGNMENT, &old_alignment);
             glPixelStorei(GL_PACK_ALIGNMENT, 1);
             fbo_gl().bind_fbo(GL_FRAMEBUFFER, ctx->target.fbo);
             glReadBuffer(GL_COLOR_ATTACHMENT0);
-            glReadPixels(0, 0, ctx->width, ctx->height, GL_RGBA,
-                         GL_UNSIGNED_BYTE, pixels.data());
+            glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE,
+                         pixels.data());
             glPixelStorei(GL_PACK_ALIGNMENT, old_alignment);
             fbo_gl().bind_fbo(GL_FRAMEBUFFER, 0);
             if (glGetError() == GL_NO_ERROR) {
+                // GL readback is bottom-row-first; the delivered
+                // frame contract is top-left origin (image APIs),
+                // so flip rows here on the render thread.
+                const size_t stride = static_cast<size_t>(w) * 4;
+                std::vector<uint8_t> row(stride);
+                for (int y = 0; y < h / 2; ++y) {
+                    uint8_t* a = pixels.data() + stride * y;
+                    uint8_t* b = pixels.data() + stride * (h - 1 - y);
+                    std::memcpy(row.data(), a, stride);
+                    std::memcpy(a, b, stride);
+                    std::memcpy(b, row.data(), stride);
+                }
                 std::lock_guard<std::mutex> lock(ctx->frames.mtx);
                 ctx->frames.front = std::move(pixels);
                 ctx->frames.has_frame = true;
@@ -517,12 +535,12 @@ AURADSP_PROJECTM_EXPORT int
                 projectm_destroy(ctx->pm);
                 ctx->pm = nullptr;
             }
+            ctx->target.destroy();
+            ctx->gl_ready.store(false, std::memory_order_release);
+            ctx->gl.destroy();
         } catch (...) {
             return false;  // keep the handle so cleanup can be retried
         }
-        ctx->target.destroy();
-        ctx->gl_ready.store(false, std::memory_order_release);
-        ctx->gl.destroy();
         return true;
     });
     if (!ok) {

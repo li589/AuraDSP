@@ -177,15 +177,20 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   // [W4] projectM 原生会话驱动（2026-11-23 接线轮）
   //
   // 激活三条件缺一不可：风格为 projectM、桥为原生桥、本地 PCM
-  // 正在流动。PCM 只存在于普通管线与 ASIO Client 模式（引擎在
-  // 本进程）；APO（audiodg）与虚拟 ASIO（DAW 进程）下快照恒空，
-  // 会话永不激活，舞台诚实回落程序化 MilkdropPainter 并由抽屉
-  // 徽标明示（visualizerEngineFallbackActive）。
-  // ------------------------------------------------------------------
+  // PCM availability (corrected 2026-11-23, full audit): only the
+  // local pipeline produces 'pcm' events today. In ASIO Client mode
+  // the engine instance is driven by the ASIO bridge, whose viz
+  // channel carries spectrum/levels but no PCM, and the isolate's
+  // own shadow handle is not fed the ASIO stream - so Client mode
+  // falls back exactly like APO / virtual ASIO until the bridge
+  // grows a PCM read export (registered follow-up). APO (audiodg)
+  // and virtual ASIO (DAW process) have no PCM by construction.
   Timer? _pmTimer;
   bool _pmInitInFlight = false;
   DateTime? _pmInitFailedAt;
   String? _pmLoadedPath;
+  String? _pmPresetFailedPath;
+  DateTime? _pmPresetFailedAt;
   List<double>? _pmLastFed;
 
   void _syncProjectmSession() {
@@ -221,7 +226,12 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
       bridge.initialize(width: 640, height: 360, fps: 30).then((ok) {
         _pmInitInFlight = false;
         if (!ok) _pmInitFailedAt = DateTime.now();
-        if (ok && mounted) _pmLoadCurrentPreset();
+        if (ok) {
+          // A fresh native instance holds its default preset; any
+          // previously recorded load belongs to the old instance.
+          _pmLoadedPath = null;
+          if (mounted) _pmLoadCurrentPreset();
+        }
       });
       return;
     }
@@ -238,8 +248,21 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
     if (bridge == null || !bridge.isAvailable) return;
     final path = widget.config.milkdropPresetPath;
     if (path == null || path.isEmpty || path == _pmLoadedPath) return;
+    // A persistently failing preset (corrupt .milk, unreadable file)
+    // must not retry file IO + a native load on every 33 ms tick.
+    final failedAt = _pmPresetFailedAt;
+    if (path == _pmPresetFailedPath &&
+        failedAt != null &&
+        DateTime.now().difference(failedAt) < const Duration(seconds: 5)) {
+      return;
+    }
     if (bridge.loadPreset(MilkdropPreset.parseFile(path))) {
       _pmLoadedPath = path;
+      _pmPresetFailedPath = null;
+      _pmPresetFailedAt = null;
+    } else {
+      _pmPresetFailedPath = path;
+      _pmPresetFailedAt = DateTime.now();
     }
   }
 

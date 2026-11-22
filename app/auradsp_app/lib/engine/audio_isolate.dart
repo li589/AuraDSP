@@ -273,6 +273,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         const Duration(minutes: 30)) {
       return;
     }
+    // Keep-set guard: if no full snapshot ever completed (e.g. the
+    // params block could not be created), the param publisher's
+    // referenced set is empty and collecting could delete copies
+    // the config still points at. Skip; the next cycle retries.
+    if (!apoPublisher.hasFlushed) return;
     lastOrphanCollectAt = now;
     final referenced = <String>{
       ...apoPublisher.referencedTransitPaths,

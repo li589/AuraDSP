@@ -8,7 +8,8 @@
  * are thread-safe. render_pixels copies the newest completed frame
  * (the render thread produces frames continuously at the configured
  * fps) and returns -3 while no frame exists yet. Pixel readback is
- * RGBA8 and starts at the lower-left row, matching glReadPixels.
+ * RGBA8; the first row is the TOP row (the bridge flips the GL
+ * bottom-up readback before delivering frames).
  * Non-Windows platforms report the core unavailable for now.
  */
 #pragma once

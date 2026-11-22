@@ -465,13 +465,21 @@ if ($PmSdk -and (Test-Path (Join-Path $PmSdk "lib\projectM-4.lib"))) {
     Write-Host "  构建 projectM 桥 (SDK: $PmSdk)..."
     $PmSrc = Join-Path $ProjectRoot "core\desktop\visualizer\projectm_bridge"
     $PmBuild = Join-Path $ProjectRoot "build\projectm-bridge"
+    $PmBridgeDll = Join-Path $PmBuild "Release\auradsp_projectm_bridge.dll"
+    # Freshness guard: the build tree persists across runs, so a
+    # failed build would otherwise leave a previous DLL in place
+    # and Test-Path below would stage it as this run's product
+    # (the repo's known stale-staging accident pattern). Delete
+    # the target first and check BOTH cmake exit codes.
+    if (Test-Path $PmBridgeDll) { Remove-Item $PmBridgeDll -Force }
+    $PmBuildRc = 1
     cmake -S $PmSrc -B $PmBuild -G "Visual Studio 18 2026" -A x64 -DAURADSP_BUILD_PROJECTM_BRIDGE=ON -DAURADSP_PROJECTM_ROOT=$PmSdk | Out-Null
     if ($LASTEXITCODE -eq 0) {
         cmake --build $PmBuild --config Release -j 4 | Out-Null
+        $PmBuildRc = $LASTEXITCODE
     }
-    $PmBridgeDll = Join-Path $PmBuild "Release\auradsp_projectm_bridge.dll"
     $PmCoreDll = Join-Path $PmSdk "bin\projectM-4.dll"
-    if ((Test-Path $PmBridgeDll) -and (Test-Path $PmCoreDll)) {
+    if ($PmBuildRc -eq 0 -and (Test-Path $PmBridgeDll) -and (Test-Path $PmCoreDll)) {
         Copy-Item $PmBridgeDll $DistPortable -Force
         Copy-Item $PmCoreDll $DistPortable -Force
         Write-Host "  -> projectM 桥已随包 (auradsp_projectm_bridge.dll + projectM-4.dll)" -ForegroundColor Green
