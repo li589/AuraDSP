@@ -143,6 +143,126 @@ struct WglContext {
 
 #endif  // _WIN32
 
+// ---------------------------------------------------------------------------
+// FBO entry points: <GL/gl.h> on Windows is GL 1.1 only, so the
+// framebuffer-object functions are loaded once from the driver.
+// projectm_opengl_render_frame() targets the default framebuffer,
+// whose back buffer is not reliably readable for a hidden window
+// (glReadPixels -> GL_INVALID_OPERATION); render_frame_fbo() into
+// our own FBO is the reliable readback path.
+// ---------------------------------------------------------------------------
+// FBO constants (absent from the GL 1.1 Windows header; values are
+// fixed by the OpenGL specification).
+#ifndef GL_FRAMEBUFFER
+#define GL_FRAMEBUFFER 0x8D40
+#define GL_COLOR_ATTACHMENT0 0x8CE0
+#define GL_DEPTH_ATTACHMENT 0x8D00
+#define GL_RENDERBUFFER 0x8D41
+#define GL_DEPTH_COMPONENT24 0x81A6
+#define GL_FRAMEBUFFER_COMPLETE 0x8CD5
+#define GL_RGBA8 0x8058
+#endif
+
+using GlGenFramebuffersFn = void (*)(GLsizei, GLuint*);
+using GlBindFramebufferFn = void (*)(GLenum, GLuint);
+using GlFramebufferTexture2DFn = void (*)(GLenum, GLenum, GLenum, GLuint, GLint);
+using GlDeleteFramebuffersFn = void (*)(GLsizei, const GLuint*);
+using GlGenRenderbuffersFn = void (*)(GLsizei, GLuint*);
+using GlBindRenderbufferFn = void (*)(GLenum, GLuint);
+using GlRenderbufferStorageFn = void (*)(GLenum, GLenum, GLsizei, GLsizei);
+using GlFramebufferRenderbufferFn = void (*)(GLenum, GLenum, GLenum, GLuint);
+using GlDeleteRenderbuffersFn = void (*)(GLsizei, const GLuint*);
+using GlCheckFramebufferStatusFn = GLenum (*)(GLenum);
+
+struct FboGl {
+    GlGenFramebuffersFn gen_fbo = nullptr;
+    GlBindFramebufferFn bind_fbo = nullptr;
+    GlFramebufferTexture2DFn fbo_texture = nullptr;
+    GlDeleteFramebuffersFn del_fbo = nullptr;
+    GlGenRenderbuffersFn gen_rb = nullptr;
+    GlBindRenderbufferFn bind_rb = nullptr;
+    GlRenderbufferStorageFn rb_storage = nullptr;
+    GlFramebufferRenderbufferFn fbo_rb = nullptr;
+    GlDeleteRenderbuffersFn del_rb = nullptr;
+    GlCheckFramebufferStatusFn check_fbo = nullptr;
+    bool ready = false;
+
+    bool load() {
+        if (ready) return true;
+        gen_fbo = reinterpret_cast<GlGenFramebuffersFn>(wglGetProcAddress("glGenFramebuffers"));
+        bind_fbo = reinterpret_cast<GlBindFramebufferFn>(wglGetProcAddress("glBindFramebuffer"));
+        fbo_texture = reinterpret_cast<GlFramebufferTexture2DFn>(wglGetProcAddress("glFramebufferTexture2D"));
+        del_fbo = reinterpret_cast<GlDeleteFramebuffersFn>(wglGetProcAddress("glDeleteFramebuffers"));
+        gen_rb = reinterpret_cast<GlGenRenderbuffersFn>(wglGetProcAddress("glGenRenderbuffers"));
+        bind_rb = reinterpret_cast<GlBindRenderbufferFn>(wglGetProcAddress("glBindRenderbuffer"));
+        rb_storage = reinterpret_cast<GlRenderbufferStorageFn>(wglGetProcAddress("glRenderbufferStorage"));
+        fbo_rb = reinterpret_cast<GlFramebufferRenderbufferFn>(wglGetProcAddress("glFramebufferRenderbuffer"));
+        del_rb = reinterpret_cast<GlDeleteRenderbuffersFn>(wglGetProcAddress("glDeleteRenderbuffers"));
+        check_fbo = reinterpret_cast<GlCheckFramebufferStatusFn>(wglGetProcAddress("glCheckFramebufferStatus"));
+        ready = gen_fbo && bind_fbo && fbo_texture && del_fbo && gen_rb &&
+                bind_rb && rb_storage && fbo_rb && del_rb && check_fbo;
+        return ready;
+    }
+};
+
+inline FboGl& fbo_gl() {
+    static FboGl g;
+    return g;
+}
+
+// Per-instance render target (render thread owned).
+struct RenderTarget {
+    GLuint fbo = 0;
+    GLuint color_tex = 0;
+    GLuint depth_rb = 0;
+    int width = 0;
+    int height = 0;
+
+    bool ensure(int w, int h) {
+        if (fbo != 0 && width == w && height == h) return true;
+        FboGl& gl = fbo_gl();
+        if (!gl.load()) return false;
+        destroy();
+        glGenTextures(1, &color_tex);
+        glBindTexture(GL_TEXTURE_2D, color_tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        gl.gen_rb(1, &depth_rb);
+        gl.bind_rb(GL_RENDERBUFFER, depth_rb);
+        gl.rb_storage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
+        gl.gen_fbo(1, &fbo);
+        gl.bind_fbo(GL_FRAMEBUFFER, fbo);
+        gl.fbo_texture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                       color_tex, 0);
+        gl.fbo_rb(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
+                  depth_rb);
+        const bool complete =
+            gl.check_fbo(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+        gl.bind_fbo(GL_FRAMEBUFFER, 0);
+        if (!complete) {
+            destroy();
+            return false;
+        }
+        width = w;
+        height = h;
+        return true;
+    }
+
+    void destroy() {
+        FboGl& gl = fbo_gl();
+        if (fbo != 0 && gl.del_fbo) gl.del_fbo(1, &fbo);
+        if (depth_rb != 0 && gl.del_rb) gl.del_rb(1, &depth_rb);
+        if (color_tex != 0) glDeleteTextures(1, &color_tex);
+        fbo = 0;
+        depth_rb = 0;
+        color_tex = 0;
+        width = 0;
+        height = 0;
+    }
+};
+
 struct PcmChunk {
     std::vector<float> samples;  // interleaved
     int frames_per_channel = 0;
@@ -171,6 +291,7 @@ struct auradsp_projectm_context {
 
 #if defined(_WIN32)
     WglContext gl;  // render-thread owned
+    RenderTarget target;
 #endif
     std::chrono::steady_clock::time_point next_frame_due{};
     std::atomic<bool> gl_ready{false};
@@ -288,16 +409,20 @@ private:
             }
             while (glGetError() != GL_NO_ERROR) {
             }
-            projectm_opengl_render_frame(ctx->pm);
+            if (!ctx->target.ensure(ctx->width, ctx->height)) return;
+            projectm_opengl_render_frame_fbo(
+                ctx->pm, static_cast<uint32_t>(ctx->target.fbo));
             std::vector<uint8_t> pixels(
                 static_cast<size_t>(ctx->width) * ctx->height * 4);
             GLint old_alignment = 4;
             glGetIntegerv(GL_PACK_ALIGNMENT, &old_alignment);
             glPixelStorei(GL_PACK_ALIGNMENT, 1);
-            glReadBuffer(GL_BACK);
+            fbo_gl().bind_fbo(GL_FRAMEBUFFER, ctx->target.fbo);
+            glReadBuffer(GL_COLOR_ATTACHMENT0);
             glReadPixels(0, 0, ctx->width, ctx->height, GL_RGBA,
                          GL_UNSIGNED_BYTE, pixels.data());
             glPixelStorei(GL_PACK_ALIGNMENT, old_alignment);
+            fbo_gl().bind_fbo(GL_FRAMEBUFFER, 0);
             if (glGetError() == GL_NO_ERROR) {
                 std::lock_guard<std::mutex> lock(ctx->frames.mtx);
                 ctx->frames.front = std::move(pixels);
@@ -395,6 +520,7 @@ AURADSP_PROJECTM_EXPORT int
         } catch (...) {
             return false;  // keep the handle so cleanup can be retried
         }
+        ctx->target.destroy();
         ctx->gl_ready.store(false, std::memory_order_release);
         ctx->gl.destroy();
         return true;
