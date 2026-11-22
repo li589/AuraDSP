@@ -74,28 +74,46 @@ AURADSP_PROJECTM_EXPORT auradsp_projectm_t
     if (fps <= 0.0f) fps = 60.0f;
     if (!has_current_gl_context_impl()) return nullptr;
 
-    auto* ctx = new auradsp_projectm_context();
-    ctx->width = width;
-    ctx->height = height;
-    ctx->fps = fps;
-    ctx->owner_thread = std::this_thread::get_id();
+    // ABI guard: libprojectM is C++ and may throw; an exception must
+    // never cross the C ABI into the Dart host. On any throw the
+    // half-built context is torn down and creation reports failure.
+    auradsp_projectm_context* ctx = nullptr;
+    try {
+        ctx = new auradsp_projectm_context();
+        ctx->width = width;
+        ctx->height = height;
+        ctx->fps = fps;
+        ctx->owner_thread = std::this_thread::get_id();
 
-    ctx->pm = projectm_create();
-    if (ctx->pm == nullptr) {
-        delete ctx;
+        ctx->pm = projectm_create();
+        if (ctx->pm == nullptr) {
+            delete ctx;
+            return nullptr;
+        }
+
+        projectm_set_window_size(ctx->pm, static_cast<size_t>(width),
+                                 static_cast<size_t>(height));
+        projectm_set_fps(ctx->pm, static_cast<int32_t>(std::lround(fps)));
+        projectm_set_preset_switch_failed_event_callback(
+            ctx->pm, on_preset_load_failed, ctx);
+        return static_cast<auradsp_projectm_t>(ctx);
+    } catch (...) {
+        if (ctx != nullptr) {
+            if (ctx->pm != nullptr) {
+                try {
+                    projectm_destroy(ctx->pm);
+                } catch (...) {
+                }
+            }
+            delete ctx;
+        }
         return nullptr;
     }
-
-    projectm_set_window_size(ctx->pm, static_cast<size_t>(width),
-                             static_cast<size_t>(height));
-    projectm_set_fps(ctx->pm, static_cast<int>(fps));
-    projectm_set_preset_switch_failed_event_callback(
-        ctx->pm, on_preset_load_failed, ctx);
-    return static_cast<auradsp_projectm_t>(ctx);
 }
 
 AURADSP_PROJECTM_EXPORT int
-    auradsp_projectm_destroy(auradsp_projectm_t handle) {
+    auradsp_projectm_destroy(auradsp_projectm_t handle) { try {
+
     if (handle == nullptr) return 0;
     auto* ctx = static_cast<auradsp_projectm_context*>(handle);
     {
@@ -110,10 +128,14 @@ AURADSP_PROJECTM_EXPORT int
     }
     delete ctx;
     return 0;
+    } catch (...) { return -3; }
+    // (ABI guard: libprojectM is C++ and may throw; an exception
+    // must never cross the C ABI into the Dart host.)
 }
 
 AURADSP_PROJECTM_EXPORT int
-    auradsp_projectm_resize(auradsp_projectm_t handle, int width, int height) {
+    auradsp_projectm_resize(auradsp_projectm_t handle, int width, int height) { try {
+
     if (handle == nullptr || width <= 0 || height <= 0) return -1;
     auto* ctx = static_cast<auradsp_projectm_context*>(handle);
     std::lock_guard<std::mutex> lock(ctx->mtx);
@@ -124,27 +146,39 @@ AURADSP_PROJECTM_EXPORT int
     projectm_set_window_size(ctx->pm, static_cast<size_t>(width),
                              static_cast<size_t>(height));
     return 0;
+    } catch (...) { return -3; }
+    // (ABI guard: libprojectM is C++ and may throw; an exception
+    // must never cross the C ABI into the Dart host.)
 }
 
 AURADSP_PROJECTM_EXPORT int
-    auradsp_projectm_get_width(auradsp_projectm_t handle) {
+    auradsp_projectm_get_width(auradsp_projectm_t handle) { try {
+
     if (handle == nullptr) return 0;
     auto* ctx = static_cast<auradsp_projectm_context*>(handle);
     std::lock_guard<std::mutex> lock(ctx->mtx);
     return ctx->width;
+    } catch (...) { return 0; }
+    // (ABI guard: libprojectM is C++ and may throw; an exception
+    // must never cross the C ABI into the Dart host.)
 }
 
 AURADSP_PROJECTM_EXPORT int
-    auradsp_projectm_get_height(auradsp_projectm_t handle) {
+    auradsp_projectm_get_height(auradsp_projectm_t handle) { try {
+
     if (handle == nullptr) return 0;
     auto* ctx = static_cast<auradsp_projectm_context*>(handle);
     std::lock_guard<std::mutex> lock(ctx->mtx);
     return ctx->height;
+    } catch (...) { return 0; }
+    // (ABI guard: libprojectM is C++ and may throw; an exception
+    // must never cross the C ABI into the Dart host.)
 }
 
 AURADSP_PROJECTM_EXPORT int auradsp_projectm_feed_pcm(
     auradsp_projectm_t handle, const float* pcm, int frames_per_channel,
-    int channels) {
+    int channels) { try {
+
     if (handle == nullptr || pcm == nullptr || frames_per_channel <= 0 ||
         frames_per_channel > kMaxPcmFrames ||
         (channels != 1 && channels != 2)) {
@@ -167,10 +201,14 @@ AURADSP_PROJECTM_EXPORT int auradsp_projectm_feed_pcm(
     projectm_pcm_add_float(ctx->pm, pcm,
                            static_cast<unsigned int>(frames_per_channel), ch);
     return 0;
+    } catch (...) { return -3; }
+    // (ABI guard: libprojectM is C++ and may throw; an exception
+    // must never cross the C ABI into the Dart host.)
 }
 
 AURADSP_PROJECTM_EXPORT int auradsp_projectm_load_preset(
-    auradsp_projectm_t handle, const char* preset_path) {
+    auradsp_projectm_t handle, const char* preset_path) { try {
+
     if (handle == nullptr || preset_path == nullptr || preset_path[0] == '\0') {
         return -1;
     }
@@ -182,14 +220,22 @@ AURADSP_PROJECTM_EXPORT int auradsp_projectm_load_preset(
     ctx->preset_load_failed.store(false, std::memory_order_release);
     projectm_load_preset_file(ctx->pm, preset_path, true);
     return ctx->preset_load_failed.load(std::memory_order_acquire) ? -3 : 0;
+    } catch (...) { return -3; }
+    // (ABI guard: libprojectM is C++ and may throw; an exception
+    // must never cross the C ABI into the Dart host.)
 }
 
-AURADSP_PROJECTM_EXPORT int auradsp_projectm_has_current_gl_context(void) {
+AURADSP_PROJECTM_EXPORT int auradsp_projectm_has_current_gl_context(void) { try {
+
     return has_current_gl_context_impl() ? 1 : 0;
+    } catch (...) { return 0; }
+    // (ABI guard: libprojectM is C++ and may throw; an exception
+    // must never cross the C ABI into the Dart host.)
 }
 
 AURADSP_PROJECTM_EXPORT int auradsp_projectm_render_pixels(
-    auradsp_projectm_t handle, uint8_t* out_rgba_pixels) {
+    auradsp_projectm_t handle, uint8_t* out_rgba_pixels) { try {
+
     if (handle == nullptr || out_rgba_pixels == nullptr) return -1;
     auto* ctx = static_cast<auradsp_projectm_context*>(handle);
     std::lock_guard<std::mutex> lock(ctx->mtx);
@@ -206,4 +252,7 @@ AURADSP_PROJECTM_EXPORT int auradsp_projectm_render_pixels(
                  out_rgba_pixels);
     glPixelStorei(GL_PACK_ALIGNMENT, old_pack_alignment);
     return glGetError() == GL_NO_ERROR ? 0 : -3;
+    } catch (...) { return -3; }
+    // (ABI guard: libprojectM is C++ and may throw; an exception
+    // must never cross the C ABI into the Dart host.)
 }
