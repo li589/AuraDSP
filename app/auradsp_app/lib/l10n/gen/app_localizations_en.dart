@@ -1964,6 +1964,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get visualizerStyleNebulaFlow => 'Nebula';
 
   @override
+  String get visualizerStyleProjectM => 'MilkDrop (projectM)';
+
+  @override
+  String get visualizerMilkdropSection => 'MilkDrop Presets (.milk)';
+
+  @override
+  String get visualizerPickMilkdropFile => 'Open Preset File (.milk)';
+
+  @override
+  String get visualizerPickMilkdropFolder => 'Import Preset Directory';
+
+  @override
   String get visualizerThemeSystem => 'System Theme';
 
   @override

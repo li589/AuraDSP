@@ -1862,6 +1862,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get visualizerStyleNebulaFlow => '星雲';
 
   @override
+  String get visualizerStyleProjectM => 'MilkDrop (projectM)';
+
+  @override
+  String get visualizerMilkdropSection => 'MilkDrop プリセット (.milk)';
+
+  @override
+  String get visualizerPickMilkdropFile => 'プリセットファイルを開く (.milk)';
+
+  @override
+  String get visualizerPickMilkdropFolder => 'プリセットフォルダをインポート';
+
+  @override
   String get visualizerThemeSystem => 'システムテーマ';
 
   @override

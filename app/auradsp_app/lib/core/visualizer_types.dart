@@ -99,6 +99,14 @@ enum VisualizerStyle {
     label: 'Nebula',
     icon: Icons.cloud_rounded,
     description: 'Deep cosmic nebula with drifting interstellar dust clouds and pulsating stellar fields',
+  ),
+
+  /// Winamp MilkDrop 2 / projectM 外部脚本视效引擎 (支持 .milk 预设脚本)
+  projectM(
+    id: 'projectM',
+    label: 'MilkDrop (projectM)',
+    icon: Icons.auto_awesome_motion_rounded,
+    description: 'Winamp MilkDrop procedural script visualizer engine via libprojectM',
   );
 
   final String id;
@@ -285,6 +293,9 @@ class VisualizerConfig {
   /// 在线歌词来源（R6）
   final LyricsSource lyricsSource;
 
+  /// MilkDrop 脚本预设路径（.milk 文件路径，或 null 为内置预设）
+  final String? milkdropPresetPath;
+
   const VisualizerConfig({
     this.style = VisualizerStyle.bars,
     this.colorTheme = VisualizerColorTheme.system,
@@ -300,6 +311,7 @@ class VisualizerConfig {
     this.showLyrics = false,
     this.showTranslation = true,
     this.lyricsSource = LyricsSource.auto,
+    this.milkdropPresetPath,
   });
 
   VisualizerConfig copyWith({
@@ -317,6 +329,7 @@ class VisualizerConfig {
     bool? showLyrics,
     bool? showTranslation,
     LyricsSource? lyricsSource,
+    String? milkdropPresetPath,
   }) {
     return VisualizerConfig(
       style: style ?? this.style,
@@ -333,6 +346,7 @@ class VisualizerConfig {
       showLyrics: showLyrics ?? this.showLyrics,
       showTranslation: showTranslation ?? this.showTranslation,
       lyricsSource: lyricsSource ?? this.lyricsSource,
+      milkdropPresetPath: milkdropPresetPath ?? this.milkdropPresetPath,
     );
   }
 
@@ -352,6 +366,7 @@ class VisualizerConfig {
         'showLyrics': showLyrics,
         'showTranslation': showTranslation,
         'lyricsSource': lyricsSource.id,
+        'milkdropPresetPath': milkdropPresetPath,
       };
 
   /// 容错读取：坏值逐项回落出厂值，不因单键脏数据丢整份配置。
@@ -390,6 +405,7 @@ class VisualizerConfig {
       showLyrics: b('showLyrics', false),
       showTranslation: b('showTranslation', true),
       lyricsSource: LyricsSource.fromId(s('lyricsSource')),
+      milkdropPresetPath: s('milkdropPresetPath'),
     );
   }
 
@@ -411,7 +427,8 @@ class VisualizerConfig {
         other.showDbScale == showDbScale &&
         other.showLyrics == showLyrics &&
         other.showTranslation == showTranslation &&
-        other.lyricsSource == lyricsSource;
+        other.lyricsSource == lyricsSource &&
+        other.milkdropPresetPath == milkdropPresetPath;
   }
 
   @override
@@ -430,6 +447,7 @@ class VisualizerConfig {
         showLyrics,
         showTranslation,
         lyricsSource,
+        milkdropPresetPath,
       );
 }
 
@@ -447,6 +465,7 @@ extension VisualizerStyleL10n on VisualizerStyle {
         VisualizerStyle.fluidDynamics => l.visualizerStyleFluid,
         VisualizerStyle.tornado => l.visualizerStyleTornado,
         VisualizerStyle.nebulaFlow => l.visualizerStyleNebulaFlow,
+        VisualizerStyle.projectM => l.visualizerStyleProjectM,
       };
 }
 

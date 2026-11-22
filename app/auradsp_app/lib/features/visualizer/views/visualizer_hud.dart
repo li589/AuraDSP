@@ -16,6 +16,7 @@ class VisualizerHud extends StatefulWidget {
   final VoidCallback onToggleLyrics;
   final VoidCallback onOpenDrawer;
   final VoidCallback onResetPeaks;
+  final VoidCallback? onPickMilkdropFile;
 
   const VisualizerHud({
     super.key,
@@ -27,6 +28,7 @@ class VisualizerHud extends StatefulWidget {
     required this.onToggleLyrics,
     required this.onOpenDrawer,
     required this.onResetPeaks,
+    this.onPickMilkdropFile,
   });
 
   @override
@@ -189,6 +191,18 @@ class _VisualizerHudState extends State<VisualizerHud> {
                           isOpen: _menuOpen,
                           onTap: _toggleMenu,
                         ),
+                        if (widget.config.style == VisualizerStyle.projectM &&
+                            widget.onPickMilkdropFile != null) ...[
+                          if (!compact) const SizedBox(width: 4),
+                          VisualizerActionButton(
+                            icon: Icons.folder_open_rounded,
+                            tooltip: l.visualizerPickMilkdropFile,
+                            onTap: () {
+                              _closeMenu();
+                              widget.onPickMilkdropFile!();
+                            },
+                          ),
+                        ],
                         if (!compact) sep,
                         // 歌词显示开关
                         VisualizerActionButton(

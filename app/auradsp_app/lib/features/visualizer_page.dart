@@ -33,6 +33,7 @@ import '../ui/path_picker_dialog.dart';
 import 'chrome.dart';
 import 'visualizer/lyrics/parsers/lrc_parser.dart';
 import 'visualizer/lyrics/services/media_sync_service.dart';
+import 'visualizer/plugins/milkdrop_preset.dart';
 import 'visualizer/views/visualizer_drawer_widgets.dart';
 import 'visualizer/views/visualizer_meters.dart';
 import 'visualizer/views/visualizer_stage.dart';
@@ -66,6 +67,9 @@ class _VisualizerPageState extends State<VisualizerPage> {
   /// 若直接 ListenableBuilder(model) 会让整个舞台子树以音频帧率重建，
   /// 造成 UI 不跟手与大量短命对象。此处只在“是否在播放”翻转时触发重建。
   final ValueNotifier<bool> _playing = ValueNotifier<bool>(false);
+
+  /// 扫描或载入的 MilkDrop 预设列表（默认含内置回退拓扑预设）
+  List<MilkdropPreset> _milkdropPresets = MilkdropPreset.builtInPresets;
 
   /// OS 全屏请求串行化：快速连点时保证「最后一次意图」最终生效。
   Future<void> _fullscreenChain = Future<void>.value();
@@ -170,6 +174,62 @@ class _VisualizerPageState extends State<VisualizerPage> {
     final doc = LrcParser.parse(read.text!);
     if (doc.isNotEmpty) {
       _mediaSync.loadLyricDocument(doc);
+    }
+  }
+
+  /// 打开单个 Winamp MilkDrop 预设文件 (.milk)
+  Future<void> _pickMilkdropPreset() async {
+    final l = l10nOf(context);
+    final path = await AuraPathPickerDialog.show(
+      context,
+      title: l.visualizerPickMilkdropFile,
+      prompt: l.visualizerPickMilkdropFile,
+      allowedExtensions: const ['milk'],
+      memorySlot: PathMemory.slotMilkdropPreset,
+      confirmLabel: l.visualizerPickMilkdropFile,
+    );
+    if (path == null || path.isEmpty) return;
+
+    final preset = MilkdropPreset.parseFile(path);
+    final cfg = widget.model.visualizerConfig.value;
+    setState(() {
+      if (!_milkdropPresets.any((p) => p.filePath == path)) {
+        _milkdropPresets = [preset, ..._milkdropPresets];
+      }
+    });
+    widget.model.setVisualizerConfig(
+      cfg.copyWith(
+        style: VisualizerStyle.projectM,
+        milkdropPresetPath: path,
+      ),
+    );
+  }
+
+  /// 导入 MilkDrop 预设包目录 (.milk 集合)
+  Future<void> _pickMilkdropDirectory() async {
+    final l = l10nOf(context);
+    final path = await AuraPathPickerDialog.show(
+      context,
+      title: l.visualizerPickMilkdropFolder,
+      prompt: l.visualizerPickMilkdropFolder,
+      mode: ResourcePickMode.directory,
+      memorySlot: PathMemory.slotMilkdropDir,
+      confirmLabel: l.visualizerPickMilkdropFolder,
+    );
+    if (path == null || path.isEmpty) return;
+
+    final presets = MilkdropPresetScanner.scanDirectory(path);
+    if (presets.isNotEmpty) {
+      final cfg = widget.model.visualizerConfig.value;
+      setState(() {
+        _milkdropPresets = presets;
+      });
+      widget.model.setVisualizerConfig(
+        cfg.copyWith(
+          style: VisualizerStyle.projectM,
+          milkdropPresetPath: presets.first.filePath,
+        ),
+      );
     }
   }
 
@@ -363,6 +423,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
                             onToggleLyrics: _toggleLyrics,
                             onOpenDrawer: _openDrawer,
                             onOpenLocalLrc: _pickLocalLrc,
+                            onPickMilkdropFile: _pickMilkdropPreset,
                             mediaSync: _mediaSync,
                             emptyText: l.noAudio,
                             active: active,
@@ -415,6 +476,9 @@ class _VisualizerPageState extends State<VisualizerPage> {
             onClose: _closeDrawer,
             onResetToDefaults: () =>
                 widget.model.setVisualizerConfig(const VisualizerConfig()),
+            onPickMilkdropFile: _pickMilkdropPreset,
+            onPickMilkdropFolder: _pickMilkdropDirectory,
+            milkdropPresets: _milkdropPresets,
           ),
             ],
           ),

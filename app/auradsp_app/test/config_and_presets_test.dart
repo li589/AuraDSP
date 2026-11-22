@@ -169,6 +169,7 @@ void main() {
           'showLyrics': true,
           'showTranslation': false,
           'lyricsSource': 'kugou',
+          'milkdropPresetPath': 'sentinel-preset.milk',
         },
       };
 

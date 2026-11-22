@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import '../controllers/waveform_synthesizer.dart';
 import '../models/visualizer_themes.dart';
 import '../models/visualizer_types.dart';
+import '../plugins/milkdrop_preset.dart';
 import '../shaders/gpu_shader_service.dart';
 import 'style_cyber_grid.dart';
 import 'style_fluid.dart';
 import 'style_goniometer.dart';
 import 'style_gpu_shader.dart';
+import 'style_milkdrop.dart';
 import 'style_oscilloscope.dart';
 import 'style_pulse_orb.dart';
 import 'style_spectrum_bars.dart';
@@ -126,6 +128,20 @@ CustomPainter buildVisualizerPainter({
         palette: palette,
         time: time,
         sensitivity: config.sensitivity,
+      );
+
+    case VisualizerStyle.projectM:
+      final preset = (config.milkdropPresetPath != null &&
+              config.milkdropPresetPath!.isNotEmpty)
+          ? MilkdropPreset.parseFile(config.milkdropPresetPath!)
+          : MilkdropPreset.builtInPresets.first;
+      return MilkdropPainter(
+        preset: preset,
+        bands: rawBands,
+        palette: palette,
+        time: time,
+        sensitivity: config.sensitivity,
+        lineWidth: config.lineWidth,
       );
   }
 }

@@ -4,6 +4,7 @@ import '../../../core/design.dart';
 import '../../../core/theme.dart';
 import '../../../core/ui_helpers.dart';
 import '../models/visualizer_types.dart';
+import '../plugins/milkdrop_preset.dart';
 import 'visualizer_drawer.dart';
 
 /// 颜色主题选择标签组
@@ -236,6 +237,9 @@ class VisualizerDrawerOverlay extends StatelessWidget {
   final ValueChanged<VisualizerConfig> onConfigChanged;
   final VoidCallback onClose;
   final VoidCallback onResetToDefaults;
+  final VoidCallback? onPickMilkdropFile;
+  final VoidCallback? onPickMilkdropFolder;
+  final List<MilkdropPreset>? milkdropPresets;
 
   const VisualizerDrawerOverlay({
     super.key,
@@ -244,6 +248,9 @@ class VisualizerDrawerOverlay extends StatelessWidget {
     required this.onConfigChanged,
     required this.onClose,
     required this.onResetToDefaults,
+    this.onPickMilkdropFile,
+    this.onPickMilkdropFolder,
+    this.milkdropPresets,
   });
 
   @override
@@ -286,6 +293,9 @@ class VisualizerDrawerOverlay extends StatelessWidget {
                       onConfigChanged: onConfigChanged,
                       onClose: onClose,
                       onResetToDefaults: onResetToDefaults,
+                      onPickMilkdropFile: onPickMilkdropFile,
+                      onPickMilkdropFolder: onPickMilkdropFolder,
+                      milkdropPresets: milkdropPresets,
                     ),
                   ),
                 ],

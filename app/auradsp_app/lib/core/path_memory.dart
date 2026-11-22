@@ -40,6 +40,9 @@ abstract final class PathMemory {
   static const String slotLiveprogSelectedDir = 'liveprogSelectedDir';
   // 本地 LRC 歌词文件（可视化歌词层）
   static const String slotLyricsLrc = 'lyricsLrc';
+  // MilkDrop 预设与目录（可视化层）
+  static const String slotMilkdropPreset = 'milkdropPreset';
+  static const String slotMilkdropDir = 'milkdropDir';
   // 文本输入式「添加目录」对话框的上次输入（播种 TextField）
   static const String slotLastScriptDir = 'lastScriptDir';
   static const String slotLastPluginDir = 'lastPluginDir';

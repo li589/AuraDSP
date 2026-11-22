@@ -188,7 +188,8 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         VisualizerStyle.harmonicWarp ||
         VisualizerStyle.fluidDynamics ||
         VisualizerStyle.tornado ||
-        VisualizerStyle.nebulaFlow =>
+        VisualizerStyle.nebulaFlow ||
+        VisualizerStyle.projectM =>
           false,
         _ => true,
       };

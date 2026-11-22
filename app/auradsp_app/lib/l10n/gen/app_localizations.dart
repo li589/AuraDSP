@@ -3526,6 +3526,30 @@ abstract class AppLocalizations {
   /// **'星云'**
   String get visualizerStyleNebulaFlow;
 
+  /// No description provided for @visualizerStyleProjectM.
+  ///
+  /// In zh, this message translates to:
+  /// **'MilkDrop (projectM)'**
+  String get visualizerStyleProjectM;
+
+  /// No description provided for @visualizerMilkdropSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'MilkDrop 脚本预设 (.milk)'**
+  String get visualizerMilkdropSection;
+
+  /// No description provided for @visualizerPickMilkdropFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开单个预设 (.milk)'**
+  String get visualizerPickMilkdropFile;
+
+  /// No description provided for @visualizerPickMilkdropFolder.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入预设包文件夹'**
+  String get visualizerPickMilkdropFolder;
+
   /// No description provided for @visualizerThemeSystem.
   ///
   /// In zh, this message translates to:

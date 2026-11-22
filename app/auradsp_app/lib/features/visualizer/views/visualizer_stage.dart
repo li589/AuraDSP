@@ -32,6 +32,7 @@ class VisualizerStage extends StatefulWidget {
   final VoidCallback onToggleLyrics;
   final VoidCallback onOpenDrawer;
   final VoidCallback? onOpenLocalLrc;
+  final VoidCallback? onPickMilkdropFile;
   final MediaSyncService? mediaSync;
   final String emptyText;
   final bool active;
@@ -50,6 +51,7 @@ class VisualizerStage extends StatefulWidget {
     required this.onToggleLyrics,
     required this.onOpenDrawer,
     this.onOpenLocalLrc,
+    this.onPickMilkdropFile,
     this.mediaSync,
     required this.emptyText,
     required this.active,
@@ -573,6 +575,7 @@ class _VisualizerStageState extends State<VisualizerStage> {
                         _onUserPointerActivity();
                         _resetPeaks();
                       },
+                      onPickMilkdropFile: widget.onPickMilkdropFile,
                     ),
                   ),
                 ),

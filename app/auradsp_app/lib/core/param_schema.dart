@@ -1762,6 +1762,14 @@ abstract final class ParamRegistry {
     setter: (m, v) => m.setVisualizerConfig(m.visualizerConfig.value
         .copyWith(lyricsSource: LyricsSource.fromId(v))),
   );
+  static final vizMilkdropPresetPath = ParamSpec<String>(
+    id: 'visualizer.milkdropPresetPath', section: 'visualizer', key: 'milkdropPresetPath',
+    type: ParamType.string, defaultValue: '',
+    category: ParamCategory.hidden,
+    getter: (m) => m.visualizerConfig.value.milkdropPresetPath ?? '',
+    setter: (m, v) => m.setVisualizerConfig(m.visualizerConfig.value
+        .copyWith(milkdropPresetPath: v.isEmpty ? null : v)),
+  );
 
   /* =========================================================================
    * 全量处理节登记表 (Ordered Sections)
@@ -2094,6 +2102,7 @@ abstract final class ParamRegistry {
         vizStyle, vizColorTheme, vizSensitivity, vizDecayRate, vizGravity,
         vizBarCount, vizLineWidth, vizBloom, vizShowGrid, vizShowPeaks,
         vizShowDbScale, vizShowLyrics, vizShowTranslation, vizLyricsSource,
+        vizMilkdropPresetPath,
       ],
     ),
     // 23. 路由

@@ -1836,6 +1836,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get visualizerStyleNebulaFlow => '星云';
 
   @override
+  String get visualizerStyleProjectM => 'MilkDrop (projectM)';
+
+  @override
+  String get visualizerMilkdropSection => 'MilkDrop 脚本预设 (.milk)';
+
+  @override
+  String get visualizerPickMilkdropFile => '打开单个预设 (.milk)';
+
+  @override
+  String get visualizerPickMilkdropFolder => '导入预设包文件夹';
+
+  @override
   String get visualizerThemeSystem => '跟随系统';
 
   @override

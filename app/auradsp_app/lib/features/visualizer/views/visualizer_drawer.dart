@@ -7,6 +7,7 @@ import '../../../core/theme.dart';
 import '../../../core/ui_helpers.dart';
 import '../../effects_page.dart' show ValueSlider;
 import '../models/visualizer_types.dart';
+import '../plugins/milkdrop_preset.dart';
 import 'visualizer_drawer_widgets.dart';
 
 /// 可视化高级参数调节侧边抽屉面板
@@ -17,6 +18,9 @@ class VisualizerConfigDrawer extends StatelessWidget {
   final ValueChanged<VisualizerConfig> onConfigChanged;
   final VoidCallback onClose;
   final VoidCallback onResetToDefaults;
+  final VoidCallback? onPickMilkdropFile;
+  final VoidCallback? onPickMilkdropFolder;
+  final List<MilkdropPreset>? milkdropPresets;
 
   const VisualizerConfigDrawer({
     super.key,
@@ -24,6 +28,9 @@ class VisualizerConfigDrawer extends StatelessWidget {
     required this.onConfigChanged,
     required this.onClose,
     required this.onResetToDefaults,
+    this.onPickMilkdropFile,
+    this.onPickMilkdropFolder,
+    this.milkdropPresets,
   });
 
   @override
@@ -299,6 +306,144 @@ class VisualizerConfigDrawer extends StatelessWidget {
                       config.copyWith(lyricsSource: source),
                     ),
                   ),
+
+                  // 5. MilkDrop 预设 (projectM)
+                  if (config.style == VisualizerStyle.projectM) ...[
+                    const SizedBox(height: 16),
+                    VisualizerDrawerSectionTitle(
+                      title: l.visualizerMilkdropSection,
+                      info: l.visualizerStyleProjectM,
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: p.panelRaised,
+                        borderRadius: BorderRadius.circular(AuraRadius.sm),
+                        border: Border.all(color: p.hairline),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.auto_awesome_motion_rounded,
+                            size: 16,
+                            color: p.accent,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              (config.milkdropPresetPath != null &&
+                                      config.milkdropPresetPath!.isNotEmpty)
+                                  ? config.milkdropPresetPath!
+                                      .split(RegExp(r'[/\\]'))
+                                      .last
+                                      .replaceAll('.milk', '')
+                                  : 'Cosmic Warp (${l.visualizerThemeSystem})',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: p.text,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.file_open_rounded, size: 14),
+                            label: Text(
+                              l.visualizerPickMilkdropFile,
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 8,
+                              ),
+                              foregroundColor: p.text,
+                              side: BorderSide(color: p.hairline),
+                            ),
+                            onPressed: onPickMilkdropFile,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.folder_open_rounded, size: 14),
+                            label: Text(
+                              l.visualizerPickMilkdropFolder,
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 8,
+                              ),
+                              foregroundColor: p.text,
+                              side: BorderSide(color: p.hairline),
+                            ),
+                            onPressed: onPickMilkdropFolder,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (milkdropPresets != null && milkdropPresets!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: p.panelRaised,
+                          borderRadius: BorderRadius.circular(AuraRadius.sm),
+                          border: Border.all(color: p.hairline),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            isDense: true,
+                            value: config.milkdropPresetPath,
+                            hint: Text(
+                              '${milkdropPresets!.length} 预设',
+                              style: TextStyle(fontSize: 12, color: p.textDim),
+                            ),
+                            dropdownColor: p.panelRaised,
+                            items: [
+                              for (final pr in milkdropPresets!)
+                                DropdownMenuItem<String>(
+                                  value: pr.filePath,
+                                  child: Text(
+                                    pr.name,
+                                    style: TextStyle(fontSize: 12, color: p.text),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (path) {
+                              if (path != null) {
+                                onConfigChanged(
+                                  config.copyWith(milkdropPresetPath: path),
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ],
               ),
             ),
