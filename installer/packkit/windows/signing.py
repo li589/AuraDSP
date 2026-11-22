@@ -13,11 +13,26 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 from ..common import die, log
+
+
+def _run_ps(ps: str) -> subprocess.CompletedProcess[str]:
+    """跨 PowerShell 版本安全运行命令（pwsh 优先，Windows PowerShell 则隔离 PSModulePath）。"""
+    exe = shutil.which("pwsh") or shutil.which("powershell") or "powershell"
+    env = None
+    if exe.lower().endswith("powershell.exe") or exe.lower() == "powershell":
+        env = os.environ.copy()
+        # 避免 Windows PowerShell 5.1 误加载 PS7 模块导致 FormatXmlUpdateException
+        paths = [p for p in env.get("PSModulePath", "").split(";") if "powershell\\7" not in p.lower()]
+        env["PSModulePath"] = ";".join(paths)
+    return subprocess.run(
+        [exe, "-NoProfile", "-Command", ps],
+        capture_output=True, text=True, errors="replace", timeout=60, env=env)
 
 
 def authenticode_info(path: Path) -> tuple[str, str]:
@@ -33,9 +48,7 @@ def authenticode_info(path: Path) -> tuple[str, str]:
         "($s.Status.ToString() + '|' + $s.SignerCertificate.Thumbprint) } "
         "else { Write-Output ($s.Status.ToString() + '|') }"
     )
-    r = subprocess.run(
-        ["powershell", "-NoProfile", "-Command", ps],
-        capture_output=True, text=True, errors="replace", timeout=60)
+    r = _run_ps(ps)
     out = (r.stdout or "").strip().splitlines()
     if r.returncode != 0 or not out or "|" not in out[0]:
         raise RuntimeError(f"Get-AuthenticodeSignature 失败: {path}")
@@ -50,9 +63,7 @@ def cert_thumbprint(path: Path) -> str:
         "Write-Output ([System.Security.Cryptography.X509Certificates."
         f"X509Certificate2]::new('{ps_path}').Thumbprint)"
     )
-    r = subprocess.run(
-        ["powershell", "-NoProfile", "-Command", ps],
-        capture_output=True, text=True, errors="replace", timeout=60)
+    r = _run_ps(ps)
     out = (r.stdout or "").strip()
     if r.returncode != 0 or not out:
         raise RuntimeError(f"无法读取随包证书指纹: {path}")
