@@ -213,7 +213,7 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
     final rows = <Widget>[];
     void add(String k, String v) {
       if (rows.isNotEmpty) rows.add(const SizedBox(height: 2));
-      rows.add(_DriverKv(k, v));
+      rows.add(_InfoRow(k, v, labelWidth: 76, fontSize: 11, padded: false));
     }
 
     if (mode != null && mode >= 0) {
@@ -369,25 +369,7 @@ class _EngineEffectiveBlockState extends State<_EngineEffectiveBlock> {
 }
 
 /// 驱动块键值行（标签左、值右接，同 _InfoRow 的紧凑版）。
-class _DriverKv extends StatelessWidget {
-  final String k, v;
-  const _DriverKv(this.k, this.v);
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 76,
-          child: Text(k, style: labelOf(p, size: 11, color: p.textDim)),
-        ),
-        Expanded(child: Text(v, style: monoOf(p, size: 11))),
-      ],
-    );
-  }
-}
+// _DriverKv 已并入 vb_theme.dart 的 _InfoRow（D5 收敛，紧凑度量走参数）。
 
 class _AsioClientDriverRow extends StatelessWidget {
   final AppModel model;
@@ -823,16 +805,19 @@ class _VirtualAsioDriverCard extends StatelessWidget {
 
     // 版式统一（2026-11-10 用户裁定）：检测/注册/注销与状态文字同行，
     // 按钮在文字栏右侧右对齐（此前为卡底独占一行）。文字走
-    // _DriverKv 紧凑键值行。本卡只管驱动注册：DAW 状态与声道
+    // _InfoRow 紧凑度量键值行。本卡只管驱动注册：DAW 状态与声道
     // 档位已归 ASIO 模式 I/O 面板（r61 验收修复去重）。
     return _DriverBlock(
       title: l.asioDriverCardTitle,
       lines: [
-        _DriverKv(
+        _InfoRow(
           l.asioDriverStatus,
           model.asioDriverInstalled
               ? l.asioDriverRegistered
               : l.asioDriverNotRegistered,
+          labelWidth: 76,
+          fontSize: 11,
+          padded: false,
         ),
         // DAW 状态行已撤（r61 验收修复）：与 ASIO 模式 I/O 面板
         // 的虚拟形态重复，状态呈现归面板一处；本卡只管注册。

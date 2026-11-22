@@ -81,25 +81,41 @@ String formatFrameCount(int frames) {
   return scaled(frames / 1e9, 'B');
 }
 
+/// 设置页键值行单一实现（2026-11-23 重复代码收敛轮 D5：原
+/// hardware_drivers 的 _DriverKv 与本类同形、仅度量不同，已并
+/// 入本类）。默认度量 = 信息行（标签宽 104 / 字号 12 / 带纵向
+/// 间距）；驱动卡紧凑度量走 labelWidth 76 / fontSize 11 /
+/// padded false，逐像素与旧 _DriverKv 一致。
 class _InfoRow extends StatelessWidget {
   final String k, v;
-  const _InfoRow(this.k, this.v);
+  final double labelWidth;
+  final double fontSize;
+  final bool padded;
+  const _InfoRow(
+    this.k,
+    this.v, {
+    this.labelWidth = 104,
+    this.fontSize = 12,
+    this.padded = true,
+  });
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final row = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: labelWidth,
+          child: Text(k, style: labelOf(p, size: fontSize, color: p.textDim)),
+        ),
+        Expanded(child: Text(v, style: monoOf(p, size: fontSize))),
+      ],
+    );
+    if (!padded) return row;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AuraSpace.xs),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 104,
-            child: Text(k, style: labelOf(p, size: 12, color: p.textDim)),
-          ),
-          Expanded(child: Text(v, style: monoOf(p, size: 12))),
-        ],
-      ),
+      child: row,
     );
   }
 }
