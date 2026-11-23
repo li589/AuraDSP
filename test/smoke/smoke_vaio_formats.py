@@ -111,6 +111,33 @@ int main() {
         VaioConvertRingToFloat((const unsigned char*)s, out, 1, 1, 0, 16, 0);
         chkFloat(out[0], 0.5f, "legacy infer pcm16");
     }
+    // 逆转换往返（r65 S2 处理后环生产者）：float -> 环 -> float
+    // 须回到原值（选精确可表值）；超幅输入钳到格式极值。
+    {
+        const float s[3] = {0.5f, -0.5f, -1.0f};
+        unsigned char raw[64];
+        float back[3];
+        VaioConvertFloatToRing(s, raw, 3, 1, 1, 16, 0);
+        VaioConvertRingToFloat(raw, back, 3, 1, 1, 16, 0);
+        chkFloat(back[0], 0.5f, "rt pcm16 +0.5");
+        chkFloat(back[1], -0.5f, "rt pcm16 -0.5");
+        chkFloat(back[2], -1.0f, "rt pcm16 -1.0");
+        VaioConvertFloatToRing(s, raw, 3, 1, 1, 24, 24);
+        VaioConvertRingToFloat(raw, back, 3, 1, 1, 24, 24);
+        chkFloat(back[0], 0.5f, "rt pcm24 +0.5");
+        chkFloat(back[2], -1.0f, "rt pcm24 -1.0");
+        VaioConvertFloatToRing(s, raw, 3, 1, 1, 32, 24);
+        VaioConvertRingToFloat(raw, back, 3, 1, 1, 32, 24);
+        chkFloat(back[0], 0.5f, "rt 24in32 +0.5");
+        chkFloat(back[2], -1.0f, "rt 24in32 -1.0");
+        VaioConvertFloatToRing(s, raw, 3, 1, 2, 32, 0);
+        VaioConvertRingToFloat(raw, back, 3, 1, 2, 32, 0);
+        chkFloat(back[0], 0.5f, "rt float +0.5");
+        const float hot[1] = {1.5f};
+        VaioConvertFloatToRing(hot, raw, 1, 1, 1, 16, 0);
+        VaioConvertRingToFloat(raw, back, 1, 1, 1, 16, 0);
+        chkFloat(back[0], 32767.0f / 32768.0f, "rt pcm16 clamp +1.5");
+    }
     // 支持矩阵
     chkBool(VaioRingFormatSupported(0, 16, 0), true,  "sup legacy 16");
     chkBool(VaioRingFormatSupported(0, 32, 0), true,  "sup legacy 32");

@@ -56,11 +56,16 @@ class AuraVaioBridge implements AudioBridgeCommon {
   Map<String, dynamic>? detect() => core.detectJson(32768);
 
   /// 启动常驻泵。engineDll 传引擎绝对路径；outputEndpointSubstr 为目标物理输出设备子串。
-  /// monitorMirror（2026-11-23 B 案）：本地监听门。开（默认）=
-  /// 桥主路渲染正常出声；关 = 主路以 SILENT 交还、本地静音，
-  /// 处理与遥测照常。经 config 的 mirror 键下发（仅开启时写键）。
+  /// monitorMirror（2026-11-23 B 案；r65 2×2 起语义收敛为
+  /// 「VAIO 输出时的 WASAPI 镜像开关」）：开 = 镜像/主路出声。
+  /// 经 config 的 mirror 键下发（仅开启时写键）。
+  /// outputVaio（r65 S2）：输出轴 = VAIO——处理后音频经驱动
+  /// 处理后环交付 VAIO 麦克风，物理端点退为镜像（mirror 决定
+  /// 其存在）。经 config 的 outvaio 键下发（仅开启时写键）。
   int start(String engineDll, String params,
-          {String outputEndpointSubstr = '', bool monitorMirror = true}) =>
+          {String outputEndpointSubstr = '',
+          bool monitorMirror = true,
+          bool outputVaio = false}) =>
       // 端点子串经 config_json 归一，三桥共用 ab_start。
       core.start(
           engineDll,
@@ -68,6 +73,7 @@ class AuraVaioBridge implements AudioBridgeCommon {
           jsonEncode({
             'endpoint': outputEndpointSubstr,
             if (monitorMirror) 'mirror': 1,
+            if (outputVaio) 'outvaio': 1,
           }));
 
   @override

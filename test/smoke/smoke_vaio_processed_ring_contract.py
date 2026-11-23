@@ -66,5 +66,27 @@ check("static VOID\nReadProcessedCaptureSamples" in drv
 check(drv.count("->CaptureSource = 0") >= 3,
       "driver clears CaptureSource on cleanup paths and destroy")
 
+# --- bridge side (r65 S2): processed-ring production + source switch ---
+brg = read("core/desktop/windows-drivers/bridge/vaio_bridge/VaioBridge.cpp")
+start = brg.split("int vaio_start(", 1)[1].split("DWORD WINAPI", 1)[0]
+check("IOCTL_AURAVAIO_MAP_PROCESSED_RING" in start,
+      "bridge maps the processed ring at start when outputVaio")
+check("CaptureSource = AURA_VAIO_CAPTURE_PROCESSED" in start,
+      "bridge switches the capture source to the processed ring")
+check('"outvaio"' in brg,
+      "start config parses the outvaio key")
+unmap = brg.split("void UnmapAndCloseRing()", 1)[1].split("void FreeScratchBuffers", 1)[0]
+check("CaptureSource = 0" in unmap
+      and unmap.index("CaptureSource = 0") < unmap.index("IOCTL_AURAVAIO_UNMAP_PROCESSED_RING"),
+      "bridge clears CaptureSource before unmapping the processed ring")
+pump = brg.split("DWORD WINAPI VaioPumpThreadProc", 1)[1]
+check("WriteProcessedRingBlock" in pump,
+      "pump produces into the processed ring on the VAIO-out path")
+check("AUDCLNT_BUFFERFLAGS_SILENT" not in brg,
+      "r64 main-path silence gate retired (2x2 S-B re-scope)")
+conv = read("core/desktop/windows-drivers/bridge/vaio_bridge/VaioSampleConvert.h")
+check("VaioConvertFloatToRing" in conv,
+      "float-to-ring inverse converter exists")
+
 print("FAILURES:", len(FAIL))
 sys.exit(1 if FAIL else 0)

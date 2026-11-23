@@ -166,6 +166,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   AuraVaioBridge? vaio;
   String vaioOutputEndpointInUse = '';
   bool vaioMirrorInUse = false;
+  bool vaioOutputVaioInUse = false; // 2×2 输出轴在用值（r65 S2）
   // VAIO 启动失败自愈（第四十七轮 S4）：start rc!=0（如输出
   // 端点被其它程序占用 0x8889000A）此前是终局——桥从未进入
   // active 记账，状态轮询与死亡回收网都够不着。失败即登记
@@ -176,6 +177,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   int vaioRetryAt = 0;
   String vaioRetryEndpoint = '';
   bool vaioRetryMirror = true; // 本地监听门默认开（2026-11-23 B 案）
+  bool vaioRetryOutputVaio = false; // 2×2 输出轴重试快照（r65 S2）
   // 桥模式共用诊断/节流状态（P1：同一时刻只有一个后端出声，不再按后端各一份）。
   bool bridgeVizNullLogged = false;
   bool bridgeNoCbLogged = false;
@@ -895,6 +897,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     bridgeManager.clearActive(vaio!);
     vaioOutputEndpointInUse = '';
     vaioMirrorInUse = false;
+    vaioOutputVaioInUse = false;
     final resumeErr = resumeWasapi('vaiomode');
     unawaited(syncPluginMirrorToLocal(lib, handle));
     send({
@@ -904,7 +907,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     });
   }
 
-  void startVaioBridge({String outputEndpointSubstr = '', bool monitorMirror = true}) {
+  void startVaioBridge(
+      {String outputEndpointSubstr = '',
+      bool monitorMirror = true,
+      bool outputVaio = false}) {
     windowsCapture.detach(restoreSaved: false);
     if (bridgeManager.isActive('vaio')) {
       // 同 startVbBridge：记账在跑但桥已死时先回收再真启动。
@@ -913,7 +919,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       dbgLog('vaiomode: start preempted by dead bridge - recycling first');
       stopVaioBridge();
     }
-    dbgLog('vaiomode: start requested output="$outputEndpointSubstr" mirror=$monitorMirror');
+    dbgLog('vaiomode: start requested output="$outputEndpointSubstr" mirror=$monitorMirror outvaio=$outputVaio');
     try {
       vaio ??= bridgeManager.load<AuraVaioBridge>('vaio');
     } catch (e) {
@@ -921,7 +927,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       return;
     }
     final rc = vaio!.start(AuraDspLib.loadedPath ?? '', '',
-        outputEndpointSubstr: outputEndpointSubstr, monitorMirror: monitorMirror);
+        outputEndpointSubstr: outputEndpointSubstr,
+        monitorMirror: monitorMirror,
+        outputVaio: outputVaio);
     dbgLog('vaiomode: start rc=$rc');
     lastVaioGeo = ''; // 每次桥启动必落一条几何快照（噪声态取证）
     lastVaioFx = ''; // S4：取证对象同口径，每 start 必落一次
@@ -934,6 +942,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       vaioRetryAt = DateTime.now().millisecondsSinceEpoch + 5000;
       vaioRetryEndpoint = outputEndpointSubstr;
       vaioRetryMirror = monitorMirror;
+      vaioRetryOutputVaio = outputVaio;
       send({
         'evt': 'vaiostatus',
         'running': false,
@@ -975,6 +984,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     bridgeManager.switchTo('vaio', vaio!);
     vaioOutputEndpointInUse = outputEndpointSubstr;
     vaioMirrorInUse = monitorMirror;
+    vaioOutputVaioInUse = outputVaio;
     bridgeManager.replayPluginMirror(vaio!, pluginMirror, send);
     unloadLocalSlotsWhileBridged();
     bridgeVizNullLogged = false;
@@ -1023,9 +1033,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     if (backend == 'vaio') {
       final ep = vaioOutputEndpointInUse;
       final mir = vaioMirrorInUse;
+      final ov = vaioOutputVaioInUse;
       stopVaioBridge();
       if (mayRestart) {
-        startVaioBridge(outputEndpointSubstr: ep, monitorMirror: mir);
+        startVaioBridge(
+            outputEndpointSubstr: ep, monitorMirror: mir, outputVaio: ov);
       }
     } else if (backend == 'vm') {
       stopVbBridge();
@@ -1870,6 +1882,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             startVaioBridge(
               outputEndpointSubstr: (m['outputEndpoint'] as String?) ?? '',
               monitorMirror: (m['monitorMirror'] as bool?) ?? false,
+              outputVaio: (m['outputVaio'] as bool?) ?? false,
             );
           } else {
             stopVaioBridge();
@@ -1882,6 +1895,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           startVaioBridge(
             outputEndpointSubstr: (m['outputEndpoint'] as String?) ?? '',
             monitorMirror: (m['monitorMirror'] as bool?) ?? false,
+            outputVaio: (m['outputVaio'] as bool?) ?? false,
           );
           break;
         case 'vaiodetect':
@@ -2812,7 +2826,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         dbgLog('vaiomode: retrying start (self-heal after failure)');
         startVaioBridge(
             outputEndpointSubstr: vaioRetryEndpoint,
-            monitorMirror: vaioRetryMirror);
+            monitorMirror: vaioRetryMirror,
+            outputVaio: vaioRetryOutputVaio);
       }
       final brc = bridgeManager.active;
       if (brc != null) {

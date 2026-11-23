@@ -37,6 +37,60 @@ inline bool VaioRingFormatSupported(unsigned long kind,
     return false;
 }
 
+// float32 → 环原始字节（VaioConvertRingToFloat 的逆，r65 S2 处
+// 理后环生产者用）：量化口径与读侧标度严格互逆（PCM16 ×32768
+// 钳 ±1、24 紧密 ×8388608、32 容器样本居高 validBits 位），浮点
+// 直通。调用前同样应先以 VaioRingFormatSupported 校验组合。
+inline void VaioConvertFloatToRing(const float* src, unsigned char* raw,
+                                   int frames, int channels,
+                                   unsigned long kind,
+                                   unsigned long containerBits,
+                                   unsigned long validBits) {
+    const int n = frames * channels;
+    if (n <= 0) return;
+    if (kind == 0) kind = (containerBits == 32) ? 2 : 1;  // 旧驱动推断
+    if (validBits == 0 || validBits > containerBits) validBits = containerBits;
+
+    if (kind == 2) {  // IEEE float32 直通
+        std::memcpy(raw, src, (size_t)n * sizeof(float));
+        return;
+    }
+    auto clampUnit = [](float v) {
+        return v < -1.0f ? -1.0f : (v > 1.0f ? 1.0f : v);
+    };
+    if (containerBits == 16) {
+        std::int16_t* s = reinterpret_cast<std::int16_t*>(raw);
+        for (int i = 0; i < n; ++i) {
+            long v = (long)(clampUnit(src[i]) * 32768.0f);
+            if (v > 32767) v = 32767;
+            if (v < -32768) v = -32768;
+            s[i] = (std::int16_t)v;
+        }
+    } else if (containerBits == 24) {  // 紧密 24 位：小端拆字节
+        for (int i = 0; i < n; ++i) {
+            long v = (long)(clampUnit(src[i]) * 8388608.0f);
+            if (v > 8388607) v = 8388607;
+            if (v < -8388608) v = -8388608;
+            unsigned char* p = raw + (size_t)i * 3;
+            const unsigned u = (unsigned)(v & 0xFFFFFF);
+            p[0] = (unsigned char)(u & 0xFF);
+            p[1] = (unsigned char)((u >> 8) & 0xFF);
+            p[2] = (unsigned char)((u >> 16) & 0xFF);
+        }
+    } else {  // 32 位容器：样本居高位
+        const int shift = (int)(32 - validBits);
+        const float scale = (float)(1u << (validBits - 1));
+        std::int32_t* s = reinterpret_cast<std::int32_t*>(raw);
+        for (int i = 0; i < n; ++i) {
+            long v = (long)(clampUnit(src[i]) * scale);
+            const long hi = (long)((1u << (validBits - 1)) - 1);
+            if (v > hi) v = hi;
+            if (v < -hi - 1) v = -hi - 1;
+            s[i] = (std::int32_t)(v << shift);
+        }
+    }
+}
+
 // 把 frames×channels 个交织样本从环原始字节转换为 float32。
 // 调用前应先以 VaioRingFormatSupported 校验组合；未校验的未知组合
 // 按 float32 直通兜底（与一期之前的旧行为一致，仅限 kind 推断路径）。

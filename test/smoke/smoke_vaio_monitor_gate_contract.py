@@ -7,6 +7,12 @@ output WAS the default) is gone. The setting is now an honest
 local-monitor gate: off silences only the local WASAPI render
 (AUDCLNT_BUFFERFLAGS_SILENT), while the engine keeps processing
 and telemetry keeps flowing. Default is ON.
+
+Revision (r65 S2, 2026-11-23): the 2x2 model re-scopes the gate.
+The main-path SILENT gate is retired — with WASAPI output the
+main render always sounds; the setting now means "WASAPI mirror
+switch when output is VAIO": off means no physical endpoint is
+opened at all and the pump runs on the ring clock.
 """
 import pathlib
 import sys
@@ -30,8 +36,12 @@ check("bool monitorEnabled = true;" in bridge,
       "bridge monitor gate defaults to enabled")
 check("g_vaio.monitorEnabled = (monitor_mirror != 0);" in bridge,
       "start config drives the gate")
-check("AUDCLNT_BUFFERFLAGS_SILENT" in bridge,
-      "off state renders silence via the SILENT flag")
+check("AUDCLNT_BUFFERFLAGS_SILENT" not in bridge,
+      "main-path silence gate retired (2x2 re-scope)")
+check("!g_vaio.outputVaio || g_vaio.monitorEnabled" in bridge,
+      "mirror client exists only when output is VAIO and mirror is on")
+check('"outVaio":%d' in bridge.replace("\\", ""),
+      "status reports the output axis")
 for gone in ("pMirrorClient", "FeedMirror", "VaioMirrorFeed",
              "mirrorRequested", "mirrorActive"):
     check(gone not in bridge, f"mirror path removed: {gone}")

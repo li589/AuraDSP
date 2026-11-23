@@ -282,12 +282,27 @@ struct VaioBridgeCtl {
     bool wasapiIsFloat = true;        // true = IEEE float32 直通
     ULONG wasapiBits = 32;            // PCM 时为 16/32
 
-    // 本地监听门（2026-11-23，user 裁定 B 案，取代 ASIO-2 的
-    // 第二路镜像渲染）：start 配置 monitor_mirror 决定。关时泵
-    // 照常处理与回传遥测，仅主路渲染以 SILENT 标志交还静音——
-    // 本地不出声；开（默认）为现行行为。旧镜像客户端/喂流规划
-    // 已整体删除，不再有第二路渲染。
-    bool monitorEnabled = true;            // start 配置：本地监听开/关
+    // 本地监听（2026-11-23 B 案；r65 2×2 §五口径收敛）：start
+    // 配置 monitor_mirror 决定。2×2 起语义收敛为「VAIO 输出时的
+    // WASAPI 镜像开关」——VAIO 进 + WASAPI 出格主路恒发声（本桥
+    // 内的主路静音门控退役）；VAIO 出格决定镜像客户端是否存在。
+    bool monitorEnabled = true;            // start 配置：镜像开/关
+
+    // 2×2 输出轴（r65 S2）：outputVaio 时处理后音频写驱动处理
+    // 后环（S1）供 VAIO 麦克风端点交付，共享头 CaptureSource=2；
+    // WASAPI 客户端仅作镜像（monitorEnabled 决定其存在），关镜
+    // 像时不建物理端点、泵按环时钟自驱。
+    bool outputVaio = false;               // start 配置：输出轴 = VAIO
+    void* pProcMapped = nullptr;           // 处理后环用户映射
+    PAURA_VAIO_SHARED_HEADER pProcHeader = nullptr;
+    BYTE* pProcPayload = nullptr;
+    ULONG procDataSize = 0;
+    ULONG procBlockAlign = 0;
+    ULONGLONG procBytesWritten = 0;        // 泵内生产计数（字节）
+    double procPhase = 0.0;                // 处理后环重采样跨块相位
+    float* scratchProcRate = nullptr;      // 处理后环重采样暂存（引擎宽）
+    float* scratchProcRing = nullptr;      // 处理后环交织暂存（环宽）
+    BYTE* scratchProcRaw = nullptr;        // 处理后环原始字节暂存
 
     // 声道协商与多声道重映射状态
     int32_t engineChannels = 2;   // 引擎当前实际运行声道数 (2, 4, 6, 8)
@@ -399,9 +414,30 @@ void DestroyWasapi() {
 
 void UnmapAndCloseRing() {
     if (g_vaio.hControlDev != INVALID_HANDLE_VALUE) {
+        // 先清录制源/静音标记再拆映射（见 vaio_start 置位处）：
+        // CaptureSource 清 0 后驱动录制读端回渲染环回环，桥进程
+        // 崩溃由驱动 Cleanup 兜底同清（S1 口径）。
+        if (g_vaio.pRingHeader) g_vaio.pRingHeader->CaptureSource = 0;
+        if (g_vaio.pRingHeader) g_vaio.pRingHeader->CaptureMuted = 0;
+        if (g_vaio.pProcMapped != nullptr) {
+            AURA_VAIO_UNMAP_REQUEST unmapReq = {0};
+            unmapReq.UserAddress = g_vaio.pProcMapped;
+            DWORD bytesRet = 0;
+            DeviceIoControl(
+                g_vaio.hControlDev,
+                IOCTL_AURAVAIO_UNMAP_PROCESSED_RING,
+                &unmapReq, sizeof(unmapReq),
+                nullptr, 0,
+                &bytesRet,
+                nullptr
+            );
+            g_vaio.pProcMapped = nullptr;
+            g_vaio.pProcHeader = nullptr;
+            g_vaio.pProcPayload = nullptr;
+            g_vaio.procDataSize = 0;
+            g_vaio.procBlockAlign = 0;
+        }
         if (g_vaio.pMappedRing != nullptr) {
-            // 先清录制静音标记再拆映射（见 vaio_start 置位处）。
-            if (g_vaio.pRingHeader) g_vaio.pRingHeader->CaptureMuted = 0;
             AURA_VAIO_UNMAP_REQUEST unmapReq = {0};
             unmapReq.UserAddress = g_vaio.pMappedRing;
             DWORD bytesRet = 0;
@@ -446,6 +482,18 @@ void FreeScratchBuffers() {
     if (g_vaio.scratchRaw) {
         free(g_vaio.scratchRaw);
         g_vaio.scratchRaw = nullptr;
+    }
+    if (g_vaio.scratchProcRate) {
+        free(g_vaio.scratchProcRate);
+        g_vaio.scratchProcRate = nullptr;
+    }
+    if (g_vaio.scratchProcRing) {
+        free(g_vaio.scratchProcRing);
+        g_vaio.scratchProcRing = nullptr;
+    }
+    if (g_vaio.scratchProcRaw) {
+        free(g_vaio.scratchProcRaw);
+        g_vaio.scratchProcRaw = nullptr;
     }
 }
 
@@ -661,6 +709,67 @@ void ApplyParamsString(const char* s) {
     }
 }
 
+// 处理后环生产（r65 S2，泵线程内调用）：引擎输出（scratchProcOut，
+// 输出率）→ 重采样到环率 → 按声道模式适配到环宽 → 按环格式量化
+// → 写处理后环载荷并推进生产计数（数据先行、计数后行，与内核
+// 写渲染环同序）。消费者（驱动录制读端）落后超一圈时按既有
+// snap 纪律丢旧，不阻塞生产者。格式组合不支持时整块写静音
+// （时序维持、内容诚实），与环读侧的格式契约外口径一致。
+static void WriteProcessedRingBlock(UINT32 framesToProcess, int safeEngineCh,
+                                    ULONG outRate, ULONG ringRate,
+                                    ULONG ringFmtKind, ULONG ringBits,
+                                    ULONG ringValidBits, ULONG blockAlign) {
+    if (!g_vaio.pProcHeader || !g_vaio.pProcPayload ||
+        g_vaio.procDataSize == 0 || blockAlign == 0) {
+        return;
+    }
+    const int ringCh = (int)(g_vaio.ringChannels ? g_vaio.ringChannels : 2);
+    // 1) 速率适配（引擎宽）：ratio = 源率/目标率，与环读侧同式。
+    const double ratio = (double)outRate / (double)ringRate;
+    int dstFrames = (int)(((double)framesToProcess - g_vaio.procPhase) / ratio);
+    if (dstFrames < 0) dstFrames = 0;
+    if (dstFrames > VaioBridgeCtl::kMaxFrames) dstFrames = VaioBridgeCtl::kMaxFrames;
+    if (dstFrames > 0) {
+        ResampleLinear(g_vaio.scratchProcOut, (int)framesToProcess,
+                       g_vaio.scratchProcRate, dstFrames, safeEngineCh,
+                       g_vaio.procPhase, ratio);
+    }
+    g_vaio.procPhase =
+        g_vaio.procPhase + (double)dstFrames * ratio - (double)framesToProcess;
+    if (dstFrames == 0) return;
+    // 2) 声道适配到环宽（离散截断 / 矩阵重映射，与主路同口径）。
+    if (g_vaio.chanMode == 1) {
+        VaioTruncateScatter(g_vaio.scratchProcRate, safeEngineCh,
+                            g_vaio.scratchProcRing, ringCh, dstFrames);
+    } else {
+        RemapInterleavedAudio(g_vaio.scratchProcRate, safeEngineCh,
+                              g_vaio.scratchProcRing, ringCh, dstFrames);
+    }
+    // 3) 量化到环格式并写入载荷（环绕两段拷贝），最后推进计数。
+    const ULONG bytes = (ULONG)dstFrames * blockAlign;
+    if (!VaioRingFormatSupported(ringFmtKind, ringBits, ringValidBits)) {
+        memset(g_vaio.scratchProcRaw, 0, bytes);
+    } else {
+        VaioConvertFloatToRing(g_vaio.scratchProcRing, g_vaio.scratchProcRaw,
+                               dstFrames, ringCh, ringFmtKind, ringBits,
+                               ringValidBits);
+    }
+    const ULONG dataSize = g_vaio.procDataSize;
+    ULONG writeOffset = (ULONG)(g_vaio.procBytesWritten % dataSize);
+    ULONG chunk1 = dataSize - writeOffset;
+    if (chunk1 >= bytes) {
+        memcpy(g_vaio.pProcPayload + writeOffset, g_vaio.scratchProcRaw, bytes);
+    } else {
+        memcpy(g_vaio.pProcPayload + writeOffset, g_vaio.scratchProcRaw, chunk1);
+        memcpy(g_vaio.pProcPayload, g_vaio.scratchProcRaw + chunk1,
+               bytes - chunk1);
+    }
+    g_vaio.procBytesWritten += bytes;
+    g_vaio.pProcHeader->WriteOffset =
+        (ULONG)(g_vaio.procBytesWritten % dataSize);
+    g_vaio.pProcHeader->TotalBytesWritten = g_vaio.procBytesWritten;
+}
+
 // RT 专用线程：零锁零分配音频泵
 
 DWORD WINAPI VaioPumpThreadProc(LPVOID) {
@@ -758,7 +867,7 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
     int renderFailRounds = 0;
     HRESULT lastRenderHr = S_OK;
     bool bitsNoteWritten = false;
-    {
+    if (g_vaio.pAudioClient) {
         const HRESULT hrStart = g_vaio.pAudioClient->Start();
         if (FAILED(hrStart)) {
             lastRenderHr = hrStart;
@@ -767,6 +876,10 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         } else {
             renderStarted = true;
         }
+    } else {
+        // VAIO 出无镜像：无渲染客户端，泵环时钟自驱（见循环内
+        // 无客户端节拍分支），不存在 Start 失败态。
+        renderStarted = true;
     }
 
     while (!InterlockedCompareExchange(&g_vaio.stopEvent, 0, 0)) {
@@ -872,6 +985,24 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             }
         }
 
+        UINT32 framesToProcess = 0;
+        if (!g_vaio.pAudioClient) {
+            // VAIO 出无镜像：环时钟自驱——按环内可读帧数推进，
+            // 无数据短睡等下一轮（stopEvent 在循环头复查）。
+            const ULONGLONG twNow = pHeader ? pHeader->TotalBytesWritten : 0;
+            ULONGLONG availNow =
+                twNow > userBytesRead ? twNow - userBytesRead : 0;
+            if (availNow > (ULONGLONG)dataSize) availNow = dataSize;
+            const ULONG availFr =
+                blockAlign > 0 ? (ULONG)(availNow / blockAlign) : 0;
+            framesToProcess = availFr > 512 ? 512 : availFr;
+            if (framesToProcess == 0) {
+                // 无数据：带上界事件等待后回循环头复查 stopEvent
+                // （D3 纪律：泵内零 Sleep；事件永不置位、上界即节拍）。
+                vmcore::WaitAudioPeriod(g_vaio.hAudioEvent, 2);
+                continue;
+            }
+        } else {
         UINT32 padFrames = 0;
         HRESULT hr = g_vaio.pAudioClient->GetCurrentPadding(&padFrames);
         if (FAILED(hr)) {
@@ -903,10 +1034,11 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         }
 
         // 单次处理块上限钳制在 512 帧，防止突发大块拉高瞬时延迟
-        UINT32 framesToProcess = (framesNeeded > 512) ? 512 : framesNeeded;
+        framesToProcess = (framesNeeded > 512) ? 512 : framesNeeded;
         if (framesToProcess > (UINT32)VaioBridgeCtl::kMaxFrames) {
             framesToProcess = (UINT32)VaioBridgeCtl::kMaxFrames;
         }
+        }  // else (pAudioClient 在场：WASAPI 节拍)
 
         // 本块的环帧消费量（速率归一）：输出 framesToProcess 帧
         // 消耗 framesToProcess × inRatio 个环帧，分数部分以
@@ -1143,6 +1275,11 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         if (g_vaio.userBypass) {
             // 用户旁路：直通，不跑 DSP
             RemapInterleavedAudio(g_vaio.scratchIn, inCh, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
+            // VAIO 出时处理后环的源恒为 scratchProcOut：旁路的
+            // 「处理结果」即输入重映射，同填一份引擎宽。
+            if (g_vaio.outputVaio) {
+                RemapInterleavedAudio(g_vaio.scratchIn, inCh, g_vaio.scratchProcOut, safeEngineCh, (int)framesToProcess);
+            }
         } else if (g_vaio.pEngine && g_vaio.fnProcess) {
             enginePathRan = true;
             // P3 静音门控（单组）：GATED 时整块写零、跳过 DSP；测试注入是
@@ -1204,6 +1341,9 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             }
         } else {
             RemapInterleavedAudio(g_vaio.scratchIn, inCh, g_vaio.scratchOut, (int)wasapiChannels, (int)framesToProcess);
+            if (g_vaio.outputVaio) {
+                RemapInterleavedAudio(g_vaio.scratchIn, inCh, g_vaio.scratchProcOut, safeEngineCh, (int)framesToProcess);
+            }
         }
 
         // 旁路/无引擎路径只做了重映射：峰值与门控尾音仍须按最终输出更新，
@@ -1223,23 +1363,41 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         double pumpUs = (double)(t1.QuadPart - t0.QuadPart) * qpcToUs;
         if (pumpUs > g_vaio.maxPumpUs) g_vaio.maxPumpUs = pumpUs;
 
+        // 写入输出（2×2 分流，r65 S2）：VAIO 出 = 处理后环为
+        // 主路、物理端点仅镜像；WASAPI 出 = 物理端点主路——
+        // r64 的主路静音门控退役，本格恒发声（§五对齐）。
+        if (g_vaio.outputVaio) {
+            WriteProcessedRingBlock(framesToProcess, safeEngineCh, outRate,
+                                    ringRate, ringFmtKind, ringBits,
+                                    ringValidBits, blockAlign);
+            g_vaio.totalPumpedFrames += framesToProcess;
+            renderFailRounds = 0;
+            if (g_vaio.pRenderClient) {
+                // 镜像渲染：同一处理后块（scratchOut 已按镜像宽
+                // 适配）写物理端点；镜像失败不入主路死亡核算。
+                BYTE* pDst = nullptr;
+                const HRESULT hrw =
+                    g_vaio.pRenderClient->GetBuffer(framesToProcess, &pDst);
+                if (SUCCEEDED(hrw) && pDst) {
+                    const int outSamples =
+                        (int)(framesToProcess * wasapiChannels);
+                    WriteFramesConverted(pDst, g_vaio.scratchOut, outSamples,
+                                         outIsFloat, outBits);
+                    g_vaio.pRenderClient->ReleaseBuffer(framesToProcess, 0);
+                }
+            }
+            continue;
+        }
         // 写入 WASAPI 物理输出缓冲区
         BYTE* pDst = nullptr;
-        hr = g_vaio.pRenderClient->GetBuffer(framesToProcess, &pDst);
+        HRESULT hr = g_vaio.pRenderClient->GetBuffer(framesToProcess, &pDst);
         if (SUCCEEDED(hr) && pDst) {
             // 写侧与读侧对称（§1.2）：物理端点混音格式为 PCM 时
             // 必须转换，直接灌 float 字节是同一类格式误读。
             const int outSamples = (int)(framesToProcess * wasapiChannels);
-            if (g_vaio.monitorEnabled) {
-                WriteFramesConverted(pDst, g_vaio.scratchOut, outSamples,
-                                     outIsFloat, outBits);
-                g_vaio.pRenderClient->ReleaseBuffer(framesToProcess, 0);
-            } else {
-                // 本地监听关：以 SILENT 交还，引擎处理与遥测照常，
-                // 仅本地端点不出声（2026-11-23 B 案）。
-                g_vaio.pRenderClient->ReleaseBuffer(
-                    framesToProcess, AUDCLNT_BUFFERFLAGS_SILENT);
-            }
+            WriteFramesConverted(pDst, g_vaio.scratchOut, outSamples,
+                                 outIsFloat, outBits);
+            g_vaio.pRenderClient->ReleaseBuffer(framesToProcess, 0);
             // 帧数只计成功写出（细审 R-B 8）：旧实现在
             // GetBuffer 失败轮照常累加，frames 增长会掩盖
             // 端点半死状态、削弱 status 取证。
@@ -1513,7 +1671,7 @@ int vaio_detect(char* out, int cap) {
 }
 
 int vaio_start(const char* engine_dll, const char* params_json, const char* output_endpoint_substr,
-               int monitor_mirror) {
+               int monitor_mirror, int output_vaio) {
     if (InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 0;  // 幂等成功
 
     // 复位状态
@@ -1521,6 +1679,8 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.userBypass = 0;
     // 本地监听门（2026-11-23 B 案）：start 配置即决议，无运行期状态。
     g_vaio.monitorEnabled = (monitor_mirror != 0);
+    // 2×2 输出轴（r65 S2）：start 配置即决议。
+    g_vaio.outputVaio = (output_vaio != 0);
     g_vaio.totalPumpedFrames = 0;
     g_vaio.peakIn = 0.0;
     g_vaio.peakOut = 0.0;
@@ -1610,6 +1770,43 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     // 拆映射前由 UnmapAndCloseRing 清 0，桥进程崩溃由驱动
     // Cleanup 兜底清 0；旧驱动不读此字段（原 Reserved），无感。
     g_vaio.pRingHeader->CaptureMuted = 1;
+    if (g_vaio.outputVaio) {
+        // 2×2 S2：映射处理后环并把录制源切到处理后环。旧驱动无
+        // 此 IOCTL → 明确失败（App 侧回落口径见 S4），不带病运行。
+        AURA_VAIO_MAP_REQUEST procReq = {0};
+        AURA_VAIO_MAP_RESPONSE procResp = {0};
+        DWORD procRet = 0;
+        const BOOL pok = DeviceIoControl(
+            g_vaio.hControlDev,
+            IOCTL_AURAVAIO_MAP_PROCESSED_RING,
+            &procReq, sizeof(procReq),
+            &procResp, sizeof(procResp),
+            &procRet,
+            nullptr
+        );
+        if (!pok || procResp.UserAddress == nullptr) {
+            snprintf(g_vaio.note, sizeof(g_vaio.note),
+                     "map-processed-ring-failed: %lu", GetLastError());
+            UnmapAndCloseRing();
+            g_vaio.startRc = -14;
+            return -14;
+        }
+        g_vaio.pProcMapped = procResp.UserAddress;
+        g_vaio.pProcHeader =
+            reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(procResp.UserAddress);
+        g_vaio.pProcPayload = (BYTE*)procResp.UserAddress +
+            (procResp.HeaderSizeBytes ? procResp.HeaderSizeBytes
+                                      : g_vaio.pProcHeader->DataOffsetBytes);
+        g_vaio.procDataSize = procResp.DataSizeBytes
+                                  ? procResp.DataSizeBytes
+                                  : g_vaio.pProcHeader->DataSizeBytes;
+        g_vaio.procBlockAlign = procResp.BlockAlign
+                                    ? procResp.BlockAlign
+                                    : g_vaio.pProcHeader->BlockAlign;
+        g_vaio.procBytesWritten = g_vaio.pProcHeader->TotalBytesWritten;
+        g_vaio.procPhase = 0.0;
+        g_vaio.pRingHeader->CaptureSource = AURA_VAIO_CAPTURE_PROCESSED;
+    }
     g_vaio.pRingPayload = (BYTE*)mapResp.UserAddress +
         (mapResp.HeaderSizeBytes ? mapResp.HeaderSizeBytes
                                  : g_vaio.pRingHeader->DataOffsetBytes);
@@ -1683,6 +1880,10 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     }
 
     // 4. 初始化 WASAPI 物理音频播放端点
+    // 2×2 S2：VAIO 出且镜像关时无物理端点（else 分支定输出几何）；
+    // VAIO 出 + 镜像开时本块照常打开镜像目标设备。
+    const bool needWasapi = !g_vaio.outputVaio || g_vaio.monitorEnabled;
+    if (needWasapi) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     HRESULT hr = CoCreateInstance(
         __uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
@@ -1901,6 +2102,25 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
         g_vaio.startRc = -11;
         return -11;
     }
+    } else {
+        // VAIO 出且镜像关：输出几何跟随驱动环——引擎按环率创建、
+        // 泵环时钟自驱、处理后环即主路（见泵无客户端分支）。
+        g_vaio.wasapiSampleRate =
+            g_vaio.ringSampleRate ? g_vaio.ringSampleRate : 48000;
+        g_vaio.wasapiChannels = g_vaio.ringChannels ? g_vaio.ringChannels : 2;
+        g_vaio.wasapiBufferFrames = 512;
+        // 泵的无数据等待走 WaitAudioPeriod（D3：泵内零 Sleep）——
+        // 无 WASAPI 周期信号可等，建一个永不置位的事件仅作带上界
+        // 的等待句柄（DestroyWasapi 统一回收 hAudioEvent）。
+        g_vaio.hAudioEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (!g_vaio.hAudioEvent) {
+            snprintf(g_vaio.note, sizeof(g_vaio.note),
+                     "create-audio-event-failed: %lu", GetLastError());
+            UnmapAndCloseRing();
+            g_vaio.startRc = -9;
+            return -9;
+        }
+    }
 
     // 5. 创建 DSP 引擎 handle (采样率按物理输出采样率或 VAIO 采样率对齐)
     const float engineSr = (float)g_vaio.wasapiSampleRate;
@@ -1941,6 +2161,25 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     memset(g_vaio.scratchProcOut, 0, scratchBytes);
     memset(g_vaio.scratchRing, 0, scratchBytes);
     memset(g_vaio.scratchRaw, 0, scratchBytes);
+    if (g_vaio.outputVaio) {
+        // 处理后环生产暂存（同 scratch 口径：4096 帧 × 8 声道）。
+        g_vaio.scratchProcRate = (float*)malloc(scratchBytes);
+        g_vaio.scratchProcRing = (float*)malloc(scratchBytes);
+        g_vaio.scratchProcRaw = (BYTE*)malloc(scratchBytes);
+        if (!g_vaio.scratchProcRate || !g_vaio.scratchProcRing ||
+            !g_vaio.scratchProcRaw) {
+            snprintf(g_vaio.note, sizeof(g_vaio.note), "malloc-scratch-failed");
+            FreeScratchBuffers();
+            UnmapAndCloseRing();
+            DestroyEngine();
+            DestroyWasapi();
+            g_vaio.startRc = -11;
+            return -11;
+        }
+        memset(g_vaio.scratchProcRate, 0, scratchBytes);
+        memset(g_vaio.scratchProcRing, 0, scratchBytes);
+        memset(g_vaio.scratchProcRaw, 0, scratchBytes);
+    }
     // 第三十九轮取证：逐声道峰值保持随 start 清零（单次起桥一轮观测）。
     for (int c = 0; c < 8; ++c) {
         g_vaio.fxChInPk[c] = 0;
@@ -2158,11 +2397,15 @@ int vaio_status(char* out, int cap) {
         total += m;
     }
     // 本地监听门（2026-11-23 B 案，恒输出）：1 = 本地出声中。
+    // 2×2 S2 追加：outVaio = 输出轴为 VAIO；procRing = 处理后环
+    // 已映射（CaptureSource 已置处理后环）。
     {
         const int m = _snprintf_s(
             out + total, (size_t)(cap - total), _TRUNCATE,
-            ",\"monitor\":%d",
-            g_vaio.monitorEnabled ? 1 : 0);
+            ",\"monitor\":%d,\"outVaio\":%d,\"procRing\":%d",
+            g_vaio.monitorEnabled ? 1 : 0,
+            g_vaio.outputVaio ? 1 : 0,
+            g_vaio.pProcMapped != nullptr ? 1 : 0);
         if (m < 0) return -1;
         total += m;
     }
@@ -2414,7 +2657,11 @@ static int AbStartAdapt(const char* engine_dll, const char* params_json,
     // 关，与 App config 默认 true 的出厂行为不冲突（默认流程
     // 必然带键）。
     const long mirror = abcfg::Long(config_json, "mirror", 0);
-    return vaio_start(engine_dll, params_json, ep, mirror != 0 ? 1 : 0);
+    // 2×2 输出轴（r65 S2）：{"outvaio":1} = 处理后音频交付
+    // VAIO 麦克风（处理后环）；缺键即 WASAPI 输出（现行行为）。
+    const long outvaio = abcfg::Long(config_json, "outvaio", 0);
+    return vaio_start(engine_dll, params_json, ep, mirror != 0 ? 1 : 0,
+                      outvaio != 0 ? 1 : 0);
 }
 #define AB_LEGACY vaio
 #define AB_CAPS_JSON                        \
