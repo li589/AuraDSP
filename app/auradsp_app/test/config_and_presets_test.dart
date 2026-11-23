@@ -170,6 +170,8 @@ void main() {
           'showTranslation': false,
           'lyricsSource': 'kugou',
           'milkdropPresetPath': 'sentinel-preset.milk',
+          // 每方案覆盖表（2026-11-23）：空表也必须原样往返。
+          'perStyle': <String, dynamic>{},
         },
       };
 

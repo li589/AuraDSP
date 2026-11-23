@@ -228,7 +228,7 @@ class AppConfig {
       pipelineInputEnabled: (audio['pipelineInputEnabled'] as bool?) ?? true,
       pipelineOutputEnabled: (audio['pipelineOutputEnabled'] as bool?) ?? true,
       apoTargetEndpoint: (audio['apoTargetEndpoint'] as String?) ?? '',
-      monitorMirroring: (audio['monitorMirroring'] as bool?) ?? false,
+      monitorMirroring: (audio['monitorMirroring'] as bool?) ?? true,
       asioDriver: (audio['asioDriver'] as String?) ?? '',
       asioBufSize: (audio['asioBufSize'] as num?)?.toInt() ?? 0,
       asioOutPair: (audio['asioOutPair'] as num?)?.toInt() ?? 0,

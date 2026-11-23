@@ -56,12 +56,12 @@ void main() {
       model.setAudioMode('vaio');
       model.setPipelineOutput('vaio');
       await tester.pumpAndSettle();
-      expect(find.text('本地耳机监听镜像'), findsOneWidget);
+      expect(find.text('本地监听'), findsOneWidget);
       expect(find.textContaining('尚未实现'), findsNothing);
       // 虚拟端点说明只在 InfoBadge 气泡里，不再常显为正文。
       expect(find.textContaining('是虚拟输出'), findsNothing);
       final mirrorRow = find.ancestor(
-        of: find.text('本地耳机监听镜像'),
+        of: find.text('本地监听'),
         matching: find.byWidgetPredicate(
             (w) => w is Row && w.children.any((c) => c is AuraSwitch)),
       );
@@ -69,13 +69,14 @@ void main() {
       final mirrorSwitch =
           find.descendant(of: mirrorRow, matching: find.byType(AuraSwitch));
       expect(mirrorSwitch, findsOneWidget);
-      expect(tester.widget<AuraSwitch>(mirrorSwitch).value, isFalse);
+      // 本地监听默认开（2026-11-23 B 案）：开关初始为开，点按后关。
+      expect(tester.widget<AuraSwitch>(mirrorSwitch).value, isTrue);
       expect(tester.widget<AuraSwitch>(mirrorSwitch).onChanged, isNotNull);
       await tester.ensureVisible(mirrorSwitch);
       await tester.tap(mirrorSwitch);
       await tester.pumpAndSettle();
-      expect(model.config.monitorMirroring, isTrue);
-      expect(tester.widget<AuraSwitch>(mirrorSwitch).value, isTrue);
+      expect(model.config.monitorMirroring, isFalse);
+      expect(tester.widget<AuraSwitch>(mirrorSwitch).value, isFalse);
     });
 
     testWidgets('vaio output selection persists', (tester) async {

@@ -85,14 +85,14 @@ void main() {
       // 文本不得再以正文出现，气泡载体 InfoBadge 须在镜像行内。
       await tester.pumpAndSettle();
       expect(find.textContaining('为虚拟声卡输出'), findsNothing);
-      expect(find.text('本地耳机监听镜像'), findsOneWidget);
+      expect(find.text('本地监听'), findsOneWidget);
       // 镜像行（标签的某个 Row 祖先）子树内须同时含气泡与开关——
       // 版式为外 Row[内 Row[标签+InfoBadge], AuraSwitch] 嵌套，
       // 故按子树判定而非直子。
       var mirrorRowFound = false;
       for (final e in find
           .ancestor(
-              of: find.text('本地耳机监听镜像'), matching: find.byType(Row))
+              of: find.text('本地监听'), matching: find.byType(Row))
           .evaluate()) {
         final row = find.byWidget(e.widget);
         final hasBadge = find

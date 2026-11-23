@@ -27,12 +27,11 @@ void main() {
           milkdropPresetPath: 'D:/presets/a.milk',
         ),
       );
+      // 抽屉在当前预设档只改调参时，传入的快照除调参外与生效值一致：
+      // 全局域字段（歌词/MilkDrop 路径）不因覆盖写入而改变。
+      // （全局域被主动改动的同步落全局行为见下一条用例。）
       m.setVisualizerStyleOverride(
-        m.visualizerConfig.value.copyWith(
-          sensitivity: 2.2,
-          showLyrics: false,
-          milkdropPresetPath: 'D:/presets/b.milk',
-        ),
+        m.visualizerConfig.value.copyWith(sensitivity: 2.2),
       );
       final eff = m.visualizerConfig.value;
       expect(eff.sensitivity, 2.2); // 调参字段被覆盖
