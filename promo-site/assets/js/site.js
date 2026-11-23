@@ -10,6 +10,42 @@
 
 var REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+/* Pointer lighting updates only CSS variables on a few large surfaces. */
+(function () {
+  if (REDUCED || !window.matchMedia("(pointer: fine)").matches) return;
+
+  var surfaces = document.querySelectorAll(".hero-workbench, .rack-card, .stage-bus-card, .stage-inspector-panel, .plat-detail-panel");
+  if (!surfaces.length) return;
+
+  var frame = 0;
+  var lastTarget = null;
+  var lastX = 0;
+  var lastY = 0;
+
+  function paint() {
+    frame = 0;
+    if (lastTarget && lastTarget.isConnected) {
+      lastTarget.style.setProperty("--pointer-x", lastX + "px");
+      lastTarget.style.setProperty("--pointer-y", lastY + "px");
+    }
+  }
+
+  surfaces.forEach(function (surface) {
+    surface.addEventListener("pointermove", function (event) {
+      var rect = surface.getBoundingClientRect();
+      lastTarget = surface;
+      lastX = event.clientX - rect.left;
+      lastY = event.clientY - rect.top;
+      if (!frame) frame = window.requestAnimationFrame(paint);
+    }, { passive: true });
+
+    surface.addEventListener("pointerleave", function () {
+      surface.style.setProperty("--pointer-x", "50%");
+      surface.style.setProperty("--pointer-y", "0%");
+    }, { passive: true });
+  });
+})();
+
 /* ==================== 1. Hero 录音室控制台 ==================== */
 (function () {
   var bench = document.getElementById("heroWorkbench");
@@ -439,6 +475,7 @@ var REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var top = document.getElementById("topbar");
   var bar = document.getElementById("progressBar");
   var toTop = document.getElementById("toTop");
+  var footer = document.querySelector("footer.foot");
   var ticking = false;
 
   function update() {
@@ -447,7 +484,11 @@ var REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     var max = document.documentElement.scrollHeight - window.innerHeight;
     if (top) top.classList.toggle("scrolled", y > 12);
     if (bar) bar.style.transform = "scaleX(" + (max > 0 ? Math.min(1, y / max) : 0) + ")";
-    if (toTop) toTop.classList.toggle("show", y > window.innerHeight * 1.15);
+    if (toTop) {
+      toTop.classList.toggle("show", y > window.innerHeight * 1.15);
+      var nearFooter = footer && footer.getBoundingClientRect().top < window.innerHeight - 72;
+      toTop.classList.toggle("above-footer", !!nearFooter);
+    }
   }
   window.addEventListener("scroll", function () {
     if (!ticking) { ticking = true; requestAnimationFrame(update); }

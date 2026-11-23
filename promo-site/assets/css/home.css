@@ -168,27 +168,32 @@ html.js .h1 .ln:nth-child(2) > span { animation-delay: .1s; }
   z-index: 3;
 }
 .hero-workbench {
+  --pointer-x: 50%;
+  --pointer-y: 30%;
   width: 100%;
   max-width: 1100px;
   margin: 0 auto;
   border-radius: var(--r-lg);
   background:
-    linear-gradient(180deg, rgba(16, 19, 25, 0.98), rgba(10, 12, 16, 0.99)) padding-box,
-    linear-gradient(180deg, rgba(246, 244, 238, .18), rgba(246, 244, 238, .05) 40%, rgba(212, 255, 63, .22)) border-box;
+    radial-gradient(520px circle at var(--pointer-x) var(--pointer-y), rgba(212, 255, 63, .055), transparent 62%),
+    linear-gradient(180deg, rgba(20, 23, 29, .78), rgba(10, 12, 16, .86)) padding-box,
+    linear-gradient(145deg, rgba(246, 244, 238, .22), rgba(246, 244, 238, .055) 48%, rgba(212, 255, 63, .2)) border-box;
   border: 1px solid transparent;
+  -webkit-backdrop-filter: blur(22px) saturate(1.2);
+  backdrop-filter: blur(22px) saturate(1.2);
   box-shadow:
-    0 28px 70px -20px rgba(0, 0, 0, .85),
-    0 4px 18px rgba(0, 0, 0, .4),
-    inset 0 1px 0 rgba(246, 244, 238, .08);
+    0 28px 70px -20px rgba(0, 0, 0, .72),
+    0 4px 18px rgba(0, 0, 0, .32),
+    inset 0 1px 0 rgba(246, 244, 238, .1);
   overflow: hidden;
   text-align: left;
-  transition: box-shadow .35s;
+  transition: box-shadow .35s var(--ease-out), border-color .35s var(--ease-out);
 }
 .hero-workbench:hover {
   box-shadow:
-    0 34px 85px -16px rgba(0, 0, 0, .92),
-    0 6px 24px rgba(0, 0, 0, .45),
-    inset 0 1px 0 rgba(212, 255, 63, .18);
+    0 34px 85px -16px rgba(0, 0, 0, .78),
+    0 6px 24px rgba(0, 0, 0, .36),
+    inset 0 1px 0 rgba(212, 255, 63, .16);
 }
 
 /* 软件顶栏 */
@@ -466,13 +471,19 @@ html.js .h1 .ln:nth-child(2) > span { animation-delay: .1s; }
 }
 
 .rack-card {
+  --pointer-x: 50%;
+  --pointer-y: 0%;
   flex: 0 0 256px;
   scroll-snap-align: start;
   border-radius: 8px;
   border: 1px solid var(--line-soft);
-  background: rgba(18, 22, 29, 0.95);
+  background:
+    radial-gradient(240px circle at var(--pointer-x) var(--pointer-y), rgba(246, 244, 238, .065), transparent 70%),
+    linear-gradient(160deg, rgba(28, 32, 39, .76), rgba(14, 17, 22, .82));
+  -webkit-backdrop-filter: blur(14px) saturate(1.12);
+  backdrop-filter: blur(14px) saturate(1.12);
   padding: 14px;
-  transition: border-color .25s, box-shadow .25s, transform .25s var(--ease-out), background .25s;
+  transition: border-color .25s, box-shadow .25s, transform .25s var(--ease-out), background-color .25s;
   cursor: pointer;
   user-select: none;
   position: relative;
@@ -800,8 +811,12 @@ html.js .h1 .ln:nth-child(2) > span { animation-delay: .1s; }
   margin-bottom: 20px;
 }
 .stage-bus-card {
+  --pointer-x: 50%;
+  --pointer-y: 0%;
   appearance: none;
-  background: var(--card);
+  background:
+    radial-gradient(260px circle at var(--pointer-x) var(--pointer-y), rgba(246, 244, 238, .055), transparent 72%),
+    linear-gradient(180deg, rgba(246, 244, 238, .04), rgba(246, 244, 238, .012));
   border: 1px solid var(--line-soft);
   border-radius: var(--r-lg);
   padding: 18px 16px;
@@ -888,11 +903,17 @@ html.js .h1 .ln:nth-child(2) > span { animation-delay: .1s; }
 
 /* 阶段单元检查器 */
 .stage-inspector-panel {
-  background: rgba(11, 14, 18, 0.96);
+  --pointer-x: 50%;
+  --pointer-y: 0%;
+  background:
+    radial-gradient(620px circle at var(--pointer-x) var(--pointer-y), rgba(246, 244, 238, .045), transparent 70%),
+    linear-gradient(155deg, rgba(19, 22, 27, .78), rgba(10, 12, 16, .86));
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-lg);
   padding: 22px 24px;
-  box-shadow: 0 14px 40px -10px rgba(0, 0, 0, .6);
+  box-shadow: 0 14px 40px -10px rgba(0, 0, 0, .48), inset 0 1px 0 rgba(246, 244, 238, .035);
 }
 .sip-header {
   display: flex;
@@ -1110,8 +1131,14 @@ html.js .h1 .ln:nth-child(2) > span { animation-delay: .1s; }
   position: relative;
 }
 .plat-detail-panel {
+  --pointer-x: 50%;
+  --pointer-y: 0%;
   display: none;
-  background: var(--card);
+  background:
+    radial-gradient(560px circle at var(--pointer-x) var(--pointer-y), rgba(246, 244, 238, .045), transparent 72%),
+    linear-gradient(155deg, rgba(19, 22, 27, .72), rgba(10, 12, 16, .82));
+  -webkit-backdrop-filter: blur(18px) saturate(1.12);
+  backdrop-filter: blur(18px) saturate(1.12);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-lg);
   padding: 26px 28px;
@@ -1422,4 +1449,53 @@ html.js .h1 .ln:nth-child(2) > span { animation-delay: .1s; }
   .wb-spectrum-viewport { height: 80px; }
   .rack-card { flex: 0 0 240px; }
   .sip-header { flex-direction: column; }
+}
+
+/* Quiet glass surfaces and precise interaction feedback. */
+.compare-card,
+.curve-card,
+.pdp-mode-card,
+.rule-card,
+.steps article,
+.get-box {
+  border-color: rgba(246, 244, 238, .1);
+  background-color: rgba(246, 244, 238, .018);
+  box-shadow: inset 0 1px 0 rgba(246, 244, 238, .035);
+  transition: border-color .28s var(--ease-out), background-color .28s var(--ease-out), box-shadow .28s var(--ease-out), transform .28s var(--ease-out);
+}
+.compare-card:hover,
+.curve-card:hover,
+.pdp-mode-card:hover,
+.rule-card:hover,
+.steps article:hover,
+.get-box:hover {
+  border-color: var(--glass-edge);
+  background-color: rgba(246, 244, 238, .035);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .2), inset 0 1px 0 rgba(246, 244, 238, .075);
+  transform: translateY(-2px);
+}
+.plat-tab-btn.active,
+.stage-bus-card.active,
+.rack-card.active {
+  box-shadow: inset 0 1px 0 rgba(212, 255, 63, .18), 0 10px 28px rgba(0, 0, 0, .2);
+}
+
+@media (hover: none), (pointer: coarse) {
+  .hero-workbench,
+  .rack-card,
+  .stage-bus-card,
+  .stage-inspector-panel,
+  .plat-detail-panel {
+    -webkit-backdrop-filter: blur(12px) saturate(1.08);
+    backdrop-filter: blur(12px) saturate(1.08);
+  }
+
+  .compare-card:hover,
+  .curve-card:hover,
+  .pdp-mode-card:hover,
+  .rule-card:hover,
+  .steps article:hover,
+  .get-box:hover {
+    transform: none;
+  }
 }
