@@ -1771,8 +1771,16 @@ int vb_set_param(const char* id, int isFloat, const void* v4) {
     for (int g = 0; g < g_b.ctx.nEng; ++g) {
         if (g_b.ctx.eng[g] && setParam(g_b.ctx.eng[g], id, v4, 4) == 0) ++ok;
     }
+    // 泵影子与引擎同值（与批量应用路径同一口径）：channels.mode 漏在
+    // 此处时，实时改声道模式只进引擎不进泵影子——vb_start 清零后泵
+    // 恒按矩阵折叠、引擎按离散逐声道处理已折叠信号（r64 验收定
+    // 罪：VB 离散除 7.1 外全折叠；7.1 因折叠分支被 procCh<8 门挡
+    // 住独免）。
+    if (!isFloat && strcmp(id, "channels.mode") == 0)
+        InterlockedExchange(&g_b.ctx.chanMode,
+                            *(const int32_t*)v4 == 1 ? 1 : 0);
     // 双耳是否真正生效由泵按“两个开关 && 工作声道数>=4”判定（与引擎同口径）。
-    if (!isFloat && strcmp(id, "spatial.binaural") == 0)
+    else if (!isFloat && strcmp(id, "spatial.binaural") == 0)
         InterlockedExchange(&g_b.ctx.spatialBinaural, *(const int32_t*)v4 ? 1 : 0);
     else if (!isFloat && strcmp(id, "spatial.enable") == 0)
         InterlockedExchange(&g_b.ctx.spatialEnable, *(const int32_t*)v4 ? 1 : 0);
@@ -1823,19 +1831,55 @@ int vb_test_change() {
     return 0;
 }
 
+// r65 甲：冻结判据与泵内同口径——sigSame 超过约 0.5s 的块数。
+static bool VizGroupFrozen(int g) {
+    if (g < 0 || g >= vmcore::PumpCtx::kMaxGroups) return false;
+    const long sr = g_b.ctx.sr;
+    const long nbs = g_b.ctx.nbs;
+    const long frozenAt = (sr > 0 && nbs > 0) ? sr / nbs / 2 : 240;
+    return frozenAt > 0 && g_b.ctx.sigSame[g] > frozenAt;
+}
+
+// 回调帧计数停滞判据（VB 退出/回调停摆）。viz_read 仅控制线程
+// 调用，静态状态安全。
+static bool VizFramesStalled() {
+    static uint64_t s_lastFrames = 0;
+    static ULONGLONG s_lastAdvance = 0;
+    const uint64_t f = g_b.ctx.frames;
+    const ULONGLONG now = GetTickCount64();
+    if (f != s_lastFrames || s_lastAdvance == 0) {
+        s_lastFrames = f;
+        s_lastAdvance = now;
+        return false;
+    }
+    return now - s_lastAdvance > 1000;
+}
+
 int vb_viz_read(void* out1600, int count) {
     if (!out1600 || count <= 0) return -1;
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
     if (!g_b.vizRead) return 0;
     const int g = HottestVizGroup();
     if (!g_b.ctx.eng[g]) return 0;
+    const bool bypass =
+        InterlockedCompareExchange(&g_b.ctx.userBypass, 0, 0) != 0;
+    const bool testing =
+        InterlockedCompareExchange(&g_b.ctx.testKind, 0, 0) != 0;
+    // r65 甲：VB 停播后持续回放同一块冻结缓冲，引擎无限重处理、
+    // viz 帧不断流——主页电平残留永不清屏（两道清屏看门狗都靠
+    // "帧停"触发）。显示层收口：所选组输入冻结或回调帧停滞 >1s
+    // 时改发静音帧；音频路径与"冻结不动音频"的既有裁定不碰。
+    if (!bypass && !testing && (VizGroupFrozen(g) || VizFramesStalled())) {
+        return g_silentViz.Emit(
+            out1600, 0, vmcore::NormalizeWorkCh(g_b.ctx.workCh));
+    }
     const int n = g_b.vizRead(g_b.ctx.eng[g], out1600, count);
     if (n > 0) return n;
     // P3 收口：门控 GATED 后桥不再调 process，引擎 ring 不再产帧。整桥静音
     // 时补一帧合法静音帧，UI 不再先冻结 1.5s 等 stale 兜底。旁路/测试注入
     // 期间门控不 Tick（gated 可能是旧值），一律不补。
-    if (InterlockedCompareExchange(&g_b.ctx.userBypass, 0, 0)) return 0;
-    if (InterlockedCompareExchange(&g_b.ctx.testKind, 0, 0) != 0) return 0;
+    if (bypass) return 0;
+    if (testing) return 0;
     if (!AllGroupsGated()) return 0;
     // 静音帧的通道数必须与引擎工作声道数一致（否则 UI 表头在静音时跳变）。
     return g_silentViz.Emit(

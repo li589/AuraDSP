@@ -88,6 +88,7 @@ PLATFORM_ANY = {
     "smoke_audit_rulings_contract.py",
     "smoke_vaio_capture_mute_contract.py",
     "smoke_vaio_processed_ring_contract.py",
+    "smoke_vb_bridge_contract.py",
     "smoke_apo_transit_contract.py",
     # r43 门禁（2026-11-17）：apo_config ACL 接管必须合并原 DACL
     # （整表替换剥服务 ACE → 默认端点不可读 → 全机无声）+ props
@@ -569,6 +570,7 @@ def run_smoke_tests():
     "smoke_mp3.py",
         "smoke_vm_detect.py",
         "smoke_vm_pump.py",
+        "smoke_vb_bridge_contract.py",
         "smoke_vm_bridge.py",
         # Z12 超预算自动保护门禁（2026-10-23）：注入观测值 → 收窄到热组 →
         # 回落自动恢复；手动改掩码立即取消；关保护不进入。App 占槽时让路。

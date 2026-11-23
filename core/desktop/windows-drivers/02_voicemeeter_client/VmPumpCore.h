@@ -385,6 +385,56 @@ inline int BusChForSlot(int procCh, int slot) {
     return chmap_stream_pos(procCh, 8, slot);
 }
 
+// 引擎进料槽集合（组内相对槽号）：本组真正会进引擎的总线槽。
+// 矩阵模式按折叠口径——2 声道折叠读 {0,1,2,4,5,6,7}（LFE 不入
+// 折，与 stereo gather 同集）；>2 声道折叠逐帧组全 8 槽。离散
+// 模式按 BusChForSlot 映射取前 procCh 槽。门控峰值与 idle 静
+// 音判据必须按此集合取：只看主对时，高声道单独有声会被误判整
+// 组静音——门控到期整组清零、idle 累计满后绕过 DSP（r65 乙次
+// 级定罪）。02 冻结参照 VmAudioCallback.cpp 是纯立体声泵，进
+// 料集恒为主对，其 PairIsSilent 判据与本口径天然一致，无需同步。
+inline int FeedSlots(long procCh, long chanMode, int* slots) {
+    if (chanMode == 0) {
+        if (procCh <= 2) {
+            const int kFold2[7] = {0, 1, 2, 4, 5, 6, 7};
+            for (int i = 0; i < 7; ++i) slots[i] = kFold2[i];
+            return 7;
+        }
+        for (int s = 0; s < 8; ++s) slots[s] = s;
+        return 8;
+    }
+    int cnt = 0;
+    for (long ch = 0; ch < procCh && cnt < 8; ++ch)
+        slots[cnt++] = BusChForSlot((int)procCh, (int)ch);
+    return cnt;
+}
+
+inline double BusSlotsPeak(VbAudioBuffer* ab, long base, const int* slots,
+                           int cnt, long n) {
+    double peak = 0.0;
+    for (int s = 0; s < cnt; ++s) {
+        const float* src = ab->r[base + slots[s]];
+        if (!src) continue;
+        for (long i = 0; i < n; ++i) {
+            const double a = src[i] < 0 ? -(double)src[i] : (double)src[i];
+            if (a > peak) peak = a;
+        }
+    }
+    return peak;
+}
+
+// 与 PairIsSilent 同口径：精确零才算静默。
+inline bool BusSlotsSilent(VbAudioBuffer* ab, long base, const int* slots,
+                           int cnt, long n) {
+    for (int s = 0; s < cnt; ++s) {
+        const float* src = ab->r[base + slots[s]];
+        if (!src) continue;
+        for (long i = 0; i < n; ++i)
+            if (src[i] != 0.0f) return false;
+    }
+    return true;
+}
+
 // Z17：单组处理主体——串行/并行共用的唯一实现（两条路径必须逐位同义）。
 // 由原 OnVbCallback 内联 for 循环体原样提取；差异仅：
 //  1) scratch 改取每组独占对 scratchInG/OutG（并行时 worker 间零共享写；
@@ -428,7 +478,13 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
     }
     // P3：门控用真实输入峰值——冻结检测只清表头，不得把"冻住的非零流"
     // 当成静音送进门控（否则那条总线会真的被切零）。
-    const float gateInPeak = (float)grpPeak;
+    // r65 乙次级：峰值按引擎进料槽集合取（FeedSlots），不再只看
+    // 主对——判据与"引擎实际会听到什么"同口径；立体声离散时集
+    // 合即主对，与旧口径逐位一致。
+    int feedSlots[8];
+    const int feedCnt = FeedSlots(procCh, chanMode, feedSlots);
+    const float gateInPeak =
+        (float)BusSlotsPeak(ab, base, feedSlots, feedCnt, n);
     if (g < 8) {
         // 冻结检测：步进 16 采、最多 64 点做 FNV 式折叠（RT 内纯整数运算）。
         // 同一块内容连续超 0.5s → 本块峰值按 0 计（只清表头）。
@@ -630,7 +686,8 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
                     if (ab->w[ch]) memset(ab->w[ch], 0, (size_t)n * sizeof(float));
                 }
             }
-            const bool inSilent = PairIsSilent(inL, inR, n);
+            const bool inSilent =
+                BusSlotsSilent(ab, base, feedSlots, feedCnt, n);
             if (inSilent && outSilent)
                 c->idleSamples[g] += (uint64_t)n;
             else
@@ -643,7 +700,7 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
         c->grpBypass[g] = true;  // Z17：bypassEntered 归约中间槽
         memcpy(outL, inL, (size_t)n * sizeof(float));
         memcpy(outR, inR, (size_t)n * sizeof(float));
-        if (!PairIsSilent(inL, inR, n)) {
+        if (!BusSlotsSilent(ab, base, feedSlots, feedCnt, n)) {
             c->idle[g] = false;
             c->idleSamples[g] = 0;
         }
