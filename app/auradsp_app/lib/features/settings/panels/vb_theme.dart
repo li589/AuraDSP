@@ -91,12 +91,14 @@ class _InfoRow extends StatelessWidget {
   final double labelWidth;
   final double fontSize;
   final bool padded;
+  final Color? valueColor;
   const _InfoRow(
     this.k,
     this.v, {
     this.labelWidth = 104,
     this.fontSize = 12,
     this.padded = true,
+    this.valueColor,
   });
 
   @override
@@ -109,7 +111,9 @@ class _InfoRow extends StatelessWidget {
           width: labelWidth,
           child: Text(k, style: labelOf(p, size: fontSize, color: p.textDim)),
         ),
-        Expanded(child: Text(v, style: monoOf(p, size: fontSize))),
+        Expanded(
+          child: Text(v, style: monoOf(p, size: fontSize, color: valueColor)),
+        ),
       ],
     );
     if (!padded) return row;

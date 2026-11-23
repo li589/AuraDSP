@@ -680,22 +680,35 @@ class _VaioDriverRow extends StatelessWidget {
     // 未发现」混为一谈——旧实现空 map 恒判 missing 是真机误报的显示面。
     final detected = det.isNotEmpty;
     final found = det['found'] == true;
-    // 第十九轮（user 裁定）：VAIO 块只留标题 + 一行状态。已就绪行
-    // 按 user 口径内嵌 track（auravaio kmdf modern/legacy 驱动已
-    // 就绪（sysvad））；原说明行与版本/track/KMDF 明细行删除——
-    // track 信息已并入状态行，版本数值排障走 detect 日志。
+    // 状态行（2026-11-23 user 裁定，取代第十九轮整行口径）：
+    // 与 ASIO 卡同款键值行「驱动状态 / 值」——未安装黄、加载
+    // 失败红、{track} 驱动已就绪绿、未检测灰。加载失败由桥
+    // detect 的 loadState 给出（设备节点/端点在场但控制设备
+    // 打不开）；旧桥无 loadState 时按 found 二态降级。
     final track = det['track'] is String && (det['track'] as String).isNotEmpty
         ? det['track'] as String
         : 'modern';
+    final loadState = det['loadState'] is String
+        ? det['loadState'] as String
+        : '';
+    final (String statusText, Color statusColor) = !detected
+        ? (l.setVaioUnknown, p.textDim)
+        : switch (loadState) {
+            'failed' => (l.vaioStatusLoadFailed, p.error),
+            _ when found => (l.vaioStatusReady(track), p.success),
+            _ => (l.vaioStatusNotInstalled, p.warning),
+          };
 
     return _DriverBlock(
       title: l.vaioDriverCardTitle,
       lines: [
-        _DriverStatus(
-          !detected
-              ? l.setVaioUnknown
-              : (found ? l.setVaioReady(track) : l.setVaioMissing),
-          !detected ? p.textDim : (found ? p.success : p.warning),
+        _InfoRow(
+          l.asioDriverStatus,
+          statusText,
+          labelWidth: 76,
+          fontSize: 11,
+          padded: false,
+          valueColor: statusColor,
         ),
       ],
       actions: [
@@ -801,6 +814,7 @@ class _VirtualAsioDriverCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = paletteOf(context);
     final l = l10nOf(context);
 
     // 版式统一（2026-11-10 用户裁定）：检测/注册/注销与状态文字同行，
@@ -818,6 +832,7 @@ class _VirtualAsioDriverCard extends StatelessWidget {
           labelWidth: 76,
           fontSize: 11,
           padded: false,
+          valueColor: model.asioDriverInstalled ? p.success : p.warning,
         ),
         // DAW 状态行已撤（r61 验收修复）：与 ASIO 模式 I/O 面板
         // 的虚拟形态重复，状态呈现归面板一处；本卡只管注册。

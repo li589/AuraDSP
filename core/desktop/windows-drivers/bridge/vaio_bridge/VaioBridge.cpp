@@ -18,6 +18,8 @@
 #include <propkey.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <avrt.h>
+#include <setupapi.h>
+#include <cfgmgr32.h>
 
 #include <cmath>
 #include <cstdint>
@@ -1362,6 +1364,98 @@ int vaio_detect(char* out, int cap) {
     }
     CoUninitialize();
 
+    // 2b. 加载状态三态（2026-11-23）：控制设备可开（或桥在跑）
+    // = ready；打不开时区分「装了但加载失败」与「未安装」——查
+    // Root 枚举下自家硬件 ID（INF 的 Root\AuraVAIO /
+    // Root\AuraVaioDriver，只匹配自家产品）的设备节点与 CM
+    // 问题码，再以 AuraVAIO 端点在场（任意状态）兜底。
+    const char* loadState = driverFound ? "ready" : "absent";
+    ULONG loadProblem = 0;
+    if (!driverFound) {
+        bool nodePresent = false;
+        HDEVINFO devs = SetupDiGetClassDevsW(
+            nullptr, L"Root", nullptr, DIGCF_ALLCLASSES | DIGCF_PRESENT);
+        if (devs != INVALID_HANDLE_VALUE) {
+            SP_DEVINFO_DATA info = {};
+            info.cbSize = sizeof(SP_DEVINFO_DATA);
+            for (DWORD i = 0; SetupDiEnumDeviceInfo(devs, i, &info); ++i) {
+                wchar_t hwids[512] = {};
+                if (!SetupDiGetDeviceRegistryPropertyW(
+                        devs, &info, SPDRP_HARDWAREID, nullptr,
+                        reinterpret_cast<PBYTE>(hwids),
+                        sizeof(hwids) - sizeof(wchar_t), nullptr)) {
+                    continue;
+                }
+                bool ours = false;
+                for (const wchar_t* hp = hwids; *hp;
+                     hp += wcslen(hp) + 1) {
+                    if (_wcsicmp(hp, L"Root\\AuraVAIO") == 0 ||
+                        _wcsicmp(hp, L"Root\\AuraVaioDriver") == 0) {
+                        ours = true;
+                        break;
+                    }
+                }
+                if (!ours) continue;
+                nodePresent = true;
+                ULONG cmStatus = 0, cmProblem = 0;
+                if (CM_Get_DevNode_Status(&cmStatus, &cmProblem,
+                                          info.DevInst, 0) == CR_SUCCESS) {
+                    loadProblem = cmProblem;
+                }
+                break;
+            }
+            SetupDiDestroyDeviceInfoList(devs);
+        }
+        bool endpointPresent = false;
+        if (!nodePresent) {
+            // 本节在 detect 的 CoUninitialize 之后，COM 需自理。
+            const HRESULT hrCo2 = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            IMMDeviceEnumerator* pEnum2 = nullptr;
+            if (SUCCEEDED(CoCreateInstance(
+                    __uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                    __uuidof(IMMDeviceEnumerator), (void**)&pEnum2)) &&
+                pEnum2) {
+                for (EDataFlow flow : {eRender, eCapture}) {
+                    IMMDeviceCollection* pCol2 = nullptr;
+                    if (SUCCEEDED(pEnum2->EnumAudioEndpoints(
+                            flow, DEVICE_STATEMASK_ALL, &pCol2)) &&
+                        pCol2) {
+                        UINT cnt2 = 0;
+                        pCol2->GetCount(&cnt2);
+                        for (UINT i = 0; i < cnt2 && !endpointPresent;
+                             ++i) {
+                            IMMDevice* pDev2 = nullptr;
+                            if (FAILED(pCol2->Item(i, &pDev2)) || !pDev2)
+                                continue;
+                            IPropertyStore* pProp2 = nullptr;
+                            if (SUCCEEDED(pDev2->OpenPropertyStore(
+                                    STGM_READ, &pProp2)) &&
+                                pProp2) {
+                                PROPVARIANT var2;
+                                PropVariantInit(&var2);
+                                if (SUCCEEDED(pProp2->GetValue(
+                                        PKEY_Device_FriendlyName,
+                                        &var2)) &&
+                                    var2.pwszVal &&
+                                    ContainsCI(WideToUtf8(var2.pwszVal),
+                                               "AuraVAIO")) {
+                                    endpointPresent = true;
+                                }
+                                PropVariantClear(&var2);
+                                pProp2->Release();
+                            }
+                            pDev2->Release();
+                        }
+                        pCol2->Release();
+                    }
+                }
+                pEnum2->Release();
+            }
+            if (SUCCEEDED(hrCo2)) CoUninitialize();
+        }
+        if (nodePresent || endpointPresent) loadState = "failed";
+    }
+
     // 3. 构建输出 JSON
     // 全面复审 S5（VAIO-9)：运行支的 st 是合成值（不碰控制设备）、
     // ActiveRender/Capture 恒 0——与「真无活跃流」不可分辨。此前
@@ -1372,14 +1466,16 @@ int vaio_detect(char* out, int cap) {
     int n = _snprintf_s(
         out, (size_t)cap, _TRUNCATE,
         "{\"found\":%s,\"driverVersion\":\"%lu.%lu.%lu\",\"track\":\"%s\",\"kmdf\":\"%lu.%lu\","
-        "\"sampleRate\":%lu,\"channels\":%lu,\"bits\":%lu",
+        "\"sampleRate\":%lu,\"channels\":%lu,\"bits\":%lu,\"loadState\":\"%s\",\"loadProblem\":%lu",
         driverFound ? "true" : "false",
         ver.DriverVersionMajor, ver.DriverVersionMinor, ver.DriverBuildNumber,
         (ver.Track == 1) ? "modern" : "legacy",
         ver.KmdfMajor, ver.KmdfMinor,
         st.SampleRate ? st.SampleRate : 48000,
         st.Channels ? st.Channels : 2,
-        st.BitsPerSample ? st.BitsPerSample : 32
+        st.BitsPerSample ? st.BitsPerSample : 32,
+        loadState,
+        loadProblem
     );
     if (n < 0) return -1;
     if (!bridgeRunning) {

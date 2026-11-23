@@ -342,7 +342,7 @@ target_include_directories(auravaio_bridge PRIVATE
 target_compile_options(auravaio_bridge PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET auravaio_bridge PROPERTY CXX_STANDARD 20)
 set_property(TARGET auravaio_bridge PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-target_link_libraries(auravaio_bridge PRIVATE ole32 avrt version)
+target_link_libraries(auravaio_bridge PRIVATE ole32 avrt version setupapi cfgmgr32)
 
 # 第五十五轮：声道适配统一表数值单测（engine/chain/channel_map.h，
 # 驱动无关）。位置映射 + 离散 gather/scatter + 矩阵下混全表；
