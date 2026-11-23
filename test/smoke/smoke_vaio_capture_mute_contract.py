@@ -29,8 +29,8 @@ def read(rel):
 ipc = read("core/desktop/windows-drivers/common/AuraVaioIpc.h")
 check("volatile ULONG      CaptureMuted;" in ipc,
       "shared header carries the CaptureMuted field")
-check("Reserved[12]" in ipc,
-      "header size preserved (Reserved shrinks to 12)")
+check("Reserved[11]" in ipc,
+      "header size preserved (Reserved 12 after this field, 11 after S1 CaptureSource)")
 
 drv = read("core/desktop/windows-drivers/01_vaio_driver/src/ControlDevice.cpp")
 fn = drv.split("AuraControlDevice_ReadCaptureSamples", 1)[1].split(

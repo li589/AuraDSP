@@ -15,6 +15,8 @@
  *                    FluidDynamics, ParticleTornado, GpuShader, Milkdrop, Atmosphere
  *   - views/       : VisualizerStage, VisualizerHud, VisualizerDrawer, VisualizerMeters, VisualizerDbScale
  */
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -33,6 +35,7 @@ import '../ui/path_picker_dialog.dart';
 import 'chrome.dart';
 import 'visualizer/lyrics/parsers/lrc_parser.dart';
 import 'visualizer/lyrics/services/media_sync_service.dart';
+import 'visualizer/plugins/milkdrop_builtins.dart';
 import 'visualizer/plugins/milkdrop_preset.dart';
 import 'visualizer/plugins/projectm_native_bridge.dart';
 import 'visualizer/views/visualizer_drawer_widgets.dart';
@@ -94,6 +97,9 @@ class _VisualizerPageState extends State<VisualizerPage> {
     widget.model.visualizerConfig.addListener(_onVisualizerConfigChanged);
     // 确保媒体监听已启动（启动时常驻开启，此处保证状态）
     _mediaSync.startAutoSync();
+    // 内置 MilkDrop 预设资产落盘（原生桥只吃真实路径，见
+    // MilkdropBuiltinStaging）；失败已在内部留痕，不阻断页面。
+    unawaited(MilkdropBuiltinStaging.ensureStaged());
   }
 
   @override

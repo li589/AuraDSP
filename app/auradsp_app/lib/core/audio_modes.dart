@@ -181,8 +181,11 @@ abstract final class AudioModes {
   /// - 输入 VAIO -> vaio 桥链（环的消费方只有 VAIO 桥）；
   /// - 输入 WASAPI + 输出 WASAPI -> capture 本地捕获链
   ///   （回录/直采 -> 本地引擎 -> 指定输出端点）；
-  /// - 输入 WASAPI + 输出 VAIO -> vaio 桥链（桥不接受外源
-  ///   注入；播放器须改投 VAIO 端点，面板指引已有此口径）；
+  /// - 输入 WASAPI + 输出 VAIO -> capture 本地捕获链（2×2
+  ///   口径，r65 S4）：处理后渲染进 VAIO 扬声器端点、驱动
+  ///   回环交付 VAIO 麦克风；监听开时镜像渲染到所选物理
+  ///   设备。此前回落桥链与输入轴语义不符（桥的输入实为
+  ///   VAIO 端点），2×2 起按轴归位；
   /// - 其余/未知 -> vaio 桥链（历史默认）。
   static PipelineChain composeChain({
     required String input,
@@ -192,7 +195,7 @@ abstract final class AudioModes {
       return PipelineChain.asio;
     }
     if (input == inputVaio) return PipelineChain.vaio;
-    if (input == inputWasapi && output == outputWasapi) {
+    if (input == inputWasapi) {
       return PipelineChain.capture;
     }
     return PipelineChain.vaio;

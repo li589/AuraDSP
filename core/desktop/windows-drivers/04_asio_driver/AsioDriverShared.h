@@ -8,7 +8,7 @@
 //                                 （S3 新增：App 写、驱动汇 Open 读；
 //                                 空/缺失/失效 → 回落系统默认端点）
 //   遥测面：Global\AuraDSP_AsioDriverTelemetry（S3 新增，
-//     v2 于 S4 扩频谱）
+//     v2 于 S4 扩频谱；v3 于 r65 尾加逐声道峰值）
 //     驱动泵写 → ASIO 桥在 asiostatus 中转读 → App 展示。解决
 //     「DAW 侧真实例与 App 侧实例互不可见」：DAW 在场、已处理帧、
 //     峰值与汇实际生效端点/格式自此有真数据源。
@@ -19,6 +19,7 @@
 //     遥测块即虚拟形态的全部跨进程通道。
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #define ASIO_DRIVER_REG_KEY L"SOFTWARE\\AuraDSP\\AsioDriver"
@@ -27,7 +28,7 @@
 
 #define ASIO_DRIVER_TELEMETRY_NAME L"Global\\AuraDSP_AsioDriverTelemetry"
 #define ASIO_DRIVER_TELEMETRY_MAGIC 0x54444141u  // 'AADT'
-#define ASIO_DRIVER_TELEMETRY_VERSION 2u
+#define ASIO_DRIVER_TELEMETRY_VERSION 3u
 #define ASIO_DRIVER_TELEMETRY_BYTES 4096u
 
 // ---- 参数块（S4）：App 写、驱动读 ----
@@ -89,7 +90,22 @@ struct AsioDriverTelemetryBlock {
     // 频谱，诚实呈现。
     float spectrum[32];          // 处理链最终输出谱
     float eqInSpectrum[32];      // EQ 入口谱
+    // ---- v3（r65）：逐声道峰值 ----
+    // peakIn/peakOut 只有立体声折叠单值，主页电平在多声道协商下
+    // 恒显示 2 格同值（r64 验收定罪）。尾加入/出逐声道峰值（线
+    // 性，索引 < channels 有效，其余为 0）；旧字段语义不变，读
+    // 者按 version 分支：v2 走立体声合成回落。
+    float peakInCh[8];           // 处理前逐声道峰值
+    float peakOutCh[8];          // 处理后（折叠前）逐声道峰值
 };
 
 static_assert(sizeof(AsioDriverTelemetryBlock) <= ASIO_DRIVER_TELEMETRY_BYTES,
               "asio driver telemetry block must fit one page");
+static_assert(offsetof(AsioDriverTelemetryBlock, spectrum) == 264u,
+              "v2 spectrum offset must not move");
+static_assert(offsetof(AsioDriverTelemetryBlock, eqInSpectrum) == 392u,
+              "v2 eqInSpectrum offset must not move");
+static_assert(offsetof(AsioDriverTelemetryBlock, peakInCh) == 520u,
+              "v3 peakInCh tail offset");
+static_assert(sizeof(AsioDriverTelemetryBlock) == 584u,
+              "v3 telemetry block size");

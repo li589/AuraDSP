@@ -106,8 +106,9 @@ void main() {
         if (hasBadge && hasSwitch) mirrorRowFound = true;
       }
       expect(mirrorRowFound, isTrue);
-      // VAIO 链下物理输出落点字段行在场。
-      expect(find.text('物理输出'), findsWidgets);
+      // VAIO 输出下镜像目标字段行在场（2×2 口径 r65 S4：
+      // 输出轴 = VAIO 时该下拉是监听镜像目标，此前称物理输出）。
+      expect(find.text('监听镜像设备'), findsWidgets);
 
       // 切到 WASAPI 渲染输出端（r58 文案：模式行值 = WASAPI 标准输出）
       model.setPipelineOutput(AudioModes.outputWasapi);

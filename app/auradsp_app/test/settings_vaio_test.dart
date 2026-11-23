@@ -41,7 +41,9 @@ void main() {
       // 输出子面板（旧断言假设模式会自动改写，已过时）。
       model.setPipelineOutput('vaio');
       await tester.pumpAndSettle();
-      expect(find.text('物理输出'), findsOneWidget);
+      // 2×2 口径（r65 S4）：输出轴 = VAIO 时该下拉是监听镜像
+      // 目标，标签改「监听镜像设备」（此前为「物理输出」）。
+      expect(find.text('监听镜像设备'), findsOneWidget);
       expect(find.text('自动选择（非AuraVAIO）'), findsOneWidget);
     });
 

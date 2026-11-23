@@ -301,8 +301,9 @@ class _VaioOutputSubpanel extends StatelessWidget {
           if (!asBridgeLanding) ...[
           // 业主 2026-11-14 裁定：虚拟端点说明整框常显太占版面，
           // 收进监听镜像行尾的问号气泡（InfoBadge，与第十二轮 D
-          // 的 APO 范式说明同形态）；监听镜像开关接真值——ASIO-2
-          // 补全后由 VAIO 桥第二路渲染消费，「尚未实现」整行删除。
+          // 的 APO 范式说明同形态）。2×2 口径（r65 S4）：本面板
+          // 仅在输出轴 = VAIO 时出现，开关即镜像开关（裁定 2）、
+          // 下方下拉即镜像目标（裁定 1）；说明文案按输入轴分格。
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -311,7 +312,10 @@ class _VaioOutputSubpanel extends StatelessWidget {
                 children: [
                   Text(l.monitorMirroring, style: labelOf(p, size: 12)),
                   const SizedBox(width: AuraSpace.xs),
-                  InfoBadge(message: l.virtualSinkNotice),
+                  InfoBadge(
+                      message: model.pipelineInput == AudioModes.inputVaio
+                          ? l.virtualSinkNoticeVaioIn
+                          : l.virtualSinkNotice),
                 ],
               ),
               AuraSwitch(
@@ -325,7 +329,8 @@ class _VaioOutputSubpanel extends StatelessWidget {
           Row(children: [
             SizedBox(
                 width: 104,
-                child: Text(l.ioPhysicalOutput,
+                child: Text(
+                    asBridgeLanding ? l.ioPhysicalOutput : l.ioMirrorTarget,
                     style: labelOf(p, size: 12, color: p.textDim))),
             Expanded(
               child: AuraDropdown<String>(

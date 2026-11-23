@@ -1484,7 +1484,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get virtualSinkNotice =>
-      'In VAIO mode the processed audio plays through the selected physical output. Turning local monitoring off silences the physical output while processing continues. When VAIO is used as a pipeline output the machine stays silent too; record the processed audio by selecting the AuraVAIO microphone endpoint in OBS or a recorder.';
+      'Processed audio is rendered into the AuraVAIO speaker endpoint and delivered through the virtual microphone (select the AuraVAIO microphone in OBS or your recorder). With local monitoring on, the same audio also plays on the physical device selected below; off means silence on this machine while delivery continues.';
+
+  @override
+  String get virtualSinkNoticeVaioIn =>
+      'Audio played into the AuraVAIO speaker endpoint is processed and sent straight to the VAIO virtual microphone (select the AuraVAIO microphone in OBS or your recorder). With local monitoring on, the same audio also plays on the physical device selected below; off means silence on this machine while delivery continues.';
+
+  @override
+  String get ioMirrorTarget => 'Monitor mirror device';
 
   @override
   String get monitorMirroring => 'Local monitoring';

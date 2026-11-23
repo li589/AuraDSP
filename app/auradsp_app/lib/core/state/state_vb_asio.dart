@@ -226,6 +226,7 @@ extension VbAsioState on AppModel {
         'cmd': 'vaiorestart',
         'outputEndpoint': config.vaioOutputEndpoint,
         'monitorMirror': config.monitorMirroring,
+        'outputVaio': vaioBridgeOutputVaio,
       });
     }
     _notifyUi();

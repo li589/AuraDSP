@@ -57,6 +57,11 @@ Abstract:
 #define AURA_VAIO_FMT_PCM               1   // PCM 整数（16 / 24 紧密 / 容器内整数）
 #define AURA_VAIO_FMT_FLOAT             2   // IEEE float32
 
+// 录制源选择（共享头 CaptureSource 字段取值，2026-11-23 S1）
+#define AURA_VAIO_CAPTURE_LOOPBACK      0   // 渲染环回环（CaptureMuted 置位时按静音处理）
+#define AURA_VAIO_CAPTURE_MUTED         1   // 录制喂静音（桥在场、VAIO 出未启用）
+#define AURA_VAIO_CAPTURE_PROCESSED     2   // 处理后回写环（VAIO 出启用）
+
 //=============================================================================
 // IOCTL Codes (FILE_DEVICE_UNKNOWN = 0x22, Custom function range 0x800-0x8FF)
 //=============================================================================
@@ -72,6 +77,15 @@ Abstract:
 
 #define IOCTL_AURAVAIO_UNMAP_SHARED_RING \
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x803, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+// 处理后回写环（2026-11-23，2×2 组合模型 S1)：VAIO 进 + VAIO 出格
+// 专用——桥把处理后音频写入此环，驱动录制读端从此环取数（渲染环
+// 被输入占用，不能再渲染回去）。映射资格限渲染环持有进程（桥）。
+#define IOCTL_AURAVAIO_MAP_PROCESSED_RING \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x805, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+#define IOCTL_AURAVAIO_UNMAP_PROCESSED_RING \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x806, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 // 注记（全面复审 S5 / VAIO-12)：GET_DEBUG_LOG 只有开发工具消费
 // 者（01_vaio_driver/tools 与 vaio_multichannel_probe)，App/桥均
@@ -168,7 +182,15 @@ typedef struct _AURA_VAIO_SHARED_HEADER {
     // 现行行为；桥在拆映射前清 0，驱动在映射文件对象 Cleanup
     // 时兜底清 0（桥进程崩溃不留残标记）。
     volatile ULONG      CaptureMuted;           // 0 = 回环，1 = 录制喂静音
-    ULONG               Reserved[12];           // Future expansion
+    // 录制源选择（2026-11-23，2×2 组合模型 S1)：原 Reserved[0] 转
+    // 正，结构尺寸与 IPC 版本号不变。0 = 渲染环回环（CaptureMuted
+    // 置位时按 1 处理，兼容只认静音标记的 r64 桥）；1 = 静音（桥
+    // 在场、VAIO 出未启用）；2 = 处理后回写环（VAIO 出启用，桥经
+    // MAP_PROCESSED_RING 映射第二环并写入处理后音频）。旧桥读到
+    // 0 = 现行行为；桥拆映射前清 0，驱动在任一映射 Cleanup 时兜
+    // 底清 0（桥进程崩溃不留残值）。
+    volatile ULONG      CaptureSource;          // AURA_VAIO_CAPTURE_* 
+    ULONG               Reserved[11];           // Future expansion
 } AURA_VAIO_SHARED_HEADER, *PAURA_VAIO_SHARED_HEADER;
 
 typedef struct _AURA_INTERSECTION_LOG_ENTRY {

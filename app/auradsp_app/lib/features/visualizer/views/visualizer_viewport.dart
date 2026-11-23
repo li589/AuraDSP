@@ -17,6 +17,7 @@ import '../styles/visualizer_painter_dispatcher.dart';
 import '../styles/visualizer_static_grid.dart';
 import '../styles/visualizer_time_aware.dart';
 import '../plugins/projectm_bridge_contract.dart';
+import '../plugins/milkdrop_builtins.dart';
 import '../plugins/milkdrop_preset.dart';
 import 'visualizer_db_scale.dart';
 
@@ -248,6 +249,13 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
     if (bridge == null || !bridge.isAvailable) return;
     final path = widget.config.milkdropPresetPath;
     if (path == null || path.isEmpty || path == _pmLoadedPath) return;
+    // 内置预设先解析落盘路径（桥只接真实文件）；尚未落盘时本
+    // tick 跳过且不记失败（落盘在页面 init 时已触发，稍后自愈）。
+    final resolved = MilkdropPreset.resolveFilePath(path);
+    if (resolved == path && MilkdropPreset.isBuiltinPath(path)) {
+      unawaited(MilkdropBuiltinStaging.ensureStaged());
+      return;
+    }
     // A persistently failing preset (corrupt .milk, unreadable file)
     // must not retry file IO + a native load on every 33 ms tick.
     final failedAt = _pmPresetFailedAt;
@@ -256,7 +264,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         DateTime.now().difference(failedAt) < const Duration(seconds: 5)) {
       return;
     }
-    if (bridge.loadPreset(MilkdropPreset.parseFile(path))) {
+    if (bridge.loadPreset(MilkdropPreset.parseFile(resolved))) {
       _pmLoadedPath = path;
       _pmPresetFailedPath = null;
       _pmPresetFailedAt = null;

@@ -27,6 +27,18 @@ static ULONG                    g_ulRingTotalSize       = 0;
 static PMDL                     g_pRingMdl              = NULL;
 static PVOID                    g_pMappedUserAddress    = NULL;
 static PEPROCESS                g_pMappedProcess        = NULL;
+// 处理后回写环（2026-11-23，2×2 模型 S1)：与渲染环同构的第二环。
+// 生产者是用户态桥（写 WriteOffset/TotalBytesWritten），消费者是
+// 驱动录制读端（维护 ReadOffset/TotalBytesRead）——与渲染环的
+// 内核写/桥读正好镜像，volatile 单调计数纪律同渲染环。映射资格
+// 限渲染环持有进程，归属跟踪与渲染环同式（文件对象定罪口径）。
+static PBYTE                    g_pProcRingBuffer       = NULL;
+static ULONG                    g_ulProcRingTotalSize   = 0;
+static ULONG                    g_ulProcRingDataSize    = 0;
+static PMDL                     g_pProcRingMdl          = NULL;
+static PVOID                    g_pProcMappedUserAddress = NULL;
+static PEPROCESS                g_pProcMappedProcess    = NULL;
+static PFILE_OBJECT             g_pProcMappedFileObject = NULL;
 // 映射归属的 FILE_OBJECT（第六轮项 1 定罪）：IRP_MJ_CLEANUP 在
 // 同进程任意控制句柄关闭时都会到达，旧实现只按进程判定就解
 // 映射——App 里 vaio_detect 开/关一次控制设备，就把正在运行
@@ -181,6 +193,68 @@ AuraControlDevice_Create(
     pHeader->TotalBytesRead         = 0;
     pHeader->StreamState            = 0; // STOP
 
+    //
+    // 处理后回写环（2026-11-23 S1)：与渲染环同尺寸同构，Create 时
+    // 一并分配（1MiB 非分页池，常驻成本可接受，换取运行期零分配）。
+    //
+    g_pProcRingBuffer = (PBYTE)AuraAllocatePool(POOL_FLAG_NON_PAGED, allocSize, AURA_POOLTAG);
+    if (g_pProcRingBuffer == NULL)
+    {
+        AURA_TRACE("Failed to allocate %u bytes for processed ring\n", allocSize);
+        IoFreeMdl(g_pRingMdl);
+        g_pRingMdl = NULL;
+        ExFreePoolWithTag(g_pRingBuffer, AURA_POOLTAG);
+        g_pRingBuffer = NULL;
+        IoDeleteSymbolicLink(&dosDeviceName);
+        IoDeleteDevice(g_pControlDeviceObject);
+        g_pControlDeviceObject = NULL;
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    RtlZeroMemory(g_pProcRingBuffer, allocSize);
+    g_ulProcRingTotalSize = allocSize;
+    g_ulProcRingDataSize = g_ulRingDataSize;
+
+    g_pProcRingMdl = IoAllocateMdl(g_pProcRingBuffer, allocSize, FALSE, FALSE, NULL);
+    if (g_pProcRingMdl == NULL)
+    {
+        AURA_TRACE("IoAllocateMdl (processed) failed\n");
+        ExFreePoolWithTag(g_pProcRingBuffer, AURA_POOLTAG);
+        g_pProcRingBuffer = NULL;
+        IoFreeMdl(g_pRingMdl);
+        g_pRingMdl = NULL;
+        ExFreePoolWithTag(g_pRingBuffer, AURA_POOLTAG);
+        g_pRingBuffer = NULL;
+        IoDeleteSymbolicLink(&dosDeviceName);
+        IoDeleteDevice(g_pControlDeviceObject);
+        g_pControlDeviceObject = NULL;
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    MmBuildMdlForNonPagedPool(g_pProcRingMdl);
+
+    {
+        PAURA_VAIO_SHARED_HEADER pProcHeader =
+            reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pProcRingBuffer);
+        pProcHeader->Magic               = AURA_VAIO_MAGIC_RING;
+        pProcHeader->Version             = AURA_VAIO_IPC_VERSION;
+        pProcHeader->HeaderSizeBytes     = sizeof(AURA_VAIO_SHARED_HEADER);
+        pProcHeader->TotalBufferSizeBytes = allocSize;
+        pProcHeader->DataOffsetBytes     = sizeof(AURA_VAIO_SHARED_HEADER);
+        pProcHeader->DataSizeBytes       = g_ulProcRingDataSize;
+        pProcHeader->SampleRate          = g_ulCurrentSampleRate;
+        pProcHeader->Channels            = g_ulCurrentChannels;
+        pProcHeader->BitsPerSample       = g_ulCurrentBitsPerSample;
+        pProcHeader->BlockAlign          = g_ulCurrentChannels * (g_ulCurrentBitsPerSample / 8);
+        pProcHeader->FormatKind          = g_ulCurrentFormatKind;
+        pProcHeader->ValidBitsPerSample  = g_ulCurrentValidBits;
+        pProcHeader->WriteOffset         = 0;
+        pProcHeader->ReadOffset          = 0;
+        pProcHeader->TotalBytesWritten   = 0;
+        pProcHeader->TotalBytesRead      = 0;
+        pProcHeader->StreamState         = 0; // STOP
+    }
+
     // Control device is ready
     g_pControlDeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
 
@@ -219,9 +293,38 @@ AuraControlDevice_Destroy(
         if (g_pRingBuffer != NULL)
         {
             reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer)->CaptureMuted = 0;
+            reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer)->CaptureSource = 0;
         }
     }
+    if (g_pProcMappedUserAddress != NULL && g_pProcRingMdl != NULL)
+    {
+        __try
+        {
+            MmUnmapLockedPages(g_pProcMappedUserAddress, g_pProcRingMdl);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            AURA_TRACE("Exception unmapping processed pages in destroy: 0x%08X\n", GetExceptionCode());
+        }
+        g_pProcMappedUserAddress = NULL;
+        g_pProcMappedProcess = NULL;
+        g_pProcMappedFileObject = NULL;
+    }
     ExReleaseFastMutex(&g_MappingMutex);
+
+    if (g_pProcRingMdl != NULL)
+    {
+        IoFreeMdl(g_pProcRingMdl);
+        g_pProcRingMdl = NULL;
+    }
+
+    if (g_pProcRingBuffer != NULL)
+    {
+        ExFreePoolWithTag(g_pProcRingBuffer, AURA_POOLTAG);
+        g_pProcRingBuffer = NULL;
+        g_ulProcRingTotalSize = 0;
+        g_ulProcRingDataSize = 0;
+    }
 
     if (g_pRingMdl != NULL)
     {
@@ -324,6 +427,31 @@ AuraControlDevice_DispatchCleanup(
         if (g_pRingBuffer != NULL)
         {
             reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer)->CaptureMuted = 0;
+            reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer)->CaptureSource = 0;
+        }
+    }
+    // 处理后环映射同口径兜底：建立映射的文件对象 cleanup 时拆
+    // 映射并清录制源（源=2 时生产者已死，留值会让录制端点永远
+    // 读一条无人写的环）。
+    if (g_pProcMappedUserAddress != NULL && g_pProcMappedProcess == currentProc &&
+        g_pProcMappedFileObject != NULL && stack->FileObject == g_pProcMappedFileObject &&
+        g_pProcRingMdl != NULL)
+    {
+        __try
+        {
+            MmUnmapLockedPages(g_pProcMappedUserAddress, g_pProcRingMdl);
+            AURA_TRACE("Unmapped processed user address %p on process cleanup\n", g_pProcMappedUserAddress);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            AURA_TRACE("Exception unmapping processed in cleanup: 0x%08X\n", GetExceptionCode());
+        }
+        g_pProcMappedUserAddress = NULL;
+        g_pProcMappedProcess = NULL;
+        g_pProcMappedFileObject = NULL;
+        if (g_pRingBuffer != NULL)
+        {
+            reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer)->CaptureSource = 0;
         }
     }
     // 持有者进程退出：释放 GET_DEBUG_LOG 的持久持有记录（审计低6）。
@@ -390,7 +518,7 @@ AuraControlDevice_DispatchDeviceControl(
             // 语义是「驱动源码版本日期」，随驱动源码变更手工同步；
             // BuildTime 在可复现构建下不跟踪钟点，恒 00:00:00。
             // 精确构建时刻看 INF 的 DriverVer（打包时由 MSBuild 盖戳）。
-            RtlStringCchCopyA(pVer->BuildDate, sizeof(pVer->BuildDate), "2026-11-18");
+            RtlStringCchCopyA(pVer->BuildDate, sizeof(pVer->BuildDate), "2026-11-23");
             RtlStringCchCopyA(pVer->BuildTime, sizeof(pVer->BuildTime), "00:00:00");
 
             bytesReturned = sizeof(AURA_VAIO_VERSION_INFO);
@@ -563,6 +691,144 @@ AuraControlDevice_DispatchDeviceControl(
         }
         break;
 
+    case IOCTL_AURAVAIO_MAP_PROCESSED_RING:
+        if (outBufLen < sizeof(AURA_VAIO_MAP_RESPONSE))
+        {
+            ntStatus = STATUS_BUFFER_TOO_SMALL;
+            break;
+        }
+        if (g_pProcRingMdl == NULL || g_pProcRingBuffer == NULL)
+        {
+            ntStatus = STATUS_DEVICE_NOT_READY;
+            break;
+        }
+        {
+            PAURA_VAIO_MAP_RESPONSE pResp = reinterpret_cast<PAURA_VAIO_MAP_RESPONSE>(systemBuffer);
+            PEPROCESS currentProc = PsGetCurrentProcess();
+            PVOID userVa = NULL;
+
+            ExAcquireFastMutex(&g_MappingMutex);
+
+            // 资格：仅渲染环持有进程（桥）可映射处理后环——处理后
+            // 环是桥的写端，第三方进程拿到写权即可伪造录制内容。
+            if (g_pMappedUserAddress == NULL || g_pMappedProcess != currentProc)
+            {
+                ExReleaseFastMutex(&g_MappingMutex);
+                ntStatus = STATUS_DEVICE_NOT_READY;
+                break;
+            }
+
+            if (g_pProcMappedUserAddress != NULL && g_pProcMappedProcess == currentProc)
+            {
+                userVa = g_pProcMappedUserAddress;
+            }
+            else if (g_pProcMappedUserAddress != NULL)
+            {
+                ExReleaseFastMutex(&g_MappingMutex);
+                ntStatus = STATUS_DEVICE_BUSY;
+                break;
+            }
+            else
+            {
+                __try
+                {
+                    userVa = MmMapLockedPagesSpecifyCache(
+                                g_pProcRingMdl,
+                                UserMode,
+                                MmCached,
+                                NULL,
+                                FALSE,
+                                NormalPagePriority | MdlMappingNoExecute);
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER)
+                {
+                    userVa = NULL;
+                    ntStatus = GetExceptionCode();
+                }
+
+                if (userVa != NULL)
+                {
+                    g_pProcMappedUserAddress = userVa;
+                    g_pProcMappedProcess     = currentProc;
+                    g_pProcMappedFileObject  = stack->FileObject;
+                }
+            }
+
+            if (userVa != NULL)
+            {
+                /* DRV-03：应答报内核真值，同 MAP_SHARED_RING。 */
+                pResp->UserAddress          = userVa;
+                pResp->TotalMappedSizeBytes = g_ulProcRingTotalSize;
+                pResp->HeaderSizeBytes      = sizeof(AURA_VAIO_SHARED_HEADER);
+                pResp->DataSizeBytes        = g_ulProcRingDataSize;
+                pResp->SampleRate           = g_ulCurrentSampleRate;
+                pResp->Channels             = g_ulCurrentChannels;
+                pResp->BitsPerSample        = g_ulCurrentBitsPerSample;
+                pResp->BlockAlign           = g_ulCurrentChannels * (g_ulCurrentBitsPerSample / 8);
+                pResp->FormatKind           = g_ulCurrentFormatKind;
+                pResp->ValidBitsPerSample   = g_ulCurrentValidBits;
+
+                bytesReturned = sizeof(AURA_VAIO_MAP_RESPONSE);
+                ntStatus = STATUS_SUCCESS;
+                AURA_TRACE("MAP_PROCESSED_RING: userVa=%p, dataSize=%u\n", userVa, pResp->DataSizeBytes);
+            }
+
+            ExReleaseFastMutex(&g_MappingMutex);
+        }
+        break;
+
+    case IOCTL_AURAVAIO_UNMAP_PROCESSED_RING:
+        {
+            PVOID reqAddress = NULL;
+            if (inBufLen >= sizeof(AURA_VAIO_UNMAP_REQUEST) && systemBuffer != NULL)
+            {
+                PAURA_VAIO_UNMAP_REQUEST pReq = reinterpret_cast<PAURA_VAIO_UNMAP_REQUEST>(systemBuffer);
+                reqAddress = pReq->UserAddress;
+            }
+
+            PEPROCESS currentProc = PsGetCurrentProcess();
+            ExAcquireFastMutex(&g_MappingMutex);
+            if (g_pProcMappedUserAddress != NULL)
+            {
+                if (g_pProcMappedProcess != NULL && g_pProcMappedProcess != currentProc)
+                {
+                    ExReleaseFastMutex(&g_MappingMutex);
+                    ntStatus = STATUS_ACCESS_DENIED;
+                    break;
+                }
+
+                if (reqAddress != NULL && reqAddress != g_pProcMappedUserAddress)
+                {
+                    ExReleaseFastMutex(&g_MappingMutex);
+                    ntStatus = STATUS_INVALID_PARAMETER;
+                    break;
+                }
+
+                if (g_pProcRingMdl != NULL)
+                {
+                    __try
+                    {
+                        MmUnmapLockedPages(g_pProcMappedUserAddress, g_pProcRingMdl);
+                        AURA_TRACE("UNMAP_PROCESSED_RING: userVa=%p unmapped\n", g_pProcMappedUserAddress);
+                    }
+                    __except (EXCEPTION_EXECUTE_HANDLER)
+                    {
+                        ntStatus = GetExceptionCode();
+                    }
+                }
+                g_pProcMappedUserAddress = NULL;
+                g_pProcMappedProcess = NULL;
+                g_pProcMappedFileObject = NULL;
+                ntStatus = STATUS_SUCCESS;
+            }
+            else
+            {
+                ntStatus = STATUS_SUCCESS;
+            }
+            ExReleaseFastMutex(&g_MappingMutex);
+        }
+        break;
+
     case IOCTL_AURAVAIO_GET_DEBUG_LOG:
         if (outBufLen < sizeof(AURA_DEBUG_LOG))
         {
@@ -713,6 +979,18 @@ AuraControlDevice_OnFormatChange(
     pHeader->BlockAlign      = Channels * (BitsPerSample / 8);
     pHeader->FormatKind      = FormatKind;
     pHeader->ValidBitsPerSample = ValidBitsPerSample;
+    // 处理后环格式恒跟随渲染流（桥按渲染协商格式写入），同批镜像。
+    if (g_pProcRingBuffer != NULL)
+    {
+        PAURA_VAIO_SHARED_HEADER pProcHeader =
+            reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pProcRingBuffer);
+        pProcHeader->SampleRate         = SampleRate;
+        pProcHeader->Channels           = Channels;
+        pProcHeader->BitsPerSample      = BitsPerSample;
+        pProcHeader->BlockAlign         = Channels * (BitsPerSample / 8);
+        pProcHeader->FormatKind         = FormatKind;
+        pProcHeader->ValidBitsPerSample = ValidBitsPerSample;
+    }
     KeReleaseSpinLock(&g_RingLock, oldIrql);
 }
 
@@ -781,6 +1059,92 @@ AuraControlDevice_WriteRenderSamples(
     KeReleaseSpinLock(&g_RingLock, oldIrql);
 }
 
+// 处理后回写环读端（2026-11-23 S1)：与渲染环读端同纪律——可用
+// 量由单调计数差派生、超环钳制 snap、不足补静音；几何一律内核
+// 真值（DRV-03)，不读处理后环共享头的几何字段。生产者（桥）不
+// 在 g_RingLock 内更新 WriteOffset/TotalBytesWritten:volatile 单
+// 调计数保证此处读到的差值只会偏小、不会越界（与桥读渲染环时
+// 读内核计数同式）。
+static VOID
+ReadProcessedCaptureSamples(
+    _Out_writes_bytes_(ByteCount) BYTE * Buffer,
+    _In_ ULONG ByteCount
+    )
+{
+    KIRQL oldIrql;
+    PAURA_VAIO_SHARED_HEADER pHeader;
+    PBYTE pPayload;
+    ULONG dataSize;
+    ULONG readOffset;
+    ULONG chunk1, chunk2;
+
+    if (g_pProcRingBuffer == NULL || g_ulProcRingDataSize == 0 ||
+        g_ulProcRingTotalSize <= sizeof(AURA_VAIO_SHARED_HEADER))
+    {
+        RtlZeroMemory(Buffer, ByteCount);
+        return;
+    }
+
+    pHeader = reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pProcRingBuffer);
+    pPayload = g_pProcRingBuffer + sizeof(AURA_VAIO_SHARED_HEADER);
+    dataSize = g_ulProcRingDataSize;
+
+    KeAcquireSpinLock(&g_RingLock, &oldIrql);
+
+    ULONGLONG totalWritten = pHeader->TotalBytesWritten;
+    ULONGLONG totalRead    = pHeader->TotalBytesRead;
+    ULONG     available    = 0;
+
+    if (totalWritten > totalRead)
+    {
+        ULONGLONG diff = totalWritten - totalRead;
+        if (diff > (ULONGLONG)dataSize)
+        {
+            diff = (ULONGLONG)dataSize;
+            pHeader->ReadOffset = (pHeader->WriteOffset + dataSize - (ULONG)diff) % dataSize;
+            pHeader->TotalBytesRead = totalWritten - diff;
+        }
+        available = (ULONG)diff;
+    }
+
+    ULONG bytesToCopy  = (ByteCount < available) ? ByteCount : available;
+    ULONG silenceBytes = ByteCount - bytesToCopy;
+
+    if (bytesToCopy > 0)
+    {
+        readOffset = pHeader->ReadOffset % dataSize;
+        chunk1 = dataSize - readOffset;
+        if (chunk1 >= bytesToCopy)
+        {
+            RtlCopyMemory(Buffer, pPayload + readOffset, bytesToCopy);
+            readOffset = (readOffset + bytesToCopy) % dataSize;
+        }
+        else
+        {
+            chunk2 = bytesToCopy - chunk1;
+            RtlCopyMemory(Buffer, pPayload + readOffset, chunk1);
+            RtlCopyMemory(Buffer + chunk1, pPayload, chunk2);
+            readOffset = chunk2 % dataSize;
+        }
+
+        pHeader->ReadOffset = readOffset;
+        pHeader->TotalBytesRead += bytesToCopy;
+        {
+            const ULONG blockAlign =
+                g_ulCurrentChannels * (g_ulCurrentBitsPerSample / 8);
+            if (blockAlign > 0)
+                g_ullTotalFramesRead += (bytesToCopy / blockAlign);
+        }
+    }
+
+    if (silenceBytes > 0)
+    {
+        RtlZeroMemory(Buffer + bytesToCopy, silenceBytes);
+    }
+
+    KeReleaseSpinLock(&g_RingLock, oldIrql);
+}
+
 VOID
 AuraControlDevice_ReadCaptureSamples(
     _Out_writes_bytes_(ByteCount) BYTE * Buffer,
@@ -803,14 +1167,29 @@ AuraControlDevice_ReadCaptureSamples(
     }
 
     pHeader = reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer);
-    /* 录制静音标记（2026-11-23 A 案）：桥在场时录制端点喂静音，
-     * 不回放处理前原始流、不推进读偏移（桥按 TotalBytesWritten
-     * 自行记账，录制侧消费与否不影响它）。标记只是布尔语义、非
-     * 几何，DRV-03 的「不读共享头几何」纪律不适用此处。 */
-    if (pHeader->CaptureMuted != 0)
+    /* 录制源选择（2026-11-23 S1 三态，A 案静音并入其一）：源只是
+     * 语义开关、非几何，DRV-03 的「不读共享头几何」纪律不适用。
+     * 静音时不回放处理前原始流、不推进读偏移（桥按
+     * TotalBytesWritten 自行记账，录制侧消费与否不影响它）；
+     * 源字段为 0 而静音标记置位时按静音处理，兼容只认静音标记
+     * 的 r64 桥。 */
     {
-        RtlZeroMemory(Buffer, ByteCount);
-        return;
+        ULONG captureSource = pHeader->CaptureSource;
+        if (captureSource == AURA_VAIO_CAPTURE_LOOPBACK &&
+            pHeader->CaptureMuted != 0)
+        {
+            captureSource = AURA_VAIO_CAPTURE_MUTED;
+        }
+        if (captureSource == AURA_VAIO_CAPTURE_MUTED)
+        {
+            RtlZeroMemory(Buffer, ByteCount);
+            return;
+        }
+        if (captureSource == AURA_VAIO_CAPTURE_PROCESSED)
+        {
+            ReadProcessedCaptureSamples(Buffer, ByteCount);
+            return;
+        }
     }
     /* DRV-03：同 WriteRenderSamples——几何由内核真值派生，不读共享头。 */
     if (g_ulRingTotalSize <= sizeof(AURA_VAIO_SHARED_HEADER))

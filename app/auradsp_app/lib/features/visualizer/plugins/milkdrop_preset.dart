@@ -54,8 +54,52 @@ class MilkdropPreset {
     ),
   ];
 
+  /// 落盘目录：内置 .milk 资产在启动时释放到用户数据目录
+  /// （MilkdropBuiltinStaging 负责写入并回填此值）。原生桥只接
+  /// 真实文件路径，'builtin:' 伪路径在任何文件用途前必须先经
+  /// [resolveFilePath] 解析——r64 验收定罪：三只内置预设此前恒
+  /// 被桥拒绝、且 parseFile 不认 builtin id 全塌成默认参数。
+  static String? builtinDir;
+
+  static bool isBuiltinPath(String path) => path.startsWith('builtin:');
+
+  /// 'builtin:<id>' → 落盘真实路径；其它路径原样返回。尚未落盘
+  /// （builtinDir 为空）时原样返回伪路径，调用方据此延后加载。
+  static String resolveFilePath(String path) {
+    if (!isBuiltinPath(path)) return path;
+    final dir = builtinDir;
+    if (dir == null) return path;
+    final id = path.substring('builtin:'.length);
+    return '$dir${Platform.pathSeparator}$id.milk';
+  }
+
   /// Parse a MilkDrop .milk file
   factory MilkdropPreset.parseFile(String path) {
+    if (isBuiltinPath(path)) {
+      // 身份与参数以声明表为准；已落盘时再以真文件校准方程标记
+      // 等解析量（名称/作者/标称参数不被文件名与文件头覆盖）。
+      for (final declared in builtInPresets) {
+        if (declared.filePath != path) continue;
+        final resolved = resolveFilePath(path);
+        if (resolved != path && File(resolved).existsSync()) {
+          final read = ResourceGate.readText(resolved);
+          if (read.ok) {
+            final parsed = parseString(declared.name, path, read.text!);
+            return MilkdropPreset(
+              name: declared.name,
+              filePath: path,
+              author: declared.author,
+              decay: declared.decay,
+              zoom: declared.zoom,
+              waveMode: declared.waveMode,
+              hasCustomEquations: parsed.hasCustomEquations,
+            );
+          }
+        }
+        return declared;
+      }
+      return MilkdropPreset(name: 'Unknown Preset', filePath: path);
+    }
     final file = File(path);
     final name = file.uri.pathSegments.isNotEmpty
         ? file.uri.pathSegments.last.replaceAll('.milk', '')
@@ -96,12 +140,14 @@ class MilkdropPreset {
           author = val;
           break;
         case 'decay':
+        case 'fdecay':
           decay = double.tryParse(val) ?? 0.98;
           break;
         case 'zoom':
           zoom = double.tryParse(val) ?? 1.0;
           break;
         case 'wave_mode':
+        case 'nwavemode':
           waveMode = int.tryParse(val) ?? 0;
           break;
         case 'per_frame_1':

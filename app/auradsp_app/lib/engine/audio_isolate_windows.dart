@@ -180,6 +180,11 @@ class WindowsCaptureController {
   String? _preAttachOutputId;
   bool _outputWasRebuilt = false;
 
+  /// 本次组建的镜像端点（2×2 S3）：null = 无镜像；'' = 系统
+  /// 默认端点。仅在主输出为 VAIO 端点时由命令层给出（状态层
+  /// 按监听开关与选择器裁决），reinitOutput 重建时沿用。
+  String? _mirrorEndpoint;
+
   bool get active => _capture != null;
 
   void _sendStatus(bool activeNow, String note) {
@@ -190,6 +195,7 @@ class WindowsCaptureController {
   /// 恢复用户先前的测试源；被桥接管/被新源覆盖时不恢复），
   /// 并把组建时重建过的输出端点还回去（_restoreOutputIfRebuilt）。
   void detach({required bool restoreSaved}) {
+    _mirrorEndpoint = null;
     _detachCaptureOnly(restoreSaved: restoreSaved);
     _restoreOutputIfRebuilt();
   }
@@ -229,8 +235,10 @@ class WindowsCaptureController {
   /// 用：换入经 _setAudioOut 缝，捕获源不受影响。
   bool reinitOutput() {
     final cur = _getAudioOut();
-    final id = cur is WasapiOut ? cur.endpointId : '';
-    _rebuildOutput(id, _engineRate(), rollbackTo: _preAttachOutputId);
+    final primary = cur is MirrorAudioOut ? cur.primary : cur;
+    final id = primary is WasapiOut ? primary.endpointId : '';
+    _rebuildOutput(id, _engineRate(),
+        rollbackTo: _preAttachOutputId, mirrorEndpoint: _mirrorEndpoint);
     final now = _getAudioOut();
     final ok = now != null && now.started;
     dbgLog('wasapi: out reinit ${ok ? 'recovered' : 'still down'} '
@@ -246,8 +254,10 @@ class WindowsCaptureController {
     required String captureEndpoint,
     required bool loopback,
     required String outputEndpoint,
+    String? mirrorEndpoint,
   }) {
     _detachCaptureOnly(restoreSaved: false);
+    _mirrorEndpoint = mirrorEndpoint;
     _savedSource = _getSource();
     final engineRate = _engineRate();
 
@@ -255,15 +265,22 @@ class WindowsCaptureController {
     // 连环 attach 时锚已在，不覆盖——锚必须是链外原始端点）。
     if (!_outputWasRebuilt) {
       final cur0 = _getAudioOut();
-      _preAttachOutputId = cur0 is WasapiOut ? cur0.endpointId : null;
+      final prim0 = cur0 is MirrorAudioOut ? cur0.primary : cur0;
+      _preAttachOutputId = prim0 is WasapiOut ? prim0.endpointId : null;
     }
 
     final cur = _getAudioOut();
-    final curId = cur is WasapiOut ? cur.endpointId : null;
-    if (cur == null || curId != outputEndpoint) {
+    final prim = cur is MirrorAudioOut ? cur.primary : cur;
+    final curId = prim is WasapiOut ? prim.endpointId : null;
+    final curMirror = cur is MirrorAudioOut ? cur.mirror : null;
+    final curMirrorId =
+        curMirror is WasapiOut ? curMirror.endpointId : null;
+    if (cur == null ||
+        curId != outputEndpoint ||
+        curMirrorId != mirrorEndpoint) {
       _outputWasRebuilt = true;
       if (!_rebuildOutput(outputEndpoint, engineRate,
-          rollbackTo: _preAttachOutputId)) {
+          rollbackTo: _preAttachOutputId, mirrorEndpoint: mirrorEndpoint)) {
         // _rebuildOutput 已回滚（优先回锚点）：以回滚结果为
         // 新基线，锚点使命结束。
         _outputWasRebuilt = false;
@@ -324,7 +341,7 @@ class WindowsCaptureController {
   /// stop）。失败时回滚到默认端点实例（尽力保住本地输出），
   /// 回滚也失败则置空（泵的降级路径接管）。
   bool _rebuildOutput(String endpointId, double engineRate,
-      {String? rollbackTo}) {
+      {String? rollbackTo, String? mirrorEndpoint}) {
     final old = _getAudioOut();
     try {
       old?.stop();
@@ -357,7 +374,38 @@ class WindowsCaptureController {
       if (!restored) _setAudioOut(null);
       return false;
     }
-    _setAudioOut(n);
+    // 镜像（2×2 S3）：主输出已就绪后尽力挂镜像——挂不上/率不
+    // 一致就主路单独跑，绝不因镜像失败回滚主输出。
+    AudioOut out = n;
+    if (mirrorEndpoint != null && mirrorEndpoint != endpointId) {
+      final mir = WasapiOut()..endpointId = mirrorEndpoint;
+      try {
+        mir.init(
+            requestedSampleRate: engineRate > 0 ? engineRate.toInt() : null);
+        mir.start();
+        if (mir.sampleRate == n.sampleRate) {
+          out = MirrorAudioOut(n, mir, onMirrorError: (e, st) {
+            swallow(e, st);
+            dbgLog('capturemode: mirror dropped after failure: $e');
+          });
+          dbgLog('capturemode: mirror attached endpoint='
+              '${mirrorEndpoint.isEmpty ? "(default)" : mirrorEndpoint}');
+        } else {
+          dbgLog('capturemode: mirror refused (rate ${mir.sampleRate} '
+              '!= main ${n.sampleRate})');
+          try {
+            mir.stop();
+          } catch (e, st) {
+            swallow(e, st);
+          }
+        }
+      } catch (e, st) {
+        swallow(e, st);
+        dbgLog('capturemode: mirror init failed '
+            '(${mirrorEndpoint.isEmpty ? "(default)" : mirrorEndpoint}): $e');
+      }
+    }
+    _setAudioOut(out);
     dbgLog('capturemode: output rebuilt endpoint='
         '${endpointId.isEmpty ? "(default)" : endpointId} '
         'rate=${n.sampleRate}');

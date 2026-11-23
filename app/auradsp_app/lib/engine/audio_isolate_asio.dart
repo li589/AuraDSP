@@ -222,6 +222,7 @@ class AsioTelemetryReader {
   int _lastHeartbeat = -1;
   int _staleTicks = 0;
   bool _wasLive = false;
+  int _lastDawCh = 2;
 
   void start(void Function(Map<String, dynamic>) send) {
     _send = send;
@@ -237,6 +238,7 @@ class AsioTelemetryReader {
     _absentSent = false;
     _lastHeartbeat = -1;
     _staleTicks = 0;
+    _lastDawCh = 2;
   }
 
   void _close() {
@@ -322,8 +324,8 @@ class AsioTelemetryReader {
       'r': -90.0,
       'stageL': List<double>.filled(32, -90.0),
       'stageR': List<double>.filled(32, -90.0),
-      'chCount': 2,
-      'chLevels': List<double>.filled(2, -90.0),
+      'chCount': _lastDawCh,
+      'chLevels': List<double>.filled(_lastDawCh, -90.0),
       'stageCh': List<double>.filled(64, -90.0),
       'ts': DateTime.now().millisecondsSinceEpoch,
       'seq': -2,
@@ -343,9 +345,9 @@ class AsioTelemetryReader {
       return;
     }
     final version = u32[1];
-    // 与桥侧读口径对齐（AsioBridge 拒绝 version <1 || >2）：未知版本
-    // 按块缺席处理，避免未来块升版改布局时静默误读频谱偏移。
-    if (version < 1 || version > 2) {
+    // 与桥侧读口径对齐（AsioBridge 拒绝 version <1 || >宏）：未知
+    // 版本按块缺席处理，避免未来块升版改布局时静默误读频谱偏移。
+    if (version < 1 || version > 3) {
       _sendAbsent();
       return;
     }
@@ -382,6 +384,18 @@ class AsioTelemetryReader {
     if (live) {
       _wasLive = true;
       final outDb = _peakDb(peakOut);
+      // v3（r65）：逐声道峰值在块尾（f32 索引 130 起为入、138 起
+      // 为出）。声道数取 DAW 协商值；v2 及以下回落立体声合成
+      // （peakOut 折叠单值左右同格，与旧版行为一致）。
+      final dawCh = u32[6];
+      var chCount = 2;
+      var chLevels = <double>[outDb, outDb];
+      if (version >= 3 && dawCh >= 2 && dawCh <= 8) {
+        chCount = dawCh;
+        chLevels = List<double>.generate(
+            dawCh, (c) => _peakDb(_f32![138 + c]));
+        _lastDawCh = dawCh;
+      }
       send({
         'evt': 'viz',
         'backend': 'asio',
@@ -391,14 +405,12 @@ class AsioTelemetryReader {
         'eqIn': version >= 2
             ? List<double>.generate(32, (i) => _f32![98 + i])
             : List<double>.filled(32, 0.0),
-        // peakOut 是处理后立体声折的单值峰值（块口径），左右同值
-        // 呈现；逐声道峰值待块扩容后再分。
         'l': outDb,
         'r': outDb,
         'stageL': List<double>.filled(32, -90.0),
         'stageR': List<double>.filled(32, -90.0),
-        'chCount': 2,
-        'chLevels': <double>[outDb, outDb],
+        'chCount': chCount,
+        'chLevels': chLevels,
         'stageCh': List<double>.filled(64, -90.0),
         'ts': DateTime.now().millisecondsSinceEpoch,
         'seq': heartbeat,

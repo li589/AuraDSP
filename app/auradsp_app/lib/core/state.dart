@@ -380,6 +380,10 @@ class AppModel extends ChangeNotifier {
   // 与三桥互斥，是管线类别内子状态而非第四种 audioMode）。
   bool captureActive = false;
   String captureNote = '';
+  // _captureCommand 最近一次拒绝起链的原因（'feedback' /
+  // 'vaio-missing'，state_audio_modes.dart 消费）：调用方据此
+  // 选提示文案，成功时清零。扩展不能声明字段，故落主类。
+  String? captureBlockReason;
   // S5a（ADR-012 D-5）：Linux 三模式状态（isolate 的 linuxstatus 事件回推，
   // 设置页据此渲染可用性与提示，不拿它当错误态）。
   bool linuxCaptureActive = false;
