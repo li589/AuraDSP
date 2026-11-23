@@ -181,7 +181,27 @@ static void compute_bands(auradsp_handle h, const float* hist, int pos, int kN,
         }
         float m = 0;
         for (int i = lo; i < hb; ++i) if (mag[i] > m) m = mag[i];
-        const float amp = m * amp_scale;
+        /* 峰值统计偏置校正（2026-11-23 晚，user 报「频谱高频大部分
+         * 时候比低频高」定罪）：对数带的高频带 bin 数随带号爆炸
+         * （48kHz/4096 时 band0 仅 1 个 bin、band31 有 273 个），
+         * 噪声型内容取带内最大值时，期望被系统性抬高
+         * 10*log10(H_N) dB（H_N 为调和数：指数分布 N 个样本最大值
+         * 的期望与均值之比），顶带相对底带约 +8 dB——音乐高频多为
+         * 噪声型（镲片/谐波喷雾）吃满偏置、低频多为基音单 bin 主导
+         * 无偏置，于是显示上高频常压低频。按 H_N ≈ ln N + γ +
+         * 1/(2N) 在功率域扣回（幅度除以 sqrt(H_N)）：N=1 不动
+         * （纯音与低带标定不变），噪声谱恢复平坦。相邻 bin 经汉宁
+         * 窗相关、有效独立数略小于 N，校正为近似（残余 ≲1 dB，
+         * 远小于原倾斜）。两条 tap 共用本函数，EQ 合成不变式在
+         * 差分中自动抵消、不受影响。 */
+        const int nBins = hb - lo;
+        float peakCorr = 1.0f;
+        if (nBins > 1) {
+            const float hn = logf((float)nBins) + 0.5772157f
+                             + 0.5f / (float)nBins;
+            peakCorr = 1.0f / sqrtf(hn);
+        }
+        const float amp = m * amp_scale * peakCorr;
         /* -75..0 dBFS → 0..1。
          * 上游一阶 DC blocker 已压掉直流/次声；-75 是「显示下限」与
          * 「窗口旁瓣红线」的折中：纯 60Hz 正弦在 band0 的汉宁窗旁瓣实测约
