@@ -614,7 +614,7 @@ else:
         others_out = max(pout[c] for c in range(6) if c != 4)
         check('peakOutCh[4] dominates (pre-fold per-channel)',
               pout[4] > 0.01 and pout[4] > 4.0 * max(others_out, 1e-6),
-              f'pout4={pout[4]:.4f} others_max={others_out:.4f}')
+              'pout=[' + ' '.join(f'{v:.4f}' for v in pout[:6]) + ']')
 
 out_l6 = (ctypes.c_float * 256)()
 out_r6 = (ctypes.c_float * 256)()
