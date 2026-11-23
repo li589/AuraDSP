@@ -1642,7 +1642,7 @@ abstract final class ParamRegistry {
   );
   static final routingMonitorMirroring = ParamSpec<bool>(
     id: 'routing.monitorMirroring', section: 'routing', key: 'monitorMirroring',
-    type: ParamType.boolean, defaultValue: false,
+    type: ParamType.boolean, defaultValue: true,
     flags: ParamFlags.presetSerializable | ParamFlags.sessionOnly,
     getter: (m) => m.config.monitorMirroring,
     setter: (m, v) => m.setMonitorMirroring(v),

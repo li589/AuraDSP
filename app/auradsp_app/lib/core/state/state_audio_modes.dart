@@ -1641,10 +1641,11 @@ extension AudioModesState on AppModel {
   }
 
   void setMonitorMirroring(bool enabled) {
-    // ASIO-2 补全（2026-11-14，业主裁定）：监听镜像已落地——
-    // VAIO 桥内第二路 WASAPI 渲染把处理后音频分路到系统默认
-    // 物理端点。值经 vaiomode/vaiorestart 载荷下发 isolate →
-    // 桥 config 的 mirror 键消费；桥在跑则热重启生效（与
+    // 本地监听门（2026-11-23，user 裁定 B 案，取代 ASIO-2 的
+    // 第二路镜像渲染）：开 = VAIO 桥主路渲染本地出声（默认）；
+    // 关 = 主路 SILENT 交还、本地静音，处理与遥测照常。值经
+    // vaiomode/vaiorestart 载荷下发 isolate → 桥 config 的
+    // mirror 键消费；桥在跑则热重启生效（与
     // setVaioOutputEndpoint 同口径）。
     if (config.monitorMirroring == enabled) return;
     config.monitorMirroring = enabled;

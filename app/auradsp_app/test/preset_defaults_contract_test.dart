@@ -208,7 +208,7 @@ void main() {
       expect(m.pipelineOutputDevice, 'Speakers (Realtek)');
       expect(m.config.asioBufSize, 512);
       expect(m.config.asioOutPair, 3);
-      expect(m.config.monitorMirroring, isFalse);
+      expect(m.config.monitorMirroring, isTrue);
     });
 
     test('出厂预设载入后复位 DSP 参数、保留路由与设备', () {

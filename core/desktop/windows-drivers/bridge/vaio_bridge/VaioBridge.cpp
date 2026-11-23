@@ -9,7 +9,6 @@
 #include "VaioBridge.h"
 #include "VaioSampleConvert.h"
 #include "VaioChannelMap.h"
-#include "VaioMirrorFeed.h"
 
 #include <windows.h>
 #include <winioctl.h>
@@ -281,30 +280,12 @@ struct VaioBridgeCtl {
     bool wasapiIsFloat = true;        // true = IEEE float32 直通
     ULONG wasapiBits = 32;            // PCM 时为 16/32
 
-    // 监听镜像（ASIO-2 补全，2026-11-14）：第二路 WASAPI 渲染，
-    // 把处理后音频分路一份到系统默认物理端点供本地耳机监听。
-    // 目标端点在 start 时决议（默认 eConsole 端点；与主路落点为
-    // 同一设备、或默认端点就是 AuraVAIO 时不启用，记 mirrorNote）。
-    // 镜像是尽力而为的监听路：其故障只停镜像自身（mirrorNote +
-    // status 键），绝不拖垮主路泵。COM 对象由 DestroyWasapi 与
-    // 主路同点回收；喂流规划见 VaioMirrorFeed.h。
-    bool mirrorRequested = false;          // start 配置要求开启
-    volatile LONG mirrorActive = 0;        // 镜像客户端已 Start 在喂
-    IMMDevice* pMirrorDevice = nullptr;
-    IAudioClient* pMirrorClient = nullptr;
-    IAudioRenderClient* pMirrorRender = nullptr;
-    WAVEFORMATEX* pMirrorMixFormat = nullptr;
-    std::string mirrorEndpointName;
-    UINT32 mirrorBufferFrames = 0;
-    UINT32 mirrorChannels = 2;
-    UINT32 mirrorSampleRate = 48000;
-    bool mirrorIsFloat = true;
-    ULONG mirrorBits = 32;
-    float* scratchMirror = nullptr;        // 声道重映射暂存（主路率）
-    float* scratchMirrorRs = nullptr;      // 采样率归一暂存（镜像率）
-    VaioMirrorFeed mirrorFeed;             // 喂流规划（泵线程独占）
-    int mirrorFailRounds = 0;              // 镜像连续失败轮（泵线程独占）
-    char mirrorNote[96] = {};              // 镜像侧状态（status 输出）
+    // 本地监听门（2026-11-23，user 裁定 B 案，取代 ASIO-2 的
+    // 第二路镜像渲染）：start 配置 monitor_mirror 决定。关时泵
+    // 照常处理与回传遥测，仅主路渲染以 SILENT 标志交还静音——
+    // 本地不出声；开（默认）为现行行为。旧镜像客户端/喂流规划
+    // 已整体删除，不再有第二路渲染。
+    bool monitorEnabled = true;            // start 配置：本地监听开/关
 
     // 声道协商与多声道重映射状态
     int32_t engineChannels = 2;   // 引擎当前实际运行声道数 (2, 4, 6, 8)
@@ -381,28 +362,6 @@ void DestroyEngine() {
 }
 
 void DestroyWasapi() {
-    // 监听镜像客户端先于主路回收（调用点都在泵线程 join 之后，
-    // 与主路同前提：不存在泵还在喂时拆对象）。
-    InterlockedExchange(&g_vaio.mirrorActive, 0);
-    if (g_vaio.pMirrorClient) {
-        g_vaio.pMirrorClient->Stop();
-    }
-    if (g_vaio.pMirrorRender) {
-        g_vaio.pMirrorRender->Release();
-        g_vaio.pMirrorRender = nullptr;
-    }
-    if (g_vaio.pMirrorClient) {
-        g_vaio.pMirrorClient->Release();
-        g_vaio.pMirrorClient = nullptr;
-    }
-    if (g_vaio.pMirrorMixFormat) {
-        CoTaskMemFree(g_vaio.pMirrorMixFormat);
-        g_vaio.pMirrorMixFormat = nullptr;
-    }
-    if (g_vaio.pMirrorDevice) {
-        g_vaio.pMirrorDevice->Release();
-        g_vaio.pMirrorDevice = nullptr;
-    }
     if (g_vaio.pAudioClient) {
         g_vaio.pAudioClient->Stop();
     }
@@ -485,14 +444,6 @@ void FreeScratchBuffers() {
     if (g_vaio.scratchRaw) {
         free(g_vaio.scratchRaw);
         g_vaio.scratchRaw = nullptr;
-    }
-    if (g_vaio.scratchMirror) {
-        free(g_vaio.scratchMirror);
-        g_vaio.scratchMirror = nullptr;
-    }
-    if (g_vaio.scratchMirrorRs) {
-        free(g_vaio.scratchMirrorRs);
-        g_vaio.scratchMirrorRs = nullptr;
     }
 }
 
@@ -709,64 +660,6 @@ void ApplyParamsString(const char* s) {
 }
 
 // RT 专用线程：零锁零分配音频泵
-// 监听镜像失败核算（ASIO-2 补全）：连续失败 400 轮判镜像端点
-// 失联——停镜像客户端、记 mirrorNote，主路不受影响（与主路端点
-// 死亡核算同阈值；镜像是尽力而为的监听路，不参与主路判死）。
-void MirrorFailTick() {
-    if (++g_vaio.mirrorFailRounds >= 400) {
-        if (g_vaio.pMirrorClient) g_vaio.pMirrorClient->Stop();
-        InterlockedExchange(&g_vaio.mirrorActive, 0);
-        snprintf(g_vaio.mirrorNote, sizeof(g_vaio.mirrorNote),
-                 "mirror-output-lost");
-    }
-}
-
-// 监听镜像喂流（ASIO-2 补全）：把本块已算出的处理后帧
-// （scratchOut，主路率/主路声道）分路写给镜像客户端。镜像时钟
-// 独立：帧数经 VaioMirrorFeed 按镜像率归一 + 缓冲钳制（不足丢
-// 弃计数）；声道/采样率各自归一（重映射 → 线性重采样，与主路
-// 同口径；块间分数由规划器的帧数携带吸收，本块源帧完整在手，
-// 块内重采样相位恒 0）。零分配：暂存均为 start 预分配。
-void FeedMirror(UINT32 inFrames, ULONG outRate) {
-    UINT32 pad = 0;
-    if (FAILED(g_vaio.pMirrorClient->GetCurrentPadding(&pad))) {
-        MirrorFailTick();
-        return;
-    }
-    const UINT32 avail = g_vaio.mirrorBufferFrames > pad
-                             ? g_vaio.mirrorBufferFrames - pad
-                             : 0;
-    const double ratio = outRate > 0
-                             ? (double)g_vaio.mirrorSampleRate / (double)outRate
-                             : 1.0;
-    const UINT32 want = g_vaio.mirrorFeed.Plan(inFrames, ratio, avail);
-    if (want == 0) return;
-    const float* src = g_vaio.scratchOut;
-    if ((int)g_vaio.mirrorChannels != (int)g_vaio.wasapiChannels) {
-        RemapInterleavedAudio(g_vaio.scratchOut, (int)g_vaio.wasapiChannels,
-                              g_vaio.scratchMirror, (int)g_vaio.mirrorChannels,
-                              (int)inFrames);
-        src = g_vaio.scratchMirror;
-    }
-    const float* feedSrc = src;
-    if (g_vaio.mirrorSampleRate != outRate) {
-        ResampleLinear(src, (int)inFrames, g_vaio.scratchMirrorRs,
-                       (int)want, (int)g_vaio.mirrorChannels, 0.0,
-                       1.0 / ratio);
-        feedSrc = g_vaio.scratchMirrorRs;
-    }
-    BYTE* pDst = nullptr;
-    const HRESULT hr = g_vaio.pMirrorRender->GetBuffer(want, &pDst);
-    if (SUCCEEDED(hr) && pDst) {
-        WriteFramesConverted(pDst, feedSrc,
-                             (int)(want * g_vaio.mirrorChannels),
-                             g_vaio.mirrorIsFloat, g_vaio.mirrorBits);
-        g_vaio.pMirrorRender->ReleaseBuffer(want, 0);
-        g_vaio.mirrorFailRounds = 0;
-    } else {
-        MirrorFailTick();
-    }
-}
 
 DWORD WINAPI VaioPumpThreadProc(LPVOID) {
     // 注册 MMCSS Pro Audio 优先级调度
@@ -871,18 +764,6 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                      "wasapi-render-start-failed: 0x%08lX", hrStart);
         } else {
             renderStarted = true;
-        }
-    }
-
-    // 监听镜像启动（ASIO-2 补全）：失败只记 mirrorNote、镜像不
-    // 激活，主路照常（镜像客户端对象留待 DestroyWasapi 回收）。
-    if (g_vaio.pMirrorClient && g_vaio.pMirrorRender) {
-        const HRESULT hrMirror = g_vaio.pMirrorClient->Start();
-        if (SUCCEEDED(hrMirror)) {
-            InterlockedExchange(&g_vaio.mirrorActive, 1);
-        } else {
-            snprintf(g_vaio.mirrorNote, sizeof(g_vaio.mirrorNote),
-                     "mirror-start-failed: 0x%08lX", hrMirror);
         }
     }
 
@@ -1347,20 +1228,21 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             // 写侧与读侧对称（§1.2）：物理端点混音格式为 PCM 时
             // 必须转换，直接灌 float 字节是同一类格式误读。
             const int outSamples = (int)(framesToProcess * wasapiChannels);
-            WriteFramesConverted(pDst, g_vaio.scratchOut, outSamples,
-                                 outIsFloat, outBits);
-            g_vaio.pRenderClient->ReleaseBuffer(framesToProcess, 0);
+            if (g_vaio.monitorEnabled) {
+                WriteFramesConverted(pDst, g_vaio.scratchOut, outSamples,
+                                     outIsFloat, outBits);
+                g_vaio.pRenderClient->ReleaseBuffer(framesToProcess, 0);
+            } else {
+                // 本地监听关：以 SILENT 交还，引擎处理与遥测照常，
+                // 仅本地端点不出声（2026-11-23 B 案）。
+                g_vaio.pRenderClient->ReleaseBuffer(
+                    framesToProcess, AUDCLNT_BUFFERFLAGS_SILENT);
+            }
             // 帧数只计成功写出（细审 R-B 8）：旧实现在
             // GetBuffer 失败轮照常累加，frames 增长会掩盖
             // 端点半死状态、削弱 status 取证。
             g_vaio.totalPumpedFrames += framesToProcess;
             renderFailRounds = 0; // 健康轮：死亡核算清零
-            // 监听镜像分路（ASIO-2 补全）：同一块处理后帧喂镜像
-            // 客户端；镜像故障内部自理（MirrorFailTick），不回
-            // 灌主路死亡核算。
-            if (InterlockedCompareExchange(&g_vaio.mirrorActive, 0, 0) == 1) {
-                FeedMirror(framesToProcess, outRate);
-            }
         } else {
             // GetBuffer 失败计入死亡核算：端点半死时 padding
             // 可读而写路全灭，正是要判出的形态（细审 R-B 1）。
@@ -1541,14 +1423,8 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     // 复位状态
     memset(&g_vaio.tc, 0, sizeof(g_vaio.tc));
     g_vaio.userBypass = 0;
-    // 监听镜像状态复位（ASIO-2 补全）：规划器/计数/注记每 start
-    // 从零开始；COM 对象由上一会话的 DestroyWasapi 保证已空。
-    g_vaio.mirrorRequested = (monitor_mirror != 0);
-    InterlockedExchange(&g_vaio.mirrorActive, 0);
-    g_vaio.mirrorFeed = VaioMirrorFeed();
-    g_vaio.mirrorFailRounds = 0;
-    g_vaio.mirrorNote[0] = '\0';
-    g_vaio.mirrorEndpointName.clear();
+    // 本地监听门（2026-11-23 B 案）：start 配置即决议，无运行期状态。
+    g_vaio.monitorEnabled = (monitor_mirror != 0);
     g_vaio.totalPumpedFrames = 0;
     g_vaio.peakIn = 0.0;
     g_vaio.peakOut = 0.0;
@@ -1953,10 +1829,8 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.scratchProcOut = (float*)malloc(scratchBytes);
     g_vaio.scratchRing = (float*)malloc(scratchBytes);
     g_vaio.scratchRaw = (BYTE*)malloc(scratchBytes);
-    g_vaio.scratchMirror = (float*)malloc(scratchBytes);
-    g_vaio.scratchMirrorRs = (float*)malloc(scratchBytes);
     if (!g_vaio.scratchIn || !g_vaio.scratchOut || !g_vaio.scratchProcIn || !g_vaio.scratchProcOut ||
-        !g_vaio.scratchRing || !g_vaio.scratchRaw || !g_vaio.scratchMirror || !g_vaio.scratchMirrorRs) {
+        !g_vaio.scratchRing || !g_vaio.scratchRaw) {
         snprintf(g_vaio.note, sizeof(g_vaio.note), "malloc-scratch-failed");
         FreeScratchBuffers();
         UnmapAndCloseRing();
@@ -1971,8 +1845,6 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     memset(g_vaio.scratchProcOut, 0, scratchBytes);
     memset(g_vaio.scratchRing, 0, scratchBytes);
     memset(g_vaio.scratchRaw, 0, scratchBytes);
-    memset(g_vaio.scratchMirror, 0, scratchBytes);
-    memset(g_vaio.scratchMirrorRs, 0, scratchBytes);
     // 第三十九轮取证：逐声道峰值保持随 start 清零（单次起桥一轮观测）。
     for (int c = 0; c < 8; ++c) {
         g_vaio.fxChInPk[c] = 0;
@@ -1998,141 +1870,6 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     // 首次启动（镜像空）则没有这段。移到决议之后：声道先定型，
     // 镜像再应用；回放顺序与首启的差异面收敛到最窄。
     ReplayMirroredParams();
-
-    // 7.3 监听镜像客户端（ASIO-2 补全，可选、尽力而为）：目标 =
-    // 系统默认 eConsole 渲染端点。以下任一情形不启用（只记
-    // mirrorNote，主路照常启动）：无默认端点、默认端点与主路落点
-    // 是同一设备（镜像 = 重复播放）、默认端点是 AuraVAIO 自身
-    // （虚拟回环无监听意义）、激活/格式/初始化失败（诚实降级）。
-    if (g_vaio.mirrorRequested) {
-        LPWSTR primaryId = nullptr;
-        if (g_vaio.pOutDevice) g_vaio.pOutDevice->GetId(&primaryId);
-        IMMDevice* pMirrorDev = nullptr;
-        HRESULT hrM = g_vaio.pEnum->GetDefaultAudioEndpoint(
-            eRender, eConsole, &pMirrorDev);
-        bool mirrorOk = SUCCEEDED(hrM) && pMirrorDev != nullptr;
-        if (!mirrorOk) {
-            snprintf(g_vaio.mirrorNote, sizeof(g_vaio.mirrorNote),
-                     "mirror-no-default-endpoint: 0x%08lX", hrM);
-        }
-        std::string mirrorName;
-        if (mirrorOk) {
-            LPWSTR mirrorId = nullptr;
-            pMirrorDev->GetId(&mirrorId);
-            if (primaryId && mirrorId && wcscmp(primaryId, mirrorId) == 0) {
-                mirrorOk = false;
-                snprintf(g_vaio.mirrorNote, sizeof(g_vaio.mirrorNote),
-                         "mirror-target-is-primary");
-            }
-            if (mirrorId) CoTaskMemFree(mirrorId);
-        }
-        if (mirrorOk) {
-            IPropertyStore* pProp = nullptr;
-            if (SUCCEEDED(pMirrorDev->OpenPropertyStore(STGM_READ, &pProp)) && pProp) {
-                PROPVARIANT var;
-                PropVariantInit(&var);
-                if (SUCCEEDED(pProp->GetValue(PKEY_Device_FriendlyName, &var)) && var.pwszVal) {
-                    mirrorName = WideToUtf8(var.pwszVal);
-                }
-                PropVariantClear(&var);
-                pProp->Release();
-            }
-            if (ContainsCI(mirrorName, "AuraVAIO")) {
-                mirrorOk = false;
-                snprintf(g_vaio.mirrorNote, sizeof(g_vaio.mirrorNote),
-                         "mirror-target-is-virtual");
-            }
-        }
-        if (primaryId) CoTaskMemFree(primaryId);
-        if (mirrorOk) {
-            g_vaio.pMirrorDevice = pMirrorDev;
-            g_vaio.mirrorEndpointName = mirrorName;
-            hrM = pMirrorDev->Activate(__uuidof(IAudioClient), CLSCTX_ALL,
-                                       nullptr, (void**)&g_vaio.pMirrorClient);
-            if (FAILED(hrM) || !g_vaio.pMirrorClient) {
-                snprintf(g_vaio.mirrorNote, sizeof(g_vaio.mirrorNote),
-                         "mirror-activate-failed: 0x%08lX", hrM);
-                mirrorOk = false;
-            }
-        } else if (pMirrorDev) {
-            pMirrorDev->Release();
-            pMirrorDev = nullptr;
-        }
-        if (mirrorOk) {
-            hrM = g_vaio.pMirrorClient->GetMixFormat(&g_vaio.pMirrorMixFormat);
-            if (FAILED(hrM) || !g_vaio.pMirrorMixFormat) {
-                snprintf(g_vaio.mirrorNote, sizeof(g_vaio.mirrorNote),
-                         "mirror-mix-format-failed: 0x%08lX", hrM);
-                mirrorOk = false;
-            }
-        }
-        if (mirrorOk) {
-            g_vaio.mirrorSampleRate = g_vaio.pMirrorMixFormat->nSamplesPerSec > 0
-                                          ? g_vaio.pMirrorMixFormat->nSamplesPerSec
-                                          : 48000;
-            g_vaio.mirrorChannels = g_vaio.pMirrorMixFormat->nChannels > 0
-                                        ? g_vaio.pMirrorMixFormat->nChannels
-                                        : 2;
-            DWORD tag = 0;
-            WORD fmtBits = 0;
-            if (!ClassifyMixFormat(g_vaio.pMirrorMixFormat,
-                                   &g_vaio.mirrorIsFloat, &g_vaio.mirrorBits,
-                                   &tag, &fmtBits)) {
-                snprintf(g_vaio.mirrorNote, sizeof(g_vaio.mirrorNote),
-                         "mirror-mix-format-unsupported: tag=0x%04lX bits=%u",
-                         (unsigned long)tag, (unsigned)fmtBits);
-                mirrorOk = false;
-            }
-        }
-        if (mirrorOk) {
-            // 无事件回调：泵按主路节拍轮询 padding 喂流；40ms 缓冲
-            // 给双时钟漂移留截断前的吸收余量（规划器丢弃兜底）。
-            hrM = g_vaio.pMirrorClient->Initialize(
-                AUDCLNT_SHAREMODE_SHARED, 0, 400000, 0,
-                g_vaio.pMirrorMixFormat, nullptr);
-            if (FAILED(hrM)) {
-                snprintf(g_vaio.mirrorNote, sizeof(g_vaio.mirrorNote),
-                         "mirror-init-failed: 0x%08lX", hrM);
-                mirrorOk = false;
-            }
-        }
-        if (mirrorOk) {
-            hrM = g_vaio.pMirrorClient->GetBufferSize(&g_vaio.mirrorBufferFrames);
-            if (FAILED(hrM) || g_vaio.mirrorBufferFrames == 0) {
-                g_vaio.mirrorBufferFrames =
-                    (UINT32)(g_vaio.mirrorSampleRate * 0.04);
-            }
-            hrM = g_vaio.pMirrorClient->GetService(
-                __uuidof(IAudioRenderClient), (void**)&g_vaio.pMirrorRender);
-            if (FAILED(hrM) || !g_vaio.pMirrorRender) {
-                snprintf(g_vaio.mirrorNote, sizeof(g_vaio.mirrorNote),
-                         "mirror-render-client-failed: 0x%08lX", hrM);
-                mirrorOk = false;
-            }
-        }
-        if (!mirrorOk) {
-            // 降级清理：部分对象可能已建，逐个即时回收（避免 start
-            // 成功后残留半套镜像对象让泵误以为可用——泵只认
-            // mirrorActive，而它要到泵内 Start 成功才置位）。
-            if (g_vaio.pMirrorRender) {
-                g_vaio.pMirrorRender->Release();
-                g_vaio.pMirrorRender = nullptr;
-            }
-            if (g_vaio.pMirrorClient) {
-                g_vaio.pMirrorClient->Release();
-                g_vaio.pMirrorClient = nullptr;
-            }
-            if (g_vaio.pMirrorMixFormat) {
-                CoTaskMemFree(g_vaio.pMirrorMixFormat);
-                g_vaio.pMirrorMixFormat = nullptr;
-            }
-            if (g_vaio.pMirrorDevice) {
-                g_vaio.pMirrorDevice->Release();
-                g_vaio.pMirrorDevice = nullptr;
-            }
-            g_vaio.mirrorEndpointName.clear();
-        }
-    }
 
     // 8. 启动 RT 音频泵线程
     // P3：采样率已定稿，配置静音门控（AURADSP_GATE=0 时禁用）。
@@ -2324,24 +2061,12 @@ int vaio_status(char* out, int cap) {
         if (m < 0) return -1;
         total += m;
     }
-    // 监听镜像（ASIO-2 补全，恒输出）：mirror 是实际在喂状态
-    // （请求开启但目标不可用/启动失败时为 0，原因见 mirrorNote）；
-    // mirrorFrames/mirrorDrops 为喂流规划器的累计（未请求时恒 0）。
+    // 本地监听门（2026-11-23 B 案，恒输出）：1 = 本地出声中。
     {
-        char mirrorEpEsc[1024] = {0};
-        EscapeJsonA(g_vaio.mirrorEndpointName, mirrorEpEsc,
-                    sizeof(mirrorEpEsc));
-        char mirrorNoteEsc[384] = {0};
-        EscapeJsonA(g_vaio.mirrorNote, mirrorNoteEsc,
-                    sizeof(mirrorNoteEsc));
         const int m = _snprintf_s(
             out + total, (size_t)(cap - total), _TRUNCATE,
-            ",\"mirror\":%ld,\"mirrorFrames\":%llu,\"mirrorDrops\":%llu,"
-            "\"mirrorEndpoint\":\"%s\",\"mirrorNote\":\"%s\"",
-            InterlockedCompareExchange(&g_vaio.mirrorActive, 0, 0),
-            (unsigned long long)g_vaio.mirrorFeed.fed,
-            (unsigned long long)g_vaio.mirrorFeed.drops,
-            mirrorEpEsc, mirrorNoteEsc);
+            ",\"monitor\":%d",
+            g_vaio.monitorEnabled ? 1 : 0);
         if (m < 0) return -1;
         total += m;
     }
@@ -2588,7 +2313,10 @@ static int AbStartAdapt(const char* engine_dll, const char* params_json,
                         const char* config_json) {
     char ep[512];
     abcfg::StrInto(config_json, "endpoint", ep, (int)sizeof(ep), "");
-    // 监听镜像开关（ASIO-2 补全）：{"mirror":1} 开启第二路渲染。
+    // 本地监听门（2026-11-23 B 案）：{"mirror":1} = 本地出声
+    // （键名沿用协议历史）；App 侧仅在开启时写出该键，缺键即
+    // 关，与 App config 默认 true 的出厂行为不冲突（默认流程
+    // 必然带键）。
     const long mirror = abcfg::Long(config_json, "mirror", 0);
     return vaio_start(engine_dll, params_json, ep, mirror != 0 ? 1 : 0);
 }

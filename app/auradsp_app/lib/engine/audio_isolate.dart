@@ -175,7 +175,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   bool vaioRetryPending = false;
   int vaioRetryAt = 0;
   String vaioRetryEndpoint = '';
-  bool vaioRetryMirror = false;
+  bool vaioRetryMirror = true; // 本地监听门默认开（2026-11-23 B 案）
   // 桥模式共用诊断/节流状态（P1：同一时刻只有一个后端出声，不再按后端各一份）。
   bool bridgeVizNullLogged = false;
   bool bridgeNoCbLogged = false;
@@ -904,7 +904,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     });
   }
 
-  void startVaioBridge({String outputEndpointSubstr = '', bool monitorMirror = false}) {
+  void startVaioBridge({String outputEndpointSubstr = '', bool monitorMirror = true}) {
     windowsCapture.detach(restoreSaved: false);
     if (bridgeManager.isActive('vaio')) {
       // 同 startVbBridge：记账在跑但桥已死时先回收再真启动。

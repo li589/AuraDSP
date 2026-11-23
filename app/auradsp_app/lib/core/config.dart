@@ -66,7 +66,7 @@ class AppConfig {
   // 的 apoEndpointChannels 在加载时忽略、下次保存时消失；端点
   // FX 里 r41 写入的覆写值在下次附加时由 install --props clear
   // 清除。引擎侧参数块 v3 覆写表保留休眠。
-  bool monitorMirroring; // 虚拟端点本地耳机监听镜像
+  bool monitorMirroring; // VAIO 本地监听门（2026-11-23 B 案：关=本地静音，默认开）
 
   // ASIO 桥选择项（audioMode=='asio' 时生效；见 AsioBridge.h 契约）
   String asioDriver; // detect 的 name（UTF-8 显示名）；''=未选择
@@ -134,7 +134,7 @@ class AppConfig {
     this.pipelineInputEnabled = true,
     this.pipelineOutputEnabled = true,
     this.apoTargetEndpoint = '',
-    this.monitorMirroring = false,
+    this.monitorMirroring = true,
     this.asioDriver = '',
     this.asioBufSize = 0,
     this.asioOutPair = 0,
