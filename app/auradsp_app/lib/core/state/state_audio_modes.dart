@@ -156,6 +156,7 @@ extension AudioModesState on AppModel {
           'on': isVaio,
           'outputEndpoint': config.vaioOutputEndpoint,
           'monitorMirror': config.monitorMirroring,
+          'outputVaio': vaioBridgeOutputVaio,
         });
         // 崩溃断路器联动：手动进入 VAIO = 知情接管，解除跳过
         // 并重新布防；离开 VAIO（桥干净停）= 解除布防。
@@ -426,6 +427,15 @@ extension AudioModesState on AppModel {
   bool get _asioVirtualMuted =>
       config.asioFlavor == AudioModes.asioVirtual && _pipelineIoSuppressed;
 
+  /// 2×2 桥格输出轴（r65 S4）：管线范式内输入/输出双 VAIO
+  /// 时桥走 VAIO 输出（处理后环交付虚拟麦克风）；其余桥格
+  /// （含 VAIO 专属范式）恒物理输出。vaiomode/vaiorestart
+  /// 载荷的 outputVaio 唯一出处。
+  bool get vaioBridgeOutputVaio =>
+      config.modeCategory == AudioModes.categoryPipeline &&
+      config.pipelineInput == AudioModes.inputVaio &&
+      config.pipelineOutput == AudioModes.outputVaio;
+
   /// 当前管线链路（仅管线/ASIO 类别内有意义；其余类别返回
   /// null）。ASIO 范式恒 asio 链（子形态差异在管线对与桥的
   /// 驱动参数，不在链种类）。
@@ -528,6 +538,10 @@ extension AudioModesState on AppModel {
     return _idsConflict(capId, _deviceIdOf(outputDevice));
   }
 
+  /// _captureCommand 最近一次拒绝起链的原因（'feedback' /
+  /// 'vaio-missing'）：调用方据此选提示文案，成功时清零。
+  String? _captureBlockReason;
+
   /// 构造捕获链命令（含反馈守卫）：回录端点与输出端点是
   /// 同一设备时，我们的渲染会被自己抓回形成自激——拒绝
   /// 起链并返回 null（调用方负责提示/停链）。
@@ -536,13 +550,26 @@ extension AudioModesState on AppModel {
     final capId = (capItem != null && capItem.id.isNotEmpty)
         ? capItem.id
         : config.pipelineInputDevice;
-    final outId = _deviceIdOf(config.pipelineOutputDevice);
+    // 输出端点（2×2 S4）：输出轴 VAIO 时主输出 = VAIO 渲染
+    // 端点本身（WASAPI 输出选择器按裁定排除 VAIO、其值转作
+    // 镜像目标）；端点未扫到（驱动未装/未枚举）不起链。
+    final vaioEp0 = vaioRenderEndpoint;
+    final bool outIsVaio = config.pipelineOutput == AudioModes.outputVaio;
+    if (outIsVaio && (vaioEp0 == null || vaioEp0.id.isEmpty)) {
+      _captureBlockReason = 'vaio-missing';
+      dbgLog('pipeline.capture: vaio output endpoint not found');
+      return null;
+    }
+    final outId =
+        outIsVaio ? vaioEp0!.id : _deviceIdOf(config.pipelineOutputDevice);
     if (_idsConflict(capId, outId)) {
+      _captureBlockReason = 'feedback';
       dbgLog(capId.isEmpty && outId.isEmpty
           ? 'pipeline.capture: feedback pair blocked (both default)'
           : 'pipeline.capture: feedback pair blocked (cap==out)');
       return null;
     }
+    _captureBlockReason = null;
     // 镜像（2×2 S3）：主输出恰为 VAIO 渲染端点且监听开时，
     // 同一处理后音频镜像渲染到 WASAPI 选择器设备（裁定 1：
     // 目标 = vaioOutputEndpoint 的现行选择，物理端点列表解析
@@ -624,6 +651,7 @@ extension AudioModesState on AppModel {
         'on': true,
         'outputEndpoint': config.vaioOutputEndpoint,
         'monitorMirror': config.monitorMirroring,
+        'outputVaio': vaioBridgeOutputVaio,
       });
       _armVaioGuard();
     } else {
@@ -705,7 +733,10 @@ extension AudioModesState on AppModel {
           _toIso?.send({'cmd': 'capturemode', 'on': false});
           captureActive = false; // 与非捕获分支同口径本地清位（细审 R-A L3）
         }
-        postNotice('输入与输出为同一端点，回录会自激啸叫，已阻止启动捕获链',
+        postNotice(
+            _captureBlockReason == 'vaio-missing'
+                ? '未检测到 AuraVAIO 虚拟声卡端点，无法以 VAIO 输出，请确认驱动已安装'
+                : '输入与输出为同一端点，回录会自激啸叫，已阻止启动捕获链',
             level: NoticeLevel.warning);
         return;
       }
@@ -735,6 +766,7 @@ extension AudioModesState on AppModel {
         'on': true,
         'outputEndpoint': config.vaioOutputEndpoint,
         'monitorMirror': config.monitorMirroring,
+        'outputVaio': vaioBridgeOutputVaio,
       });
       _armVaioGuard();
     } else if (chain == PipelineChain.asio &&
@@ -768,7 +800,10 @@ extension AudioModesState on AppModel {
     final payload = _captureCommand('capturerestart');
     if (payload == null) {
       _toIso?.send({'cmd': 'capturemode', 'on': false});
-      postNotice('输入与输出为同一端点，回录会自激啸叫，已停止捕获链',
+      postNotice(
+          _captureBlockReason == 'vaio-missing'
+              ? '未检测到 AuraVAIO 虚拟声卡端点，无法以 VAIO 输出，请确认驱动已安装'
+              : '输入与输出为同一端点，回录会自激啸叫，已停止捕获链',
           level: NoticeLevel.warning);
       return;
     }
@@ -1668,12 +1703,14 @@ extension AudioModesState on AppModel {
   }
 
   void setMonitorMirroring(bool enabled) {
-    // 本地监听门（2026-11-23，user 裁定 B 案，取代 ASIO-2 的
-    // 第二路镜像渲染）：开 = VAIO 桥主路渲染本地出声（默认）；
-    // 关 = 主路 SILENT 交还、本地静音，处理与遥测照常。值经
-    // vaiomode/vaiorestart 载荷下发 isolate → 桥 config 的
-    // mirror 键消费；桥在跑则热重启生效（与
-    // setVaioOutputEndpoint 同口径）。
+    // 本地监听（2026-11-23 B 案；r65 2×2 起语义收敛为「VAIO
+    // 输出时的 WASAPI 镜像开关」）：开 = VAIO 输出两格并行
+    // 镜像渲染到所选物理设备（默认）；关 = 不建镜像、本地
+    // 无声，处理与交付照常。WASAPI 输出时开关隐藏且不生效
+    // （值保留）。值经 vaiomode/vaiorestart 载荷下发 isolate
+    // → 桥 config 的 mirror 键消费；桥在跑则热重启生效（与
+    // setVaioOutputEndpoint 同口径）。管线 WASAPI 进 + VAIO
+    // 出格的镜像由 _captureCommand 的 mirrorEndpoint 消费。
     if (config.monitorMirroring == enabled) return;
     config.monitorMirroring = enabled;
     persistRoutingChange();
@@ -1682,6 +1719,7 @@ extension AudioModesState on AppModel {
         'cmd': 'vaiorestart',
         'outputEndpoint': config.vaioOutputEndpoint,
         'monitorMirror': enabled,
+        'outputVaio': vaioBridgeOutputVaio,
       });
     }
     _notifyUi();

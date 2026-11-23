@@ -28,10 +28,11 @@ void main() {
     expect(chain('wasapi', 'asio_client'), 'asio');
   });
 
-  test('WASAPI in + VAIO out falls back to the vaio bridge', () {
-    // 桥不接受外源注入：捕获源无法喂 VAIO 桥，合成回桥链
-    // （播放器须改投 VAIO 端点，面板指引口径）。
-    expect(chain('wasapi', 'vaio'), 'vaio');
+  test('WASAPI in + VAIO out = capture chain rendering into VAIO', () {
+    // 2×2 口径（r65 S4）：输入轴是 WASAPI 就走本地捕获链——
+    // 处理后渲染进 VAIO 端点、驱动回环交付虚拟麦克风；
+    // 此前回落桥链与输入轴语义不符（桥的输入实为 VAIO 端点）。
+    expect(chain('wasapi', 'vaio'), 'capture');
   });
 
   test('unknown/empty values fall back to the vaio bridge', () {
