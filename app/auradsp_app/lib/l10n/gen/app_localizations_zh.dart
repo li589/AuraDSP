@@ -1383,7 +1383,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get virtualSinkNotice =>
-      'VAIO 模式下处理后的声音从所选物理输出播放。关闭本地监听后物理输出静音，音频处理照常进行；普通管线把 VAIO 作输出时，本机同样听不到，在 OBS 或录音软件中选择 AuraVAIO 麦克风端点即可录制处理后音频。';
+      '处理后的音频渲染进 AuraVAIO 扬声器端点，由虚拟麦克风端点交付录制（在 OBS 或录音软件中选择 AuraVAIO 麦克风）。开启本地监听时，同一音频还会镜像到下方所选的物理设备播放；关闭则本机无声、交付照常。';
+
+  @override
+  String get virtualSinkNoticeVaioIn =>
+      '播放到 AuraVAIO 扬声器端点的音频经处理后直接送 VAIO 虚拟麦克风（在 OBS 或录音软件中选择 AuraVAIO 麦克风）。开启本地监听时，同一音频还会镜像到下方所选的物理设备播放；关闭则本机无声、交付照常。';
+
+  @override
+  String get ioMirrorTarget => '监听镜像设备';
 
   @override
   String get monitorMirroring => '本地监听';

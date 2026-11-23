@@ -1406,7 +1406,14 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get virtualSinkNotice =>
-      'VAIO モードでは処理後の音声が選択した物理出力から再生されます。ローカルモニターを切ると物理出力は無音になりますが、処理は継続します。VAIO をパイプライン出力にした場合も本機では聞こえません。OBS や録音ソフトで AuraVAIO マイクエンドポイントを選ぶと処理後の音声を録音できます。';
+      '処理後の音声は AuraVAIO スピーカーエンドポイントへレンダリングされ、仮想マイクから配信されます（OBS や録音ソフトで AuraVAIO マイクを選択してください）。ローカルモニターをオンにすると、同じ音声が下で選んだ物理デバイスからも再生されます。オフでは本機は無音になりますが、配信は継続します。';
+
+  @override
+  String get virtualSinkNoticeVaioIn =>
+      'AuraVAIO スピーカーエンドポイントへ再生された音声は処理され、そのまま VAIO 仮想マイクへ送られます（OBS や録音ソフトで AuraVAIO マイクを選択してください）。ローカルモニターをオンにすると、同じ音声が下で選んだ物理デバイスからも再生されます。オフでは本機は無音になりますが、配信は継続します。';
+
+  @override
+  String get ioMirrorTarget => 'モニターミラー先';
 
   @override
   String get monitorMirroring => 'ローカルモニター';
