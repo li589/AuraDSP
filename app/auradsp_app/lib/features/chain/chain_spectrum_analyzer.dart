@@ -679,34 +679,42 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 顶部标题与控制工具条
+          // 顶部标题与控制工具条（2026-11-23 user 裁定）：标题
+          // 改「最终频响」并走 l10n；左组 Expanded 占满，两个
+          // 工具按钮按构造贴卡片右缘（旧 Flexible+Spacer 拼法
+          // 在宽屏下按钮视觉漂移）。
           Row(
             children: [
-              Container(
-                width: 3.5,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: p.accent,
-                  borderRadius: BorderRadius.circular(2),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 3.5,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: p.accent,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        l.chainFinalResponseTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: p.text,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AuraSpace.sm),
+                    // 频响极值胶囊（窄屏下沉，见下方 compact 分支）
+                    if (!compact) rangeChip,
+                  ],
                 ),
               ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  '处理链频响测量',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: p.text,
-                  ),
-                ),
-              ),
-              const SizedBox(width: AuraSpace.sm),
-              // 频响极值胶囊（窄屏下沉，见下方 compact 分支）
-              if (!compact) rangeChip,
-              const Spacer(),
 
               // 曲线/折线模式切换按钮
               IconButton(

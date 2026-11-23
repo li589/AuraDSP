@@ -103,7 +103,7 @@ class ChainPage extends StatelessWidget {
       builder: (context, _) => PageScaffold(
         title: l10nOf(context).chainTitle,
         children: [
-          // 1. 卡片一：「处理链频响测量」（EqualizerAPO 风格全流程复合频响测量）
+          // 1. 卡片一：「最终频响」（EqualizerAPO 风格全流程复合频响测量）
           ChainSpectrumAnalyzer(model: model),
 
           // 2. 卡片二：「处理顺序」（拖拽自动应用、智能重置、全 19 级电平、内嵌科幻流全景）

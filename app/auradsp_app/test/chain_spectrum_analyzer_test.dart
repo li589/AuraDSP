@@ -147,7 +147,7 @@ void main() {
       await tester.pumpWidget(_wrap(ChainSpectrumAnalyzer(model: model)));
       await tester.pumpAndSettle();
 
-      expect(find.text('处理链频响测量'), findsOneWidget);
+      expect(find.text('最终频响'), findsOneWidget);
       expect(find.text('全部'), findsOneWidget);
       expect(find.text('FL'), findsOneWidget);
       expect(find.text('FR'), findsOneWidget);
@@ -160,6 +160,29 @@ void main() {
       await tester.tap(find.byIcon(Icons.show_chart_rounded));
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.timeline_rounded), findsOneWidget);
+    });
+
+    testWidgets('最终频响标题行：模式/刷新按钮贴卡片右缘', (tester) async {
+      tester.view.physicalSize = const Size(1600, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final model = AppModel(testing: true);
+      await tester.pumpWidget(_wrap(ChainSpectrumAnalyzer(model: model)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('最终频响'), findsOneWidget);
+      final cardRight =
+          tester.getRect(find.byType(ChainSpectrumAnalyzer)).right;
+      final buttons = find.byType(IconButton);
+      expect(buttons, findsNWidgets(2));
+      // 末位按钮（刷新）右缘距卡片右缘恰为卡片内边距（12）。
+      final refreshRight = tester.getRect(buttons.last).right;
+      expect((cardRight - refreshRight - 12).abs(), lessThan(2.0));
+      // 模式切换按钮在刷新按钮左侧。
+      final toggleRight = tester.getRect(buttons.first).right;
+      expect(toggleRight, lessThanOrEqualTo(refreshRight));
     });
 
     test('多声道根据 effectiveChannelCount 动态展示 FL/FR/C/LFE/SL/SR 等', () {
