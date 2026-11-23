@@ -499,8 +499,26 @@ abstract class AppLocalizations {
   /// No description provided for @setVaioUnknown.
   ///
   /// In zh, this message translates to:
-  /// **'AuraVAIO 驱动状态未检测'**
+  /// **'未检测'**
   String get setVaioUnknown;
+
+  /// No description provided for @vaioStatusNotInstalled.
+  ///
+  /// In zh, this message translates to:
+  /// **'未安装'**
+  String get vaioStatusNotInstalled;
+
+  /// No description provided for @vaioStatusLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载失败'**
+  String get vaioStatusLoadFailed;
+
+  /// No description provided for @vaioStatusReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'{track} 驱动已就绪'**
+  String vaioStatusReady(String track);
 
   /// No description provided for @setInstallDriverUac.
   ///
@@ -1822,6 +1840,12 @@ abstract class AppLocalizations {
   /// **'重新测算全链路频响与端到端延迟'**
   String get chainFreqRefreshTooltip;
 
+  /// No description provided for @chainFinalResponseTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'最终频响'**
+  String get chainFinalResponseTitle;
+
   /// No description provided for @chainLatencyMeasuredMsg.
   ///
   /// In zh, this message translates to:
@@ -2503,7 +2527,7 @@ abstract class AppLocalizations {
   /// No description provided for @asioDriverRegistered.
   ///
   /// In zh, this message translates to:
-  /// **'已在系统注册'**
+  /// **'已注册'**
   String get asioDriverRegistered;
 
   /// No description provided for @asioDriverNotRegistered.
@@ -2629,13 +2653,13 @@ abstract class AppLocalizations {
   /// No description provided for @virtualSinkNotice.
   ///
   /// In zh, this message translates to:
-  /// **'AuraVAIO 是虚拟输出，本机听不到；在 OBS 或录音软件中选择 AuraVAIO 即可监听。开启监听镜像可把处理后音频分路一份到默认耳机/扬声器。'**
+  /// **'VAIO 模式下处理后的声音从所选物理输出播放。关闭本地监听后物理输出静音，音频处理照常进行；普通管线把 VAIO 作输出时，本机同样听不到，在 OBS 或录音软件中选择 AuraVAIO 麦克风端点即可录制处理后音频。'**
   String get virtualSinkNotice;
 
   /// No description provided for @monitorMirroring.
   ///
   /// In zh, this message translates to:
-  /// **'本地耳机监听镜像'**
+  /// **'本地监听'**
   String get monitorMirroring;
 
   /// No description provided for @audioDevice.
@@ -3255,6 +3279,36 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'可视化设置'**
   String get visualizerDrawerTitle;
+
+  /// No description provided for @visualizerScopeGlobal.
+  ///
+  /// In zh, this message translates to:
+  /// **'全局设置'**
+  String get visualizerScopeGlobal;
+
+  /// No description provided for @visualizerScopePreset.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前预设'**
+  String get visualizerScopePreset;
+
+  /// No description provided for @visualizerScopePresetInherit.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前方案沿用全局设置，在此调整后将单独记住。'**
+  String get visualizerScopePresetInherit;
+
+  /// No description provided for @visualizerScopePresetActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前方案使用单独设置，与全局互不影响。'**
+  String get visualizerScopePresetActive;
+
+  /// No description provided for @visualizerScopeFollowGlobal.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复跟随全局'**
+  String get visualizerScopeFollowGlobal;
 
   /// No description provided for @visualizerDrawerCloseTip.
   ///

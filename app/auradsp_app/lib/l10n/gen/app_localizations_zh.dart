@@ -229,7 +229,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setVaioStartAnyway => '仍然启动';
 
   @override
-  String get setVaioUnknown => 'AuraVAIO 驱动状态未检测';
+  String get setVaioUnknown => '未检测';
+
+  @override
+  String get vaioStatusNotInstalled => '未安装';
+
+  @override
+  String get vaioStatusLoadFailed => '加载失败';
+
+  @override
+  String vaioStatusReady(String track) {
+    return '$track 驱动已就绪';
+  }
 
   @override
   String get setInstallDriverUac => 'UAC提权安装驱动';
@@ -948,6 +959,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainFreqRefreshTooltip => '重新测算全链路频响与端到端延迟';
 
   @override
+  String get chainFinalResponseTitle => '最终频响';
+
+  @override
   String chainLatencyMeasuredMsg(String ms) {
     return 'DSP 链延迟已更新为 $ms ms';
   }
@@ -1305,7 +1319,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get asioDriverStatus => '驱动状态';
 
   @override
-  String get asioDriverRegistered => '已在系统注册';
+  String get asioDriverRegistered => '已注册';
 
   @override
   String get asioDriverNotRegistered => '未注册';
@@ -1369,10 +1383,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get virtualSinkNotice =>
-      'AuraVAIO 是虚拟输出，本机听不到；在 OBS 或录音软件中选择 AuraVAIO 即可监听。开启监听镜像可把处理后音频分路一份到默认耳机/扬声器。';
+      'VAIO 模式下处理后的声音从所选物理输出播放。关闭本地监听后物理输出静音，音频处理照常进行；普通管线把 VAIO 作输出时，本机同样听不到，在 OBS 或录音软件中选择 AuraVAIO 麦克风端点即可录制处理后音频。';
 
   @override
-  String get monitorMirroring => '本地耳机监听镜像';
+  String get monitorMirroring => '本地监听';
 
   @override
   String get audioDevice => '设备';
@@ -1698,6 +1712,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get visualizerDrawerTitle => '可视化设置';
+
+  @override
+  String get visualizerScopeGlobal => '全局设置';
+
+  @override
+  String get visualizerScopePreset => '当前预设';
+
+  @override
+  String get visualizerScopePresetInherit => '当前方案沿用全局设置，在此调整后将单独记住。';
+
+  @override
+  String get visualizerScopePresetActive => '当前方案使用单独设置，与全局互不影响。';
+
+  @override
+  String get visualizerScopeFollowGlobal => '恢复跟随全局';
 
   @override
   String get visualizerDrawerCloseTip => '关闭设置';

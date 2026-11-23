@@ -239,7 +239,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setVaioStartAnyway => 'Start anyway';
 
   @override
-  String get setVaioUnknown => 'AuraVAIO driver status not checked yet';
+  String get setVaioUnknown => 'Not detected';
+
+  @override
+  String get vaioStatusNotInstalled => 'Not installed';
+
+  @override
+  String get vaioStatusLoadFailed => 'Load failed';
+
+  @override
+  String vaioStatusReady(String track) {
+    return '$track driver ready';
+  }
 
   @override
   String get setInstallDriverUac => 'Install driver (UAC)';
@@ -1037,6 +1048,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Re-measure full-chain frequency response and end-to-end latency';
 
   @override
+  String get chainFinalResponseTitle => 'Final Response';
+
+  @override
   String chainLatencyMeasuredMsg(String ms) {
     return 'DSP-chain latency updated to $ms ms';
   }
@@ -1405,7 +1419,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get asioDriverStatus => 'Driver Status';
 
   @override
-  String get asioDriverRegistered => 'Registered in System';
+  String get asioDriverRegistered => 'Registered';
 
   @override
   String get asioDriverNotRegistered => 'Not Registered';
@@ -1470,10 +1484,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get virtualSinkNotice =>
-      'AuraVAIO is a virtual output — silent locally. Select AuraVAIO in OBS or a recording app to monitor it, or enable monitor mirroring to split the processed audio to your default headphones/speakers.';
+      'In VAIO mode the processed audio plays through the selected physical output. Turning local monitoring off silences the physical output while processing continues. When VAIO is used as a pipeline output the machine stays silent too; record the processed audio by selecting the AuraVAIO microphone endpoint in OBS or a recorder.';
 
   @override
-  String get monitorMirroring => 'Headphone Monitor Mirroring';
+  String get monitorMirroring => 'Local monitoring';
 
   @override
   String get audioDevice => 'Device';
@@ -1811,6 +1825,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get visualizerDrawerTitle => 'Visualizer Settings';
+
+  @override
+  String get visualizerScopeGlobal => 'Global';
+
+  @override
+  String get visualizerScopePreset => 'Current preset';
+
+  @override
+  String get visualizerScopePresetInherit =>
+      'This style currently follows the global settings; edits here will be remembered for it separately.';
+
+  @override
+  String get visualizerScopePresetActive =>
+      'This style uses its own settings, independent of the global ones.';
+
+  @override
+  String get visualizerScopeFollowGlobal => 'Follow global again';
 
   @override
   String get visualizerDrawerCloseTip => 'Close settings';

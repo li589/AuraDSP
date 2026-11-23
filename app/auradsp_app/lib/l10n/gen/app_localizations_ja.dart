@@ -232,7 +232,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setVaioStartAnyway => 'それでも起動';
 
   @override
-  String get setVaioUnknown => 'AuraVAIO ドライバーの状態は未検出です';
+  String get setVaioUnknown => '未検出';
+
+  @override
+  String get vaioStatusNotInstalled => '未インストール';
+
+  @override
+  String get vaioStatusLoadFailed => '読み込み失敗';
+
+  @override
+  String vaioStatusReady(String track) {
+    return '$track ドライバーの準備完了';
+  }
 
   @override
   String get setInstallDriverUac => 'ドライバーをインストール（UAC）';
@@ -966,6 +977,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chainFreqRefreshTooltip => '全チェーンの周波数応答と端到端遅延を再測定';
 
   @override
+  String get chainFinalResponseTitle => '最終周波数応答';
+
+  @override
   String chainLatencyMeasuredMsg(String ms) {
     return 'DSPチェーン遅延を $ms ms に更新しました';
   }
@@ -1328,7 +1342,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get asioDriverStatus => 'ドライバー状態';
 
   @override
-  String get asioDriverRegistered => 'システムに登録済み';
+  String get asioDriverRegistered => '登録済み';
 
   @override
   String get asioDriverNotRegistered => '未登録';
@@ -1392,10 +1406,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get virtualSinkNotice =>
-      'AuraVAIO は仮想出力で、本機では聞こえません。OBS や録音アプリで AuraVAIO を選ぶとモニターできます。モニターミラーリングを有効にすると、処理後の音声が既定のヘッドホン/スピーカーにも分岐します。';
+      'VAIO モードでは処理後の音声が選択した物理出力から再生されます。ローカルモニターを切ると物理出力は無音になりますが、処理は継続します。VAIO をパイプライン出力にした場合も本機では聞こえません。OBS や録音ソフトで AuraVAIO マイクエンドポイントを選ぶと処理後の音声を録音できます。';
 
   @override
-  String get monitorMirroring => 'ヘッドホンモニターミラーリング';
+  String get monitorMirroring => 'ローカルモニター';
 
   @override
   String get audioDevice => 'デバイス';
@@ -1725,6 +1739,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get visualizerDrawerTitle => 'ビジュアライザー設定';
+
+  @override
+  String get visualizerScopeGlobal => '全体設定';
+
+  @override
+  String get visualizerScopePreset => '現在のプリセット';
+
+  @override
+  String get visualizerScopePresetInherit =>
+      'このスタイルは全体設定に従っています。ここで調整すると個別に記憶されます。';
+
+  @override
+  String get visualizerScopePresetActive => 'このスタイルは個別設定を使用しています（全体設定とは独立）。';
+
+  @override
+  String get visualizerScopeFollowGlobal => '全体設定に戻す';
 
   @override
   String get visualizerDrawerCloseTip => '設定を閉じる';
