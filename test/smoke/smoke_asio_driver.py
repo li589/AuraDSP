@@ -611,9 +611,16 @@ else:
         check('peakInCh discriminates ch4-only signal',
               pin[4] > 0.03 and others_in < 0.005,
               f'pin4={pin[4]:.4f} others_max={others_in:.4f}')
-        others_out = max(pout[c] for c in range(6) if c != 4)
-        check('peakOutCh[4] dominates (pre-fold per-channel)',
-              pout[4] > 0.01 and pout[4] > 4.0 * max(others_out, 1e-6),
+        # 输出侧不断言「独大」：冒烟无 App 在场，引擎声道模式
+        # 为编译缺省 stereo——离散声道按 channel_map 折叠口径
+        # 折入驻留声道（实测 SL 0.05 折入 L 得 0.0354 = 0.05×
+        # 0.7071），输出分布由引擎矩阵决定、与遥测无关。输出
+        # 侧只钉逐声道性本身：被喂声道在场、六声道互不相同
+        # （全等 = 广播拷贝的失败形态）、且有声道保持静默。
+        spread_out = max(pout[:6]) - min(pout[:6])
+        check('peakOutCh per-channel (not a broadcast copy)',
+              pout[4] > 0.01 and spread_out > 0.005
+              and min(pout[:6]) < 0.005,
               'pout=[' + ' '.join(f'{v:.4f}' for v in pout[:6]) + ']')
 
 out_l6 = (ctypes.c_float * 256)()
