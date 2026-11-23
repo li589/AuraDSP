@@ -538,10 +538,6 @@ extension AudioModesState on AppModel {
     return _idsConflict(capId, _deviceIdOf(outputDevice));
   }
 
-  /// _captureCommand 最近一次拒绝起链的原因（'feedback' /
-  /// 'vaio-missing'）：调用方据此选提示文案，成功时清零。
-  String? _captureBlockReason;
-
   /// 构造捕获链命令（含反馈守卫）：回录端点与输出端点是
   /// 同一设备时，我们的渲染会被自己抓回形成自激——拒绝
   /// 起链并返回 null（调用方负责提示/停链）。
@@ -556,20 +552,20 @@ extension AudioModesState on AppModel {
     final vaioEp0 = vaioRenderEndpoint;
     final bool outIsVaio = config.pipelineOutput == AudioModes.outputVaio;
     if (outIsVaio && (vaioEp0 == null || vaioEp0.id.isEmpty)) {
-      _captureBlockReason = 'vaio-missing';
+      captureBlockReason = 'vaio-missing';
       dbgLog('pipeline.capture: vaio output endpoint not found');
       return null;
     }
     final outId =
         outIsVaio ? vaioEp0!.id : _deviceIdOf(config.pipelineOutputDevice);
     if (_idsConflict(capId, outId)) {
-      _captureBlockReason = 'feedback';
+      captureBlockReason = 'feedback';
       dbgLog(capId.isEmpty && outId.isEmpty
           ? 'pipeline.capture: feedback pair blocked (both default)'
           : 'pipeline.capture: feedback pair blocked (cap==out)');
       return null;
     }
-    _captureBlockReason = null;
+    captureBlockReason = null;
     // 镜像（2×2 S3）：主输出恰为 VAIO 渲染端点且监听开时，
     // 同一处理后音频镜像渲染到 WASAPI 选择器设备（裁定 1：
     // 目标 = vaioOutputEndpoint 的现行选择，物理端点列表解析
@@ -734,7 +730,7 @@ extension AudioModesState on AppModel {
           captureActive = false; // 与非捕获分支同口径本地清位（细审 R-A L3）
         }
         postNotice(
-            _captureBlockReason == 'vaio-missing'
+            captureBlockReason == 'vaio-missing'
                 ? '未检测到 AuraVAIO 虚拟声卡端点，无法以 VAIO 输出，请确认驱动已安装'
                 : '输入与输出为同一端点，回录会自激啸叫，已阻止启动捕获链',
             level: NoticeLevel.warning);
@@ -801,7 +797,7 @@ extension AudioModesState on AppModel {
     if (payload == null) {
       _toIso?.send({'cmd': 'capturemode', 'on': false});
       postNotice(
-          _captureBlockReason == 'vaio-missing'
+          captureBlockReason == 'vaio-missing'
               ? '未检测到 AuraVAIO 虚拟声卡端点，无法以 VAIO 输出，请确认驱动已安装'
               : '输入与输出为同一端点，回录会自激啸叫，已停止捕获链',
           level: NoticeLevel.warning);
