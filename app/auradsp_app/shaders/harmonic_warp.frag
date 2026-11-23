@@ -12,7 +12,10 @@ uniform vec4 uColor2;
 out vec4 fragColor;
 
 void main() {
-    vec2 uv = (FlutterFragCoord().xy - 0.5 * uResolution.xy) / min(uResolution.x, uResolution.y);
+    // 整体缩放（2026-11-23）：射线外径最大约 1.12 而短边半幅只有
+    // 0.5，原归一化下上下必被裁切；uv 乘 1.7 后常态外径约 0.44、
+    // 峰值约 0.66（尖端本就渐隐），整图可显示全。
+    vec2 uv = (FlutterFragCoord().xy - 0.5 * uResolution.xy) / min(uResolution.x, uResolution.y) * 1.7;
 
     float r = length(uv);
     float theta = atan(uv.y, uv.x);

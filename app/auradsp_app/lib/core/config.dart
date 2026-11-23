@@ -114,6 +114,12 @@ class AppConfig {
   /// 同一份数据另随会话记忆与预设系统保存/恢复。
   VisualizerConfig visualizerConfig;
 
+  /// 每方案（风格）可视化覆盖表（2026-11-23 user 裁定）：键为
+  /// VisualizerStyle.id，只替换调参字段（配色/灵敏度/衰减/重力/
+  /// 柱数/线宽/辉光/网格/峰值/dB 刻度）；风格、歌词与 MilkDrop
+  /// 路径恒归全局 [visualizerConfig]。抽屉「当前预设」档写入。
+  Map<String, VisualizerConfig> visualizerPerStyle;
+
   AppConfig({
     this.sampleRate = 48000,
     this.maxBlockFrames = 1024,
@@ -158,6 +164,7 @@ class AppConfig {
     this.pluginScanDirsSeeded = false,
     List<String>? customScriptDirs,
     VisualizerConfig? visualizerConfig,
+    Map<String, VisualizerConfig>? visualizerPerStyle,
   })  : modeCategory = modeCategory ?? AudioModes.categoryForMode(audioMode),
         attachmentMode = attachmentMode ??
             ((audioMode == 'vbcallback' || audioMode == 'voicemeeter_api')
@@ -171,7 +178,8 @@ class AppConfig {
         asioFlavor = asioFlavor ?? AudioModes.asioClient,
         pluginScanDirs = pluginScanDirs ?? [],
         customScriptDirs = customScriptDirs ?? [],
-        visualizerConfig = visualizerConfig ?? const VisualizerConfig() {
+        visualizerConfig = visualizerConfig ?? const VisualizerConfig(),
+        visualizerPerStyle = visualizerPerStyle ?? {} {
     // ASIO 模式重构 S1 迁移：旧存量「管线类别 + ASIO 管线对」
     // 在此统一提升为 ASIO 范式（纯函数 migrateParadigm，config
     // 加载与会话恢复同口径）。新鲜构造（默认对 wasapi/wasapi）
@@ -251,7 +259,26 @@ class AppConfig {
               .toList() ??
           [],
       visualizerConfig: VisualizerConfig.fromJson(viz),
+      visualizerPerStyle: _readVisualizerPerStyle(viz),
     );
+  }
+
+  /// 每方案覆盖表解析：visualizer 节的 perStyle 子表，键为风格
+  /// id、值为一份完整 VisualizerConfig JSON（合并时只取调参
+  /// 字段）。坏条目逐条跳过。
+  static Map<String, VisualizerConfig> _readVisualizerPerStyle(
+      Map<String, dynamic> viz) {
+    final out = <String, VisualizerConfig>{};
+    final raw = viz['perStyle'];
+    if (raw is Map) {
+      for (final e in raw.entries) {
+        if (e.key is String && e.value is Map) {
+          out[e.key as String] = VisualizerConfig.fromJson(
+              Map<String, dynamic>.from(e.value as Map));
+        }
+      }
+    }
+    return out;
   }
 
   /// 扫描目录解析（含旧键迁移）。容错：坏条目跳过，不因单条脏数据丢全表。
@@ -344,7 +371,11 @@ class AppConfig {
           'pluginScanDirsSeeded': pluginScanDirsSeeded,
           'customScriptDirs': customScriptDirs,
         },
-        'visualizer': visualizerConfig.toJson(),
+        'visualizer': {
+          ...visualizerConfig.toJson(),
+          'perStyle': visualizerPerStyle
+              .map((k, v) => MapEntry(k, v.toJson())),
+        },
       };
 }
 

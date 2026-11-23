@@ -24,6 +24,12 @@ class VisualizerConfigDrawer extends StatelessWidget {
   final ValueChanged<MilkdropPreset>? onSelectMilkdropPreset;
   final bool isProjectMNativeActive;
 
+  /// 设置范围（2026-11-23）：false = 全局设置，true = 当前预设
+  /// （当前风格的单独覆盖）。切换只改写入口，不改当前显示值。
+  final bool scopePreset;
+  final ValueChanged<bool>? onScopeChanged;
+  final bool hasStyleOverride;
+
   const VisualizerConfigDrawer({
     super.key,
     required this.config,
@@ -35,6 +41,9 @@ class VisualizerConfigDrawer extends StatelessWidget {
     this.milkdropPresets,
     this.onSelectMilkdropPreset,
     this.isProjectMNativeActive = false,
+    this.scopePreset = false,
+    this.onScopeChanged,
+    this.hasStyleOverride = false,
   });
 
   @override
@@ -106,11 +115,47 @@ class VisualizerConfigDrawer extends StatelessWidget {
                   vertical: 12,
                 ),
                 children: [
-                  // 1. 色彩主题选择
-                  VisualizerDrawerSectionTitle(
-                    title: l.visualizerSectionPalette,
-                    info: l.visualizerSectionPaletteInfo,
+                  // 0. 设置范围切换（2026-11-23 user 裁定）：全局
+                  // 设置 / 当前预设两档分别记忆。预设档编辑写入
+                  // 当前风格覆盖表；尚无覆盖时明示沿用全局。
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SegmentedButton<bool>(
+                          segments: [
+                            ButtonSegment(
+                              value: false,
+                              label: Text(l.visualizerScopeGlobal),
+                            ),
+                            ButtonSegment(
+                              value: true,
+                              label: Text(l.visualizerScopePreset),
+                            ),
+                          ],
+                          selected: {scopePreset},
+                          style: const ButtonStyle(
+                            visualDensity: VisualDensity.compact,
+                            tapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onSelectionChanged: (val) =>
+                              onScopeChanged?.call(val.first),
+                        ),
+                      ),
+                    ],
                   ),
+                  if (scopePreset) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      hasStyleOverride
+                          ? l.visualizerScopePresetActive
+                          : l.visualizerScopePresetInherit,
+                      style: labelOf(p, size: 11, color: p.textDim),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+
+                  // 1. 色彩主题选择
                   VisualizerDrawerSectionTitle(
                     title: l.visualizerSectionPalette,
                     info: l.visualizerSectionPaletteInfo,
@@ -505,10 +550,14 @@ class VisualizerConfigDrawer extends StatelessWidget {
               child: Align(
                 alignment: Alignment.center,
                 child: Tooltip(
-                  message: l.visualizerResetDefaultsTip,
+                  message: scopePreset
+                      ? l.visualizerScopeFollowGlobal
+                      : l.visualizerResetDefaultsTip,
                   child: OutlinedButton.icon(
                     icon: const Icon(Icons.restore_rounded, size: 16),
-                    label: Text(l.visualizerResetDefaults),
+                    label: Text(scopePreset
+                        ? l.visualizerScopeFollowGlobal
+                        : l.visualizerResetDefaults),
                     style: OutlinedButton.styleFrom(
                       visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.symmetric(

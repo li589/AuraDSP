@@ -242,6 +242,9 @@ class VisualizerDrawerOverlay extends StatelessWidget {
   final List<MilkdropPreset>? milkdropPresets;
   final ValueChanged<MilkdropPreset>? onSelectMilkdropPreset;
   final bool isProjectMNativeActive;
+  final bool scopePreset;
+  final ValueChanged<bool>? onScopeChanged;
+  final bool hasStyleOverride;
 
   const VisualizerDrawerOverlay({
     super.key,
@@ -255,6 +258,9 @@ class VisualizerDrawerOverlay extends StatelessWidget {
     this.milkdropPresets,
     this.onSelectMilkdropPreset,
     this.isProjectMNativeActive = false,
+    this.scopePreset = false,
+    this.onScopeChanged,
+    this.hasStyleOverride = false,
   });
 
   @override
@@ -302,6 +308,9 @@ class VisualizerDrawerOverlay extends StatelessWidget {
                       milkdropPresets: milkdropPresets,
                       onSelectMilkdropPreset: onSelectMilkdropPreset,
                       isProjectMNativeActive: isProjectMNativeActive,
+                      scopePreset: scopePreset,
+                      onScopeChanged: onScopeChanged,
+                      hasStyleOverride: hasStyleOverride,
                     ),
                   ),
                 ],

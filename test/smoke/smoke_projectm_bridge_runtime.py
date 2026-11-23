@@ -33,6 +33,14 @@ def check(cond, msg):
         FAILS.append(msg)
 
 
+def _variant(base: str, **repl) -> str:
+    out = base
+    for k, v in repl.items():
+        import re as _re
+        out = _re.sub(rf"^{k}=.*$", f"{k}={v}", out, flags=_re.M)
+    return out
+
+
 MINIMAL_MILK = """[preset00]
 fRating=3.000
 fGammaAdj=1.000
@@ -191,6 +199,53 @@ def main() -> int:
     if got == 0:
         nonzero = sum(1 for i in range(0, len(buf), 997) if buf[i] != 0)
         print("  NOTE 非零采样点 %d（仅记录，像素内容随驱动而异）" % nonzero)
+
+    # 预设切换判别（2026-11-23，宾机报「只有第一个预设能显示」）：
+    # 桥以 smooth transition 加载，疑过渡期后续加载被静默吞。
+    # A/B 两预设运动与配色差异显著：加载 B 并持续喂流渲染后，
+    # 帧内容必须实质变化；再切回 A 必须再次变化。
+    def grab(seconds: float) -> bytes:
+        bb = (ctypes.c_ubyte * (320 * 180 * 4))()
+        end = time.time() + seconds
+        last = -3
+        while time.time() < end:
+            dll.auradsp_projectm_feed_pcm(h, pcm, frames, 2)
+            last = dll.auradsp_projectm_render_pixels(h, bb)
+            time.sleep(0.05)
+        return bytes(bb) if last == 0 else b""
+
+    def mean_diff(a: bytes, b: bytes) -> float:
+        if not a or not b or len(a) != len(b):
+            return -1.0
+        step = 401
+        tot = 0
+        cnt = 0
+        for i in range(0, len(a), step):
+            tot += abs(a[i] - b[i])
+            cnt += 1
+        return tot / max(cnt, 1)
+
+    frame_a = grab(1.2)
+    alt = os.path.join(tmp, "variant.milk")
+    with open(alt, "w", encoding="utf-8") as f:
+        f.write(_variant(MINIMAL_MILK,
+                         **{"fDecay": "0.900", "zoom": "1.300",
+                            "wave_r": "1.000", "wave_g": "0.050",
+                            "wave_b": "0.050",
+                            "per_frame_1": "zoom = 1.30;",
+                            "per_frame_2": "rot = 0.05;"}))
+    rc = dll.auradsp_projectm_load_preset(h, alt.encode("utf-8"))
+    check(rc == 0, "第二个预设加载返回 0（实得 %d）" % rc)
+    frame_b = grab(1.5)
+    d_ab = mean_diff(frame_a, frame_b)
+    check(d_ab > 1.0,
+          "切换预设后帧内容实质变化（A/B 采样平均差 %.3f）" % d_ab)
+    rc = dll.auradsp_projectm_load_preset(h, good.encode("utf-8"))
+    check(rc == 0, "切回第一个预设返回 0（实得 %d）" % rc)
+    frame_a2 = grab(1.5)
+    d_ba = mean_diff(frame_b, frame_a2)
+    check(d_ba > 1.0,
+          "切回后帧内容再次变化（B/A2 采样平均差 %.3f）" % d_ba)
 
     check(dll.auradsp_projectm_resize(h, 160, 90) == 0, "resize 返回 0")
     buf2 = (ctypes.c_ubyte * (160 * 90 * 4))()

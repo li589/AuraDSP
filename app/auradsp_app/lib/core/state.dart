@@ -261,7 +261,13 @@ class AppModel extends ChangeNotifier {
   void setVisualizerConfig(VisualizerConfig next, {bool persistConfig = true}) {
     if (config.visualizerConfig == next) return;
     config.visualizerConfig = next;
-    visualizerConfig.value = next;
+    visualizerConfig.value = effectiveVisualizerConfig(next);
+    _persistVisualizerConfig(persistConfig);
+    _notifyUi();
+    scheduleAutoSave();
+  }
+
+  void _persistVisualizerConfig(bool persistConfig) {
     if (persistConfig && !_isReplayingSession) {
       _vizConfigSaveTimer?.cancel();
       _vizConfigSaveTimer = Timer(const Duration(milliseconds: 300), () {
@@ -269,6 +275,66 @@ class AppModel extends ChangeNotifier {
         ConfigManager.save(config);
       });
     }
+  }
+
+  /// 生效配置（2026-11-23 user 裁定）：全局为底，当前风格的覆盖
+  /// 表只替换调参字段（配色/灵敏度/衰减/重力/柱数/线宽/辉光/
+  /// 网格/峰值/dB 刻度）；风格、歌词与 MilkDrop 路径恒归全局。
+  /// [visualizerConfig] 通知器发布的恒为生效值，消费端无感。
+  VisualizerConfig effectiveVisualizerConfig(VisualizerConfig global) {
+    final entry = config.visualizerPerStyle[global.style.id];
+    if (entry == null) return global;
+    return global.copyWith(
+      colorTheme: entry.colorTheme,
+      sensitivity: entry.sensitivity,
+      decayRate: entry.decayRate,
+      gravity: entry.gravity,
+      barCount: entry.barCount,
+      lineWidth: entry.lineWidth,
+      bloom: entry.bloom,
+      showGrid: entry.showGrid,
+      showPeaks: entry.showPeaks,
+      showDbScale: entry.showDbScale,
+    );
+  }
+
+  /// 当前风格是否存在单独覆盖（抽屉「当前预设」档状态显示）。
+  bool get visualizerHasStyleOverride =>
+      config.visualizerPerStyle.containsKey(config.visualizerConfig.style.id);
+
+  /// 抽屉「当前预设」档写入口：把 [tuned] 记入当前风格覆盖表；
+  /// 全局域字段（歌词/MilkDrop 路径）若有变化同步落全局。
+  void setVisualizerStyleOverride(VisualizerConfig tuned) {
+    final g = config.visualizerConfig;
+    config.visualizerPerStyle[g.style.id] = tuned;
+    if (tuned.showLyrics != g.showLyrics ||
+        tuned.showTranslation != g.showTranslation ||
+        tuned.lyricsSource != g.lyricsSource ||
+        tuned.milkdropPresetPath != g.milkdropPresetPath) {
+      config.visualizerConfig = g.copyWith(
+        showLyrics: tuned.showLyrics,
+        showTranslation: tuned.showTranslation,
+        lyricsSource: tuned.lyricsSource,
+        milkdropPresetPath: tuned.milkdropPresetPath,
+        clearMilkdropPresetPath: tuned.milkdropPresetPath == null,
+      );
+    }
+    visualizerConfig.value =
+        effectiveVisualizerConfig(config.visualizerConfig);
+    _persistVisualizerConfig(true);
+    _notifyUi();
+    scheduleAutoSave();
+  }
+
+  /// 当前风格恢复跟随全局（删除其覆盖表条目）。
+  void clearVisualizerStyleOverride() {
+    if (config.visualizerPerStyle.remove(config.visualizerConfig.style.id) ==
+        null) {
+      return;
+    }
+    visualizerConfig.value =
+        effectiveVisualizerConfig(config.visualizerConfig);
+    _persistVisualizerConfig(true);
     _notifyUi();
     scheduleAutoSave();
   }
@@ -1380,7 +1446,8 @@ class AppModel extends ChangeNotifier {
     this.window.setCloseToTray(config.closeToTray);
     // 可视化配置：config.json 是跨重启持久化副本，这里建立运行时真相源。
     // 随后 SessionMemory.restoreMemoryImage 会再用会话快照覆盖（若存在）。
-    visualizerConfig = ValueNotifier<VisualizerConfig>(config.visualizerConfig);
+    visualizerConfig = ValueNotifier<VisualizerConfig>(
+        effectiveVisualizerConfig(config.visualizerConfig));
     channelsCountMode = config.channelsCountMode.clamp(0, 1);
     final cc = config.channelsCount;
     channelsCount = (cc == 2 || cc == 4 || cc == 6 || cc == 8) ? cc : 2;
@@ -1672,7 +1739,7 @@ class AppModel extends ChangeNotifier {
     config = ConfigManager.resetToDefaults();
     // 可视化配置同属 config.json：复位必须同步刷新运行时真相源，
     // 否则界面仍停留在旧风格/旧歌词源。
-    visualizerConfig.value = config.visualizerConfig;
+    visualizerConfig.value = effectiveVisualizerConfig(config.visualizerConfig);
     // 「恢复默认」必须连带清除会话记忆：否则 autoRestoreSession 开启时
     // 下次启动 restoreMemoryImage 把旧参数全部还原（用户心智：全部归零）。
     // 先取消挂起的防抖保存——否则 500ms 后的 timer 会把文件写回来。

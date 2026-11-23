@@ -78,15 +78,18 @@ void main() {
         // 顶部与底部平滑羽化 (防止硬截断边缘)
         float vEnvelope = smoothstep(-0.95, -0.65, p.y) * smoothstep(1.15, 0.85, p.y);
 
-        // 密度合成
-        float density = (wall * 0.65 + stream1 * 0.75 + stream2 * 1.1 + sparks * 1.8) * vEnvelope;
+        // 密度合成（2026-11-23 修复）：螺旋流纹与火花必须被漏斗
+        // 壁面门控——旧式把角向图案在整个体积内无门控叠加，36 步
+        // 累积后饱和成实心条纹柱（用户报「完全是乱七八糟」）。
+        // 改后流纹只活在壁面薄壳上，柱内与柱外保持通透。
+        float density = wall * (0.45 + stream1 * 0.75 + stream2 * 1.1 + sparks * 1.8) * vEnvelope;
 
         if (density > 0.01) {
             // 色彩沿漏斗高度与流束平滑过渡
             vec3 sliceColor = mix(uColor1.rgb, uColor2.rgb, hNorm * 0.75 + stream1 * 0.25);
             sliceColor += vec3(0.9, 0.95, 1.0) * sparks * 0.5; // 火花高光
 
-            float alpha = clamp(density * 0.16, 0.0, 1.0);
+            float alpha = clamp(density * 0.12, 0.0, 1.0);
             accCol += sliceColor * alpha * (1.0 - accAlpha);
             accAlpha += alpha * (1.0 - accAlpha);
         }

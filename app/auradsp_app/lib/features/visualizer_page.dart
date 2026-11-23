@@ -53,6 +53,11 @@ class _VisualizerPageState extends State<VisualizerPage> {
   late final MediaSyncService _mediaSync =
       widget.mediaSync ?? MediaSyncService.instance;
   bool _drawerOpen = false;
+
+  /// 可视化设置范围（2026-11-23）：false = 全局设置档，
+  /// true = 当前预设档（当前风格单独覆盖）。页面级状态，
+  /// 抽屉开关不丢。
+  bool _vizScopePreset = false;
   VisualizerDisplayMode _displayMode = VisualizerDisplayMode.restore;
   final FocusNode _focusNode = FocusNode();
 
@@ -487,11 +492,28 @@ class _VisualizerPageState extends State<VisualizerPage> {
           VisualizerDrawerOverlay(
             open: _drawerOpen,
             config: config,
-            onConfigChanged: (newCfg) =>
-                widget.model.setVisualizerConfig(newCfg),
+            onConfigChanged: (newCfg) {
+              // 范围分流（2026-11-23）：预设档写当前风格覆盖表，
+              // 全局档写全局配置；显示值恒为生效配置。
+              if (_vizScopePreset) {
+                widget.model.setVisualizerStyleOverride(newCfg);
+              } else {
+                widget.model.setVisualizerConfig(newCfg);
+              }
+            },
             onClose: _closeDrawer,
-            onResetToDefaults: () =>
-                widget.model.setVisualizerConfig(const VisualizerConfig()),
+            onResetToDefaults: () {
+              // 复位按档：预设档 = 当前风格恢复跟随全局；
+              // 全局档 = 全局回出厂。
+              if (_vizScopePreset) {
+                widget.model.clearVisualizerStyleOverride();
+              } else {
+                widget.model.setVisualizerConfig(const VisualizerConfig());
+              }
+            },
+            scopePreset: _vizScopePreset,
+            onScopeChanged: (v) => setState(() => _vizScopePreset = v),
+            hasStyleOverride: widget.model.visualizerHasStyleOverride,
             onPickMilkdropFile: _pickMilkdropPreset,
             onPickMilkdropFolder: _pickMilkdropDirectory,
             milkdropPresets: _milkdropPresets,

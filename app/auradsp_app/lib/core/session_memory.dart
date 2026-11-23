@@ -99,7 +99,11 @@ abstract final class SessionMemory {
         'slots': slotSnapshots,
         // 可视化配置（2026-10-31）：此前只存在页面私有状态，重启即丢。
         // 与 config.json 同源；会话快照优先（用户改完立刻退出也能恢复）。
-        'visualizer': m.visualizerConfig.value.toJson(),
+        // 全局 + 每方案覆盖表分开存（2026-11-23）：旧实现存生效
+        // 值，恢复时生效值变全局会与覆盖表叠加；分开存可精确重建。
+        'visualizer': m.config.visualizerConfig.toJson(),
+        'visualizerPerStyle': m.config.visualizerPerStyle
+            .map((k, v) => MapEntry(k, v.toJson())),
         'parameters': snapshot.params,
       };
 
@@ -264,6 +268,17 @@ abstract final class SessionMemory {
 
       // 可视化配置（2026-10-31）：会话快照优先于 config.json，
       // 兼容旧会话（无该键 → 保持 config 已加载的值）。
+      if (session['visualizerPerStyle'] is Map) {
+        final perStyle = <String, VisualizerConfig>{};
+        for (final e
+            in (session['visualizerPerStyle'] as Map).entries) {
+          if (e.key is String && e.value is Map) {
+            perStyle[e.key as String] = VisualizerConfig.fromJson(
+                Map<String, dynamic>.from(e.value as Map));
+          }
+        }
+        m.config.visualizerPerStyle = perStyle;
+      }
       if (session['visualizer'] is Map) {
         m.setVisualizerConfig(
           VisualizerConfig.fromJson(

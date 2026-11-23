@@ -16,7 +16,11 @@ class SpectrumBarsPainter extends CustomPainter {
 
   final Paint _gridPaint = Paint()..strokeWidth = 1;
   final Paint _barPaint = Paint();
-  final Paint _peakPaint = Paint()..strokeWidth = 2.0;
+  // 峰值小横线是开放折线路径，必须描边：默认填充样式画开放
+  // 路径等于零面积、什么都不显示（2026-11-23 峰值线消失定罪）。
+  final Paint _peakPaint = Paint()
+    ..strokeWidth = 2.0
+    ..style = PaintingStyle.stroke;
   final Paint _glowPaint = Paint();
 
   /// 渐变 shader 按画布尺寸缓存：画笔实例由视口缓存复用，窗口不变时
