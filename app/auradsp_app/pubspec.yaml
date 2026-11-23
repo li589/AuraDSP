@@ -35,6 +35,7 @@ flutter:
   assets:
     - assets/presets/defaults.json
     - assets/presets/factory/
+    - assets/milkdrop/
     - assets/presets/plugin_tables.json
     - assets/tray_icon.ico
     - assets/tray_icon.png

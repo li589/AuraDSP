@@ -247,6 +247,31 @@ def main() -> int:
     check(d_ba > 1.0,
           "切回后帧内容再次变化（B/A2 采样平均差 %.3f）" % d_ba)
 
+    # 内置预设真文件判别（r65）：随包三只 .milk 必须各自可加载
+    # 且渲染互异——r64 时三只内置是 'builtin:' 伪路径，桥恒拒
+    # 绝、UI 恒显示同一默认画面（宾机报「只能开第一个」）。
+    repo_root = os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))))
+    builtin_dir = os.path.join(
+        repo_root, "app", "auradsp_app", "assets", "milkdrop")
+    builtin_frames = {}
+    for name in ("cosmic_warp", "bio_pulsar", "neon_vortex"):
+        p = os.path.join(builtin_dir, name + ".milk")
+        check(os.path.isfile(p), "内置预设文件在仓：%s" % name)
+        if not os.path.isfile(p):
+            continue
+        rc = dll.auradsp_projectm_load_preset(h, p.encode("utf-8"))
+        check(rc == 0, "内置预设 %s 加载返回 0（实得 %d）" % (name, rc))
+        builtin_frames[name] = grab(1.5)
+    names = sorted(builtin_frames)
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            d = mean_diff(builtin_frames[names[i]],
+                          builtin_frames[names[j]])
+            check(d > 1.0,
+                  "内置预设 %s 与 %s 帧内容互异（采样平均差 %.3f）"
+                  % (names[i], names[j], d))
+
     check(dll.auradsp_projectm_resize(h, 160, 90) == 0, "resize 返回 0")
     buf2 = (ctypes.c_ubyte * (160 * 90 * 4))()
     got = -3
