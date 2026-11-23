@@ -543,12 +543,39 @@ extension AudioModesState on AppModel {
           : 'pipeline.capture: feedback pair blocked (cap==out)');
       return null;
     }
+    // 镜像（2×2 S3）：主输出恰为 VAIO 渲染端点且监听开时，
+    // 同一处理后音频镜像渲染到 WASAPI 选择器设备（裁定 1：
+    // 目标 = vaioOutputEndpoint 的现行选择，物理端点列表解析
+    // 为 id；未选 = 默认端点）。镜像目标与捕获端点相同时会
+    // 把镜像声抓回来自激，同自激守卫口径直接不给镜像。
+    String? mirrorId;
+    final vaioEp = vaioRenderEndpoint;
+    if (config.monitorMirroring &&
+        vaioEp != null &&
+        vaioEp.id.isNotEmpty &&
+        outId == vaioEp.id) {
+      final pick = config.vaioOutputEndpoint;
+      if (pick.isEmpty) {
+        mirrorId = '';
+      } else {
+        for (final d in vaioPhysicalEndpoints) {
+          if (d.name == pick || d.id == pick) {
+            mirrorId = d.id.isNotEmpty ? d.id : d.name;
+            break;
+          }
+        }
+      }
+      if (mirrorId != null && _idsConflict(capId, mirrorId)) {
+        mirrorId = null;
+      }
+    }
     return {
       'cmd': cmd,
       'captureEndpoint': capId,
       // 下拉默认项与渲染端点 = 回录；录音端点 = 直采。
       'loopback': capItem?.isRender ?? true,
       'outputEndpoint': outId,
+      if (mirrorId != null) 'mirrorEndpoint': mirrorId,
     };
   }
 

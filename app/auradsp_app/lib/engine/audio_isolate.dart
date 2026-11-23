@@ -1784,6 +1784,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               captureEndpoint: (m['captureEndpoint'] as String?) ?? '',
               loopback: (m['loopback'] as bool?) ?? true,
               outputEndpoint: (m['outputEndpoint'] as String?) ?? '',
+              // 镜像键缺席 = 无镜像（2×2 S3）；在场时 '' 表示
+              // 默认端点镜像，与无镜像严格区分。
+              mirrorEndpoint: m.containsKey('mirrorEndpoint')
+                  ? (m['mirrorEndpoint'] as String?) ?? ''
+                  : null,
             );
           } else {
             windowsCapture.detach(restoreSaved: true);
@@ -1796,6 +1801,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               captureEndpoint: (m['captureEndpoint'] as String?) ?? '',
               loopback: (m['loopback'] as bool?) ?? true,
               outputEndpoint: (m['outputEndpoint'] as String?) ?? '',
+              mirrorEndpoint: m.containsKey('mirrorEndpoint')
+                  ? (m['mirrorEndpoint'] as String?) ?? ''
+                  : null,
             );
           }
           break;
