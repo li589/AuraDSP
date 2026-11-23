@@ -86,6 +86,7 @@ PLATFORM_ANY = {
     "smoke_asio_driver_params.py",
     "smoke_asio_telemetry_contract.py",
     "smoke_audit_rulings_contract.py",
+    "smoke_vaio_capture_mute_contract.py",
     "smoke_apo_transit_contract.py",
     # r43 门禁（2026-11-17）：apo_config ACL 接管必须合并原 DACL
     # （整表替换剥服务 ACE → 默认端点不可读 → 全机无声）+ props
@@ -423,6 +424,7 @@ def run_smoke_tests():
     "smoke_asio_driver_params.py",
     "smoke_asio_telemetry_contract.py",
     "smoke_apo_transit_contract.py",
+    "smoke_vaio_capture_mute_contract.py",
     "smoke_audit_rulings_contract.py",
     # r43 门禁（2026-11-17）：ACL 接管合并原 DACL + props clear
     # 容忍值不存在（宾机全机无声/附加误判实证）。平台分类在

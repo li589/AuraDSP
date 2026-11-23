@@ -215,6 +215,11 @@ AuraControlDevice_Destroy(
         g_pMappedUserAddress = NULL;
         g_pMappedProcess = NULL;
         g_pMappedFileObject = NULL;
+        // 驱动整体拆解：录制静音标记随环一并失效，清零防残留。
+        if (g_pRingBuffer != NULL)
+        {
+            reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer)->CaptureMuted = 0;
+        }
     }
     ExReleaseFastMutex(&g_MappingMutex);
 
@@ -314,6 +319,12 @@ AuraControlDevice_DispatchCleanup(
         g_pMappedUserAddress = NULL;
         g_pMappedProcess = NULL;
         g_pMappedFileObject = NULL;
+        // 桥消失（正常停桥走桥侧清零，此处是进程崩溃兜底）：
+        // 录制静音标记不得残留，否则普通管线的回环录制被误哑。
+        if (g_pRingBuffer != NULL)
+        {
+            reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer)->CaptureMuted = 0;
+        }
     }
     // 持有者进程退出：释放 GET_DEBUG_LOG 的持久持有记录（审计低6）。
     if (g_pDebugLogHolder == currentProc)
@@ -792,6 +803,15 @@ AuraControlDevice_ReadCaptureSamples(
     }
 
     pHeader = reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer);
+    /* 录制静音标记（2026-11-23 A 案）：桥在场时录制端点喂静音，
+     * 不回放处理前原始流、不推进读偏移（桥按 TotalBytesWritten
+     * 自行记账，录制侧消费与否不影响它）。标记只是布尔语义、非
+     * 几何，DRV-03 的「不读共享头几何」纪律不适用此处。 */
+    if (pHeader->CaptureMuted != 0)
+    {
+        RtlZeroMemory(Buffer, ByteCount);
+        return;
+    }
     /* DRV-03：同 WriteRenderSamples——几何由内核真值派生，不读共享头。 */
     if (g_ulRingTotalSize <= sizeof(AURA_VAIO_SHARED_HEADER))
     {

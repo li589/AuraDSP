@@ -439,6 +439,8 @@ void DestroyWasapi() {
 void UnmapAndCloseRing() {
     if (g_vaio.hControlDev != INVALID_HANDLE_VALUE) {
         if (g_vaio.pMappedRing != nullptr) {
+            // 先清录制静音标记再拆映射（见 vaio_start 置位处）。
+            if (g_vaio.pRingHeader) g_vaio.pRingHeader->CaptureMuted = 0;
             AURA_VAIO_UNMAP_REQUEST unmapReq = {0};
             unmapReq.UserAddress = g_vaio.pMappedRing;
             DWORD bytesRet = 0;
@@ -1631,6 +1633,11 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
 
     g_vaio.pMappedRing = mapResp.UserAddress;
     g_vaio.pRingHeader = reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(mapResp.UserAddress);
+    // 录制端点静音（2026-11-23 A 案）：桥在场期间驱动录制读端
+    // 喂静音——VAIO 麦克风端点不再回放处理前的原始渲染流。
+    // 拆映射前由 UnmapAndCloseRing 清 0，桥进程崩溃由驱动
+    // Cleanup 兜底清 0；旧驱动不读此字段（原 Reserved），无感。
+    g_vaio.pRingHeader->CaptureMuted = 1;
     g_vaio.pRingPayload = (BYTE*)mapResp.UserAddress +
         (mapResp.HeaderSizeBytes ? mapResp.HeaderSizeBytes
                                  : g_vaio.pRingHeader->DataOffsetBytes);

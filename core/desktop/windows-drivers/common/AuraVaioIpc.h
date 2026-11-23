@@ -160,7 +160,15 @@ typedef struct _AURA_VAIO_SHARED_HEADER {
     // 结构尺寸与 IPC 版本号都不变。
     ULONG               FormatKind;             // AURA_VAIO_FMT_*
     ULONG               ValidBitsPerSample;     // 0 = 与 BitsPerSample 相同
-    ULONG               Reserved[13];           // Future expansion
+    // 录制端点静音标记（2026-11-23，user 裁定 A 案）：原 Reserved[0]
+    // 转正，结构尺寸与 IPC 版本号不变。桥（VAIO 模式）映射环期间
+    // 置 1：驱动的录制读端据此喂静音——桥模式下录制端点不再回放
+    // 处理前的原始渲染流；无桥时（普通管线把 VAIO 当输出）恒 0，
+    // 录制端点照常回环处理后音频。旧驱动整头零初始化读到 0 =
+    // 现行行为；桥在拆映射前清 0，驱动在映射文件对象 Cleanup
+    // 时兜底清 0（桥进程崩溃不留残标记）。
+    volatile ULONG      CaptureMuted;           // 0 = 回环，1 = 录制喂静音
+    ULONG               Reserved[12];           // Future expansion
 } AURA_VAIO_SHARED_HEADER, *PAURA_VAIO_SHARED_HEADER;
 
 typedef struct _AURA_INTERSECTION_LOG_ENTRY {
