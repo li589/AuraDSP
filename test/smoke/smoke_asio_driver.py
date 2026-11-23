@@ -337,6 +337,19 @@ def telemetry_u32(offset):
         return None
     return struct.unpack_from('<I', buf, offset)[0]
 
+def telemetry_f32(offset):
+    h = _kernel32.OpenFileMappingW(0x0004, False, 'Global\\AuraDSP_AsioDriverTelemetry')
+    if not h:
+        return None
+    view = _kernel32.MapViewOfFile(h, 0x0004, 0, 0, 4096)
+    if not view:
+        return None
+    buf = (ctypes.c_char * 4096).from_address(view)
+    magic = struct.unpack_from('<I', buf, 0)[0]
+    if magic != 0x54444141:  # 'AADT'
+        return None
+    return struct.unpack_from('<f', buf, offset)[0]
+
 switch_count = 0
 test_mode = 'sine'
 test_dc_val = 0.1
@@ -542,6 +555,7 @@ buf6 = (ASIOBufferInfo * 12)(
     *[ASIOBufferInfo(0, c, (ctypes.c_void_p * 2)()) for c in range(6)]
 )
 mch_switches = [0]
+mch_mode = ['all']  # 'all' = 六声道同送；'ch4' = 仅声道索引 4 送信号
 
 
 def py_buffer_switch6(idx, direct):
@@ -551,8 +565,9 @@ def py_buffer_switch6(idx, direct):
         p = buf6[6 + o].buffers[idx]
         if p:
             b = arr.from_address(p)
+            v = 0.05 if (mch_mode[0] == 'all' or o == 4) else 0.0
             for i in range(256):
-                b[i] = 0.05
+                b[i] = v
 
 
 cb6 = BufferSwitchProto(py_buffer_switch6)
@@ -574,6 +589,32 @@ if daw_ch is None and not _block_ok:
           'inaccessible in this environment')
 else:
     check('telemetry dawCh == 6 (driver tier authoritative)', daw_ch == 6, f'dawCh={daw_ch}')
+
+# r65 v3 逐声道遥测判别（主页恒 2 格同亮的回归钉）：只给输出
+# 声道索引 4 送信号——peakInCh 必须只有 [4] 非零（处理前取数，
+# 与引擎无关）；peakOutCh[4] 须显著压过其余声道（折叠前逐声道）。
+tele_ver = telemetry_u32(4)
+if tele_ver is None and not _block_ok:
+    print('NOTE telemetry v3 per-channel check skipped: Global '
+          'namespace inaccessible in this environment')
+else:
+    check('telemetry version == 3', tele_ver == 3, f'ver={tele_ver}')
+    mch_mode[0] = 'ch4'
+    time.sleep(0.15)
+    pin = [telemetry_f32(520 + 4 * c) for c in range(8)]
+    pout = [telemetry_f32(552 + 4 * c) for c in range(8)]
+    mch_mode[0] = 'all'
+    if pin[4] is None or pout[4] is None:
+        check('telemetry per-channel peaks readable', False, 'read failed')
+    else:
+        others_in = max(pin[c] for c in range(6) if c != 4)
+        check('peakInCh discriminates ch4-only signal',
+              pin[4] > 0.03 and others_in < 0.005,
+              f'pin4={pin[4]:.4f} others_max={others_in:.4f}')
+        others_out = max(pout[c] for c in range(6) if c != 4)
+        check('peakOutCh[4] dominates (pre-fold per-channel)',
+              pout[4] > 0.01 and pout[4] > 4.0 * max(others_out, 1e-6),
+              f'pout4={pout[4]:.4f} others_max={others_out:.4f}')
 
 out_l6 = (ctypes.c_float * 256)()
 out_r6 = (ctypes.c_float * 256)()

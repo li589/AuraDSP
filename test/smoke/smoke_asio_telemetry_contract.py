@@ -3,7 +3,8 @@
 
 背景：遥测块 Global\\AuraDSP_AsioDriverTelemetry 是虚拟 ASIO
 形态下 DAW 侧真实例的唯一回传通道（S3 最小集：心跳/已处理
-帧/峰值/汇状态；S4 升 v2 追加输出/EQ 入口频谱各 32 段）。四
+帧/峰值/汇状态；S4 升 v2 追加输出/EQ 入口频谱各 32 段；r65
+升 v3 尾加逐声道峰值 peakInCh/peakOutCh 各 8）。四
 个消费/生产方——契约头、驱动泵、桥 asiostatus 中转、Dart 读
 者——任一处布局或版本口径漂移都会静默错位（频谱读偏、版本
 误拒），真机上只表现为「图不对」而无人报错。
@@ -50,9 +51,14 @@ dart_asio = read(DART_ASIO)
 # ---- 契约头 ----
 check("telemetry name", "AuraDSP_AsioDriverTelemetry" in shared)
 check("telemetry magic AADT", "0x54444141" in shared)
-check("telemetry version 2", "ASIO_DRIVER_TELEMETRY_VERSION 2u" in shared)
+check("telemetry version 3", "ASIO_DRIVER_TELEMETRY_VERSION 3u" in shared)
 check("spectrum fields v2",
       "spectrum[32]" in shared and "eqInSpectrum[32]" in shared)
+check("per-channel peak fields v3",
+      "peakInCh[8]" in shared and "peakOutCh[8]" in shared)
+check("v3 tail offsets pinned (static_assert)",
+      "offsetof(AsioDriverTelemetryBlock, peakInCh) == 520u" in shared and
+      "sizeof(AsioDriverTelemetryBlock) == 584u" in shared)
 check("block fits one page (static_assert)",
       "sizeof(AsioDriverTelemetryBlock) <= ASIO_DRIVER_TELEMETRY_BYTES" in shared)
 
@@ -67,6 +73,12 @@ check("loader binds auradsp_viz_read optionally",
 check("driver publishes heartbeat/frames",
       "m_telemetry->heartbeat++" in driver and
       "m_telemetry->processedFrames" in driver)
+check("driver publishes per-channel peaks v3",
+      "m_telemetry->peakInCh" in driver and
+      "m_telemetry->peakOutCh" in driver and
+      "telePeakOutCh[c]" in driver)
+check("driver writes telemetry version unconditionally (r65)",
+      "m_telemetry->version = ASIO_DRIVER_TELEMETRY_VERSION;" in driver)
 
 # ---- 桥中转侧 ----
 check("bridge accepts telemetry versions 1..current",
@@ -85,6 +97,10 @@ check("reader frames u64 pair", "u32[8] + u32[9] * 4294967296.0" in dart_asio)
 check("reader synthesizes asio viz",
       "'backend': 'asio'" in dart_asio and "'evt': 'viz'" in dart_asio)
 check("reader stale-heartbeat liveness gate", "_staleTicks <= 15" in dart_asio)
+check("reader accepts versions 1..3",
+      "version < 1 || version > 3" in dart_asio)
+check("reader per-channel levels from f32[138] (peakOutCh)",
+      "_f32![138 + c]" in dart_asio and "dawCh >= 2 && dawCh <= 8" in dart_asio)
 
 print("RESULT:", "FAIL " + ",".join(fails) if fails else "PASS")
 sys.exit(1 if fails else 0)

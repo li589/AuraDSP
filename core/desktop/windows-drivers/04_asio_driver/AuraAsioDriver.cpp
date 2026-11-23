@@ -463,8 +463,11 @@ void AuraAsioDriver::OpenTelemetry() {
     if (!preExisting || m_telemetry->magic != ASIO_DRIVER_TELEMETRY_MAGIC) {
         memset(m_telemetry, 0, sizeof(AsioDriverTelemetryBlock));
         m_telemetry->magic = ASIO_DRIVER_TELEMETRY_MAGIC;
-        m_telemetry->version = ASIO_DRIVER_TELEMETRY_VERSION;
     }
+    // version 无条件写（r65）：存活块可能由旧版驱动写成 v2 布局，
+    // 若只在新建时写版本号，新驱动会带着旧版本号发布 v3 尾部
+    // 字段，读者按 v2 回落、逐声道电平永不生效。
+    m_telemetry->version = ASIO_DRIVER_TELEMETRY_VERSION;
     m_telemetry->writerPid = GetCurrentProcessId();
 }
 
@@ -661,6 +664,8 @@ DWORD AuraAsioDriver::PumpLoop() {
         const long playIndex = 1 - currentToggle;
 
         float telePeakIn = 0.0f, telePeakOut = 0.0f;
+        float telePeakInCh[8] = {};
+        float telePeakOutCh[8] = {};
         if (m_proc && m_interleavedIn && m_interleavedOut && m_foldL && m_foldR) {
             // 按通道收集 DAW 输出块，交织进 m_interleavedIn（缺缓冲的通道补零）
             for (long c = 0; c < ch; ++c) {
@@ -719,6 +724,8 @@ DWORD AuraAsioDriver::PumpLoop() {
             }
 
             // S3 遥测峰值：入 = DAW 原始块 ch0/1，出 = 处理后立体声折。
+            // r65 v3：同一循环顺带逐声道峰值——入取交织原始块、出
+            // 取折叠前的处理结果；旧单值口径原样保留（面板兼容）。
             for (long i = 0; i < m_bufferSize; ++i) {
                 const float a0 = std::abs(m_interleavedIn[i * ch + 0]);
                 const float a1 =
@@ -729,6 +736,12 @@ DWORD AuraAsioDriver::PumpLoop() {
                 const float o1 = std::abs(m_foldR[i]);
                 if (o0 > telePeakOut) telePeakOut = o0;
                 if (o1 > telePeakOut) telePeakOut = o1;
+                for (long c = 0; c < ch && c < 8; ++c) {
+                    const float ai = std::abs(m_interleavedIn[i * ch + c]);
+                    if (ai > telePeakInCh[c]) telePeakInCh[c] = ai;
+                    const float ao = std::abs(m_proc[i * ch + c]);
+                    if (ao > telePeakOutCh[c]) telePeakOutCh[c] = ao;
+                }
             }
         }
 
@@ -738,6 +751,10 @@ DWORD AuraAsioDriver::PumpLoop() {
             m_telemetry->processedFrames = (uint64_t)m_samplePosition;
             m_telemetry->peakIn = telePeakIn;
             m_telemetry->peakOut = telePeakOut;
+            std::memcpy(m_telemetry->peakInCh, telePeakInCh,
+                        sizeof(telePeakInCh));
+            std::memcpy(m_telemetry->peakOutCh, telePeakOutCh,
+                        sizeof(telePeakOutCh));
             // S4 频谱：取引擎 viz 环最新一帧。旁路（引擎不处理）
             // 或引擎缺席/viz 未绑定时写全零，不留陈旧频谱误导
             // UI；处理中但本块无新帧则保留上一帧（防闪烁）。
