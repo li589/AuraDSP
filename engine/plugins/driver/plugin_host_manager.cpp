@@ -808,6 +808,16 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
                 latchSlotFault(slot, static_cast<int>(PluginFaultStage::Process),
                                static_cast<int>(PluginFaultCategory::ProcessCrash));
             }
+            /* [审查 M7 补漏 2026-11-24] 交错/remote 路径同 processSlot
+             * 口径发布快照：代理延迟随块大小逐块变，此前只有平面路径
+             * 发布，getLatencySlot 在本路径恒读激活期旧值（AUD-01 复现
+             * 与宿主进程烟测各挂一处：数值恒慢一个块大小相位）。 */
+            if (s.instance) {
+                s.transportFailed.store(s.instance->hostTransportFailed(),
+                                        std::memory_order_relaxed);
+                s.latency.store(s.instance->getLatency(),
+                                std::memory_order_relaxed);
+            }
         }
         if (sampleTelemetry) {
             for (uint32_t ch = 0; ch < channels; ++ch) {
