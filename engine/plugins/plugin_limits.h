@@ -37,5 +37,9 @@ constexpr int kBusChannelsInt = static_cast<int>(kBusChannels);
  * 合法值可达 64，与总线通道上限无关；数组必须按厂商上限分配，否则越界。 */
 constexpr int kVst2ArrayChannels = 64;
 
+/* 单轮插件扫描的结果/候选规模上限（审查 L8 强制点在 plugin_scanner）。
+ * IPC 协议头的 ipc::kMaxScannedPlugins 别名引用本值，不得另写字面量。 */
+constexpr uint32_t kMaxScannedPlugins = 65536u;
+
 }  // namespace limits
 }  // namespace auradsp

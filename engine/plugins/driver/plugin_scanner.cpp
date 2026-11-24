@@ -1,5 +1,7 @@
 #include "plugin_host.h"
 
+#include "plugins/plugin_limits.h"
+
 #include "plugin_bundle.h"
 #include "plugin_format_driver.h"
 #include "plugin_metadata_util.h"
@@ -374,8 +376,8 @@ std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& 
         for (auto& m : metas) results.push_back(std::move(m));
         /* [审查 L8 2026-11-25] kMaxScannedPlugins 强制点（一次性扫描路）：
          * 结果达协议上限即截断收工，避免超大插件目录把扫描规模撑爆。 */
-        if (results.size() >= ipc::kMaxScannedPlugins) {
-            results.resize(ipc::kMaxScannedPlugins);
+        if (results.size() >= auradsp::limits::kMaxScannedPlugins) {
+            results.resize(auradsp::limits::kMaxScannedPlugins);
             break;
         }
     }
@@ -504,8 +506,8 @@ int PluginHostManager::scanBegin(const std::string& extraDirsJson, bool deepScan
     /* [审查 L8 2026-11-25] kMaxScannedPlugins 强制点（分块扫描路）：
      * 候选数按协议上限截断，扫描工作量有界（多插件 bundle 的结果数
      * 可略超候选数，量级仍受候选顶约束）。 */
-    if (job->candidates.size() > ipc::kMaxScannedPlugins) {
-        job->candidates.resize(ipc::kMaxScannedPlugins);
+    if (job->candidates.size() > auradsp::limits::kMaxScannedPlugins) {
+        job->candidates.resize(auradsp::limits::kMaxScannedPlugins);
     }
 
     // 结果渐进写入 m_scannedPlugins：扫描过程中 get_all 即返回已扫到的部分

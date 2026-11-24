@@ -24,7 +24,7 @@ constexpr uint32_t kMaxSlots = auradsp::limits::kMaxSlots;
 constexpr uint32_t kChannels = auradsp::limits::kBusChannels;
 constexpr uint32_t kTransportFrames = 128u;
 constexpr uint32_t kRingBlocks = 16u;
-constexpr uint32_t kMaxScannedPlugins = 65536u;
+constexpr uint32_t kMaxScannedPlugins = auradsp::limits::kMaxScannedPlugins;
 constexpr size_t kMaxControlPayload = 32u * 1024u * 1024u;
 
 enum class Op : uint32_t {
