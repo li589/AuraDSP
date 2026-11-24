@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-21T02:23:05Z",
-  "updated_at": "2026-11-24T11:44:58Z",
+  "updated_at": "2026-11-24T11:53:27Z",
   "files": {
     ".ai/README.md": {
       "role": "index",
@@ -251,9 +251,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "89c67eeb395861f61873115a9e547faf7a692d3bd151c7453b9b73c5c339f963",
-      "size": 1155970,
-      "normalized_sha256": "89c67eeb395861f61873115a9e547faf7a692d3bd151c7453b9b73c5c339f963"
+      "sha256": "2eb8287a3c77e7b038a6e2f7490efb392a27015215bde80ceccd1529df1352b3",
+      "size": 1156018,
+      "normalized_sha256": "2eb8287a3c77e7b038a6e2f7490efb392a27015215bde80ceccd1529df1352b3"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -1174,9 +1174,9 @@
     },
     "app/auradsp_app/lib/engine/audio_isolate_windows.dart": {
       "role": "index",
-      "sha256": "33e07054ce746640ed1d50274828e62f4a762ea29ae5963138cbd2359cfcf55b",
-      "size": 19554,
-      "normalized_sha256": "c84b44792e2e0c808fe151740ba7c83f75658f14103e4fad0e1ba45324aee6b4"
+      "sha256": "9a98122b3828b163254488ff1438f6092807da66ff1a33213eef28dafda9627f",
+      "size": 19814,
+      "normalized_sha256": "48467a5307c71452ceff6be1046fda6b35290de77091b0ef1aa786b221295cb1"
     },
     "app/auradsp_app/lib/engine/audio_out/alsa_ffi.dart": {
       "role": "index",
@@ -1972,9 +1972,9 @@
     },
     "app/auradsp_app/lib/features/visualizer/views/visualizer_viewport.dart": {
       "role": "index",
-      "sha256": "65abdcd905aee99e8c9a17860e90fbdc655eb07a5265352d15eb6ecdbbb927ef",
-      "size": 21072,
-      "normalized_sha256": "0772b1574fa407f06e3addc65b3b5bf0b5352d48bddf9c39f60c8932fbe028e2"
+      "sha256": "8d5a6cb4896cfdbbaf6363397377e7372173ffdf00ef075522e390242c4c4a3e",
+      "size": 21369,
+      "normalized_sha256": "7bfd6450c839d4f32ec869b350eaef35f4bd046ae33b15265223727e94d3d27b"
     },
     "app/auradsp_app/lib/features/visualizer_page.dart": {
       "role": "index",
