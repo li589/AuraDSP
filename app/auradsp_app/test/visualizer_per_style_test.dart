@@ -160,6 +160,42 @@ void main() {
       expect(entry.sensitivity, 1.0); // 在场即覆盖（生效行为不变）
     });
 
+    test('全局复位只复位调谐参数，风格/歌词/MilkDrop 选择保留（审查 F5）', () {
+      final m = AppModel(testing: true);
+      m.setVisualizerConfig(
+        const VisualizerConfig().copyWith(
+          style: VisualizerStyle.tornado,
+          sensitivity: 2.2,
+          bloom: 0.1,
+          barCount: 64,
+          showLyrics: true,
+          showTranslation: false,
+          milkdropPresetPath: 'D:/presets/x.milk',
+        ),
+      );
+      // 当前风格留一份覆盖，复位不得触碰（按档复位）。
+      m.setVisualizerStyleOverride(
+        m.visualizerConfig.value.copyWith(gravity: 3.3),
+      );
+      expect(m.visualizerHasStyleOverride, isTrue);
+
+      m.resetVisualizerTuningToDefaults();
+
+      final raw = m.config.visualizerConfig;
+      // 调谐回出厂
+      expect(raw.sensitivity, 1.0);
+      expect(raw.bloom, 0.5);
+      expect(raw.barCount, 32);
+      // 选择保留
+      expect(raw.style, VisualizerStyle.tornado);
+      expect(raw.showLyrics, isTrue);
+      expect(raw.showTranslation, isFalse);
+      expect(raw.milkdropPresetPath, 'D:/presets/x.milk');
+      // 覆盖仍在，生效值里覆盖字段仍由覆盖提供
+      expect(m.visualizerHasStyleOverride, isTrue);
+      expect(m.visualizerConfig.value.gravity, 3.3);
+    });
+
     test('脏覆盖表条目逐条跳过不丢整表', () {
       final cfg = AppConfig.fromJson({
         'visualizer': {

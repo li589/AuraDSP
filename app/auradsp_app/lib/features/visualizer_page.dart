@@ -512,11 +512,12 @@ class _VisualizerPageState extends State<VisualizerPage> {
             onClose: _closeDrawer,
             onResetToDefaults: () {
               // 复位按档：预设档 = 当前风格恢复跟随全局；
-              // 全局档 = 全局回出厂。
+              // 全局档 = 只复位调谐参数（审查 F5，user 裁定
+              // 2026-11-25：风格/歌词/MilkDrop 选择保留）。
               if (_vizScopePreset) {
                 widget.model.clearVisualizerStyleOverride();
               } else {
-                widget.model.setVisualizerConfig(const VisualizerConfig());
+                widget.model.resetVisualizerTuningToDefaults();
               }
             },
             scopePreset: _vizScopePreset,

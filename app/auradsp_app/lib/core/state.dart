@@ -267,6 +267,22 @@ class AppModel extends ChangeNotifier {
     scheduleAutoSave();
   }
 
+  /// 全局档复位（审查 F5，user 裁定 2026-11-25）：只把调谐参数回
+  /// 出厂——调谐字段口径 = [VisualizerStyleOverride] 的 10 字段
+  /// （配色/灵敏度/衰减/重力/频段数/线宽/辉光/网格/峰值/dB 刻度）；
+  /// 风格、歌词（开关/双语/来源）与 MilkDrop 预设选择保留当前值，
+  /// 不再连带跳回 bars。各风格覆盖不动（按档复位不变）。
+  void resetVisualizerTuningToDefaults() {
+    final cur = config.visualizerConfig;
+    setVisualizerConfig(VisualizerConfig(
+      style: cur.style,
+      showLyrics: cur.showLyrics,
+      showTranslation: cur.showTranslation,
+      lyricsSource: cur.lyricsSource,
+      milkdropPresetPath: cur.milkdropPresetPath,
+    ));
+  }
+
   void _persistVisualizerConfig(bool persistConfig) {
     if (persistConfig && !_isReplayingSession) {
       _vizConfigSaveTimer?.cancel();
