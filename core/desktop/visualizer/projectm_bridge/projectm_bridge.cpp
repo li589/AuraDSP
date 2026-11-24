@@ -375,6 +375,16 @@ private:
             for (auto& t : tasks) t();
             const auto now = std::chrono::steady_clock::now();
             for (auto* ctx : ctxs) {
+                /* [审查 M9 2026-11-24] 快照在任务执行前取得：本轮任务里
+                 * 可能刚完成某 ctx 的销毁注销，快照中的指针随即失效。
+                 * 解引用前逐个复核仍在注册表中，不依赖「注销—销毁—
+                 * delete」的跨线程时序假设。 */
+                {
+                    std::lock_guard<std::mutex> lock(mtx_);
+                    if (std::find(contexts_.begin(), contexts_.end(), ctx) ==
+                        contexts_.end())
+                        continue;
+                }
                 if (ctx->gl_ready.load(std::memory_order_acquire) &&
                     now >= ctx->next_frame_due) {
                     render_one(ctx);
