@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-21T02:23:05Z",
-  "updated_at": "2026-11-24T16:57:05Z",
+  "updated_at": "2026-11-24T18:24:50Z",
   "files": {
     ".ai/README.md": {
       "role": "index",
@@ -245,15 +245,15 @@
     },
     "README.md": {
       "role": "index",
-      "sha256": "4909025a3e9e75d3de009219895d5d4d5f0bb26cc1ce57eb2891b6fdde6c21c8",
-      "size": 9426,
-      "normalized_sha256": "4909025a3e9e75d3de009219895d5d4d5f0bb26cc1ce57eb2891b6fdde6c21c8"
+      "sha256": "b9bb70a404118d9786a97ba9bca68ae11c664209820fa4b8b1322d103f802186",
+      "size": 9580,
+      "normalized_sha256": "b9bb70a404118d9786a97ba9bca68ae11c664209820fa4b8b1322d103f802186"
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "c61e6012989541b4fd1a73008ed308f71375739672d0198a15ebdeee97b492ed",
-      "size": 1162881,
-      "normalized_sha256": "c61e6012989541b4fd1a73008ed308f71375739672d0198a15ebdeee97b492ed"
+      "sha256": "15f48e72b219c992d8061a071e21b3c7c1780d1ecbbaa878c0db7708dbd3f3ab",
+      "size": 1168055,
+      "normalized_sha256": "15f48e72b219c992d8061a071e21b3c7c1780d1ecbbaa878c0db7708dbd3f3ab"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -1030,9 +1030,9 @@
     },
     "app/auradsp_app/lib/core/state.dart": {
       "role": "index",
-      "sha256": "d00fe59a9603f93c5178affb2c6a01b28bc34d8f8a6d07f784119b4d05c1d45f",
-      "size": 88605,
-      "normalized_sha256": "d00fe59a9603f93c5178affb2c6a01b28bc34d8f8a6d07f784119b4d05c1d45f"
+      "sha256": "1eb2162bc35a52187202f198317d43634398f5a64bab055e1ae6c781ea25374d",
+      "size": 89365,
+      "normalized_sha256": "1eb2162bc35a52187202f198317d43634398f5a64bab055e1ae6c781ea25374d"
     },
     "app/auradsp_app/lib/core/state/state_audio_modes.dart": {
       "role": "index",
@@ -1798,9 +1798,9 @@
     },
     "app/auradsp_app/lib/features/visualizer/plugins/milkdrop_builtins.dart": {
       "role": "index",
-      "sha256": "5f14cee3c06af131ba761a72564a6cb541b8d20eb35be9d977cfe8ffa58fd0dd",
-      "size": 1965,
-      "normalized_sha256": "5f14cee3c06af131ba761a72564a6cb541b8d20eb35be9d977cfe8ffa58fd0dd"
+      "sha256": "51897907db4d449f978ccf67e65a62be14d34d284e2690f43f4661d03a9d06d2",
+      "size": 2250,
+      "normalized_sha256": "51897907db4d449f978ccf67e65a62be14d34d284e2690f43f4661d03a9d06d2"
     },
     "app/auradsp_app/lib/features/visualizer/plugins/milkdrop_preset.dart": {
       "role": "index",
@@ -1978,9 +1978,9 @@
     },
     "app/auradsp_app/lib/features/visualizer_page.dart": {
       "role": "index",
-      "sha256": "829992f9159344222fae7a28d373f34789c0c3533b9559806d9bf00c648e8aae",
-      "size": 22187,
-      "normalized_sha256": "829992f9159344222fae7a28d373f34789c0c3533b9559806d9bf00c648e8aae"
+      "sha256": "e6f4581d5f2a3056cc8e6217f30e97e600616d1395a393035c64765bc3357047",
+      "size": 22276,
+      "normalized_sha256": "e6f4581d5f2a3056cc8e6217f30e97e600616d1395a393035c64765bc3357047"
     },
     "app/auradsp_app/lib/features/widgets.dart": {
       "role": "index",
@@ -2974,9 +2974,9 @@
     },
     "app/auradsp_app/test/visualizer_per_style_test.dart": {
       "role": "index",
-      "sha256": "ad844c2337f4765ba37505b416a35a459267ec2a1bdd8b8971605fe231420d36",
-      "size": 6964,
-      "normalized_sha256": "ad844c2337f4765ba37505b416a35a459267ec2a1bdd8b8971605fe231420d36"
+      "sha256": "8b7aff8767fa0c666ce010912343516273ac64db1b43bc223b0180a9246738c5",
+      "size": 8270,
+      "normalized_sha256": "8b7aff8767fa0c666ce010912343516273ac64db1b43bc223b0180a9246738c5"
     },
     "app/auradsp_app/test/visualizer_refactor_test.dart": {
       "role": "index",
@@ -18287,9 +18287,9 @@
     },
     "core/desktop/visualizer/projectm_bridge/projectm_bridge.cpp": {
       "role": "index",
-      "sha256": "fd3a7b9a313a355c4e6491ba2a093730305bcf3f20543972b6f11cec8d7640f0",
-      "size": 25384,
-      "normalized_sha256": "fd3a7b9a313a355c4e6491ba2a093730305bcf3f20543972b6f11cec8d7640f0"
+      "sha256": "accc667dea1a323e547758f62ef757c9988327fe1ad032cc857eb2fa4af083c2",
+      "size": 26149,
+      "normalized_sha256": "accc667dea1a323e547758f62ef757c9988327fe1ad032cc857eb2fa4af083c2"
     },
     "core/desktop/visualizer/projectm_bridge/projectm_bridge_api.h": {
       "role": "index",
@@ -18382,9 +18382,9 @@
     },
     "core/desktop/windows-drivers/01_vaio_driver/src/ControlDevice.cpp": {
       "role": "index",
-      "sha256": "891b43997029c52d499ee323c67aa6ffaf314339e23911c85141ed08b3d8b31a",
-      "size": 49035,
-      "normalized_sha256": "891b43997029c52d499ee323c67aa6ffaf314339e23911c85141ed08b3d8b31a"
+      "sha256": "680a063260ca456fb838ce8674c7041d785806641c29c09bf3521ef97cd5d21e",
+      "size": 50442,
+      "normalized_sha256": "680a063260ca456fb838ce8674c7041d785806641c29c09bf3521ef97cd5d21e"
     },
     "core/desktop/windows-drivers/01_vaio_driver/src/ControlDevice.h": {
       "role": "index",
@@ -18748,9 +18748,9 @@
     },
     "core/desktop/windows-drivers/04_asio_driver/AuraAsioDriver.cpp": {
       "role": "index",
-      "sha256": "ffd83b49d86d3b0e6189dab208362d10f2a92a0a2dca058936f30842b0db84d8",
-      "size": 41235,
-      "normalized_sha256": "0f7cd7614d939af498bd43ec053394e2d911b770e4ec7dc5c54e2ed7127c23fc"
+      "sha256": "45246d161c75fadf1d781c33e0375fee0480af590d295506a2555ac8d466a05a",
+      "size": 40543,
+      "normalized_sha256": "45246d161c75fadf1d781c33e0375fee0480af590d295506a2555ac8d466a05a"
     },
     "core/desktop/windows-drivers/04_asio_driver/AuraAsioDriver.def": {
       "role": "index",
@@ -18760,9 +18760,9 @@
     },
     "core/desktop/windows-drivers/04_asio_driver/AuraAsioDriver.h": {
       "role": "index",
-      "sha256": "c3a7836bf284ebe9b39cdddaee9ce058456f1a93959abf351530f17401285a5b",
-      "size": 7515,
-      "normalized_sha256": "cd00bf419b73e7710004b08a8e9ac48b78ed74350db03c91203e93a266854b7d"
+      "sha256": "e5bc774d7482231bfe5e4838948758d18e647a1f5d39f2eea6852eb58af79edc",
+      "size": 7437,
+      "normalized_sha256": "e5bc774d7482231bfe5e4838948758d18e647a1f5d39f2eea6852eb58af79edc"
     },
     "core/desktop/windows-drivers/04_asio_driver/AuraAsioDriverGuid.h": {
       "role": "index",
@@ -18886,9 +18886,9 @@
     },
     "core/desktop/windows-drivers/bridge/vaio_bridge/VaioBridge.cpp": {
       "role": "index",
-      "sha256": "cc6e7625f4e8cadc4b2e240a3c9b5bfd48fd03fb065362eb565ab9a8f194977e",
-      "size": 125563,
-      "normalized_sha256": "aa10497471f15f969bd73358d28456393e4e1c9e5b856fee6741ceefe9608e7a"
+      "sha256": "df72d0f69e2cdf7c8001d942cca393088005a86a9f1e3d362d4480c68b7de333",
+      "size": 123736,
+      "normalized_sha256": "df72d0f69e2cdf7c8001d942cca393088005a86a9f1e3d362d4480c68b7de333"
     },
     "core/desktop/windows-drivers/bridge/vaio_bridge/VaioBridge.def": {
       "role": "index",
@@ -19042,9 +19042,9 @@
     },
     "docs/00-总览/产品架构总览.md": {
       "role": "index",
-      "sha256": "9f1623f190e2d362c1e3d6b640b59cfaf92c3f0084a2d424322086d23de1e084",
-      "size": 11487,
-      "normalized_sha256": "367e89573043af2a97a64dbfea021fbcad92ff60e55406d0147964e2a5283685"
+      "sha256": "561d84f7d715756312aa5f1b3e054eb5065b303933ec141ee0c197cdcd62c2ff",
+      "size": 11403,
+      "normalized_sha256": "561d84f7d715756312aa5f1b3e054eb5065b303933ec141ee0c197cdcd62c2ff"
     },
     "docs/00-总览/项目初衷.md": {
       "role": "index",
@@ -19357,6 +19357,12 @@
       "sha256": "43e41ac44187091c47bb46805a7aa9391dda8d99c4839a948d1c0e62ffadca02",
       "size": 9505,
       "normalized_sha256": "10e6014dbac500fd9402e59bd429afe7ba1fb07158aea0c1e33f3da2ce78eb1a"
+    },
+    "docs/20-执行/卷积双槽影子立项-2026-11-25.md": {
+      "role": "index",
+      "sha256": "cb50d0183a4bc44e6d151aac6d5f048432080d161031561f4278d5dbdf4d7e39",
+      "size": 4268,
+      "normalized_sha256": "cb50d0183a4bc44e6d151aac6d5f048432080d161031561f4278d5dbdf4d7e39"
     },
     "docs/20-执行/多声道电平PhaseB设计-2026-10-24.md": {
       "role": "index",
@@ -19714,9 +19720,9 @@
     },
     "docs/30-审查/全量代码审查-2026-11-24.md": {
       "role": "index",
-      "sha256": "e79b6518819507637534752a52b1c556235aa2b73c02cfafcd3fc80593adddc0",
-      "size": 35519,
-      "normalized_sha256": "e79b6518819507637534752a52b1c556235aa2b73c02cfafcd3fc80593adddc0"
+      "sha256": "62b1d60264c0c1128e92aa397f5446c78f12a4df0ce9cae6339ab6afcc9f0b80",
+      "size": 40772,
+      "normalized_sha256": "62b1d60264c0c1128e92aa397f5446c78f12a4df0ce9cae6339ab6afcc9f0b80"
     },
     "docs/30-审查/全量代码审查与硬置入特判排查-2026-10-24.md": {
       "role": "index",
@@ -20866,9 +20872,9 @@
     },
     "engine/auradsp_engine.cpp": {
       "role": "index",
-      "sha256": "df479481fe33493b42f0247b109811fad23774ec02e0acb558d2cd040e08f1f9",
-      "size": 30958,
-      "normalized_sha256": "df479481fe33493b42f0247b109811fad23774ec02e0acb558d2cd040e08f1f9"
+      "sha256": "c3c8c79b050612a9cd0b0b988df3902112d5bba77a47fdf61e4e317a496329bf",
+      "size": 31903,
+      "normalized_sha256": "c3c8c79b050612a9cd0b0b988df3902112d5bba77a47fdf61e4e317a496329bf"
     },
     "engine/auradsp_engine.def": {
       "role": "index",
@@ -20908,9 +20914,9 @@
     },
     "engine/chain/engine_audiofile.cpp": {
       "role": "index",
-      "sha256": "71aa87df8a11ab55c6652d73a18bb66b6004ee1de1d3faedd6c0431f148ffd86",
-      "size": 3205,
-      "normalized_sha256": "71aa87df8a11ab55c6652d73a18bb66b6004ee1de1d3faedd6c0431f148ffd86"
+      "sha256": "9a1e1c51c17dffd43fddffb7170361aaa0401252bf2485eee2c7c57bf4343bbb",
+      "size": 3836,
+      "normalized_sha256": "9a1e1c51c17dffd43fddffb7170361aaa0401252bf2485eee2c7c57bf4343bbb"
     },
     "engine/chain/engine_chain.cpp": {
       "role": "index",
@@ -20920,9 +20926,9 @@
     },
     "engine/chain/engine_convolver.cpp": {
       "role": "index",
-      "sha256": "b7676bbdea871e343c917c627d5e133d94b52e160ed0b91cf75284d703d23782",
-      "size": 16179,
-      "normalized_sha256": "b7676bbdea871e343c917c627d5e133d94b52e160ed0b91cf75284d703d23782"
+      "sha256": "a7887889646720d5f85c6f024c6a3fb703ed7ccc8adc41e5146d85daf59907a9",
+      "size": 16971,
+      "normalized_sha256": "a7887889646720d5f85c6f024c6a3fb703ed7ccc8adc41e5146d85daf59907a9"
     },
     "engine/chain/engine_probe.cpp": {
       "role": "index",
@@ -20938,9 +20944,9 @@
     },
     "engine/chain/speaker_layout.h": {
       "role": "index",
-      "sha256": "ba1329b45a568071222b8066fb85a9b5416389038fa1d84df50215268ffbaeb9",
-      "size": 2426,
-      "normalized_sha256": "ba1329b45a568071222b8066fb85a9b5416389038fa1d84df50215268ffbaeb9"
+      "sha256": "f10d62e08bb66e2b28655621f4b58d68471b2abd9fdebf1aa9a135d1041993cf",
+      "size": 2879,
+      "normalized_sha256": "f10d62e08bb66e2b28655621f4b58d68471b2abd9fdebf1aa9a135d1041993cf"
     },
     "engine/core_sources.cmake": {
       "role": "index",
@@ -21010,9 +21016,9 @@
     },
     "engine/dsp/dsp_mc_liveprog.h": {
       "role": "index",
-      "sha256": "a8de5a9b307ef6e526d7b54a1284034dbd09b3431ac1abc92dc5a98eeca53192",
-      "size": 2767,
-      "normalized_sha256": "a8de5a9b307ef6e526d7b54a1284034dbd09b3431ac1abc92dc5a98eeca53192"
+      "sha256": "2ed433d826a48926cbc33f2f9e603da01749dffb4c6674325ec33a5ab15c31d2",
+      "size": 3022,
+      "normalized_sha256": "2ed433d826a48926cbc33f2f9e603da01749dffb4c6674325ec33a5ab15c31d2"
     },
     "engine/dsp/dsp_mc_reverb.cpp": {
       "role": "index",
@@ -21064,9 +21070,9 @@
     },
     "engine/legacy/PATCHES.md": {
       "role": "index",
-      "sha256": "31b4f7838f795144b0cd591ed34695b1265fdd9cc8fdd4253e1ae2ebee1e653c",
-      "size": 101620,
-      "normalized_sha256": "31b4f7838f795144b0cd591ed34695b1265fdd9cc8fdd4253e1ae2ebee1e653c"
+      "sha256": "82aa3aa4f1c1c000adfdfbf3e591cd04bc6e3c2713d84c4901326b4a815d8ea4",
+      "size": 105132,
+      "normalized_sha256": "82aa3aa4f1c1c000adfdfbf3e591cd04bc6e3c2713d84c4901326b4a815d8ea4"
     },
     "engine/legacy/cpthread.c": {
       "role": "index",
@@ -21118,9 +21124,9 @@
     },
     "engine/legacy/jdsp/Effects/convolver1D.c": {
       "role": "index",
-      "sha256": "fbd1d98f94c13181757e25ad14e4bb111b40a57db6f8682b20227f3a3d767007",
-      "size": 7332,
-      "normalized_sha256": "fbd1d98f94c13181757e25ad14e4bb111b40a57db6f8682b20227f3a3d767007"
+      "sha256": "c92da83c9787c81a23ab25094663da26a61016ed7a1b708b4ef317345ae84747",
+      "size": 7713,
+      "normalized_sha256": "c92da83c9787c81a23ab25094663da26a61016ed7a1b708b4ef317345ae84747"
     },
     "engine/legacy/jdsp/Effects/crossfeed.c": {
       "role": "index",
@@ -21184,9 +21190,9 @@
     },
     "engine/legacy/jdsp/Effects/eel2/eel_matrix.h": {
       "role": "index",
-      "sha256": "94cdde005782a06500b58a75371f483d02cb1ba9a04da51be8feeb1884575c1e",
-      "size": 24446,
-      "normalized_sha256": "94cdde005782a06500b58a75371f483d02cb1ba9a04da51be8feeb1884575c1e"
+      "sha256": "b020c7de7dffdadda18cd045daaf662cf336c0a31f1d3e24bae5f5ec4bab70dc",
+      "size": 29725,
+      "normalized_sha256": "b020c7de7dffdadda18cd045daaf662cf336c0a31f1d3e24bae5f5ec4bab70dc"
     },
     "engine/legacy/jdsp/Effects/eel2/fft.c": {
       "role": "index",
@@ -21202,9 +21208,9 @@
     },
     "engine/legacy/jdsp/Effects/eel2/glue_port.h": {
       "role": "index",
-      "sha256": "23172b1d098c02bbe4ee72026ca5f313f48d949dc492ab8996c0ba486b7814b2",
-      "size": 28705,
-      "normalized_sha256": "23172b1d098c02bbe4ee72026ca5f313f48d949dc492ab8996c0ba486b7814b2"
+      "sha256": "76f8273d78c0cafa12c4204671c74575efb86cdfb74d4a2120bc66c1944695ee",
+      "size": 29503,
+      "normalized_sha256": "76f8273d78c0cafa12c4204671c74575efb86cdfb74d4a2120bc66c1944695ee"
     },
     "engine/legacy/jdsp/Effects/eel2/ns-eel-int.h": {
       "role": "index",
@@ -21892,9 +21898,9 @@
     },
     "engine/legacy/jdsp/jdspController.c": {
       "role": "index",
-      "sha256": "cbd672ee3b91753f396f482be72d54513683d2b0e3d6f14920a2ba7643cd70a8",
-      "size": 62313,
-      "normalized_sha256": "cbd672ee3b91753f396f482be72d54513683d2b0e3d6f14920a2ba7643cd70a8"
+      "sha256": "38c0574cb02dbeb63b3891e3ca8b480c9bc154ed1e6562902dad2da4e71c7891",
+      "size": 62331,
+      "normalized_sha256": "38c0574cb02dbeb63b3891e3ca8b480c9bc154ed1e6562902dad2da4e71c7891"
     },
     "engine/legacy/jdsp/jdsp_header.h": {
       "role": "index",
@@ -22036,15 +22042,15 @@
     },
     "engine/plugins/driver/plugin_chain_component.cpp": {
       "role": "index",
-      "sha256": "4c7e79065737d5918bc48fe301e21be02e117ee96e9dc97b67c8bc2eeab1bf9b",
-      "size": 8248,
-      "normalized_sha256": "4c7e79065737d5918bc48fe301e21be02e117ee96e9dc97b67c8bc2eeab1bf9b"
+      "sha256": "adc565a98d78265b8e3d9eefd4d822b560a3d9f966a52b3cf2abd0fb516b179f",
+      "size": 8916,
+      "normalized_sha256": "adc565a98d78265b8e3d9eefd4d822b560a3d9f966a52b3cf2abd0fb516b179f"
     },
     "engine/plugins/driver/plugin_chain_component.h": {
       "role": "index",
-      "sha256": "0ce6ffa8b3539a9ae61edc856b5eee0b50be3e2148d800ee7956b16147112ae7",
-      "size": 4077,
-      "normalized_sha256": "0ce6ffa8b3539a9ae61edc856b5eee0b50be3e2148d800ee7956b16147112ae7"
+      "sha256": "cebc9ea1d7174a36148c0e3f4521d507978138c0aa4ab411297fc32f4197ff0a",
+      "size": 4476,
+      "normalized_sha256": "cebc9ea1d7174a36148c0e3f4521d507978138c0aa4ab411297fc32f4197ff0a"
     },
     "engine/plugins/driver/plugin_driver_registry.cpp": {
       "role": "index",
@@ -22054,9 +22060,9 @@
     },
     "engine/plugins/driver/plugin_host_manager.cpp": {
       "role": "index",
-      "sha256": "5f429d0d7b4ae43b8090a18eacc781eca92d86d529c1fedef92f23dc9b2b5712",
-      "size": 67670,
-      "normalized_sha256": "5f429d0d7b4ae43b8090a18eacc781eca92d86d529c1fedef92f23dc9b2b5712"
+      "sha256": "3ab221b1420819c8e5e5fd633720976989aa6e104a328cfa1cc9d81c87c66fbf",
+      "size": 68411,
+      "normalized_sha256": "3ab221b1420819c8e5e5fd633720976989aa6e104a328cfa1cc9d81c87c66fbf"
     },
     "engine/plugins/driver/plugin_json.cpp": {
       "role": "index",
@@ -22072,9 +22078,9 @@
     },
     "engine/plugins/driver/plugin_scanner.cpp": {
       "role": "index",
-      "sha256": "91a62655564ca6db79ddfe1852c53e6dd3ec8cad3c11a65ce20dabf473b91dfa",
-      "size": 29905,
-      "normalized_sha256": "91a62655564ca6db79ddfe1852c53e6dd3ec8cad3c11a65ce20dabf473b91dfa"
+      "sha256": "24886b61e9ed13bab7aeda6a0da35b26cbeffc2300023af20d9c8968935a3528",
+      "size": 30685,
+      "normalized_sha256": "24886b61e9ed13bab7aeda6a0da35b26cbeffc2300023af20d9c8968935a3528"
     },
     "engine/plugins/driver/plugin_thread.cpp": {
       "role": "index",
@@ -22126,9 +22132,9 @@
     },
     "engine/plugins/formats/vst2/vst2_instance.cpp": {
       "role": "index",
-      "sha256": "7339aef7d296563ee23d437181cad48685145a7f773405e912d46644f209b24b",
-      "size": 51976,
-      "normalized_sha256": "7339aef7d296563ee23d437181cad48685145a7f773405e912d46644f209b24b"
+      "sha256": "ba55bd3bad9fce31a6c9f2d9efc05c935e55668208cc52899e99f313b87695a4",
+      "size": 52431,
+      "normalized_sha256": "ba55bd3bad9fce31a6c9f2d9efc05c935e55668208cc52899e99f313b87695a4"
     },
     "engine/plugins/formats/vst2/vst2_instance.h": {
       "role": "index",
@@ -22156,9 +22162,9 @@
     },
     "engine/plugins/formats/vst3/vst3_instance.cpp": {
       "role": "index",
-      "sha256": "1b272f543f16953577bc961f5912f87dbb0587797804b185093928d8f5363972",
-      "size": 90639,
-      "normalized_sha256": "1b272f543f16953577bc961f5912f87dbb0587797804b185093928d8f5363972"
+      "sha256": "eed666b0977dd203e649699c51aa525b1685cb10e10f0b9604254cf70af888ad",
+      "size": 91483,
+      "normalized_sha256": "eed666b0977dd203e649699c51aa525b1685cb10e10f0b9604254cf70af888ad"
     },
     "engine/plugins/formats/vst3/vst3_instance.h": {
       "role": "index",
@@ -22168,9 +22174,9 @@
     },
     "engine/plugins/formats/vst3/vst3_metadata.cpp": {
       "role": "index",
-      "sha256": "cb79d3957edef81957b8a2b293c4b47c5d407b0269aaa141e2aa70a08c7f96bc",
-      "size": 11046,
-      "normalized_sha256": "cb79d3957edef81957b8a2b293c4b47c5d407b0269aaa141e2aa70a08c7f96bc"
+      "sha256": "b6f5f021fd915effff014dd9d65a8bc7cb5533f4b1d83e1ddee3e6738937ec82",
+      "size": 11682,
+      "normalized_sha256": "b6f5f021fd915effff014dd9d65a8bc7cb5533f4b1d83e1ddee3e6738937ec82"
     },
     "engine/plugins/formats/vst3/vst3_metadata.h": {
       "role": "index",
@@ -22234,9 +22240,9 @@
     },
     "engine/plugins/platform/host/plugin_host_command.cpp": {
       "role": "index",
-      "sha256": "94724c166ed2c46513391d7a32bd3d5988a498265e3cd540760baa2976f0147b",
-      "size": 14682,
-      "normalized_sha256": "94724c166ed2c46513391d7a32bd3d5988a498265e3cd540760baa2976f0147b"
+      "sha256": "3176658694662a2d0a083410547d3c6b8352dc89173287240a366a33ed18a30b",
+      "size": 15040,
+      "normalized_sha256": "3176658694662a2d0a083410547d3c6b8352dc89173287240a366a33ed18a30b"
     },
     "engine/plugins/platform/host/plugin_host_command.h": {
       "role": "index",
@@ -22312,9 +22318,9 @@
     },
     "engine/plugins/platform/win32/host/plugin_ipc_protocol.h": {
       "role": "index",
-      "sha256": "9d6ad3454481e6c7038b491be939a4640de3d031e360098594d275f698b8bb8c",
-      "size": 7176,
-      "normalized_sha256": "9d6ad3454481e6c7038b491be939a4640de3d031e360098594d275f698b8bb8c"
+      "sha256": "f0a2e339f4a2df1eff7406fd4cc0b8bc0413e5901ec6dc4b2a22c4aa2c733d6f",
+      "size": 7205,
+      "normalized_sha256": "f0a2e339f4a2df1eff7406fd4cc0b8bc0413e5901ec6dc4b2a22c4aa2c733d6f"
     },
     "engine/plugins/platform/win32/host/plugin_shared_region.cpp": {
       "role": "index",
@@ -22384,9 +22390,9 @@
     },
     "engine/plugins/plugin_limits.h": {
       "role": "index",
-      "sha256": "a6c52a524c848050ef16f01cfc5e02286fb4c8ab8692cc7e073fe055c04398d6",
-      "size": 1783,
-      "normalized_sha256": "a6c52a524c848050ef16f01cfc5e02286fb4c8ab8692cc7e073fe055c04398d6"
+      "sha256": "7c30d5d92894e2cc738a33762c8de19acbe4a6745f8540ae63b0b8e051d6fe6c",
+      "size": 2021,
+      "normalized_sha256": "7c30d5d92894e2cc738a33762c8de19acbe4a6745f8540ae63b0b8e051d6fe6c"
     },
     "engine/plugins/preset_io.h": {
       "role": "index",
@@ -22426,9 +22432,9 @@
     },
     "installer/README.md": {
       "role": "index",
-      "sha256": "f7c42293ab339bcf7d64a26aa1803bea6c556358566393eccb1d5262ab28db08",
-      "size": 10040,
-      "normalized_sha256": "f7c42293ab339bcf7d64a26aa1803bea6c556358566393eccb1d5262ab28db08"
+      "sha256": "67222d1c51160c6f794782081ce45b9a8eca6d3210ec9254640fcbc291473e10",
+      "size": 10288,
+      "normalized_sha256": "67222d1c51160c6f794782081ce45b9a8eca6d3210ec9254640fcbc291473e10"
     },
     "installer/android/README.md": {
       "role": "index",
@@ -22756,9 +22762,9 @@
     },
     "installer/packkit/version.py": {
       "role": "index",
-      "sha256": "a6b7793b650972e64ddb5a94ae20931aaf8f22b65718ac3798bf1394c118997d",
-      "size": 1881,
-      "normalized_sha256": "a6b7793b650972e64ddb5a94ae20931aaf8f22b65718ac3798bf1394c118997d"
+      "sha256": "1d7a759d53fc16b05af3a4a4d3c868e1a2db02342653133f4619b68f06a4bfc0",
+      "size": 1885,
+      "normalized_sha256": "1d7a759d53fc16b05af3a4a4d3c868e1a2db02342653133f4619b68f06a4bfc0"
     },
     "installer/packkit/windows/__init__.py": {
       "role": "index",
@@ -22774,9 +22780,9 @@
     },
     "installer/packkit/windows/driver.py": {
       "role": "index",
-      "sha256": "6ebb3c61128a0631151795a8d03262cf921c9beae9a751a66630d6fc6806ec61",
-      "size": 5886,
-      "normalized_sha256": "6ebb3c61128a0631151795a8d03262cf921c9beae9a751a66630d6fc6806ec61"
+      "sha256": "a798d5608be0cbb4fee005e129a2c1c5cd78bae42e4288b66771c2614a15ac31",
+      "size": 6787,
+      "normalized_sha256": "a798d5608be0cbb4fee005e129a2c1c5cd78bae42e4288b66771c2614a15ac31"
     },
     "installer/packkit/windows/driver_payload.py": {
       "role": "index",
@@ -22816,9 +22822,9 @@
     },
     "installer/packkit/windows/signing.py": {
       "role": "index",
-      "sha256": "9fa031079ffc0aec84b562cc2c4df231f21910163cb7cf11d302916044f7f6c3",
-      "size": 6601,
-      "normalized_sha256": "9fa031079ffc0aec84b562cc2c4df231f21910163cb7cf11d302916044f7f6c3"
+      "sha256": "4992cbd3748d0b9fa5c00aebe5bc5d3c80c7e9f59128592c92b1606398ae619a",
+      "size": 7065,
+      "normalized_sha256": "4992cbd3748d0b9fa5c00aebe5bc5d3c80c7e9f59128592c92b1606398ae619a"
     },
     "installer/packkit/windows/toolchain.py": {
       "role": "index",
@@ -22840,9 +22846,9 @@
     },
     "installer/shared/version_resolver.py": {
       "role": "index",
-      "sha256": "911b7eadc4cb59faeda5998d459f003b195e7f3b2790de991c5d99c6255f9a99",
-      "size": 2946,
-      "normalized_sha256": "911b7eadc4cb59faeda5998d459f003b195e7f3b2790de991c5d99c6255f9a99"
+      "sha256": "90c7870973bf960cd2319572311008db66fca687c623934b05e81372564154c5",
+      "size": 2950,
+      "normalized_sha256": "90c7870973bf960cd2319572311008db66fca687c623934b05e81372564154c5"
     },
     "installer/tests/test_packkit_linux_unit.py": {
       "role": "observe",
@@ -25576,9 +25582,9 @@
     },
     "tools/README.md": {
       "role": "index",
-      "sha256": "c72c98a0bf67fd1765aa3cff29179850afea6d0ad92d962f216a1a85129a15f9",
-      "size": 13268,
-      "normalized_sha256": "c72c98a0bf67fd1765aa3cff29179850afea6d0ad92d962f216a1a85129a15f9"
+      "sha256": "621eb33492e03eb4a52b9a4e0db542ad54b9fdea630669266a1f9f33409bf665",
+      "size": 13577,
+      "normalized_sha256": "621eb33492e03eb4a52b9a4e0db542ad54b9fdea630669266a1f9f33409bf665"
     },
     "tools/bin/abi_consistency.py": {
       "role": "index",
@@ -25660,9 +25666,9 @@
     },
     "tools/bin/progress_ui.py": {
       "role": "index",
-      "sha256": "ff5dd3f6ed31b844dc3adcd300ac59b09934d5dced8c1f865a965ceae33f64c9",
-      "size": 24575,
-      "normalized_sha256": "ff5dd3f6ed31b844dc3adcd300ac59b09934d5dced8c1f865a965ceae33f64c9"
+      "sha256": "724cc09e1d898d92b129b3262d8589ed8ca3c3709fdc7309797214c97b1a39d9",
+      "size": 27827,
+      "normalized_sha256": "724cc09e1d898d92b129b3262d8589ed8ca3c3709fdc7309797214c97b1a39d9"
     },
     "tools/bin/push_via_api.py": {
       "role": "index",
@@ -25978,9 +25984,9 @@
     },
     "tools/remote/Restore-DriverCertTrust.ps1": {
       "role": "index",
-      "sha256": "b28b65d16c7c257970eab9eb7b1f0d18b2672f578e439d03e65c5d68b4374f32",
-      "size": 1838,
-      "normalized_sha256": "b28b65d16c7c257970eab9eb7b1f0d18b2672f578e439d03e65c5d68b4374f32"
+      "sha256": "0fe4ceabe10e988ac94b50758bbed342115af50a2a5855541875325d19317449",
+      "size": 1892,
+      "normalized_sha256": "0fe4ceabe10e988ac94b50758bbed342115af50a2a5855541875325d19317449"
     },
     "tools/remote/Send-ToGuest.ps1": {
       "role": "index",
@@ -26002,9 +26008,9 @@
     },
     "tools/remote/guest_reaper_state.py": {
       "role": "index",
-      "sha256": "4b0325190869aaedb2df83f3dc8cb11e650aa914260cf529d1875ad496f6e407",
-      "size": 1473,
-      "normalized_sha256": "4b0325190869aaedb2df83f3dc8cb11e650aa914260cf529d1875ad496f6e407"
+      "sha256": "3a6ff12b5406fdcc34decefd39f37cb607edc7dcaa6ce598a241320cca9f5790",
+      "size": 1404,
+      "normalized_sha256": "3a6ff12b5406fdcc34decefd39f37cb607edc7dcaa6ce598a241320cca9f5790"
     },
     "tools/remote/guest_telemetry.py": {
       "role": "index",
@@ -26014,9 +26020,9 @@
     },
     "tools/remote/sync_to_vm.py": {
       "role": "index",
-      "sha256": "24f5aec0739d6b9bd2103352008f6287a8528ff3069da23db150382d8e92cc31",
-      "size": 4407,
-      "normalized_sha256": "24f5aec0739d6b9bd2103352008f6287a8528ff3069da23db150382d8e92cc31"
+      "sha256": "d11162523768a8f12d51738fd3a91692fd835d9a072fc577887aae17d6a1f588",
+      "size": 4679,
+      "normalized_sha256": "d11162523768a8f12d51738fd3a91692fd835d9a072fc577887aae17d6a1f588"
     },
     "tools/remote/vm_exec.py": {
       "role": "index",
