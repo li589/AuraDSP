@@ -719,7 +719,13 @@ def run_smoke_tests():
     passed = skipped = failed = 0
     skipped_files = []
     ui = _progress_ui("AuraDSP Smoke Tests", total=len(smoke_files))
+    cancelled_run = False
     for sf in smoke_files:
+        if ui and ui.cancelled():
+            print("\n[CANCEL] 进度窗取消：跳过剩余 smoke")
+            all_pass = False
+            cancelled_run = True
+            break
         path = os.path.join(SMOKE_DIR, sf)
         if not os.path.exists(path):
             print(f"[WARN] File not found: {sf}")
@@ -763,7 +769,8 @@ def run_smoke_tests():
         print("  SKIPPED: " + ", ".join(skipped_files))
     print("========================================")
     if ui:
-        ui.done(all_pass,
+        ui.done(all_pass and not cancelled_run,
+                "用户取消" if cancelled_run else
                 f"PASS {passed} | SKIP {skipped} | FAIL {failed}")
     return 0 if all_pass else 1
 

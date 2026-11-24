@@ -16,7 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ..common import die, log, open_progress_ui, ui_step
+from ..common import die, log, open_progress_ui, ui_cancelled, ui_step
 from ..hashing import merge_sha256sums
 from ..manifest import refresh_dist_manifest
 from ..naming import RESOURCE_TIERS
@@ -175,6 +175,8 @@ def _main_impl(argv: list[str]) -> int:
         fn = MODE_FUNCS.get(mode)
         if fn is None:
             raise die(f"未知模式: {mode}（可选 {', '.join(MODE_FUNCS)} 或 all）")
+        if ui_cancelled():
+            raise die("用户从进度窗取消打包")
         ui_step(f"打包模式 {mode}")
         dest = fn(args, ver, out)
         produced.append(dest)

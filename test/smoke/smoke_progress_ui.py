@@ -168,6 +168,35 @@ check("packkit.common 日志镜像", _has("installer/packkit/common.py", "open_p
 check("release 接线", _has("installer/release.py", "open_progress_ui"))
 check("pack cli 接线", _has("installer/packkit/windows/cli.py", "open_progress_ui"))
 
+# --- 8. 取消回传通道 -----------------------------------------------------------
+import time as _time
+
+mod8 = load_mod()
+os.environ["AURADSP_NO_UI"] = "1"
+ui8 = mod8.ProgressUI("t")
+del os.environ["AURADSP_NO_UI"]
+check("未点取消时 cancelled() 为 False", ui8.cancelled() is False)
+
+
+class _CancelProc:
+    stdin = _MemStdin()
+    stdout = io.BytesIO(b"noise line\nCANCEL\n")
+
+
+ui8._attach(_CancelProc())
+deadline = _time.monotonic() + 5.0
+while _time.monotonic() < deadline and not ui8.cancelled():
+    _time.sleep(0.05)
+check("子进程发 CANCEL 后 cancelled() 置位", ui8.cancelled() is True)
+ui8._proc = None
+
+# --- 9. 取消检查点在位 -----------------------------------------------------------
+check("runner 取消检查点", _has("test/runner.py", "ui.cancelled()"))
+check("pack cli 取消检查点",
+      _has("installer/packkit/windows/cli.py", "ui_cancelled()"))
+check("release 取消检查点", _has("installer/release.py", "ui_cancelled()"))
+check("窗口侧有取消按钮", _has("tools/bin/progress_ui.py", "取消运行"))
+
 print()
 if fails:
     print(f"FAILURES: {fails}")

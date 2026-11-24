@@ -85,6 +85,17 @@ def ui_step(text: str) -> None:
             pass
 
 
+def ui_cancelled() -> bool:
+    """进度窗「取消运行」是否已被按下（无窗时恒 False）。"""
+    ui = _ui
+    if ui is None:
+        return False
+    try:
+        return bool(ui.cancelled())
+    except Exception:
+        return False
+
+
 def die(msg: str) -> SystemExit:
     """返回（而非抛出）SystemExit，调用方写 `raise die(...)` 以保留栈语义。"""
     return SystemExit(f"{LOG_PREFIX} error: {msg}")

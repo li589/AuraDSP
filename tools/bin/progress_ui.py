@@ -15,12 +15,20 @@
 - 关闭开关：环境变量 `AURADSP_NO_UI=1` 全局禁用；非 Windows 平台默认
   不拉起（`AURADSP_PROGRESS_UI=1` 可强制尝试，失败照样静默）。
 
-协议（一行一个 JSON，UTF-8）：
+协议（宿主→窗口，一行一个 JSON，UTF-8，经 stdin）：
   {"t":"title","text":...}            窗口标题（首行）
   {"t":"step","text":...}             当前步骤文案
   {"t":"prog","done":n,"total":m}     进度（total 可后补）
   {"t":"log","text":...}              日志行（窗口只留最近 300 行）
   {"t":"done","ok":true/false,"text":...}  终局：成功停 4s、失败停 15s 后自关
+
+交互（窗口→宿主，经子进程 stdout 文本行）：
+  CANCEL                              用户点了「取消运行」：宿主在下一个
+                                      检查点查 ui.cancelled() 并自行停下
+                                      （runner 每条 smoke 前、pack 每个
+                                      模式前、release 每个档位前各一处）。
+  关窗（X 或「关闭窗口」）不发任何信号：管道断裂后宿主自动卸下 UI，
+  脚本照常跑完——关窗永远不等于取消。
 
 用法（宿主侧）：
   from progress_ui import ProgressUI   # 按路径加载，见各入口的加载器
@@ -37,6 +45,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 
 _DONE_OK_LINGER_MS = 4000
@@ -80,18 +89,19 @@ class ProgressUI:
         self._done_sent = False
         self._count = 0
         self._total = total
+        self._cancel = threading.Event()
         if not _should_spawn():
             return
         try:
-            self._proc = subprocess.Popen(
+            proc = subprocess.Popen(
                 [_child_executable(), os.path.abspath(__file__), "--serve"],
                 stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
             )
         except Exception:
-            self._proc = None
             return
+        self._attach(proc)
         self._send({"t": "title", "text": title})
         if total:
             self._send({"t": "prog", "done": 0, "total": total})
@@ -99,6 +109,30 @@ class ProgressUI:
             atexit.register(self._at_exit)
         except Exception:
             pass
+
+    def _attach(self, proc) -> None:
+        """挂上子进程并起取消信号读线程（窗口 stdout 出现 CANCEL 即置位）。"""
+        self._proc = proc
+
+        def _reader() -> None:
+            try:
+                for raw in proc.stdout:  # type: ignore[union-attr]
+                    if raw.strip() == b"CANCEL":
+                        self._cancel.set()
+            except Exception:
+                pass
+
+        try:
+            threading.Thread(target=_reader, daemon=True).start()
+        except Exception:
+            pass
+
+    def cancelled(self) -> bool:
+        """用户是否点了「取消运行」。宿主在检查点轮询，永不抛。"""
+        try:
+            return self._cancel.is_set()
+        except Exception:
+            return False
 
     # -- 内部 ------------------------------------------------------------
     def _send(self, event: dict) -> None:
@@ -218,6 +252,28 @@ def _serve() -> int:
                       font=("Consolas", 9))
     log_box.pack(fill="both", expand=True)
 
+    keep_open = tk.BooleanVar(value=False)
+    btn_row = ttk.Frame(frm)
+    btn_row.pack(fill="x", pady=(8, 0))
+    cancel_btn = ttk.Button(btn_row, text="取消运行")
+    cancel_btn.pack(side="left")
+    ttk.Button(btn_row, text="关闭窗口", command=lambda: _close()).pack(
+        side="left", padx=(8, 0))
+    ttk.Checkbutton(btn_row, text="完成后保持打开",
+                    variable=keep_open).pack(side="left", padx=(12, 0))
+    ttk.Label(btn_row, text="关窗不中断脚本").pack(side="right")
+
+    def _on_cancel() -> None:
+        try:
+            sys.stdout.write("CANCEL\n")
+            sys.stdout.flush()
+        except Exception:
+            pass
+        cancel_btn.configure(state="disabled")
+        status_var.set("正在取消…（当前步骤结束后停下）")
+
+    cancel_btn.configure(command=_on_cancel)
+
     def _append_log(text: str) -> None:
         log_box.configure(state="normal")
         log_box.insert("end", text + "\n")
@@ -254,7 +310,12 @@ def _serve() -> int:
             linger = _EOF_LINGER_MS
         if state["total"]:
             bar.configure(value=state["done"], maximum=state["total"])
-        root.after(linger, _close)
+        try:
+            cancel_btn.configure(state="disabled")
+        except Exception:
+            pass
+        if not keep_open.get():
+            root.after(linger, _close)
 
     def _close() -> None:
         try:
@@ -307,13 +368,20 @@ def _serve() -> int:
 
 
 def _demo() -> int:
-    """人工自检：喂一段假进度，肉眼确认窗口出现与自动关闭。"""
-    ui = ProgressUI("AuraDSP 进度窗自检 demo", total=5)
-    for i in range(1, 6):
-        ui.step(f"假步骤 {i}/5")
+    """人工自检：喂一段假进度，肉眼确认窗口出现与自动关闭。
+
+    步骤拉长到 10 步、每步 1.2s，留足点「取消运行」的时间：点后 demo
+    应在当前步结束即停下并显示失败终局；不点则走完显示完成。
+    """
+    ui = ProgressUI("AuraDSP 进度窗自检 demo", total=10)
+    for i in range(1, 11):
+        if ui.cancelled():
+            ui.done(ok=False, text=f"已在第 {i} 步前取消")
+            return 2
+        ui.step(f"假步骤 {i}/10")
         ui.log(f"demo log line {i}")
         ui.advance()
-        time.sleep(0.7)
+        time.sleep(1.2)
     ui.done(ok=True, text="demo 完成，应在约 4 秒后自动关闭")
     return 0
 

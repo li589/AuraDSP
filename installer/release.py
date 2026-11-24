@@ -40,6 +40,7 @@ from packkit.common import (  # noqa: E402
     log,
     open_progress_ui,
     reconfigure_streams,
+    ui_cancelled,
     ui_step,
 )
 from packkit.deliver import (  # noqa: E402
@@ -248,6 +249,8 @@ def _main_impl(argv: list[str]) -> int:
         out_dir = work_dir / tier
         if not args.dry_run:
             out_dir.mkdir(parents=True, exist_ok=True)
+        if ui_cancelled():
+            raise die("用户从进度窗取消发布")
         ui_step(f"打包档位 {tier}")
         plan.run_pack(tier, modes, out_dir, what_if=args.dry_run)
         # 产物名由各平台命名真相源给：编排层不猜名字
