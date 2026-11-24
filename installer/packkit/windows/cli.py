@@ -90,7 +90,9 @@ def _run_driver_gates(args, modes: list[str]) -> None:
 
     驱动不在 build_windows.ps1 的目标集里，所以「谁上次编的就是什么」；
     不加这道校验，包可能装着比源码旧的驱动。staging 是开发测试向的就地
-    补齐，陈旧只警告；driver/setup 两条发行路径必须拒绝。
+    补齐，陈旧只警告；driver/setup/portable 三条发行路径必须拒绝
+    （portable 载荷同样组装 driver/，F-6 审查 2026-11-24：此前
+    portable-only 调用整段跳过本门，陈旧驱动可静默出包）。
     """
     if modes == ["staging"]:
         ddir = find_driver_dir(args.driver_dir)
@@ -98,7 +100,7 @@ def _run_driver_gates(args, modes: list[str]) -> None:
             for problem in check_driver_freshness(ddir):
                 log(f"警告: {problem}（staging 不拦截；发行打包仍会拒绝）")
 
-    if "driver" not in modes and "setup" not in modes:
+    if "driver" not in modes and "setup" not in modes and "portable" not in modes:
         return
     if args.build_driver and not args.what_if:
         build_driver()

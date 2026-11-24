@@ -31,10 +31,17 @@ $outLog = Join-Path $WorkDir ("guestrun_{0}_out.log" -f $Tag)
 $errLog = Join-Path $WorkDir ("guestrun_{0}_err.log" -f $Tag)
 "start $(Get-Date -Format HH:mm:ss) script=$Script tag=$Tag" | Out-File $resultLog
 & scp -i $Key -o StrictHostKeyChecking=no -o ConnectTimeout=8 $src ("{0}@{1}:C:/Users/{2}/{3}" -f $GuestUser, $GuestHost, $GuestUser, $Script)
+# F-7 (review 2026-11-24): a failed scp must stop the run -- otherwise
+# ssh happily executes the guest's stale copy from a previous run and
+# its output is filed as this run's result.
+if ($LASTEXITCODE -ne 0) { throw "scp to guest failed (rc=$LASTEXITCODE); refusing to run a possibly stale copy of $Script" }
 $pyArgSuffix = ''
 if ($PyArgs) { $pyArgSuffix = ' ' + $PyArgs }
 $remote = "python C:\Users\$GuestUser\$Script$pyArgSuffix"
-$p = Start-Process ssh -ArgumentList '-i', $Key, '-o', 'StrictHostKeyChecking=no', '-o', 'ConnectTimeout=8', ("{0}@{1}" -f $GuestUser, $GuestHost), $remote -Wait -PassThru -RedirectStandardOutput $outLog -RedirectStandardError $errLog -NoNewWindow
+# F-7: ServerAlive bounds a wedged relay to ~60s instead of the
+# tens-of-minutes hang this script's header warns about; ConnectTimeout
+# alone only covers connection establishment.
+$p = Start-Process ssh -ArgumentList '-i', $Key, '-o', 'StrictHostKeyChecking=no', '-o', 'ConnectTimeout=8', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4', ("{0}@{1}" -f $GuestUser, $GuestHost), $remote -Wait -PassThru -RedirectStandardOutput $outLog -RedirectStandardError $errLog -NoNewWindow
 "ssh rc=$($p.ExitCode)" | Out-File $resultLog -Append
 Get-Content $outLog -ErrorAction SilentlyContinue | Out-File $resultLog -Append
 Get-Content $errLog -ErrorAction SilentlyContinue | Select-Object -First 5 | Out-File $resultLog -Append
