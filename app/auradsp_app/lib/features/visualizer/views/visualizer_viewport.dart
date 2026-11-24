@@ -266,6 +266,11 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         effectivePcm = _synthesizePcmFromWaveform();
         bridge.feedPcm(effectivePcm);
         _pmLastFed = null; // 合成 PCM 每帧内容变化，避免相同引用短路
+      } else if (_pmLastFed != null) {
+        // 音频转为静音时向 projectM 泵送一帧归零缓冲，使波形平滑归平，避免上一帧驻留
+        _synthPcmBuffer.fillRange(0, _synthPcmBuffer.length, 0.0);
+        bridge.feedPcm(_synthPcmBuffer);
+        _pmLastFed = null;
       }
     }
     bridge.renderFrame();

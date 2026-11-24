@@ -65,6 +65,7 @@ class WasapiCaptureSourceImpl implements WindowsCaptureSource, RawMultichannelSo
 
   @override
   void fill(Float32List out, int frames, int deviceRate) {
+    _lastBlockFrames = 0;
     if (_failed) {
       _zero(out, frames);
       return;
@@ -167,6 +168,8 @@ class WasapiCaptureSourceImpl implements WindowsCaptureSource, RawMultichannelSo
           out[baseOut + c] = _fifo[baseFifo + c];
         }
       }
+      _r = (_r + take) % _capFrames;
+      _n -= take;
       if (take < frames) {
         out.fillRange(take * ch, frames * ch, 0.0);
       }
@@ -189,6 +192,11 @@ class WasapiCaptureSourceImpl implements WindowsCaptureSource, RawMultichannelSo
           out[baseOut + c] = _fifo[a + c] * (1 - f) + _fifo[b + c] * f;
         }
       }
+      final consumed = _frac + produce * ratio;
+      final drop = consumed.floor();
+      _r = (_r + drop) % _capFrames;
+      _n -= drop;
+      _frac = consumed - drop;
       if (produce < frames) {
         out.fillRange(produce * ch, frames * ch, 0.0);
       }
