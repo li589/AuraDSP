@@ -249,6 +249,13 @@ void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
     if (slot >= kMaxPluginSlots) return;
     PluginSlot& s = m_slots[slot];
     clearSlotFault(slot);
+    /* [审查 M7 补漏二 2026-11-25] 快照随实例生命周期复位：旧实例的
+     * 传输失联快照若留到新实例落座，链组件在首块前以 isBypassedSlot
+     * 判旁路、永不调用 process，快照便永无刷新机会——重载后恒直通
+     * （smoke_plugin_host_process [7] 定罪）。卸载 choke point 在此
+     * 清零，落座点（loadSlot/reactivateSlot）以新实例活读回填。 */
+    s.transportFailed.store(false, std::memory_order_relaxed);
+    s.latency.store(0, std::memory_order_relaxed);
     s.hasActive.store(false, std::memory_order_release);
     s.destroyPending.store(true, std::memory_order_release);
     std::atomic_thread_fence(std::memory_order_acquire);
@@ -1024,6 +1031,8 @@ void PluginHostManager::reactivateSlot(PluginSlot& s, int channelHint,
         s.instance->setChannelHint(channelHint);
         s.instance->activate(sampleRate, maxBlockSize);
         s.latency.store(s.instance->getLatency(), std::memory_order_relaxed);
+        s.transportFailed.store(s.instance->hostTransportFailed(),
+                                std::memory_order_relaxed);
         const PluginBusInfo bus = s.instance->busInfo();
         s.mainInChannels.store(bus.mainInChannels > 0 ? bus.mainInChannels : 2,
                                std::memory_order_relaxed);
@@ -1172,6 +1181,10 @@ void PluginHostManager::commitInstanceLocked(size_t slot, std::unique_ptr<IPlugi
     auto old = std::move(s.instance);
     s.instance = std::move(instance);
     s.latency.store(s.instance->getLatency(), std::memory_order_relaxed);
+    /* M7 补漏二：落座点以新实例活读回填传输快照（与 latency 同点），
+     * 同步/异步两条挂载路都经本函数，一处覆盖。 */
+    s.transportFailed.store(s.instance->hostTransportFailed(),
+                            std::memory_order_relaxed);
     const PluginBusInfo bus = s.instance->busInfo();
     s.mainInChannels.store(bus.mainInChannels > 0 ? bus.mainInChannels : 2,
                            std::memory_order_relaxed);
@@ -1224,6 +1237,9 @@ std::unique_ptr<IPluginInstance> PluginHostManager::detachInstanceLocked(size_t 
     const bool quiesced = waitQuiesce(s.inFlight);
     s.destroyPending.store(false, std::memory_order_relaxed);
     s.latency.store(0, std::memory_order_relaxed);
+    /* M7 补漏二（同 unloadPluginSlotLocked 口径）：拆卸路径清
+     * 传输失联快照，防新实例被旧快照判旁路恒直通。 */
+    s.transportFailed.store(false, std::memory_order_relaxed);
 
     auto instance = std::move(s.instance);
     if (!quiesced) {
