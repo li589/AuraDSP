@@ -89,4 +89,42 @@ void main() {
       expect(m.pipelinePairConflicts, isTrue);
     });
   });
+
+  group('AuraVAIO vs 第三方 VAIO 过滤规格', () {
+    test('filteredWasapiOutputs 仅排除 AuraVAIO 与虚拟 ASIO，保留 VB-Audio VAIO 等第三方虚拟卡', () {
+      final m = AppModel(testing: true);
+      m.wasapiDevices = const [
+        AudioDeviceItem(id: 'realtek', name: 'Speakers (Realtek Audio)', isRender: true),
+        AudioDeviceItem(id: 'auravaio', name: 'Speakers (AuraVAIO Virtual Audio Device)', isRender: true),
+        AudioDeviceItem(id: 'vb_vaio', name: 'VoiceMeeter Input (VB-Audio VoiceMeeter VAIO)', isRender: true),
+        AudioDeviceItem(id: 'vb_aux', name: 'VoiceMeeter Aux Input (VB-Audio VoiceMeeter AUX VAIO)', isRender: true),
+        AudioDeviceItem(id: 'asio', name: 'AuraDSP Virtual ASIO Render', isRender: true),
+      ];
+      m.vaioDetectInfo = <String, dynamic>{};
+      final outIds = m.filteredWasapiOutputs.map((d) => d.id).toList();
+      expect(outIds, contains('realtek'));
+      expect(outIds, contains('vb_vaio'));
+      expect(outIds, contains('vb_aux'));
+      expect(outIds, isNot(contains('auravaio')));
+      expect(outIds, isNot(contains('asio')));
+    });
+
+    test('vaioPhysicalEndpoints 仅排除自身 AuraVAIO 与虚拟 ASIO，允许第三方 VAIO 作为物理监听端点', () {
+      final m = AppModel(testing: true);
+      m.wasapiDevices = const [];
+      m.vaioDetectInfo = <String, dynamic>{
+        'endpoints': [
+          {'id': 'realtek', 'name': 'Speakers (Realtek Audio)'},
+          {'id': 'auravaio', 'name': 'Speakers (AuraVAIO Virtual Audio Device)'},
+          {'id': 'vb_vaio', 'name': 'VoiceMeeter Input (VB-Audio VoiceMeeter VAIO)'},
+          {'id': 'asio', 'name': 'AuraDSP Virtual ASIO Render'},
+        ],
+      };
+      final epIds = m.vaioPhysicalEndpoints.map((d) => d.id).toList();
+      expect(epIds, contains('realtek'));
+      expect(epIds, contains('vb_vaio'));
+      expect(epIds, isNot(contains('auravaio')));
+      expect(epIds, isNot(contains('asio')));
+    });
+  });
 }

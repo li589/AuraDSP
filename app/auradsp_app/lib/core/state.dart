@@ -470,15 +470,26 @@ class AppModel extends ChangeNotifier {
   // 修复，见 state_audio_modes.dart 的 reconcileDeviceSelections。
   final Map<String, DateTime> _reconcileAbsentSince = {};
 
+  /// 判断是否为 AuraDSP 自身虚拟端点（AuraVAIO、虚拟 ASIO 等）。
+  /// 仅排除本应用自身创建的虚拟驱动，第三方虚拟端点（如 VB-Audio VoiceMeeter VAIO 等）保留。
+  static bool isAuraVirtualDevice(String name, [String id = '']) {
+    final n = name.toLowerCase();
+    final idLower = id.toLowerCase();
+    final isAuraVaio = n.contains('auravaio') ||
+        (n.contains('aura') && n.contains('vaio')) ||
+        idLower.contains('auravaio') ||
+        (idLower.contains('aura') && idLower.contains('vaio'));
+    final isAuraAsio = n.contains('auradsp virtual asio') ||
+        n.contains('auradsp asio') ||
+        idLower.contains('auradsp virtual asio') ||
+        idLower.contains('auradsp asio');
+    return isAuraVaio || isAuraAsio;
+  }
+
   List<AudioDeviceItem> get filteredWasapiInputs {
     final list = <AudioDeviceItem>[];
     for (final d in wasapiDevices) {
-      final n = d.name.toLowerCase();
-      if (n.contains('auravaio') ||
-          n.contains('auradsp virtual asio') ||
-          n.contains('auradsp asio')) {
-        continue;
-      }
+      if (isAuraVirtualDevice(d.name, d.id)) continue;
       list.add(d);
     }
     // 空列表就返回空（2026-10-28）：此前这里塞 3 条带「Realtek / 英特尔智音」
@@ -508,15 +519,7 @@ class AppModel extends ChangeNotifier {
     final list = <AudioDeviceItem>[];
     for (final d in wasapiDevices) {
       if (!d.isRender) continue;
-      final n = d.name.toLowerCase();
-      final idLower = d.id.toLowerCase();
-      if (n.contains('vaio') ||
-          n.contains('auravaio') ||
-          n.contains('auradsp virtual asio') ||
-          n.contains('auradsp asio') ||
-          idLower.contains('vaio')) {
-        continue;
-      }
+      if (isAuraVirtualDevice(d.name, d.id)) continue;
       list.add(d);
     }
     if (list.isEmpty) {
@@ -538,13 +541,7 @@ class AppModel extends ChangeNotifier {
           }
         }
         if (name.isEmpty) continue;
-        final n = name.toLowerCase();
-        final idLower = id.toLowerCase();
-        if (!n.contains('vaio') &&
-            !n.contains('auravaio') &&
-            !n.contains('auradsp virtual asio') &&
-            !n.contains('auradsp asio') &&
-            !idLower.contains('vaio')) {
+        if (!isAuraVirtualDevice(name, id)) {
           list.add(AudioDeviceItem(id: id, name: name, isRender: true));
         }
       }
@@ -613,15 +610,7 @@ class AppModel extends ChangeNotifier {
         }
       }
       if (name.isEmpty) continue;
-      final lower = name.toLowerCase();
-      final idLower = id.toLowerCase();
-      if (lower.contains('vaio') ||
-          lower.contains('auravaio') ||
-          lower.contains('auradsp virtual asio') ||
-          lower.contains('auradsp asio') ||
-          idLower.contains('vaio')) {
-        continue;
-      }
+      if (isAuraVirtualDevice(name, id)) continue;
       list.add(AudioDeviceItem(id: id, name: name, isRender: true));
     }
     // 若 VAIO 探测结果暂未就绪，使用 filteredWasapiOutputs 兜底
