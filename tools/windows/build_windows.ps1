@@ -171,6 +171,20 @@ function Assert-Fresh {
     return $item
 }
 
+# -------------------------------------------------------------------------
+# Progress UI step mirroring (2026-11-24): when the release orchestrator
+# runs this script with AURADSP_PROGRESS_EVENTS pointing at its relay
+# events file, step banners are appended there as JSON lines so they show
+# in the same progress window. No env var = no-op; any failure is silent.
+# -------------------------------------------------------------------------
+function Send-UiStep([string]$Text) {
+    if (-not $env:AURADSP_PROGRESS_EVENTS) { return }
+    try {
+        $json = '{"t":"step","text":"' + $Text + '"}'
+        [IO.File]::AppendAllText($env:AURADSP_PROGRESS_EVENTS, $json + "`n", (New-Object System.Text.UTF8Encoding $false))
+    } catch { }
+}
+
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "         AuraDSP Windows 全栈构建与产物整理流水线           " -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
@@ -184,6 +198,7 @@ Write-Host "`n"
 # Step 1: 进程锁定检测与自动释放
 # -------------------------------------------------------------------------
 Write-Host "[1/6] 检查运行中进程与文件锁..." -ForegroundColor Yellow
+Send-UiStep "[1/6] 检查运行中进程与文件锁..."
 
 # 清理**本仓库构建树**相关的残留 MSBuild/cmake 进程（详见 Stop-StaleBuildProcesses）。
 Stop-StaleBuildProcesses
@@ -210,6 +225,7 @@ else {
 # -------------------------------------------------------------------------
 if (-not $SkipEngine) {
     Write-Host "`n[2/6] 检查与编译 C++ 核心引擎 (auradsp_engine.dll)..." -ForegroundColor Yellow
+Send-UiStep "[2/6] 编译 C++ 核心引擎..."
     $EngineOutDir = Join-Path $ProjectRoot "core\desktop\windows\out"
 
     Write-Host "  配置 CMake (预设 windows-x64，构建树 build/windows/x64)..."
@@ -290,6 +306,7 @@ else {
 # -------------------------------------------------------------------------
 if (-not $SkipDrivers) {
     Write-Host "`n[3/6] 检查与编译 C++ 驱动常驻桥..." -ForegroundColor Yellow
+Send-UiStep "[3/6] 编译 C++ 驱动常驻桥..."
     $DriversOutDir = Join-Path $ProjectRoot "core\desktop\windows-drivers\out"
 
     Write-Host "  配置 CMake (预设 windows-x64；桥与引擎同一构建树)..."
@@ -339,6 +356,7 @@ else {
 # 故把它们并入构建流水线：门禁要跑，先把门禁要用的东西建出来。
 if (-not $SkipDrivers) {
     Write-Host "`n[3b/6] 编译 smoke 门禁依赖的测试目标..." -ForegroundColor Yellow
+Send-UiStep "[3b/6] 编译 smoke 测试目标..."
     $TestTargets = @(
         "test_plugin_chain", "test_host_quarantine", "test_dll_dirs",
         "rt_drain_test", "vaio_pump_wait_test", "vm_detect",
@@ -367,6 +385,7 @@ if (-not $SkipDrivers) {
 # -------------------------------------------------------------------------
 if (-not $SkipFlutter) {
     Write-Host "`n[4/6] 编译 Flutter 桌面端 (auradsp_app)..." -ForegroundColor Yellow
+Send-UiStep "[4/6] 编译 Flutter 桌面端..."
     $FlutterAppDir = Join-Path $ProjectRoot "app\auradsp_app"
     Set-Location $FlutterAppDir
 
@@ -400,6 +419,7 @@ else {
 # Step 5: 整理与归集发布包 (dist/AuraDSP-Windows-x64)
 # -------------------------------------------------------------------------
 Write-Host "`n[5/6] 规整分发产物与声学资源目录..." -ForegroundColor Yellow
+Send-UiStep "[5/6] 规整分发产物与资源目录..."
 $DistRoot = Join-Path $ProjectRoot "dist"
 $DistPortable = Join-Path $DistRoot "AuraDSP-Windows-x64"
 
@@ -508,6 +528,7 @@ else {
 # -------------------------------------------------------------------------
 if ($BuildAddons) {
     Write-Host "`n[6/6] 生成独立扩展资源包 (tools/resource_pipeline/build_packages.py)..." -ForegroundColor Yellow
+Send-UiStep "[6/6] 生成独立扩展资源包..."
     python "$ProjectRoot\tools\resource_pipeline\build_packages.py"
 }
 

@@ -12,8 +12,17 @@
 - 宿主侧所有公开方法**永不抛异常**：内部全包 try/except，发送失败只把
   自己置为失效。调用方不需要任何防御代码。
 - 子进程读到管道 EOF（宿主退出或被杀）即自行收尾退出，不留孤儿窗。
-- 关闭开关：环境变量 `AURADSP_NO_UI=1` 全局禁用；非 Windows 平台默认
+- 关闭开关：环境变量 `AURADSP_NO_UI=1` 全局禁用；release/pack/runner
+  均有 `--no-progress-ui` 命令行开关（等效）。非 Windows 平台默认
   不拉起（`AURADSP_PROGRESS_UI=1` 可强制尝试，失败照样静默）。
+- **非交互会话中继**：脚本被计划任务/服务拉起时不在活动桌面会话，
+  窗口建了也看不见——此时改走文件模式：事件写临时目录的
+  events.jsonl，再用一次性 /IT 计划任务把查看器投到活动会话 tail
+  显示；取消走同目录 cancel.flag；宿主退出落 closed.flag 并删任务，
+  查看器退出时自清目录。中继搭不起来自动退回管道模式。
+  `AURADSP_UI_RELAY=0` 可关中继。中继模式下宿主把 events 路径经
+  `AURADSP_PROGRESS_EVENTS` 传给子进程，build_windows.ps1 的步骤
+  横幅会 append 进同一窗口。
 
 协议（宿主→窗口，一行一个 JSON，UTF-8，经 stdin）：
   {"t":"title","text":...}            窗口标题（首行）
@@ -81,27 +90,65 @@ def _child_executable() -> str:
     return exe
 
 
+def _in_active_console_session() -> bool:
+    """当前进程是否就在活动桌面会话里（窗口能被用户看见）。
+
+    计划任务/服务方式启动的进程在非交互会话，窗口建了也看不见——这类
+    情况改走文件事件 + /IT 计划任务把查看器投到活动会话（见 _start_relay）。
+    判读失败一律按「在交互会话」处理（退回管道模式，最坏是看不见，
+    不影响脚本本身）。
+    """
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        active = kernel32.WTSGetActiveConsoleSessionId()
+        mine = ctypes.c_ulong(0)
+        kernel32.ProcessIdToSessionId(kernel32.GetCurrentProcessId(),
+                                      ctypes.byref(mine))
+        return active == mine.value
+    except Exception:
+        return True
+
+
 class ProgressUI:
     """宿主侧句柄。构造即尝试拉起子进程；失败后所有方法为空操作。"""
 
     def __init__(self, title: str, total: int | None = None) -> None:
         self._proc: subprocess.Popen | None = None
         self._done_sent = False
+        self._dead = False
         self._count = 0
         self._total = total
         self._cancel = threading.Event()
+        # 文件中继模式状态（非交互会话时用）：事件写 JSONL 文件，查看器
+        # 由 /IT 计划任务在活动桌面会话里 tail 显示；取消走同目录 flag。
+        self._fh = None
+        self.events_path: str | None = None
+        self._relay_dir: str | None = None
+        self._task_name: str | None = None
+        self._cancel_check_at = 0.0
+        self._cancel_flag_hit = False
         if not _should_spawn():
             return
-        try:
-            proc = subprocess.Popen(
-                [_child_executable(), os.path.abspath(__file__), "--serve"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-            )
-        except Exception:
-            return
-        self._attach(proc)
+        relay_ok = False
+        if (sys.platform == "win32"
+                and os.environ.get("AURADSP_UI_RELAY", "").strip() != "0"
+                and not _in_active_console_session()):
+            relay_ok = self._start_relay()
+        if not relay_ok:
+            try:
+                proc = subprocess.Popen(
+                    [_child_executable(), os.path.abspath(__file__), "--serve"],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception:
+                return
+            self._attach(proc)
         self._send({"t": "title", "text": title})
         if total:
             self._send({"t": "prog", "done": 0, "total": total})
@@ -109,6 +156,46 @@ class ProgressUI:
             atexit.register(self._at_exit)
         except Exception:
             pass
+
+    def _start_relay(self) -> bool:
+        """非交互会话：建事件文件并用 /IT 一次性任务在桌面会话开查看器。"""
+        try:
+            import tempfile
+
+            relay_dir = tempfile.mkdtemp(prefix="auradsp_ui_")
+            events_path = os.path.join(relay_dir, "events.jsonl")
+            with open(events_path, "w", encoding="utf-8"):
+                pass
+            self._fh = open(events_path, "a", encoding="utf-8")
+            self._relay_dir = relay_dir
+            self.events_path = events_path
+            task = f"AuraDSP-ProgressUI-{os.getpid()}"
+            tr = (f'"{_child_executable()}" "{os.path.abspath(__file__)}" '
+                  f'--serve-file "{events_path}"')
+            kw = dict(stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                      timeout=20)
+            r1 = subprocess.run(
+                ["schtasks", "/Create", "/TN", task, "/TR", tr,
+                 "/SC", "ONCE", "/ST", "23:59", "/IT", "/F"], **kw)
+            if r1.returncode != 0:
+                raise OSError("schtasks create failed")
+            self._task_name = task
+            r2 = subprocess.run(["schtasks", "/Run", "/TN", task], **kw)
+            if r2.returncode != 0:
+                raise OSError("schtasks run failed")
+            return True
+        except Exception:
+            # 中继搭不起来：清掉半成品，退回管道模式（看不见但无害）。
+            try:
+                if self._fh is not None:
+                    self._fh.close()
+            except Exception:
+                pass
+            self._fh = None
+            self.events_path = None
+            self._relay_dir = None
+            self._task_name = None
+            return False
 
     def _attach(self, proc) -> None:
         """挂上子进程并起取消信号读线程（窗口 stdout 出现 CANCEL 即置位）。"""
@@ -130,7 +217,16 @@ class ProgressUI:
     def cancelled(self) -> bool:
         """用户是否点了「取消运行」。宿主在检查点轮询，永不抛。"""
         try:
-            return self._cancel.is_set()
+            if self._cancel.is_set():
+                return True
+            if self._relay_dir and not self._cancel_flag_hit:
+                now = time.monotonic()
+                if now - self._cancel_check_at > 0.25:
+                    self._cancel_check_at = now
+                    self._cancel_flag_hit = os.path.exists(
+                        os.path.join(self._relay_dir, "cancel.flag"))
+                return self._cancel_flag_hit
+            return False
         except Exception:
             return False
 
@@ -160,23 +256,57 @@ class ProgressUI:
             pass
 
     def _send(self, event: dict) -> None:
-        proc = self._proc
-        if proc is None or self._done_sent:
+        if self._done_sent or self._dead:
+            return
+        if self._fh is None and self._proc is None:
             return
         try:
             line = json.dumps(event, ensure_ascii=False) + "\n"
-            proc.stdin.write(line.encode("utf-8"))  # type: ignore[union-attr]
-            proc.stdin.flush()  # type: ignore[union-attr]
+            if self._fh is not None:
+                self._fh.write(line)
+                self._fh.flush()
+            else:
+                proc = self._proc
+                proc.stdin.write(line.encode("utf-8"))  # type: ignore[union-attr]
+                proc.stdin.flush()  # type: ignore[union-attr]
         except Exception:
-            # 管道断裂 = UI 已死：永久静默，宿主照常跑。
-            self._proc = None
-            self._drop_pipe(proc)
+            # 管道/文件断裂 = UI 已死：永久静默，宿主照常跑。
+            # 注意 proc 只在管道分支里赋值，文件分支失败时未绑定，
+            # 必须从 self._proc 现取（rebase 合并 1ccdc1ce 时的坑）。
+            self._dead = True
+            proc, self._proc = self._proc, None
+            if proc is not None:
+                self._drop_pipe(proc)
 
     def _at_exit(self) -> None:
-        # 没显式 done 就关管道：子进程读到 EOF 会自己收尾。
+        # 管道模式关写端（子进程读 EOF 自收尾）；中继模式落 closed.flag
+        # 并删一次性任务（删任务不杀已在跑的查看器），事件目录留给
+        # 查看器退出时自清。
         proc, self._proc = self._proc, None
         if proc is not None:
             self._drop_pipe(proc)
+        if self._fh is not None:
+            try:
+                self._fh.close()
+            except Exception:
+                pass
+            self._fh = None
+        if self._relay_dir:
+            try:
+                with open(os.path.join(self._relay_dir, "closed.flag"),
+                          "w", encoding="utf-8") as f:
+                    f.write("1")
+            except Exception:
+                pass
+            if self._task_name:
+                try:
+                    subprocess.run(
+                        ["schtasks", "/Delete", "/TN", self._task_name, "/F"],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        timeout=15)
+                except Exception:
+                    pass
+                self._task_name = None
 
     # -- 公开 API（永不抛） ------------------------------------------------
     def step(self, text: str) -> None:
@@ -222,30 +352,19 @@ class ProgressUI:
 # 子进程侧：Tk 小窗。只在被以 --serve 拉起时运行；任何异常都只死自己。
 # ---------------------------------------------------------------------------
 
-def _serve() -> int:
+def _serve_window(events, cancel_action, cleanup=None) -> int:
+    """小窗本体：从 events 队列消费事件；cancel_action 为取消按钮回调。
+
+    events 队列元素为事件 dict，None = 事件源已结束（EOF/宿主退出）。
+    cleanup 在窗口关闭时调用（文件模式下清中继目录），可为 None。
+    """
     try:
         import tkinter as tk
         from tkinter import ttk
     except Exception:
         return 3
 
-    import queue
-
-    events: "queue.Queue[dict | None]" = queue.Queue()
-
-    def _reader() -> None:
-        try:
-            for raw in sys.stdin.buffer:
-                try:
-                    events.put(json.loads(raw.decode("utf-8", "replace")))
-                except Exception:
-                    continue
-        except Exception:
-            pass
-        events.put(None)  # EOF 哨兵
-
-    import threading
-    threading.Thread(target=_reader, daemon=True).start()
+    import queue  # noqa: F401  （events 由调用方建好传入，此处仅类型语义）
 
     try:
         root = tk.Tk()
@@ -287,8 +406,7 @@ def _serve() -> int:
 
     def _on_cancel() -> None:
         try:
-            sys.stdout.write("CANCEL\n")
-            sys.stdout.flush()
+            cancel_action()
         except Exception:
             pass
         cancel_btn.configure(state="disabled")
@@ -340,6 +458,11 @@ def _serve() -> int:
             root.after(linger, _close)
 
     def _close() -> None:
+        if cleanup is not None:
+            try:
+                cleanup()
+            except Exception:
+                pass
         try:
             root.destroy()
         except Exception:
@@ -389,6 +512,102 @@ def _serve() -> int:
     return 0
 
 
+def _serve() -> int:
+    """管道模式：stdin 读事件，取消写 stdout（宿主与查看器同会话时用）。"""
+    import queue
+
+    events: "queue.Queue[dict | None]" = queue.Queue()
+
+    def _reader() -> None:
+        try:
+            for raw in sys.stdin.buffer:
+                try:
+                    events.put(json.loads(raw.decode("utf-8", "replace")))
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        events.put(None)  # EOF 哨兵
+
+    threading.Thread(target=_reader, daemon=True).start()
+
+    def _cancel() -> None:
+        sys.stdout.write("CANCEL\n")
+        sys.stdout.flush()
+
+    return _serve_window(events, _cancel)
+
+
+def _serve_file(events_path: str) -> int:
+    """文件模式（非交互会话中继）：tail events.jsonl，取消落 cancel.flag。
+
+    结束条件：读到 done 事件（窗口自行按终局收尾）、closed.flag 出现
+    （宿主已退）或事件文件被删。退出时清掉整个中继目录。
+    """
+    import queue
+
+    events: "queue.Queue[dict | None]" = queue.Queue()
+    relay_dir = os.path.dirname(os.path.abspath(events_path))
+    closed_flag = os.path.join(relay_dir, "closed.flag")
+    cancel_flag = os.path.join(relay_dir, "cancel.flag")
+
+    def _tail() -> None:
+        buf = b""
+        pos = 0
+        saw_done = False
+        while True:
+            try:
+                if os.path.exists(closed_flag) or not os.path.exists(events_path):
+                    break
+                with open(events_path, "rb") as f:
+                    f.seek(pos)
+                    chunk = f.read()
+                    pos = f.tell()
+                if chunk:
+                    buf += chunk
+                    while b"\n" in buf:
+                        line, buf = buf.split(b"\n", 1)
+                        line = line.strip().lstrip(b"\xef\xbb\xbf")
+                        if not line:
+                            continue
+                        try:
+                            ev = json.loads(line.decode("utf-8", "replace"))
+                        except Exception:
+                            continue
+                        events.put(ev)
+                        if ev.get("t") == "done":
+                            saw_done = True
+                if saw_done:
+                    # 终局已投递，窗口自会按 linger 收尾；再等 closed.flag
+                    # 兜底即可，不必继续 tail。
+                    while not os.path.exists(closed_flag):
+                        time.sleep(0.25)
+                    break
+            except Exception:
+                pass
+            time.sleep(0.1)
+        events.put(None)
+
+    threading.Thread(target=_tail, daemon=True).start()
+
+    def _cancel() -> None:
+        with open(cancel_flag, "w", encoding="utf-8") as f:
+            f.write("1")
+
+    def _cleanup() -> None:
+        for name in ("events.jsonl", "cancel.flag", "closed.flag"):
+            try:
+                os.remove(os.path.join(relay_dir, name))
+            except Exception:
+                pass
+        try:
+            os.rmdir(relay_dir)
+        except Exception:
+            pass
+
+    return _serve_window(events, _cancel, cleanup=_cleanup)
+
+
 def _demo() -> int:
     """人工自检：喂一段假进度，肉眼确认窗口出现与自动关闭。
 
@@ -411,6 +630,9 @@ def _demo() -> int:
 if __name__ == "__main__":
     if "--serve" in sys.argv:
         raise SystemExit(_serve())
+    if "--serve-file" in sys.argv:
+        idx = sys.argv.index("--serve-file")
+        raise SystemExit(_serve_file(sys.argv[idx + 1]))
     if "--demo" in sys.argv:
         raise SystemExit(_demo())
     print(__doc__)

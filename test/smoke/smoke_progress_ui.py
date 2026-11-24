@@ -197,6 +197,35 @@ check("pack cli 取消检查点",
 check("release 取消检查点", _has("installer/release.py", "ui_cancelled()"))
 check("窗口侧有取消按钮", _has("tools/bin/progress_ui.py", "取消运行"))
 
+# --- 10. 非交互会话中继 + 命令行开关（2026-11-24 user 报「UI 似乎不会打开」）---
+check("会话判读函数在位且返回 bool",
+      isinstance(mod._in_active_console_session(), bool))
+check("中继模式在位", _has("tools/bin/progress_ui.py", "--serve-file")
+      and _has("tools/bin/progress_ui.py", "AURADSP_UI_RELAY"))
+check("release --no-progress-ui", _has("installer/release.py", "--no-progress-ui"))
+check("pack --no-progress-ui",
+      _has("installer/packkit/windows/cli.py", "--no-progress-ui"))
+check("runner --no-progress-ui", _has("test/runner.py", "--no-progress-ui"))
+check("release 传事件路径给构建子进程",
+      _has("installer/release.py", "AURADSP_PROGRESS_EVENTS"))
+check("build_windows.ps1 步骤镜像",
+      _has("tools/windows/build_windows.ps1", "AURADSP_PROGRESS_EVENTS")
+      and _has("tools/windows/build_windows.ps1", "Send-UiStep"))
+
+# --- 11. --serve-file 喂 done 后自终止 ------------------------------------------
+import tempfile
+
+relay_dir = tempfile.mkdtemp(prefix="auradsp_ui_smoke_")
+events_path = os.path.join(relay_dir, "events.jsonl")
+with open(events_path, "w", encoding="utf-8") as f:
+    f.write('{"t":"title","text":"smoke"}\n{"t":"done","ok":true,"text":"x"}\n')
+try:
+    p = subprocess.run([sys.executable, UI_PATH, "--serve-file", events_path],
+                       capture_output=True, timeout=25)
+    check("--serve-file 在 done 后自行终止", True, f"rc={p.returncode}")
+except subprocess.TimeoutExpired:
+    check("--serve-file 在 done 后自行终止", False, "25s 未退出")
+
 print()
 if fails:
     print(f"FAILURES: {fails}")

@@ -131,6 +131,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     ap.add_argument("--clean-work", action="store_true", help="完成后删除中间目录")
     ap.add_argument("--publish", action="store_true",
                     help="发布（未接线；本轮只落工具）")
+    ap.add_argument("--no-progress-ui", action="store_true",
+                    help="不打开进度小窗（默认打开；等效 AURADSP_NO_UI=1）")
     return ap.parse_args(argv)
 
 
@@ -170,11 +172,19 @@ def _split_tiers(raw: str | None) -> list[str] | None:
 def main(argv: list[str]) -> int:
     # 进度小窗（2026-11-24）：编排层开窗，[pack] 日志自动镜像；子进程
     # （pack/build）置 AURADSP_UI_NESTED 抑制另开窗。UI 故障不影响编排。
+    if "--no-progress-ui" in argv:
+        import os
+
+        os.environ["AURADSP_NO_UI"] = "1"
     ui = open_progress_ui("AuraDSP 发布编排")
     if ui is not None:
         import os
 
         os.environ.setdefault("AURADSP_UI_NESTED", "1")
+        # 中继（文件）模式下把事件文件路径传给子进程：build_windows.ps1
+        # 的步骤横幅会 append 进同一个窗口。
+        if getattr(ui, "events_path", None):
+            os.environ["AURADSP_PROGRESS_EVENTS"] = ui.events_path
     try:
         rc = _main_impl(argv)
     except SystemExit as exc:

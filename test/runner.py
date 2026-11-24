@@ -879,7 +879,11 @@ def main():
                         help="Perf regression audio mode (default: sysapo)")
     parser.add_argument("--perf-strict", action="store_true",
                         help="Perf regression exits non-zero when thresholds are exceeded")
+    parser.add_argument("--no-progress-ui", action="store_true",
+                        help="不打开进度小窗（默认打开；等效 AURADSP_NO_UI=1）")
     args = parser.parse_args()
+    if args.no_progress_ui:
+        os.environ["AURADSP_NO_UI"] = "1"
 
     if args.perf:
         return run_perf_regression(args.perf, args.perf_mode, args.perf_strict)

@@ -72,6 +72,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     ap.add_argument("--sha256sums", action="store_true")
     ap.add_argument("--clean", action="store_true")
     ap.add_argument("--what-if", action="store_true")
+    ap.add_argument("--no-progress-ui", action="store_true",
+                    help="不打开进度小窗（默认打开；等效 AURADSP_NO_UI=1）")
     ap.add_argument("--verify", type=Path,
                     help="校验已生成的 Setup exe 后退出")
     return ap.parse_args(argv)
@@ -131,6 +133,10 @@ def _complete_staging_once(args, done: list[bool]) -> None:
 def main(argv: list[str]) -> int:
     # 进度小窗（2026-11-24）：开窗后 [pack] 日志自动镜像（common.log 转发），
     # 本函数只管终局播报；die 的 SystemExit 也要如实报失败再原样抛出。
+    if "--no-progress-ui" in argv:
+        import os
+
+        os.environ["AURADSP_NO_UI"] = "1"
     ui = open_progress_ui("AuraDSP 打包（pack）")
     try:
         rc = _main_impl(argv)
