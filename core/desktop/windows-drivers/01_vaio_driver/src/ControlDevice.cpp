@@ -518,7 +518,7 @@ AuraControlDevice_DispatchDeviceControl(
             // 语义是「驱动源码版本日期」，随驱动源码变更手工同步；
             // BuildTime 在可复现构建下不跟踪钟点，恒 00:00:00。
             // 精确构建时刻看 INF 的 DriverVer（打包时由 MSBuild 盖戳）。
-            RtlStringCchCopyA(pVer->BuildDate, sizeof(pVer->BuildDate), "2026-11-23");
+            RtlStringCchCopyA(pVer->BuildDate, sizeof(pVer->BuildDate), "2026-11-25");
             RtlStringCchCopyA(pVer->BuildTime, sizeof(pVer->BuildTime), "00:00:00");
 
             bytesReturned = sizeof(AURA_VAIO_VERSION_INFO);
@@ -751,6 +751,16 @@ AuraControlDevice_DispatchDeviceControl(
                     g_pProcMappedUserAddress = userVa;
                     g_pProcMappedProcess     = currentProc;
                     g_pProcMappedFileObject  = stack->FileObject;
+                    /* [审查 L3 2026-11-25] 新会话锚定：处理后环读游标
+                     * 快进到写游标，上一会话残留音频（最大约 340ms）
+                     * 不会在本会话开场被当新数据读走。仅新鲜映射时
+                     * 执行；同进程复用既有映射不得跳过在途数据。 */
+                    if (g_pProcRingBuffer != NULL)
+                    {
+                        PAURA_VAIO_SHARED_HEADER pProcHdr =
+                            reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pProcRingBuffer);
+                        pProcHdr->TotalBytesRead = pProcHdr->TotalBytesWritten;
+                    }
                 }
             }
 
@@ -819,6 +829,19 @@ AuraControlDevice_DispatchDeviceControl(
                 g_pProcMappedUserAddress = NULL;
                 g_pProcMappedProcess = NULL;
                 g_pProcMappedFileObject = NULL;
+                /* [审查 L2 2026-11-25] 纵深防御：映射已拆而录制源
+                 * 仍指处理后环是语义错误中间态（此前靠桥侧自觉与
+                 * Cleanup 兜底）；UNMAP 成功后在同一把锁内顺手清 0
+                 * （回环源），不等桥侧复位。 */
+                if (g_pRingBuffer != NULL)
+                {
+                    PAURA_VAIO_SHARED_HEADER pHdr =
+                        reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pRingBuffer);
+                    if (pHdr->CaptureSource == AURA_VAIO_CAPTURE_PROCESSED)
+                    {
+                        pHdr->CaptureSource = AURA_VAIO_CAPTURE_LOOPBACK;
+                    }
+                }
                 ntStatus = STATUS_SUCCESS;
             }
             else

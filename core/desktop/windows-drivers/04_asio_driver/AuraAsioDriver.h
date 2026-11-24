@@ -159,7 +159,7 @@ private:
     float* m_engIn = nullptr;
     float* m_engOut = nullptr;
     // W7：输出端点热切换——参数块 reserved1[0] 的序号变化即触发重开汇。
-    long m_lastEndpointSeq = 0;
+    long m_lastEndpointSeq = -1;  // L4：-1 = 尚未采纳基线，首个稳定块直接采纳现值不触发重开汇
     bool m_sinkReloadReq = false;  // 泵线程独占（Pull 置位、块边界消费）
 
     char m_errorMessage[128] = {0};

@@ -627,8 +627,13 @@ void AuraAsioDriver::PullParamsFromBlock() {
         ParseParamInt(snapshot, "channels.count", (int)m_channels));
     m_channelMode = ParseParamInt(snapshot, "channels.mode", 0);
     // W7：端点序号变化即请求重开汇（reserved1[0]，旧 App 恒 0 不触发）。
+    // [审查 L4 2026-11-25] 首个稳定块直接采纳现值作基线：App 跨会话
+    // 切换过端点时序号已非 0，旧初值 0 会让 DAW 启动首块多一次无谓
+    // 的汇重开（数十 ms dropout 级）。
     const long epSeq = (long)m_params->reserved1[0];
-    if (epSeq != m_lastEndpointSeq) {
+    if (m_lastEndpointSeq < 0) {
+        m_lastEndpointSeq = epSeq;
+    } else if (epSeq != m_lastEndpointSeq) {
         m_lastEndpointSeq = epSeq;
         m_sinkReloadReq = true;
     }

@@ -659,8 +659,18 @@ void ReplayMirroredParams() {
 
 void ApplyParamsString(const char* s) {
     if (!s || !*s || !g_vaio.pEngine || !g_vaio.fnSetParam) return;
-    char buf[4096] = {0};
-    strncpy_s(buf, s, sizeof(buf) - 1);
+    /* [审查 L1 2026-11-25] 参数串缓冲按载荷实长动态分配：旧固定
+     * 4096 字节在参数表增长后会静默截断尾部参数（现全量约 2.7KB）。
+     * 防御顶 64KB（远超契约规模），超顶记 paramsFailed 并整串拒收，
+     * 不再出现「截断后半截生效」的静默错误。 */
+    const size_t len = strlen(s);
+    if (len > 64u * 1024u) {
+        ++g_vaio.paramsFailed;
+        return;
+    }
+    std::vector<char> bufStorage(len + 1);
+    char* buf = bufStorage.data();
+    memcpy(buf, s, len + 1);
     for (char* tok = strtok(buf, ";"); tok != nullptr; tok = strtok(nullptr, ";")) {
         char* eq = strchr(tok, '=');
         if (!eq || eq == tok) {
@@ -719,8 +729,13 @@ static void WriteProcessedRingBlock(UINT32 framesToProcess, int safeEngineCh,
                                     ULONG outRate, ULONG ringRate,
                                     ULONG ringFmtKind, ULONG ringBits,
                                     ULONG ringValidBits, ULONG blockAlign) {
+    /* [审查 L5 2026-11-25] 写处理后环用它自己的 procBlockAlign
+     * （MAP 应答回填），不再借渲染环的 blockAlign——旧写法是隐性
+     * 耦合（当前内核两侧恒相等才没出事）。未映射时回退入参。 */
+    const ULONG effBlockAlign =
+        g_vaio.procBlockAlign ? g_vaio.procBlockAlign : blockAlign;
     if (!g_vaio.pProcHeader || !g_vaio.pProcPayload ||
-        g_vaio.procDataSize == 0 || blockAlign == 0) {
+        g_vaio.procDataSize == 0 || effBlockAlign == 0) {
         return;
     }
     const int ringCh = (int)(g_vaio.ringChannels ? g_vaio.ringChannels : 2);
@@ -746,7 +761,7 @@ static void WriteProcessedRingBlock(UINT32 framesToProcess, int safeEngineCh,
                               g_vaio.scratchProcRing, ringCh, dstFrames);
     }
     // 3) 量化到环格式并写入载荷（环绕两段拷贝），最后推进计数。
-    const ULONG bytes = (ULONG)dstFrames * blockAlign;
+    const ULONG bytes = (ULONG)dstFrames * effBlockAlign;
     if (!VaioRingFormatSupported(ringFmtKind, ringBits, ringValidBits)) {
         memset(g_vaio.scratchProcRaw, 0, bytes);
     } else {
