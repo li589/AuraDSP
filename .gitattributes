@@ -13,6 +13,12 @@
 # 打包器在出口处也会再规范化一次，这里是第一道防线。
 *.desktop text eol=lf
 
+# AOCI 索引卷按字节哈希绑定，checkout 成 CRLF 会被判为 line_ending_rewrite
+# 并阻断维护（2026-11-24 实测 860 项漂移）。钉死 LF 保证工作树与 blob 同字节。
+aoci.txt text eol=lf
+aoci.meta.txt text eol=lf
+aoci.code.txt text eol=lf
+
 # 二进制
 *.png binary
 *.jpg binary
