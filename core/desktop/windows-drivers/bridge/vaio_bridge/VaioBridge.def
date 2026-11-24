@@ -29,6 +29,7 @@ EXPORTS
     ab_get_param
     ab_get_param_str
     ab_viz_read
+    ab_pcm_read
     ab_bypass
     ab_test_start
     ab_test_stop

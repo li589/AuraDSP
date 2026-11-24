@@ -24,8 +24,16 @@ public:
     void Close();
     bool IsOpen() const { return m_open; }
 
-    // 写入立体声浮点音频 [-1.0f, +1.0f]
+    // 写入立体声浮点音频 [-1.0f, +1.0f]（既有双声道监听路径）。
+    // 端点更宽时仅前两声道有内容，其余声道写零——保持旧行为。
     void PushSamples(const float* inL, const float* inR, long count, double sourceSampleRate);
+
+    // 写入 srcCh 声道交织浮点音频（离散多声道直通）。实际宽度由汇按
+    // Open 时的端点混音格式定：srcCh 超出部分丢弃、不足补零。下混
+    // 责任在调用方（engine/chain/channel_map.h 单一真相表）——本层
+    // 不造第二套折叠规则。
+    void PushSamplesInterleaved(const float* interleaved, int srcCh,
+                                long count, double sourceSampleRate);
 
     double GetTargetSampleRate() const { return m_targetSampleRate; }
     int GetTargetChannels() const { return m_targetChannels; }
@@ -57,7 +65,11 @@ private:
     double m_resamplePhase = 0.0;
 
     // 单线程无锁环形缓冲（单生产者单消费者位于同一泵线程）
+    // 帧 stride 由端点混音格式定（m_fifoStride），容量按 8 声道上限
+    // 一次性分配；立体声端点仍是 2，读写路径与旧版逐样本等价。
     static constexpr size_t kFifoCapacity = 16384;
+    static constexpr int kMaxOutChannels = 8;
+    int m_fifoStride = 2;  // FIFO 每帧声道数（= 端点声道，1..8）
     std::vector<float> m_fifo;
     size_t m_fifoRead = 0;
     size_t m_fifoWrite = 0;

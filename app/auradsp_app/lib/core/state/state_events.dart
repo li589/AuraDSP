@@ -1043,9 +1043,15 @@ extension StateEvents on AppModel {
         }
         spectrum.value = (raw['spectrum'] as List).cast<double>();
         final pcm = raw['pcm'];
-        if (vizBackend == 'local' &&
-            (raw['pcmSource'] == 'source' || raw['pcmSource'] == 'engine') &&
-            pcm is List) {
+        // [W5 ASIO PCM tap] 'engine' 是引擎处理后 PCM 的逐字抽头：
+        // local 泵与 ASIO 桥（Client 形态，引擎在 DAW 进程内）都产
+        // 这种来源，故不按 vizBackend 限死。'source' 仍是本地输入
+        // 原始快照，只允许 local——桥模式没有真实源输入，放行等于
+        // 给 projectM 喂伪造 PCM。
+        final pcmFromEngine = raw['pcmSource'] == 'engine';
+        final pcmFromLocalSource =
+            vizBackend == 'local' && raw['pcmSource'] == 'source';
+        if ((pcmFromEngine || pcmFromLocalSource) && pcm is List) {
           if (pcm.length <= 1024 && pcm.length.isEven) {
             final samples = <double>[];
             var valid = true;

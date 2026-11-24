@@ -97,7 +97,7 @@ private:
     // 与 future() 既有口径）。
     HANDLE m_hParamsMap = nullptr;
     const AsioDriverParamsBlock* m_params = nullptr;
-    long m_lastParamSeq = 0;
+    long m_lastParamSeq = 0;  // 上次应用的 writeSeq（v2 偶数稳定值）
     int m_paramsRetry = 0;
     bool m_paramsMuted = false;  // 泵线程独占（Pull 与消费同线程）
 
@@ -139,11 +139,14 @@ private:
     // 实时音频交织与 DSP 处理中间缓冲（createBuffers 时分配，RT 线程零分配）
     // m_proc：处理后交织输出（bufferSize * m_channels）；m_foldL/R：N→立体声下混，
     // 供 WasapiSink 物理端点消费（m_channels==2 时为通道 0/1 的等价拷贝）。
+    // m_multiOut：多声道端点且 m_channels > 端点宽度时的下混目标
+    // （bufferSize * kMaxChannels，按 8 声道上限分配；立体声端点不用）。
     float* m_interleavedIn = nullptr;
     float* m_interleavedOut = nullptr;
     float* m_proc = nullptr;
     float* m_foldL = nullptr;
     float* m_foldR = nullptr;
+    float* m_multiOut = nullptr;
 
     char m_errorMessage[128] = {0};
 };

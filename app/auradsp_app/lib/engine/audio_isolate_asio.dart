@@ -21,7 +21,9 @@ part of 'audio_isolate.dart';
 const String _asioParamsName = r'Global\AuraDSP_AsioDriverParams';
 const String _asioTelemetryName = r'Global\AuraDSP_AsioDriverTelemetry';
 const int _asioParamsMagic = 0x50444141; // 'AADP'
-const int _asioParamsVersion = 1;
+// v2：参数块改奇偶 seqlock（与 APO 同协议）。旧 App 的 v1 块被驱动
+// 按版本全等整体拒绝，安全降级为默认参数。
+const int _asioParamsVersion = 2;
 const int _asioParamsBytes = 8192;
 const int _asioParamsPayloadOffset = 64;
 const int _asioParamsPayloadCap = _asioParamsBytes - _asioParamsPayloadOffset - 1;
@@ -171,8 +173,11 @@ class AsioParamPublisher {
     return parts.join(';');
   }
 
-  /// 全量落块：载荷 → 字节数 → bypass → seq 最后递增（驱动以
-  /// seq 变化触发应用，应用前复核 seq 稳定防读到半写载荷）。
+  /// 全量落块（v2 奇偶 seqlock，与 APO 参数块同协议）：
+  /// seq 先置奇数（写入中）→ 写载荷/字节数/bypass/mute → 再置偶数
+  /// （稳定）。读者前后各取一次 seq，两次相同且为偶数才采信，写者
+  /// 中途改写必被识破。旧"写毕才递增"让读者可在写者未进入写入态时
+  /// 开始拷贝，正是撕裂窗口的来源。
   void flushAll() {
     if (!active) return;
     if (!_ensure()) return;
@@ -187,6 +192,10 @@ class AsioParamPublisher {
       dbgLog('asio publisher: payload truncated to $end bytes');
     }
     final view = _view!;
+    // 1) 进入写入态：seq 变奇（(x+1)|1 保证奇数，含上次中断的奇值）。
+    _seq = (_seq + 1) | 1;
+    _i32![2] = _seq;
+    // 2) 写载荷与独立字段（读者看到奇数不会采信）。
     for (var i = 0; i < bytes.length; i++) {
       view[_asioParamsPayloadOffset + i] = bytes[i];
     }
@@ -194,6 +203,7 @@ class AsioParamPublisher {
     _u32![4] = bytes.length;
     _i32![3] = (_bypassOf?.call() ?? false) ? 1 : 0;
     _i32![5] = (_muteOf?.call() ?? false) ? 1 : 0;
+    // 3) 离开写入态：seq 变偶（稳定发布）。
     _seq += 1;
     _i32![2] = _seq;
   }

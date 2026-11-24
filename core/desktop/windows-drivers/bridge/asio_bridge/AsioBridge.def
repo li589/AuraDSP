@@ -29,6 +29,7 @@ EXPORTS
     ab_get_param          PRIVATE
     ab_get_param_str      PRIVATE
     ab_viz_read           PRIVATE
+    ab_pcm_read           PRIVATE
     ab_bypass             PRIVATE
     ab_test_start         PRIVATE
     ab_test_stop          PRIVATE

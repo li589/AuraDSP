@@ -240,7 +240,11 @@ ASIOError AuraAsioDriver::createBuffers(ASIOBufferInfo* bufferInfos, long numCha
     m_proc = static_cast<float*>(_aligned_malloc(interBytes, 64));
     m_foldL = static_cast<float*>(_aligned_malloc(pairBytes, 64));
     m_foldR = static_cast<float*>(_aligned_malloc(pairBytes, 64));
-    if (!m_interleavedIn || !m_interleavedOut || !m_proc || !m_foldL || !m_foldR) {
+    const size_t multiBytes =
+        (size_t)bufferSize * (size_t)kMaxChannels * sizeof(float);
+    m_multiOut = static_cast<float*>(_aligned_malloc(multiBytes, 64));
+    if (!m_interleavedIn || !m_interleavedOut || !m_proc || !m_foldL ||
+        !m_foldR || !m_multiOut) {
         disposeBuffers();
         return ASE_NoMemory;
     }
@@ -249,6 +253,7 @@ ASIOError AuraAsioDriver::createBuffers(ASIOBufferInfo* bufferInfos, long numCha
     memset(m_proc, 0, interBytes);
     memset(m_foldL, 0, pairBytes);
     memset(m_foldR, 0, pairBytes);
+    memset(m_multiOut, 0, multiBytes);
 
     // 引擎句柄实例化（按协商后的采样率与缓冲大小创建）
     if (!m_engineLoader.IsLoaded()) {
@@ -327,6 +332,10 @@ ASIOError AuraAsioDriver::disposeBuffers() {
     if (m_foldR) {
         _aligned_free(m_foldR);
         m_foldR = nullptr;
+    }
+    if (m_multiOut) {
+        _aligned_free(m_multiOut);
+        m_multiOut = nullptr;
     }
 
     for (int c = 0; c < kMaxChannels; ++c) {
@@ -508,7 +517,9 @@ void AuraAsioDriver::OpenParams() {
         return;
     }
     m_params = block;
-    m_lastParamSeq = 0;  // 首块强制应用一次现行参数
+    // 新映射：seq 哨兵归 0。App 已写过（偶数 >= 2）则首个 Pull 即应用；
+    // 块仍全零（写者未启动）时 seq=0 与哨兵相等，不会应用空载荷。
+    m_lastParamSeq = 0;
 }
 
 void AuraAsioDriver::CloseParams() {
@@ -522,9 +533,10 @@ void AuraAsioDriver::CloseParams() {
     }
 }
 
-// seq 变化才动作：拷贝载荷 → 复核 seq 未再变（写者中途改写则
-// 本轮放弃、下块重试）→ 更新待应用串 + 旁路，并立即应用到
-// 在生引擎。泵线程调用（非 RT 回调），引擎 set_param 的线程
+// v2 奇偶 seqlock（与 APO 参数块同协议）：读前 writeSeq 必须为偶数
+// 且与上次应用值不同；拷完载荷/bypass/mute 后再读一次，两次相同才
+// 采信——写者处于奇数写入窗口、或拷贝期间又写一轮，必被识破，本轮
+// 放弃、下块重试。泵线程调用（非 RT 回调），引擎 set_param 的线程
 // 安全口径与 APO worker 应用参数同级。
 void AuraAsioDriver::PullParamsFromBlock() {
     if (!m_params) {
@@ -536,8 +548,13 @@ void AuraAsioDriver::PullParamsFromBlock() {
         }
         return;
     }
-    const long seq = m_params->seq;
-    if (seq == m_lastParamSeq) return;
+    // 版本全等兜底（OpenParams 已查一次，但块可能被旧 App 重写）：
+    // v1 的"写毕才递增"在奇偶协议下会让长期停在奇数的序号永远被
+    // 跳过，必须整体拒绝，安全降级为默认参数。
+    if (m_params->version != ASIO_DRIVER_PARAMS_VERSION) return;
+    const long s1 = m_params->writeSeq;
+    if ((s1 & 1) != 0) return;         // 写入中：本轮不碰
+    if (s1 == m_lastParamSeq) return;  // 无新版本
     uint32_t bytes = m_params->payloadBytes;
     if (bytes > ASIO_DRIVER_PARAMS_PAYLOAD_CAP) {
         bytes = ASIO_DRIVER_PARAMS_PAYLOAD_CAP;
@@ -547,8 +564,8 @@ void AuraAsioDriver::PullParamsFromBlock() {
     std::string snapshot(payload, payload + bytes);
     const long bypass = m_params->bypass;
     const long mute = m_params->mute;
-    if (m_params->seq != seq) return;  // 拷贝期间写者已更新，下块重试
-    m_lastParamSeq = seq;
+    if (m_params->writeSeq != s1) return;  // 拷贝期间写者又写一轮，下块重试
+    m_lastParamSeq = s1;
     m_pendingParamString = snapshot;
     m_paramsMuted = (mute != 0);
     m_bypass.store(bypass != 0, std::memory_order_relaxed);
@@ -691,7 +708,8 @@ DWORD AuraAsioDriver::PumpLoop() {
                 memcpy(m_proc, m_interleavedIn, (size_t)m_bufferSize * (size_t)ch * sizeof(float));
             }
 
-            // N→立体声下混，供 WasapiSink 物理端点（2 声道为逐样本等价拷贝）
+            // N→立体声下混（始终计算）：peakOut 单值遥测、旧面板兼容
+            // 与端点回落都依赖这对缓存的最终折叠结果。
             if (ch <= 2) {
                 for (long i = 0; i < m_bufferSize; ++i) {
                     m_foldL[i] = m_proc[i * ch + 0];
@@ -710,8 +728,26 @@ DWORD AuraAsioDriver::PumpLoop() {
                 }
             }
 
-            // 1. WASAPI 物理渲染汇直通推流
-            m_wasapiSink.PushSamples(m_foldL, m_foldR, m_bufferSize, m_sampleRate);
+            // 1. WASAPI 物理渲染汇直通推流（W5 多声道）
+            // 端点宽度决定路径：立体声端点维持原折叠推流（逐样本
+            // 等价）；端点多声道且流不宽于端点时离散直通；流更宽时
+            // 用同一张 chmap 表下混到端点宽度。下混目标缓冲按 8 声道
+            // 上限在 createBuffers 分配，RT 路径零分配。
+            const int sinkCh = m_wasapiSink.GetTargetChannels();
+            if (sinkCh <= 2) {
+                m_wasapiSink.PushSamples(m_foldL, m_foldR, m_bufferSize, m_sampleRate);
+            } else if (ch <= sinkCh) {
+                m_wasapiSink.PushSamplesInterleaved(m_proc, (int)ch,
+                                                    m_bufferSize, m_sampleRate);
+            } else {
+                for (long i = 0; i < m_bufferSize; ++i) {
+                    chmap_fold_frame(m_proc + i * ch, (int)ch,
+                                     m_multiOut + (size_t)i * (size_t)sinkCh,
+                                     sinkCh);
+                }
+                m_wasapiSink.PushSamplesInterleaved(m_multiOut, sinkCh,
+                                                    m_bufferSize, m_sampleRate);
+            }
 
             // 2. 将处理后各通道提供给输入通道（标准虚拟驱动 Loopback 回录）
             for (long c = 0; c < ch; ++c) {

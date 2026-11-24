@@ -7,11 +7,12 @@
 Global\\AuraDSP_AsioDriverParams（App 写、驱动读、seq 触发应
 用）并删除假会话（虚拟形态 = isolate 控制模式、本地链停摆）。
 
-本冒烟是纯源码契约钉：契约头常量、驱动只读打开 + seq 门 +
-稳定复核 + 块缺席重试、Dart 发布者写序（seq 最后）、
-channels.count 排除与 graph.order 单带、isolate 虚拟分支不
-起桥会话、泵的控制模式停链门。任一处被改回去（假会话复活、
-seq 门删除、写序颠倒）本冒烟必红。两平台可跑。
+本冒烟是纯源码契约钉：契约头常量、驱动只读打开 + 奇偶
+seqlock 门（奇数=写入中不采信）+ 稳定复核 + 块缺席重试、
+Dart 发布者写序（seq 先奇后偶包住载荷）、channels.count
+排除与 graph.order 单带、isolate 虚拟分支不起桥会话、
+泵的控制模式停链门。任一处被改回去（假会话复活、奇偶
+门删除、写序颠倒）本冒烟必红。两平台可跑。
 """
 import os
 import sys
@@ -47,17 +48,22 @@ dart_iso = read(DART_ISO)
 # ---- 契约头 ----
 check("params block name", "AuraDSP_AsioDriverParams" in shared)
 check("params magic AADP", "0x50444141" in shared)
-check("params version 1", "ASIO_DRIVER_PARAMS_VERSION 1u" in shared)
+check("params version 2 (parity seqlock)",
+      "ASIO_DRIVER_PARAMS_VERSION 2u" in shared)
 check("params bytes 8192", "ASIO_DRIVER_PARAMS_BYTES 8192u" in shared)
 check("payload offset 64", "ASIO_DRIVER_PARAMS_PAYLOAD_OFFSET 64u" in shared)
+check("header writeSeq field", "volatile long writeSeq;" in shared)
 
 # ---- 驱动消费侧 ----
 check("driver opens params read-only",
       "OpenFileMappingW(FILE_MAP_READ" in driver and
       "ASIO_DRIVER_PARAMS_NAME" in driver)
 check("driver seq gate", "m_lastParamSeq" in driver and
-      "seq == m_lastParamSeq" in driver)
-check("driver stability re-check", "m_params->seq != seq" in driver)
+      "s1 == m_lastParamSeq" in driver)
+check("driver rejects odd write window", "(s1 & 1) != 0" in driver)
+check("driver stability re-check", "m_params->writeSeq != s1" in driver)
+check("driver version parity guard",
+      "m_params->version != ASIO_DRIVER_PARAMS_VERSION" in driver)
 check("driver applies via ApplyParamsString",
       "ApplyParamsString(m_engine, snapshot" in driver)
 check("driver bypass from block",
@@ -67,11 +73,12 @@ check("pump pulls params per block", "PullParamsFromBlock();" in driver)
 
 # ---- Dart 发布者 ----
 check("publisher creates mapping", "createFileMappingW" in dart_asio)
+i_odd = dart_asio.find("_seq = (_seq + 1) | 1;")
 i_payload = dart_asio.find("view[_asioParamsPayloadOffset + i]")
-i_seq = dart_asio.find("_i32![2] = _seq")
-check("publisher writes seq last",
-      0 <= i_payload < i_seq,
-      f"payload@{i_payload} seq@{i_seq}")
+i_even = dart_asio.find("_seq += 1;")
+check("publisher brackets payload with odd/even seq",
+      0 <= i_odd < i_payload < i_even,
+      f"odd@{i_odd} payload@{i_payload} even@{i_even}")
 check("publisher excludes channels.count",
       "id == 'channels.count'" in dart_asio)
 check("publisher carries graph.order only",

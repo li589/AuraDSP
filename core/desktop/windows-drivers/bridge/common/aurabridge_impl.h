@@ -69,6 +69,12 @@ int ab_viz_read(void* out1600, int count) {
     return AB_OLD(_viz_read)(out1600, count);
 }
 
+// 处理后 PCM 抽头：ASIO 透传引擎 auradsp_pcm_read；VM/VAIO 的引擎在
+// App 自身进程（App 直读句柄），桥侧实现为诚实返回 0。
+int ab_pcm_read(void* out, int frames) {
+    return AB_OLD(_pcm_read)(out, frames);
+}
+
 int ab_bypass(int on) { return AB_OLD(_bypass)(on); }
 
 int ab_test_start(int kind, const float* pcm, int frames, int ch, int rate) {

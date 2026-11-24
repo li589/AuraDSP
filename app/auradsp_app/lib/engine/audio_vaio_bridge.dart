@@ -92,6 +92,10 @@ class AuraVaioBridge implements AudioBridgeCommon {
   @override
   Map<String, dynamic>? vizRead() => core.vizRead();
 
+  /// VAIO 桥无 PCM tap（同 VM：引擎在 App 自身进程），恒 0。
+  @override
+  int pcmRead(Pointer<Float> out, int frames) => core.pcmRead(out, frames);
+
   @override
   int testStart(int kind,
           {Pointer<Float>? pcm, int frames = 0, int ch = 2, int rate = 0}) =>

@@ -32,12 +32,13 @@ BRIDGES = [
     ("vaio", "auravaio_bridge.dll", "vaio"),
 ]
 
-# bridge/common/aurabridge.h 的 14 个导出（AURABRIDGE_ABI=1）
+# bridge/common/aurabridge.h 的 15 个导出（AURABRIDGE_ABI=1；
+# ab_pcm_read 为 2026-11-24 新增的公共面符号）
 AB_SYMBOLS = [
     "ab_abi_version", "ab_capabilities", "ab_detect", "ab_start", "ab_stop",
     "ab_status", "ab_set_param", "ab_set_param_str", "ab_get_param",
-    "ab_get_param_str", "ab_viz_read", "ab_bypass", "ab_test_start",
-    "ab_test_stop",
+    "ab_get_param_str", "ab_viz_read", "ab_pcm_read", "ab_bypass",
+    "ab_test_start", "ab_test_stop",
 ]
 EXPECTED_ABI = 1
 

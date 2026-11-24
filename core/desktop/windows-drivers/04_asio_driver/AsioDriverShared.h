@@ -31,19 +31,25 @@
 #define ASIO_DRIVER_TELEMETRY_VERSION 3u
 #define ASIO_DRIVER_TELEMETRY_BYTES 4096u
 
-// ---- 参数块（S4）：App 写、驱动读 ----
+// ---- 参数块（S4；v2 起改奇偶 seqlock）：App 写、驱动读 ----
 // App（isolate 内的 AsioParamPublisher）是唯一写者：把参数镜像
-// 序列化为引擎 ApplyParamsString 同格式的 "id=value;..." 载荷
-// 写入 payload，写毕才递增 seq（驱动以 seq 变化为应用触发，
-// 应用前后再读 seq 复核载荷稳定）。bypass 独立成字段（不经
-// 参数串）。mute 同为独立字段（r61 验收修复）：App 在 ASIO
-// 模式内关链路总闸时置 1，驱动泵整体静音——与 bypass 分工
-// （bypass 是处理直通，mute 是无声）。字符串型参数 v1 只携带 graph.order，其余（脚本
-// 代码、文件路径类）不经本块——分隔格式承载不了任意文本，
-// 属已知约束（见方案附记）。
+// 序列化为引擎 ApplyParamsString 同格式的 "id=value;..." 载荷。
+// v2 写协议与 APO 参数块一致（03_system_apo/ApoShared.h）：
+//   写者：writeSeq 置奇数（写入中）→ 写 payload/字节数/bypass/mute
+//         → writeSeq 置偶数（稳定）。
+//   读者：读前取一次 writeSeq，必须为偶数且未变；拷完全部字段后
+//         再取一次，两次相同才采信——写者中途改写必被识破。
+// v1 是"写毕才递增、读者前后复核"的单向序号：写者未进入写入态时
+// 读者已开始拷贝，载荷与 seq 可被读成半新半旧。v2 由版本全等校验
+// 隔离（旧 App 的 v1 块被驱动整体拒绝，安全降级为默认参数）。
+// bypass 独立成字段（不经参数串）。mute 同为独立字段（r61 验收
+// 修复）：App 在 ASIO 模式内关链路总闸时置 1，驱动泵整体静音——
+// 与 bypass 分工（bypass 是处理直通，mute 是无声）。字符串型参数
+// v1 只携带 graph.order，其余（脚本代码、文件路径类）不经本块——
+// 分隔格式承载不了任意文本，属已知约束（见方案附记）。
 #define ASIO_DRIVER_PARAMS_NAME L"Global\\AuraDSP_AsioDriverParams"
 #define ASIO_DRIVER_PARAMS_MAGIC 0x50444141u  // 'AADP'
-#define ASIO_DRIVER_PARAMS_VERSION 1u
+#define ASIO_DRIVER_PARAMS_VERSION 2u
 #define ASIO_DRIVER_PARAMS_BYTES 8192u
 #define ASIO_DRIVER_PARAMS_PAYLOAD_OFFSET 64u
 #define ASIO_DRIVER_PARAMS_PAYLOAD_CAP \
@@ -52,7 +58,7 @@
 struct AsioDriverParamsBlock {
     uint32_t magic;          // ASIO_DRIVER_PARAMS_MAGIC
     uint32_t version;        // ASIO_DRIVER_PARAMS_VERSION
-    volatile long seq;       // 写者递增：载荷 + bypass 的版本号
+    volatile long writeSeq;  // seqlock：奇=写入中，偶=稳定
     volatile long bypass;    // 0 = 处理中，1 = 旁路
     uint32_t payloadBytes;   // payload 有效字节数（不含 NUL）
     volatile long mute;      // 1 = 链路总闸静音（原 reserved0）

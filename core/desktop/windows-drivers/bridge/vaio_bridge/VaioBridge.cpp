@@ -2499,6 +2499,14 @@ int vaio_get_param_str(const char* id, char* out, int cap) {
     return (int)strlen(out);
 }
 
+// 处理后 PCM 抽头（ab_pcm_read）：VAIO 形态同 VM——引擎在 App 自身
+// 进程内，由 isolate 直读；桥侧恒 0（无桥内 PCM 源）。
+int vaio_pcm_read(void* out, int frames) {
+    (void)out;
+    (void)frames;
+    return 0;
+}
+
 int vaio_viz_read(void* out1600, int count) {
     if (!out1600 || count <= 0 || !g_vaio.pEngine || !g_vaio.fnVizRead) return 0;
     const int n = g_vaio.fnVizRead(g_vaio.pEngine, out1600, count);

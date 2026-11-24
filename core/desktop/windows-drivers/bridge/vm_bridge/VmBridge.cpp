@@ -1855,6 +1855,15 @@ static bool VizFramesStalled() {
     return now - s_lastAdvance > 1000;
 }
 
+// 处理后 PCM 抽头（ab_pcm_read）：VM 形态的引擎句柄由 App 自身
+// isolate 持有并直读 auradsp_pcm_read，桥内无需中转。恒 0 表示
+// 「本桥无桥内 PCM 源」——调用方据此回落输入快照，不得当静音音频。
+int vb_pcm_read(void* out, int frames) {
+    (void)out;
+    (void)frames;
+    return 0;
+}
+
 int vb_viz_read(void* out1600, int count) {
     if (!out1600 || count <= 0) return -1;
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;

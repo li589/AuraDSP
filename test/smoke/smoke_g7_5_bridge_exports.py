@@ -71,9 +71,10 @@ def read(p):
 print("== [A] 解析单元 ==")
 
 N_HEADER = {"asio": 16, "vaio": 16, "vb": 29}      # 旧前缀公共面已于 2026-10-30 下线
-# 统一契约 ab_*（common/aurabridge.h）14 项：声明只出现在 AB_COMMON_H，
-# 由 abi_consistency.py 参与 B1 双向比对。
-AB_EXPORTS = 14
+# 统一契约 ab_*（common/aurabridge.h）15 项：声明只出现在 AB_COMMON_H，
+# 由 abi_consistency.py 参与 B1 双向比对。ab_pcm_read 于 2026-11-24
+# 加入公共面（ASIO 真读桥内引擎 PCM；VM/VAIO 诚实返回 0）。
+AB_EXPORTS = 15
 N_DEF = {"asio": N_HEADER["asio"] + AB_EXPORTS,
          "vaio": N_HEADER["vaio"] + AB_EXPORTS,
          "vb": N_HEADER["vb"] + AB_EXPORTS}
@@ -114,7 +115,7 @@ check("[B1] CLI --bridges-only 退出码 0", r.returncode == 0,
 check("[B2] 报告 %d 个导出 1:1" % sum(N_DEF.values()),
       ("%d 个导出" % sum(N_DEF.values())) in r.stdout, r.stdout.strip()[-120:])
 check("[B3] 有且仅有一套公共面（ab_*），无旧前缀重复导出",
-      "103 个导出" in r.stdout, "见 [B1] 输出")
+      "106 个导出" in r.stdout, "见 [B1] 输出")
 
 # ------------------------------------------------------------------ [C] 活体
 print("== [C] 活体：真相源 DLL 真的导出 Dart 硬绑定符号 ==")

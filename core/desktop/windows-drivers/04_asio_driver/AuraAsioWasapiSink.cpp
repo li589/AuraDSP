@@ -6,7 +6,9 @@
 #include <algorithm>
 
 AuraAsioWasapiSink::AuraAsioWasapiSink() {
-    m_fifo.resize(kFifoCapacity * 2, 0.0f);
+    // 按 8 声道上限一次分配；实际 stride 在 Open 按端点混音格式定，
+    // 立体声端点仍只走前两声道，内存虽多留 4 倍但无实时分配。
+    m_fifo.resize(kFifoCapacity * (size_t)kMaxOutChannels, 0.0f);
 }
 
 AuraAsioWasapiSink::~AuraAsioWasapiSink() {
@@ -74,6 +76,12 @@ bool AuraAsioWasapiSink::Open() {
     }
 
     m_targetChannels = pMixFormat->nChannels > 0 ? pMixFormat->nChannels : 2;
+    // 多声道输出（2026-11-24 W5）：FIFO stride 跟随端点混音格式。
+    // 端点声明超过 8 声道属异常，回落立体声——宁可丢环绕也不越界。
+    m_fifoStride =
+        (m_targetChannels >= 1 && m_targetChannels <= kMaxOutChannels)
+            ? m_targetChannels
+            : 2;
     m_targetSampleRate = pMixFormat->nSamplesPerSec > 0 ? (double)pMixFormat->nSamplesPerSec : 48000.0;
     m_bitsPerSample = pMixFormat->wBitsPerSample > 0 ? pMixFormat->wBitsPerSample : 32;
 
@@ -173,15 +181,27 @@ void AuraAsioWasapiSink::Close() {
 void AuraAsioWasapiSink::PushSamples(const float* inL, const float* inR, long count, double sourceSampleRate) {
     if (!m_open || count <= 0) return;
 
+    const int stride = m_fifoStride;
+    // 写一帧：单声道端点取 (L+R)/2，其余端点前两声道直写、更宽时
+    // 第 3+ 声道写零（保持旧行为：双声道监听不向环绕扩张）。
+    auto push = [&](float l, float r) {
+        if (m_fifoCount >= kFifoCapacity) return;
+        float* d = &m_fifo[(size_t)m_fifoWrite * (size_t)stride];
+        if (stride == 1) {
+            d[0] = (l + r) * 0.5f;
+        } else {
+            d[0] = l;
+            d[1] = r;
+            for (int c = 2; c < stride; ++c) d[c] = 0.0f;
+        }
+        m_fifoWrite = (m_fifoWrite + 1) % kFifoCapacity;
+        m_fifoCount++;
+    };
+
     if (std::abs(sourceSampleRate - m_targetSampleRate) < 1.0) {
         // 采样率一致（如 48kHz 到 48kHz），直接压入
         for (long i = 0; i < count; ++i) {
-            if (m_fifoCount < kFifoCapacity) {
-                m_fifo[m_fifoWrite * 2 + 0] = inL ? inL[i] : 0.0f;
-                m_fifo[m_fifoWrite * 2 + 1] = inR ? inR[i] : 0.0f;
-                m_fifoWrite = (m_fifoWrite + 1) % kFifoCapacity;
-                m_fifoCount++;
-            }
+            push(inL ? inL[i] : 0.0f, inR ? inR[i] : 0.0f);
         }
     } else {
         // 自适应线性重采样（如 44.1kHz 到 48kHz）
@@ -195,15 +215,48 @@ void AuraAsioWasapiSink::PushSamples(const float* inL, const float* inR, long co
             const float s0_R = inR ? inR[idx] : 0.0f;
             const float s1_R = (inR && idx + 1 < count) ? inR[idx + 1] : s0_R;
 
-            const float outL = s0_L + frac * (s1_L - s0_L);
-            const float outR = s0_R + frac * (s1_R - s0_R);
+            push(s0_L + frac * (s1_L - s0_L), s0_R + frac * (s1_R - s0_R));
+            m_resamplePhase += step;
+        }
+        m_resamplePhase -= count;
+    }
 
-            if (m_fifoCount < kFifoCapacity) {
-                m_fifo[m_fifoWrite * 2 + 0] = outL;
-                m_fifo[m_fifoWrite * 2 + 1] = outR;
-                m_fifoWrite = (m_fifoWrite + 1) % kFifoCapacity;
-                m_fifoCount++;
+    DrainToWasapi();
+}
+
+void AuraAsioWasapiSink::PushSamplesInterleaved(const float* interleaved, int srcCh,
+                                               long count, double sourceSampleRate) {
+    if (!m_open || count <= 0 || !interleaved || srcCh <= 0) return;
+
+    const int stride = m_fifoStride;
+    const int copyCh = (srcCh < stride) ? srcCh : stride;
+
+    auto pushFrame = [&](const float* frame) {
+        if (m_fifoCount >= kFifoCapacity) return;
+        float* d = &m_fifo[(size_t)m_fifoWrite * (size_t)stride];
+        for (int c = 0; c < copyCh; ++c) d[c] = frame[c];
+        for (int c = copyCh; c < stride; ++c) d[c] = 0.0f;
+        m_fifoWrite = (m_fifoWrite + 1) % kFifoCapacity;
+        m_fifoCount++;
+    };
+
+    if (std::abs(sourceSampleRate - m_targetSampleRate) < 1.0) {
+        for (long i = 0; i < count; ++i) {
+            pushFrame(interleaved + (size_t)i * (size_t)srcCh);
+        }
+    } else {
+        const double step = sourceSampleRate / m_targetSampleRate;
+        float out[kMaxOutChannels];
+        while (m_resamplePhase < count) {
+            const long idx = (long)m_resamplePhase;
+            const float frac = (float)(m_resamplePhase - idx);
+            const long idx1 = (idx + 1 < count) ? (idx + 1) : idx;
+            for (int c = 0; c < copyCh; ++c) {
+                const float s0 = interleaved[(size_t)idx * (size_t)srcCh + c];
+                const float s1 = interleaved[(size_t)idx1 * (size_t)srcCh + c];
+                out[c] = s0 + frac * (s1 - s0);
             }
+            pushFrame(out);
             m_resamplePhase += step;
         }
         m_resamplePhase -= count;
@@ -229,42 +282,40 @@ void AuraAsioWasapiSink::DrainToWasapi() {
     hr = m_pRenderClient->GetBuffer(framesToWrite, &pData);
     if (FAILED(hr) || !pData) return;
 
+    const int stride = m_fifoStride;
+    const int outCh = m_targetChannels;
+
     if (m_isFloat) {
         float* dst = reinterpret_cast<float*>(pData);
         for (UINT32 i = 0; i < framesToWrite; ++i) {
-            const float L = m_fifo[m_fifoRead * 2 + 0];
-            const float R = m_fifo[m_fifoRead * 2 + 1];
+            const float* src = &m_fifo[(size_t)m_fifoRead * (size_t)stride];
             m_fifoRead = (m_fifoRead + 1) % kFifoCapacity;
             m_fifoCount--;
 
-            if (m_targetChannels == 1) {
-                dst[i] = (L + R) * 0.5f;
+            if (outCh == 1) {
+                dst[i] = src[0];
             } else {
-                dst[i * m_targetChannels + 0] = L;
-                dst[i * m_targetChannels + 1] = R;
-                for (int c = 2; c < m_targetChannels; ++c) {
-                    dst[i * m_targetChannels + c] = 0.0f;
+                for (int c = 0; c < outCh; ++c) {
+                    dst[(size_t)i * outCh + c] = (c < stride) ? src[c] : 0.0f;
                 }
             }
         }
     } else if (m_bitsPerSample == 16) {
         int16_t* dst = reinterpret_cast<int16_t*>(pData);
         for (UINT32 i = 0; i < framesToWrite; ++i) {
-            float L = m_fifo[m_fifoRead * 2 + 0];
-            float R = m_fifo[m_fifoRead * 2 + 1];
+            const float* src = &m_fifo[(size_t)m_fifoRead * (size_t)stride];
             m_fifoRead = (m_fifoRead + 1) % kFifoCapacity;
             m_fifoCount--;
 
-            if (L > 1.0f) L = 1.0f; else if (L < -1.0f) L = -1.0f;
-            if (R > 1.0f) R = 1.0f; else if (R < -1.0f) R = -1.0f;
-
-            if (m_targetChannels == 1) {
-                dst[i] = (int16_t)((L + R) * 0.5f * 32767.0f);
+            if (outCh == 1) {
+                float v = src[0];
+                if (v > 1.0f) v = 1.0f; else if (v < -1.0f) v = -1.0f;
+                dst[i] = (int16_t)(v * 32767.0f);
             } else {
-                dst[i * m_targetChannels + 0] = (int16_t)(L * 32767.0f);
-                dst[i * m_targetChannels + 1] = (int16_t)(R * 32767.0f);
-                for (int c = 2; c < m_targetChannels; ++c) {
-                    dst[i * m_targetChannels + c] = 0;
+                for (int c = 0; c < outCh; ++c) {
+                    float v = (c < stride) ? src[c] : 0.0f;
+                    if (v > 1.0f) v = 1.0f; else if (v < -1.0f) v = -1.0f;
+                    dst[(size_t)i * outCh + c] = (int16_t)(v * 32767.0f);
                 }
             }
         }
@@ -285,23 +336,19 @@ void AuraAsioWasapiSink::DrainToWasapi() {
             (double)((validBits >= 32) ? 2147483647LL
                                        : ((1LL << (validBits - 1)) - 1));
         for (UINT32 i = 0; i < framesToWrite; ++i) {
-            float L = m_fifo[m_fifoRead * 2 + 0];
-            float R = m_fifo[m_fifoRead * 2 + 1];
+            const float* src = &m_fifo[(size_t)m_fifoRead * (size_t)stride];
             m_fifoRead = (m_fifoRead + 1) % kFifoCapacity;
             m_fifoCount--;
 
-            if (L > 1.0f) L = 1.0f; else if (L < -1.0f) L = -1.0f;
-            if (R > 1.0f) R = 1.0f; else if (R < -1.0f) R = -1.0f;
-
-            const float vals[2] = {L, R};
-            for (int c = 0; c < m_targetChannels; ++c) {
-                const float v = (c < 2) ? vals[c] : 0.0f;
+            for (int c = 0; c < outCh; ++c) {
+                float v = (c < stride) ? src[c] : 0.0f;
+                if (v > 1.0f) v = 1.0f; else if (v < -1.0f) v = -1.0f;
                 // double 乘法：float 表示不了 2^31-1，满幅会溢出成
                 // 负满幅单点爆音。
                 int64_t s = (int64_t)((double)v * scale);
                 s <<= shift;
                 uint64_t u = (uint64_t)s;
-                BYTE* dst = pData + ((size_t)i * m_targetChannels + c) *
+                BYTE* dst = pData + ((size_t)i * outCh + c) *
                                         (size_t)containerBytes;
                 for (int b = 0; b < containerBytes; ++b) {
                     dst[b] = (BYTE)((u >> (8 * b)) & 0xFF);

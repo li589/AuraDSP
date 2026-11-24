@@ -99,6 +99,12 @@ class AuraAsioBridge implements AudioBridgeCommon {
   @override
   Map<String, dynamic>? vizRead() => core.vizRead();
 
+  /// 桥内引擎的处理后立体声 PCM（L/R 交织）。仅 ASIO Client 形态有意义：
+  /// DAW 打开本驱动时 App 没有自己的引擎句柄，projectM 的喂入只能经桥取。
+  /// 旧桥/引擎无 `ab_pcm_read` 时返回 0，调用方回落输入快照。
+  @override
+  int pcmRead(Pointer<Float> out, int frames) => core.pcmRead(out, frames);
+
   @override
   int testStart(int kind,
           {Pointer<Float>? pcm, int frames = 0, int ch = 2, int rate = 0}) =>

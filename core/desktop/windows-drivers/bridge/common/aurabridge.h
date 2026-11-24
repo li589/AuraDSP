@@ -77,6 +77,13 @@ AB_API int ab_get_param_str(const char* id, char* out, int cap);
 // auradsp_viz_read 同布局透传）。返回帧数，0=无引擎/未运行。
 AB_API int ab_viz_read(void* out1600, int count);
 
+// 读处理后立体声 PCM（float32，L/R 交织，out 容量至少 frames*2）。
+// 返回实际帧数；0=无引擎/未运行/该桥无桥内 PCM 源，<0=参数非法。
+// ASIO Client 形态是唯一真值来源（引擎在 DAW 进程内，App 无本地
+// 句柄）；VM/VAIO 的引擎在 App 自身进程，App 直读引擎，桥侧恒 0。
+// 调用方按返回 0 降级——不得把零填充当处理后音频。
+AB_API int ab_pcm_read(void* out, int frames);
+
 // 用户旁路（跳过 process，输入直通）。0=ok，<0=未运行。
 AB_API int ab_bypass(int on);
 

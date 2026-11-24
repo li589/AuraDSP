@@ -2851,6 +2851,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               bridgeStaleSince = 0;
               bridgeStaleSent = false;
               v['backend'] = vizBackend;
+              // [W5 ASIO PCM tap] Client 形态下引擎在 DAW 进程内，桥是
+              // 唯一 PCM 来源：按 viz 节奏拉最近 512 帧处理后立体声。
+              // 桥无导出/无新帧（GATED 或旁路）时不给 pcm 键——状态层
+              // 保持清空并回落程序化渲染，绝不补零冒充处理后音频。
+              if (backend == 'asio') {
+                final got = brc.pcmRead(pcmBufEng, 512);
+                if (got > 0) {
+                  v['pcmSource'] = 'engine';
+                  v['pcm'] =
+                      List<double>.of(pcmBufEng.asTypedList(got * 2));
+                }
+              }
               send({'evt': 'viz', ...v});
               // 第四十五轮 S1：桥 viz 声道**不再**喂钳制器——r44 S1
               // 的喂入把能力绑在流几何回声上（VAIO ringCh 空闲=2、

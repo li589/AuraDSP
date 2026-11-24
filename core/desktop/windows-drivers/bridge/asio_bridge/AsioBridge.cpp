@@ -140,6 +140,13 @@ using vmcore::FnEngSetParam;
 using vmcore::FnEngVizRead;
 using vmcore::PumpCtx;
 
+// PCM tap（Client 形态）：处理后立体声 PCM（L/R 交织 float32）。
+// 引擎自 2026-11-23 起导出 auradsp_pcm_read（engine/auradsp_engine.h），
+// 与 auradsp_viz_read 同一 SPSC 环口径。VM/VAIO 无此需求，故类型与
+// 绑定都留在本桥，不进 VmPumpCore.h 共用面。
+using FnEngPcmRead = uint32_t(__cdecl*)(void* handle, float* out,
+                                        uint32_t frames);
+
 struct BridgeCtl {
     auraasio::AsioHost host;
     // 引擎（动态加载；单 handle——ASIO v1 只取一个立体声对进链）
@@ -150,6 +157,7 @@ struct BridgeCtl {
     FnEngSetParam setParam = nullptr;
     FnEngGetParam getParam = nullptr;
     FnEngVizRead vizRead = nullptr;
+    FnEngPcmRead pcmRead = nullptr;
     void* engine = nullptr;
     std::wstring enginePath;      // 加载到的引擎 DLL（宽字节原样）
     // 驱动信息（status 用）
@@ -268,6 +276,7 @@ void DestroyEngine() {
     g_b.setParam = nullptr;
     g_b.getParam = nullptr;
     g_b.vizRead = nullptr;
+    g_b.pcmRead = nullptr;
     g_b.destroy = nullptr;
     g_b.enginePath.clear();
     // P3：引擎没了门控一并作废（下次 start 会重新 Configure）。
@@ -398,6 +407,9 @@ int asio_start_ex(const char* driver_name, const char* engine_dll,
         g_b.setParam = (FnEngSetParam)GetProcAddress(g_b.engMod, "auradsp_set_param");
         g_b.getParam = (FnEngGetParam)GetProcAddress(g_b.engMod, "auradsp_get_param");
         g_b.vizRead = (FnEngVizRead)GetProcAddress(g_b.engMod, "auradsp_viz_read");
+        // 可选导出：旧引擎没有 PCM tap，缺失时 pcmRead 保持 nullptr，
+        // ab_pcm_read 返回 0（调用方回落输入快照，绝不伪造 PCM）。
+        g_b.pcmRead = (FnEngPcmRead)GetProcAddress(g_b.engMod, "auradsp_pcm_read");
         // [PATCHED-AuraDSP P-028 §7-2] 加载后强校验引擎 ABI（auradsp_abi 缺失也算不兼容）
         engAbiFn = (FnEngAbi)GetProcAddress(g_b.engMod, "auradsp_abi");
         engAbi = engAbiFn ? engAbiFn() : 0;
@@ -763,6 +775,17 @@ int asio_viz_read(void* out1600, int count) {
     if (InterlockedCompareExchange(&g_b.userBypass, 0, 0)) return 0;
     if (InterlockedCompareExchange(&g_b.tc.testKind, 0, 0) != 0) return 0;
     return g_silentViz.Emit(out1600, 0, g_b.ioCh);
+}
+
+// 处理后 PCM 读出（Client 形态）：引擎最近 frames 帧处理后立体声
+// PCM（L/R 交织），返回实际帧数。线程模型与 viz_read 一致——仅 Dart
+// 控制线程调用，不进 RT。GATED/旁路期间引擎无新帧，返回 0 由调用方
+// 回落输入快照；绝不补零帧冒充"处理后音频"。
+int asio_pcm_read(void* out, int frames) {
+    if (!out || frames <= 0) return -1;
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    if (!g_b.pcmRead || !g_b.engine) return 0;
+    return (int)g_b.pcmRead(g_b.engine, (float*)out, (uint32_t)frames);
 }
 
 // §7-2（P-028）桥 ABI 协商：返回桥编译所依据的引擎 ABI 版本（viz 帧布局代际）。

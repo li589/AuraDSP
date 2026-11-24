@@ -177,15 +177,13 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   // ------------------------------------------------------------------
   // [W4] projectM 原生会话驱动（2026-11-23 接线轮）
   //
-  // 激活三条件缺一不可：风格为 projectM、桥为原生桥、本地 PCM
-  // PCM availability (corrected 2026-11-23, full audit): only the
-  // local pipeline produces 'pcm' events today. In ASIO Client mode
-  // the engine instance is driven by the ASIO bridge, whose viz
-  // channel carries spectrum/levels but no PCM, and the isolate's
-  // own shadow handle is not fed the ASIO stream - so Client mode
-  // falls back exactly like APO / virtual ASIO until the bridge
-  // grows a PCM read export (registered follow-up). APO (audiodg)
-  // and virtual ASIO (DAW process) have no PCM by construction.
+  // 激活三条件缺一不可：风格为 projectM、桥为原生桥、有真实 PCM。
+  // PCM availability (updated 2026-11-24): the local pipeline taps the
+  // engine handle directly; ASIO Client mode taps the bridge instead
+  // (ab_pcm_read → auradsp_pcm_read inside the DAW process, W5). Both
+  // publish pcmSource='engine'. APO (audiodg) and virtual ASIO have no
+  // PCM by construction, so they keep falling back to procedural
+  // rendering — never feed synthesized or zero-filled audio here.
   Timer? _pmTimer;
   bool _pmInitInFlight = false;
   DateTime? _pmInitFailedAt;

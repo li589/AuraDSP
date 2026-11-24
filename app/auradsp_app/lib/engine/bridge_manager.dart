@@ -44,6 +44,11 @@ abstract interface class AudioBridgeCommon {
 
   Map<String, dynamic>? vizRead();
 
+  /// 桥内引擎的处理后立体声 PCM（L/R 交织 float32）。真值仅 ASIO 桥
+  /// 提供（Client 形态下引擎在 DAW 进程内）；VM/VAIO 与旧桥恒返回 0，
+  /// 调用方必须据此降级为输入快照，不得把零填充当处理后音频。
+  int pcmRead(Pointer<Float> out, int frames);
+
   int testStart(int kind,
       {Pointer<Float>? pcm, int frames, int ch, int rate});
 
@@ -64,6 +69,8 @@ typedef _SetParamC = Int32 Function(Pointer<Utf8>, Int32, Pointer<Void>);
 typedef _SetParamDart = int Function(Pointer<Utf8>, int, Pointer<Void>);
 typedef _VizReadC = Int32 Function(Pointer<Void>, Int32);
 typedef _VizReadDart = int Function(Pointer<Void>, int);
+typedef _PcmReadC = Int32 Function(Pointer<Float>, Int32);
+typedef _PcmReadDart = int Function(Pointer<Float>, int);
 typedef _TestStartC = Int32 Function(Int32, Pointer<Float>, Int32, Int32, Int32);
 typedef _TestStartDart = int Function(int, Pointer<Float>, int, int, int);
 typedef _TestStopC = Int32 Function();
@@ -106,6 +113,25 @@ class AudioBridgeCore {
       dylib.lookupFunction<_SetParamC, _SetParamDart>('ab_set_param');
   late final _VizReadDart _vizRead =
       dylib.lookupFunction<_VizReadC, _VizReadDart>('ab_viz_read');
+
+  /// `ab_pcm_read` 是可选导出（当前仅 ASIO 桥实现）：VM/VAIO 与旧桥
+  /// 没有该符号，缺失即永久降级为「无桥内 PCM」。首次访问探测一次，
+  /// 结果缓存——不能让每次 viz 节流都走异常路径。
+  _PcmReadDart? _pcmRead;
+  bool _pcmReadProbed = false;
+
+  _PcmReadDart? get _pcmReadFn {
+    if (!_pcmReadProbed) {
+      _pcmReadProbed = true;
+      try {
+        _pcmRead =
+            dylib.lookupFunction<_PcmReadC, _PcmReadDart>('ab_pcm_read');
+      } catch (_) {
+        _pcmRead = null;
+      }
+    }
+    return _pcmRead;
+  }
   late final _TestStartDart _testStart = dylib
       .lookupFunction<_TestStartC, _TestStartDart>('ab_test_start');
   late final _TestStopDart _testStop =
@@ -208,6 +234,22 @@ class AudioBridgeCore {
       return null;
     } finally {
       malloc.free(buf);
+    }
+  }
+
+  /// 读桥内引擎的处理后立体声 PCM（L/R 交织 float32）。
+  /// [out] 容量至少 `frames * 2` 个 float。返回实际帧数；0=桥未运行/
+  /// 无引擎/该桥无 PCM tap（旧桥或 VM/VAIO），调用方必须回落输入快照，
+  /// 不得把零填充当处理后音频。
+  int pcmRead(Pointer<Float> out, int frames) {
+    final fn = _pcmReadFn;
+    if (fn == null || frames <= 0) return 0;
+    try {
+      final n = fn(out, frames);
+      return n > 0 ? n : 0;
+    } catch (e, st) {
+      swallowThrottled(e, st, logTag);
+      return 0;
     }
   }
 
