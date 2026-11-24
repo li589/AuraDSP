@@ -35,10 +35,22 @@ def find_driver_dir(explicit: str | None) -> Path | None:
     if explicit:
         p = Path(explicit)
         return p if p.is_dir() else None
-    candidates: list[Path] = []
-    for sysfile in DRIVER_SRC_ROOT.rglob("*.sys"):
-        if "legacy" not in sysfile.parts:  # legacy 驱动不进发行包
-            candidates.append(sysfile.parent)
+    parents = {sysfile.parent for sysfile in DRIVER_SRC_ROOT.rglob("*.sys")
+               if "legacy" not in sysfile.parts}  # legacy 驱动不进发行包
+
+    def has_payload(d: Path) -> bool:
+        # 候选必须含 VAIO 载荷三件的准确文件名（审查 F-10）：只看
+        # 后缀种类时，陈旧备份目录凑齐 sys+inf+cat 又更新 mtime
+        # 即可劫持评分，把旧驱动当现行产物选走。
+        try:
+            return ((d / DRIVER_SYS_NAME).is_file()
+                    and (d / DRIVER_CAT_NAME).is_file()
+                    and any(f.is_file() and f.suffix.lower() == ".inf"
+                            for f in d.iterdir()))
+        except OSError:
+            return False
+
+    candidates = [d for d in parents if has_payload(d)]
     if not candidates:
         return None
 
@@ -115,6 +127,11 @@ def build_driver(track: str = "modern", config: str = "Release") -> None:
              "-File", str(p)] + argv,
             check=True, cwd=str(DRIVER_SRC_ROOT))
         if script == "build_drivers.ps1":
+            if sys_path is None:
+                # 处女树（构建前全树无 .sys）时 sys_path 捕获为 None；
+                # 构建已产出产物，重新定位一次再判（审查 F-10）。
+                ddir = find_driver_dir(None)
+                sys_path = (ddir / DRIVER_SYS_NAME) if ddir else None
             if sys_path is None or not sys_path.is_file():
                 raise die("驱动构建后未找到 AuraVaioDriver.sys，中止打包")
             if sys_path.stat().st_mtime < build_started - 2:

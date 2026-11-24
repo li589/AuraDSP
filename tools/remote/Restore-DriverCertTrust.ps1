@@ -27,6 +27,7 @@ $tmp = Join-Path $env:TEMP 'signer_from_cat.cer'
 Export-Certificate -Cert $cert -FilePath $tmp -Force | Out-Null
 Import-Certificate -FilePath $tmp -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
 Import-Certificate -FilePath $tmp -CertStoreLocation Cert:\LocalMachine\TrustedPublisher | Out-Null
+Remove-Item $tmp -Force -ErrorAction SilentlyContinue
 "imported into LocalMachine Root + TrustedPublisher" | Out-File $Log -Append
 $s2 = Get-AuthenticodeSignature $CatPath
 "cat now Status=$($s2.Status) Signer=$($s2.SignerCertificate.Thumbprint)" | Out-File $Log -Append

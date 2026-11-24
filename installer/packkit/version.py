@@ -13,7 +13,7 @@ from pathlib import Path
 from .common import die
 from .paths import VERSION_RESOLVER
 
-_OVERRIDE_RE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d+)$")
+_OVERRIDE_RE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{1,2})$")
 
 
 def load_resolver():

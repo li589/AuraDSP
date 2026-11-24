@@ -1230,7 +1230,7 @@ void pfloat32Multiplexed(JamesDSPLib *jdsp, float *x, float *y, size_t n)
 	{
 		const size_t oldBlockSize = jdsp->blockSize;
 		jdsp->blockSize = n;
-		/* [PATCHED-AuraDSP P-008/P-009] 块长变化时不得重建卷积器，除非容量真正扩大。
+		/* [PATCHED-AuraDSP P-008] [PATCHED-AuraDSP P-009] 块长变化时不得重建卷积器，除非容量真正扩大。
 		 *
 		 * P-008 曾用 2 倍量级滞回，但 WASAPI 可用帧数仍可能从接近满块跌到不足一半，
 		 * 于是周期性重建并没有完全消除（1024/512 实测仍有约 20 倍耗时尖峰）。

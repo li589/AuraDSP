@@ -75,6 +75,7 @@ def main():
     sftp = ssh.open_sftp()
 
     print(f"Syncing {len(FILES_TO_SYNC)} files to {host}:{remote_base}...")
+    failures = []
     for rel_path in FILES_TO_SYNC:
         local_path = os.path.join(local_base, *rel_path.split("/"))
         remote_path = f"{remote_base}/{rel_path}"
@@ -86,11 +87,18 @@ def main():
         except IOError:
             ssh.exec_command(f"mkdir -p '{remote_dir}'")
             
-        sftp.put(local_path, remote_path)
-        print(f"  [OK] {rel_path}")
+        try:
+            sftp.put(local_path, remote_path)
+            print(f"  [OK] {rel_path}")
+        except Exception as e:
+            failures.append(rel_path)
+            print(f"  [FAIL] {rel_path}: {e}")
 
     sftp.close()
     ssh.close()
+    if failures:
+        print(f"{len(failures)} file(s) failed to sync: {', '.join(failures)}")
+        sys.exit(1)
     print("All files synced successfully.")
 
 if __name__ == "__main__":

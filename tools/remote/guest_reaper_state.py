@@ -18,7 +18,6 @@ def main():
                  r'C:\Program Files\REAPER'):
         cands += glob.glob(os.path.join(base, '**', 'reaper.ini'),
                            recursive=True)
-    cands += glob.glob(r'C:\Users\li\**\reaper.ini', recursive=True)
     cands = sorted(set(cands))
     print('ini candidates:', cands)
     for p in cands:

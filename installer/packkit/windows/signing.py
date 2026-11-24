@@ -84,25 +84,30 @@ def check_driver_payload_signed(dest: Path, *, warn_only: bool) -> None:
     problems: list[str] = []
     cats = sorted(f for f in dest.iterdir()
                   if f.is_file() and f.suffix.lower() == ".cat")
-    vaio_cats = [f for f in cats if "auravaio" in f.name.lower()]
-    cat = vaio_cats[0] if vaio_cats else (cats[0] if cats else None)
     signer_thumb = ""
 
-    if cat is None:
+    if not cats:
         problems.append("随包 driver/ 缺 .cat 目录文件")
     elif sys.platform != "win32":
-        log(f"警告: 非 Windows 平台无法验证 .cat 签名，跳过签名门: {cat}")
+        log(f"警告: 非 Windows 平台无法验证 .cat 签名，跳过签名门: {cats[0]}")
         return
     else:
-        try:
-            status, signer_thumb = authenticode_info(cat)
-            if status != "Valid" or not signer_thumb:
-                problems.append(
-                    f"随包 .cat 未签名或签名无效（Status={status}）: {cat.name}"
-                    "——Inf2Cat 后必须跑 sign_drivers.ps1 签名，或打包时加 "
-                    "--build-driver；未签名的包在目标机报 Code 52、VAIO 不启动")
-        except RuntimeError as e:
-            problems.append(f"随包 .cat 签名无法验证（{e}）: {cat.name}")
+        # 载荷里每一只 .cat 都验（审查 F-9）：只验一只时，载荷构成
+        # 变化后其余 .cat 会漏验。签名者指纹以 VAIO .cat 的为准
+        # （.cer 一致性检查的对象是驱动签名者），无 VAIO .cat 时
+        # 取第一只有效签名者。
+        for cat in cats:
+            try:
+                status, thumb = authenticode_info(cat)
+                if status != "Valid" or not thumb:
+                    problems.append(
+                        f"随包 .cat 未签名或签名无效（Status={status}）: {cat.name}"
+                        "——Inf2Cat 后必须跑 sign_drivers.ps1 签名，或打包时加 "
+                        "--build-driver；未签名的包在目标机报 Code 52、VAIO 不启动")
+                elif "auravaio" in cat.name.lower() or not signer_thumb:
+                    signer_thumb = thumb
+            except RuntimeError as e:
+                problems.append(f"随包 .cat 签名无法验证（{e}）: {cat.name}")
 
     if not problems and signer_thumb:
         cer = dest / "AuraDSP_TestSign.cer"
@@ -152,4 +157,7 @@ def sign_file(args, path: Path) -> None:
         cmd += ["/f", pfx, "/p", os.environ.get("AURADSP_SIGN_PASS", "")]
     cmd.append(str(path))
     log(f"sign: {path.name}")
-    subprocess.run(cmd, check=True)
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        raise die(f"signtool 签名失败（rc={e.returncode}）: {path.name}")

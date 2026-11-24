@@ -31,7 +31,7 @@ PUBSPEC = ROOT / "app" / "auradsp_app" / "pubspec.yaml"
 
 # 发布总则：vXX.XX.X —— 主、次版本各最多两位数；修订号一位起
 # （修订号超过 9 时应进位次版本，这里只做格式下限校验）。
-VERSION_RE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d+)$")
+VERSION_RE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{1,2})$")
 
 
 def resolve() -> dict[str, str]:
