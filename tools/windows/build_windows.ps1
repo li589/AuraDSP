@@ -261,6 +261,11 @@ Send-UiStep "[2/6] 编译 C++ 核心引擎..."
     $EngineSize = $EngineItem.Length
     Write-Host "  -> 核心引擎就绪: auradsp_engine.dll ($([math]::Round($EngineSize / 1MB, 2)) MB)" -ForegroundColor Green
 
+    # smoke 的引擎 DLL 第一候选是 test\auradsp_engine.dll（本地放置的
+    # 便捷副本）：每轮构建后以新鲜产物覆盖，防止旧副本遮蔽新构建
+    # （2026-11-24 批A 门禁实踩：冻结旧副本令 liveprog/gmem 冒烟跑旧 DLL）。
+    Copy-Item -LiteralPath $EngineDll -Destination (Join-Path $ProjectRoot "test\auradsp_engine.dll") -Force
+
     if ($ApoEngine) {
         $ApoEngineDll = Join-Path $EngineOutDir "$BuildType\auradsp_engine_apo.dll"
         $null = Assert-Fresh -Path $ApoEngineDll -Label "APO 引擎 "
@@ -362,7 +367,7 @@ Send-UiStep "[3b/6] 编译 smoke 测试目标..."
         "rt_drain_test", "vaio_pump_wait_test", "vm_detect",
         "vm_pump_test", "vm_parallel_test", "apo_inspect",
         "silence_gate_test", "AuraApo", "apo_config",
-        "channel_map_test", "auradsp_test_latency"
+        "channel_map_test", "auradsp_test_latency", "apo_engine_test"
     )
     Invoke-Clean (@("cmake", "--build", "--preset", $BuildPreset, "--target") + $TestTargets + "--", "-m:$BuildJobs") `
         -Log (Join-Path $ProjectRoot "build\reports\build_test_targets.log")
@@ -378,6 +383,17 @@ Send-UiStep "[3b/6] 编译 smoke 测试目标..."
         throw "smoke 门禁依赖的测试目标未产出: $($Missing -join ', ')"
     }
     Write-Host "  -> 测试目标就绪: $($TestTargets.Count) 个" -ForegroundColor Green
+
+    # apo_engine_test 要求 auradsp_engine_apo.dll 与 AuraApo.dll 同目录
+    # （windows-drivers\out\<Config>）：AuraApo 由本步构建直接落位，纪律版
+    # 引擎来自 Step 2 的引擎树产物——复制新鲜件对齐三件套，不再靠手动放置
+    # （2026-11-24 批A 门禁实踩：同目录旧件冻结致参数块版本不一致全红）。
+    $ApoSrc = Join-Path $ProjectRoot "core\desktop\windows\out\$BuildType\auradsp_engine_apo.dll"
+    $ApoDstDir = Join-Path $ProjectRoot "core\desktop\windows-drivers\out\$BuildType"
+    if ((Test-Path $ApoSrc) -and (Test-Path $ApoDstDir)) {
+        Copy-Item -LiteralPath $ApoSrc -Destination $ApoDstDir -Force
+        Write-Host "  -> APO 测试三件套已对齐: auradsp_engine_apo.dll 已同步到驱动产物目录" -ForegroundColor Green
+    }
 }
 
 # -------------------------------------------------------------------------
