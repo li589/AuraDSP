@@ -821,6 +821,11 @@ yquist * 0.999，
 ## P-038 LiveProg 运行环境感知与代码冗余清理（已实施，2026-10-26）
 
 - **状态**：已实施（2026-10-26，对应细审 REM-1/REM-2/REM-3）。
+- **口径注记（2026-11-25，审查 L13）**：多声道宿主
+  （engine/dsp/dsp_mc_liveprog.cpp）的 dev_srate 与 srate 同值
+  （恒等于引擎采样率），与本条立体声宿主 dev_srate=设备采样率
+  的口径不同；已在 dsp_mc_liveprog.h 头注写明，脚本跨宿主移植
+  时勿假设 dev_srate 为设备率。
 - **位置**：`jdsp/jdsp_header.h`、`jdsp/Effects/liveprogWrapper.c`、
   `jdsp/jdspController.c`、`engine/engine_internal.h`、`engine/chain/engine_chain.cpp`。
 - **动机**：
@@ -1288,3 +1293,13 @@ yquist * 0.999，
   P-045 五处、P-046 一处缺 `PATCHED-` 前缀的标记，P-006/P-007 在
   multimodalEQ.c 的三处裸标记，全部改为标准格式（各条目下有
   一行 dated 注记）。
+
+## P-055 convolver1D（jdsp/Effects/convolver1D.c）— finalImpulse 空指针检查顺序（2026-11-25，审查 L1）
+
+- **位置**：`Convolver1DLoadImpulseResponse` 的 finalImpulse 分配处
+  与 `bufDeleteAndUnlock` 失败路径清理处（共两处标记）。
+- **改动**：finalImpulse 的 NULL 检查原写在 memset 之后——OOM 时
+  先对空指针 memset 直接崩溃，走不到失败路径；检查前移到
+  memset 之前。失败路径逐声道释放循环同样在 finalImpulse 为空
+  时解引用它，补 `if (finalImpulse)` 守卫（其余到达该路径的
+  调用点行为不变）。

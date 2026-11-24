@@ -71,13 +71,16 @@ int Convolver1DLoadImpulseResponse(JamesDSPLib *jdsp, float *tempImpulseFloat, u
 	}
 	Convolver1DConstructor(jdsp);
 	float **finalImpulse = (float**)malloc(impChannels * sizeof(float*));
-	memset(finalImpulse, 0, impChannels * sizeof(float*));
 	int ret = 1;
+	/* [PATCHED-AuraDSP P-055] NULL check moved before memset: on OOM the
+	 * original order memset through a null pointer and crashed instead
+	 * of taking the failure path below. */
 	if (!finalImpulse)
 	{
 		ret = 0;
 		goto bufDeleteAndUnlock;
 	}
+	memset(finalImpulse, 0, impChannels * sizeof(float*));
 	for (unsigned int i = 0; i < impChannels; i++)
 	{
 		float* channelbuf = (float*)malloc(impulseLengthActual * sizeof(float));
@@ -209,9 +212,13 @@ int Convolver1DLoadImpulseResponse(JamesDSPLib *jdsp, float *tempImpulseFloat, u
 		}
 	}
 bufDeleteAndUnlock:
-	for (unsigned int i = 0; i < impChannels; i++)
-		if (finalImpulse[i])
-			free(finalImpulse[i]);
+	/* [PATCHED-AuraDSP P-055] Skip the per-channel free loop when
+	 * finalImpulse itself is null, else the failure path dereferences
+	 * the same null pointer it is reporting. */
+	if (finalImpulse)
+		for (unsigned int i = 0; i < impChannels; i++)
+			if (finalImpulse[i])
+				free(finalImpulse[i]);
 	if (finalImpulse)
 		free(finalImpulse);
 	jdsp_unlock(jdsp);

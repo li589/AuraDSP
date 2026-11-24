@@ -49,16 +49,26 @@ inline SpeakerLayout layout_for(int ch) {
     l.sr = -1;
     l.bl = -1;
     l.br = -1;
-    if (ch == 4) {
+    if (ch == 3) {
+        /* 3.0: FL(0), FR(1), C(2)（审查 L3 补全奇数宽，勿静默丢 C） */
+        l.c = 2;
+    } else if (ch == 4) {
         /* Quad 4.0 (ADR-003): FL(0), FR(1), BL(2), BR(3) */
         l.bl = 2;
         l.br = 3;
+    } else if (ch == 5) {
+        /* 5.0: FL(0), FR(1), C(2), SL(3), SR(4)（审查 L3 补全） */
+        l.c = 2;
+        l.sl = 3;
+        l.sr = 4;
     } else if (ch >= 6) {
         /* 5.1 (6ch) / 7.1 (8ch) */
         l.c = 2;
         l.lfe = 3;
         l.sl = 4;
         l.sr = 5;
+        /* ch == 7（6.1）的 BC（后中置）无对位槽：bl/br 保持 -1 显式
+         * 不映射，调用方按 -1 判读，不静默折叠（审查 L3）。 */
         if (ch >= 8) {
             l.bl = 6;
             l.br = 7;

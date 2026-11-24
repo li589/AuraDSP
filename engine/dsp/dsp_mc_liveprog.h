@@ -33,7 +33,10 @@ void mc_liveprog_set_enabled(McLiveProgHost* host, int enabled);
 int mc_liveprog_get_enabled(const McLiveProgHost* host);
 
 /* 控制线程：环境同步——采样率/声道数变化时调用；写全部槽快照与
- * 已注册的环境寄存器（srate/dev_srate/num_ch/nch）。 */
+ * 已注册的环境寄存器（srate/dev_srate/num_ch/nch）。
+ * 注意（审查 L13）：本宿主 dev_srate 与 srate 同值（恒等于引擎采样
+ * 率），与立体声宿主 dev_srate=设备采样率的口径不同（PATCHES.md
+ * P-038 登记）；脚本跨宿主移植时勿假设 dev_srate 为设备率。 */
 void mc_liveprog_set_sample_rate(McLiveProgHost* host, float sampleRate);
 void mc_liveprog_set_channels(McLiveProgHost* host, int channels);
 

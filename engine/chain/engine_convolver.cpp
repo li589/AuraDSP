@@ -249,6 +249,14 @@ auradsp_status load_ir_file(auradsp_handle h, const char* path) {
     }
     free(bytes);
 
+    /* 审查 L2：采样率缺失（损坏头）时时长门与重采样都会静默跳过、
+     * 按错率装载，直接判参数错误。 */
+    if (src_rate == 0) {
+        free(data);
+        set_error(h, "convolver.ir: parse failed (missing sample rate)");
+        return AURADSP_E_PARAM;
+    }
+
     /* L4：健全性扫描（NaN/Inf 会毒化卷积输出） */
     const size_t n = frames * ch;
     float peak = 0.0f;
@@ -287,6 +295,14 @@ const float maxIrSec = h->gate_max_ir_seconds.load(std::memory_order_relaxed);
     if (src_rate != 0 && fabs((double)src_rate - h->jdsp.fs) > 0.5) {
         const double ratio = (double)h->jdsp.fs / (double)src_rate;
         out_frames = (size_t)ceil((double)frames * ratio);
+        /* 审查 L2：重采样可放大帧数（低率文件到高引擎率），重采样后
+         * 必须复查同一硬顶，否则 16M/64M 上限被放大倍率绕过。 */
+        if (out_frames > 16u * 1024 * 1024 ||
+            (unsigned long long)out_frames * ch > 64ull * 1024 * 1024) {
+            free(data);
+            set_error(h, "convolver.ir: file too large (resampled length exceeds max 16M frames / 64M samples)");
+            return AURADSP_E_PARAM;
+        }
         float* res = (float*)malloc(out_frames * ch * sizeof(float));
         if (!res) { free(data); set_error(h, "convolver.ir: out of memory (resample)"); return AURADSP_E_IO; }
         memset(res, 0, out_frames * ch * sizeof(float));
