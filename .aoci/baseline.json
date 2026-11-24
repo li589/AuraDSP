@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-21T02:23:05Z",
-  "updated_at": "2026-11-23T12:09:53Z",
+  "updated_at": "2026-11-24T02:38:10Z",
   "files": {
     ".ai/README.md": {
       "role": "index",
@@ -245,9 +245,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "c080f38ff049d5612a887a1441ab6033e06216d4e50eeea02bb54b08760aa5d6",
-      "size": 1159111,
-      "normalized_sha256": "c080f38ff049d5612a887a1441ab6033e06216d4e50eeea02bb54b08760aa5d6"
+      "sha256": "c3743f5cbe91fa473c98e5505b1076f1e05b1246a9a176f628073d4ca80800ef",
+      "size": 1162627,
+      "normalized_sha256": "c3743f5cbe91fa473c98e5505b1076f1e05b1246a9a176f628073d4ca80800ef"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -2332,9 +2332,9 @@
     },
     "app/auradsp_app/shaders/particle_tornado.frag": {
       "role": "index",
-      "sha256": "c3708dc1b10f1633869efdc0e24b131c79f2dd0a2d9c24ae12ca65f7e1145844",
-      "size": 4093,
-      "normalized_sha256": "c3708dc1b10f1633869efdc0e24b131c79f2dd0a2d9c24ae12ca65f7e1145844"
+      "sha256": "13417afd52fb655034c7bfd2b44cfc4beb4a8244651b125b892af15806d631eb",
+      "size": 5210,
+      "normalized_sha256": "13417afd52fb655034c7bfd2b44cfc4beb4a8244651b125b892af15806d631eb"
     },
     "app/auradsp_app/test/about_page_test.dart": {
       "role": "index",
@@ -19882,9 +19882,9 @@
     },
     "docs/30-审查/未决问题登记-2026-11-13.md": {
       "role": "index",
-      "sha256": "a2b94e440c6ebf29fe787ed05e3404b492fb0c10314011a35ddfbaf17717614f",
-      "size": 55856,
-      "normalized_sha256": "a2b94e440c6ebf29fe787ed05e3404b492fb0c10314011a35ddfbaf17717614f"
+      "sha256": "43a7acf87195a66c8acceb2c97874e996b759c947ba0fae34fb3d092148fd9d3",
+      "size": 58721,
+      "normalized_sha256": "43a7acf87195a66c8acceb2c97874e996b759c947ba0fae34fb3d092148fd9d3"
     },
     "docs/30-审查/监听镜像补全与面板提示收口-2026-11-14.md": {
       "role": "index",
@@ -20920,9 +20920,9 @@
     },
     "engine/chain/engine_viz.cpp": {
       "role": "index",
-      "sha256": "748b3551b02f8cd72d408ba89dfc24801d8a4189341af89effd850b4dd93e003",
-      "size": 17315,
-      "normalized_sha256": "748b3551b02f8cd72d408ba89dfc24801d8a4189341af89effd850b4dd93e003"
+      "sha256": "8582f7efd71ed7a2aa0fb4f1651a4974eb841172d09fcb0e83f60d9f2dcd8447",
+      "size": 18659,
+      "normalized_sha256": "8582f7efd71ed7a2aa0fb4f1651a4974eb841172d09fcb0e83f60d9f2dcd8447"
     },
     "engine/chain/speaker_layout.h": {
       "role": "index",
@@ -25927,6 +25927,60 @@
       "sha256": "e3e38e891c806c1fc06f1a2ae012ccc46d6d7ec62b9b9aa0549eda19ce20d4aa",
       "size": 2849,
       "normalized_sha256": "e3e38e891c806c1fc06f1a2ae012ccc46d6d7ec62b9b9aa0549eda19ce20d4aa"
+    },
+    "tools/remote/Invoke-DevTask.ps1": {
+      "role": "index",
+      "sha256": "93d07fd9d8dee1991baaed38b826103fe04cdce09f96ec891c6d9c371ed61e64",
+      "size": 1247,
+      "normalized_sha256": "93d07fd9d8dee1991baaed38b826103fe04cdce09f96ec891c6d9c371ed61e64"
+    },
+    "tools/remote/Invoke-GuestScript.ps1": {
+      "role": "index",
+      "sha256": "527ca0c492088223613ffd84a4ed4a27ca3047a94bbd49b939d42ee19f684351",
+      "size": 2447,
+      "normalized_sha256": "527ca0c492088223613ffd84a4ed4a27ca3047a94bbd49b939d42ee19f684351"
+    },
+    "tools/remote/README.md": {
+      "role": "index",
+      "sha256": "52f2323170780a54eeba0717082f1bbfbd89bfcf5117f51e4a50f5143171fc9d",
+      "size": 3658,
+      "normalized_sha256": "52f2323170780a54eeba0717082f1bbfbd89bfcf5117f51e4a50f5143171fc9d"
+    },
+    "tools/remote/Restore-DriverCertTrust.ps1": {
+      "role": "index",
+      "sha256": "b28b65d16c7c257970eab9eb7b1f0d18b2672f578e439d03e65c5d68b4374f32",
+      "size": 1838,
+      "normalized_sha256": "b28b65d16c7c257970eab9eb7b1f0d18b2672f578e439d03e65c5d68b4374f32"
+    },
+    "tools/remote/Send-ToGuest.ps1": {
+      "role": "index",
+      "sha256": "e203d939ca23fedba7364ef80dad3c28f188a24209917785b54b2051a1652c04",
+      "size": 2098,
+      "normalized_sha256": "e203d939ca23fedba7364ef80dad3c28f188a24209917785b54b2051a1652c04"
+    },
+    "tools/remote/asio_registration_probe.py": {
+      "role": "index",
+      "sha256": "961fb748a84d0a5004877b0d6be4f4ad4a6b02a92cca930b4855205e18900e22",
+      "size": 2057,
+      "normalized_sha256": "961fb748a84d0a5004877b0d6be4f4ad4a6b02a92cca930b4855205e18900e22"
+    },
+    "tools/remote/guest_file_info.py": {
+      "role": "index",
+      "sha256": "79250f29900752bdd0046ad347b3c68293f9229e120043df7d2d89cd9e3a08bc",
+      "size": 1019,
+      "normalized_sha256": "79250f29900752bdd0046ad347b3c68293f9229e120043df7d2d89cd9e3a08bc"
+    },
+    "tools/remote/guest_reaper_state.py": {
+      "role": "index",
+      "sha256": "4b0325190869aaedb2df83f3dc8cb11e650aa914260cf529d1875ad496f6e407",
+      "size": 1473,
+      "normalized_sha256": "4b0325190869aaedb2df83f3dc8cb11e650aa914260cf529d1875ad496f6e407"
+    },
+    "tools/remote/guest_telemetry.py": {
+      "role": "index",
+      "sha256": "b5653c17ac372efa695997e2e6dde04e0f8b0685f7baa8c21f4df4ed62222009",
+      "size": 3005,
+      "normalized_sha256": "b5653c17ac372efa695997e2e6dde04e0f8b0685f7baa8c21f4df4ed62222009"
     },
     "tools/remote/sync_to_vm.py": {
       "role": "index",

@@ -489,7 +489,7 @@ aurora_wave.frag[KU4T]: F:以三段叠加正弦生成音频驱动的极光波形
 neon_tunnel.frag[KU4T]: F:以极坐标隧道翘曲生成音频驱动的霓虹环带，低频加深翘曲并叠加中心辉光 | R:code:app/auradsp_app/pubspec.yaml,code:app/auradsp_app/lib/features/visualizer/styles/style_gpu_shader.dart | A:用平滑阶跃取环带，径向衰减收束到画外，颜色按极角在两色间混合 | S:像素坐标必须经Flutter运行时着色器取，直接取内置变量会与设备像素比错位
 harmonic_warp.frag[KU4T]: F:极坐标谐波射线片元着色器：32束对称射线、低频冲击波纹与能量核辉光 | R:code:app/auradsp_app/lib/features/visualizer/shaders/gpu_shader_service.dart | A:uBass抬升射线内径并加速波纹外扩，uMid与uTreble驱动射线长度，背景双层色呼吸渐变 | S:uniform按声明顺序索引，Dart侧setFloat序号与GLSL声明不一致不报错只会画面错乱
 nebula_flow.frag[KU4T]: F:深空星云片元着色器：4阶FBM双重域扭曲气体漂移、闪烁恒星场与低频核心脉冲 | R:code:app/auradsp_app/lib/features/visualizer/shaders/gpu_shader_service.dart | A:uBass放大域扭曲幅度与核心膨胀，uTreble增强星光闪烁，密度梯度映射三层星云色 | S:FBM固定4阶与旋转矩阵为性能预算，加深倍频或迭代数在低端GPU会明显掉帧
-particle_tornado.frag[KU4S]: F:粒子龙卷风片元着色器：光线步进螺旋漏斗涡旋与深度排序轨道尘埃 | R:code:app/auradsp_app/lib/features/visualizer/shaders/gpu_shader_service.dart | A:uBass驱动涡旋转速与半径脉动，粒子沿确定性轨道螺旋上升，无需CPU侧粒子系统 | S:光线步进固定36步恒定步长为性能预算，不得按分辨率或uBass动态加深否则中低端GPU掉帧
+particle_tornado.frag[KU4S]: F:粒子龙卷风片元着色器：光线步进螺旋漏斗涡旋，流纹脉冲门控成离散亮点+哈希格微尘（r66 离散化；原连续正弦带累积成编织网格且芯部过曝） | R:code:app/auradsp_app/lib/features/visualizer/shaders/gpu_shader_service.dart | A:uBass 驱动涡旋转速与半径脉动，粒子沿确定性轨道螺旋上升，无需 CPU 侧粒子系统；基础密度降至 0.07 | S:光线步进固定 36 步为性能预算不得动态加深；微尘格 theta 向恰 36 格与 atan 接缝对齐，改格数会露接缝；密度回升会重现芯部洗白
 
 ===D:/temp_desktop/Proj/JamesDSP/app/auradsp_app/test/===
 about_page_test.dart[TU4T]: F:以源码文本断言钉住关于页与左栅形态标签契约，并校验应用版本与工程版本一致 | R:code:app/auradsp_app/lib/core/app_info.dart,code:app/auradsp_app/pubspec.yaml,code:app/auradsp_app/lib/features/settings/settings_about_tab.dart | A:按多级目录回退定位源文件后做子串断言，覆盖设置页分类接线与外链端口调用 | S:断的是源码文本而非渲染结果，调用点改名会让用例失效并需同步
@@ -3986,7 +3986,7 @@ vm-win10第四轮处置与取证收口-2026-11-10.md[SH4T]: F:第四轮处置与
 新旧问题复核报告-2026-11-20.md[SG4S]: F:2026-11-20新旧问题复核：复核AUD-01、AUD-02并与滚动登记及较早审查未决项对账 | R:- | A:只读复核留证，未改产品代码与现行登记 | S:-
 未决任务复核-2026-10-31.md[SG5L]: F:2026-10-31未决任务复核：逐项回代码与产物取证，清点三轮审查登记物与内存专项后续项 | R:- | A:已修销账、未修写明改法、口径有出入当场纠正，不采信历史文档口径 | S:-
 未决问题清单-2026-10-19.md[SG5L]: F:2026-10-19未决问题清单：曾为唯一权威索引，2026-10-23清零终结 | R:- | A:现仅作历史记录，现行未决登记为未决问题登记-2026-11-13 | S:标题中唯一权威索引称谓已失效，勿再据此取未决项
-未决问题登记-2026-11-13.md[SG6L]: F:现行未决问题总登记：汇各轮收口遗留与验收项于一处，各条注来源与定级 | R:- | A:未决项的滚动真相源，已关闭项不在本表（见各轮收口） | S:待裁定批（如R-01至R-04、V-01）须裁定收齐再整批开工，不得逐项先行
+未决问题登记-2026-11-13.md[SG6L]: F:现行未决问题总登记：汇各轮收口遗留与验收项于一处，各条注来源与定级 | R:- | A:未决项的滚动真相源，已关闭项不在本表（见各轮收口）；2026-11-23 深夜附记登记后续小项轮与第二轮全量审查收口（AUD-01 销项、中转孤儿回收、R-01 至 R-03 登记） | S:待裁定批（如 R-01 至 R-04、V-01）须裁定收齐再整批开工，不得逐项先行；本表只以日期附记更正，不重写旧条
 监听镜像补全与面板提示收口-2026-11-14.md[SG4T]: F:2026-11-14收口：ASIO-2监听镜像补全与VAIO输出子面板提示修订 | R:- | A:源于业主开发机实测照片指出的两处面板问题 | S:-
 相关组件设计逻辑与复用审查报告-2026-10-12.md[SG4M]: F:2026-10-12相关组件设计逻辑与复用审查：EQ每点Q接入前的组件关系与复用裁定归档 | R:- | A:原始工作记录移入本文档，第四节为归档时已落地修改状态 | S:-
 第三十七轮音频页目检修订收口-2026-11-15.md[SG4T]: F:第三十七轮收口：设置-音频页十项目检修订全落地 | R:- | A:业主对系统页验收通过后给出的音频页修订指令轮 | S:-
@@ -4146,7 +4146,7 @@ engine_audiofile.cpp[KD5T]: F:测试放音音频文件解码：WAV之外经dr_mp
 engine_chain.cpp[KD9L]: F:处理链编排实现：效果阶段顺序、链序重排、插件阶段路由（PluginChainComponent）与逐声道处理主循环 | R:code:engine/engine_internal.h,code:engine/chain/channel_map.h | A:链顺序由参数契约驱动，限幅器恒为链尾最终门（ADR-010） | S:RT主循环零分配零锁；链序变更必须与参数表与UI阶段元数据同步
 engine_convolver.cpp[KD7M]: F:卷积效果实现：IR加载、分区卷积与多声道卷积处理 | R:code:engine/engine_internal.h | A:文件路径经平台fs端口读取，APO形态只认中转目录路径 | S:RT线程不得加载IR文件，加载与校验在控制面完成
 engine_probe.cpp[KD6L]: F:引擎探针导出：供测试与宿主诊断读取引擎内部状态的extern C探针面 | R:code:engine/chain/engine_audiofile.cpp | A:探针面与正式ABI分离，只服务测试与取证 | S:探针导出不得被产品路径依赖
-engine_viz.cpp[KD8M]: F:可视化数据生产：频谱历史、逐声道峰值与PCM抽头的RT侧写入 | R:code:engine/auradsp_engine.h | A:频谱历史每个process块必须调用写入；PCM抽头供projectM桥读原始波形 | S:RT侧只写、UI侧只读的SPSC纪律；漏调频谱写入会让频谱冻结
+engine_viz.cpp[KD8M]: F:可视化数据生产：频谱历史、逐声道峰值与 PCM 抽头的 RT 侧写入 | R:code:engine/auradsp_engine.h | A:频谱历史每个 process 块必须调用写入；PCM 抽头供 projectM 桥读原始波形；compute_bands 峰值聚合后按每带 bin 数扣偏置校正（1/sqrt(lnN+γ+1/2N)，N=1 不变） | S:RT 侧只写、UI 侧只读的 SPSC 纪律，漏调写入频谱冻结；峰值聚合的统计偏置随带宽指数增长（白噪约 +11 dB 倾斜），校正与聚合口径绑定，改聚合须连同校正重定；EQ 输入/输出两抽头共用 compute_bands，频响差值靠同函数相消
 speaker_layout.h[KH6T]: F:8声道位掩码定义：对齐WAVEFORMATEX与驱动拓扑声道序 | R:code:engine/chain/channel_map.h | A:声道位置语义的位级基础，与channel_map位置表配套 | S:掩码位序必须与Windows驱动拓扑一致，改位序等于改声道身份
 
 ===D:/temp_desktop/Proj/JamesDSP/engine/dsp/===
@@ -5106,6 +5106,15 @@ ui_verify_sixpage.py[XQ4S]: F:UI验证探针：六页巡检的呈现核验 | R:-
 ===D:/temp_desktop/Proj/JamesDSP/tools/remote/===
 sync_to_vm.py[XQ5S]: F:远程同步工具：把文件同步到虚拟机的通道脚本 | R:- | A:远程验证基础设施 | S:大文件经中继须限速或走开发机直连宾机局域网
 vm_exec.py[XQ5S]: F:远程执行工具：在虚拟机内执行命令的通道脚本 | R:- | A:远程验证基础设施 | S:-
+Invoke-DevTask.ps1[XR3T]: F:开发机长任务可靠通道：以一次性计划任务启动指定 PS 脚本，脱离 ssh 会话独立运行 | R:code:tools/remote/Invoke-GuestScript.ps1 | A:任务名与脚本路径为参数；被承载脚本自带进度/结果日志落盘，发起方事后轮询读文件判读 | S:-
+Invoke-GuestScript.ps1[XR3T]: F:从开发机把宾机 Python 脚本 scp 到宾机并经 ssh 执行，输出重定向落盘后回读 | R:code:tools/remote/guest_telemetry.py | A:Start-Process ssh -Wait 加输出重定向形态，规避嵌套交互 ssh 会话挂死；宾机地址/用户/密钥为带默认值参数 | S:-
+README.md[SG3T]: F:tools/remote 远程实测脚本登记：通道约定与每脚本用途、跑位、已知不可行项 | R:code:tools/remote/Invoke-GuestScript.ps1 | A:开发机/宾机分工、计划任务承载、交付回读哈希为准、PS 纯 ASCII 等约定集中于此，新脚本先在此登记 | S:-
+Restore-DriverCertTrust.ps1[XR3T]: F:从已签名 .cat 提取内嵌签名者证书并导入 LocalMachine Root 与 TrustedPublisher，恢复开发机驱动签名信任 | R:- | A:须提权运行（计划任务最高权限或管理员 shell）；导入后回读 .cat 的 Authenticode Status 自证 | S:-
+Send-ToGuest.ps1[XV3T]: F:从开发机向宾机投递文件（默认桌面）并回读宾机侧 SHA-256 与本地比对验证 | R:code:tools/remote/guest_file_info.py | A:开发机直连宾机局域网 scp（guest_key）；验证不过即抛错，不认 scp 退出码 | S:-
+asio_registration_probe.py[XQ3T]: F:Windows 主机 ASIO 注册探针：枚举 HKLM/HKCU 名单并核 AuraDSP Driver 的 CLSID 与 InprocServer32 指向 | R:- | A:指向 DLL 存在时报 mtime/大小并粗查遥测字段标记，区分未注册、指向旧 DLL、注册正确三态 | S:-
+guest_file_info.py[XQ3T]: F:宾机侧文件核对：打印指定文件大小与 SHA-256，缺文件时列同目录 AuraDSP 条目 | R:code:tools/remote/Send-ToGuest.ps1 | A:交付回读核对的宾机侧一半，与投递端本地哈希比对一致才算落地 | S:-
+guest_reaper_state.py[XQ3T]: F:宾机 REAPER 状态回读：定位 reaper.ini 并打印 [asiochan] 段的 ASIO 声道范围 | R:code:tools/remote/guest_telemetry.py | A:范围全开（0 7 0 7）只说明设备开路，轨道与主轨 Track channels 仍须各自设目标声道数 | S:-
+guest_telemetry.py[XO4T]: F:宾机 ASIO 遥测块采样器：读 Global\AuraDSP_AsioDriverTelemetry 打印 dawCh/running 与逐声道处理前/后峰值 | R:code:tools/remote/Invoke-GuestScript.ps1 | A:--samples/--interval 可调；判读口径：入零为 DAW 路由侧、入有出零为引擎侧、出有而 App 不显为消费侧 | S:ctypes 调 kernel32 必须声明 restype/argtypes，否则 64 位句柄被截断、MapViewOfFile 访问违例
 
 ===D:/temp_desktop/Proj/JamesDSP/tools/resource_pipeline/===
 build_packages.py[XV6S]: F:资源包构建：把资源内容打成core与full资源包 | R:- | A:资源发行基础设施，资源包走独立版本线resources-v | S:资源内容变更才出新资源版，软件发行不重挂资源资产
