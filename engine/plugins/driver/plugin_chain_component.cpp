@@ -45,9 +45,11 @@ void PluginChainComponent::reset() {
     if (!m_host) return;
     for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
         m_host->unloadPluginSlot(slot);
-        m_multiDelayLines[slot].reset();
-        m_lastMasks[slot] = 0;
     }
+    /* [审查 L7] 延迟线与 m_lastMasks 的复位不在控制线程直改：
+     * 只置位，RT 在下个块首统一执行（组件随即销毁时该位随对象
+     * 消亡，无副作用）。 */
+    m_rtResetPending.store(true, std::memory_order_release);
 }
 
 /* E16：平面 4 参 process() 已删除（Phase 3 重构前遗留死路径，全库无生产
@@ -58,12 +60,11 @@ void PluginChainComponent::setEnabled(bool enable) noexcept {
     const bool previous = m_chainEnabled.exchange(enable, std::memory_order_acq_rel);
     if (enable && !previous) {
         /* 关闭期间延迟线只进不出，内容已陈旧；重启用时全量复位，
-         * 首块按「无延迟历史」重建（m_lastMasks 一并清零，走既有
-         * mask 变化复位路径），避免旧音频注入。 */
-        for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
-            m_multiDelayLines[slot].reset();
-            m_lastMasks[slot] = 0;
-        }
+         * 首块按「无延迟历史」重建，避免旧音频注入。[审查 L7]
+         * 复位不在控制线程直改延迟线/m_lastMasks（与 RT 并发），
+         * 只置位 m_rtResetPending——RT 在首个启用块的块首消费，
+         * 「首块无延迟历史」语义不变。 */
+        m_rtResetPending.store(true, std::memory_order_release);
     }
 }
 
@@ -84,6 +85,14 @@ void PluginChainComponent::processInterleavedN(int stage, float* interleaved,
     }
     /* 链级开关：关闭时插件（含 PDC）整体不进路径，纯直通。 */
     if (!m_chainEnabled.load(std::memory_order_acquire)) return;
+    /* [审查 L7] 块首消费控制线程的复位请求：延迟线与 m_lastMasks
+     * 的复位统一在 RT 线程执行，与下方 mask 变化复位同口径。 */
+    if (m_rtResetPending.exchange(false, std::memory_order_acq_rel)) {
+        for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
+            m_multiDelayLines[slot].reset();
+            m_lastMasks[slot] = 0;
+        }
+    }
     if (!stageHasActiveOrPdc(stage)) return;
 
     const bool pdc = m_pdcEnabled.load(std::memory_order_acquire);

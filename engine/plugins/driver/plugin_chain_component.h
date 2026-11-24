@@ -78,7 +78,12 @@ private:
     /* E16 后平面 process() 已删除，立体声 DelayLine 无任何读路径；它只会在
      * 插件态随 ensureDelayLines 被 prepare，白占 2.0MB（4 槽 × 0.5MB）。 */
     std::array<MultiDelayLine, PluginHostManager::kMaxPluginSlots> m_multiDelayLines;
+    /* [审查 L7 2026-11-25] m_lastMasks 与延迟线内容自此只有 RT 线程
+     * 读写：控制线程的复位请求（reset / setEnabled 重启用）只置位
+     * m_rtResetPending，RT 在块首消费并执行复位——与引擎 P-047 的
+     * reset_req 同范式。此前控制线程直改与 RT 并发，可致旧音频注入。 */
     std::array<uint32_t, PluginHostManager::kMaxPluginSlots> m_lastMasks{};
+    std::atomic<bool> m_rtResetPending{false};
 };
 
 } // namespace auradsp
