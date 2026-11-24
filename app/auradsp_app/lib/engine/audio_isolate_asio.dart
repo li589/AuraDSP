@@ -419,6 +419,13 @@ class AsioTelemetryReader {
             dawCh, (c) => _peakDb(_f32![138 + c]));
         _lastDawCh = dawCh;
       }
+      // W8（2026-11-24）：主页两柱在 `cc<=2` 分支取 l/r，而旧口径
+      // 两者都填折叠单值 peakOut —— 矩阵 2.0 下 L/R 物理独立、显示
+      // 却恒同亮（user 实测）。v3 有逐声道峰值时以 chLevels[0]/[1]
+      // 为准，与本地泵与桥路径的 levelLDbfs/levelRDbfs 同语义；
+      // v2 块没有逐声道数据，才回落单值。
+      final levelL = chLevels.isNotEmpty ? chLevels[0] : outDb;
+      final levelR = chLevels.length > 1 ? chLevels[1] : outDb;
       send({
         'evt': 'viz',
         'backend': 'asio',
@@ -428,8 +435,8 @@ class AsioTelemetryReader {
         'eqIn': version >= 2
             ? List<double>.generate(32, (i) => _f32![98 + i])
             : List<double>.filled(32, 0.0),
-        'l': outDb,
-        'r': outDb,
+        'l': levelL,
+        'r': levelR,
         'stageL': List<double>.filled(32, -90.0),
         'stageR': List<double>.filled(32, -90.0),
         'chCount': chCount,
