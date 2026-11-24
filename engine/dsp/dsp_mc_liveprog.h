@@ -42,10 +42,6 @@ void mc_liveprog_set_channels(McLiveProgHost* host, int channels);
  * lp_refresh_sliders 的取指针部分）。 */
 float* mc_liveprog_slider_var(McLiveProgHost* host, int index1Based);
 
-/* 控制线程：执行一次活动快照的 slider 段（滑块刷新后调用，平移
- * lp_refresh_sliders 的尾步）。 */
-void mc_liveprog_exec_slider_section(McLiveProgHost* host);
-
 /* RT 线程：对交织缓冲原地执行多声道脚本。
  * buf 为 frames × channels 交织；仅在使能且编译成功时改动数据，
  * 否则逐字节直通。channels 钳制到 [1,8]；spl 越界声道读 0、写丢弃；

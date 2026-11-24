@@ -397,12 +397,6 @@ float* mc_liveprog_slider_var(McLiveProgHost* host, int index1Based) {
     return NSEEL_VM_regvar(s->vm, nm);
 }
 
-void mc_liveprog_exec_slider_section(McLiveProgHost* host) {
-    if (!host) return;
-    McSlot* s = host->active;
-    if (s && s->codehandleSlider) NSEEL_code_execute(s->codehandleSlider);
-}
-
 void mc_liveprog_process(McLiveProgHost* host, float* buf, int frames,
                          int channels) {
     if (!host || !buf) return;

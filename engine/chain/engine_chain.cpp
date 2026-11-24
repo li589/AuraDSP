@@ -518,7 +518,9 @@ void mc_lp_refresh_sliders(auradsp_handle h) {
         if (h->lp_mc_slider_ptr[i])
             *h->lp_mc_slider_ptr[i] = h->p.lp_mc_param[i].load(std::memory_order_relaxed);
     }
-    mc_liveprog_exec_slider_section(h->mc_lp);
+    /* [审查 M11 2026-11-24] 同 lp_refresh_sliders：不在控制线程对
+     * 活动槽 execute @slider；MC 处理路径每块开头在 RT 线程执行
+     * slider 段，新值下一块生效。 */
 }
 
 
@@ -1139,8 +1141,11 @@ void lp_refresh_sliders(auradsp_handle h) {
         if (h->lp_slider_ptr[i])
             *h->lp_slider_ptr[i] = h->p.lp_param[i].load(std::memory_order_relaxed);
     }
-    if (eel->codehandleSlider)
-        NSEEL_code_execute(eel->codehandleSlider);
+    /* [审查 M11 2026-11-24] 此处不再由控制线程直接 execute @slider：
+     * 换槽后活动 VM 可能正被 RT 块使用，并发执行同一 VM 会撕裂
+     * @slider 结果。滑块值已写回寄存器，立体声处理路径每块开头在
+     * RT 线程执行 slider 段（liveprogWrapper 块首），新值下一块即
+     * 生效；加载期影子槽上的一次执行在编译路径内已完成。 */
 }
 
 
