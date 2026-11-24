@@ -636,6 +636,86 @@ check('disposeBuffers (6ch) S_OK', DisposeFunc(pAsio2.value) == 0)
 ref_asio2 = ReleaseFunc(pAsio2.value)
 check('IASIO object (tier-6) released cleanly (ref=0)', ref_asio2 == 0, f'ref={ref_asio2}')
 
+# 测试 G：REAPER 调用序回归（2026-11-24 定罪）：宿主先
+# createBuffers 再 setSampleRate 时，驱动会销毁重建引擎；重建
+# 路径曾漏钉 channels.count，引擎声道数回落默认 2——8 声道流
+# 被当成立体声处理、声道模式拨动全程无效（宾机 REAPER 实测）。
+# 本段按 REAPER 的顺序（createBuffers → setSampleRate → start）
+# 在档位 8 下复演，并以逐声道遥测钉矩阵/离散两种模式的真实
+# 输出分布：只喂输出声道 4（SL）恒定 0.05——矩阵应折入 FL
+# (0.05×0.7071≈0.0354) 且 SL 回填 0.0250；离散应只有 SL 0.05。
+if not _block_ok:
+    print('NOTE REAPER-order regression skipped: params block '
+          'inaccessible in this environment')
+else:
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REG_PATH) as _k:
+        winreg.SetValueEx(_k, 'Channels', 0, winreg.REG_DWORD, 8)
+
+    pAsio3 = ctypes.c_void_p()
+    hr3 = CreateInstanceFunc(pFactory.value, None, ctypes.byref(CLSID_AuraAsioDriver), ctypes.byref(pAsio3))
+    check('IClassFactory::CreateInstance (REAPER-order instance) S_OK', hr3 == 0)
+    check('IASIO::init (REAPER-order) returned true', InitFunc(pAsio3.value, None) == 1)
+    n_in8 = ctypes.c_long(0)
+    n_out8 = ctypes.c_long(0)
+    res_ch8 = GetChannelsFunc(pAsio3.value, ctypes.byref(n_in8), ctypes.byref(n_out8))
+    check('getChannels follows registry tier (8, 8)',
+          res_ch8 == 0 and n_in8.value == 8 and n_out8.value == 8,
+          f'in={n_in8.value} out={n_out8.value}')
+
+    buf8 = (ASIOBufferInfo * 16)(
+        *[ASIOBufferInfo(1, c, (ctypes.c_void_p * 2)()) for c in range(8)],
+        *[ASIOBufferInfo(0, c, (ctypes.c_void_p * 2)()) for c in range(8)]
+    )
+
+    def py_buffer_switch8(idx, direct):
+        arr = ctypes.c_float * 256
+        for o in range(8):                   # 输出位于索引 8..15
+            p = buf8[8 + o].buffers[idx]
+            if p:
+                b = arr.from_address(p)
+                v = 0.05 if o == 4 else 0.0
+                for i in range(256):
+                    b[i] = v
+
+    cb8 = BufferSwitchProto(py_buffer_switch8)
+    callbacks8 = ASIOCallbacks(cb8, cb_sr, cb_msg, BufferSwitchTimeInfoProto())
+    check('createBuffers (8ch, before setSampleRate) S_OK',
+          CreateBuffersFunc(pAsio3.value, buf8, 16, 256, ctypes.byref(callbacks8)) == 0)
+    check('setSampleRate 48000 after createBuffers (REAPER order) S_OK',
+          SetSrFunc(pAsio3.value, 48000.0) == 0)
+    check('start (REAPER-order 8ch) S_OK', StartFunc(pAsio3.value) == 0)
+
+    params_publish('channels.mode=0;channels.upmix_fill=0', 0)
+    time.sleep(0.45)
+    pout_m = [telemetry_f32(552 + 4 * c) for c in range(8)]
+    if pout_m[0] is None:
+        check('REAPER-order matrix peaks readable', False, 'read failed')
+    else:
+        check('REAPER-order: matrix downmix active after setSampleRate recreate '
+              '(SL folds to FL 0.0354, SL refill 0.0250)',
+              0.030 < pout_m[0] < 0.041 and 0.020 < pout_m[4] < 0.030
+              and pout_m[1] < 0.005 and pout_m[2] < 0.005,
+              'pout=[' + ' '.join(f'{v:.4f}' for v in pout_m) + ']')
+    params_publish('channels.mode=1', 0)
+    time.sleep(0.45)
+    pout_d = [telemetry_f32(552 + 4 * c) for c in range(8)]
+    if pout_d[0] is None:
+        check('REAPER-order discrete peaks readable', False, 'read failed')
+    else:
+        check('REAPER-order: discrete mode after setSampleRate recreate '
+              '(SL only 0.05)',
+              0.045 < pout_d[4] < 0.055 and pout_d[0] < 0.005,
+              'pout=[' + ' '.join(f'{v:.4f}' for v in pout_d) + ']')
+    params_publish('channels.mode=0', 0)
+
+    check('stop (REAPER-order 8ch) S_OK', StopFunc(pAsio3.value) == 0)
+    check('disposeBuffers (REAPER-order 8ch) S_OK', DisposeFunc(pAsio3.value) == 0)
+    ref_asio3 = ReleaseFunc(pAsio3.value)
+    check('IASIO object (REAPER-order) released cleanly (ref=0)', ref_asio3 == 0, f'ref={ref_asio3}')
+
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REG_PATH) as _k:
+        winreg.SetValueEx(_k, 'Channels', 0, winreg.REG_DWORD, 6)
+
 # 复原注册表档位（冒烟不得污染用户 App 的真实配置）
 with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REG_PATH) as _k:
     if _saved_ch is None:

@@ -135,6 +135,16 @@ ASIOError AuraAsioDriver::getSampleRate(ASIOSampleRate* sampleRate) {
     return ASE_OK;
 }
 
+void AuraAsioDriver::FinishEngineSetup() {
+    if (!m_engine) return;
+    if (!m_pendingParamString.empty()) {
+        m_engineLoader.ApplyParamsString(m_engine, m_pendingParamString.c_str());
+    }
+    // B2c：驱动为权威，钉死引擎通道档位（避免传输/处理步长不一致）
+    int nCh = (int)m_channels;
+    m_engineLoader.SetParam(m_engine, "channels.count", &nCh, (uint32_t)sizeof(nCh));
+}
+
 ASIOError AuraAsioDriver::setSampleRate(ASIOSampleRate sampleRate) {
     if (canSampleRate(sampleRate) != ASE_OK) return ASE_NoClock;
     if (m_started) return ASE_InvalidMode;
@@ -142,9 +152,7 @@ ASIOError AuraAsioDriver::setSampleRate(ASIOSampleRate sampleRate) {
     if (m_engine) {
         m_engineLoader.DestroyEngine(m_engine);
         m_engine = m_engineLoader.CreateEngine((float)m_sampleRate, (int)m_bufferSize);
-        if (m_engine && !m_pendingParamString.empty()) {
-            m_engineLoader.ApplyParamsString(m_engine, m_pendingParamString.c_str());
-        }
+        FinishEngineSetup();
     }
     if (m_callbacks && m_callbacks->sampleRateDidChange) {
         m_callbacks->sampleRateDidChange(m_sampleRate);
@@ -248,14 +256,7 @@ ASIOError AuraAsioDriver::createBuffers(ASIOBufferInfo* bufferInfos, long numCha
     }
     if (m_engineLoader.IsLoaded()) {
         m_engine = m_engineLoader.CreateEngine((float)m_sampleRate, (int)m_bufferSize);
-        if (m_engine && !m_pendingParamString.empty()) {
-            m_engineLoader.ApplyParamsString(m_engine, m_pendingParamString.c_str());
-        }
-        // B2c：驱动为权威，钉死引擎通道档位（避免传输/处理步长不一致）
-        if (m_engine) {
-            int nCh = (int)m_channels;
-            m_engineLoader.SetParam(m_engine, "channels.count", &nCh, (uint32_t)sizeof(nCh));
-        }
+        FinishEngineSetup();
     }
 
     for (long i = 0; i < numChannels; ++i) {

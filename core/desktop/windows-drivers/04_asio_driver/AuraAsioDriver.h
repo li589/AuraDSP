@@ -84,6 +84,13 @@ private:
     void OpenParams();
     void CloseParams();
     void PullParamsFromBlock();
+    // 引擎创建后的统一收尾：重放挂起参数串 + 钉死声道档位。两个
+    // 创建点（createBuffers / setSampleRate 重建）必须走同一收尾——
+    // setSampleRate 曾只重放参数串、漏钉 channels.count，宿主若在
+    // createBuffers 之后调 setSampleRate（如 REAPER），重建引擎的
+    // 声道数回落引擎默认 2，多声道流被当成立体声处理（2026-11-24
+    // 宾机实测定罪；回归钉在 smoke_asio_driver 的 REAPER 调用序段）。
+    void FinishEngineSetup();
     HANDLE m_hTelemetryMap = nullptr;
     AsioDriverTelemetryBlock* m_telemetry = nullptr;
     // S4 参数块（只读映射；App 未运行时缺席，引擎保持默认参数
