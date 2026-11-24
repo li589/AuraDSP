@@ -1737,6 +1737,14 @@ extension AudioModesState on AppModel {
         'monitorMirror': enabled,
         'outputVaio': vaioBridgeOutputVaio,
       });
+    } else if (pipelineChain == PipelineChain.capture &&
+        captureActive &&
+        config.pipelineOutput == AudioModes.outputVaio) {
+      // [审查 F3 2026-11-24] WASAPI 进 + VAIO 出格：镜像由
+      // _captureCommand 在起链时算入载荷，isolate 只在 capturerestart
+      // 时重建——本格下补走设备变更路径热重发，否则拨开关当场无
+      // 反应、须等切设备/模式重建链路才生效。
+      _pipelineDeviceChanged();
     }
     _notifyUi();
   }

@@ -228,6 +228,13 @@ extension VbAsioState on AppModel {
         'monitorMirror': config.monitorMirroring,
         'outputVaio': vaioBridgeOutputVaio,
       });
+    } else if (pipelineChain == PipelineChain.capture &&
+        captureActive &&
+        config.pipelineOutput == AudioModes.outputVaio) {
+      // [审查 F3 2026-11-24] WASAPI 进 + VAIO 出格：镜像目标经
+      // _captureCommand 载荷消费，本格下补 capturerestart 热重发
+      // （与 setMonitorMirroring 同口径），否则换目标当场不生效。
+      _pipelineDeviceChanged();
     }
     _notifyUi();
   }
