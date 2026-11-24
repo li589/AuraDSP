@@ -135,6 +135,30 @@ class ProgressUI:
             return False
 
     # -- 内部 ------------------------------------------------------------
+    def _drop_pipe(self, proc) -> None:
+        """管道断裂收尾：显式 close 并摘掉 stdin 引用。
+
+        只把 self._proc 置 None 不够——Popen.stdin 是 BufferedWriter，
+        解释器退出时它还会析构 flush 一次已关闭的 fd，CPython 就此打印
+        `Exception ignored in: <_io.BufferedWriter name=N>` + OSError 22
+        （构建/打包日志里出现的正是这一条）。显式 close 会把内部 ok 置 0，
+        析构不再重试；`proc.stdin = None` 再断一层引用，双保险。
+        """
+        try:
+            stdin = getattr(proc, "stdin", None)
+        except Exception:
+            stdin = None
+        if stdin is None:
+            return
+        try:
+            stdin.close()
+        except Exception:
+            pass
+        try:
+            proc.stdin = None
+        except Exception:
+            pass
+
     def _send(self, event: dict) -> None:
         proc = self._proc
         if proc is None or self._done_sent:
@@ -146,15 +170,13 @@ class ProgressUI:
         except Exception:
             # 管道断裂 = UI 已死：永久静默，宿主照常跑。
             self._proc = None
+            self._drop_pipe(proc)
 
     def _at_exit(self) -> None:
         # 没显式 done 就关管道：子进程读到 EOF 会自己收尾。
         proc, self._proc = self._proc, None
         if proc is not None:
-            try:
-                proc.stdin.close()  # type: ignore[union-attr]
-            except Exception:
-                pass
+            self._drop_pipe(proc)
 
     # -- 公开 API（永不抛） ------------------------------------------------
     def step(self, text: str) -> None:
