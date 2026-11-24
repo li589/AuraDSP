@@ -38,6 +38,11 @@ WINDOWS_ONLY = {
     "test/settings_vaio_test.dart",
     "test/settings_paradigms_test.dart",
     "test/plugins_page_layout_test.dart",
+    # 虚拟 ASIO 宽度口径（2026-11-24 J6 定罪补登记）：手动档钳制
+    # 依赖 _capabilityChForMode 的能力合成，而该合成首行即
+    # isWindows 门（非 Windows 恒 null 不钳制）——断言对象是
+    # Windows 驱动档位范式本身，与本清单同口径。
+    "test/asio_virtual_channels_test.dart",
 }
 
 

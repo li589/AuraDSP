@@ -100,7 +100,11 @@ const Set<String> kNoEngineWriteSpecIds = {
   'routing.asioOutPair', // ASIO 输出对，ConfigManager 域
   'routing.asioFlavor', // ASIO 子形态，ConfigManager 域
   'routing.asioRenderEndpoint', // 虚拟 ASIO 汇后端端点，ConfigManager 域
-  'routing.monitorMirroring', // 监视器镜像，ConfigManager 域
+  // 注：routing.monitorMirroring / routing.vaioOutputEndpoint 已于
+  // 审查 Dart-F3（2026-11-24）移出本集——其 setter 在 WASAPI 进 +
+  // VAIO 出格经 _pipelineDeviceChanged 向 isolate 下发
+  // capturerestart（方法链非空），不再是纯落盘（与下注 W3/S2
+  // 两例同口径）。
   // 注：routing.pipelineInputDevice / pipelineOutputDevice 已于
   // 全接线 W3（2026-11-10）移出本集——其 setter 经
   // _pipelineDeviceChanged 向 isolate 下发 capturemode/
@@ -109,7 +113,6 @@ const Set<String> kNoEngineWriteSpecIds = {
   // 第七轮 S2（2026-11-11）移出本集——其 setter 经
   // applyPipelineChain 向 isolate 下发链路启停命令（方法链非空），
   // 不再是纯落盘（此前开关未接线、纯装饰，系项 5 定罪本体）。
-  'routing.vaioOutputEndpoint', // AuraVAIO 端点，ConfigManager 域
   // 可视化配置（2026-10-31）：AppModel.visualizerConfig → config.json /
   // SessionMemory / 预设快照，全部不符发引擎（纯 Dart 侧状态）。
   'visualizer.style', 'visualizer.colorTheme', 'visualizer.sensitivity',
