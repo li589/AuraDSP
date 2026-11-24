@@ -101,3 +101,18 @@ Entry 的语义必须来自模型对真实证据的理解。不得仅依据路�
 
 不预加载、不猜测，也不自行重建这些专项流程。平台调用方式、请求格式、批次上限、审批规则、索引格式细节和恢复步骤由对应Guide、工具说明、模型Prompt和CLI帮助按需提供。
 <!-- aoci:end -->
+
+## 门禁宿主 Start-Process 挂死（2026-11-25 fixC/fixD 两连踩）
+
+- schtasks 宿主脚本里用 `Start-Process -Wait -PassThru
+  -RedirectStandardOutput/-RedirectStandardError` 跑
+  `tools\build_windows.ps1`：构建本体已完成（日志尾有收尾
+  横幅、产物齐全）后宿主仍挂 12+ 分钟不返回、「build rc=」
+  永不落盘（fixC、fixD 两轮复现；同形态的 fixB 曾正常）。
+  机理未定罪（疑似子孙进程持有重定向句柄），不凭猜修工具。
+- 此后门禁一律：构建输出重定向由被调脚本自理或用日志轮询
+  判完成（看收尾横幅 + 产物时间戳），不在宿主里
+  Start-Process -Wait 带重定向等构建；判读完成以子任务
+  自身日志为准（与「宿主残留」老规矩同源）。恢复手法：杀
+  宿主 powershell（按命令行匹配脚本名），剩余步骤另起
+  无 Start-Process 的直跑任务。
