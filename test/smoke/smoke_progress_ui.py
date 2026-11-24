@@ -208,6 +208,12 @@ check("pack --no-progress-ui",
 check("runner --no-progress-ui", _has("test/runner.py", "--no-progress-ui"))
 check("release 传事件路径给构建子进程",
       _has("installer/release.py", "AURADSP_PROGRESS_EVENTS"))
+check("只读调用不开窗（F-5）",
+      _has("installer/release.py", '"--plan"')
+      and _has("installer/packkit/windows/cli.py", '"--verify"'))
+check("SystemExit(0) 不误报失败（F-5）",
+      _has("installer/release.py", "exc.code in (0, None)")
+      and _has("installer/packkit/windows/cli.py", "exc.code in (0, None)"))
 check("build_windows.ps1 步骤镜像",
       _has("tools/windows/build_windows.ps1", "AURADSP_PROGRESS_EVENTS")
       and _has("tools/windows/build_windows.ps1", "Send-UiStep"))

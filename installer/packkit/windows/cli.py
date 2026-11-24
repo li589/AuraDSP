@@ -137,12 +137,19 @@ def main(argv: list[str]) -> int:
         import os
 
         os.environ["AURADSP_NO_UI"] = "1"
+    # 只读/瞬时调用不开窗（审查 F-5，2026-11-24）：--help/--verify 在
+    # 参数解析期就退出，开窗只会留下一扇误报「失败」的窗。
+    if any(a in argv for a in ("-h", "--help", "--verify")):
+        return _main_impl(argv)
     ui = open_progress_ui("AuraDSP 打包（pack）")
     try:
         rc = _main_impl(argv)
     except SystemExit as exc:
         if ui is not None:
-            ui.done(ok=False, text=str(exc)[:120])
+            if exc.code in (0, None):
+                ui.done(ok=True, text="")
+            else:
+                ui.done(ok=False, text=str(exc)[:120])
         raise
     if ui is not None:
         ui.done(ok=rc == 0, text="打包完成" if rc == 0 else f"退出码 {rc}")
