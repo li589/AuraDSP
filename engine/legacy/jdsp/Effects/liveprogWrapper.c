@@ -275,6 +275,7 @@ static int LiveProgCompileInto(LiveProg *pg, JamesDSPLib *jdsp, char *codeTextIn
 		pg->compileSucessfully = 0;
 		return -1;
 	}
+	NSEEL_aura_budget_arm(pg->codehandleInit, 4000000); /* [PATCHED-AuraDSP P-053] */
 	NSEEL_code_execute(pg->codehandleInit);
 
 	if (codeTextSlider && codeTextSlider[0])
@@ -559,8 +560,14 @@ void LiveProgProcess(JamesDSPLib *jdsp, size_t n)
 		if (eel && eel->compileSucessfully && eel->codehandleProcess &&
 		    eel->input1 && eel->input2)
 		{
+			/* [PATCHED-AuraDSP P-053] 托管预算按块补给：slider 与
+			 * process 两句柄在每块开始时各补满 400 万次迭代。 */
 			if (eel->codehandleSlider)
+			{
+				NSEEL_aura_budget_arm(eel->codehandleSlider, 4000000);
 				NSEEL_code_execute(eel->codehandleSlider);
+			}
+			NSEEL_aura_budget_arm(eel->codehandleProcess, 4000000);
 			for (size_t i = 0; i < n; i++)
 			{
 				*eel->input1 = jdsp->tmpBuffer[0][i];

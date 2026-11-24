@@ -7760,12 +7760,18 @@ NSEEL_CODEHANDLE NSEEL_code_compile_ex(NSEEL_VMCTX _ctx, const char *_expression
 	return (NSEEL_CODEHANDLE)handle;
 }
 //------------------------------------------------------------------------------
+void NSEEL_aura_budget_arm(NSEEL_CODEHANDLE code, int32_t amount)
+{
+	codeHandleType *h = (codeHandleType *)code;
+	if (h) { h->aura_budget_managed = 1; h->aura_iter_budget = amount; }
+}
 void NSEEL_code_execute(NSEEL_CODEHANDLE code)
 {
 	codeHandleType *h = (codeHandleType *)code;
 	INT_PTR codeptr = (INT_PTR)h->code;
 	INT_PTR tabptr = (INT_PTR)h->workTable;
-	GLUE_CALL_CODE(tabptr, codeptr, (INT_PTR)h->ramPtr);
+	GLUE_CALL_CODE(tabptr, codeptr, (INT_PTR)h->ramPtr,
+	               h->aura_budget_managed ? &h->aura_iter_budget : NULL);
 }
 int32_t NSEEL_code_geterror_flag(NSEEL_VMCTX ctx)
 {

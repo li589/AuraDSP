@@ -110,6 +110,8 @@ typedef struct {
   int32_t code_size; // in case the caller wants to write it out
   int32_t code_stats[4];
   void *ramPtr;
+  int32_t aura_budget_managed; /* [PATCHED-AuraDSP P-053] 非 0 = 托管迭代预算模式 */
+  int32_t aura_iter_budget;    /* [PATCHED-AuraDSP P-053] 托管模式剩余迭代预算（宿主按块补给） */
   int32_t workTable_size; // size (minus padding/extra space) of workTable -- only used if EEL_VALIDATE_WORKTABLE_USE set, but might be handy to have around too
 } codeHandleType;
 #include "s_str.h"

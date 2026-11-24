@@ -407,7 +407,7 @@ static void *GLUE_realAddress(void *fn, void *fn_e, int32_t *size)
 #define EEL_BC_STACK_PUSH(type, val) (*(type *)(stackptr -= EEL_BC_STACK_POP_SIZE)) = (val)
 #define EEL_BC_STACK_POP() (stackptr += EEL_BC_STACK_POP_SIZE)
 #define EEL_BC_TRUE ((float*)(INT_PTR)1)
-static void GLUE_CALL_CODE(INT_PTR bp, INT_PTR cp, INT_PTR rt) 
+static void GLUE_CALL_CODE(INT_PTR bp, INT_PTR cp, INT_PTR rt, int32_t *aura_budget_io) 
 {
   char __stack[EEL_BC_STACKSIZE];
   char *iptr = (char*)cp;
@@ -420,12 +420,16 @@ static void GLUE_CALL_CODE(INT_PTR bp, INT_PTR cp, INT_PTR rt)
 #define fp_rewind(x) (_fpstacktop -= (x))
   float fpstack[GLUE_MAX_FPSTACK_SIZE];
   float *_fpstacktop=fpstack-1;
-  /* [PATCHED-AuraDSP P-053] 单次 execute 的循环迭代总预算：loop/while
-   * 每次迭代在 LOOP_END/WHILE_END 处扣减，耗尽即强制退出该循环。
-   * 防恶意/失误脚本（loop(2000000000)、while 死循环）把音频线程
-   * 事实挂死；400 万次简单迭代约数十毫秒级，合法脚本（逐样本小
-   * 循环、@init 表初始化）远低于此。 */
+  /* [PATCHED-AuraDSP P-053] 循环迭代总预算：loop/while 每次迭代在
+   * LOOP_END/WHILE_END 处扣减，耗尽即强制退出该循环，防恶意/失误
+   * 脚本（loop(2000000000)、while 死循环）把音频线程事实挂死。
+   * 未托管（aura_budget_io == NULL）：单次 execute 预算 400 万次。
+   * 托管模式：宿主（LiveProg 双宿主）在句柄上布防并按处理块补给，
+   * 同一块内逐帧 execute 共享同一预算——@sample 每帧一次 execute，
+   * 单次口径会被逐帧重置、等于没有上限（2026-11-24 批A 门禁实测
+   * 3 块 43.7 秒教训）。 */
   int32_t aura_iter_budget = 4000000;
+  int32_t *aura_budgetp = aura_budget_io ? aura_budget_io : &aura_iter_budget;
   for (;;)
   {
     EEL_BC_TYPE inst = *(EEL_BC_TYPE *)iptr;
@@ -575,7 +579,7 @@ static void GLUE_CALL_CODE(INT_PTR bp, INT_PTR cp, INT_PTR rt)
       break;
       case EEL_BC_LOOP_END:
         wtp = *(void **) (stackptr);
-        if (--(*(int32_t *)(stackptr+EEL_BC_STACK_POP_SIZE)) <= 0 || --aura_iter_budget < 0) /* [PATCHED-AuraDSP P-053] */
+        if (--(*(int32_t *)(stackptr+EEL_BC_STACK_POP_SIZE)) <= 0 || --(*aura_budgetp) < 0) /* [PATCHED-AuraDSP P-053] */
         {
           stackptr += EEL_BC_STACK_POP_SIZE*2;
           iptr += sizeof(GLUE_JMP_TYPE);
@@ -594,7 +598,7 @@ static void GLUE_CALL_CODE(INT_PTR bp, INT_PTR cp, INT_PTR rt)
       case EEL_BC_WHILE_END:
         wtp = *(float **) stackptr;
         EEL_BC_STACK_POP();
-		if (--(*(int32_t *)stackptr) <= 0 || --aura_iter_budget < 0) /* [PATCHED-AuraDSP P-053] */
+		if (--(*(int32_t *)stackptr) <= 0 || --(*aura_budgetp) < 0) /* [PATCHED-AuraDSP P-053] */
 		{
 			EEL_BC_STACK_POP();
 			iptr += sizeof(GLUE_JMP_TYPE) + *(GLUE_JMP_TYPE *)iptr; // endpt

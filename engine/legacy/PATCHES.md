@@ -1254,3 +1254,12 @@ yquist * 0.999，
 - **验收**：`test/smoke/smoke_liveprog.py` 新增第 10 节：sleep
   编译拒绝、@sample 中 loop(2000000000) 被截断且 process 迅速
   返回通路存活、@init 300 万次循环在预算内完整执行。
+- **修订（2026-11-24 晚，批A 门禁实测后）**：单次 execute 口径被
+  @sample 逐帧执行逐帧重置——loop(2e9) 每帧各烧 400 万次，
+  3 块（480 帧/块）实测 43.7 秒，等于没有上限。预算改为双口径：
+  未布防句柄维持单次 execute 预算（其他 EEL 消费者行为不变）；
+  LiveProg 双宿主经 `NSEEL_aura_budget_arm`（nseel-compiler.c /
+  ns-eel.h，句柄字段在 ns-eel-int.h）把 init/slider/process 句柄
+  置托管模式——init 编译后布防一次，slider/process 每处理块开头
+  各补满 400 万次，块内逐帧共享。@init 300 万次仍在单次布防内
+  完整执行（验收 10c 不变）。

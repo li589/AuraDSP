@@ -162,6 +162,7 @@ int mc_compile_into(McLiveProgHost* host, McSlot* s, char* codeInit,
     ctx->functions_common = 0;
     s->codehandleInit = NSEEL_code_compile_ex(s->vm, codeInit, 0, 1);
     if (!s->codehandleInit) { s->compileOk = 0; return -1; }
+    NSEEL_aura_budget_arm(s->codehandleInit, 4000000); /* P-053 托管预算 */
     NSEEL_code_execute(s->codehandleInit);
     if (codeSlider && codeSlider[0]) {
         s->codehandleSlider = NSEEL_code_compile(s->vm, codeSlider, 0);
@@ -171,6 +172,7 @@ int mc_compile_into(McLiveProgHost* host, McSlot* s, char* codeInit,
             s->codehandleInit = nullptr;
             return -5;
         }
+        NSEEL_aura_budget_arm(s->codehandleSlider, 4000000); /* P-053 */
         NSEEL_code_execute(s->codehandleSlider);
     }
     s->codehandleProcess = NSEEL_code_compile(s->vm, codeProcess, 0);
@@ -415,7 +417,12 @@ void mc_liveprog_process(McLiveProgHost* host, float* buf, int frames,
             for (int c = 0; c < kMcChannels; ++c)
                 if (!s->inputs[c]) { inputsOk = false; break; }
             if (inputsOk) {
-                if (s->codehandleSlider) NSEEL_code_execute(s->codehandleSlider);
+                /* P-053 托管预算按块补给（slider/process 各 400 万次）。 */
+                if (s->codehandleSlider) {
+                    NSEEL_aura_budget_arm(s->codehandleSlider, 4000000);
+                    NSEEL_code_execute(s->codehandleSlider);
+                }
+                NSEEL_aura_budget_arm(s->codehandleProcess, 4000000);
                 int nch = channels;
                 if (nch < 1) nch = 1;
                 if (nch > kMcChannels) nch = kMcChannels;

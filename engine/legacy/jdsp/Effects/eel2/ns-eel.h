@@ -104,6 +104,11 @@ NSEEL_CODEHANDLE NSEEL_code_compile_ex(NSEEL_VMCTX ctx, const char *code, int32_
 char *NSEEL_code_getcodeerror(NSEEL_VMCTX ctx);
 int32_t NSEEL_code_geterror_flag(NSEEL_VMCTX ctx);
 void NSEEL_code_execute(NSEEL_CODEHANDLE code);
+/* [PATCHED-AuraDSP P-053] 托管迭代预算布防/补给：托管模式下该句柄的
+ * 全部 execute 共享同一预算、由宿主按块补给，防 @sample 逐帧执行时
+ * 每帧重置预算令 loop(2e9) 事实挂死；未布防句柄维持单次 execute
+ * 预算口径，其他 EEL 消费者行为不变。 */
+void NSEEL_aura_budget_arm(NSEEL_CODEHANDLE code, int32_t amount);
 void NSEEL_code_free(NSEEL_CODEHANDLE code);
 int32_t *NSEEL_code_getstats(NSEEL_CODEHANDLE code); // 4 ints...source bytes, static code bytes, call code bytes, data bytes
 // configuration:
