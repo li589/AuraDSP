@@ -111,7 +111,7 @@
   `destroyInstance`（锁外：deactivate / destroy / FreeLibrary）。拆完之后"只让重活上
   控制线程、提交留在调用方线程"才成立。
 - **瓶颈是调用方线程，不是锁**：Dart isolate 内音频泵（5ms/轮推 WASAPI）与命令处理
-  在**同一事件循环**，所以挂载 p50 77.6ms / max 1144.1ms 会跳过 220 轮泵 → underrun。
+  在同一事件循环，所以挂载 p50 77.6ms / max 1144.1ms 会跳过 220 轮泵 → underrun。
   修法是把重活挪到引擎控制线程（std::thread + deque + cv），提交端只做微秒级入队
   （实测 0.010–0.056ms vs 同步 61.6/91.0ms）。
 - **异步任务的状态字段用原子**（`std::atomic<int> taskState`），调用方无锁轮询；
@@ -185,7 +185,7 @@
   - **Flutter 测试大坑与教训**：在 Widget 测试中，`listDirAsync` 若使用 `Stream` 异步流遍历与 `CircularProgressIndicator` 结合，会导致 `pumpAndSettle` 持续等待流微任务而超时（10 分钟死循环）；改用 `Future(() { return listSync(); })` 配合 `isScanning` 状态指示，非阻塞且测试立即稳定 settle。
 - **引擎补丁 P-039（libjamesdsp & engine_chain）**：
   - ① `LiveProgStringParser` 采用严格四段状态机扫描（`@init`, `@slider`, `@block`, `@sample`），`@slider` 独立编译并挂接到 block 首部执行，解决官方模板 5/6 报错；
-  - ② 修复 `engine_chain.cpp` 中编译被拒绝（格式/语法错误）时未重置缓存导致下次正确代码因“同因抑制”被静默丢弃触发 5 秒超时的严重缺陷。
+  - ② 修复 `engine_chain.cpp` 中编译被拒绝（格式/语法错误）时未重置缓存导致下次正确代码因"同因抑制"被静默丢弃触发 5 秒超时的严重缺陷。
 - **测试全绿与交付**：47 个 Flutter 测试套件 100% 通过；9 项 Python 冒烟测试 100% 通过；`l10n_cjk_guard_test.dart` 0 债务通过；`flutter analyze` 0 警告 0 报错；`build_windows.ps1` 全栈构建与产物同步完毕。
 
 ---
@@ -359,8 +359,8 @@ tools/sync_artifacts.ps1 分发 test/ 等三处。
   （scrollbar.dart handleThumbPressUpdate），会连带拖不动。正解 = 自定义
   ScrollPhysics，`shouldAcceptUserOffset => maxScrollExtent>minScrollExtent`
   （ui/wheel_scroll.dart AuraListScrollPhysics）。
-- **扫描目录空表契约**：UI 恒发 dirs；空表 → isolate 发 ';' 显式空哨兵，
-  引擎按 ';' 拆零路径、不回落默认目录（'' 仍保留给旧脚本兼容）。
+- **扫描目录空表契约**：UI 恒发 dirs；空表 → isolate 发 `';'` 显式空哨兵，
+  引擎按 `';'` 拆零路径、不回落默认目录（`''` 仍保留给旧脚本兼容）。
 
 ## 10-31 未决任务复核（2026-10-31）
 
@@ -381,7 +381,7 @@ tools/sync_artifacts.ps1 分发 test/ 等三处。
   （`in_flight==0` 或 `proc_count>=retired_at`），有界等待 500ms 墙钟，仍不可用则放弃本次重载。
   L-03 主 conv 走 `kAuraStages` 的 `arbmag` stage `lock 0→1` + 控制侧同持 `jdsp_lock`；
   L-02 拆为 `reset_channel_state`（控制侧置 `reset_req`）+ `reset_channel_state_rt`（RT 消费）。
-  登记 PATCHES.md **P-047 / P-048**；门禁 `test/smoke/smoke_pool_race.py`（已挂 runner.py，
+  登记 PATCHES.md **P-047 / P-048**；门禁 `test/smoke/smoke_pool_race.py`（已挂 `runner.py`，
   四阶段）；反向验证脚本化可复现：`python tools/probe/prefix_toggle.py revert|restore`。
   **教训：池的 `LoadImpulseResponse` 首步即 `Free` ⇒ 与 RT 的 `Process` 并发是 UAF（崩溃级），
   不是听感问题；「原位刷新」是撕裂级；两者都无锁。**
@@ -455,6 +455,7 @@ tools/sync_artifacts.ps1 分发 test/ 等三处。
 - **本机 `bash` 是 WSL 不是 Git Bash**：`C:\WINDOWS\system32\bash.exe` 解析优先，Git Bash 在
   `C:\FreeRulesPrograms\BasicToolkits\Git\bin\bash.exe`。`build_engine.sh` 依赖 MSYS 专有的
   `pwd -W`，在 WSL bash 下**第 13 行即失败**（`pwd: -W: invalid option`）。
+
 - **管道吞退出码**：构建命令被 `| tail` / `| Select-Object` 包裹时，脚本 `set -e` 保护不到外层，
   失败也显示「成功」。必须显式检查 `$LASTEXITCODE` 或直接核对 `BUILD OK` 标记 + DLL mtime。
 - **产物分发可能被运行中的 App 锁住**：`sync_artifacts.ps1` 对 `app/.../runner/Release` 的副本会报
@@ -538,3 +539,11 @@ tools/sync_artifacts.ps1 分发 test/ 等三处。
 - 安全 PCM 只能取自本地 `Source.fill()` 原始交错双声道样本，不能从桥接 telemetry、频谱或电平反推。消息快照上限 512 stereo frames；Dart 与 native ABI 均校验通道数、偶数样本、帧上限、finite 与 [-1,1] 范围，非法整批拒绝。
 - portable OpenGL `glGetString(GL_VERSION)` 只能证明当前线程存在某个 GL context，不能证明它与 Flutter/Skia 或创建时 context 相同。Native bridge 调用须保持创建线程及同一已验证 context；宿主未提供 context identity verifier 时禁止初始化，继续 fallback。
 - Flutter viewport 预留可选 bridge/PCM 注入点，但应用组合根尚未注入 native bridge；widget/build/render 路径不直接调用 FFI。没有经验证的 Flutter context provider 时生产路径继续使用 MilkDrop。真实 SDK/context 下的 native 构建和运行验证仍待完成。
+- **2026-11-24 更新**：PCM 来源已扩展到 ASIO Client——`ab_pcm_read` 入公共桥契约（14→15 项），ASIO 桥绑引擎 `auradsp_pcm_read` 抽处理后立体声，VM/VAIO 诚实返回 0；state 层 `pcmSource=='engine'` 不限后端接纳、`'source'` 仍只 local。projectM 随 r2 起进入发行包（`AURADSP_PROJECTM_SDK=build/projectm-sdk/windows-x64-msvc/install` 必须设置）。原生渲染的真实 Flutter context 仍由业主真机复测确认。详见 `.ai/memory/2026-11-24.md`。
+
+## ASIO 声道契约（2026-11-24 闭环，勿回退）
+- **流宽 ≠ 引擎宽**：驱动不得把引擎 `channels.count` 钉成 DAW 协商流宽。App 经参数块下发用户档位，驱动按 `m_engineCh`/`m_channelMode` 影子在泵内适配：离散用 `chmap_gather_discrete`/`scatter_discrete`，矩阵收窄/扩张用 `chmap_fold`。遥测逐声道峰值须经 `chmap_stream_pos` 按引擎声道序上报，UI 的 N 槽标签才与数据一一对应——4.0 的 BL/BR 在 8 宽流里位于第 7/8 位，直接裁前 N 位会把 C/LFE 当 BL/BR。
+- **参数块是奇偶 seqlock**：`AsioDriverParamsBlock` v2 的 `writeSeq` 奇=写入中、偶=稳定；写者置奇→写载荷→置偶，读者必须偶数且前后两次相同。版本全等校验隔离旧块。与 APO 同口径，勿退回「写毕递增 seq + 稳定性复核」的弱版本。
+- **逐声道峰值 vs 折叠单值**：主页 2.0 两柱取 `chLevels[0]/[1]`（v3 遥测），不能用折叠单值 `peakOut`——矩阵 2.0 下 L/R 物理独立，单值会恒同亮。v2 旧块才回落单值。
+- **端点热切换**：参数块 `reserved1[0]` 作 endpointSeq，App 切端点递增、驱动泵块边界 Close/Open 汇并刷新遥测，免重开 DAW。
+- **set_channels_count 幂等**：仅宽度真变化时 `reset_channel_state`；参数块每轮重放整镜像，无条件重置会周期性清零全模块状态（爆音）。
