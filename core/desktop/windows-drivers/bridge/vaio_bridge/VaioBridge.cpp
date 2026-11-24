@@ -1806,6 +1806,11 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
         g_vaio.procBytesWritten = g_vaio.pProcHeader->TotalBytesWritten;
         g_vaio.procPhase = 0.0;
         g_vaio.pRingHeader->CaptureSource = AURA_VAIO_CAPTURE_PROCESSED;
+        g_vaio.pRingHeader->CaptureMuted = 0;
+    } else {
+        // WASAPI 输出时：VAIO 麦克风端点必须静音（只有 VAIO 输入 + VAIO 输出时，麦克风才输出处理后的音频）
+        g_vaio.pRingHeader->CaptureSource = AURA_VAIO_CAPTURE_MUTED;
+        g_vaio.pRingHeader->CaptureMuted = 1;
     }
     g_vaio.pRingPayload = (BYTE*)mapResp.UserAddress +
         (mapResp.HeaderSizeBytes ? mapResp.HeaderSizeBytes

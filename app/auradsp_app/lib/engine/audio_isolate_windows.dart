@@ -24,14 +24,26 @@ abstract class WindowsCaptureSource implements Source {
 /// 采样率：捕获设备优先在 init 时请求引擎率（WASAPI 服务端
 /// 转换）；协商率仍与泵率不同时在此做线性重采样（FileSource
 /// 同式，分数游标跨调用保留）。
-class WasapiCaptureSourceImpl implements WindowsCaptureSource {
-  WasapiCaptureSourceImpl(this._capture);
+class WasapiCaptureSourceImpl implements WindowsCaptureSource, RawMultichannelSource {
+  WasapiCaptureSourceImpl(this._capture)
+      : _fifo = Float32List(
+            _capFrames * (_capture.mix.channels > 0 ? _capture.mix.channels : 2)),
+        _lastBlock = Float32List(
+            4096 * (_capture.mix.channels > 0 ? _capture.mix.channels : 2));
 
   final WasapiCapture _capture;
   bool _failed = false;
+  int _consecutiveErrors = 0;
+  static const int _maxConsecutiveErrors = 5;
 
   @override
   bool get failed => _failed;
+
+  @override
+  int get rawCh => _capture.mix.channels;
+
+  @override
+  bool get hasRaw => rawCh > 2;
 
   /// 失效一次性回调（控制器回推 capturestatus 用）。
   void Function()? onFailed;
@@ -41,7 +53,11 @@ class WasapiCaptureSourceImpl implements WindowsCaptureSource {
   static const int _targetDepth = 4096;
   final ThrottledLog _dropLog =
       ThrottledLog('capture-fifo-drop', head: 3, every: 200);
-  final Float32List _fifo = Float32List(_capFrames * 2);
+  final Float32List _fifo;
+  final Float32List _lastBlock;
+  int _lastBlockFrames = 0;
+  int _lastBlockDeviceRate = 0;
+
   int _r = 0; // 读游标（帧）
   int _n = 0; // 在仓帧数
   double _frac = 0; // 重采样分数游标（输入帧坐标）
@@ -55,25 +71,105 @@ class WasapiCaptureSourceImpl implements WindowsCaptureSource {
     }
     try {
       _drain();
+      _consecutiveErrors = 0;
     } catch (e, st) {
-      _failed = true;
+      _consecutiveErrors++;
+      if (_consecutiveErrors >= _maxConsecutiveErrors) {
+        _failed = true;
+        dbgLog('capturemode: capture source failed after $_consecutiveErrors errors: $e');
+        onFailed?.call();
+      } else {
+        dbgLog('capturemode: transient capture drain error ($_consecutiveErrors/$_maxConsecutiveErrors): $e');
+      }
       swallow(e, st);
-      dbgLog('capturemode: capture source failed: $e');
-      onFailed?.call();
       _zero(out, frames);
       return;
     }
+    final ch = rawCh;
     final capRate = _capture.sampleRate;
+    final maxBlockCapacity = _lastBlock.length ~/ ch;
+    final actualFrames = math.min(frames, maxBlockCapacity);
+
     if (capRate == deviceRate) {
-      final take = math.min(frames, _n);
+      final take = math.min(actualFrames, _n);
       for (var i = 0; i < take; i++) {
-        final idx = ((_r + i) % _capFrames) * 2;
-        out[i * 2] = _fifo[idx];
-        out[i * 2 + 1] = _fifo[idx + 1];
+        final baseFifo = ((_r + i) % _capFrames) * ch;
+        final baseBlock = i * ch;
+        for (var c = 0; c < ch; c++) {
+          _lastBlock[baseBlock + c] = _fifo[baseFifo + c];
+        }
+        out[i * 2] = _lastBlock[baseBlock];
+        out[i * 2 + 1] = _lastBlock[baseBlock + (ch > 1 ? 1 : 0)];
       }
       _r = (_r + take) % _capFrames;
       _n -= take;
       _zeroFrom(out, take, frames);
+      _lastBlockFrames = take;
+      _lastBlockDeviceRate = deviceRate;
+    } else {
+      final ratio = capRate / deviceRate;
+      var avail = 0;
+      if (_n >= 2) {
+        avail = ((_n - 1 - _frac) / ratio).floor() + 1;
+        if (avail < 0) avail = 0;
+      }
+      final produce = math.min(actualFrames, avail);
+      for (var i = 0; i < produce; i++) {
+        final pos = _frac + i * ratio;
+        final i0 = pos.floor();
+        final f = pos - i0;
+        final a = ((_r + i0) % _capFrames) * ch;
+        final b = ((_r + i0 + 1) % _capFrames) * ch;
+        final baseBlock = i * ch;
+        for (var c = 0; c < ch; c++) {
+          _lastBlock[baseBlock + c] = _fifo[a + c] * (1 - f) + _fifo[b + c] * f;
+        }
+        out[i * 2] = _lastBlock[baseBlock];
+        out[i * 2 + 1] = _lastBlock[baseBlock + (ch > 1 ? 1 : 0)];
+      }
+      _zeroFrom(out, produce, frames);
+      final consumed = _frac + produce * ratio;
+      final drop = consumed.floor();
+      _r = (_r + drop) % _capFrames;
+      _n -= drop;
+      _frac = consumed - drop;
+      _lastBlockFrames = produce;
+      _lastBlockDeviceRate = deviceRate;
+    }
+  }
+
+  @override
+  void fillRaw(Float32List out, int frames, int deviceRate) {
+    if (_failed) {
+      out.fillRange(0, frames * rawCh, 0.0);
+      return;
+    }
+    final ch = rawCh;
+    // 如果刚刚在同轮调用过 fill，直接复用已转换的 _lastBlock，对齐且不重复消费 FIFO
+    if (_lastBlockFrames > 0 && _lastBlockDeviceRate == deviceRate) {
+      final copyFrames = math.min(frames, _lastBlockFrames);
+      for (var i = 0; i < copyFrames * ch; i++) {
+        out[i] = _lastBlock[i];
+      }
+      if (copyFrames < frames) {
+        out.fillRange(copyFrames * ch, frames * ch, 0.0);
+      }
+      return;
+    }
+    // 独立调用回退：从 _fifo 提取
+    final capRate = _capture.sampleRate;
+    if (capRate == deviceRate) {
+      final take = math.min(frames, _n);
+      for (var i = 0; i < take; i++) {
+        final baseFifo = ((_r + i) % _capFrames) * ch;
+        final baseOut = i * ch;
+        for (var c = 0; c < ch; c++) {
+          out[baseOut + c] = _fifo[baseFifo + c];
+        }
+      }
+      if (take < frames) {
+        out.fillRange(take * ch, frames * ch, 0.0);
+      }
     } else {
       final ratio = capRate / deviceRate;
       var avail = 0;
@@ -86,17 +182,16 @@ class WasapiCaptureSourceImpl implements WindowsCaptureSource {
         final pos = _frac + i * ratio;
         final i0 = pos.floor();
         final f = pos - i0;
-        final a = ((_r + i0) % _capFrames) * 2;
-        final b = ((_r + i0 + 1) % _capFrames) * 2;
-        out[i * 2] = _fifo[a] * (1 - f) + _fifo[b] * f;
-        out[i * 2 + 1] = _fifo[a + 1] * (1 - f) + _fifo[b + 1] * f;
+        final a = ((_r + i0) % _capFrames) * ch;
+        final b = ((_r + i0 + 1) % _capFrames) * ch;
+        final baseOut = i * ch;
+        for (var c = 0; c < ch; c++) {
+          out[baseOut + c] = _fifo[a + c] * (1 - f) + _fifo[b + c] * f;
+        }
       }
-      _zeroFrom(out, produce, frames);
-      final consumed = _frac + produce * ratio;
-      final drop = consumed.floor();
-      _r = (_r + drop) % _capFrames;
-      _n -= drop;
-      _frac = consumed - drop;
+      if (produce < frames) {
+        out.fillRange(produce * ch, frames * ch, 0.0);
+      }
     }
   }
 
@@ -118,14 +213,17 @@ class WasapiCaptureSourceImpl implements WindowsCaptureSource {
     // 不读），剩余空间过小时强行排包只会把新包永久留在
     // 设备缓冲里错位——留待消费腾出空间后再排。
     if (free < 2048) return;
+    final ch = rawCh;
     _scratch ??=
-        Float32List(math.max(8192, _capture.bufferFrames * 2) * 2);
-    final maxIn = math.min(free, _scratch!.length ~/ 2);
+        Float32List(math.max(8192, _capture.bufferFrames * ch) * 2);
+    final maxIn = math.min(free, _scratch!.length ~/ ch);
     final got = _capture.drainInto(_scratch!, maxIn);
     for (var i = 0; i < got; i++) {
-      final idx = ((_r + _n + i) % _capFrames) * 2;
-      _fifo[idx] = _scratch![i * 2];
-      _fifo[idx + 1] = _scratch![i * 2 + 1];
+      final baseFifo = ((_r + _n + i) % _capFrames) * ch;
+      final baseScratch = i * ch;
+      for (var c = 0; c < ch; c++) {
+        _fifo[baseFifo + c] = _scratch![baseScratch + c];
+      }
     }
     _n += got;
   }

@@ -42,8 +42,7 @@ abstract class AudioOut {
 /// 本类只按同率前提工作。
 final class MirrorAudioOut implements AudioOut {
   MirrorAudioOut(this.primary, this.mirror,
-      {void Function(Object e, StackTrace st)? onMirrorError})
-      : _onMirrorError = onMirrorError;
+      {this._onMirrorError});
 
   final AudioOut primary;
   AudioOut? mirror;

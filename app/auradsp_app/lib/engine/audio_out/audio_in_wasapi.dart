@@ -447,10 +447,10 @@ final class WasapiCapture {
         final ch = mix.channels;
         for (var f = 0; f < frames; f++) {
           final base = f * ch;
-          final l = silent ? 0.0 : _sample(data, base);
-          final r = silent ? 0.0 : _sample(data, base + (ch > 1 ? 1 : 0));
-          out[(written + f) * 2] = l;
-          out[(written + f) * 2 + 1] = r;
+          final outBase = (written + f) * ch;
+          for (var c = 0; c < ch; c++) {
+            out[outBase + c] = silent ? 0.0 : _sample(data, base + c);
+          }
         }
         _hr('CaptureReleaseBuffer', releaseBufferFn(captureClient, frames));
         written += frames;

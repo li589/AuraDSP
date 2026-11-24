@@ -7,6 +7,13 @@ abstract class Source {
   void fill(Float32List out, int frames, int deviceRate);
 }
 
+/// 支持向多声道引擎提供原始 Nch 数据的源契约
+abstract interface class RawMultichannelSource {
+  int get rawCh;
+  bool get hasRaw;
+  void fillRaw(Float32List out, int frames, int deviceRate);
+}
+
 /// 通用波形发生源（第四十四轮 S4，取代原固定 440Hz 正弦
 /// 源）：正弦/方波/三角，频率可热改（相位连续、无爆音跳
 /// 变），可选对数扫频（20→20000 Hz、20 秒循环，频响测试
@@ -78,17 +85,21 @@ class PinkSource implements Source {
   }
 }
 
-class FileSource implements Source {
+class FileSource implements Source, RawMultichannelSource {
   final Float32List data; // stereo（fold 版：引擎/viz/桥统一入口）
   final int srcRate;
 
   /// 多声道 raw（直通用，Nch 交织；无则 null）与声道数。
   final Float32List? raw;
+  @override
   final int rawCh;
   double _pos = 0;
   double _posRaw = 0;
   bool loop = true;
   FileSource(this.data, this.srcRate, {this.raw, this.rawCh = 2});
+
+  @override
+  bool get hasRaw => raw != null && rawCh > 2;
 
   /// 源文件声道数（fold 后恒 2 compass；直通判断用 fileCh）。
   int fileCh = 2;
@@ -138,6 +149,7 @@ class FileSource implements Source {
 
   /// 直通填充：raw Nch 交织 + 同式线性重采样（与 fill 独立游标；切换模式
   /// 不追求采样级连续，追求不断尾不崩溃）。
+  @override
   void fillRaw(Float32List out, int frames, int deviceRate) {
     final r = raw;
     if (r == null || rawCh < 3) {

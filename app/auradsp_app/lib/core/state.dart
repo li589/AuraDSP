@@ -401,6 +401,7 @@ class AppModel extends ChangeNotifier {
   /// 1s 节拍轮询回推，同一失败 note 只通知一次；桥恢复运行后清锚，
   /// 下一次失败可再通知。
   String lastVaioFailNote = '';
+  bool? _lastVaioBridgeOutputVaio;
   String lastAsioFailNote = '';
 
   /// ASIO 驱动请求重置的热切换在飞标记（全面复审 S4 / ASIO-6）：
@@ -508,9 +509,12 @@ class AppModel extends ChangeNotifier {
     for (final d in wasapiDevices) {
       if (!d.isRender) continue;
       final n = d.name.toLowerCase();
-      if (n.contains('auravaio') ||
+      final idLower = d.id.toLowerCase();
+      if (n.contains('vaio') ||
+          n.contains('auravaio') ||
           n.contains('auradsp virtual asio') ||
-          n.contains('auradsp asio')) {
+          n.contains('auradsp asio') ||
+          idLower.contains('vaio')) {
         continue;
       }
       list.add(d);
@@ -535,9 +539,12 @@ class AppModel extends ChangeNotifier {
         }
         if (name.isEmpty) continue;
         final n = name.toLowerCase();
-        if (!n.contains('auravaio') &&
+        final idLower = id.toLowerCase();
+        if (!n.contains('vaio') &&
+            !n.contains('auravaio') &&
             !n.contains('auradsp virtual asio') &&
-            !n.contains('auradsp asio')) {
+            !n.contains('auradsp asio') &&
+            !idLower.contains('vaio')) {
           list.add(AudioDeviceItem(id: id, name: name, isRender: true));
         }
       }
@@ -607,9 +614,12 @@ class AppModel extends ChangeNotifier {
       }
       if (name.isEmpty) continue;
       final lower = name.toLowerCase();
-      if (lower.contains('auravaio') ||
+      final idLower = id.toLowerCase();
+      if (lower.contains('vaio') ||
+          lower.contains('auravaio') ||
           lower.contains('auradsp virtual asio') ||
-          lower.contains('auradsp asio')) {
+          lower.contains('auradsp asio') ||
+          idLower.contains('vaio')) {
         continue;
       }
       list.add(AudioDeviceItem(id: id, name: name, isRender: true));
@@ -1256,6 +1266,7 @@ class AppModel extends ChangeNotifier {
   DateTime? _vizLastFrameAt;
   DateTime? _vizSilentSince;
   bool _vizDisplayCleared = true;
+  int _vizClearTimeMs = 0;
   // 看门狗 Timer 由事件循环持有（Timer.periodic 不依赖外部引用存活），
   // App 生命周期单例无取消路径，故不留字段句柄（避免 unused_field）。
 

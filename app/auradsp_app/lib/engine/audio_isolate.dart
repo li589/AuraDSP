@@ -3020,6 +3020,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           // 模式下引擎声道数自动回退到设备能力内，变化才重派）。
           updateCapabilityCh(devCh);
           final fs = source is FileSource ? source as FileSource : null;
+          final rawMulti = source is RawMultichannelSource
+              ? (source as RawMultichannelSource)
+              : null;
           // 5.1 直通判定（本地渲染 only）：raw 就绪 + 用户开直通 +
           // 设备声道兜得住；任一不满足回落 fold。引擎照常跑 fold 版供 viz。
           final rawSrc = (fs != null &&
@@ -3043,21 +3046,21 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                     (paramMirror[ParamId.spatialBinaural]?.value ?? 0) != 0;
             if (countMode == 0) {
               // 自动模式：跟随输入源与设备声道数动态调整引擎 channels.count
-              final want = fs == null
+              final want = rawMulti == null
                   ? 2
                   : localEngineChannels(
-                      hasRaw: fs.raw != null,
-                      rawCh: fs.rawCh,
+                      hasRaw: rawMulti.hasRaw,
+                      rawCh: rawMulti.rawCh,
                       passthrough51: passthrough51,
                       bypass: bypass,
                       devCh: devCh,
                       channelsMode: cm,
                       binauralActive: binauralOn);
-              if (fs != null && want > 2 && applyEngineChannels(want) == fs.rawCh) {
+              if (rawMulti != null && want > 2 && applyEngineChannels(want) == rawMulti.rawCh) {
                 if (srcPaused) {
-                  inBufEng.fillRange(0, frames * fs.rawCh, 0);
+                  inBufEng.fillRange(0, frames * rawMulti.rawCh, 0);
                 } else {
-                  fs.fillRaw(inBufEng, frames, w.sampleRate);
+                  rawMulti.fillRaw(inBufEng, frames, w.sampleRate);
                 }
                 lib!.process(handle!, inPtrEng, outPtrEng8, frames);
                 engineMulti = true;
@@ -3076,11 +3079,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               }
             } else {
               // 手动模式：保持引擎 channels.count 不变（用户/配置锁定，不调用 applyEngineChannels 覆盖）
-              if (engineChCount > 2 && fs != null && fs.raw != null && fs.rawCh == engineChCount) {
+              if (engineChCount > 2 && rawMulti != null && rawMulti.hasRaw && rawMulti.rawCh == engineChCount) {
                 if (srcPaused) {
-                  inBufEng.fillRange(0, frames * fs.rawCh, 0);
+                  inBufEng.fillRange(0, frames * rawMulti.rawCh, 0);
                 } else {
-                  fs.fillRaw(inBufEng, frames, w.sampleRate);
+                  rawMulti.fillRaw(inBufEng, frames, w.sampleRate);
                 }
                 lib!.process(handle!, inPtrEng, outPtrEng8, frames);
                 engineMulti = true;

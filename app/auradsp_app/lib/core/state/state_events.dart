@@ -20,6 +20,7 @@ extension StateEvents on AppModel {
   /// 一并补齐。电平地板与旧上升沿一致（-90），逐声道回「无帧」
   /// 态（count=0，UI 回退 L/R 两柱）。
   void _clearVizState() {
+    _vizClearTimeMs = DateTime.now().millisecondsSinceEpoch;
     spectrum.value = List<double>.filled(32, 0.0);
     projectmPcmSnapshot.value = <double>[];
     eqInSpectrum.value = List<double>.filled(32, 0.0);
@@ -1008,6 +1009,11 @@ extension StateEvents on AppModel {
         break;
       case 'viz':
         if (!window.isVisible) break;
+        // 丢弃模式切换或清屏前在途产生或过时的迟到帧
+        final frameTs = (raw['ts'] as num?)?.toInt() ?? 0;
+        if (frameTs > 0 && frameTs < _vizClearTimeMs) {
+          break;
+        }
         // 第二十三轮（按数据来源治理）：只收当前模式预期来源的
         // 帧。切换后旧源的迟到帧（含其断流补帧）不得把已清零的
         // 显示面重新涂回；进程内泵帧无 backend 键，按 'local'。

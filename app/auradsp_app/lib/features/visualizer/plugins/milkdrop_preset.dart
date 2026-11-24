@@ -63,7 +63,7 @@ class MilkdropPreset {
 
   static bool isBuiltinPath(String path) => path.startsWith('builtin:');
 
-  /// 'builtin:<id>' → 落盘真实路径；其它路径原样返回。尚未落盘
+  /// `builtin:<id>` → 落盘真实路径；其它路径原样返回。尚未落盘
   /// （builtinDir 为空）时原样返回伪路径，调用方据此延后加载。
   static String resolveFilePath(String path) {
     if (!isBuiltinPath(path)) return path;

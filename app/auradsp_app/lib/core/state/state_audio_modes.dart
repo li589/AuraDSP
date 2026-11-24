@@ -76,6 +76,14 @@ extension AudioModesState on AppModel {
           ? AudioModes.attachVoicemeeterApi
           : AudioModes.attachSysApo;
     } else {
+      if (config.modeCategory == AudioModes.categoryPipeline) {
+        if (config.pipelineInput == AudioModes.inputAsioDriver) {
+          config.pipelineInput = AudioModes.inputVaio;
+        }
+        if (config.pipelineOutput == AudioModes.outputAsioClient) {
+          config.pipelineOutput = AudioModes.outputVaio;
+        }
+      }
       // 模式↔输出端多对一：覆写口径收敛在
       // AudioModes.pipelineOutputForMode（非损，见其注释）。
       // Linux 不写（细审 R-D L8）：该纯函数是 Windows 管线
@@ -505,7 +513,7 @@ extension AudioModesState on AppModel {
     // 一并复位，新源首帧到达前不触发断流清屏的重复通知。
     _vizLastFrameAt = null;
     _vizSilentSince = null;
-    if (!_vizDisplayCleared) _clearVizState();
+    _clearVizState();
   }
 
   /// 在枚举结果里按 id 或名称找端点（config 里存的设备值是
@@ -590,6 +598,8 @@ extension AudioModesState on AppModel {
       }
       if (mirrorId != null && _idsConflict(capId, mirrorId)) {
         mirrorId = null;
+        postNotice('监听设备与输入设备重叠，已阻止镜像以防啸叫自激',
+            level: NoticeLevel.warning);
       }
     }
     return {
@@ -598,7 +608,7 @@ extension AudioModesState on AppModel {
       // 下拉默认项与渲染端点 = 回录；录音端点 = 直采。
       'loopback': capItem?.isRender ?? true,
       'outputEndpoint': outId,
-      if (mirrorId != null) 'mirrorEndpoint': mirrorId,
+      'mirrorEndpoint': ?mirrorId,
     };
   }
 
@@ -657,11 +667,9 @@ extension AudioModesState on AppModel {
   }
 
   void applyPipelineChain() {
-    if (!PlatformProfile.supportsBridges) return;
-    // 第二十三轮：链路对账前先按数据来源对齐显示面——本函数的
-    // 全部调用点（模式切换/管线改选/就绪对账）config 已持新值，
-    // 预期来源变化即清零（幂等，见 _syncVizSourceOnSwitch）。
+    // 链路对账前先按数据来源对齐显示面并触发清零（各平台包括 Linux 通用）
     _syncVizSourceOnSwitch();
+    if (!PlatformProfile.supportsBridges) return;
     // 模式切换后异步补刷设备+调和（第三十四轮）。
     _requestDeviceRefreshAfterChain();
     // 第七轮 S2（项 5）：开关总闸——任一关闭，合成链不下发，在跑
@@ -749,22 +757,34 @@ extension AudioModesState on AppModel {
       captureActive = false;
       dbgLog('pipeline.chain: capturemode off');
     }
-    if (chain == PipelineChain.vaio && !vaioActive) {
-      // 断路器跳过期内对账不得把桥偷偷补起来（用户手动选
-      // VAIO 清除 tripped 后本门自然放行）。
-      if (vaioBootGuardTripped) {
-        dbgLog('pipeline.reconcile: vaiomode resend suppressed (breaker)');
-        return;
+    if (chain == PipelineChain.vaio) {
+      if (!vaioActive) {
+        // 断路器跳过期内对账不得把桥偷偷补起来（用户手动选
+        // VAIO 清除 tripped 后本门自然放行）。
+        if (vaioBootGuardTripped) {
+          dbgLog('pipeline.reconcile: vaiomode resend suppressed (breaker)');
+          return;
+        }
+        dbgLog('pipeline.reconcile: resend vaiomode (vaioActive=false)');
+        _lastVaioBridgeOutputVaio = vaioBridgeOutputVaio;
+        _toIso?.send({
+          'cmd': 'vaiomode',
+          'on': true,
+          'outputEndpoint': config.vaioOutputEndpoint,
+          'monitorMirror': config.monitorMirroring,
+          'outputVaio': vaioBridgeOutputVaio,
+        });
+        _armVaioGuard();
+      } else if (_lastVaioBridgeOutputVaio != vaioBridgeOutputVaio) {
+        _lastVaioBridgeOutputVaio = vaioBridgeOutputVaio;
+        dbgLog('pipeline.reconcile: outputVaio changed to $vaioBridgeOutputVaio, restarting vaio bridge');
+        _toIso?.send({
+          'cmd': 'vaiorestart',
+          'outputEndpoint': config.vaioOutputEndpoint,
+          'monitorMirror': config.monitorMirroring,
+          'outputVaio': vaioBridgeOutputVaio,
+        });
       }
-      dbgLog('pipeline.reconcile: resend vaiomode (vaioActive=false)');
-      _toIso?.send({
-        'cmd': 'vaiomode',
-        'on': true,
-        'outputEndpoint': config.vaioOutputEndpoint,
-        'monitorMirror': config.monitorMirroring,
-        'outputVaio': vaioBridgeOutputVaio,
-      });
-      _armVaioGuard();
     } else if (chain == PipelineChain.asio &&
         (!asioActive || config.asioFlavor == AudioModes.asioVirtual)) {
       // 虚拟形态恒重发：控制模式无会话活标志，总闸的静音/解静

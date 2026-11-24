@@ -191,6 +191,19 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   String? _pmPresetFailedPath;
   DateTime? _pmPresetFailedAt;
   List<double>? _pmLastFed;
+  final List<double> _synthPcmBuffer =
+      List<double>.filled(WaveformSynthesizer.pointCount * 2, 0.0);
+
+  List<double> _synthesizePcmFromWaveform() {
+    final wl = widget.waveformSynth.waveL;
+    final wr = widget.waveformSynth.waveR;
+    const count = WaveformSynthesizer.pointCount;
+    for (var i = 0; i < count; i++) {
+      _synthPcmBuffer[i * 2] = wl[i].clamp(-1.0, 1.0);
+      _synthPcmBuffer[i * 2 + 1] = wr[i].clamp(-1.0, 1.0);
+    }
+    return _synthPcmBuffer;
+  }
 
   void _syncProjectmSession() {
     final bridge = widget.projectMBridge;
@@ -211,8 +224,6 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
     if (bridge == null || widget.config.style != VisualizerStyle.projectM) {
       return;
     }
-    final pcm = widget.projectmPcm?.value;
-    if (pcm == null || pcm.isEmpty) return; // 无本地 PCM：不激活
     if (!bridge.isAvailable) {
       final failedAt = _pmInitFailedAt;
       if (_pmInitInFlight ||
@@ -235,9 +246,27 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
       return;
     }
     _pmLoadCurrentPreset();
-    if (!identical(pcm, _pmLastFed)) {
-      _pmLastFed = pcm;
-      bridge.feedPcm(pcm);
+
+    // PCM 供给：优先使用底层真实 PCM 快照；当无真实 PCM 时（如虚拟 ASIO、APO 等
+    // 跨进程/无抽头驱动模式），以 WaveformSynthesizer 合成的平滑波形自动兜底，
+    // 保证在任何底层驱动/声卡模式下 MilkDrop 预设皆可完整接线渲染。
+    final realPcm = widget.projectmPcm?.value;
+    List<double>? effectivePcm;
+    if (realPcm != null && realPcm.isNotEmpty) {
+      effectivePcm = realPcm;
+      if (!identical(effectivePcm, _pmLastFed)) {
+        _pmLastFed = effectivePcm;
+        bridge.feedPcm(effectivePcm);
+      }
+    } else {
+      final hasAudio = (widget.levelL.value > -89.0 || widget.levelR.value > -89.0) ||
+          (widget.spectrum.value.isNotEmpty &&
+              widget.spectrum.value.any((b) => b > 0.001));
+      if (hasAudio) {
+        effectivePcm = _synthesizePcmFromWaveform();
+        bridge.feedPcm(effectivePcm);
+        _pmLastFed = null; // 合成 PCM 每帧内容变化，避免相同引用短路
+      }
     }
     bridge.renderFrame();
   }
