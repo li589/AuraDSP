@@ -126,7 +126,8 @@ class AudioBridgeCore {
       try {
         _pcmRead =
             dylib.lookupFunction<_PcmReadC, _PcmReadDart>('ab_pcm_read');
-      } catch (_) {
+      } catch (e, st) {
+        swallow(e, st);
         _pcmRead = null;
       }
     }
