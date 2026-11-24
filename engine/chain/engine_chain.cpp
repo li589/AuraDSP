@@ -1523,6 +1523,23 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
 
 
 
+/* [审查 M1 2026-11-24] 链尾样本安全卫士：NaN/Inf 归零、±10 钳位。
+ * 两条链共用；每链在 Stage 4 插件链前后各调一次，Stage 4 之后那道
+ * 保证卫士是链上最后一个写者。 */
+static inline void final_sample_guard(float* dst, int total_samples) {
+    for (int i = 0; i < total_samples; ++i) {
+        float s = dst[i];
+        if (std::isnan(s) || std::isinf(s)) {
+            dst[i] = 0.0f;
+        } else if (s > 10.0f) {
+            dst[i] = 10.0f;
+        } else if (s < -10.0f) {
+            dst[i] = -10.0f;
+        }
+    }
+}
+
+
 /* 离散多声道处理链本体 (Phase B: Category A 独立单声道滤波 + Category B 声场保持) */
 void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, int frames, int ch) {
     if (!h || !src || !dst || frames <= 0 || ch <= 0) return;
@@ -1709,19 +1726,15 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     sample_stage_mc_vendor(h, 11, dst, frames, ch);  /* Stage 11: Output/限幅后 (S1 补接) */
 
     // 5. 全局多声道输出样本安全卫士：过滤 NaN / Inf 异常浮点并实施 [-10.0, +10.0] 极限钳位
-    const int total_samples = frames * ch;
-    for (int i = 0; i < total_samples; ++i) {
-        float s = dst[i];
-        if (std::isnan(s) || std::isinf(s)) {
-            dst[i] = 0.0f;
-        } else if (s > 10.0f) {
-            dst[i] = 10.0f;
-        } else if (s < -10.0f) {
-            dst[i] = -10.0f;
-        }
-    }
+    final_sample_guard(dst, frames * ch);
 
     auradsp::plugin_chain_process_n(h, 4, dst, (uint32_t)frames, (uint32_t)ch);
+
+    /* [审查 M1 2026-11-24] Stage 4（Post-Limiter）插件链排在卫士之后，
+     * 其输出原先直达出口：插件产 NaN/Inf/>10 无人拦截。卫士须为链上
+     * 最后一个写者——Stage 4 之后再补一道（前道保留，兼作插件输入
+     * 卫生）。矩阵/双耳复用立体声链、离散复用本链，四出口同口径。 */
+    final_sample_guard(dst, frames * ch);
 
     /* [PATCHED-AuraDSP P-047] MC 块结束：释放在途守卫计数。
      * 顺序：先递减 in_flight（表示「此刻无 RT 在用池」），proc_count 保持单调
@@ -1878,18 +1891,11 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     limiter_process_mc(h, dst, frames, 2);
 
     /* 全局输出样本安全卫士：过滤 NaN / Inf 异常浮点并实施 [-10.0, +10.0] 极限钳位 */
-    const int total_samples = frames * 2;
-    for (int i = 0; i < total_samples; ++i) {
-        float s = dst[i];
-        if (std::isnan(s) || std::isinf(s)) {
-            dst[i] = 0.0f;
-        } else if (s > 10.0f) {
-            dst[i] = 10.0f;
-        } else if (s < -10.0f) {
-            dst[i] = -10.0f;
-        }
-    }
+    final_sample_guard(dst, frames * 2);
 
     /* Stage 4: Post-Limiter（链尾，最终安全输出后） */
     auradsp::plugin_chain_process(h, 4, dst, (uint32_t)frames);
+
+    /* [审查 M1 2026-11-24] 同 MC 链：卫士补到 Stage 4 之后作最后写者。 */
+    final_sample_guard(dst, frames * 2);
 }

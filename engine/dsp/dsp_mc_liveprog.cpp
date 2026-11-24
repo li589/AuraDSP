@@ -433,7 +433,15 @@ void mc_liveprog_process(McLiveProgHost* host, float* buf, int frames,
                     NSEEL_code_execute(s->codehandleProcess);
                     for (int c = 0; c < nch; ++c) {
                         const double v = *s->inputs[c];
-                        frame[c] = std::isfinite(v) ? (float)v : 0.0f;
+                        /* [审查 M2 2026-11-24] 卫士须在 float 域复判：
+                         * double 域 finite 的大值（1e300）cast 后成 Inf
+                         * 仍会被旧写回放行，且无 ±10 钳位。先 cast、
+                         * 再判 finite、再钳 ±10，与链尾卫士同口径。 */
+                        float fv = (float)v;
+                        if (!std::isfinite(fv)) fv = 0.0f;
+                        else if (fv > 10.0f) fv = 10.0f;
+                        else if (fv < -10.0f) fv = -10.0f;
+                        frame[c] = fv;
                     }
                 }
             }
