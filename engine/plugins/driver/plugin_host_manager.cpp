@@ -447,6 +447,9 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
 
 void PluginHostManager::setBypassSlot(size_t slot, bool bypass) {
     if (slot >= kMaxPluginSlots) return;
+    /* [审查 M7 2026-11-24] instance->setBypass 的解引用须与卸载互斥：
+     * 持 m_hostMutex（卸载/装载同锁），杜绝与销毁并发的裸解引用。 */
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     m_slots[slot].bypassed.store(bypass, std::memory_order_release);
     // F-8a：旁通切换后首个音频块刷新遥测（解除旁通时不读到切换前的陈旧值）
     resetTelemetryGateSlot(slot);
@@ -462,7 +465,10 @@ bool PluginHostManager::isBypassedSlot(size_t slot) const {
     // 与手动旁路同形（文案恒「旁路」），成因只经 fault 字段区分。
     if (m_slots[slot].fault.load(std::memory_order_acquire)) return true;
     if (m_slots[slot].bypassed.load(std::memory_order_acquire)) return true;
-    return m_slots[slot].instance && m_slots[slot].instance->hostTransportFailed();
+    /* [审查 M7 2026-11-24] 传输失联读原子快照（process 路径每块在
+     * 在途守卫内发布）：本函数在 RT 每块被调，裸解引用 instance 与
+     * 控制线程销毁存在 UAF 窗口，不再直读实例。 */
+    return m_slots[slot].transportFailed.load(std::memory_order_acquire);
 }
 
 uint32_t PluginHostManager::getLatencySlot(size_t slot) const {
@@ -471,11 +477,10 @@ uint32_t PluginHostManager::getLatencySlot(size_t slot) const {
     // 块大小自适应（实测 128→+128、256→+256、512→+512、1024→+1024，延迟恒
     // 为 1 个回调）。故这里返回实例的**实时值**而非加载快照：快照是首块前的
     // 128 口径，用它做 PDC 会在 512 帧设备上欠补 384 帧（8ms）。
-#ifndef AURADSP_HOST_INPROC
-    if ((m_remoteMode || dynamic_cast<ProcessPluginProxy*>(m_slots[slot].instance.get())) && m_slots[slot].instance) {
-        return m_slots[slot].instance->getLatency();
-    }
-#endif
+    /* [审查 M7 2026-11-24] 实时延迟读原子值：进程外代理的延迟随回调
+     * 块大小变化，由 process 路径每块在在途守卫内把实例实时值发布到
+     * latency 原子（见 processSlot），本函数不再裸解引用 instance
+     * （RT 每块调用，与销毁并发即 UAF 窗口）。 */
     return m_slots[slot].latency.load(std::memory_order_relaxed);
 }
 
@@ -651,17 +656,7 @@ void PluginHostManager::setChannelHint(int channels) {
 #endif
     for (size_t s = 0; s < kMaxPluginSlots; ++s) {
         if (!m_slots[s].instance || !m_slots[s].hasActive.load()) continue;
-        m_slots[s].instance->setChannelHint(channels);
-        m_slots[s].instance->activate(m_sampleRate, m_maxBlockSize);
-        m_slots[s].latency.store(m_slots[s].instance->getLatency(),
-                                 std::memory_order_relaxed);
-        const PluginBusInfo bus = m_slots[s].instance->busInfo();
-        m_slots[s].mainInChannels.store(bus.mainInChannels > 0 ? bus.mainInChannels : 2,
-                                        std::memory_order_relaxed);
-        m_slots[s].mainOutChannels.store(
-            bus.mainOutChannels > 0 ? bus.mainOutChannels
-                                    : (bus.mainInChannels > 0 ? bus.mainInChannels : 2),
-            std::memory_order_relaxed);
+        reactivateSlot(m_slots[s], channels, m_sampleRate, m_maxBlockSize);
     }
 }
 
@@ -695,7 +690,16 @@ void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float
 
     /* SEH/异常段已隔离到 processSlotGuarded（MSVC C2712：无析构函数才能用 __try） */
     s.processCalls.fetch_add(1, std::memory_order_relaxed);
-    if (processSlotGuarded(s, inChannels, outChannels, numFrames) != 0) {
+    const int guardedRc = processSlotGuarded(s, inChannels, outChannels, numFrames);
+    /* [审查 M7 2026-11-24] 在途守卫内发布实例快照：传输失联与实时
+     * 延迟（代理延迟随块大小变）写入原子，供 RT 侧 getter 无锁读，
+     * 不再在 getter 里裸解引用 instance。 */
+    if (s.instance) {
+        s.transportFailed.store(s.instance->hostTransportFailed(),
+                                std::memory_order_relaxed);
+        s.latency.store(s.instance->getLatency(), std::memory_order_relaxed);
+    }
+    if (guardedRc != 0) {
         // Q1（Part I D4）：故障闩锁取代 F-8a 的静默自动旁路。置
         // fault（处理级 / process_crash）后有效旁路经 isBypassedSlot
         // 成立，手动 bypass 标志保持不动——用户解除旁路不会误启
@@ -741,10 +745,15 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
     }
     mask &= (1u << channels) - 1u;
     if (mask == 0) return;
-    if (numFrames > m_channelScratchBlock || !m_channelIn[0] ||
-        !m_channelOut[0] || !m_channelZero) {
+    /* [审查 M6 2026-11-24] 本块只取一次当前代 scratch 并整块使用：
+     * 控制侧扩容只换原子指针、旧代不释放，故整块内指针恒有效。 */
+    ChannelScratch* sc = m_scratchCurrent.load(std::memory_order_acquire);
+    if (!sc || numFrames > sc->block || !sc->in[0] || !sc->out[0] || !sc->zero) {
         return;
     }
+    auto& scIn = sc->in;
+    auto& scOut = sc->out;
+    auto& scZero = sc->zero;
 
     PluginSlot& s = m_slots[slot];
     if (!s.hasActive.load(std::memory_order_acquire) ||
@@ -760,7 +769,7 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
 
     for (uint32_t i = 0; i < numFrames; ++i) {
         for (uint32_t ch = 0; ch < channels; ++ch) {
-            m_channelIn[ch][i] = interleaved[i * channels + ch];
+            scIn[ch][i] = interleaved[i * channels + ch];
         }
     }
 
@@ -804,7 +813,7 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
             for (uint32_t ch = 0; ch < channels; ++ch) {
                 if (!(mask & (1u << ch))) continue;
                 for (uint32_t i = 0; i < numFrames; ++i) {
-                    const float a = m_channelIn[ch][i];
+                    const float a = scIn[ch][i];
                     const float b = interleaved[i * channels + ch];
                     inSum += static_cast<double>(a) * a;
                     outSum += static_cast<double>(b) * b;
@@ -830,13 +839,13 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
         auto fillOutput = [&](int count, const float* first) {
             for (int ch = 0; ch < count; ++ch) {
                 if (ch < 2 && first && ch == 0) {
-                    std::memcpy(m_channelOut[ch].get(), first,
+                    std::memcpy(scOut[ch].get(), first,
                                 static_cast<size_t>(numFrames) * sizeof(float));
                 } else if (first) {
-                    std::memcpy(m_channelOut[ch].get(), first,
+                    std::memcpy(scOut[ch].get(), first,
                                 static_cast<size_t>(numFrames) * sizeof(float));
                 } else {
-                    std::memset(m_channelOut[ch].get(), 0,
+                    std::memset(scOut[ch].get(), 0,
                                 static_cast<size_t>(numFrames) * sizeof(float));
                 }
             }
@@ -845,15 +854,15 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
         if (inChannels == 1) {
             for (uint32_t ch = 0; ch < channels; ++ch) {
                 if (!(mask & (1u << ch))) continue;
-                fillOutput(outChannels, m_channelIn[ch].get());
-                float* inPtrs[1] = {m_channelIn[ch].get()};
+                fillOutput(outChannels, scIn[ch].get());
+                float* inPtrs[1] = {scIn[ch].get()};
                 float* outPtrs[8] = {};
-                for (int oc = 0; oc < outChannels; ++oc) outPtrs[oc] = m_channelOut[oc].get();
+                for (int oc = 0; oc < outChannels; ++oc) outPtrs[oc] = scOut[oc].get();
                 processSlot(slot, inPtrs, outPtrs, numFrames);
                 for (uint32_t i = 0; i < numFrames; ++i) {
-                    interleaved[i * channels + ch] = m_channelOut[0][i];
+                    interleaved[i * channels + ch] = scOut[0][i];
                 }
-                accumulate(m_channelIn[ch].get(), m_channelOut[0].get());
+                accumulate(scIn[ch].get(), scOut[0].get());
             }
         } else if (inChannels == 2) {
             for (uint32_t base = 0; base + 1 < channels; base += 2) {
@@ -861,24 +870,24 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
                 if (group == 0) continue;
                 const uint32_t srcL = (group & 1u) ? base : base + 1;
                 const uint32_t srcR = (group & 2u) ? base + 1 : srcL;
-                std::memcpy(m_channelOut[0].get(), m_channelIn[srcL].get(),
+                std::memcpy(scOut[0].get(), scIn[srcL].get(),
                             static_cast<size_t>(numFrames) * sizeof(float));
-                std::memcpy(m_channelOut[1].get(), m_channelIn[srcR].get(),
+                std::memcpy(scOut[1].get(), scIn[srcR].get(),
                             static_cast<size_t>(numFrames) * sizeof(float));
                 for (int oc = 2; oc < outChannels; ++oc) {
-                    std::memcpy(m_channelOut[oc].get(), m_channelIn[srcL].get(),
+                    std::memcpy(scOut[oc].get(), scIn[srcL].get(),
                                 static_cast<size_t>(numFrames) * sizeof(float));
                 }
-                float* inPtrs[2] = {m_channelIn[srcL].get(), m_channelIn[srcR].get()};
+                float* inPtrs[2] = {scIn[srcL].get(), scIn[srcR].get()};
                 float* outPtrs[8] = {};
-                for (int oc = 0; oc < outChannels; ++oc) outPtrs[oc] = m_channelOut[oc].get();
+                for (int oc = 0; oc < outChannels; ++oc) outPtrs[oc] = scOut[oc].get();
                 processSlot(slot, inPtrs, outPtrs, numFrames);
                 for (uint32_t i = 0; i < numFrames; ++i) {
-                    if (group & 1u) interleaved[i * channels + base] = m_channelOut[0][i];
-                    if (group & 2u) interleaved[i * channels + base + 1] = m_channelOut[1][i];
+                    if (group & 1u) interleaved[i * channels + base] = scOut[0][i];
+                    if (group & 2u) interleaved[i * channels + base + 1] = scOut[1][i];
                 }
-                accumulate(m_channelIn[srcL].get(), m_channelOut[0].get());
-                accumulate(m_channelIn[srcR].get(), m_channelOut[1].get());
+                accumulate(scIn[srcL].get(), scOut[0].get());
+                accumulate(scIn[srcR].get(), scOut[1].get());
             }
         } else {
             int selected[8] = {};
@@ -893,16 +902,16 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
                 float* outPtrs[8] = {};
                 for (int j = 0; j < inChannels; ++j) {
                     inPtrs[j] = (j < groupCount)
-                                    ? m_channelIn[selected[start + j]].get()
-                                    : m_channelZero.get();
+                                    ? scIn[selected[start + j]].get()
+                                    : scZero.get();
                 }
                 for (int j = 0; j < outChannels; ++j) {
-                    outPtrs[j] = m_channelOut[j].get();
+                    outPtrs[j] = scOut[j].get();
                     if (j < groupCount) {
-                        std::memcpy(m_channelOut[j].get(), inPtrs[j],
+                        std::memcpy(scOut[j].get(), inPtrs[j],
                                     static_cast<size_t>(numFrames) * sizeof(float));
                     } else {
-                        std::memset(m_channelOut[j].get(), 0,
+                        std::memset(scOut[j].get(), 0,
                                     static_cast<size_t>(numFrames) * sizeof(float));
                     }
                 }
@@ -911,9 +920,9 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
                     const int oc = (std::min)(j, outChannels - 1);
                     for (uint32_t i = 0; i < numFrames; ++i) {
                         interleaved[i * channels + selected[start + j]] =
-                            m_channelOut[oc][i];
+                            scOut[oc][i];
                     }
-                    accumulate(inPtrs[j], m_channelOut[oc].get());
+                    accumulate(inPtrs[j], scOut[oc].get());
                 }
             }
         }
@@ -968,19 +977,52 @@ bool PluginHostManager::loadPlugin(const std::string& path, const std::string& p
 
 bool PluginHostManager::ensureChannelScratch(uint32_t maxBlockSize) {
     if (maxBlockSize == 0) return false;
-    if (m_channelScratchBlock >= maxBlockSize &&
-        m_channelIn[0] && m_channelOut[0] && m_channelZero) {
-        return true;
+    /* [审查 M6 2026-11-24] 代际发布：当前代够用直接返回；扩容建新代
+     * 后原子换指针，旧代留置 m_scratchGenerations 不释放——RT 可能
+     * 正读旧代，释放即 UAF（旧实现 reset 与 RT 无同步）。本函数只在
+     * 控制线程（装载/格式路径）调用，代际表无需加锁。 */
+    ChannelScratch* cur = m_scratchCurrent.load(std::memory_order_acquire);
+    if (cur && cur->block >= maxBlockSize) return true;
+    auto gen = std::make_unique<ChannelScratch>();
+    for (size_t ch = 0; ch < gen->in.size(); ++ch) {
+        gen->in[ch].reset(new (std::nothrow) float[maxBlockSize]());
+        gen->out[ch].reset(new (std::nothrow) float[maxBlockSize]());
+        if (!gen->in[ch] || !gen->out[ch]) return false;
     }
-    for (size_t ch = 0; ch < m_channelIn.size(); ++ch) {
-        m_channelIn[ch].reset(new (std::nothrow) float[maxBlockSize]());
-        m_channelOut[ch].reset(new (std::nothrow) float[maxBlockSize]());
-        if (!m_channelIn[ch] || !m_channelOut[ch]) return false;
-    }
-    m_channelZero.reset(new (std::nothrow) float[maxBlockSize]());
-    if (!m_channelZero) return false;
-    m_channelScratchBlock = maxBlockSize;
+    gen->zero.reset(new (std::nothrow) float[maxBlockSize]());
+    if (!gen->zero) return false;
+    gen->block = maxBlockSize;
+    ChannelScratch* raw = gen.get();
+    m_scratchGenerations.push_back(std::move(gen));
+    m_scratchCurrent.store(raw, std::memory_order_release);
     return true;
+}
+
+/* [审查 M5 2026-11-24] 活动槽再激活协议（调用方持 m_hostMutex）：
+ * activate 会重建实例的 process 每块缓冲成员，旧实现由控制线程对
+ * 活动实例直接调用，与在途 process() 并发即 UAF。现按卸载同款握手：
+ * 先摘活（hasActive=false 止新块进入），waitQuiesce 等在途排空后才
+ * 触碰实例，完成后复活。排空超时（RT 异常滞留）则本轮跳过触碰并
+ * 复活——实例保持旧格式可用，下次格式变更再试；绝不在未排空时
+ * 触碰（与 B3 隔离区契约同理）。 */
+void PluginHostManager::reactivateSlot(PluginSlot& s, int channelHint,
+                                       double sampleRate, uint32_t maxBlockSize) {
+    if (!s.instance) return;
+    s.hasActive.store(false, std::memory_order_release);
+    const bool quiesced = waitQuiesce(s.inFlight);
+    if (quiesced) {
+        s.instance->setChannelHint(channelHint);
+        s.instance->activate(sampleRate, maxBlockSize);
+        s.latency.store(s.instance->getLatency(), std::memory_order_relaxed);
+        const PluginBusInfo bus = s.instance->busInfo();
+        s.mainInChannels.store(bus.mainInChannels > 0 ? bus.mainInChannels : 2,
+                               std::memory_order_relaxed);
+        s.mainOutChannels.store(
+            bus.mainOutChannels > 0 ? bus.mainOutChannels
+                                    : (bus.mainInChannels > 0 ? bus.mainInChannels : 2),
+            std::memory_order_relaxed);
+    }
+    s.hasActive.store(true, std::memory_order_release);
 }
 
 void PluginHostManager::updateFormat(double sampleRate, uint32_t maxBlockSize) {
@@ -1011,16 +1053,7 @@ void PluginHostManager::updateFormat(double sampleRate, uint32_t maxBlockSize) {
 #endif
     for (size_t s = 0; s < kMaxPluginSlots; ++s) {
         if (m_slots[s].instance && m_slots[s].hasActive.load()) {
-            m_slots[s].instance->setChannelHint(m_channelHint.load());
-            m_slots[s].instance->activate(sampleRate, maxBlockSize);
-            m_slots[s].latency.store(m_slots[s].instance->getLatency(), std::memory_order_relaxed);
-            const PluginBusInfo bus = m_slots[s].instance->busInfo();
-            m_slots[s].mainInChannels.store(bus.mainInChannels > 0 ? bus.mainInChannels : 2,
-                                            std::memory_order_relaxed);
-            m_slots[s].mainOutChannels.store(
-                bus.mainOutChannels > 0 ? bus.mainOutChannels
-                                        : (bus.mainInChannels > 0 ? bus.mainInChannels : 2),
-                std::memory_order_relaxed);
+            reactivateSlot(m_slots[s], m_channelHint.load(), sampleRate, maxBlockSize);
         }
     }
 }

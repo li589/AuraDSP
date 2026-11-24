@@ -246,6 +246,9 @@ public:
         std::atomic<bool> hasActive{false};
         std::atomic<bool> bypassed{false};
         std::atomic<uint32_t> latency{0};
+        /* [审查 M7 2026-11-24] 传输失联的原子快照：由 process 路径在
+         * 在途守卫内每块发布，isBypassedSlot 只读快照不再解引用实例。 */
+        std::atomic<bool> transportFailed{false};
         std::atomic<int> insertStage{3}; // 0=Pre-DSP, 1=Pre-Vendor, 2=Post-Vendor, 3=Post-Reverb, 4=Post-Limiter
         std::atomic<uint32_t> channelMask{
             (1u << auradsp::limits::kBusChannels) - 1u};
@@ -450,10 +453,23 @@ public:
     double m_sampleRate{48000.0};
     uint32_t m_maxBlockSize{1024};
     std::atomic<int> m_channelHint{2};
-    std::array<std::unique_ptr<float[]>, 8> m_channelIn;
-    std::array<std::unique_ptr<float[]>, 8> m_channelOut;
-    std::unique_ptr<float[]> m_channelZero;
-    uint32_t m_channelScratchBlock = 0;
+    /* [审查 M6 2026-11-24] 声道 scratch 改代际双缓冲：控制侧扩容建
+     * 新代并原子发布，RT 每块只取一次当前代指针整块使用；旧代由
+     * m_scratchGenerations 持有至管理器析构，绝不在 RT 可能读取时
+     * 释放（旧实现 reset 旧缓冲与 RT 无同步，堆 UAF 窗口）。 */
+    struct ChannelScratch {
+        std::array<std::unique_ptr<float[]>, 8> in;
+        std::array<std::unique_ptr<float[]>, 8> out;
+        std::unique_ptr<float[]> zero;
+        uint32_t block = 0;
+    };
+    std::atomic<ChannelScratch*> m_scratchCurrent{nullptr};
+    std::vector<std::unique_ptr<ChannelScratch>> m_scratchGenerations;
+    /* [审查 M5 2026-11-24] 活动槽再激活协议：摘活 → 等在途排空 →
+     * 触碰实例（setChannelHint/activate/延迟/总线回读）→ 复活；
+     * 排空超时则本轮跳过触碰（见实现注释）。调用方须持 m_hostMutex。 */
+    void reactivateSlot(PluginSlot& s, int channelHint, double sampleRate,
+                        uint32_t maxBlockSize);
     mutable std::recursive_mutex m_hostMutex;
 
     // ---- C2 分块扫描状态与元数据缓存 ----
