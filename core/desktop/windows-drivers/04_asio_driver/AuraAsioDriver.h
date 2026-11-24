@@ -148,5 +148,19 @@ private:
     float* m_foldR = nullptr;
     float* m_multiOut = nullptr;
 
+    // W6：流宽 ↔ 引擎宽解耦。m_engineCh 是 channels.count 的影子
+    // （参数块下发，缺省跟随 DAW 协商流宽），m_channelMode 是
+    // channels.mode 影子（0=矩阵 / 1=离散）。两者只在泵线程写读；
+    // createBuffers / FinishEngineSetup 在建引擎时同步。
+    int m_engineCh = 2;
+    int m_channelMode = 0;
+    // 宽度不一致时的适配缓冲（bufferSize * kMaxChannels）。离散用
+    // chmap_gather/scatter，矩阵收窄用 chmap_fold；同宽时零拷贝不走这里。
+    float* m_engIn = nullptr;
+    float* m_engOut = nullptr;
+    // W7：输出端点热切换——参数块 reserved1[0] 的序号变化即触发重开汇。
+    long m_lastEndpointSeq = 0;
+    bool m_sinkReloadReq = false;  // 泵线程独占（Pull 置位、块边界消费）
+
     char m_errorMessage[128] = {0};
 };

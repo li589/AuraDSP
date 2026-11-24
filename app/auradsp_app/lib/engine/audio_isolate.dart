@@ -1880,6 +1880,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             channels: (m['channels'] as num?)?.toInt() ?? asioChannelsFromSource(),
           );
           break;
+        case 'asioendpointseq':
+          // W7：输出端点变更 → 参数块 reserved1[0] 递增，驱动泵在块
+          // 边界重开汇（读注册表取新端点）。虚拟形态专属；Client 形态
+          // 端点由桥 start 参数决定，bump 自动空操作。
+          asioPublisher.bumpEndpointSeq();
+          break;
         case 'asiodetect':
           detectAsioDrivers();
           break;

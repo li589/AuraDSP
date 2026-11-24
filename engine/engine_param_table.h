@@ -712,12 +712,15 @@ static auradsp_status set_channels_count(auradsp_handle h, const void* value, ui
             h->p.dyneq_channels.store(new_def, std::memory_order_relaxed);
         if (h->p.exciter_channels.load(std::memory_order_relaxed) == old_def)
             h->p.exciter_channels.store(new_def, std::memory_order_relaxed);
+        auradsp::plugin_chain_set_channel_hint(h, v);
+        /* 通道数变化改变拓扑；WP6：统一调用 reset_channel_state
+         * 全模块重置逐通道状态，并重算延迟。
+         * W6（2026-11-24）：只在**真变化**时做。参数块每轮重放整个
+         * 镜像（含 channels.count），无条件重置会把「拖任意参数」
+         * 变成周期性全模块状态清零——实测表现为爆音/断续。 */
+        reset_channel_state(h);
+        compute_latency(h, &h->latency_ms);
     }
-    auradsp::plugin_chain_set_channel_hint(h, v);
-    /* 通道数变化改变拓扑；WP6：统一调用 reset_channel_state
-     * 全模块重置逐通道状态，并重算延迟。 */
-    reset_channel_state(h);
-    compute_latency(h, &h->latency_ms);
     return AURADSP_OK;
 }
 

@@ -1821,6 +1821,10 @@ extension AudioModesState on AppModel {
       'RenderEndpoint',
       endpointId,
     );
+    // W7（2026-11-24）：注册表写完立刻通知 isolate 递增参数块的端点
+    // 序号——驱动泵在块边界重开 WASAPI 汇并读新端点，不再需要重开
+    // DAW。Client 形态下 publisher 未激活，bump 自动空操作。
+    _toIso?.send({'cmd': 'asioendpointseq'});
     persistRoutingChange();
     _notifyUi();
     return ok;

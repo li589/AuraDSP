@@ -130,6 +130,7 @@ class AsioParamPublisher {
         _seq = 0;
         _i32![2] = 0;
         _u32![4] = 0;
+        _i32![6] = 0; // W7：端点序号（reserved1[0]）随块头重置归零
       } else {
         _seq = _i32![2];
       }
@@ -145,16 +146,17 @@ class AsioParamPublisher {
   }
 
   /// 镜像序列化：引擎 ApplyParamsString 同格式 "id=value;..."。
-  /// channels.count 由驱动按 DAW 协商声道自钉，不经本块；字符
-  /// 串参数只携带 graph.order（分隔格式承载不了任意文本——脚
-  /// 本代码/文件路径类不经本块，属 S4 已知约束）。
+  /// channels.count 自 W6（2026-11-24）起**随镜像下发**：驱动不再把它
+  /// 钉成 DAW 协商宽，App 的 4.0/2.0 档位因此能真正改变 DAW 进程内
+  /// 引擎的处理宽度（流宽与引擎宽不一致由驱动 chmap 适配层承担）。
+  /// 字符串型参数只携带 graph.order（分隔格式承载不了任意文本——
+  /// 脚本代码/文件路径类不经本块，属 S4 已知约束）。
   String _serialize() {
     final mirror = _mirror;
     if (mirror == null) return '';
     final parts = <String>[];
     final ids = mirror.keys.toList()..sort();
     for (final id in ids) {
-      if (id == 'channels.count') continue;
       final e = mirror[id]!;
       if (!e.value.isFinite) continue;
       if (e.isFloat) {
@@ -206,6 +208,17 @@ class AsioParamPublisher {
     // 3) 离开写入态：seq 变偶（稳定发布）。
     _seq += 1;
     _i32![2] = _seq;
+  }
+
+  /// 输出端点切换通知（W7）：参数块 reserved1[0] 递增，驱动泵在块
+  /// 边界读到新序号即重开 WASAPI 汇（Open 内读注册表新端点），
+  /// 不必重开 DAW。只在虚拟形态有意义；未激活/映射失败时静默。
+  void bumpEndpointSeq() {
+    if (!active) return;
+    if (!_ensure()) return;
+    final next = ((_i32![6] & 0x7FFFFFFF) + 1) & 0x7FFFFFFF;
+    _i32![6] = next;
+    dbgLog('asio publisher: endpoint seq -> $next');
   }
 
   /// 参数镜像变更通知（setParam/setParamStr/bypass 派发点调用）：

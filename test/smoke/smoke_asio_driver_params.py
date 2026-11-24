@@ -79,11 +79,26 @@ i_even = dart_asio.find("_seq += 1;")
 check("publisher brackets payload with odd/even seq",
       0 <= i_odd < i_payload < i_even,
       f"odd@{i_odd} payload@{i_payload} even@{i_even}")
-check("publisher excludes channels.count",
-      "id == 'channels.count'" in dart_asio)
+check("publisher carries channels.count (W6 width authority)",
+      "if (id == 'channels.count') continue;" not in dart_asio)
 check("publisher carries graph.order only",
       "_strMirror?['graph.order']" in dart_asio)
 check("publisher debounced", "noteChanged" in dart_asio)
+
+# ---- W6 流宽/引擎宽解耦 与 W7 端点热切换（2026-11-24）----
+check("driver keeps engine-width shadow", "m_engineCh" in driver)
+check("driver keeps channel-mode shadow", "m_channelMode" in driver)
+check("driver adapts width via chmap",
+      "chmap_gather_discrete" in driver and
+      "chmap_scatter_discrete" in driver and "chmap_fold(" in driver)
+check("driver no longer pins count to stream width",
+      "int nCh = (int)m_channels;\n    m_engineLoader.SetParam" not in driver)
+check("driver telemetry in engine order",
+      "chmap_stream_pos(engCh, (int)ch, c)" in driver)
+check("header endpoint seq slot documented", "reserved1[0]" in shared)
+check("publisher bumps endpoint seq", "bumpEndpointSeq" in dart_asio)
+check("isolate routes endpoint seq command",
+      "case 'asioendpointseq'" in dart_iso)
 
 # ---- 总闸静音（r61 验收修复） ----
 check("header mute field", "volatile long mute;" in shared)

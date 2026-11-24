@@ -4,11 +4,43 @@
 #include "chain/channel_map.h"  // 声道适配统一表（第五十五轮）
 
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <new>
 #include <sddl.h>
 
 std::atomic<long> AuraAsioDriver::s_instanceCount{0};
+
+namespace {
+
+// 从 "id=value;..." 参数串里取整数参数；缺失/非法返回 def。
+// 与引擎 ApplyParamsString 同一分隔口径（';' 分条、'=' 分值）。
+int ParseParamInt(const std::string& s, const char* id, int def) {
+    if (s.empty() || !id || !*id) return def;
+    const size_t idLen = std::strlen(id);
+    size_t pos = 0;
+    while (pos < s.size()) {
+        const size_t semi = s.find(';', pos);
+        const size_t end = (semi == std::string::npos) ? s.size() : semi;
+        if (end > pos + idLen && s.compare(pos, idLen, id) == 0 &&
+            s[pos + idLen] == '=') {
+            return std::atoi(s.c_str() + pos + idLen + 1);
+        }
+        if (semi == std::string::npos) break;
+        pos = semi + 1;
+    }
+    return def;
+}
+
+// 引擎宽度合法区间：1..8（与 AuraAsioDriver::kMaxChannels 同值；
+// 匿名命名空间在类外，取字面量并在此注明来源）。
+int ClampEngineChannels(int ch) {
+    if (ch < 1) return 1;
+    if (ch > 8) return 8;
+    return ch;
+}
+
+}  // namespace
 
 AuraAsioDriver::AuraAsioDriver() {
     s_instanceCount.fetch_add(1, std::memory_order_relaxed);
@@ -140,8 +172,16 @@ void AuraAsioDriver::FinishEngineSetup() {
     if (!m_pendingParamString.empty()) {
         m_engineLoader.ApplyParamsString(m_engine, m_pendingParamString.c_str());
     }
-    // B2c：驱动为权威，钉死引擎通道档位（避免传输/处理步长不一致）
-    int nCh = (int)m_channels;
+    // W6：不再把 channels.count 钉成流宽——App 的 4.0/2.0 档位要让
+    // 引擎按窄宽度处理，宽度不一致由泵内 chmap 适配层承担（gather/
+    // fold/scatter）。参数串未下发时按流宽起步，避免引擎默认 2 声道
+    // 误读 8 宽流；参数串已下发则以 App 值为准（幂等重放一次）。
+    const int fromParams =
+        ParseParamInt(m_pendingParamString, "channels.count", 0);
+    m_engineCh = (fromParams > 0) ? ClampEngineChannels(fromParams)
+                                  : ClampEngineChannels((int)m_channels);
+    m_channelMode = ParseParamInt(m_pendingParamString, "channels.mode", 0);
+    int nCh = m_engineCh;
     m_engineLoader.SetParam(m_engine, "channels.count", &nCh, (uint32_t)sizeof(nCh));
 }
 
@@ -243,8 +283,11 @@ ASIOError AuraAsioDriver::createBuffers(ASIOBufferInfo* bufferInfos, long numCha
     const size_t multiBytes =
         (size_t)bufferSize * (size_t)kMaxChannels * sizeof(float);
     m_multiOut = static_cast<float*>(_aligned_malloc(multiBytes, 64));
+    // W6：宽度适配缓冲按上限一次分配，运行期切声道不再分配。
+    m_engIn = static_cast<float*>(_aligned_malloc(multiBytes, 64));
+    m_engOut = static_cast<float*>(_aligned_malloc(multiBytes, 64));
     if (!m_interleavedIn || !m_interleavedOut || !m_proc || !m_foldL ||
-        !m_foldR || !m_multiOut) {
+        !m_foldR || !m_multiOut || !m_engIn || !m_engOut) {
         disposeBuffers();
         return ASE_NoMemory;
     }
@@ -254,6 +297,8 @@ ASIOError AuraAsioDriver::createBuffers(ASIOBufferInfo* bufferInfos, long numCha
     memset(m_foldL, 0, pairBytes);
     memset(m_foldR, 0, pairBytes);
     memset(m_multiOut, 0, multiBytes);
+    memset(m_engIn, 0, multiBytes);
+    memset(m_engOut, 0, multiBytes);
 
     // 引擎句柄实例化（按协商后的采样率与缓冲大小创建）
     if (!m_engineLoader.IsLoaded()) {
@@ -336,6 +381,14 @@ ASIOError AuraAsioDriver::disposeBuffers() {
     if (m_multiOut) {
         _aligned_free(m_multiOut);
         m_multiOut = nullptr;
+    }
+    if (m_engIn) {
+        _aligned_free(m_engIn);
+        m_engIn = nullptr;
+    }
+    if (m_engOut) {
+        _aligned_free(m_engOut);
+        m_engOut = nullptr;
     }
 
     for (int c = 0; c < kMaxChannels; ++c) {
@@ -567,6 +620,18 @@ void AuraAsioDriver::PullParamsFromBlock() {
     if (m_params->writeSeq != s1) return;  // 拷贝期间写者又写一轮，下块重试
     m_lastParamSeq = s1;
     m_pendingParamString = snapshot;
+    // W6：参数串是引擎宽度的权威（App 的 4.0/2.0 档位经此到达
+    // DAW 进程内引擎）；串里没有时跟流宽，绝不让引擎沿用旧窄宽度
+    // 去误读更宽的流。
+    m_engineCh = ClampEngineChannels(
+        ParseParamInt(snapshot, "channels.count", (int)m_channels));
+    m_channelMode = ParseParamInt(snapshot, "channels.mode", 0);
+    // W7：端点序号变化即请求重开汇（reserved1[0]，旧 App 恒 0 不触发）。
+    const long epSeq = (long)m_params->reserved1[0];
+    if (epSeq != m_lastEndpointSeq) {
+        m_lastEndpointSeq = epSeq;
+        m_sinkReloadReq = true;
+    }
     m_paramsMuted = (mute != 0);
     m_bypass.store(bypass != 0, std::memory_order_relaxed);
     if (m_engine && !snapshot.empty()) {
@@ -672,6 +737,16 @@ DWORD AuraAsioDriver::PumpLoop() {
         // S4：参数块拉取（seq 未变时仅一次原子读，开销可忽略）。
         PullParamsFromBlock();
 
+        // W7：端点序号变化 → 块边界重开汇。重开会阻塞几十 ms
+        // （COM + Initialize），换输出设备本来就要断音，DAW 侧只
+        // 表现为一次 dropout；比"必须重开 DAW"好得多。
+        if (m_sinkReloadReq) {
+            m_sinkReloadReq = false;
+            m_wasapiSink.Close();
+            m_wasapiSink.Open();
+            PublishTelemetrySinkState();
+        }
+
         const long currentToggle = m_toggle;
         m_toggle = 1 - m_toggle;
 
@@ -679,6 +754,12 @@ DWORD AuraAsioDriver::PumpLoop() {
 
         // Phase 2 / Phase 3：提取对立半区（DAW 在上一个时钟周期已填毕的数据）
         const long ch = m_channels;
+        // W6：引擎宽度（channels.count 影子）。不等宽时走适配层，
+        // 等宽时保持零拷贝旧路径。
+        const int engCh = (m_engineCh >= 1 && m_engineCh <= (int)kMaxChannels)
+                              ? m_engineCh
+                              : (int)ch;
+        const bool widthAdapt = (engCh != (int)ch);
         const long playIndex = 1 - currentToggle;
 
         float telePeakIn = 0.0f, telePeakOut = 0.0f;
@@ -699,9 +780,46 @@ DWORD AuraAsioDriver::PumpLoop() {
                 // 遥测峰值随折叠归零、频谱走清零分支。
                 memset(m_proc, 0, (size_t)m_bufferSize * (size_t)ch * sizeof(float));
             } else if (m_engine && !m_bypass.load(std::memory_order_relaxed)) {
-                // 交织 DAW 输出送入 DSP 处理
-                m_engineLoader.Process(m_engine, m_interleavedIn, m_interleavedOut, (int)m_bufferSize, (int)m_channels);
-                memcpy(m_proc, m_interleavedOut, (size_t)m_bufferSize * (size_t)ch * sizeof(float));
+                // W6：流宽 ↔ 引擎宽适配。
+                //   离散（mode=1）：按 chmap_stream_pos 取声道，映射外
+                //     丢弃——4ch 引擎的 BL/BR 取自 8 宽流的 6/7，不会
+                //     把 C/LFE 误当 BL/BR（本轮 4.0 错位的根因）。
+                //   矩阵（mode=0）收窄：chmap_fold 折叠保能量（8→6 时
+                //     BL/BR 折进 SL/SR）。
+                //   矩阵扩张：按布局放置，静音槽交给引擎上混/填充。
+                const float* engIn = m_interleavedIn;
+                float* engOut = m_interleavedOut;
+                if (widthAdapt) {
+                    if (m_channelMode != 0) {
+                        chmap_gather_discrete(m_interleavedIn, (int)ch,
+                                              m_engIn, engCh,
+                                              (int)m_bufferSize);
+                    } else if (engCh < (int)ch) {
+                        chmap_fold(m_interleavedIn, (int)ch, m_engIn, engCh,
+                                   (int)m_bufferSize);
+                    } else {
+                        chmap_scatter_discrete(m_interleavedIn, (int)ch,
+                                               m_engIn, engCh,
+                                               (int)m_bufferSize);
+                    }
+                    engIn = m_engIn;
+                    engOut = m_engOut;
+                }
+                m_engineLoader.Process(m_engine, engIn, engOut,
+                                       (int)m_bufferSize, engCh);
+                if (!widthAdapt) {
+                    memcpy(m_proc, engOut,
+                           (size_t)m_bufferSize * (size_t)ch * sizeof(float));
+                } else if (m_channelMode == 0 && engCh > (int)ch) {
+                    // 上混后的宽引擎输出折回窄流
+                    chmap_fold(engOut, engCh, m_proc, (int)ch,
+                               (int)m_bufferSize);
+                } else {
+                    // 引擎窄：按布局放回流（离散与矩阵同口径；scatter
+                    // 整帧先清零，未被引擎覆盖的流声道保持静音）。
+                    chmap_scatter_discrete(engOut, engCh, m_proc, (int)ch,
+                                           (int)m_bufferSize);
+                }
                 m_dspProcessedFrames.fetch_add((uint64_t)m_bufferSize, std::memory_order_relaxed);
             } else {
                 // 旁路直通（或未加载引擎时安全透传）
@@ -763,6 +881,10 @@ DWORD AuraAsioDriver::PumpLoop() {
             // S3 遥测峰值：入 = DAW 原始块 ch0/1，出 = 处理后立体声折。
             // r65 v3：同一循环顺带逐声道峰值——入取交织原始块、出
             // 取折叠前的处理结果；旧单值口径原样保留（面板兼容）。
+            // W6：逐声道峰值改按**引擎声道序**上报——UI 按 channels.count
+            // 显示 N 槽、标签取引擎布局，数据必须同序。4ch 引擎的 BL/BR
+            // 在 8 宽流里位于 6/7，直接取流前 4 位会把 C/LFE 显示成
+            // BL/BR（本轮 4.0 实测错位的直接原因）。
             for (long i = 0; i < m_bufferSize; ++i) {
                 const float a0 = std::abs(m_interleavedIn[i * ch + 0]);
                 const float a1 =
@@ -773,10 +895,14 @@ DWORD AuraAsioDriver::PumpLoop() {
                 const float o1 = std::abs(m_foldR[i]);
                 if (o0 > telePeakOut) telePeakOut = o0;
                 if (o1 > telePeakOut) telePeakOut = o1;
-                for (long c = 0; c < ch && c < 8; ++c) {
-                    const float ai = std::abs(m_interleavedIn[i * ch + c]);
+                for (int c = 0; c < engCh && c < 8; ++c) {
+                    const int pos = chmap_stream_pos(engCh, (int)ch, c);
+                    if (pos >= (int)ch) continue;
+                    const float ai =
+                        std::abs(m_interleavedIn[(size_t)i * (size_t)ch + pos]);
                     if (ai > telePeakInCh[c]) telePeakInCh[c] = ai;
-                    const float ao = std::abs(m_proc[i * ch + c]);
+                    const float ao =
+                        std::abs(m_proc[(size_t)i * (size_t)ch + pos]);
                     if (ao > telePeakOutCh[c]) telePeakOutCh[c] = ao;
                 }
             }

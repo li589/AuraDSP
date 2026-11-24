@@ -62,6 +62,9 @@ struct AsioDriverParamsBlock {
     volatile long bypass;    // 0 = 处理中，1 = 旁路
     uint32_t payloadBytes;   // payload 有效字节数（不含 NUL）
     volatile long mute;      // 1 = 链路总闸静音（原 reserved0）
+    // reserved1[0]（offset 24，Dart i32[6]）自 W7 起为输出端点序号：
+    // App 每次切换 RenderEndpoint 递增；驱动泵看到变化即 Close/Open
+    // WASAPI 汇（Open 内重读注册表），免重开 DAW。旧 App 恒 0 不触发。
     uint32_t reserved1[10];  // 凑 payload 偏移至 64
     // char payload[PAYLOAD_CAP + 1]：NUL 结尾的 UTF-8 参数串，
     // 位于偏移 ASIO_DRIVER_PARAMS_PAYLOAD_OFFSET。
