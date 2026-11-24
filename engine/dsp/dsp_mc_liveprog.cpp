@@ -100,6 +100,8 @@ void mc_slot_init_vm(McLiveProgHost* host, McSlot* s) {
     s->snapNumCh = host->channels;
     s->vm = NSEEL_VM_alloc();
     if (!s->vm) return; /* OOM：槽不可用，编译时自然跳过 */
+    /* P-053（2026-11-24 审查 H1）：拒绝 sleep 等阻塞内建（编译期校验）。 */
+    NSEEL_VM_SetFunctionValidator(s->vm, NSEEL_aura_default_validator, nullptr);
     s->vmFs = NSEEL_VM_regvar(s->vm, "srate");
     if (s->vmFs) *s->vmFs = host->fs;
     s->vmDevFs = NSEEL_VM_regvar(s->vm, "dev_srate");

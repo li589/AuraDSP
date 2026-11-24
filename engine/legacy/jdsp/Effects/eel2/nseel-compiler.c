@@ -7855,6 +7855,15 @@ void NSEEL_VM_SetFunctionValidator(NSEEL_VMCTX _ctx, const char * (*validateFunc
 		ctx->func_check_user = user;
 	}
 }
+/* [PATCHED-AuraDSP P-053] 默认校验器实现：sleep() 在音频/控制线程上
+ * 无条件阻塞（内建上限 3e7 ms），宿主一律编译期拒绝；其余放行。 */
+const char *NSEEL_aura_default_validator(const char *fn_name, void *user)
+{
+	(void)user;
+	if (fn_name && !strcmp(fn_name, "sleep"))
+		return "function disabled by host (blocking)";
+	return NULL;
+}
 void NSEEL_VM_free(NSEEL_VMCTX _ctx) // free when done with a VM and ALL of its code have been freed, as well
 {
 	if (_ctx)

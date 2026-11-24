@@ -180,5 +180,36 @@ p_slider = peak()
 print("9) @slider section runtime exec: out_peak=%.4f (expect 0.60)" % p_slider)
 assert abs(p_slider - 0.60) < 0.01, p_slider
 
+# 10) [P-053] 执行预算与阻塞内建拒绝（2026-11-24 审查 H1）
+import time as _time
+# 10a) sleep() 编译期拒绝（校验器）：status 不得为 1
+rc = set_str("liveprog.code", "@init\nsleep(1000);\n@sample\nspl0 = spl0;")
+st = get_i("liveprog.status")
+print("10a) sleep rejected at compile: rc=%d status=%d" % (rc, st))
+assert st != 1, "sleep() must be rejected at compile time"
+# 10b) loop(2000000000) 在 @sample：预算强制截断，process 迅速返回
+# 且通路存活（无预算时本用例等于事实挂死，不设超时即门禁自证）。
+assert set_str("liveprog.code",
+               "@sample\nloop(2000000000, x += 1);\nspl0 *= 0.5;\nspl1 *= 0.5;") == 0
+assert set_i("liveprog.enable", 1) == 0
+for i in range(N*2): buf[i] = 0.3
+t0 = _time.time()
+for _ in range(3):
+    dll.auradsp_process(h, buf, out, N)
+dt = _time.time() - t0
+p10 = peak()
+print("10b) huge loop truncated: %.2fs for 3 blocks, peak=%.4f (expect 0.15)" % (dt, p10))
+assert dt < 10.0, dt
+assert abs(p10 - 0.15) < 0.01, p10
+# 10c) @init 大循环在预算内（300 万 < 400 万）应完整执行
+assert set_str("liveprog.code",
+               "@init\nx = 0;\nloop(3000000, x += 1);\n@sample\nspl0 = (x == 3000000) ? spl0 : 0;") == 0
+assert get_i("liveprog.status") == 1
+for i in range(N*2): buf[i] = 0.3
+dll.auradsp_process(h, buf, out, N)
+p10c = peak()
+print("10c) @init 3M loop completes: peak=%.4f (expect 0.30)" % p10c)
+assert abs(p10c - 0.30) < 0.01, p10c
+
 print("PASS: liveprog engine flow all OK")
 

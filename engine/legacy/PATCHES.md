@@ -1231,3 +1231,26 @@ yquist * 0.999，
   用例（gmem[2^24] 回绕落池头、gmem[-1] 读写自洽、进程存活；
   负索引具体落点随平台浮点→整数转换细节，不钉死）；既有
   [A]–[G] 不变。
+
+## P-053 jdsp/Effects/eel2 + 两宿主 — EEL 执行预算与阻塞内建拒绝（审查 H1，2026-11-24）
+
+- **问题**：脚本执行无任何时间/指令预算：`while` 上限 2^24、
+  `loop(n)` 计数不钳（`loop(2000000000)` 近乎永久挂起），单个样本
+  内即可把 RT 线程事实挂死；`sleep()` 无条件注册（上限 3e7 ms），
+  两宿主从未调 `NSEEL_VM_SetFunctionValidator`。
+- **修法**：① 解释器 `GLUE_CALL_CODE`（glue_port.h）加单次 execute
+  循环迭代总预算 4,000,000：LOOP_END/WHILE_END 每迭代扣减，耗尽
+  即按自然退出路径离环（栈清理同口径）——嵌套循环共享同一预算，
+  恶意脚本最坏把单块拖慢数十毫秒级而非挂死，合法脚本（逐样本小
+  循环、@init 数百万级表初始化）不受影响；② eel2 提供默认校验器
+  `NSEEL_aura_default_validator`（nseel-compiler.c / ns-eel.h），
+  编译期拒绝 `sleep`；立体声宿主（liveprogWrapper.c）与 MC 宿主
+  （engine/dsp/dsp_mc_liveprog.cpp，非 legacy 侧只加注册一行）
+  在 VM 创建后统一注册。
+- **残留**：内建函数内部的长循环（如 memset 超大 len 的分块拷贝）
+  不经解释器预算，属带宽型消耗而非挂死，未在本号处理；EEL 编译
+  详细错误宿主仍未读取（P-003 既有欠账），sleep 拒绝在宿主侧
+  表现为编译失败（status≠1）。
+- **验收**：`test/smoke/smoke_liveprog.py` 新增第 10 节：sleep
+  编译拒绝、@sample 中 loop(2000000000) 被截断且 process 迅速
+  返回通路存活、@init 300 万次循环在预算内完整执行。

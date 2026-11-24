@@ -80,6 +80,9 @@ NSEEL_VMCTX NSEEL_VM_alloc(); // return a handle
 void NSEEL_VM_free(NSEEL_VMCTX ctx); // free when done with a VM and ALL of its code have been freed, as well
 // validateFunc can return error message if not permitted
 void NSEEL_VM_SetFunctionValidator(NSEEL_VMCTX, const char * (*validateFunc)(const char *fn_name, void *user), void *user);
+/* [PATCHED-AuraDSP P-053] 宿主默认函数校验器：拒绝 sleep 等阻塞内建
+ * （返回非 NULL 即编译期拒绝，错误串进 last_error_string）。 */
+const char *NSEEL_aura_default_validator(const char *fn_name, void *user);
 void NSEEL_VM_remove_unused_vars(NSEEL_VMCTX _ctx);
 void NSEEL_VM_clear_var_refcnts(NSEEL_VMCTX _ctx);
 void NSEEL_VM_remove_all_nonreg_vars(NSEEL_VMCTX _ctx);

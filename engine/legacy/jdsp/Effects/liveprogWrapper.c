@@ -101,6 +101,8 @@ static void LiveProgSlotInitVM(LiveProg *pg, float fs, float devFs, int numCh)
 	pg->vm = NSEEL_VM_alloc(); // create virtual machine
 	if (!pg->vm)
 		return; /* OOM：槽不可用，编译时自然跳过 */
+	/* [PATCHED-AuraDSP P-053] 拒绝 sleep 等阻塞内建（编译期校验）。 */
+	NSEEL_VM_SetFunctionValidator(pg->vm, NSEEL_aura_default_validator, NULL);
 	pg->vmFs = NSEEL_VM_regvar(pg->vm, "srate");
 	if (pg->vmFs)
 		*pg->vmFs = fs;

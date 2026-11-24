@@ -420,6 +420,12 @@ static void GLUE_CALL_CODE(INT_PTR bp, INT_PTR cp, INT_PTR rt)
 #define fp_rewind(x) (_fpstacktop -= (x))
   float fpstack[GLUE_MAX_FPSTACK_SIZE];
   float *_fpstacktop=fpstack-1;
+  /* [PATCHED-AuraDSP P-053] 单次 execute 的循环迭代总预算：loop/while
+   * 每次迭代在 LOOP_END/WHILE_END 处扣减，耗尽即强制退出该循环。
+   * 防恶意/失误脚本（loop(2000000000)、while 死循环）把音频线程
+   * 事实挂死；400 万次简单迭代约数十毫秒级，合法脚本（逐样本小
+   * 循环、@init 表初始化）远低于此。 */
+  int32_t aura_iter_budget = 4000000;
   for (;;)
   {
     EEL_BC_TYPE inst = *(EEL_BC_TYPE *)iptr;
@@ -569,7 +575,7 @@ static void GLUE_CALL_CODE(INT_PTR bp, INT_PTR cp, INT_PTR rt)
       break;
       case EEL_BC_LOOP_END:
         wtp = *(void **) (stackptr);
-        if (--(*(int32_t *)(stackptr+EEL_BC_STACK_POP_SIZE)) <= 0)
+        if (--(*(int32_t *)(stackptr+EEL_BC_STACK_POP_SIZE)) <= 0 || --aura_iter_budget < 0) /* [PATCHED-AuraDSP P-053] */
         {
           stackptr += EEL_BC_STACK_POP_SIZE*2;
           iptr += sizeof(GLUE_JMP_TYPE);
@@ -588,7 +594,7 @@ static void GLUE_CALL_CODE(INT_PTR bp, INT_PTR cp, INT_PTR rt)
       case EEL_BC_WHILE_END:
         wtp = *(float **) stackptr;
         EEL_BC_STACK_POP();
-		if (--(*(int32_t *)stackptr) <= 0)
+		if (--(*(int32_t *)stackptr) <= 0 || --aura_iter_budget < 0) /* [PATCHED-AuraDSP P-053] */
 		{
 			EEL_BC_STACK_POP();
 			iptr += sizeof(GLUE_JMP_TYPE) + *(GLUE_JMP_TYPE *)iptr; // endpt
