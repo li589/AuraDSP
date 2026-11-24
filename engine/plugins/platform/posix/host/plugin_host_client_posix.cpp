@@ -483,8 +483,17 @@ bool PluginHostClient::load(uint32_t slot, const std::string& path,
         return false;
     }
     std::memcpy(&outInfo, body.data(), sizeof(outInfo));
+    /* [审查 M8 2026-11-24] 九字符串字段全补 NUL 终止，与 Win32 侧
+     * plugin_host_client.cpp load() 同口径：此前 POSIX 只补 3 个，
+     * 畸形/旧版宿主把字段填满时引擎侧按 C 串读会越字段。 */
     outInfo.path[sizeof(outInfo.path) - 1] = '\0';
+    outInfo.id[sizeof(outInfo.id) - 1] = '\0';
     outInfo.name[sizeof(outInfo.name) - 1] = '\0';
+    outInfo.bundleName[sizeof(outInfo.bundleName) - 1] = '\0';
+    outInfo.vendor[sizeof(outInfo.vendor) - 1] = '\0';
+    outInfo.version[sizeof(outInfo.version) - 1] = '\0';
+    outInfo.category[sizeof(outInfo.category) - 1] = '\0';
+    outInfo.description[sizeof(outInfo.description) - 1] = '\0';
     outInfo.errorMessage[sizeof(outInfo.errorMessage) - 1] = '\0';
     outError = outInfo.errorMessage;
     return true;
