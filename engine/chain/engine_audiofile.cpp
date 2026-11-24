@@ -21,6 +21,10 @@
 namespace {
 
 constexpr size_t kMaxMp3Bytes = 64u * 1024u * 1024u;
+/* 审查 L17：解码帧数硬顶（1<<25 帧 ≈ 12.7 分钟@44.1k，立体声 float
+ * 解码缓冲 ≤256MiB）。只有输入字节上限时，低码率长文件可让 drmp3
+ * 尝试分配数 GB；解码前先 init 探帧数、超顶直接拒绝。 */
+constexpr uint64_t kMaxMp3Frames = 1ull << 25;
 
 /* 二进制整文件读入（UTF-8 路径经平台端口；成功返回 malloc 缓冲 + 大小）。 */
 unsigned char* read_bin_file(const char* utf8path, size_t* out_size) {
@@ -61,6 +65,17 @@ float* auradsp_decode_audio_file(const char* utf8path, int* out_rate, uint64_t* 
     size_t size = 0;
     unsigned char* bytes = read_bin_file(utf8path, &size);
     if (!bytes) return nullptr;
+    {
+        drmp3 probe;
+        if (drmp3_init_memory(&probe, bytes, size, nullptr)) {
+            const drmp3_uint64 est = drmp3_get_pcm_frame_count(&probe);
+            drmp3_uninit(&probe);
+            if (est > kMaxMp3Frames) {
+                free(bytes);
+                return nullptr;
+            }
+        }
+    }
     drmp3_config cfg;
     cfg.channels = 2; /* 恒输出 stereo interleave（单声道源自动双声道复制） */
     cfg.sampleRate = 0; /* 保持源采样率（Dart FileSource 按 ratio 重采样播放） */

@@ -293,6 +293,7 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
      * 会直接踩空；一次分支换内存安全（RT 开销可忽略）。 */
     if (!h || !in || !out || !h->open.load(std::memory_order_acquire) || frames <= 0) return;
     /* 内存安全防御：防御驱动层 frames > max_block 导致的 scratch 堆缓冲区溢出 */
+    const int frames_in = frames;
     if (frames > h->max_block) frames = h->max_block;
     /* E-03：给控制侧延迟计算留一个无竞争的设备域块长快照。 */
     h->lat_block_frames.store(frames, std::memory_order_relaxed);
@@ -312,6 +313,12 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
     /* [ADR-003 Phase A] 多声道：先把 M 声道下混成立体声，处理完再上混回 M。
      * ch<=2 时整段跳过，立体声路径与改造前逐字节一致。 */
     const int ch = h->channel_count.load(std::memory_order_relaxed);
+    /* 审查 L4：截断后输出尾部清零——尾部不在处理范围内，违规调用方
+     * 读到的是旧数据而非本块结果；ch 已知后、任一处理分支之前执行。 */
+    if (frames_in > frames) {
+        std::memset(out + (size_t)frames * (size_t)ch, 0,
+                    (size_t)(frames_in - frames) * (size_t)ch * sizeof(float));
+    }
     const bool multichannel = (ch > 2);
     h->last_block_ch = ch;   /* [Phase B] emit_viz 填 channel_count；与 ch_out_peak 同块同源 */
 

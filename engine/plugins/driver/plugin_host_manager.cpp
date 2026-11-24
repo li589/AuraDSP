@@ -825,6 +825,19 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
                 s.latency.store(s.instance->getLatency(),
                                 std::memory_order_relaxed);
             }
+            /* [审查 L6 2026-11-25] 交错/remote 路径补与平面路径同口径的
+             * NaN/Inf 清洗：guarded 调用直写 interleaved，此前毒化样本
+             * 可穿过本路径传播到下游（现行宿主虽在宿主侧清洗，引擎侧
+             * 不得依赖对端实现）。 */
+            for (uint32_t ch = 0; ch < channels; ++ch) {
+                if (!(mask & (1u << ch))) continue;
+                for (uint32_t i = 0; i < numFrames; ++i) {
+                    float& v = interleaved[i * channels + ch];
+                    if (!std::isfinite(v)) v = 0.0f;
+                    else if (v > 10.0f) v = 10.0f;
+                    else if (v < -10.0f) v = -10.0f;
+                }
+            }
         }
         if (sampleTelemetry) {
             for (uint32_t ch = 0; ch < channels; ++ch) {

@@ -502,6 +502,15 @@ public:
             return;
         }
 
+        /* [审查 L9 2026-11-25] numFrames 超 activate 期 scratch 时
+         * fallback 缓冲为空指针、会被当声道缓冲交给插件；入口硬门
+         * 直通（生产链路由 manager 前置拦截，此门守直调/遗留 ABI）。 */
+        if (numFrames > m_zeroBuffer.size() ||
+            numFrames > m_discardBuffer.size()) {
+            copyThrough(inChannels, outChannels, numFrames, chHint);
+            return;
+        }
+
         float* inputs[kMaxPluginChannels] = {};
         float* outputs[kMaxPluginChannels] = {};
         const float* fallbackZero = (m_zeroBuffer.size() >= numFrames) ? m_zeroBuffer.data() : nullptr;
