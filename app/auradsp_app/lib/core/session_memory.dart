@@ -269,11 +269,11 @@ abstract final class SessionMemory {
       // 可视化配置（2026-10-31）：会话快照优先于 config.json，
       // 兼容旧会话（无该键 → 保持 config 已加载的值）。
       if (session['visualizerPerStyle'] is Map) {
-        final perStyle = <String, VisualizerConfig>{};
+        final perStyle = <String, VisualizerStyleOverride>{};
         for (final e
             in (session['visualizerPerStyle'] as Map).entries) {
           if (e.key is String && e.value is Map) {
-            perStyle[e.key as String] = VisualizerConfig.fromJson(
+            perStyle[e.key as String] = VisualizerStyleOverride.fromJson(
                 Map<String, dynamic>.from(e.value as Map));
           }
         }

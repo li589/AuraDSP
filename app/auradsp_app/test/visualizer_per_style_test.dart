@@ -77,18 +77,87 @@ void main() {
       expect(m.visualizerHasStyleOverride, isFalse);
     });
 
-    test('覆盖表随 config JSON 往返不丢', () {
+    test('覆盖表随 config JSON 往返不丢（稀疏形态）', () {
       final cfg = AppConfig(
         visualizerPerStyle: {
-          'bars': const VisualizerConfig().copyWith(bloom: 0.9),
-          'tornado': const VisualizerConfig().copyWith(barCount: 64),
+          'bars': const VisualizerStyleOverride(bloom: 0.9),
+          'tornado': const VisualizerStyleOverride(barCount: 64),
         },
       );
       final json = cfg.toJson();
       final back = AppConfig.fromJson(json);
       expect(back.visualizerPerStyle.length, 2);
       expect(back.visualizerPerStyle['bars']!.bloom, 0.9);
+      expect(back.visualizerPerStyle['bars']!.sensitivity, isNull);
       expect(back.visualizerPerStyle['tornado']!.barCount, 64);
+    });
+
+    test('稀疏覆盖：只改过的字段冻结，其余跟随全局（审查 Dart-F2）', () {
+      final m = AppModel(testing: true);
+      // 预设档只动灵敏度
+      m.setVisualizerStyleOverride(
+        m.visualizerConfig.value.copyWith(sensitivity: 2.2),
+      );
+      // 存储层只记灵敏度一字段
+      final entry = m.config.visualizerPerStyle['bars']!;
+      expect(entry.sensitivity, 2.2);
+      expect(entry.gravity, isNull);
+      expect(entry.bloom, isNull);
+      // 之后全局改重力：该风格跟随（旧整份快照实现会静默失效）
+      m.setVisualizerConfig(
+        m.config.visualizerConfig.copyWith(gravity: 2.6),
+      );
+      expect(m.visualizerConfig.value.gravity, 2.6);
+      expect(m.visualizerConfig.value.sensitivity, 2.2); // 覆盖仍在
+    });
+
+    test('覆盖值与全局相同则不留条目', () {
+      final m = AppModel(testing: true);
+      m.setVisualizerStyleOverride(
+        m.visualizerConfig.value.copyWith(sensitivity: 2.2),
+      );
+      expect(m.visualizerHasStyleOverride, isTrue);
+      // 预设档把灵敏度改回全局值 → diff 为空、条目消失
+      m.setVisualizerStyleOverride(
+        m.visualizerConfig.value.copyWith(sensitivity: 1.0),
+      );
+      expect(m.visualizerHasStyleOverride, isFalse);
+    });
+
+    test('全局档整份编辑不烤入覆盖值（applyVisualizerEdit）', () {
+      final m = AppModel(testing: true);
+      m.setVisualizerStyleOverride(
+        m.visualizerConfig.value.copyWith(sensitivity: 2.2),
+      ); // bars 覆盖灵敏度 2.2（生效值）
+      // 全局档以生效值为基底只改重力
+      m.applyVisualizerEdit(
+        m.visualizerConfig.value.copyWith(gravity: 2.6),
+      );
+      // 全局只落重力；灵敏度全局仍 1.0、覆盖仍 2.2
+      expect(m.config.visualizerConfig.gravity, 2.6);
+      expect(m.config.visualizerConfig.sensitivity, 1.0);
+      expect(m.visualizerConfig.value.sensitivity, 2.2);
+      expect(m.visualizerConfig.value.gravity, 2.6);
+    });
+
+    test('旧档整份快照 JSON 读入后在场字段视为覆盖', () {
+      final cfg = AppConfig.fromJson({
+        'visualizer': {
+          'style': 'bars',
+          'perStyle': {
+            'bars': {
+              'style': 'bars',
+              'colorTheme': 'system',
+              'sensitivity': 1.0,
+              'bloom': 0.9,
+              'showLyrics': true,
+            },
+          },
+        },
+      });
+      final entry = cfg.visualizerPerStyle['bars']!;
+      expect(entry.bloom, 0.9);
+      expect(entry.sensitivity, 1.0); // 在场即覆盖（生效行为不变）
     });
 
     test('脏覆盖表条目逐条跳过不丢整表', () {

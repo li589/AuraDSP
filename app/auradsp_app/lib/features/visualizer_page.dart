@@ -160,7 +160,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
   void _toggleLyrics() {
     final cfg = widget.model.visualizerConfig.value;
     // 启停媒体监听由 _onVisualizerConfigChanged 统一响应（预设/会话同路径）
-    widget.model.setVisualizerConfig(cfg.copyWith(showLyrics: !cfg.showLyrics));
+    widget.model.applyVisualizerEdit(cfg.copyWith(showLyrics: !cfg.showLyrics));
   }
 
   /// 手动加载本地 LRC 文件（在线检索无结果或离线曲目时的兜底）。
@@ -209,7 +209,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
         _milkdropPresets = [preset, ..._milkdropPresets];
       }
     });
-    widget.model.setVisualizerConfig(
+    widget.model.applyVisualizerEdit(
       cfg.copyWith(
         style: VisualizerStyle.projectM,
         milkdropPresetPath: path,
@@ -236,7 +236,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
       setState(() {
         _milkdropPresets = presets;
       });
-      widget.model.setVisualizerConfig(
+      widget.model.applyVisualizerEdit(
         cfg.copyWith(
           style: VisualizerStyle.projectM,
           milkdropPresetPath: presets.first.filePath,
@@ -431,7 +431,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
                             config: config,
                             displayMode: _displayMode,
                             onStyleChanged: (st) => widget.model
-                                .setVisualizerConfig(config.copyWith(style: st)),
+                                .applyVisualizerEdit(config.copyWith(style: st)),
                             onToggleStageMode: _toggleStageMode,
                             onDisplayModeChanged: _applyDisplayMode,
                             onToggleLyrics: _toggleLyrics,
@@ -442,7 +442,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
                             milkdropPresets: _milkdropPresets,
                             onSelectMilkdropPreset: (preset) {
                               final cfg = widget.model.visualizerConfig.value;
-                              widget.model.setVisualizerConfig(
+                              widget.model.applyVisualizerEdit(
                                 cfg.copyWith(
                                   style: VisualizerStyle.projectM,
                                   milkdropPresetPath: preset.filePath,
@@ -504,7 +504,9 @@ class _VisualizerPageState extends State<VisualizerPage> {
               if (_vizScopePreset) {
                 widget.model.setVisualizerStyleOverride(newCfg);
               } else {
-                widget.model.setVisualizerConfig(newCfg);
+                // [审查 Dart-F2] 全局档以原始全局为基底施加
+                // 改动字段，避免当前风格覆盖值被烤进全局。
+                widget.model.applyVisualizerEdit(newCfg);
               }
             },
             onClose: _closeDrawer,
@@ -525,7 +527,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
             milkdropPresets: _milkdropPresets,
             onSelectMilkdropPreset: (preset) {
               final cfg = widget.model.visualizerConfig.value;
-              widget.model.setVisualizerConfig(
+              widget.model.applyVisualizerEdit(
                 cfg.copyWith(
                   style: VisualizerStyle.projectM,
                   milkdropPresetPath: preset.filePath,

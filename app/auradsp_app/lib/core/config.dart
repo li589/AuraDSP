@@ -118,7 +118,7 @@ class AppConfig {
   /// VisualizerStyle.id，只替换调参字段（配色/灵敏度/衰减/重力/
   /// 柱数/线宽/辉光/网格/峰值/dB 刻度）；风格、歌词与 MilkDrop
   /// 路径恒归全局 [visualizerConfig]。抽屉「当前预设」档写入。
-  Map<String, VisualizerConfig> visualizerPerStyle;
+  Map<String, VisualizerStyleOverride> visualizerPerStyle;
 
   AppConfig({
     this.sampleRate = 48000,
@@ -164,7 +164,7 @@ class AppConfig {
     this.pluginScanDirsSeeded = false,
     List<String>? customScriptDirs,
     VisualizerConfig? visualizerConfig,
-    Map<String, VisualizerConfig>? visualizerPerStyle,
+    Map<String, VisualizerStyleOverride>? visualizerPerStyle,
   })  : modeCategory = modeCategory ?? AudioModes.categoryForMode(audioMode),
         attachmentMode = attachmentMode ??
             ((audioMode == 'vbcallback' || audioMode == 'voicemeeter_api')
@@ -264,16 +264,16 @@ class AppConfig {
   }
 
   /// 每方案覆盖表解析：visualizer 节的 perStyle 子表，键为风格
-  /// id、值为一份完整 VisualizerConfig JSON（合并时只取调参
-  /// 字段）。坏条目逐条跳过。
-  static Map<String, VisualizerConfig> _readVisualizerPerStyle(
+  /// id、值为稀疏覆盖 JSON（只含被改过的调参字段）。旧档整份
+  /// 快照 JSON 同样可读（在场调参字段视为覆盖）。坏条目逐条跳过。
+  static Map<String, VisualizerStyleOverride> _readVisualizerPerStyle(
       Map<String, dynamic> viz) {
-    final out = <String, VisualizerConfig>{};
+    final out = <String, VisualizerStyleOverride>{};
     final raw = viz['perStyle'];
     if (raw is Map) {
       for (final e in raw.entries) {
         if (e.key is String && e.value is Map) {
-          out[e.key as String] = VisualizerConfig.fromJson(
+          out[e.key as String] = VisualizerStyleOverride.fromJson(
               Map<String, dynamic>.from(e.value as Map));
         }
       }

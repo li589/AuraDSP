@@ -1655,7 +1655,7 @@ abstract final class ParamRegistry {
     type: ParamType.string, defaultValue: 'bars',
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.style.id,
-    setter: (m, v) => m.setVisualizerConfig(
+    setter: (m, v) => m.applyVisualizerEdit(
         m.visualizerConfig.value.copyWith(style: VisualizerStyle.fromId(v))),
   );
   static final vizColorTheme = ParamSpec<String>(
@@ -1663,7 +1663,7 @@ abstract final class ParamRegistry {
     type: ParamType.string, defaultValue: 'system',
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.colorTheme.id,
-    setter: (m, v) => m.setVisualizerConfig(m.visualizerConfig.value
+    setter: (m, v) => m.applyVisualizerEdit(m.visualizerConfig.value
         .copyWith(colorTheme: VisualizerColorTheme.fromId(v))),
   );
   static final vizSensitivity = ParamSpec<double>(
@@ -1671,7 +1671,7 @@ abstract final class ParamRegistry {
     type: ParamType.float, defaultValue: 1.0, min: 0.2, max: 3.0, step: 0.1,
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.sensitivity,
-    setter: (m, v) => m.setVisualizerConfig(
+    setter: (m, v) => m.applyVisualizerEdit(
         m.visualizerConfig.value.copyWith(sensitivity: v)),
   );
   static final vizDecayRate = ParamSpec<double>(
@@ -1679,7 +1679,7 @@ abstract final class ParamRegistry {
     type: ParamType.float, defaultValue: 0.6, min: 0.1, max: 0.95,
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.decayRate,
-    setter: (m, v) => m.setVisualizerConfig(
+    setter: (m, v) => m.applyVisualizerEdit(
         m.visualizerConfig.value.copyWith(decayRate: v)),
   );
   static final vizGravity = ParamSpec<double>(
@@ -1687,7 +1687,7 @@ abstract final class ParamRegistry {
     type: ParamType.float, defaultValue: 1.8, min: 0.5, max: 4.0,
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.gravity,
-    setter: (m, v) => m.setVisualizerConfig(
+    setter: (m, v) => m.applyVisualizerEdit(
         m.visualizerConfig.value.copyWith(gravity: v)),
   );
   static final vizBarCount = ParamSpec<int>(
@@ -1695,7 +1695,7 @@ abstract final class ParamRegistry {
     type: ParamType.int32, defaultValue: 32, min: 32, max: 64,
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.barCount,
-    setter: (m, v) => m.setVisualizerConfig(
+    setter: (m, v) => m.applyVisualizerEdit(
         m.visualizerConfig.value.copyWith(barCount: v)),
   );
   static final vizLineWidth = ParamSpec<double>(
@@ -1703,7 +1703,7 @@ abstract final class ParamRegistry {
     type: ParamType.float, defaultValue: 1.5, min: 0.8, max: 3.5,
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.lineWidth,
-    setter: (m, v) => m.setVisualizerConfig(
+    setter: (m, v) => m.applyVisualizerEdit(
         m.visualizerConfig.value.copyWith(lineWidth: v)),
   );
   static final vizBloom = ParamSpec<double>(
@@ -1711,7 +1711,7 @@ abstract final class ParamRegistry {
     type: ParamType.float, defaultValue: 0.5, min: 0.0, max: 1.0,
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.bloom,
-    setter: (m, v) => m.setVisualizerConfig(
+    setter: (m, v) => m.applyVisualizerEdit(
         m.visualizerConfig.value.copyWith(bloom: v)),
   );
   static final vizShowGrid = ParamSpec<bool>(
@@ -1719,7 +1719,7 @@ abstract final class ParamRegistry {
     type: ParamType.boolean, defaultValue: true,
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.showGrid,
-    setter: (m, v) => m.setVisualizerConfig(
+    setter: (m, v) => m.applyVisualizerEdit(
         m.visualizerConfig.value.copyWith(showGrid: v)),
   );
   static final vizShowPeaks = ParamSpec<bool>(
@@ -1727,7 +1727,7 @@ abstract final class ParamRegistry {
     type: ParamType.boolean, defaultValue: true,
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.showPeaks,
-    setter: (m, v) => m.setVisualizerConfig(
+    setter: (m, v) => m.applyVisualizerEdit(
         m.visualizerConfig.value.copyWith(showPeaks: v)),
   );
   static final vizShowDbScale = ParamSpec<bool>(
@@ -1735,7 +1735,7 @@ abstract final class ParamRegistry {
     type: ParamType.boolean, defaultValue: true,
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.showDbScale,
-    setter: (m, v) => m.setVisualizerConfig(
+    setter: (m, v) => m.applyVisualizerEdit(
         m.visualizerConfig.value.copyWith(showDbScale: v)),
   );
   static final vizShowLyrics = ParamSpec<bool>(
@@ -1743,7 +1743,7 @@ abstract final class ParamRegistry {
     type: ParamType.boolean, defaultValue: false,
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.showLyrics,
-    setter: (m, v) => m.setVisualizerConfig(
+    setter: (m, v) => m.applyVisualizerEdit(
         m.visualizerConfig.value.copyWith(showLyrics: v)),
   );
   static final vizShowTranslation = ParamSpec<bool>(
@@ -1751,7 +1751,7 @@ abstract final class ParamRegistry {
     type: ParamType.boolean, defaultValue: true,
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.showTranslation,
-    setter: (m, v) => m.setVisualizerConfig(
+    setter: (m, v) => m.applyVisualizerEdit(
         m.visualizerConfig.value.copyWith(showTranslation: v)),
   );
   static final vizLyricsSource = ParamSpec<String>(
@@ -1759,7 +1759,7 @@ abstract final class ParamRegistry {
     type: ParamType.string, defaultValue: 'auto',
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.lyricsSource.id,
-    setter: (m, v) => m.setVisualizerConfig(m.visualizerConfig.value
+    setter: (m, v) => m.applyVisualizerEdit(m.visualizerConfig.value
         .copyWith(lyricsSource: LyricsSource.fromId(v))),
   );
   static final vizMilkdropPresetPath = ParamSpec<String>(
@@ -1767,7 +1767,7 @@ abstract final class ParamRegistry {
     type: ParamType.string, defaultValue: '',
     category: ParamCategory.hidden,
     getter: (m) => m.visualizerConfig.value.milkdropPresetPath ?? '',
-    setter: (m, v) => m.setVisualizerConfig(v.isEmpty
+    setter: (m, v) => m.applyVisualizerEdit(v.isEmpty
         ? m.visualizerConfig.value.copyWith(clearMilkdropPresetPath: true)
         : m.visualizerConfig.value.copyWith(milkdropPresetPath: v)),
   );

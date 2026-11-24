@@ -454,6 +454,125 @@ class VisualizerConfig {
       );
 }
 
+/// 每风格稀疏覆盖（2026-11-23 r64 裁定；2026-11-24 审查 Dart-F2
+/// 落地）：只记与全局不同的调参字段，null = 跟随全局。此前覆盖表
+/// 存整份生效快照——首次在预设档改任一滑块，该风格全部调参字段
+/// 即被冻结，之后全局改动对该风格静默失效、预设值也被挡住。
+/// 旧档整份 JSON 经 fromJson 读入时，在场调参字段一律视为覆盖
+/// （加载时生效行为不变），下次写入即收敛为稀疏形态。
+class VisualizerStyleOverride {
+  final VisualizerColorTheme? colorTheme;
+  final double? sensitivity;
+  final double? decayRate;
+  final double? gravity;
+  final int? barCount;
+  final double? lineWidth;
+  final double? bloom;
+  final bool? showGrid;
+  final bool? showPeaks;
+  final bool? showDbScale;
+
+  const VisualizerStyleOverride({
+    this.colorTheme,
+    this.sensitivity,
+    this.decayRate,
+    this.gravity,
+    this.barCount,
+    this.lineWidth,
+    this.bloom,
+    this.showGrid,
+    this.showPeaks,
+    this.showDbScale,
+  });
+
+  bool get isEmpty =>
+      colorTheme == null &&
+      sensitivity == null &&
+      decayRate == null &&
+      gravity == null &&
+      barCount == null &&
+      lineWidth == null &&
+      bloom == null &&
+      showGrid == null &&
+      showPeaks == null &&
+      showDbScale == null;
+
+  /// 写入端收敛：与当前全局逐字段 diff，只保留不同字段。
+  factory VisualizerStyleOverride.diff(
+      VisualizerConfig tuned, VisualizerConfig global) {
+    return VisualizerStyleOverride(
+      colorTheme: tuned.colorTheme != global.colorTheme ? tuned.colorTheme : null,
+      sensitivity: tuned.sensitivity != global.sensitivity ? tuned.sensitivity : null,
+      decayRate: tuned.decayRate != global.decayRate ? tuned.decayRate : null,
+      gravity: tuned.gravity != global.gravity ? tuned.gravity : null,
+      barCount: tuned.barCount != global.barCount ? tuned.barCount : null,
+      lineWidth: tuned.lineWidth != global.lineWidth ? tuned.lineWidth : null,
+      bloom: tuned.bloom != global.bloom ? tuned.bloom : null,
+      showGrid: tuned.showGrid != global.showGrid ? tuned.showGrid : null,
+      showPeaks: tuned.showPeaks != global.showPeaks ? tuned.showPeaks : null,
+      showDbScale: tuned.showDbScale != global.showDbScale ? tuned.showDbScale : null,
+    );
+  }
+
+  /// 合并端：非 null 字段替换全局，null 回落全局（copyWith 的
+  /// ?? 语义恰好实现回落）。
+  VisualizerConfig applyTo(VisualizerConfig global) {
+    return global.copyWith(
+      colorTheme: colorTheme,
+      sensitivity: sensitivity,
+      decayRate: decayRate,
+      gravity: gravity,
+      barCount: barCount,
+      lineWidth: lineWidth,
+      bloom: bloom,
+      showGrid: showGrid,
+      showPeaks: showPeaks,
+      showDbScale: showDbScale,
+    );
+  }
+
+  /// 只写非 null 字段（稀疏落盘）。
+  Map<String, dynamic> toJson() => {
+        if (colorTheme != null) 'colorTheme': colorTheme!.id,
+        if (sensitivity != null) 'sensitivity': sensitivity,
+        if (decayRate != null) 'decayRate': decayRate,
+        if (gravity != null) 'gravity': gravity,
+        if (barCount != null) 'barCount': barCount,
+        if (lineWidth != null) 'lineWidth': lineWidth,
+        if (bloom != null) 'bloom': bloom,
+        if (showGrid != null) 'showGrid': showGrid,
+        if (showPeaks != null) 'showPeaks': showPeaks,
+        if (showDbScale != null) 'showDbScale': showDbScale,
+      };
+
+  /// 容错读取（与 VisualizerConfig.fromJson 同钳位口径）：在场且
+  /// 合法的调参字段才记为覆盖，其余（含全局域键）忽略。
+  factory VisualizerStyleOverride.fromJson(Map<String, dynamic> json) {
+    double? d(String key, double lo, double hi) {
+      final v = json[key];
+      if (v is num && v.isFinite) return v.toDouble().clamp(lo, hi);
+      return null;
+    }
+
+    bool? b(String key) => json[key] is bool ? json[key] as bool : null;
+    final bc = json['barCount'];
+    return VisualizerStyleOverride(
+      colorTheme: json['colorTheme'] is String
+          ? VisualizerColorTheme.fromId(json['colorTheme'] as String)
+          : null,
+      sensitivity: d('sensitivity', 0.2, 3.0),
+      decayRate: d('decayRate', 0.1, 0.95),
+      gravity: d('gravity', 0.5, 4.0),
+      barCount: bc is num ? ((bc.toInt() == 64) ? 64 : 32) : null,
+      lineWidth: d('lineWidth', 0.8, 3.5),
+      bloom: d('bloom', 0.0, 1.0),
+      showGrid: b('showGrid'),
+      showPeaks: b('showPeaks'),
+      showDbScale: b('showDbScale'),
+    );
+  }
+}
+
 /// 风格与配色的多语言显示名（枚举内 label 仅作英文兜底）
 extension VisualizerStyleL10n on VisualizerStyle {
   String labelOf(AppLocalizations l) => switch (this) {

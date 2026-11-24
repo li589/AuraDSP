@@ -284,29 +284,86 @@ class AppModel extends ChangeNotifier {
   VisualizerConfig effectiveVisualizerConfig(VisualizerConfig global) {
     final entry = config.visualizerPerStyle[global.style.id];
     if (entry == null) return global;
-    return global.copyWith(
-      colorTheme: entry.colorTheme,
-      sensitivity: entry.sensitivity,
-      decayRate: entry.decayRate,
-      gravity: entry.gravity,
-      barCount: entry.barCount,
-      lineWidth: entry.lineWidth,
-      bloom: entry.bloom,
-      showGrid: entry.showGrid,
-      showPeaks: entry.showPeaks,
-      showDbScale: entry.showDbScale,
-    );
+    return entry.applyTo(global);
   }
 
   /// 当前风格是否存在单独覆盖（抽屉「当前预设」档状态显示）。
   bool get visualizerHasStyleOverride =>
       config.visualizerPerStyle.containsKey(config.visualizerConfig.style.id);
 
-  /// 抽屉「当前预设」档写入口：把 [tuned] 记入当前风格覆盖表；
-  /// 全局域字段（歌词/MilkDrop 路径）若有变化同步落全局。
+  /// 以生效值为基底的整份编辑写回全局（审查 Dart-F2，2026-11-24）：
+  /// [edited] 相对改前生效值变化了的字段才施加到原始全局，其余
+  /// 字段保持原始全局——防止当前风格的覆盖值被整份快照烤进全局
+  /// 存储（旧 param_schema setter 与抽屉全局档的共同病灶）。抽屉
+  /// 全局档、param_schema 全部 viz setter、页面单字段开关共用。
+  void applyVisualizerEdit(VisualizerConfig edited) {
+    final g = config.visualizerConfig;
+    final before = effectiveVisualizerConfig(g);
+    if (edited == before) return;
+    var next = g;
+    if (edited.style != before.style) {
+      next = next.copyWith(style: edited.style);
+    }
+    if (edited.colorTheme != before.colorTheme) {
+      next = next.copyWith(colorTheme: edited.colorTheme);
+    }
+    if (edited.sensitivity != before.sensitivity) {
+      next = next.copyWith(sensitivity: edited.sensitivity);
+    }
+    if (edited.decayRate != before.decayRate) {
+      next = next.copyWith(decayRate: edited.decayRate);
+    }
+    if (edited.gravity != before.gravity) {
+      next = next.copyWith(gravity: edited.gravity);
+    }
+    if (edited.barCount != before.barCount) {
+      next = next.copyWith(barCount: edited.barCount);
+    }
+    if (edited.lineWidth != before.lineWidth) {
+      next = next.copyWith(lineWidth: edited.lineWidth);
+    }
+    if (edited.bloom != before.bloom) {
+      next = next.copyWith(bloom: edited.bloom);
+    }
+    if (edited.showGrid != before.showGrid) {
+      next = next.copyWith(showGrid: edited.showGrid);
+    }
+    if (edited.showPeaks != before.showPeaks) {
+      next = next.copyWith(showPeaks: edited.showPeaks);
+    }
+    if (edited.showDbScale != before.showDbScale) {
+      next = next.copyWith(showDbScale: edited.showDbScale);
+    }
+    if (edited.showLyrics != before.showLyrics) {
+      next = next.copyWith(showLyrics: edited.showLyrics);
+    }
+    if (edited.showTranslation != before.showTranslation) {
+      next = next.copyWith(showTranslation: edited.showTranslation);
+    }
+    if (edited.lyricsSource != before.lyricsSource) {
+      next = next.copyWith(lyricsSource: edited.lyricsSource);
+    }
+    if (edited.milkdropPresetPath != before.milkdropPresetPath) {
+      next = next.copyWith(
+        milkdropPresetPath: edited.milkdropPresetPath,
+        clearMilkdropPresetPath: edited.milkdropPresetPath == null,
+      );
+    }
+    setVisualizerConfig(next);
+  }
+
+  /// 抽屉「当前预设」档写入口：把 [tuned] 与当前全局逐字段 diff
+  /// 后稀疏记入当前风格覆盖表（只存改过字段，r64 裁定；diff 为
+  /// 空则该风格无覆盖）；全局域字段（歌词/MilkDrop 路径）若有
+  /// 变化同步落全局。
   void setVisualizerStyleOverride(VisualizerConfig tuned) {
     final g = config.visualizerConfig;
-    config.visualizerPerStyle[g.style.id] = tuned;
+    final sparse = VisualizerStyleOverride.diff(tuned, g);
+    if (sparse.isEmpty) {
+      config.visualizerPerStyle.remove(g.style.id);
+    } else {
+      config.visualizerPerStyle[g.style.id] = sparse;
+    }
     if (tuned.showLyrics != g.showLyrics ||
         tuned.showTranslation != g.showTranslation ||
         tuned.lyricsSource != g.lyricsSource ||
