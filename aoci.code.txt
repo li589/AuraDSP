@@ -4,7 +4,7 @@
 .gitattributes[FV6T]: F:声明仓库换行、平台行尾、Shell与desktop规则、二进制属性，并钉死三卷AOCI索引为LF | R:code:.gitignore,code:AGENT.md | A:减少跨平台CRLF噪声、保护二进制、保证AOCI卷工作树与blob同字节 | S:Shell和desktop必须LF否则脚本或appimagetool失败；aoci.txt/meta/code必须eol=lf否则checkout成CRLF被判line_ending_rewrite阻断维护
 .gitignore[FV7S]: F:定义第三方源码、参考手册、本机环境、IDE与智能体harness目录、构建产物、临时文件、资源包和测试工件的版本控制边界 | R:code:.gitattributes,code:AGENT.md,code:source/ORIGIN.md | A:将可追踪源码文档与本机构建、资源和过程产物分离，保护仓库体积与发布许可边界 | S:AOCI资产aoci.txt、aoci.meta.txt、aoci.code.txt及AGENTS.md未被忽略；.mcp.json与.codegraph/属本机状态不入库，source/*仅ORIGIN.md例外入库
 AGENT.md[SG9L]: F:提供AuraDSP全仓智能体协作总纲，说明架构分层、目录职责、构建测试、RT安全、UI规范、测试挂载、分支策略与代码认知工具规矩（§3.8） | R:code:CLAUDE.md,code:app/auradsp_app/AGENT.md,code:docs/项目架构与开发规范.md | A:是AI修改项目代码前的主约束入口，要求以引擎契约、数据驱动和门禁验证维持跨平台一致性 | S:任何音频路径修改都必须保持RT线程零分配、零锁、零系统调用；AOCI与CodeGraph仅作索引证据，改代码与定罪必须read源码加grep全量核对，冲突以源码为准
-AGENTS.md[SG7S]: F:补充仓库级智能体操作约定，约束代码导航、构建验证、目录分流和跨层改动前的影响核对 | R:code:AGENT.md,code:CLAUDE.md,code:.ai/memory/MEMORY.md | A:作为协作代理的快速入口，强调先读项目规范、再按真实构建区与测试入口执行 | S:CodeGraph只能覆盖语言内调用关系，ABI导出、Dart FFI和字符串契约必须额外按符号名核查
+AGENTS.md[SG7S]: F:补充仓库级智能体操作约定，约束代码导航、构建验证、目录分流和跨层改动前的影响核对，并登记代码认知工具规矩与历轮打包/同步/门禁事故教训 | R:code:AGENT.md,code:CLAUDE.md,code:.ai/memory/MEMORY.md | A:作为协作代理的快速入口，强调先读项目规范、再按真实构建区与测试入口执行；教训条目按日期归档、只增补不改写 | S:CodeGraph只能覆盖语言内调用关系，ABI导出、Dart FFI和字符串契约必须额外按符号名核查；门禁宿主禁用Start-Process -Wait带重定向等构建（两连挂），改日志轮询判完成
 CLAUDE.md[SG7S]: F:为Claude类代码代理提供AuraDSP架构、构建测试命令、分支策略与关键工程约束的项目指南，含代码认知工具规则（规则6，与AGENT.md §3.8同源） | R:code:AGENT.md,code:CMakePresets.json,code:test/runner.py | A:把引擎、驱动、Flutter、资源、测试和工具的入口与风险集中说明，便于代理按项目流程工作 | S:Windows和Flutter发布构建必须保留--no-tree-shake-icons，第三方source目录只读且禁止嵌套.git；ABI导出影响面禁止用CodeGraph图谱评估，必须按符号名grep宿主加载点
 CMakeLists.txt[FV8T]: F:提供AuraDSP统一CMake根入口，按Windows或Linux加入对应桌面子工程，并保留子工程独立配置能力；含可选projectM桥开关AURADSP_BUILD_PROJECTM_BRIDGE（默认关） | R:code:CMakePresets.json,code:core/desktop/windows,code:core/desktop/linux,code:core/desktop/windows-drivers,code:core/desktop/visualizer/projectm_bridge | A:Windows可选构建桥与驱动套件，Linux进入核心引擎平台适配，Android暂不接入根构建 | S:未安装Steinberg ASIO SDK时必须关闭AURADSP_BUILD_BRIDGES，Android仍走独立NDK脚本
 CMakePresets.json[FV7T]: F:声明Windows、Linux和Android占位配置预设及Debug/Release构建预设，统一中间目录和生成器选择 | R:code:CMakeLists.txt,code:core/desktop/windows,code:core/desktop/linux,code:core/android | A:Windows使用VS 2026 x64，Linux使用Ninja并将产物写回子工程out目录，Android预设仅作占位 | S:构建树统一落build/<platform>/<arch>，历史脚本与产物同步依赖子工程out/<Config>路径不变
@@ -140,7 +140,7 @@ aura.tokens.json[FC8M]: F:定义AuraDSP深浅主题颜色、间距、圆角、�
 app_info.dart[EC3T]: F:提供应用版本、开源仓库地址和GPL v3.0协议名称等运行时元信息 | R:code:app/auradsp_app/pubspec.yaml,code:LICENSE | A:关于页与诊断页面读取这些常量，契约测试要求版本与pubspec保持一致 | S:修改版本展示时必须同步pubspec版本真相源并通过about_page_test
 audio_modes.dart[CD7M]: F:定义跨平台音频处理模式、附加与管线输入输出双轴选项（WASAPI/VAIO二选一可任意组合）、ASIO形态及合法化逻辑 | R:code:app/auradsp_app/lib/platform/platform_profile.dart,code:app/auradsp_app/AGENT.md | A:以模式类别、平台选项和默认值统一驱动设置页与后端选择，未知存量值回退平台默认；composeChain按双轴合成实际链路 | S:模式语义受composeChain与引擎后端契约约束，修改选项必须联动活切、持久化和测试
 channel_layout.dart[CD3T]: F:提供2、4、6、8声道的位索引与显示代码，并按声道数派生完整路由掩码 | R:code:engine/auradsp_engine.h,code:app/auradsp_app/lib/features | A:作为频谱分析器与声道路由器共享的唯一布局数据源，未知或超界数量按引擎约定归一化 | S:新增或调整声道顺序必须同时核对引擎layout_for与所有UI使用方，禁止另写硬编码掩码
-config.dart[CC8L]: F:集中管理音频引擎、可视化、声道、交互范式、ASIO、管线双轴与监听镜像（monitorMirroring）等全局外置配置 | R:code:app/auradsp_app/lib/core/audio_modes.dart,code:app/auradsp_app/lib/core/io/document_store.dart,code:app/auradsp_app/lib/core/defaults/defaults_layer.dart | A:启动时从用户配置目录加载config.json，缺失时生成模板并支持热更新、重置与稀疏落盘 | S:配置读取必须容忍旧版本残留键并在下次保存时自然清除；monitorMirroring的fromJson缺省必须为true，与字段初值不一致会使老配置静默关镜像
+config.dart[CC8L]: F:集中管理音频引擎、可视化、声道、交互范式、ASIO、管线双轴与监听镜像（monitorMirroring）等全局外置配置；可视化按风格覆盖表为稀疏覆盖类型（只存改过字段） | R:code:app/auradsp_app/lib/core/audio_modes.dart,code:app/auradsp_app/lib/core/io/document_store.dart,code:app/auradsp_app/lib/core/defaults/defaults_layer.dart | A:启动时从用户配置目录加载config.json，缺失时生成模板并支持热更新、重置与稀疏落盘 | S:配置读取必须容忍旧版本残留键并在下次保存时自然清除；monitorMirroring的fromJson缺省必须为true，与字段初值不一致会使老配置静默关镜像；旧全量快照形态的perStyle条目载入时按在场字段解释为稀疏覆盖
 design.dart[CU7M]: F:把设计令牌落地为间距、组件尺寸、动效节奏与排版尺度常量供全应用取用 | R:code:app/auradsp_app/design/tokens/aura.tokens.json,code:app/auradsp_app/lib/core/theme.dart,code:app/auradsp_app/lib/core/tokens.g.dart | A:间距统一走8pt网格、字号固定六级，数值读数使用等宽字体，正文禁用海报体 | S:布局常量一律从此文件取，禁止在页面内散写魔法数破坏视觉节奏
 eel_slider_parser.dart[CE6S]: F:解析EEL2脚本中的滑块声明、范围、步进、枚举选项与显示名称 | R:code:app/auradsp_app/lib/core/state.dart,code:app/auradsp_app/lib/features/liveprog | A:从features下沉至core以纠正反向依赖，同时识别宿主滑块1至8与自定义变量滑块 | S:带枚举花括号的声明与仅默认值的简短声明格式均需支持，解析失败不得阻断脚本加载
 effect_registry.dart[CD8M]: F:登记处理链各阶段的链组、电平表槽位、探针支持、延迟计入与默认顺序 | R:code:app/auradsp_app/lib/features/chain/chain_page.dart,code:app/auradsp_app/lib/core/param_schema.dart,code:engine/auradsp_engine.h | A:UI链序、链组旁路、电平表、全链延迟和探针支持集均由该表派生，不再维护镜像表 | S:新增stage只能在此登记一次，并同步C++阶段表与参数前缀，否则出现拖拽错位或探针假接通
@@ -149,16 +149,16 @@ error_sink.dart[CO6T]: F:为静默异常提供冷路径留痕与热路径按tag�
 media_track.dart[CD4T]: F:定义平台无关的系统媒体会话曲目元数据模型 | R:code:app/auradsp_app/lib/platform | A:承载标题、艺术家、专辑、时长、播放位置与播放状态，供平台端口与歌词可视化消费 | S:该模型位于core以保持平台层不反向依赖features，新增字段应维持不可变与copyWith语义
 nav.dart[CU5T]: F:定义应用页面枚举作为导航位索引 | R:code:app/auradsp_app/lib/features/shell.dart,code:app/auradsp_app/lib/core/state.dart | A:取值顺序即导航位，配合IndexedStack保活供状态层判断当前页可见性以门控高频工作 | S:枚举顺序必须与shell的导航目标列表严格一致，插入或重排会错位页面与门控判断
 notice.dart[CU5T]: F:定义全局瞬时通知模型与信息、警告、错误三个等级 | R:code:app/auradsp_app/lib/features/shell.dart,code:app/auradsp_app/lib/core/state.dart | A:通知统一经状态层投递、由壳层唯一宿主渲染，投递方只给已本地化文案与等级 | S:引擎原始错误串不走本模型，仍经引擎错误通道在呈现层本地化与脱敏
-param_schema.dart[CD9L]: F:登记音频与路由参数元数据及有序处理节，统一类型、范围、默认值、分类和模型读写 | R:code:app/auradsp_app/lib/core/state.dart,code:app/auradsp_app/lib/core/visualizer_types.dart,code:engine/auradsp_engine.h | A:为参数下发、预设快照应用和自绑定控件提供Dart侧描述符；分节钩子处理复合快照与迁移 | S:新增或更改参数需同步引擎契约、参数登记及对账测试；预设恢复依赖分节注册顺序处理副作用
+param_schema.dart[CD9L]: F:登记音频与路由参数元数据及有序处理节，统一类型、范围、默认值、分类和模型读写 | R:code:app/auradsp_app/lib/core/state.dart,code:app/auradsp_app/lib/core/visualizer_types.dart,code:engine/auradsp_engine.h | A:为参数下发、预设快照应用和自绑定控件提供Dart侧描述符；分节钩子处理复合快照与迁移；可视化类setter统一经applyVisualizerEdit落盘，只把真改字段写入原始全局 | S:新增或更改参数需同步引擎契约、参数登记及对账测试；预设恢复依赖分节注册顺序处理副作用；可视化setter不得直写setVisualizerConfig全量快照，否则会把按风格覆盖烘焙进全局
 path_memory.dart[CC5S]: F:按功能槽位记忆文件与目录选择器的最近路径，并通过ResourceLocator提供资源目录回退 | R:code:app/auradsp_app/lib/core/io/document_store.dart,code:app/auradsp_app/lib/core/config.dart,code:app/auradsp_app/lib/core/io/resource_gate.dart,code:app/auradsp_app/lib/core/io/resource_locator.dart | A:进程内懒加载file_paths.json；成功选取或导航后写入，目录失效时记忆读取返回空 | S:取消或失败不覆盖上次路径；测试重置只清内存态，不删除持久文件
 presets.dart[CD8L]: F:实现预设系统的建模、快照、恢复、出厂与用户预设库管理及脏状态追踪 | R:code:app/auradsp_app/lib/core/param_schema.dart,code:app/auradsp_app/lib/core/config.dart,code:app/auradsp_app/lib/core/defaults/defaults_layer.dart | A:区分出厂只读与用户预设，覆盖全效果卡片参数并通过参数表统一序列化 | S:恢复预设必须容忍新增字段缺失并按先参数后开关的顺序应用，否则旧预设会失效
-session_memory.dart[CD7M]: F:实现防抖自动保存与启动恢复全局会话快照，含插件槽位、阶段与声道记忆 | R:code:app/auradsp_app/lib/core/presets.dart,code:app/auradsp_app/lib/core/state.dart,code:app/auradsp_app/lib/core/config.dart | A:保存前重算预设脏状态并记录每槽插件、旁路、插入阶段与各路线声道 | S:恢复时必须将插件槽位状态与效果参数一并重放，只恢复参数会造成无声或路由错位
-state.dart[CD9L]: F:定义AppModel作为主isolate应用状态中心，持有音频isolate句柄与各后端桥镜像并把协议翻译为可观察状态，精准排除自身AuraVAIO/ASIO端点，维护清屏时间戳防陈旧帧回写 | R:code:app/auradsp_app/lib/engine/audio_isolate.dart,code:app/auradsp_app/lib/core/param_schema.dart,code:app/auradsp_app/lib/core/state/state_core.dart | A:按模型、核心、事件、效果、EQ、链、会话、音频模式分区为part extension，高频可视化走独立通知器，以isAuraVirtualDevice精准排除自有虚拟端点并放行第三方VAIO | S:虚拟ASIO的asioInfo只是驱动遥测镜像，真处理在DAW进程内，不得当作App引擎状态；part extension不能声明实例字段，跨extension共享状态必须落在AppModel类体；extension不可直呼notifyListeners必须走类体转发_notifyUi
+session_memory.dart[CD7M]: F:实现防抖自动保存与启动恢复全局会话快照，含插件槽位、阶段与声道记忆 | R:code:app/auradsp_app/lib/core/presets.dart,code:app/auradsp_app/lib/core/state.dart,code:app/auradsp_app/lib/core/config.dart | A:保存前重算预设脏状态并记录每槽插件、旁路、插入阶段与各路线声道；可视化按风格覆盖以稀疏形态读写 | S:恢复时必须将插件槽位状态与效果参数一并重放，只恢复参数会造成无声或路由错位
+state.dart[CD9L]: F:定义AppModel作为主isolate应用状态中心，持有音频isolate句柄与各后端桥镜像并把协议翻译为可观察状态，精准排除自身AuraVAIO/ASIO端点，维护清屏时间戳防陈旧帧回写；持有可视化按风格稀疏覆盖与全局编辑收敛入口 | R:code:app/auradsp_app/lib/engine/audio_isolate.dart,code:app/auradsp_app/lib/core/param_schema.dart,code:app/auradsp_app/lib/core/state/state_core.dart | A:按模型、核心、事件、效果、EQ、链、会话、音频模式分区为part extension，高频可视化走独立通知器，以isAuraVirtualDevice精准排除自有虚拟端点并放行第三方VAIO；effectiveVisualizerConfig以覆盖合并全局，applyVisualizerEdit只把相对编辑前生效值的真改字段落回原始全局 | S:虚拟ASIO的asioInfo只是驱动遥测镜像，真处理在DAW进程内，不得当作App引擎状态；part extension不能声明实例字段，跨extension共享状态必须落在AppModel类体；extension不可直呼notifyListeners必须走类体转发_notifyUi；按风格覆盖为空差分时必须删除条目防幽灵覆盖
 theme.dart[CU7M]: F:基于设计令牌定义AuraDSP深色、浅色与极光三套主题的调色板、字体与组件主题 | R:code:app/auradsp_app/lib/core/tokens.g.dart,code:app/auradsp_app/design/tokens/aura.tokens.json | A:层次靠明度阶梯与1px发丝线而非阴影，小圆角6/10/14，中文标题用得意黑而正文用系统黑体 | S:正文与控件绝不得使用得意黑海报体，数值读数必须用等宽字体与表格数字
 tokens.g.dart[FC6S]: F:由设计令牌JSON生成的Flutter颜色、间距与尺寸常量 | R:code:app/auradsp_app/design/tokens/aura.tokens.json,code:tools/gen_theme.py,code:app/auradsp_app/lib/core/theme.dart | A:为三套主题提供编译期颜色常量与8pt网格间距，供主题和设计层直接引用 | S:本文件为生成物禁止手改，修改令牌后必须重跑gen_theme.py并通过令牌一致性测试
 ui_helpers.dart[CU7L]: F:提供响应式断点、真实输入能力判定与统一问号帮助徒标组件 | R:code:app/auradsp_app/lib/core/design.dart,code:app/auradsp_app/lib/core/theme.dart,code:app/auradsp_app/lib/l10n/gen/app_localizations.dart | A:断点只决定布局形态，触屏语义由真实PointerDown判定；徽标用Overlay定位并自动翻转 | S:宽窗口触屏与窄窗口鼠标必须按真实输入能力区分，不得用窗口宽度推断触屏
 vaio_boot_guard.dart[CR6T]: F:以数据目录标记文件实现VAIO桥崩溃断路器，避免起桥崩溃重启循环 | R:code:app/auradsp_app/lib/core/error_sink.dart,code:app/auradsp_app/lib/core/state.dart | A:桥启动时布防、干净停止时解除，启动时消费残留标记则本次跳过自动启动并通知 | S:标记只在非正常结束时残留，消费即删除以保证一次性跳过；守卫自身吞错绝不影响启动
-visualizer_types.dart[CD9L]: F:定义可视化风格、显示模式、歌词来源及不可变配置模型，提供持久化转换与本地化标签，并作为每方案覆盖表（perStyle）的值类型 | R:code:app/auradsp_app/lib/core/state.dart,code:app/auradsp_app/lib/core/presets.dart,code:app/auradsp_app/lib/features/visualizer/models/visualizer_themes.dart | A:作为core层配置真源参与状态、预设和会话；枚举解析与JSON读取对未知或脏值回退默认项；copyWith以clearMilkdropPresetPath显式清除预设路径 | S:配置模型留在core以避免core反向依赖features；copyWith用??语义，null永不清除字段，清除必须走显式标志
+visualizer_types.dart[CD9L]: F:定义可视化风格、显示模式、歌词来源及不可变配置模型，提供持久化转换与本地化标签，并定义按风格稀疏覆盖类型VisualizerStyleOverride（可空调谐字段、diff收敛、applyTo合并） | R:code:app/auradsp_app/lib/core/state.dart,code:app/auradsp_app/lib/core/presets.dart,code:app/auradsp_app/lib/features/visualizer/models/visualizer_themes.dart | A:作为core层配置真源参与状态、预设和会话；枚举解析与JSON读取对未知或脏值回退默认项；copyWith以clearMilkdropPresetPath显式清除预设路径；覆盖的toJson只写非空字段，fromJson按VisualizerConfig同口径钳制 | S:配置模型留在core以避免core反向依赖features；copyWith用??语义，null永不清除字段，清除必须走显式标志；perStyle值类型已改稀疏覆盖，旧全量快照JSON按在场字段兼容解读，不得再按整表快照落盘
 
 ===D:/temp_desktop/Proj/JamesDSP/app/auradsp_app/lib/core/debug/===
 debug_trace.dart[CO7M]: F:把UI动作、参数下发、引擎回执、命令与生命周期统一记录为结构化调试事件流 | R:code:app/auradsp_app/lib/engine/debug_log.dart,code:app/auradsp_app/lib/core/state/state_events.dart | A:默认关闭，经命令行开关启用后以JSONL批量落盘，发布构建先判enabled再格式化以保证零开销 | S:音频isolate不直接调用本类，其回执由主isolate统一记录以避免加重实时路径负担
@@ -196,7 +196,7 @@ null_ports.dart[CG6M]: F:为插件目录、插件宿主、注册表、自启、�
 resource_picker.dart[CU5S]: F:统一封装文件与目录选择流程，含对话框端口调用、扩展名校验与路径记忆 | R:code:app/auradsp_app/lib/platform/port/file_dialog.dart,code:app/auradsp_app/lib/core/path_memory.dart,code:app/auradsp_app/lib/core/io/resource_gate.dart | A:只依赖端口契约由组合根注入具体实现，成功后写入PathMemory，失败或取消返回null不抛 | S:core不得直接导入具体平台实现，新增选择场景应扩展请求模型而非另建选择器
 
 ===D:/temp_desktop/Proj/JamesDSP/app/auradsp_app/lib/core/state/===
-state_audio_modes.dart[CD8L]: F:实现音频模式与管线双轴切换、设备枚举、自激拦截告警、工作声道口径、VAIO输出热重启与ASIO端点热切换下发 | R:code:app/auradsp_app/lib/core/audio_modes.dart,code:app/auradsp_app/lib/core/config.dart,code:app/auradsp_app/lib/engine/audio_isolate.dart | A:切模式置顶同步可视化源并清屏，捕获命令校验输入与镜像自激重叠并拦截；跟踪VAIO输出开关热发重启命令；setAsioRenderEndpoint写注册表并递增endpointSeq | S:虚拟ASIO显示宽度取驱动档位或活跃DAW协商值，App引擎镜像恒为2不可作依据；桥模式改采样率切回进程内须对账重启isolate；输入与镜像重叠必须阻止镜像防啸叫
+state_audio_modes.dart[CD8L]: F:实现音频模式与管线双轴切换、设备枚举、自激拦截告警、工作声道口径、VAIO输出热重启与ASIO端点热切换下发 | R:code:app/auradsp_app/lib/core/audio_modes.dart,code:app/auradsp_app/lib/core/config.dart,code:app/auradsp_app/lib/engine/audio_isolate.dart | A:切模式置顶同步可视化源并清屏，捕获命令校验输入与镜像自激重叠并拦截；跟踪VAIO输出开关热发重启命令；setAsioRenderEndpoint写注册表并递增endpointSeq；WASAPI进+VAIO出格里改监听镜像经_pipelineDeviceChanged热重发capturerestart | S:虚拟ASIO显示宽度取驱动档位或活跃DAW协商值，App引擎镜像恒为2不可作依据；桥模式改采样率切回进程内须对账重启isolate；输入与镜像重叠必须阻止镜像防啸叫；捕获格镜像在链启动时烘焙进payload，不热重发则改设置不生效
 state_chain.dart[CD8L]: F:实现处理链阶段与组顺序、立体声链推送、Liveprog、卷积DDC与低频斜坡控制 | R:code:app/auradsp_app/lib/core/effect_registry.dart,code:app/auradsp_app/lib/core/param_schema.dart | A:立体声链开关关闭时引擎侧一律收0而UI滑块位置不动，避免回写冲掉用户设置 | S:发送graph.order前必须只保留12个vendor阶段id，混入自研节点会被引擎白名单整体拒绝
 state_core.dart[CD8L]: F:提供引擎命令原语、强类型参数读写、乐观镜像与音频isolate生命周期管理 | R:code:app/auradsp_app/lib/core/state.dart,code:app/auradsp_app/lib/engine/auradsp_ffi.dart,code:app/auradsp_app/lib/core/debug/debug_trace.dart | A:统一处理setParam与setParamStr下发、回执匹配与类型转换，声道设置同时写驱动档位保持同一事实 | S:isolate未连接时命令必须记作丢弃而非已下发，否则会造成等不到回执的假阳性
 state_effects.dart[CD8L]: F:实现全部效果参数的setter与联动逻辑，覆盖动态、低频、空间、混响、门限、EQ与输出级 | R:code:app/auradsp_app/lib/core/param_schema.dart,code:app/auradsp_app/lib/core/state.dart | A:每组setter只存值并下发，特定效果带派生量计算、预设联动与UI状态同步 | S:混响预设为唯一开关值-1关-2自定义0至18预设，不得再引入品质档拦截限制
@@ -204,10 +204,10 @@ state_eq.dart[CD7L]: F:实现EQ网格与频点选择、曲线编辑、预设套�
 state_events.dart[CD8L]: F:实现isolate事件全量路由、去重、可视化清零与陈旧帧丢弃、延迟回执与ASIO遥测解析，并按pcmSource接纳引擎抽头PCM | R:code:app/auradsp_app/lib/core/state.dart,code:app/auradsp_app/lib/engine/auradsp_ffi.dart | A:按消息类型更新状态与可视化通知器，以清屏时间戳丢弃切模式前途经通道的迟到陈旧帧，维护清屏看门狗与电平表长度，遥测宽度变化重算显示声道 | S:'engine'来源PCM不限vizBackend均接纳（桥内抽头可信），'source'仅local才接纳避免喂伪造PCM；分级电平表长度须等于引擎阶段总数；切模式后时间戳早于清屏基准的viz消息必须丢弃
 state_models.dart[CD6M]: F:定义会话持久化的插件槽快照、引擎连接与展示状态、引擎信息与音频设备条目等辅助模型 | R:code:app/auradsp_app/lib/core/state.dart | A:把引擎上报的ABI、版本、采样率、声道与缓冲帧以及端点能力归一为UI可消费结构 | S:插件槽快照的routeChannels为null表示旧会话缺字段，必须回落全0xFF而不得当作空掩码
 state_session.dart[CD7L]: F:实现会话回放、预设脏跟踪、防抖保存、主题与语言、自定义插件目录与采样率切换 | R:code:app/auradsp_app/lib/core/session_memory.dart,code:app/auradsp_app/lib/core/plugins/plugin_scan_dirs.dart,code:app/auradsp_app/lib/core/io/builtin_dirs.dart | A:维护插件扫描目录列表真值与内置目录状态，并处理已保存会话的快照重放 | S:清空目录列表后不得自动加回平台预置目录，内置目录恒启用且UI禁止移除
-state_vb_asio.dart[CD8M]: F:实现Voicemeeter桥总线与插件组、ASIO驱动选择及VAIO输出端点的状态控制 | R:code:app/auradsp_app/lib/core/state.dart,code:app/auradsp_app/lib/core/audio_modes.dart | A:总线开关只发命令并登记在途表，由心跳回推收尾，不阻塞UI；保护态下按hotGrp收窄生效掩码 | S:VB超预算保护激活时非hotGrp路插件被桥自动旁路，UI必须显示部分旁路而非完全生效
+state_vb_asio.dart[CD8M]: F:实现Voicemeeter桥总线与插件组、ASIO驱动选择及VAIO输出端点的状态控制 | R:code:app/auradsp_app/lib/core/state.dart,code:app/auradsp_app/lib/core/audio_modes.dart | A:总线开关只发命令并登记在途表，由心跳回推收尾，不阻塞UI；保护态下按hotGrp收窄生效掩码；VAIO输出端点变更在WASAPI进+VAIO出格同样经_pipelineDeviceChanged热重发capturerestart | S:VB超预算保护激活时非hotGrp路插件被桥自动旁路，UI必须显示部分旁路而非完全生效
 
 ===D:/temp_desktop/Proj/JamesDSP/app/auradsp_app/lib/engine/===
-apo_param_index.dart[FC8M]: F:定义APO参数块的序号总数与参数id到块内槽位的映射表 | R:code:engine/engine_param_table.h,code:tools/gen_apo_param_layout.py,code:app/auradsp_app/lib/engine/apo_plugin_block.dart | A:供APO参数发布者按id定位u32槽位，与C侧同名表逐项对应 | S:本表由生成器从引擎参数表导出，手改会与C侧序号错位导致APO参数全部错位
+apo_param_index.dart[FC8M]: F:定义APO参数块的序号总数与参数id到块内槽位的映射表 | R:code:engine/engine_param_table.h,code:tools/gen_apo_param_layout.py,code:app/auradsp_app/lib/engine/apo_plugin_block.dart | A:供APO参数发布者按id定位u32槽位，与C侧同名表逐项对应；参数块v5起字符串槽扩容收纳IR/DDC文件路径类参数 | S:本表由生成器从引擎参数表导出，手改会与C侧序号错位导致APO参数全部错位；引擎参数表增删行必须同轮重生本表与布局摘要
 apo_plugin_block.dart[FC7T]: F:定义System APO插件共享块的头、槽位、路径、状态区布局常量与格式码 | R:code:core/desktop/windows-drivers/03_system_apo/ApoShared.h,code:test/smoke/smoke_apo_plugin_layout.py | A:按头64B加每槽槽头64B、路径1024B、id256B、状态512KiB的固定布局映射 | S:布局是手工契约而非引擎表派生，改动必须同步C侧头文件与布局冒烟测试
 apo_transit.dart[IH6T]: F:把被APO引用的IR与DDC文件按内容哈希复制到ProgramData中转目录供LocalService身份读取，并回收超龄孤儿中转件 | R:code:app/auradsp_app/lib/platform/port/windows_system.dart,code:app/auradsp_app/lib/engine/audio_isolate_apo.dart | A:参数通道只下发中转路径，UI仍显示原始路径；孤儿回收默认7天龄下限，全部失败吞掉并记日志 | S:不得把audiodg读不到的原始路径写进参数块假装可用，失败时应写空路径让引擎卸载该文件
 audio_abridge.dart[IN7S]: F:加载ASIO常驻桥动态库，提供驱动清单、启动参数与vizRead/pcmRead的FFI调用面 | R:code:app/auradsp_app/lib/engine/bridge_manager.dart,code:app/auradsp_app/lib/engine/bridge_plugin_ffi.dart,code:app/auradsp_app/lib/platform/platform_profile.dart | A:按可执行旁、engine子目录、环境变量三类候选查找，加载后做桥ABI协商 | S:桥ABI不匹配必须抛错不降级；pcmRead经导出探测旧桥缺ab_pcm_read时返回0由调用方回落
@@ -225,7 +225,7 @@ audio_wav.dart[RD5S]: F:解析RIFF/WAVE文件并解码为float采样，支持折
 auradsp_ffi.dart[IG9L]: F:提供引擎C ABI的dart:ffi绑定、参数ID常量、可视化帧结构与各导出函数封装，含可视化PCM抽头auradsp_pcm_read（导出57） | R:code:engine/auradsp_engine.h,code:app/auradsp_app/lib/core/param_schema.dart,code:app/auradsp_app/lib/engine/audio_isolate.dart | A:仅在音频isolate内使用，过程调用要求单音频线程独占句柄并显式声明Dart侧签名 | S:可视化帧尺寸变动必须同步C侧与全部ctypes镜像，错一位即静默读错电平与频谱；新增导出必须同步.def、.map与头文件四处登记
 backend_switch.dart[CR6T]: F:定义输出后端互斥切换的失败语义与回滚判定 | R:code:app/auradsp_app/lib/engine/audio_isolate.dart | A:停旧成功才允许起新，停旧失败则拆掉新后端并带出原因，宁可切换失败也不静默双开 | S:停旧必须抛出而不能在内部吞掉，否则会两路同时出声形成梳状回声且日志无痕迹
 bridge_death_gate.dart[CR5T]: F:为桥非计划死亡后的自动重启限速，按窗口统计死亡次数 | R:code:app/auradsp_app/lib/engine/bridge_manager.dart,code:app/auradsp_app/lib/engine/audio_isolate.dart | A:窗口内允许有限次重启，超限停手并留状态；切模式或热重启视为重新布防 | S:桥在端点重建后会自报已停而记账仍在跑，必须走正式停起回收而不能重复下发启动
-bridge_manager.dart[IN7L]: F:维护后端桥注册表惰性加载当前后端，收敛三桥同构控制面、可视化读取与pcmRead探测 | R:code:app/auradsp_app/lib/engine/audio_vbridge.dart,code:app/auradsp_app/lib/engine/audio_abridge.dart,code:app/auradsp_app/lib/engine/audio_vaio_bridge.dart,code:app/auradsp_app/lib/engine/bridge_plugin_ffi.dart | A:未选中后端不加载，播放参数与旁路统一入口，桥专属启动参数各自绑定 | S:桥停止后只停会话DLL驻留不得卸载否则破坏第三方引用致崩溃；pcmRead按导出探测旧桥缺符号返回0
+bridge_manager.dart[IN7L]: F:维护后端桥注册表惰性加载当前后端，收敛三桥同构控制面、可视化读取与pcmRead探测 | R:code:app/auradsp_app/lib/engine/audio_vbridge.dart,code:app/auradsp_app/lib/engine/audio_abridge.dart,code:app/auradsp_app/lib/engine/audio_vaio_bridge.dart,code:app/auradsp_app/lib/engine/bridge_plugin_ffi.dart | A:未选中后端不加载，播放参数与旁路统一入口，桥专属启动参数各自绑定 | S:桥停止后只停会话DLL驻留不得卸载否则破坏第三方引用致崩溃；pcmRead按导出探测旧桥缺符号返回0；异常捕获必须绑定(e, st)并经swallow留痕（D4-b），禁止匿名catch
 bridge_plugin_ffi.dart[IN7M]: F:封装三桥共用的插件槽FFI，包括加载卸载、旁路、状态、编辑器与阶段声道控制 | R:code:app/auradsp_app/lib/engine/auradsp_ffi.dart,code:app/auradsp_app/lib/core/plugins/plugin_manager.dart | A:按桥前缀绑定同名导出，语义与引擎插件槽一致：1成功、0失败 | S:桥模式下插件命令必须发给桥自己的引擎，否则插件挂在空闲本地句柄上只有编辑器而无处理
 debug_log.dart[CO6S]: F:提供跳isolate的文件调试日志，按角色分文件写入并节流刷盘与按尺寸轮转 | R:code:app/auradsp_app/lib/engine/audio_isolate.dart,code:app/auradsp_app/lib/core/error_sink.dart | A:UI与音频isolate各写不同文件，保证每行单写者以保完整；高频调用点用限流版本 | S:文件追加并非原子追加，两isolate共写会造成整行覆写，必须按角色分文件而不能共享一句柄
 head_tracker.dart[IH5T]: F:接收OpenTrack通过UDP发送的头部姿态数据并提取yaw角度回调 | R:code:app/auradsp_app/lib/core/state.dart,code:engine | A:支持双精度与单精度头部两种包长，发送频率限制在约30Hz后由引擎再做平滑 | S:仅消费yaw且以33ms节流，不得把报文直接高频下发给引擎以免抖动与过载
@@ -263,7 +263,7 @@ notice_host.dart[CU6S]: F:作为全应用瞬时通知的唯一呈现点，监听
 plugins_page.dart[AU8L]: F:组装第三方插件中心页，含扫描目录、顶部状态、插件列表与槽位管理 | R:code:app/auradsp_app/lib/features/plugins/plugins_hero.dart,code:app/auradsp_app/lib/features/plugins/plugins_list.dart,code:app/auradsp_app/lib/features/plugins/plugin_scan_dirs_section.dart | A:四槽位共享一套插件库，按模式决定总线选路与插件组处理掩码 | S:插件页不得自行保存扫描结果，必须经插件管理器缓存与事件回写否则会出现双份真相
 settings_page.dart[AU7S]: F:定义设置页骨架与路由，按外观、音频、系统、测试与关于五类分区组装并切换 | R:code:app/auradsp_app/lib/features/settings/settings_audio_tab.dart,code:app/auradsp_app/lib/features/settings/settings_system_tab.dart,code:app/auradsp_app/lib/features/settings/panels/sections.dart | A:各分区拆为独立文件并以part挂入，底部分类栏固定悬浮切换分组 | S:新增设置分区必须同时登记底部分类栏标签与图标，否则会出现无法进入的页面
 shell.dart[AU9L]: F:实现应用骨架，含左侧导航、常驻状态顶栏与内容区，并以保活栈切换六个页面 | R:code:app/auradsp_app/lib/core/nav.dart,code:app/auradsp_app/lib/core/state.dart,code:app/auradsp_app/lib/features/notice_host.dart | A:顶栏展示引擎形态、三态徽标、延迟与配色快切，页面惰性实例化启动只建首屏，切页零重建 | S:离屏页面必须由可见页门控与定时器暂停承担代价，否则保活会让后台高频任务持续跑；页面切换不能改回AnimatedSwitcher，会销毁非当前页导致切页全量重建
-visualizer_page.dart[AU8L]: F:组装可视化页面、舞台、实时仪表、歌词与MilkDrop选择，并协调三档显示模式及键盘操作 | R:code:app/auradsp_app/lib/features/visualizer/views/visualizer_stage.dart,code:app/auradsp_app/lib/core/visualizer_types.dart,code:app/auradsp_app/lib/core/path_memory.dart | A:仅监听播放状态翻转以避免音频帧触发整页重建；页面离开时退出全屏并关闭抽屉 | S:系统全屏请求串行执行，保证快速切换时最后一次显示意图最终生效
+visualizer_page.dart[AU8L]: F:组装可视化页面、舞台、实时仪表、歌词与MilkDrop选择，并协调三档显示模式及键盘操作 | R:code:app/auradsp_app/lib/features/visualizer/views/visualizer_stage.dart,code:app/auradsp_app/lib/core/visualizer_types.dart,code:app/auradsp_app/lib/core/path_memory.dart | A:仅监听播放状态翻转以避免音频帧触发整页重建；页面离开时退出全屏并关闭抽屉；歌词开关与MilkDrop选文件/文件夹/预设等基于生效值的编辑统一经applyVisualizerEdit收敛，只把真改字段落回全局 | S:系统全屏请求串行执行，保证快速切换时最后一次显示意图最终生效；页面内编辑不得整表回写生效快照，否则按风格覆盖会被烘焙进全局
 widgets.dart[CU3T]: F:为旧导入路径保留共享控件库转发入口 | R:code:app/auradsp_app/lib/ui/widgets.dart | A:仅做转发，实体在ui/widgets.dart | S:不得再实现控件，否则共享层出现两份真相
 
 ===D:/temp_desktop/Proj/JamesDSP/app/auradsp_app/lib/features/debug/===
@@ -497,7 +497,7 @@ about_page_test.dart[TU4T]: F:以源码文本断言钉住关于页与左栅形�
 alsa_backend_test.dart[TI3T]: F:钉住ALSA专家模式的配置默认值、JSON往返与旧配置缺字段回落，并验证设备名去重口径 | R:code:app/auradsp_app/lib/core/config.dart,code:app/auradsp_app/lib/engine/audio_out/alsa_ffi.dart | A:默认后端须为pulse且两处设备串为空，旧配置仅带采样率时仍落默认 | S:旧配置缺ALSA键必须落pulse默认，否则升级后会静默切到不可用后端
 ambient_background_setting_test.dart[TQ4S]: F:钉住氛囲背景开关的默认值、JSON往返、旧配置回落与关闭后不再构造频谱层 | R:code:app/auradsp_app/lib/core/config.dart,code:app/auradsp_app/lib/features/home_page.dart | A:断言门控是不构造组件，且重复设同值不反复通知 | S:门控改成可见性隐藏仍会保留订阅与定时器，本用例专防该退化
 apo_mode_switch_gate_test.dart[TI4S]: F:钉住切离系统APO时的自动卸载门，含拦截、卸载后续行、等待期间吞掉重复切换与失败回滚 | R:code:app/auradsp_app/lib/core/state/state_audio_modes.dart,code:app/auradsp_app/lib/core/audio_modes.dart | A:卸载本体经注入替身替代，等待期间以首个目标为准，无附加时直接切换 | S:卸载失败需留在原模式并回滚范式与附加字段，只清忙标记会与配置不一致
-apo_multi_endpoint_test.dart[TI3T]: F:校验APO端点id的FNV-1a哈希与原生侧同值、遥测分块名格式与已废除的覆写配置键 | R:code:app/auradsp_app/lib/engine/apo_param_index.dart,code:app/auradsp_app/lib/engine/audio_isolate.dart,code:app/auradsp_app/lib/core/config.dart | A:以开发机端点id的实测哈希作固定向量，并要求旧键加载忽略、保存消失 | S:哈希必须与原生侧恒等，任一侧换算法会让分端点遥测块名整体错位
+apo_multi_endpoint_test.dart[TI3T]: F:校验APO端点id的FNV-1a哈希与原生侧同值、遥测分块名格式与已废除的覆写配置键，并钉参数块v5布局常量 | R:code:app/auradsp_app/lib/engine/apo_param_index.dart,code:app/auradsp_app/lib/engine/audio_isolate.dart,code:app/auradsp_app/lib/core/config.dart | A:以开发机端点id的实测哈希作固定向量，并要求旧键加载忽略、保存消失 | S:哈希必须与原生侧恒等，换算法会让分端点遥测块名整体错位；块版本或槽布局变更须同步布局常量
 atlas_release_test.dart[TU4T]: F:钉住可视化图集的解码、释放与再解码全周期，并验证解码在飞时释放的代次作废 | R:code:app/auradsp_app/lib/features/visualizer/styles/visualizer_sprite_atlas.dart | A:轮询等待图像出现或消失，释放不置失败标记，恢复后可再次解码 | S:释放期间在飞解码的落地结果必须作废，回填会让已释放图集重新占住内存
 audio_modes_test.dart[TC4M]: F:钉住各平台音频后端选项集、默认值、归一化与类别映射口径 | R:code:app/auradsp_app/lib/core/audio_modes.dart,code:app/auradsp_app/lib/core/config.dart | A:断言Windows四后端、Android双模式、Linux与macOS三模式，未知平台回落自动 | S:非法模式值必须按平台默认修复而不是保留原串，否则后端解析会拿到空实现
 autostart_ports_test.dart[TI3S]: F:以替身注册表与临时目录验证两平台自启端口的开关读写与路径转义 | R:code:app/auradsp_app/platform/autostart/autostart_linux.dart,code:app/auradsp_app/platform/autostart/autostart_windows.dart | A:Linux走桌面条目文件存在性，Windows走当前用户运行项字符串读写 | S:空实现端口必须报不可用，测试用它防真实平台调用泄漏到单测
@@ -554,7 +554,7 @@ mc_channel_levels_test.dart[TD4S]: F:钉住可视化帧的结构尺寸与多声�
 mpris_provider_test.dart[TI4S]: F:以假播放器实例验证系统媒体会话的元数据、播放状态与位置归一化 | R:code:app/auradsp_app/platform/media/media_session_linux.dart,code:app/auradsp_app/lib/core/media_track.dart | A:无会话总线时整组跳过，有总线时自注册假播放器并驱动信号 | S:位置靠本地外推推进，轮询总线会持续占用会话带宽
 narrow_pages_test.dart[TU3S]: F:钉住最小支持宽度下六个主页逐页装载不产生溢出与裁切异常 | R:code:app/auradsp_app/lib/features/shell.dart,code:app/auradsp_app/lib/core/nav.dart | A:在窄屏视口逐个切页并断言无布局异常 | S:窄屏下限是产品口径，低于该宽度不保证可用也不在回归范围
 out_recovery_test.dart[TR3T]: F:钉住本地输出端点失效的识别口径与恢复窗口边界 | R:code:app/auradsp_app/lib/engine/audio_out/out_recovery.dart | A:以带错误码的异常字符串分类，被占用与其他后端文案不命中 | S:被占错误不得归为失效，否则会触发无效重建并反复重连
-param_contract_test.dart[TC9L]: F:参数三层契约全量回归，含取值器闭环、静态下发链、引擎双向对账与默认值一致 | R:code:app/auradsp_app/lib/core/param_schema.dart,code:app/auradsp_app/lib/core/state.dart,code:app/auradsp_app/lib/core/effect_registry.dart | A:白名单与实测集做双向精确相等断言，另以生成夹具带源码行数哨兵 | S:白名单只允许显式登记并带理由，集合双向相等防止悄悄变大变小；引擎三文件行数变化必须同轮重跑gen_param_contract再生夹具
+param_contract_test.dart[TC9L]: F:参数三层契约全量回归，含取值器闭环、静态下发链、引擎双向对账与默认值一致 | R:code:app/auradsp_app/lib/core/param_schema.dart,code:app/auradsp_app/lib/core/state.dart,code:app/auradsp_app/lib/core/effect_registry.dart | A:白名单与实测集做双向精确相等断言，另以生成夹具带源码行数哨兵 | S:白名单只允许显式登记并带理由，集合双向相等防止悄悄变大变小；引擎三文件行数变化必须同轮重跑gen_param_contract再生夹具；setter形态变化（如新增下发链）必须同轮修订kNoEngineWriteSpecIds登记并注明日期与先例
 param_schema_test.dart[TC7L]: F:参数元数据注册中心与状态层的对账，含唯一性、边界合法性与界面控件联动 | R:code:app/auradsp_app/lib/core/param_schema.dart,code:app/auradsp_app/lib/features/effects_page.dart | A:逐参数校验标识唯一、范围与默认值合法，并验证卡片按元数据渲染控件 | S:参数标识必须全局唯一，重名会让预设快照与下发错位
 path_memory_test.dart[TC3T]: F:钉住分槽路径记忆的目录记录、跨实例读回与无变化不写盘 | R:code:app/auradsp_app/lib/core/path_memory.dart,code:app/auradsp_app/lib/core/config.dart | A:选取文件后记录所在目录，重置内存后仍能读回，目录失效时返回空 | S:无变化时不得重写文件，频繁写盘会与自动保存抢锁
 phase3_shaders_plugins_test.dart[TU4S]: F:钉住五类GPU着色器资源路径、MilkDrop预设解析扫描、projectM桥契约与全风格画笔路由 | R:code:app/auradsp_app/lib/features/visualizer/styles/visualizer_painter_dispatcher.dart | A:断言GpuShaderType资源路径不变式与风格标签，覆盖全部枚举值的画笔可绘制性，空/坏milk内容安全回落 | S:测试用PictureRecorder空画布验证可绘制性，外部projectM引擎只测Mock契约不依赖真实DLL
@@ -607,7 +607,7 @@ cava_feature_engine_test.dart[TU4T]: F:CAVA特征引擎单测：感知加权/重
 apo_transit_gc_test.dart[TQ5T]: F:验证APO中转孤儿回收collectOrphans：引用集内条目永留、无引用且超龄者删除、未超龄者保留、根目录缺失为空操作 | R:code:app/auradsp_app/lib/engine/apo_transit.dart | A:以逻辑时钟造龄（dart:io无改mtime接口），覆盖引用匹配的斜杠与大小写容错 | S:回收龄下限默认7天，测试不得依赖真实文件mtime
 milkdrop_builtins_test.dart[TQ5T]: F:钉住MilkDrop内置预设解析与暂存：builtin:伪路径经resolveFilePath落到暂存的真实.milk文件且三预设互不相同 | R:code:app/auradsp_app/lib/features/visualizer/plugins/milkdrop_preset.dart,code:app/auradsp_app/lib/features/visualizer/plugins/milkdrop_builtins.dart | A:在临时目录走ensureStaged全流程并断言文件存在、内容与资产一致 | S:测试不得依赖真实用户数据目录，暂存根必须可注入
 mirror_audio_out_test.dart[TQ5S]: F:钉住MirrorAudioOut镜像语义：节拍与状态只委托主输出、缓冲不足跳过镜像、镜像写失败丢弃镜像且只上报一次 | R:code:app/auradsp_app/lib/engine/audio_out/audio_out.dart | A:以假主/镜像输出注入故障与短缺场景逐项断言六例 | S:镜像故障绝不能拖垮主输出，测试须断言主路写入完整
-visualizer_per_style_test.dart[TQ5T]: F:钉住每方案可视化设置语义：无覆盖时生效值即全局、覆盖只替换调参字段、歌词与MilkDrop路径恒归全局、覆盖表JSON往返与脏条目逐条跳过 | R:code:app/auradsp_app/lib/core/config.dart,code:app/auradsp_app/lib/core/visualizer_types.dart | A:按风格id构造覆盖表逐项断言生效值合并与分档复位 | S:覆盖里改全局域字段必须同步落全局，不得出现双写不一致
+visualizer_per_style_test.dart[TQ5T]: F:钉住每方案可视化设置语义：无覆盖时生效值即全局、覆盖只替换调参字段、歌词与MilkDrop路径恒归全局、覆盖表JSON往返与脏条目逐条跳过，并钉稀疏覆盖的冻结语义与旧全量快照兼容解读 | R:code:app/auradsp_app/lib/core/config.dart,code:app/auradsp_app/lib/core/visualizer_types.dart | A:按风格id构造覆盖表逐项断言生效值合并与分档复位；另断言空差分删除条目、全局编辑不烘焙覆盖 | S:覆盖里改全局域字段必须同步落全局，不得出现双写不一致；覆盖条目只存改过字段，全量快照式回写即回归
 
 ===D:/temp_desktop/Proj/JamesDSP/app/auradsp_app/tool/===
 bake_viz_atlas_test.dart[TV3T]: F:离屏烘焙可视化精灵图集为固定尺寸 PNG 资产 | R:code:app/auradsp_app/lib/features/visualizer/styles/visualizer_atlas_bake.dart | A:显式运行该脚本后用共享绘制函数录制并编码为图像文件 | S:绘制种子固定以保证同一版本逐像素可重复，运行期不再烘焙
@@ -3738,8 +3738,8 @@ ApoEngineHost.cpp[IE7L]: F:APO引擎宿主：DLL动态加载、座位抢占、�
 ApoEngineHost.h[IE6M]: F:ApoEngineHost 类：引擎符号表、端点上下文、生效宽决议原子发布与插件槽应用状态 | R:code:core/desktop/windows-drivers/03_system_apo/ApoParamIndex.h | A:RT Process src/dst 可同址（INPLACE 别名安全）；插件载荷只从快照读不直读活映射 | S:插件通道可选符号缺失时整通道静默禁用，不影响引擎本体
 ApoInspector.cpp[IE5M]: F:系统APO注册状态巡检CLI：枚举端点、读FX五槽与DisableProtectedAudioDG | R:code:core/desktop/windows-drivers/03_system_apo/ApoInspector.h | A:端点默认格式优先读PKEY_AudioEngine_DeviceFormat（系统设置页真值），GetMixFormat仅兜底 | S:GetMixFormat恒32f与系统设置不一致（VAIO装机默认16位实报），属性缺失才回退
 ApoInspector.h[IE4T]: F:APO 巡检数据结构：ApoEndpoint（五槽+格式+enhancementsDisabled）与 ApoInspect 汇总 | R:- | A:protectedAudioDG 1=关签名强制，0/缺失=强制，-1=读不到 | S:-
-ApoParamIndex.h[IE6M]: F:APO 参数名序号总表与字符串槽布局：数值槽 340 + 字符串槽（convolver ir/ddc 等） | R:- | A:v4 序号 335 插入 channels.count，尾段移位一格；序号一旦发布永不复用 | S:-
-ApoShared.h[IE7M]: F:APO三共享块协议：参数块seqlock v4、telemetry v7（座位/回传/插件/逐声道/生效值/身份段）与SDDL | R:code:core/desktop/windows-drivers/03_system_apo/ApoParamIndex.h | A:seqlock奇偶写序；有效位图未置槽保留引擎默认值 | S:版本全等校验：新旧App/APO混搭时旧侧整体拒绝（透传降级），绝不按错位序号误用参数；telemetry尾部追加段读者按version分级取用
+ApoParamIndex.h[IE6M]: F:APO 参数名序号总表与字符串槽布局：数值槽 340 + 字符串槽 6（convolver ir/ddc 等文件路径类） | R:- | A:参数块升v5：字符串槽尾增convolver.ir.path与ddc.load两槽，覆写段偏移随之后移；序号一旦发布永不复用 | S:-
+ApoShared.h[IE7M]: F:APO三共享块协议：参数块seqlock v5、telemetry v7（座位/回传/插件/逐声道/生效值/身份段）与SDDL | R:code:core/desktop/windows-drivers/03_system_apo/ApoParamIndex.h | A:seqlock奇偶写序；有效位图未置槽保留引擎默认值 | S:版本全等校验：新旧App/APO混搭时旧侧整体拒绝（透传降级），绝不按错位序号误用参数；telemetry尾部追加段读者按version分级取用
 AuraApo.cpp[IE6M]: F:CAuraApo COM实现：五接口QI、委托态IUnknown、Initialize读FX属性取端点身份、LockForProcess启停宿主与APOProcess RT转发 | R:code:core/desktop/windows-drivers/03_system_apo/ApoEngineHost.h | A:FX属性集挂在pAPOSystemEffectsProperties，端点存储仅兜底；GetLatency引擎在位时如实报告 | S:-
 AuraApo.def[FV2T]: F:APO DLL 导出表：四个 Dll* 入口全部 PRIVATE | R:- | A:PRIVATE 防装饰名外的隐式链接 | S:-
 AuraApo.h[IE5S]: F:CAuraApo 类声明：四 APO 接口、Inner 非委托 IUnknown、端点属性读取与心跳映射成员 | R:code:core/desktop/windows-drivers/03_system_apo/ApoEngineHost.h | A:RT 注释标明 APOProcess 无锁无堆分配 | S:抢不到座位或引擎不可用时 APOProcess 自动回落 v1 透传，行为不劣于现状
@@ -4014,7 +4014,7 @@ vm-win10第四轮处置与取证收口-2026-11-10.md[SH4T]: F:第四轮处置与
 第四十轮频谱修复与第四十一轮APO多端点收口-2026-11-16.md[SG5S]: F:第四十轮频谱声道修复与第四十一轮APO多端点v2（S0至S3）合并收口 | R:- | A:收口留证，dated记录不改写原文 | S:-
 脚本页面与脚本功能检查升级报告-2026-10-13.md[SG4T]: F:2026-10-13脚本页面与功能检查升级报告：LiveProg编辑页、EEL2后端与Dart桥接的检查结论 | R:- | A:收口留证，dated记录不改写原文 | S:-
 设备自动刷新与引擎生效值回读收口-2026-11-14.md[SG5S]: F:第三十四与三十五轮合并收口：设备自动刷新与失效选择调和、引擎生效值回读与APO切离等待全覆盖 | R:- | A:收口留证，dated记录不改写原文 | S:-
-资源计划实施收口-2026-11-12.md[SG5T]: F:资源计划实施收口：资源包与内置目录及APO文件中转全阶段落地（P2/P2.5/P4） | R:- | A:收口留证，dated记录不改写原文 | S:-
+资源计划实施收口-2026-11-12.md[SG5T]: F:资源计划实施收口：资源包与内置目录及APO文件中转全阶段落地（P2/P2.5/P4），附Dart-F1参数块补槽的dated附录 | R:- | A:收口留证，dated记录不改写原文，后续变更以附录增补 | S:-
 跨平台基础审查-2026-11-01.md[SG5L]: F:2026-11-01跨平台基础审查：引擎、Flutter、Windows构建层、Android脚手架与门禁的基线评估 | R:- | A:收口留证，dated记录不改写原文 | S:-
 重构全量代码审查报告-2026-10-13.md[SG4S]: F:2026-10-13重构全量审查：P0治理、P1拆分、P2引擎模块化、P3a目录重组序列的审查结论 | R:- | A:收口留证，dated记录不改写原文 | S:-
 预设系统与硬置入复检-2026-10-28.md[SG5M]: F:2026-10-28预设系统与硬置入专项复检：用户指定一轮的检查结论与处置 | R:- | A:收口留证，dated记录不改写原文 | S:-
@@ -4023,6 +4023,7 @@ vm-win10第四轮处置与取证收口-2026-11-10.md[SH4T]: F:第四轮处置与
 驱动层与接线层全面复审纪要-2026-11-11.md[SG5S]: F:驱动层与接线层全面复审纪要：五路只读复审（VAIO/ASIO/APO等）的51条发现原文 | R:- | A:收口留证，dated记录不改写原文 | S:-
 驱动层与接线层全面复审计划-2026-11-11.md[SG4T]: F:驱动层与接线层全面复审计划：五路只读复审的范围与分工 | R:- | A:复审计划留证，结论见同名纪要与收口 | S:-
 高性能专业音频系统评估-2026-11-01.md[SG5L]: F:2026-11-01高性能专业音频系统评估：引擎DSP链、出厂预设资产与Windows Release DLL的性能评估 | R:- | A:基线评估留证 | S:-
+全量代码审查-2026-11-24.md[SG7L]: F:2026-11-24全量代码审查报告：四路并行审查（引擎核心/Windows驱动与桥/Dart应用层/工具链与文档）汇编，高5中17低31，附分批修复方案与逐批收口附录 | R:code:docs/30-审查/资源计划实施收口-2026-11-12.md | A:审查结论按批A（高）→B（引擎中）→C（Dart/工具链中）→D（低）推进，每批以dated附录收口留证，原文不改写；含CI J6长期红的定罪终结注记 | S:审查条目只是线索，修复前必须按源码复核（仓库AGENT.md §3.8口径）；驱动与桥一路为零高零中，勿因总表数字误判风险分布
 
 ===D:/temp_desktop/Proj/JamesDSP/app/auradsp_app/assets/milkdrop/===
 bio_pulsar.milk[FE5T]: F:MilkDrop内置预设Bio Pulsar：低衰减（fDecay 0.950）径向脉动波形（nWaveMode 0），画面随乐律动扩张收缩 | R:code:app/auradsp_app/lib/features/visualizer/plugins/milkdrop_builtins.dart,code:app/auradsp_app/assets/milkdrop/cosmic_warp.milk | A:r65内置的三个真.milk预设之一，经builtin:伪路径由MilkdropPreset.resolveFilePath解析并暂存后供projectM桥加载 | S:内置预设必须是真实.milk内容，builtin:伪路径本身不可直接喂给桥的parseFile
@@ -4031,7 +4032,7 @@ neon_vortex.milk[FE5T]: F:MilkDrop内置预设Neon Vortex：高衰减长拖尾�
 
 ===D:/temp_desktop/Proj/JamesDSP/core/desktop/visualizer/projectm_bridge/===
 CMakeLists.txt[FV6T]: F:构建projectM桥DLL：链接SDK导入库与OpenGL，产出供Flutter runner旁置的桥二进制 | R:code:core/desktop/visualizer/projectm_bridge/projectm_bridge_api.h,code:CMakeLists.txt | A:SDK路径经AURADSP_PROJECTM_SDK定位，根构建以AURADSP_BUILD_PROJECTM_BRIDGE开关（默认关）纳管 | S:发行打包时必须在调用会话设置AURADSP_PROJECTM_SDK，否则staging缺桥DLL被发布预检硬拦
-projectm_bridge.cpp[IE7L]: F:实现projectM桥：自持隐藏窗口WGL上下文与专用渲染线程，加载.milk预设、喂PCM并经自有FBO读回像素 | R:code:core/desktop/visualizer/projectm_bridge/projectm_bridge_api.h | A:全部GL与projectM调用收敛在渲染线程，控制面经消息与句柄状态交互，尺寸变更重建FBO | S:默认帧缓冲后缓冲在隐藏窗口读回恒失败（glReadPixels报0x502），帧读回必须走自有FBO；Windows GL头只有1.1，FBO入口须经wglGetProcAddress取
+projectm_bridge.cpp[IE7L]: F:实现projectM桥：自持隐藏窗口WGL上下文与专用渲染线程，加载.milk预设、喂PCM并经自有FBO读回像素 | R:code:core/desktop/visualizer/projectm_bridge/projectm_bridge_api.h | A:全部GL与projectM调用收敛在渲染线程，控制面经消息与句柄状态交互，尺寸变更重建FBO；渲染环解引用快照ctx前复验其仍在contexts_在册，防销毁后use-after-free | S:默认帧缓冲后缓冲在隐藏窗口读回恒失败（glReadPixels报0x502），帧读回必须走自有FBO；Windows GL头只有1.1，FBO入口须经wglGetProcAddress取；快照ctx可能已被并发销毁，任何解引用（含gl_ready读）前必须先复验在册
 projectm_bridge_api.h[IE7T]: F:声明projectM桥C ABI九导出：create/destroy/resize/尺寸查询/feed_pcm/load_preset/render_pixels等 | R:code:core/desktop/visualizer/projectm_bridge/projectm_bridge.cpp,code:app/auradsp_app/lib/features/visualizer/plugins/projectm_native_bridge.dart | A:不透明句柄加int错误码约定，PCM为交错float，预设以UTF-8路径传入 | S:导出集合与Dart侧lookup必须逐名一致，增删导出须同步两端与桥契约测试
 
 ===D:/temp_desktop/Proj/JamesDSP/docs/40-回顾/===
@@ -4144,8 +4145,8 @@ engine_param_table.h[CD9L]: F:参数ID单一真相：全量184参数的X宏表�
 ===D:/temp_desktop/Proj/JamesDSP/engine/chain/===
 channel_map.h[KG8S]: F:流与引擎声道适配统一表：位置映射、下混折叠chmap_fold_frame与上混填充，全平台单一真相 | R:code:core/desktop/windows-drivers/04_asio_driver/AuraAsioDriver.cpp | A:APO/VB/VAIO三桥与ASIO驱动只留一行委托，数值行为由channel_map_test宿主单测守 | S:矩阵下混除LFE外不丢内容：折入声道×0.7071、驻留原量；各宿主禁止再抄本地折叠表（历史上两次漂移定罪）
 engine_audiofile.cpp[KD5T]: F:测试放音音频文件解码：WAV之外经dr_mp3解码MP3供引擎测试与探针使用 | R:code:engine/chain/engine_probe.cpp | A:DRMP3_IMPLEMENTATION全仓唯一实例化点 | S:dr_mp3实现只能在此单点实例化，多点实例化会重复符号
-engine_chain.cpp[KD9L]: F:处理链编排实现：效果阶段顺序、链序重排、插件阶段路由（PluginChainComponent）与逐声道处理主循环 | R:code:engine/engine_internal.h,code:engine/chain/channel_map.h | A:链顺序由参数契约驱动，限幅器恒为链尾最终门（ADR-010） | S:RT主循环零分配零锁；链序变更必须与参数表与UI阶段元数据同步
-engine_convolver.cpp[KD7M]: F:卷积效果实现：IR加载、分区卷积与多声道卷积处理 | R:code:engine/engine_internal.h | A:文件路径经平台fs端口读取，APO形态只认中转目录路径 | S:RT线程不得加载IR文件，加载与校验在控制面完成
+engine_chain.cpp[KD9L]: F:处理链编排实现：效果阶段顺序、链序重排、插件阶段路由（PluginChainComponent）与逐声道处理主循环 | R:code:engine/engine_internal.h,code:engine/chain/channel_map.h | A:链顺序由参数契约驱动，限幅器恒为链尾最终门（ADR-010）；有限值守卫提为final_sample_guard在插件链前后各执行一次，守卫恒为最后写入者；@slider节只在RT块首执行，控制线程刷新不再执行脚本 | S:RT主循环零分配零锁；链序变更必须与参数表与UI阶段元数据同步；插件输入卫生不得替代链尾守卫，毒化样本必须在出链前被钳清
+engine_convolver.cpp[KD7M]: F:卷积效果实现：IR加载、分区卷积与多声道卷积处理 | R:code:engine/engine_internal.h | A:文件路径经平台fs端口读取，APO形态只认中转目录路径；厂商加载失败即清ir_ready与几何/峰值残留，状态与错误一致 | S:RT线程不得加载IR文件，加载与校验在控制面完成；加载失败不得留半成品状态供后续帧误用
 engine_probe.cpp[KD6L]: F:引擎探针导出：供测试与宿主诊断读取引擎内部状态的extern C探针面 | R:code:engine/chain/engine_audiofile.cpp | A:探针面与正式ABI分离，只服务测试与取证 | S:探针导出不得被产品路径依赖
 engine_viz.cpp[KD8M]: F:可视化数据生产：频谱历史、逐声道峰值与 PCM 抽头的 RT 侧写入 | R:code:engine/auradsp_engine.h | A:频谱历史每个 process 块必须调用写入；PCM 抽头供 projectM 桥读原始波形；compute_bands 峰值聚合后按每带 bin 数扣偏置校正（1/sqrt(lnN+γ+1/2N)，N=1 不变） | S:RT 侧只写、UI 侧只读的 SPSC 纪律，漏调写入频谱冻结；峰值聚合的统计偏置随带宽指数增长（白噪约 +11 dB 倾斜），校正与聚合口径绑定，改聚合须连同校正重定；EQ 输入/输出两抽头共用 compute_bands，频响差值靠同函数相消
 speaker_layout.h[KH6T]: F:8声道位掩码定义：对齐WAVEFORMATEX与驱动拓扑声道序 | R:code:engine/chain/channel_map.h | A:声道位置语义的位级基础，与channel_map位置表配套 | S:掩码位序必须与Windows驱动拓扑一致，改位序等于改声道身份
@@ -4159,8 +4160,8 @@ dsp_gate.cpp[KD6M]: F:链头动态处理：噪声门、Deesser与自动增益补
 dsp_haas.cpp[KD5T]: F:Haas差分环绕：一侧延迟加干湿混合、另一侧恒直通 | R:code:engine/engine_internal.h | A:延迟侧由haas.side参数决定 | S:-
 dsp_lookahead_limiter.h[KD7T]: F:前视限幅器：链尾最终门的峰值钳制实现 | R:code:engine/chain/engine_chain.cpp | A:ADR-010链尾语义的实现件 | S:前视窗外的硬钳行为为已登记待裁定项（R-02），改钳制策略前先看未决登记
 dsp_loudness.cpp[KD5T]: F:响度补偿：慢速电平跟随估计回放响度并做等响度自适应修正 | R:code:engine/engine_internal.h | A:约0.5s慢速跟随，避免逐帧增益抽动 | S:-
-dsp_mc_liveprog.cpp[KD7L]: F:多声道EEL脚本级宿主（liveprog.mc方案B）：脚本只处理spl0/spl1、其余声道旁路 | R:code:engine/dsp/dsp_mc_liveprog.h | A:并发纪律平移legacy liveprogWrapper的P-016影子槽方案 | S:脚本环境num_ch/nch为当前链声道数，脚本本体只见前两声道是既定语义不得误判为丢声道
-dsp_mc_liveprog.h[KD6T]: F:多声道EEL脚本宿主声明：liveprog.mc的接口与状态结构 | R:code:engine/dsp/dsp_mc_liveprog.cpp | A:与单声道LiveProg并存的多声道脚本面 | S:-
+dsp_mc_liveprog.cpp[KD7L]: F:多声道EEL脚本级宿主（liveprog.mc方案B）：脚本只处理spl0/spl1、其余声道旁路；托管迭代预算按块补给、块内逐帧共享 | R:code:engine/dsp/dsp_mc_liveprog.h | A:并发纪律平移legacy liveprogWrapper的P-016影子槽方案；写回先落float域再判有限并钳±10，防大double转float溢出Inf漏过 | S:脚本环境num_ch/nch为当前链声道数，脚本本体只见前两声道是既定语义不得误判为丢声道；@sample逐帧执行，任何逐次预算都会被帧数放大，必须用托管预算口径
+dsp_mc_liveprog.h[KD6T]: F:多声道EEL脚本宿主声明：liveprog.mc的接口与状态结构（含托管预算装填口） | R:code:engine/dsp/dsp_mc_liveprog.cpp | A:与单声道LiveProg并存的多声道脚本面；无调用方的slider节导出已随控制线程执行摘除而删除 | S:-
 dsp_mc_reverb.cpp[KD7M]: F:离散多声道FDN混响：N进N出反馈延迟网络 | R:code:engine/engine_internal.h | A:WP1按多声道重构方案§3.3设计 | S:-
 dsp_oversample.h[KD6S]: F:过采样工具：非线性效果的抗混叠升降采样 | R:code:engine/engine_internal.h | A:供饱和类效果在高倍率域处理后抽取 | S:-
 dsp_psycho.cpp[KD5T]: F:心理声学低频增强：基于缺失基频心理声学的低频下潜感合成 | R:code:engine/engine_internal.h | A:P2拆分件 | S:-
@@ -4169,7 +4170,7 @@ dsp_spatial.cpp[KD7L]: F:空间音效：参数化HRTF加早期反射（影院/�
 
 ===D:/temp_desktop/Proj/JamesDSP/engine/legacy/===
 MemoryUsage.h[LZ3T]: F:上游内存用量统计头（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP源码（GPL-3.0），仅可经[PATCHED-AuraDSP P-NNN]注释补丁并在PATCHES.md登记，禁止直接改写上游逻辑 | S:-
-PATCHES.md[SG8L]: F:legacy补丁台账：全部[PATCHED-AuraDSP P-NNN]补丁的编号、缘由与落点登记 | R:code:engine/legacy/jamesdsp.c | A:改legacy的唯一合法通道记录 | S:新增补丁必须先在此登记编号再落码，台账与代码注释编号必须一致
+PATCHES.md[SG8L]: F:legacy补丁台账：全部[PATCHED-AuraDSP P-NNN]补丁的编号、缘由与落点登记，现行54条（含P-052 gmem钳制、P-053迭代预算托管口径修订、P-054懒分配补登记） | R:code:engine/legacy/jamesdsp.c | A:改legacy的唯一合法通道记录；标记格式已统一为标准形，裸标记与合并标记清零 | S:新增补丁必须先在此登记编号再落码，台账与代码注释编号必须一致
 cpthread.c[LZ3S]: F:上游跨平台线程封装实现（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP源码（GPL-3.0），仅可经[PATCHED-AuraDSP P-NNN]注释补丁并在PATCHES.md登记，禁止直接改写上游逻辑 | S:-
 cpthread.h[LZ3T]: F:上游跨平台线程封装声明（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP源码（GPL-3.0），仅可经[PATCHED-AuraDSP P-NNN]注释补丁并在PATCHES.md登记，禁止直接改写上游逻辑 | S:-
 essential.h[LZ3S]: F:上游基础宏与类型定义头（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP源码（GPL-3.0），仅可经[PATCHED-AuraDSP P-NNN]注释补丁并在PATCHES.md登记，禁止直接改写上游逻辑 | S:-
@@ -4184,8 +4185,8 @@ convolver1D.c[LZ5M]: F:上游一维卷积实现（JamesDSP遗产） | R:code:eng
 crossfeed.c[LZ5S]: F:上游交叉馈送实现（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP源码（GPL-3.0），仅可经[PATCHED-AuraDSP P-NNN]注释补丁并在PATCHES.md登记，禁止直接改写上游逻辑 | S:-
 dbb.c[LZ5S]: F:上游动态低频增强实现（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP源码（GPL-3.0），仅可经[PATCHED-AuraDSP P-NNN]注释补丁并在PATCHES.md登记，禁止直接改写上游逻辑 | S:-
 dynamic.c[LZ5S]: F:上游动态处理实现（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP源码（GPL-3.0），仅可经[PATCHED-AuraDSP P-NNN]注释补丁并在PATCHES.md登记，禁止直接改写上游逻辑 | S:-
-liveprogWrapper.c[LZ7L]: F:legacy LiveProg（EEL2脚本）宿主包装：脚本编译、参数滑杆与逐帧执行的遗产实现 | R:code:engine/legacy/PATCHES.md,code:engine/dsp/dsp_mc_liveprog.cpp | A:上游遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记；P-016影子槽并发纪律源出于此，多声道宿主逐条平移 | S:脚本只处理spl0/spl1为既定语义；影子槽纪律不得回退为直写共享状态
-multimodalEQ.c[LZ5M]: F:上游多模式均衡实现（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
+liveprogWrapper.c[LZ7L]: F:legacy LiveProg（EEL2脚本）宿主包装：脚本编译、参数滑杆与逐帧执行的遗产实现；注册默认校验器拒sleep并按块装填托管预算（P-053） | R:code:engine/legacy/PATCHES.md,code:engine/dsp/dsp_mc_liveprog.cpp | A:上游遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记；P-016影子槽并发纪律源出于此，多声道宿主逐条平移 | S:脚本只处理spl0/spl1为既定语义；影子槽纪律不得回退为直写共享状态
+multimodalEQ.c[LZ5M]: F:上游多模式均衡实现（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写；P-006/P-007裸标记已统一标准形（M10） | S:-
 reverb.c[LZ5M]: F:上游混响实现（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
 stereoEnhancement.c[LZ5S]: F:上游立体声增强实现（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
 vacuumTube.c[LZ5S]: F:上游电子管模拟实现（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
@@ -4202,10 +4203,10 @@ eelCommon.h[LZ4T]: F:EEL2公共常量与共享定义头（上游遗产） | R:co
 eel_matrix.h[LZ4M]: F:EEL2矩阵运算辅助头（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
 fft.c[LZ4L]: F:EEL2内嵌FFT实现（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
 fft.h[LZ4T]: F:EEL2内嵌FFT声明（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
-glue_port.h[LZ4M]: F:EEL2与宿主之间的胶水端口定义（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
-ns-eel-int.h[LZ4S]: F:NS-EEL内部接口声明（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
-ns-eel.h[LZ4T]: F:NS-EEL对外声明（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
-nseel-compiler.c[LZ6L]: F:NS-EEL脚本编译器核心：EEL2脚本编译为可执行表示（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
+glue_port.h[LZ4L]: F:EEL2与宿主之间的胶水端口定义（上游遗产）；含字节码执行器与gmem寻址（P-052掩码回绕） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写；GLUE_CALL_CODE支持托管预算指针入参 | S:-
+ns-eel-int.h[LZ4M]: F:NS-EEL内部接口声明（上游遗产）；含codeHandleType托管预算字段与RAM分配（P-052掩码） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
+ns-eel.h[LZ4S]: F:NS-EEL对外声明（上游遗产）；含AuraDSP预算装填与默认校验器声明（P-053） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
+nseel-compiler.c[LZ6L]: F:NS-EEL脚本编译器核心：EEL2脚本编译为可执行表示（上游遗产）；实现托管迭代预算装填（P-053） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
 nseel-ram.c[LZ4T]: F:NS-EEL RAM管理实现（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
 s_str.c[LZ4S]: F:EEL2字符串处理实现（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游数值库遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
 s_str.h[LZ4T]: F:EEL2字符串处理声明（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游数值库遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
@@ -4330,7 +4331,7 @@ spectralInterpolatorFloat.h[LZ5T]: F:上游频谱插值（float）声明（James
 
 ===D:/temp_desktop/Proj/JamesDSP/engine/legacy/jdsp/===
 jdspController.c[LZ6M]: F:上游JDSP控制器实现：遗产效果链的参数与状态调度（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
-jdsp_header.h[LZ5T]: F:上游JDSP总头：遗产模块的聚合声明（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
+jdsp_header.h[LZ5L]: F:上游JDSP总头：遗产模块的聚合声明（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写；文件内补丁标记已统一标准形（M10） | S:-
 
 ===D:/temp_desktop/Proj/JamesDSP/engine/platform/android/===
 README.md[SG4T]: F:engine/platform/android端口说明：Android侧平台适配的现状与边界 | R:code:engine/AGENT.md | A:平台端口目录的局部说明 | S:-
@@ -4357,7 +4358,7 @@ win_compat.cpp[IP5S]: F:Windows兼容层实现：模块加载等Win32细节的�
 
 ===D:/temp_desktop/Proj/JamesDSP/engine/plugins/api/===
 plugin_format_driver.h[IE7T]: F:插件格式驱动接口：各格式（VST3/CLAP/VST2等）向宿主注册的统一驱动面 | R:code:engine/plugins/api/plugin_host.h | A:格式实现只经此接口接入，宿主不感知格式细节 | S:新增格式必须实现本接口，禁止在宿主层写格式分支
-plugin_host.h[IE8L]: F:插件宿主引擎API（M1）：进程内托管VST3/CLAP的元数据、实例与处理契约 | R:code:engine/plugins/driver/plugin_host_manager.cpp | A:扫描与加载共用本头的PluginMetadata等类型 | S:宿主API是引擎与格式驱动之间的唯一契约面
+plugin_host.h[IE8L]: F:插件宿主引擎API（M1）：进程内托管VST3/CLAP的元数据、实例与处理契约；PluginSlot含传输失联原子快照 | R:code:engine/plugins/driver/plugin_host_manager.cpp | A:扫描与加载共用本头的PluginMetadata等类型 | S:宿主API是引擎与格式驱动之间的唯一契约面
 plugin_metadata_util.h[IE5T]: F:插件元数据填充原语：扫描与加载共用，只依赖PluginMetadata不依赖格式SDK | R:code:engine/plugins/api/plugin_host.h | A:保持格式无关，避免元数据逻辑在各格式驱动里复制 | S:-
 
 ===D:/temp_desktop/Proj/JamesDSP/engine/plugins/driver/===
@@ -4368,7 +4369,7 @@ plugin_bundle.h[IE5T]: F:插件bundle内二进制解析声明 | R:code:engine/pl
 plugin_chain_component.cpp[IE8L]: F:插件链组件：把插件槽接入处理链，逐槽故障隔离（SEH）与旁路、延迟对齐 | R:code:engine/plugins/driver/plugin_chain_component.h,code:engine/chain/engine_chain.cpp | A:Phase 3起链的插件阶段经本组件路由；故障槽自动旁路并上报 | S:插件崩溃必须被隔离为单槽旁路，禁止波及整链与宿主进程
 plugin_chain_component.h[IE7T]: F:插件链组件声明：槽位状态、旁路与处理接口 | R:code:engine/plugins/driver/plugin_chain_component.cpp | A:与实现成对 | S:-
 plugin_driver_registry.cpp[IE6S]: F:插件格式驱动注册表：汇总已注册格式驱动供扫描与加载分发 | R:code:engine/plugins/api/plugin_format_driver.h | A:新增格式在此登记后自动进入扫描面 | S:-
-plugin_host_manager.cpp[IE8L]: F:插件宿主管理器：实例生命周期、进程内与远程宿主调度、加载卸载排空 | R:code:engine/plugins/api/plugin_host.h,code:engine/plugins/driver/inflight_guard.h | A:时间与等待经port/time.h收口，禁止直用Win32计时 | S:卸载必须走在飞排空，禁止在RT处理中途释放实例
+plugin_host_manager.cpp[IE8L]: F:插件宿主管理器：实例生命周期、进程内与远程宿主调度、加载卸载排空、再激活静默握手、通道scratch代际化与延迟/失联快照发布 | R:code:engine/plugins/api/plugin_host.h,code:engine/plugins/driver/inflight_guard.h | A:时间与等待经port/time.h收口，禁止直用Win32计时；快照在平面与交错两处理路径逐块发布，拆卸清零、落座与再激活以新实例活读回填 | S:卸载必须走在飞排空，禁止在RT处理中途释放实例；快照不清零会使重载槽被旧失联值判旁路恒直通
 plugin_json.cpp[IE5S]: F:插件元数据JSON序列化实现（不依赖格式SDK） | R:code:engine/plugins/driver/plugin_json.h | A:元数据跨进程传递（远程宿主）经此序列化 | S:-
 plugin_json.h[IE5T]: F:插件元数据JSON序列化声明 | R:code:engine/plugins/driver/plugin_json.cpp | A:与实现成对 | S:-
 plugin_scanner.cpp[IE7M]: F:插件扫描器：遍历插件目录、识别格式并产出元数据清单 | R:code:engine/plugins/driver/plugin_driver_registry.cpp,code:engine/plugins/api/plugin_metadata_util.h | A:扫描在控制面执行，结果供UI与会话恢复使用 | S:扫描不得加载执行插件本体到RT路径，坏插件必须容错跳过
@@ -4412,7 +4413,7 @@ plugin_host_command.cpp[IE6S]: F:远程宿主命令编解码实现：宿主进�
 plugin_host_command.h[IE6T]: F:远程宿主命令协议声明 | R:code:engine/plugins/platform/host/plugin_host_command.cpp | A:与实现成对 | S:-
 
 ===D:/temp_desktop/Proj/JamesDSP/engine/plugins/platform/posix/host/===
-plugin_host_client_posix.cpp[IE6M]: F:POSIX远程宿主客户端：拉起并驱动Linux隔离宿主进程 | R:code:engine/plugins/platform/host/plugin_host_command.h | A:与win32客户端同协议、平台实现分离 | S:-
+plugin_host_client_posix.cpp[IE6L]: F:POSIX远程宿主客户端：拉起并驱动Linux隔离宿主进程；RemotePluginInfo九个字符串字段逐一NUL终止（与Win32同口径） | R:code:engine/plugins/platform/host/plugin_host_command.h | A:与win32客户端同协议、平台实现分离 | S:-
 plugin_host_main_posix.cpp[IE6S]: F:POSIX隔离宿主进程入口：独立进程内加载插件并经IPC服务 | R:code:engine/plugins/platform/posix/host/plugin_host_client_posix.cpp | A:宿主崩溃只损失自身进程，引擎侧逐槽旁路 | S:-
 plugin_shared_region_posix.cpp[IE6S]: F:POSIX共享内存区实现：宿主与引擎之间的音频与参数共享段 | R:code:engine/plugins/platform/host/plugin_host_command.h | A:音频数据经共享段零拷贝传递 | S:-
 
@@ -4448,7 +4449,7 @@ preset_io.h[IE6T]: F:插件预设读写接口：插件状态块的序列化与�
 
 ===D:/temp_desktop/Proj/JamesDSP/installer/===
 README.md[OV6T]: F:installer目录总说明：统一发布编排与各平台打包层的入口索引 | R:code:installer/release.py | A:发行入口为release.py，各平台细节在packkit与平台层 | S:打包前先核本目录现行入口，勿按旧路径与旧参数假设
-release.py[OV9M]: F:统一发布编排入口：按平台轮次驱动发行计划产出deliver集，预检硬门禁与进度小窗取消回传 | R:code:installer/packkit/release_api.py | A:发行唯一入口产物落--out-root下deliver-rN；staging须先由pack.py构建；拉起progress_ui | S:发行前核对资源驱动新鲜度与projectM SDK环境，AURADSP_PROJECTM_SDK缺失时静默不含桥须显式设置；预检先于--build
+release.py[OV9M]: F:统一发布编排入口：按平台轮次驱动发行计划产出deliver集，预检硬门禁与进度小窗取消回传 | R:code:installer/packkit/release_api.py | A:发行唯一入口产物落--out-root下deliver-rN；staging须先由pack.py构建；进度窗默认开、--no-progress-ui可关，只读计划/校验不开窗 | S:发行前核对资源/驱动新鲜度与projectM SDK环境，缺失时桥静默不含须显式设置
 
 ===D:/temp_desktop/Proj/JamesDSP/installer/android/===
 README.md[OV4T]: F:Android侧打包说明（占位与现状） | R:code:installer/README.md | A:平台层说明 | S:-
@@ -4535,7 +4536,7 @@ textio.py[OV5T]: F:packkit/linux文本IO工具：包内文本文件的编码与�
 
 ===D:/temp_desktop/Proj/JamesDSP/installer/packkit/windows/===
 __init__.py[OV5T]: F:packkit/windows包入口 | R:code:installer/packkit/windows/cli.py | A:平台层命名空间 | S:-
-cli.py[OV7S]: F:packkit/windows命令行入口：参数解析、模式分发与进度小窗取消回传 | R:code:installer/windows/pack.py | A:windows/pack.py经此进入平台层；长跑模式拉起progress_ui并在阶段前查ui_cancelled | S:参数以--help与源码为准勿凭记忆拼；关窗不等于取消，取消须经窗口CANCEL文本行
+cli.py[OV7M]: F:packkit/windows命令行入口：参数解析、模式分发与进度小窗取消回传；驱动新鲜度门覆盖driver/setup/portable三模式 | R:code:installer/windows/pack.py | A:windows/pack.py经此进入平台层；长跑模式拉起progress_ui并在阶段前查ui_cancelled，只读调用（--help/--plan/--verify）不开窗 | S:参数以--help与源码为准勿凭记忆拼；关窗不等于取消，取消须经窗口CANCEL文本行
 driver.py[OV7S]: F:packkit/windows驱动打包：驱动模式的构建衔接与新鲜度门 | R:code:installer/packkit/windows/driver_payload.py | A:驱动源变更面（VAIO源加common头加vcxproj）触发重建判定 | S:驱动已新鲜时--build-driver的改写校验会失败，此时应跳过驱动步而非强推
 driver_payload.py[OV6S]: F:packkit/windows驱动载荷组装：把预构建驱动件组入包体 | R:code:installer/packkit/windows/driver.py | A:VAIO驱动不在build_windows目标集内，靠预构建载荷入包 | S:入包前必须验.cat有Authenticode签名者，无签名裸cat会触发Code 52
 installer_build.py[OV6S]: F:packkit/windows向导构建衔接：按需重建安装向导二进制 | R:code:installer/packkit/windows/release_plan.py | A:setup模式默认复用旧向导，改向导的轮次必须显式重建 | S:动过向导却不重建会装出旧行为，须以向导app.so哈希新旧不同作新鲜度证据
@@ -4659,7 +4660,7 @@ ORIGIN.md[SG7S]: F:第三方源码登记册：source/下克隆项目的来源、
 ===D:/temp_desktop/Proj/JamesDSP/test/===
 README.md[TQ6S]: F:test目录规范：构建树位置与测试组织口径 | R:code:test/runner.py | A:编译验证树一律test/build/<name>，禁止仓库根随手建build_* | S:违反构建树规范的产物不得入库
 engine_artifact.py[TQ7T]: F:引擎构建产物路径的单一解析器：find_engine_lib按平台与配置定位引擎库 | R:code:test/runner.py | A:此前百余smoke各自拼路径且有硬编码作者机绝对路径，S1起只许在此定义一次 | S:smoke与工具禁止再自行拼引擎产物路径，一律经本解析器
-runner.py[TQ8L]: F:测试总入口：smoke全量、UI自动化与性能回归调度，按平台集合分发并接进度小窗取消 | R:code:test/engine_artifact.py,code:test/README.md | A:新smoke登记进对应平台集合与run_smoke_tests主清单两处；进度小窗取消在每条smoke前查 | S:纯源码契约smoke必须进PLATFORM_ANY，误放Windows段会Linux静默跳过假绿；登记后核对diff行数防截断
+runner.py[TQ8L]: F:测试总入口：smoke全量、UI自动化与性能回归调度，按平台集合分发并接进度小窗取消 | R:code:test/engine_artifact.py,code:test/README.md | A:新smoke登记进对应平台集合与run_smoke_tests主清单两处，并由smoke_runner_registry三向对账守恒；进度小窗取消在每条smoke前查，--no-progress-ui可关窗 | S:纯源码smoke必须进PLATFORM_ANY，误放Windows段会在Linux静默跳过假绿
 
 ===D:/temp_desktop/Proj/JamesDSP/test/data/===
 reverb_presets.json[TQ4S]: F:混响预设测试数据：供混响相关测试加载的预设样本 | R:code:test/runner.py | A:测试夹具数据 | S:-
@@ -4799,7 +4800,7 @@ smoke_crossfeed.py[TQ5S]: F:交叉馈送烟测：crossfeed通路的数值核验 
 smoke_d1_latency_sr.py[TQ5S]: F:D1延迟采样率烟测：延迟测量与采样率口径的核验 | R:- | A:常驻烟测 | S:-
 smoke_d2_rt_drain.py[TQ6S]: F:D2 RT排空烟测：插件卸载时在飞处理排空纪律的核验 | R:- | A:常驻烟测 | S:排空不得在RT线程等待或释放处理中实例
 smoke_d3_vaio_pump_wait.py[TQ6S]: F:D3泵等待烟测：VAIO泵循环零Sleep与有界等待的源码不变式核验 | R:- | A:D3纪律的常驻门禁 | S:泵循环体禁止出现Sleep调用，等待必须经WaitAudioPeriod且上界50ms
-smoke_d4b_swallow.py[TQ6S]: F:D4b静默异常烟测：全lib扫描catch必须绑定(e,st)并记录或带实质swallow注释 | R:- | A:静默吞异常的常驻门禁，扫描无路径参数全lib | S:匿名catch(_)自动判红，新代码不得绕过
+smoke_d4b_swallow.py[TQ6M]: F:D4b静默异常烟测：全lib扫描catch必须绑定(e,st)并记录或带实质swallow注释；限流出口数钉死（现行11） | R:- | A:静默吞异常的常驻门禁，扫描无路径参数全lib | S:匿名catch(_)自动判红，新代码不得绕过；新增限流出口须同轮改钉数
 smoke_d5_slot_timeout.py[TQ5S]: F:D5槽超时烟测：插件槽调用超时处置的核验 | R:- | A:常驻烟测 | S:-
 smoke_d6_patch_ids.py[TQ6S]: F:D6补丁编号烟测：legacy补丁注释编号与PATCHES.md台账的一致性核验 | R:- | A:补丁纪律的常驻门禁 | S:落码补丁必须先在台账登记编号
 smoke_d7_asrc_consistency.py[TQ5S]: F:D7异步采样率转换一致性烟测 | R:- | A:常驻烟测 | S:-
@@ -4846,8 +4847,8 @@ smoke_linux_plugin_ui.py[TQ5S]: F:Linux插件界面烟测：X11编辑器承载�
 smoke_linux_pulse_output.py[TQ5S]: F:Linux Pulse输出烟测：PulseAudio默认输出通路核验 | R:- | A:Linux平台烟测 | S:-
 smoke_linux_source_table.py[TQ5S]: F:Linux源表烟测：core_sources核心源表在Linux构建的完整性核验 | R:- | A:Linux平台烟测 | S:-
 smoke_linux_virtual_sink.py[TQ5S]: F:Linux虚拟汇烟测：虚拟sink通路的核验 | R:- | A:Linux平台烟测 | S:-
-smoke_liveprog.py[TQ6S]: F:LiveProg烟测：EEL脚本通路的基本处理核验 | R:- | A:常驻烟测 | S:脚本只处理spl0/spl1为既定语义
-smoke_liveprog_gmem.py[TQ5S]: F:LiveProg全局内存烟测：脚本gmem共享面的核验 | R:- | A:常驻烟测 | S:-
+smoke_liveprog.py[TQ6M]: F:LiveProg烟测：EEL脚本通路的基本处理核验，含sleep编译期拒绝与托管迭代预算（死循环块级截断、@init大循环完整执行） | R:- | A:常驻烟测；测试脚本必须同时含@init与@sample两节 | S:脚本只处理spl0/spl1为既定语义
+smoke_liveprog_gmem.py[TQ5M]: F:LiveProg全局内存烟测：脚本gmem共享面的核验，含索引掩码回绕与负索引落点（分句柄分测） | R:- | A:常驻烟测 | S:-
 smoke_liveprog_mc.py[TQ6S]: F:多声道LiveProg烟测：liveprog.mc宿主的处理核验 | R:- | A:常驻烟测 | S:3+声道原样旁路为既定语义
 smoke_liveprog_mc_examples.py[TQ5S]: F:多声道LiveProg示例烟测：随附示例脚本的可运行性核验 | R:- | A:常驻烟测 | S:-
 smoke_liveprog_mc_stress.py[TQ6S]: F:多声道LiveProg压力烟测：高负载下脚本宿主的稳定性核验 | R:- | A:常驻烟测 | S:-
@@ -4889,7 +4890,7 @@ smoke_projectm_bridge_runtime.py[TQ7M]: F:projectM桥运行时烟测：真桥DLL
 smoke_ps1_bom.py[TQ5S]: F:PS1 BOM烟测：PowerShell脚本的编码与BOM口径核验 | R:- | A:常驻源码契约 | S:PS 5.1按ANSI读无BOM脚本，中文区域下脚本内中文字面量会乱码，门禁脚本只许ASCII标志串
 smoke_r47_input_metering.py[TQ5S]: F:r47输入电平烟测：输入侧电平表数据的核验 | R:- | A:常驻烟测 | S:-
 smoke_r47_vaio_selfheal.py[TQ6S]: F:r47 VAIO自愈烟测：桥残留断路器与自动恢复口径核验 | R:- | A:常驻烟测 | S:桥启动布防标志残留时跳过自动起桥并警告，手动选VAIO即接管重布防
-smoke_r47_vb_channel_discipline.py[TQ6S]: F:r47 VB声道纪律烟测：VB模式声道口径的核验 | R:- | A:常驻烟测 | S:-
+smoke_r47_vb_channel_discipline.py[TQ6T]: F:r47 VB声道纪律烟测：VB模式声道口径的核验，钉死字面量已按r55统一折叠函数chmap_fold_frame修订 | R:- | A:常驻烟测；钉死字面量随实现演进须以dated注记修订，不得静默改 | S:-
 smoke_r49_mc_stage_meters.py[TQ5S]: F:r49多声道阶段电平烟测：逐阶段电平的核验 | R:- | A:常驻烟测 | S:-
 smoke_r49_vb_testfile_channels.py[TQ5S]: F:r49 VB测试文件声道烟测：测试文件声道口径核验 | R:- | A:常驻烟测 | S:任一端为ASIO时文件测试源无效的口径由使用侧遵守
 smoke_release_strings.py[TQ5S]: F:发行字符串烟测：发行构建内版本与标志字符串的在位核验 | R:- | A:常驻源码契约 | S:打包前验暂存产物含本轮标志串是发行门禁的一部分
@@ -4936,7 +4937,8 @@ smoke_xdg_paths.py[TQ5S]: F:XDG路径烟测：Linux配置与数据路径的XDG�
 vdc_resampler_test.c[TQ4S]: F:VDC重采样原生测试：重采样数值的C级核验 | R:- | A:原生测试件 | S:-
 x11_min.h[TQ3T]: F:X11最小声明头：供Linux UI探针编译的最小X11定义 | R:- | A:测试辅助件 | S:-
 x11_tree_check.c[TQ4S]: F:X11窗口树检查：Linux插件窗口挂载的原生核验 | R:- | A:原生测试件 | S:-
-smoke_progress_ui.py[TQ8M]: F:进度小窗隔离纪律门禁：NO_UI、坏可执行文件、管道炸裂、嵌套抑制、事件协议、EOF自终止、四处接线与取消回传 | R:code:tools/bin/progress_ui.py,code:test/runner.py | A:纯源码+本地行为烟测任意平台可跑，逐行JSON事件形状与取消通道判别 | S:管道断裂后宿主自动失效但脚本照跑完，关窗永远不等于取消；UI异常绝不带崩脚本是立身之本
+smoke_progress_ui.py[TQ8M]: F:进度小窗隔离纪律门禁：NO_UI、坏可执行文件、管道炸裂、嵌套抑制、事件协议、EOF自终止、四处接线与取消回传，含中继模式与只读调用不开窗 | R:code:tools/bin/progress_ui.py,code:test/runner.py | A:纯源码+本地行为烟测任意平台可跑，逐行JSON事件形状与取消通道判别 | S:管道断裂后宿主自动失效但脚本照跑完，关窗永远不等于取消；UI异常绝不带崩脚本是立身之本
+smoke_runner_registry.py[TQ6T]: F:smoke登记三向对账自检：磁盘文件、runner平台集合与run_smoke_tests主清单互洽且无重名，防漏注册静默不跑 | R:code:test/runner.py | A:AST解析runner.py做集合对账，批A工具链F-1随8条漏跑smoke补注册一并新增 | S:新smoke只写文件不登记即被本烟测判红
 
 ===D:/temp_desktop/Proj/JamesDSP/test/ui/===
 ui_assert.py[TQ5S]: F:UI断言库：UI自动化验证共用的断言原语 | R:- | A:UI验证基础设施 | S:-
@@ -4956,7 +4958,7 @@ vm_abi_check.py[TQ5S]: F:VM ABI检查：虚拟机内引擎ABI的核验件 | R:- 
 ===D:/temp_desktop/Proj/JamesDSP/tools/===
 README.md[XG5T]: F:tools目录说明：工具分组与入口索引 | R:- | A:工具区说明 | S:-
 build_windows.ps1[XV7S]: F:根构建包装脚本：Windows全量构建的统一入口，转发tools/windows实现 | R:- | A:构建基础设施 | S:构建一律走本根包装脚本，嵌套调用子目录脚本曾静默无产出致暂存旧构建混入打包
-gen_apo_param_layout.py[XV7S]: F:APO参数布局生成：由engine_param_table.h派生参数块布局摘要 | R:- | A:生成工具，smoke_apo_param_layout守其产物 | S:改参数表任一行必须同轮重跑本工具，否则布局烟测红
+gen_apo_param_layout.py[XV7M]: F:APO参数布局生成：由engine_param_table.h派生参数块布局摘要（含v5字符串槽布局） | R:- | A:生成工具，smoke_apo_param_layout守其产物 | S:改参数表任一行必须同轮重跑本工具，否则布局烟测红
 gen_param_contract.py[XV7S]: F:参数契约夹具生成：由参数表与引擎三文件行数派生契约夹具 | R:- | A:生成工具，param_contract_test的Part D行数哨兵守其产物 | S:改engine_param_table.h、engine_internal.h或auradsp_engine.cpp任一行数必须同轮重跑本工具，否则J6单点红
 gen_theme.py[XQ4S]: F:主题生成：由主题定义产出主题代码 | R:- | A:生成工具 | S:-
 l10n_cjk_scan.py[XQ5S]: F:CJK文案扫描：检出文案中的编码与缺键问题 | R:- | A:本地化卫生工具 | S:-
@@ -4984,13 +4986,13 @@ legacy_copy_drift.py[XQ6S]: F:遗产副本漂移检查：检出legacy副本与�
 patch_id_scan.py[XQ6S]: F:补丁编号扫描：核对legacy补丁注释与台账编号 | R:- | A:D6门禁的工具面 | S:-
 push_via_api.py[XQ4S]: F:API推送工具：经GitHub API推送的应急通道 | R:- | A:辅助工具 | S:仅在常规git通道不可用时使用
 rebuild_plugin_cache.py[XQ5S]: F:插件缓存重建：重建插件扫描缓存 | R:- | A:辅助工具 | S:-
-run_dart_tests.py[XQ6S]: F:Dart测试运行器：按文件组织flutter test的执行 | R:- | A:测试基础设施 | S:Windows全量跑有竞争失败，判读须按单文件复跑区分竞争与真失败
+run_dart_tests.py[XQ6S]: F:Dart测试运行器：按文件组织flutter test的执行，Windows范式文件在非Windows主机明示SKIP-PLATFORM | R:- | A:测试基础设施；WINDOWS_ONLY清单与runner.py的PLATFORM_WINDOWS同口径，虚拟ASIO宽度测试已补登记 | S:Windows全量跑有竞争失败，判读须按单文件复跑区分竞争与真失败
 run_tests.py[XQ6S]: F:测试运行器：组织原生与烟测的批量执行 | R:- | A:测试基础设施 | S:两套全量不得同时跑
 scan_engine_strings.py[XQ5S]: F:引擎字符串扫描：检出引擎二进制内的标志字符串 | R:- | A:发行核验工具 | S:Dart AOT中文串为UTF-16LE，英文为UTF-8，扫描口径须分开
 verify_dll_copies.py[XQ6S]: F:DLL副本核验：核对各副本与构建产物的一致性 | R:- | A:发行核验工具 | S:构建驱动树后、跑runner前必须刷新副本，副本不入git
 viz_frame.py[XQ4S]: F:可视化帧工具：抓取与比对可视化帧 | R:- | A:调试辅助工具 | S:-
 win_env_sanitize.py[XQ5S]: F:Windows环境净化：子进程环境变量的清理实现 | R:- | A:辅助工具 | S:-
-progress_ui.py[XV9L]: F:长跑脚本的独立Tk进度小窗：JSON行经stdin旁观进度，stdout回传CANCEL，管道断裂时_safe_drop永久静默 | R:code:test/smoke/smoke_progress_ui.py,code:installer/packkit/common.py | A:pythonw子进程标准库零新依赖；宿主公开方法永不抛；EOF自终止不留孤儿窗；AURADSP_NO_UI全局禁用 | S:管道断裂必须显式close并proc.stdin=None断引用，否则BufferedWriter析构期flush已关fd打印Exception ignored+OSError22；关窗不等于取消，取消只认CANCEL文本行
+progress_ui.py[XV9L]: F:长跑脚本的独立Tk进度小窗：JSON行经stdin旁观进度，stdout回传CANCEL，管道断裂时_safe_drop永久静默；非交互会话走事件文件中继+计划任务拉起查看器 | R:code:test/smoke/smoke_progress_ui.py,code:installer/packkit/common.py | A:pythonw子进程标准库零新依赖；宿主公开方法永不抛；EOF自终止不留孤儿窗；AURADSP_NO_UI全局禁用，--no-progress-ui等价 | S:管道断裂必须显式close并proc.stdin=None断引用，否则BufferedWriter析构期flush已关fd打印Exception ignored+OSError22；关窗不等于取消，取消只认CANCEL文本行
 
 ===D:/temp_desktop/Proj/JamesDSP/tools/calibration/===
 cal2vdc.py[XQ4S]: F:校准转VDC工具：把校准数据转为.vdc文件 | R:- | A:校准辅助工具 | S:-
@@ -5033,10 +5035,10 @@ ui_verify_deep_redesign.py[XQ4S]: F:UI验证探针：深度重构版界面的呈
 ui_verify_sixpage.py[XQ4S]: F:UI验证探针：六页巡检的呈现核验 | R:- | A:探针工具，非常驻门禁 | S:-
 
 ===D:/temp_desktop/Proj/JamesDSP/tools/remote/===
-sync_to_vm.py[XQ5S]: F:远程同步工具：把文件同步到虚拟机的通道脚本 | R:- | A:远程验证基础设施 | S:大文件经中继须限速或走开发机直连宾机局域网
-vm_exec.py[XQ5S]: F:远程执行工具：在虚拟机内执行命令的通道脚本 | R:- | A:远程验证基础设施 | S:-
+sync_to_vm.py[XQ5T]: F:远程同步工具：把文件同步到虚拟机的通道脚本（legacy）；凭据只从环境变量/参数取，无硬编码默认值 | R:- | A:远程验证基础设施 | S:大文件经中继须限速或走开发机直连宾机局域网；缺凭据即报错退出，不得回落内置口令
+vm_exec.py[XQ5T]: F:远程执行工具：在虚拟机内执行命令的通道脚本（legacy）；凭据只从环境变量/参数取，无硬编码默认值 | R:- | A:远程验证基础设施 | S:缺凭据即报错退出，不得回落内置口令（曾内置者按已泄漏处理）
 Invoke-DevTask.ps1[XR3T]: F:开发机长任务可靠通道：以一次性计划任务启动指定 PS 脚本，脱离 ssh 会话独立运行 | R:code:tools/remote/Invoke-GuestScript.ps1 | A:任务名与脚本路径为参数；被承载脚本自带进度/结果日志落盘，发起方事后轮询读文件判读 | S:-
-Invoke-GuestScript.ps1[XR4T]: F:从开发机把宾机Python脚本scp到宾机并经ssh执行，输出重定向落盘后回读 | R:code:tools/remote/guest_telemetry.py | A:Start-Process ssh -Wait加输出重定向规避嵌套交互ssh挂死；PyArgs改单字符串参数解决嵌套引号层问题 | S:-
+Invoke-GuestScript.ps1[XR4T]: F:从开发机把宾机Python脚本scp到宾机并经ssh执行，输出重定向落盘后回读；scp退出码必查，ssh带保活防中继挂死 | R:code:tools/remote/guest_telemetry.py | A:Start-Process ssh -Wait加输出重定向规避嵌套交互ssh挂死；PyArgs改单字符串参数解决嵌套引号层问题 | S:scp失败必须抛错中止，拿宾机旧副本冒充本轮结果是已定罪的假绿通道
 README.md[SG3T]: F:tools/remote 远程实测脚本登记：通道约定与每脚本用途、跑位、已知不可行项 | R:code:tools/remote/Invoke-GuestScript.ps1 | A:开发机/宾机分工、计划任务承载、交付回读哈希为准、PS 纯 ASCII 等约定集中于此，新脚本先在此登记 | S:-
 Restore-DriverCertTrust.ps1[XR3T]: F:从已签名 .cat 提取内嵌签名者证书并导入 LocalMachine Root 与 TrustedPublisher，恢复开发机驱动签名信任 | R:- | A:须提权运行（计划任务最高权限或管理员 shell）；导入后回读 .cat 的 Authenticode Status 自证 | S:-
 Send-ToGuest.ps1[XV3T]: F:从开发机向宾机投递文件（默认桌面）并回读宾机侧 SHA-256 与本地比对验证 | R:code:tools/remote/guest_file_info.py | A:开发机直连宾机局域网 scp（guest_key）；验证不过即抛错，不认 scp 退出码 | S:-
@@ -5052,7 +5054,7 @@ merge_resources.py[XQ5S]: F:资源合并：多来源资源的合并入管线 | R
 
 ===D:/temp_desktop/Proj/JamesDSP/tools/windows/===
 build_host_x86.bat[XV5T]: F:x86隔离宿主构建批处理：plugin_host_x86的构建入口 | R:- | A:构建基础设施 | S:双宿主按位宽分开构建
-build_windows.ps1[XV8L]: F:Windows构建实现：引擎、桥、驱动树、App与测试夹具的分步构建，Step 3b产测试夹具、Step 5同步暂存目录 | R:- | A:构建基础设施，根tools/build_windows.ps1为统一入口转发至此 | S:Step 1会结束在跑的App进程；依赖新构建产物的烟测必须把夹具目标登记进Step 3b目标集与产物清扫扩展名表，否则门禁机静默跳过；根构建会清空dist整树
+build_windows.ps1[XV8L]: F:Windows构建实现：引擎、桥、驱动树、App与测试夹具的分步构建，Step 3b产测试夹具、Step 5同步暂存目录；各步经Send-UiStep向进度小窗旁报 | R:- | A:构建基础设施，根tools/build_windows.ps1为统一入口转发至此；Step 2每轮把新鲜引擎DLL覆写test便捷副本、Step 3b含apo_engine_test且APO测试三件套每轮对齐（防冻结） | S:Step 1会结束在跑的App进程；依赖新构建产物的烟测必须把夹具目标登记进Step 3b目标集与产物清扫扩展名表，否则门禁机静默跳过；根构建会清空dist整树
 gpu_sampler.ps1[XQ4S]: F:GPU采样脚本（Windows版）：性能基线采样的执行件 | R:- | A:性能验证工具 | S:-
 out_build_engine.bat[XV4T]: F:引擎构建批处理（windows目录副本） | R:- | A:构建辅助 | S:-
 perf_regression.py[XQ5S]: F:性能回归工具（windows目录副本） | R:- | A:性能验证工具 | S:-
