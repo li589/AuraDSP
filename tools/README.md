@@ -48,6 +48,7 @@
 | `bin/run_dart_tests.py` | T-03 Dart 测试门禁：按文件串行 + 失败单文件重试两次 |
 | `bin/debug_log_scan.py` | 调试打印规范门禁（业务代码禁直接 print/debugPrint） |
 | `bin/viz_frame.py` | `auradsp_viz_frame` 的唯一 Python ctypes 镜像（§7-1） |
+| `bin/progress_ui.py` | 打包/发布/测试进度小窗（release.py、packkit、test/runner.py 共用）：默认打开，`--no-progress-ui` 或 `AURADSP_NO_UI=1` 关闭；独立子进程显示步进/日志/取消，UI 失败永不带崩宿主，非交互会话自动走文件中继到活动桌面会话 |
 
 ### 1b. 根级生成器与远程助手
 

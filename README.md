@@ -41,7 +41,7 @@ UI 与引擎之间只有一层 **C ABI**（`engine/auradsp_engine.h`）：UI 不
 | **Rootless** | Android APK | 会话级 AudioEffect 前台服务 | ○ 蓝本 `source/RootlessJamesDSP` |
 
 Windows 主卡三范式（ADR-014，`audio_modes.dart`）：**附加模式**（`sysapo` 系统 APO，默认）·
-**普通管线模式**（端点含 `vaio` AuraVAIO 虚拟声卡与 `vbcallback` Voicemeeter 回调）·
+**普通管线模式**（端点含 `vaio` AuraVAIO 虚拟声卡与 `vbcallback` Voicemeeter 回调；管线内输入/输出各自独立二选一 WASAPI / VAIO、四格自由组合，VAIO 输出时可把处理后音频镜像监听到所选 WASAPI 设备）·
 **ASIO 模式**（虚拟 ASIO / ASIO Client 二选一，2/4/6/8 声道）。
 Linux 三模式：`system`（PA 输出）· `virtual`（null-sink 虚拟设备）· `driver`（snd-aloop 回环），外加 ALSA 专家直连。
 双平台安装器均已落地（Windows 单文件向导 / Linux deb + AppImage + tar.gz），见 `installer/`。

@@ -105,6 +105,7 @@ installer/
   - Linux：四件（deb / 驱动 deb / AppImage / tar.gz），**单档位**——
     产物名不含档位后缀，两档会互相覆盖（`release.py` 直接拒绝）。
 - **发布未接线**：`--publish` 会明确失败。本轮（2026-11-20）只落工具，不产出、不上传、不投放。
+- **进度小窗**：`release.py` 与单平台 pack、测试 runner 默认打开进度小窗（`tools/bin/progress_ui.py`），`--no-progress-ui` 或环境变量 `AURADSP_NO_UI=1` 可关；只读调用（`--help`/`--plan`/`--verify`）不开窗。
 - 分层、命名规范与驱动门禁细则见 `docs/07_打包工具链分层与发布编排-2026-11-20.md`。
 
 ---

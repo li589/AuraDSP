@@ -79,7 +79,10 @@ struct WglContext {
                                nullptr, GetModuleHandleW(nullptr), nullptr);
         if (hwnd == nullptr) return false;
         hdc = GetDC(hwnd);
-        if (hdc == nullptr) return false;
+        if (hdc == nullptr) {
+            destroy();
+            return false;
+        }
 
         PIXELFORMATDESCRIPTOR pfd{};
         pfd.nSize = sizeof(pfd);
@@ -90,14 +93,24 @@ struct WglContext {
         pfd.cColorBits = 32;
         pfd.cDepthBits = 24;
         const int fmt = ChoosePixelFormat(hdc, &pfd);
-        if (fmt == 0 || !SetPixelFormat(hdc, fmt, &pfd)) return false;
+        if (fmt == 0 || !SetPixelFormat(hdc, fmt, &pfd)) {
+            destroy();
+            return false;
+        }
 
         // Bootstrap context, then try a 3.3 core context (libprojectM
         // 4.x targets GL 3.3); fall back to the bootstrap context.
+        // [审查 L16 2026-11-25] init 中途失败一律先 destroy() 再返回：
+        // 此前各失败点直接 return，已建的 HWND/HDC（及末步的 rc）
+        // 全部漏释放；destroy() 按成员判空收尾且把字段清零，可重入。
         HGLRC bootstrap = wglCreateContext(hdc);
-        if (bootstrap == nullptr) return false;
+        if (bootstrap == nullptr) {
+            destroy();
+            return false;
+        }
         if (!wglMakeCurrent(hdc, bootstrap)) {
             wglDeleteContext(bootstrap);
+            destroy();
             return false;
         }
         using CreateAttribsFn = HGLRC(WINAPI*)(HDC, HGLRC, const int*);
@@ -116,7 +129,11 @@ struct WglContext {
                 rc = core;
             }
         }
-        return wglMakeCurrent(hdc, rc) != FALSE;
+        if (!wglMakeCurrent(hdc, rc)) {
+            destroy();
+            return false;
+        }
+        return true;
     }
 
     void resize_window(int width, int height) {
@@ -279,8 +296,11 @@ struct FrameStore {
 
 struct auradsp_projectm_context {
     projectm_handle pm = nullptr;
-    int width = 0;
-    int height = 0;
+    /* [审查 L16 2026-11-25] width/height 由调用线程写（create/resize）、
+     * 渲染线程读（render/render_pixels）：改 atomic 消除形式数据竞争，
+     * 读写点均为隐式 load/store、调用形态不变。 */
+    std::atomic<int> width{0};
+    std::atomic<int> height{0};
     float fps = 60.0f;
     std::atomic<bool> preset_load_failed{false};
 

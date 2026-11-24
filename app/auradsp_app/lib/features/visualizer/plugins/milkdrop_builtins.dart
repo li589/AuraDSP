@@ -17,10 +17,11 @@ import 'milkdrop_preset.dart';
 abstract final class MilkdropBuiltinStaging {
   static const int _contentVersion = 1;
   static bool _done = false;
+  static bool _inFlight = false;
 
   static Future<void> ensureStaged() async {
-    if (_done) return;
-    _done = true;
+    if (_done || _inFlight) return;
+    _inFlight = true;
     try {
       final dir = ConfigManager.subDir('milkdrop_builtins');
       MilkdropPreset.builtinDir = dir.path;
@@ -42,9 +43,14 @@ abstract final class MilkdropBuiltinStaging {
         );
       }
       if (stale) await stampFile.writeAsString('$_contentVersion');
+      _done = true;
     } catch (e, st) {
       // 落盘失败不阻断可视化：内置预设回落声明参数的 Dart 渲染。
+      // 审查 F4：_done 只在成功后置位——失败不闩锁，后续调用
+      // （如下次进入可视化页）会重试落盘；_inFlight 防并发重入。
       swallow(e, st);
+    } finally {
+      _inFlight = false;
     }
   }
 }
