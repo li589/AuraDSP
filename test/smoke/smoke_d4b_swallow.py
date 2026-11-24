@@ -29,7 +29,8 @@
   [A] 规则引擎单元：构造 8 段片段，逐条验证 R1/R2/R3/R4 判红、注释与字符串排除
   [B] 全仓门禁：0 违规，且规模非空转
   [C] 覆盖证据：代码级 `catch (_)` 仅剩 1 处（debug_log 自引用，带标记）；
-      热路径 10 处全部是 swallowThrottled（P1 收敛：三桥 5×3→5、泵循环 3→1）；
+      热路径 11 处全部是 swallowThrottled（P1 收敛后 10 处；2026-11-24
+      桥管理收敛进 bridge_manager 后构成修订为 11，见 [C] 注释）；
       swallow 调用 ≥ 70
   [D] 反向验证：把真实源码里已修的一处改回 `catch (_) {}`，门禁必须判红
       （不做这层，就无法排除「扫描器什么都没扫到也算通过」的空转）
@@ -162,7 +163,10 @@ check("代码级 catch (_) 仅剩 1 处（debug_log 自引用）", under_code ==
 throttled = sum(1 for s in all_sites if "swallowThrottled(" in s["logged"])
 # P1 收敛后：三桥公共面 5 处 × 3 份 → AudioBridgeCore 一份 5 处；
 # 泵循环三个后端分支 3 处 → 单点 1 处。10 = 5 + 3(bridge-plugin-ffi) + 1(eq-probe) + 1(pump)。
-check("热路径限流出口 10 处", throttled == 10, f"实际 {throttled}")
+# 2026-11-24 构成修订（批A 门禁）：桥管理收敛进 bridge_manager 后构成变化——
+# 11 = 6(bridge_manager：桥公共面 5 + 泵循环单点 1) + 3(bridge-plugin-ffi)
+#    + 1(state_eq) + 1(audio_isolate)。
+check("热路径限流出口 11 处", throttled == 11, f"实际 {throttled}")
 
 plain = sum(1 for s in all_sites if "swallow(" in s["logged"])
 check("普通留痕出口 >= 70 处", plain >= 70, f"实际 {plain}")

@@ -190,7 +190,7 @@ assert st != 1, "sleep() must be rejected at compile time"
 # 10b) loop(2000000000) 在 @sample：预算强制截断，process 迅速返回
 # 且通路存活（无预算时本用例等于事实挂死，不设超时即门禁自证）。
 assert set_str("liveprog.code",
-               "@sample\nloop(2000000000, x += 1);\nspl0 *= 0.5;\nspl1 *= 0.5;") == 0
+               "@init\nx = 0;\n@sample\nloop(2000000000, x += 1);\nspl0 *= 0.5;\nspl1 *= 0.5;") == 0
 assert set_i("liveprog.enable", 1) == 0
 for i in range(N*2): buf[i] = 0.3
 t0 = _time.time()

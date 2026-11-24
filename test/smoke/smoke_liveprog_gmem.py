@@ -15,8 +15,8 @@
   [E] 引用 gmem 的脚本按需物理提交（单句柄 < 60MB，旧口径 ~89MB）
   [F] VB 八总线形态 8 个并发 gmem 引擎总增长 < 320MB（旧口径 ~700MB）
   [G] 深层 gmem（VEH 页提交）读写正确
-  [H] 越界 gmem 索引回绕进池内（P-052）：gmem[2^24] 落池头、
-      gmem[-1] 读写自洽、进程存活
+  [H] 越界 gmem 索引回绕进池内（P-052）：gmem[2^24] 落池头、进程存活
+  [H2] 负 gmem 索引（-1/-2）读写自洽、进程存活（独立句柄，避落点相撞）
 
 用法：python test/smoke/smoke_liveprog_gmem.py（退出码 0 = 全绿）
 """
@@ -233,17 +233,35 @@ dll.auradsp_destroy(h)
 SCRIPT_WRAP = "\n".join([
     "@init",
     "gmem[16777216] = 0.5;",
-    "gmem[-1] = 0.25;",
     "@sample",
-    "ok = (gmem[0] == 0.5) && (gmem[-1] == 0.25) ? 1 : 0;",
-    "spl0 = 0.2 * ok;",
-    "spl1 = 0.2 * ok;",
+    "spl0 = 0.2 * (gmem[0] == 0.5 ? 1 : 0);",
+    "spl1 = spl0;",
 ])
 h = dll.auradsp_create(SR, N)
 rc = set_str(h, "liveprog.code", SCRIPT_WRAP)
 set_i(h, "liveprog.enable", 1)
 peak = run(h)
 check("[H] 越界 gmem 索引回绕进池内且进程存活",
+      rc == 0 and abs(peak - 0.2) < 0.02, "peak=%.4f rc=%d" % (peak, rc))
+dll.auradsp_destroy(h)
+
+# [H2] 负索引自洽（独立句柄，避免与 [H] 的回绕落点相撞——负索引经
+# 浮点→整数截断落点随实现细节，只钉同一脚本内读写自洽 + 存活；
+# 其中 -2 是修复前真正落池外的形态）。
+SCRIPT_NEG = "\n".join([
+    "@init",
+    "gmem[-1] = 0.25;",
+    "gmem[-2] = 0.75;",
+    "@sample",
+    "ok = (gmem[-1] == 0.25) && (gmem[-2] == 0.75) ? 1 : 0;",
+    "spl0 = 0.2 * ok;",
+    "spl1 = spl0;",
+])
+h = dll.auradsp_create(SR, N)
+rc = set_str(h, "liveprog.code", SCRIPT_NEG)
+set_i(h, "liveprog.enable", 1)
+peak = run(h)
+check("[H2] 负 gmem 索引读写自洽且进程存活",
       rc == 0 and abs(peak - 0.2) < 0.02, "peak=%.4f rc=%d" % (peak, rc))
 dll.auradsp_destroy(h)
 
