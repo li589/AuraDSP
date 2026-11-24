@@ -52,6 +52,7 @@ from __future__ import annotations
 import atexit
 import json
 import os
+import queue
 import subprocess
 import sys
 import threading
@@ -131,6 +132,10 @@ class ProgressUI:
         self._task_name: str | None = None
         self._cancel_check_at = 0.0
         self._cancel_flag_hit = False
+        # 管道模式写队列 + 写线程（审查 F-8）：_attach 成功才建；
+        # 为 None 时 _send 走旧同步写（烟测直挂假 proc 的路径不变）。
+        self._queue = None
+        self._writer_thread = None
         if not _should_spawn():
             return
         relay_ok = False
@@ -213,6 +218,16 @@ class ProgressUI:
             threading.Thread(target=_reader, daemon=True).start()
         except Exception:
             pass
+        # F-8：管道写移到专用线程，宿主线程从此只做有界入队，
+        # 查看器读线程死掉/管道填满时挂住的是写线程而非宿主。
+        try:
+            self._queue = queue.Queue(maxsize=512)
+            self._writer_thread = threading.Thread(
+                target=self._writer_loop, daemon=True)
+            self._writer_thread.start()
+        except Exception:
+            self._queue = None
+            self._writer_thread = None
 
     def cancelled(self) -> bool:
         """用户是否点了「取消运行」。宿主在检查点轮询，永不抛。"""
@@ -255,6 +270,26 @@ class ProgressUI:
         except Exception:
             pass
 
+    def _writer_loop(self) -> None:
+        """管道写线程（审查 F-8）：阻塞写只发生在这里。写失败 = UI
+        已死，置 _dead 并断管后退出；队列中剩余事件随之丢弃。"""
+        proc = self._proc
+        while True:
+            data = self._queue.get()
+            try:
+                if data is None:
+                    return
+                proc.stdin.write(data)  # type: ignore[union-attr]
+                proc.stdin.flush()  # type: ignore[union-attr]
+            except Exception:
+                self._dead = True
+                p, self._proc = self._proc, None
+                if p is not None:
+                    self._drop_pipe(p)
+                return
+            finally:
+                self._queue.task_done()
+
     def _send(self, event: dict) -> None:
         if self._done_sent or self._dead:
             return
@@ -265,6 +300,24 @@ class ProgressUI:
             if self._fh is not None:
                 self._fh.write(line)
                 self._fh.flush()
+            elif self._queue is not None:
+                # F-8：有界入队，宿主永不阻塞。队列满 = 查看器消费
+                # 不动：普通进度事件直接丢弃；终局 done 事件挤掉
+                # 最旧一条也要送达。
+                data = line.encode("utf-8")
+                try:
+                    self._queue.put_nowait(data)
+                except queue.Full:
+                    if event.get("t") == "done":
+                        try:
+                            self._queue.get_nowait()
+                            self._queue.task_done()
+                        except Exception:
+                            pass
+                        try:
+                            self._queue.put_nowait(data)
+                        except Exception:
+                            pass
             else:
                 proc = self._proc
                 proc.stdin.write(line.encode("utf-8"))  # type: ignore[union-attr]
@@ -282,6 +335,16 @@ class ProgressUI:
         # 管道模式关写端（子进程读 EOF 自收尾）；中继模式落 closed.flag
         # 并删一次性任务（删任务不杀已在跑的查看器），事件目录留给
         # 查看器退出时自清。
+        if self._queue is not None:
+            try:
+                self._queue.put_nowait(None)
+            except Exception:
+                pass
+            if self._writer_thread is not None:
+                try:
+                    self._writer_thread.join(timeout=0.5)
+                except Exception:
+                    pass
         proc, self._proc = self._proc, None
         if proc is not None:
             self._drop_pipe(proc)
@@ -333,8 +396,16 @@ class ProgressUI:
         self._send({"t": "done", "ok": bool(ok), "text": str(text)})
         self._done_sent = True
         # 给子进程留出读完管道的时间再关写端；关早了终局事件会丢。
+        # 队列模式等写线程把队列送完（上限 1.5s，超时照常收尾）。
         try:
-            time.sleep(0.15)
+            if self._queue is not None:
+                deadline = time.monotonic() + 1.5
+                while time.monotonic() < deadline:
+                    if self._queue.unfinished_tasks == 0:
+                        break
+                    time.sleep(0.02)
+            else:
+                time.sleep(0.15)
         except Exception:
             pass
         self._at_exit()
@@ -496,11 +567,13 @@ def _serve_window(events, cancel_action, cleanup=None) -> int:
             pass
         except Exception:
             pass
-        if not state["finished"] or True:
-            try:
-                root.after(80, _drain)
-            except Exception:
-                pass
+        # 恒定重排（原条件 `not state["finished"] or True` 恒真、
+        # 前半为死代码，审查 F-8 顺手清理）：窗口销毁由 _finish 的
+        # 定时回调/用户关闭负责，root 销毁后 after 抛错被吞、循环自止。
+        try:
+            root.after(80, _drain)
+        except Exception:
+            pass
 
     root.protocol("WM_DELETE_WINDOW", _close)
     _update_meta()

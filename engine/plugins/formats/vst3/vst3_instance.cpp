@@ -1363,9 +1363,20 @@ public:
         context.continousTimeSamples = m_continuousTimeSamples;
         context.projectTimeSamples = m_continuousTimeSamples;
         {
-            FILETIME ft = {};
-            GetSystemTimeAsFileTime(&ft);
-            context.systemTime = (static_cast<int64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+            /* [审查 L10 2026-11-25] systemTime 改时间轴推算：每 512 块
+             * 向 OS 时钟重同步一次，其余块按采样数推进（100ns 单位），
+             * 不再每块一次系统调用进 RT 路径；推算值块间单调递增。 */
+            if (m_blocksSinceTimeSync == 0) {
+                FILETIME ft = {};
+                GetSystemTimeAsFileTime(&ft);
+                m_systemTime100ns = (static_cast<int64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+            }
+            if (++m_blocksSinceTimeSync >= 512) m_blocksSinceTimeSync = 0;
+            context.systemTime = m_systemTime100ns;
+            if (m_sampleRate > 0.0) {
+                m_systemTime100ns += static_cast<int64_t>(
+                    static_cast<double>(numFrames) * 10000000.0 / m_sampleRate + 0.5);
+            }
         }
         m_continuousTimeSamples += numFrames;
 
@@ -1870,6 +1881,8 @@ private:
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlockSize = 1024;
     int64_t m_continuousTimeSamples = 0;
+    int64_t m_systemTime100ns = 0;      // L10：推算用 systemTime 基准（100ns）
+    uint32_t m_blocksSinceTimeSync = 0; // L10：距上次 OS 时钟重同步的块数
     int32_t m_inChannels = 2;
     int32_t m_outChannels = 2;
     int32_t m_channelHint = 2;

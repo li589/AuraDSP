@@ -9,6 +9,7 @@
 
 #include "plugin_format_driver.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace auradsp {
@@ -216,8 +217,12 @@ bool handleHostCommand(const HostTransport& transport,
             if (!r.str(path)) break;
             std::vector<RemotePluginInfo> infos;
             if (queryMetadata(path, infos) && !infos.empty()) {
-                const uint32_t count = static_cast<uint32_t>(infos.size());
-                const size_t bytes = infos.size() * sizeof(RemotePluginInfo);
+                /* [审查 L8 2026-11-25] 组响应 count 按协议批上限钳制：
+                 * 客户端本就拒收超 kMaxMetadataBatch 的响应，宿主侧
+                 * 不钳只会整批失败；钳后至少前 512 条可用。 */
+                const uint32_t count = static_cast<uint32_t>(
+                    std::min(infos.size(), static_cast<size_t>(kMaxMetadataBatch)));
+                const size_t bytes = static_cast<size_t>(count) * sizeof(RemotePluginInfo);
                 body.resize(sizeof(count) + bytes);
                 std::memcpy(body.data(), &count, sizeof(count));
                 std::memcpy(body.data() + sizeof(count), infos.data(), bytes);

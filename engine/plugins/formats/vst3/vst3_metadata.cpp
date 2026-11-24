@@ -59,6 +59,14 @@ std::string char16ToUtf8(const char16_t* str) {
 #endif
 
 
+/// 审查 L11：插件返回的定长 char 数组不保证 NUL 终止，直接构造
+/// std::string / strcmp 会越界读；一律按数组上限截断拷贝。
+std::string boundedField(const char* p, size_t cap) {
+    size_t n = 0;
+    while (n < cap && p[n] != '\0') ++n;
+    return std::string(p, n);
+}
+
 std::string cidToHexString(const Steinberg::TUID tuid) {
     std::ostringstream ss;
     for (int i = 0; i < 16; ++i) {
@@ -87,7 +95,7 @@ bool applyVstAudioEffectClass(PluginMetadata& meta,
     if (!factory) return false;
     Steinberg::PClassInfo classInfo;
     if (factory->getClassInfo(index, &classInfo) != Steinberg::kResultOk) return false;
-    if (std::strcmp(classInfo.category, kVstAudioEffectClass) != 0) return false;
+    if (boundedField(classInfo.category, sizeof(classInfo.category)) != kVstAudioEffectClass) return false;
 
     meta.format = PluginFormat::VST3;
     // id 是实例化身份键：快扫拿不到 CID（为空），加载路必须权威解析，
@@ -108,8 +116,8 @@ bool applyVstAudioEffectClass(PluginMetadata& meta,
         return v.empty() || (!seeded && v == "1.0");
     };
 
-    put(meta.name, classInfo.name);
-    put(meta.category, classInfo.category);
+    put(meta.name, boundedField(classInfo.name, sizeof(classInfo.name)));
+    put(meta.category, boundedField(classInfo.category, sizeof(classInfo.category)));
     fillMetadataIfEmpty(meta.bundleName, fs::path(bundlePath).stem().string());
 
     // 工厂级厂商
@@ -117,7 +125,7 @@ bool applyVstAudioEffectClass(PluginMetadata& meta,
     Steinberg::PFactoryInfo factoryInfo;
     if (factory->getFactoryInfo(&factoryInfo) == Steinberg::kResultOk &&
         factoryInfo.vendor[0] != '\0') {
-        factoryVendor = factoryInfo.vendor;
+        factoryVendor = boundedField(factoryInfo.vendor, sizeof(factoryInfo.vendor));
     }
 
     // IPluginFactory3：Unicode 类信息，先写（优先级最高的描述符来源）
@@ -151,7 +159,7 @@ bool applyVstAudioEffectClass(PluginMetadata& meta,
             if (classInfoW.subCategories[0] != 0) {
                 // subCategories 是 char8（ASCII），直接赋值；只有 name/vendor/version
                 // 才是 char16，需要 wideToUtf8 转换。
-                put(meta.category, classInfoW.subCategories);
+                put(meta.category, boundedField(classInfoW.subCategories, sizeof(classInfoW.subCategories)));
             }
         }
     }
@@ -161,12 +169,12 @@ bool applyVstAudioEffectClass(PluginMetadata& meta,
         Steinberg::PClassInfo2 classInfo2;
         if (factory2->getClassInfo2(index, &classInfo2) == Steinberg::kResultOk) {
             if (wantVendor(meta.vendor)) {
-                if (classInfo2.vendor[0]) meta.vendor = classInfo2.vendor;
+                if (classInfo2.vendor[0]) meta.vendor = boundedField(classInfo2.vendor, sizeof(classInfo2.vendor));
             }
             if (wantVersion(meta.version)) {
-                if (classInfo2.version[0]) meta.version = classInfo2.version;
+                if (classInfo2.version[0]) meta.version = boundedField(classInfo2.version, sizeof(classInfo2.version));
             }
-            put(meta.category, classInfo2.subCategories);
+            put(meta.category, boundedField(classInfo2.subCategories, sizeof(classInfo2.subCategories)));
         }
     }
 
