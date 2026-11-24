@@ -8,7 +8,7 @@ void MultimodalEqualizerConstructor(JamesDSPLib *jdsp)
 {
 	double freqAx[NUMPTS] = { 25.0, 40.0, 63.0, 100.0, 160.0, 250.0, 400.0, 630.0, 1000.0, 1600.0, 2500.0, 4000.0, 6300.0, 10000.0, 16000.0 };
 	memcpy(jdsp->mEQ.freq + 1, freqAx, NUMPTS * sizeof(double));
-	/* P-007：原先硬编码 24000.0，在 44.1kHz 下超过 Nyquist(22050)。
+	/* [PATCHED-AuraDSP P-007] 原先硬编码 24000.0，在 44.1kHz 下超过 Nyquist(22050)。
 	 * 改为按实际采样率的 Nyquist 取值。 */
 	jdsp->mEQ.freq[NUMPTS + 1] = (double)jdsp->fs * 0.5;
 	memset(jdsp->mEQ.z1_AL, 0, sizeof(jdsp->mEQ.z1_AL));
@@ -165,7 +165,7 @@ void MultimodalEqualizerAxisInterpolation(JamesDSPLib *jdsp, int interpolationMo
 	}
 	jdsp->mEQ.freq[0] = 0.0;
 	jdsp->mEQ.gain[0] = jdsp->mEQ.gain[1];
-	/* P-007：同上，按实际采样率的 Nyquist 而非硬编码 24k。 */
+	/* [PATCHED-AuraDSP P-007] 同上，按实际采样率的 Nyquist 而非硬编码 24k。 */
 	jdsp->mEQ.freq[NUMPTS + 1] = (double)jdsp->fs * 0.5;
 	jdsp->mEQ.gain[NUMPTS + 1] = jdsp->mEQ.gain[NUMPTS];
 	if (!operatingMode)
@@ -181,7 +181,7 @@ void MultimodalEqualizerAxisInterpolation(JamesDSPLib *jdsp, int interpolationMo
 			makima(&jdsp->mEQ.pch2, jdsp->mEQ.freq, jdsp->mEQ.gain, NUMPTS + 2, 1, 1);
 			eqFil = InterpolatingEqMinimumPhase(&jdsp->mEQ.instance.coeffGen, (float)jdsp->fs, (void *)(&jdsp->mEQ.pch2));
 		}
-		/* P-006：重建到「非活动」的那个卷积器，再在块边界原子换指针。
+		/* [PATCHED-AuraDSP P-006] 重建到「非活动」的那个卷积器，再在块边界原子换指针。
 		 * 旧代码直接重建 mEQ.conv，而音频线程同时在 FFTConvolver2x2Process 里
 		 * 读它的 IR 段指针、_current、_overlap —— 同一对象边处理边重写。
 		 * 换出后必须再跑满 1 块才允许把该实例重新投入重建，否则会与

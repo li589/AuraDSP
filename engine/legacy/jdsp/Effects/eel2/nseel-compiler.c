@@ -5174,7 +5174,7 @@ opcodeRec *nseel_createIfElse(compileContext *ctx, opcodeRec *code1, opcodeRec *
 }
 opcodeRec *nseel_createMemoryAccess(compileContext *ctx, opcodeRec *code1, opcodeRec *code2)
 {
-	/* [AuraDSP 2026-10-30] 任何 x[y] 内存访问都走这里，且运行时用 r12
+	/* [PATCHED-AuraDSP P-054 2026-10-30] 任何 x[y] 内存访问都走这里，且运行时用 r12
 	 * (= handle->ramPtr) 做基址：编译期必须确保 gmem 区已分配，否则
 	 * ramPtr 为 NULL，第一次读写就 AV。 */
 	EEL_RAM(ctx);
@@ -7828,7 +7828,7 @@ void NSEEL_init_memRegion(NSEEL_VMCTX _ctx)
 		InitRegion_context(ctx->region_context);
 	}
 }
-/* [AuraDSP 2026-10-31 P-045] gmem 区：64MB 只保留地址空间，首次访问按页提交
+/* [PATCHED-AuraDSP P-045 2026-10-31] gmem 区：64MB 只保留地址空间，首次访问按页提交
  * （Windows VEH；POSIX 依赖 calloc 的惰性零页）。语义仍是全零，脚本未触及
  * 的页不消耗物理内存。返回 NULL = 内存不足；调用方按「编译失败」处理。 */
 float *NSEEL_VM_getram(NSEEL_VMCTX _ctx)
@@ -7881,7 +7881,7 @@ void NSEEL_VM_free(NSEEL_VMCTX _ctx) // free when done with a VM and ALL of its 
 		freeBlocks(&ctx->tmpblocks_head);  // free blocks
 		freeBlocks(&ctx->blocks_head);  // free blocks
 		freeBlocks(&ctx->blocks_head_data);  // free blocks
-		aura_eel_ram_free(ctx->ram_state);  /* [AuraDSP P-045] 惰性 gmem 区 */
+		aura_eel_ram_free(ctx->ram_state);  /* [PATCHED-AuraDSP P-045] 惰性 gmem 区 */
 		ctx->ram_state = 0;
 		ctx->scanner = 0;
 		free(ctx);
@@ -7906,7 +7906,7 @@ void NSEEL_VM_SetStringFunc(NSEEL_VMCTX ctx, float(*onString)(void *caller_this,
 }
 void *NSEEL_PProc_RAM(void *data, int32_t data_size, compileContext *ctx)
 {
-	/* [AuraDSP 2026-10-30] gmem 指针嵌入点：脚本第一次真正引用 RAM 时才分配。 */
+	/* [PATCHED-AuraDSP P-054 2026-10-30] gmem 指针嵌入点：脚本第一次真正引用 RAM 时才分配。 */
 	if (data_size > 0)
 	{
 		float *ram = EEL_RAM(ctx);

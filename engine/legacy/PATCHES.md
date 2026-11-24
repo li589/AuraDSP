@@ -88,6 +88,7 @@
   只有 conv2 才是真正的 IR 存储。故无需为其引入第二份
 - **兼容性**：外部调用方无需改动，auradsp_set_param("eq.curve") 语义不变；
   operatingMode != 0 的 IIR 分支未触及
+- **标记格式统一（2026-11-24，审查 M10）**：multimodalEQ.c 内的裸标记 `/* P-006：… */` 已改标准格式 `[PATCHED-AuraDSP P-006]`。
 
 ## P-007 multimodalEQ.c — EQ 频率轴按实际 Nyquist 收尾（2026-10-10）
 
@@ -101,6 +102,7 @@
 - **兼容性**：freq[NUMPTS]（用户最末点）已由引擎侧钳到 
 yquist * 0.999，
   故 freq[NUMPTS] < fs * 0.5 恒成立，单调性不被破坏。
+- **标记格式统一（2026-11-24，审查 M10）**：multimodalEQ.c 内两处裸标记 `/* P-007：… */` 已改标准格式 `[PATCHED-AuraDSP P-007]`。
 
 ## P-008 jdspController.c — 块长抖动抑制：不再无谓重建卷积器（电平抖动 / 卡顿修复，2026-10-12）
 
@@ -1025,6 +1027,7 @@ yquist * 0.999，
   偶发按页提交（每 64KB 一次），不在音频块热路径的常规节奏内。
 - **上游同步冲突风险**：中（`nseel-compiler.c` 两处函数体 + 头文件声明；
   逻辑替换，签名与 ABI 不变）。
+- **标记格式统一（2026-11-24，审查 M10）**：五处 `[AuraDSP … P-045]` 已改标准格式 `[PATCHED-AuraDSP P-045 …]`；补丁点另含 ns-eel-int.h 一处（gmem 惰性物理提交声明）。
 
 ## P-046 jdsp_header.h — comp 槽位按 P-034 设计收回 9 槽（2026-10-31）
 
@@ -1042,6 +1045,7 @@ yquist * 0.999，
   `smoke_b1d_comp_startup.py`(82)、`smoke_comp_band_order.py`、
   `smoke_chain_meter.py` 全绿；9 空引擎进程增量 327.7MB → 250.7MB。
 - **上游同步冲突风险**：低（单宏值 + 注释）。
+- **标记格式统一（2026-11-24，审查 M10）**：jdsp_header.h 的 `[AuraDSP P-046 2026-10-31]` 已改标准格式 `[PATCHED-AuraDSP P-046 2026-10-31]`。
 
 ## P-047 engine/engine_internal.h + engine/chain/engine_chain.cpp + engine/auradsp_engine.cpp + engine/engine_param_table.h + engine/dsp/dsp_spatial.cpp — 逐声道池双槽化 + 拓扑重置改请求位（L-01 / L-02，2026-10-31）
 
@@ -1263,3 +1267,24 @@ yquist * 0.999，
   置托管模式——init 编译后布防一次，slider/process 每处理块开头
   各补满 400 万次，块内逐帧共享。@init 300 万次仍在单次布防内
   完整执行（验收 10c 不变）。
+
+## P-054 eel2（ns-eel-int.h / ns-eel.h / nseel-compiler.c）— gmem 区惰性分配（2026-10-30 改动，2026-11-24 补登记）
+
+- **位置**：`NSEEL_VM_getram` 访问器与 `ramPtr` 改指针（ns-eel-int.h
+  两处、ns-eel.h 一处）；编译期内存访问构造 `nseel_createMemoryAccess`
+  与 gmem 指针嵌入点 `NSEEL_PProc_RAM`（nseel-compiler.c 两处）。
+- **改动**：gmem 区原为 VM 结构体内嵌 `float[1<<24]`（64MB），每个
+  VM 一建就吃满（三槽 × 多 handle 让空闲进程白占约 1.5GB）；改为
+  首次真正用到 RAM（x[y]/gmem/tds 等）时才 calloc 64MB（仍全零，
+  语义不变），未用 RAM 的脚本零占用；编译期确保已分配再嵌入指针，
+  否则 ramPtr 为 NULL 首访即 AV。
+- **与 P-045 的关系**：P-045（2026-10-31）是在本号惰性分配之上的
+  进一步优化——64MB 只保留地址空间、首次访问按页物理提交（VEH）。
+  两号独立成立：无 P-045 时本号是 calloc 一次到位。
+- **补登记缘由（审查 M10，2026-11-24）**：本改动原只有
+  `[AuraDSP 2026-10-30]` 日期标记、无编号无登记，补丁门禁
+  （patch_id_scan）不可见；本次统一改标准格式
+  `[PATCHED-AuraDSP P-054 2026-10-30]` 并补本条。同轮一并统一：
+  P-045 五处、P-046 一处缺 `PATCHED-` 前缀的标记，P-006/P-007 在
+  multimodalEQ.c 的三处裸标记，全部改为标准格式（各条目下有
+  一行 dated 注记）。
