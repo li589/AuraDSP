@@ -41,14 +41,8 @@ PLATFORM_ANY = {
     # r44 S4（2026-11-17）：测试页三段化结构门禁（WaveSource/传输
     # 协议/状态保留路径/三卡布局），纯源码扫描，任意平台可跑。
     "smoke_dart_test_wave.py",
-        "smoke_dart_chcap_authority.py",
-        "smoke_apo_engch_truncate.py",
-        "smoke_dart_r46_display_list.py",
-        "smoke_r47_vb_channel_discipline.py",
-        "smoke_r47_vaio_selfheal.py",
-        "smoke_r47_input_metering.py",
-        "smoke_r49_mc_stage_meters.py",
-        "smoke_r49_vb_testfile_channels.py",
+    # 登记完整性自检（2026-11-24 审查 F-1）：磁盘 smoke 与执行清单差集。
+    "smoke_runner_registry.py",
     "smoke_apo_engch_truncate.py",
     "smoke_dart_r46_display_list.py",
     "smoke_r47_vb_channel_discipline.py",
@@ -536,6 +530,18 @@ def run_smoke_tests():
         # ToneSource、isolate 传输三命令、setSource 跨源保留路径、
         # 测试页三卡与旧芯片退役，纯源码扫描。
         "smoke_dart_test_wave.py",
+        # 2026-11-24 审查 F-1 补登记：以下 8 条自 r47/r49 登记日起只在
+        # PLATFORM_ANY 分类里、从未进执行清单（静默假绿），本轮补入；
+        # 防复发自检见 smoke_runner_registry.py。
+        "smoke_runner_registry.py",
+        "smoke_dart_chcap_authority.py",
+        "smoke_apo_engch_truncate.py",
+        "smoke_dart_r46_display_list.py",
+        "smoke_r47_vb_channel_discipline.py",
+        "smoke_r47_vaio_selfheal.py",
+        "smoke_r47_input_metering.py",
+        "smoke_r49_mc_stage_meters.py",
+        "smoke_r49_vb_testfile_channels.py",
         # S2 Linux 源表门禁（2026-11-01，ADR-012 §4.3）：Linux 编译闭包不含
         # jamesdsp.c / Win32 源、gcc shim 与 stdint 前置注入在场、.map 同源。
         # 2026-11-20 重校：闭包从 CMake 派生（插件子系统 2026-11-02 立项后

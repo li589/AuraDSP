@@ -14,6 +14,12 @@ channels.mode 无关恒顺序截断，矩阵模式在引擎入口即与离散
      路径）；
   4. VmBridge 两条参数路径（ApplyParamsString 实时 +
      SyncWorkChFromMirror 重建）都同步 chanMode。
+
+2026-11-24 修订（审查 F-1 补登记后首跑）：折叠表已于第五十五轮
+收编至 engine/chain/channel_map.h 单一真相，泵侧改逐帧委托
+chmap_fold_frame——第 2 项的钉法由 r47 期泵内字面公式改为「泵
+委托 + channel_map 表体口径（8→6 SL 主 BL 折、8→4 BL 主 SL 折、
+折入 ×k、LFE 不入折）」，纪律本身不变。
 """
 import os
 import sys
@@ -44,11 +50,14 @@ def main():
     check("parallel publish + worker snapshot carry chanMode",
           "c->curChanMode = chanMode;" in pump and
           "const long chanMode = c->curChanMode;" in pump)
+    chmap = read("engine/chain/channel_map.h")
     check("matrix fold gather for procCh 6/4",
-          "sIn[i * 6 + 4] = b[4] + b[6] * k;" in pump and
-          "sIn[i * 4 + 2] = b[6] + b[4] * k;" in pump)
+          "chmap_fold_frame(b, 8, &sIn[i * procCh], procCh);" in pump
+          and "out[4] = in[4] + in[6] * k;" in chmap
+          and "out[2] = in[6] + in[4] * k;" in chmap)
     check("matrix fold gather for stereo (8->2, LFE excluded)",
-          "sIn[i * 2] = inL[i] + (cc +" in pump)
+          "chmap_fold_frame(b, 8, &sIn[i * 2], 2);" in pump
+          and "if (ly.sl >= 0) l += in[ly.sl] * k;" in chmap)
     check("engine path zeroes unwritten bus slots",
           "if (!written) {" in pump and
           "memset(dst, 0, (size_t)n * sizeof(float));" in pump)
