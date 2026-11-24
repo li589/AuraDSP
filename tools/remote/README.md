@@ -35,7 +35,7 @@
 | `Invoke-DevTask.ps1` | 开发机 | 以一次性计划任务启动一个 .ps1（脱离 ssh 会话，长任务标准通道） |
 | `Send-ToGuest.ps1` | 开发机 | 投递文件到宾机桌面（或指定目录）并回读哈希验证 |
 | `Restore-DriverCertTrust.ps1` | 开发机（提权） | 从已签名的 .cat 提取内嵌签名者证书，导入 LocalMachine Root + TrustedPublisher，恢复打包签名门所需的信任（2026-11-23 r66 事故的修复脚本） |
-| `sync_to_vm.py` / `vm_exec.py` | VM | 早期 vm-linux 同步/执行工具（paramiko），保留登记，现状以脚本头注为准 |
+| `sync_to_vm.py` / `vm_exec.py` | VM | 早期 vm-linux 同步/执行工具（paramiko），保留登记，现状以脚本头注为准。**历史问题（2026-11-24 审查 F-2）**：两脚本曾把 VM 登录口令硬编码为 `VM_PASS` 默认值随仓库分发，已删除默认值（凭据改走环境变量/密钥）；该口令已入 git 历史、按已泄露对待，VM 侧应轮换 |
 
 ## 已知不可行
 

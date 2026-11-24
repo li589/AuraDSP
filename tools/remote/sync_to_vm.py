@@ -1,4 +1,10 @@
 # -*- coding: utf-8 -*-
+"""早期 vm-linux 文件同步工具（paramiko，文件清单为旧布局快照）。
+
+凭据：密码走 VM_PASS 环境变量。2026-11-24（审查 F-2）：删除曾
+硬编码在源码里的 VM_PASS 默认值——该口令已随仓库与 git 历史
+分发，按已泄露对待，VM 侧应轮换。
+"""
 import os
 import sys
 import paramiko
@@ -57,7 +63,9 @@ FILES_TO_SYNC = [
 def main():
     host = os.environ.get("VM_HOST", "192.168.204.130")
     user = os.environ.get("VM_USER", "li")
-    password = os.environ.get("VM_PASS", "12345678")
+    password = os.environ.get("VM_PASS")
+    if not password:
+        raise SystemExit("VM_PASS 环境变量未设置（源码不再内置默认口令）")
     remote_base = "/home/li/Workspace/AuraDSP"
     local_base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
