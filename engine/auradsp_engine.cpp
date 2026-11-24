@@ -434,6 +434,10 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         for (int c = 0; c < ch && c < AURADSP_CH_MAX; ++c) h->stage_peak_ch[13][c] = pk_out_ch[c];
         for (int c = ch; c < AURADSP_CH_MAX; ++c) h->stage_peak_ch[13][c] = 0.0f;
 
+        /* [审查 L18 2026-11-25] 离散/矩阵两模式的 viz tap 后移到
+         * MC LiveProg 之后（见分发后 tap 块），两分支只登记待写。 */
+        bool mcVizTap = false;
+        bool mcVizPeak = false;
         const bool binaural =
             h->p.spatial_binaural.load(std::memory_order_relaxed) != 0 &&
             h->p.spatial_enable.load(std::memory_order_relaxed) != 0 &&
@@ -457,7 +461,7 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
                 /* 模式 1: 离散多声道独立处理 (Phase B: Category A 独立单声道滤波 + Category B 声场保持) */
                 process_multichannel_chain(h, h->mx_scratch, out, frames, ch);
                 h->frames_since_viz += frames;
-                viz_write(h, out, frames, ch);
+                mcVizTap = true;
             } else {
                 /* 模式 0: 矩阵混音 (Phase A 修复版: 彻底解决左右环绕串扰与镜像颠倒) */
                 if (!mx_downmix(h, h->mx_scratch, h->shelf_scratch, frames, ch) || !h->mx_stereo) {
@@ -467,19 +471,26 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
                 process_stereo_chain(h, h->shelf_scratch, h->mx_stereo, frames);
                 mx_upmix(h, out, h->mx_stereo, frames, ch);
                 h->frames_since_viz += frames;
-                /* 频谱/历史与 per-channel 电平同口径：按 mx_upmix 后真实
-                 * 写进设备的 out 实测。旧口径取下混立体声（mx_stereo），
-                 * 而下混公式按设计不折入 LFE（LFE 直通）——LFE-only 内容
-                 * 在频谱上恒空（第四十一轮 user 实测坐实），且与电平口径
-                 * 分裂。改走 out 全声道后与离散模式一致（viz_write 内做
-                 * 全声道均值单声道化）。 */
-                viz_write(h, out, frames, ch);
-                viz_scan_out_peak(h, out, frames, ch);
+                /* tap 后移至 MC LiveProg 后（L18）；tap 面仍是
+                 * mx_upmix 后真实写进设备的 out 全声道——旧口径取
+                 * 下混立体声时 LFE 直通不折入、LFE-only 内容频谱
+                 * 恒空（第四十一轮 user 实测坐实）。 */
+                mcVizTap = true;
+                mcVizPeak = true;
             }
         }
         /* 多声道 EEL 脚本级（方案 B）：模式分发后的母带位——脚本看到
          * 全链处理完成的最终多声道信号。未使能/未编译时逐字节直通。 */
         if (h->mc_lp) mc_liveprog_process(h->mc_lp, out, frames, ch);
+        /* [审查 L18 2026-11-25] viz tap 本体：频谱历史与逐声道峰值
+         * （viz_write 内填 ch_out_peak）须含 MC LiveProg 贡献，与
+         * 立体声路径口径一致（其 LiveProg 在链内、tap 在链后）。
+         * 此前 tap 在脚本之前，脚本对频谱/峰值不可见。双耳分支的
+         * tap 是 shelf_scratch 立体声渲染面、不经本块，保持原位。 */
+        if (mcVizTap) {
+            viz_write(h, out, frames, ch);
+            if (mcVizPeak) viz_scan_out_peak(h, out, frames, ch);
+        }
         int vizInt = h->viz_interval.load(std::memory_order_relaxed);
         if (vizInt < 64) vizInt = 480;
         if (h->frames_since_viz >= vizInt) {

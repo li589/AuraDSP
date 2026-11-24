@@ -404,7 +404,7 @@ static void *GLUE_realAddress(void *fn, void *fn_e, int32_t *size)
 #define EEL_BC_STACKSIZE (32768)
 // todo: check for stack overflows! we could determine if this is possible at compile time.
 #define EEL_BC_STACK_POP_SIZE 8
-#define EEL_BC_STACK_PUSH(type, val) (*(type *)(stackptr -= EEL_BC_STACK_POP_SIZE)) = (val)
+#define EEL_BC_STACK_PUSH(type, val) (*(type *)(stackptr - EEL_BC_STACK_POP_SIZE >= __stack ? (stackptr -= EEL_BC_STACK_POP_SIZE) : (aura_stack_overflow = 1, stackptr))) = (val) /* [PATCHED-AuraDSP P-056] */
 #define EEL_BC_STACK_POP() (stackptr += EEL_BC_STACK_POP_SIZE)
 #define EEL_BC_TRUE ((float*)(INT_PTR)1)
 static void GLUE_CALL_CODE(INT_PTR bp, INT_PTR cp, INT_PTR rt, int32_t *aura_budget_io) 
@@ -430,8 +430,13 @@ static void GLUE_CALL_CODE(INT_PTR bp, INT_PTR cp, INT_PTR rt, int32_t *aura_bud
    * 3 块 43.7 秒教训）。 */
   int32_t aura_iter_budget = 4000000;
   int32_t *aura_budgetp = aura_budget_io ? aura_budget_io : &aura_iter_budget;
+  /* [PATCHED-AuraDSP P-056] 解释器栈饱和标志：PUSH/MOVE_STACK 触界
+   * 置位，派发循环头检查后中止本次 execute（深递归/深嵌套脚本只
+   * 损失本次执行，不再溢出 32KB 帧内栈砸 RT 线程栈）。 */
+  int aura_stack_overflow = 0;
   for (;;)
   {
+    if (aura_stack_overflow) return;
     EEL_BC_TYPE inst = *(EEL_BC_TYPE *)iptr;
     iptr += sizeof(EEL_BC_TYPE);
     switch (inst)
@@ -506,6 +511,13 @@ static void GLUE_CALL_CODE(INT_PTR bp, INT_PTR cp, INT_PTR rt, int32_t *aura_bud
       break;
       case EEL_BC_MOVE_STACK:
         stackptr += *(int32_t *)iptr;
+        /* [PATCHED-AuraDSP P-056] 帧调整越界钳制 + 置饱和标志：
+         * 钳后指针恒在栈内，循环头随即中止本次 execute。 */
+        if (stackptr < __stack || stackptr > __stack + EEL_BC_STACKSIZE)
+        {
+          aura_stack_overflow = 1;
+          stackptr = stackptr < __stack ? __stack : __stack + EEL_BC_STACKSIZE;
+        }
         iptr += sizeof(int32_t);
       break;
       case EEL_BC_STORE_P1_TO_STACK_AT_OFFS:

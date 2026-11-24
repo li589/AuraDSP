@@ -2,6 +2,18 @@
 #define __NS_EEL_MATRIX_H__
 #include "eelCommon.h"
 #include "numericSys/quadprog.h"
+/* [PATCHED-AuraDSP P-057] 跨度守卫（审查 P-052 残留）：eel_matrix
+ * 内建族的 rows/cols/长度全部来自脚本，基址虽已由 P-052 掩码进池，
+ * 但「合法基址 + 超大跨度」仍可读出池尾、且 rows*cols 在 int32 里
+ * 先行溢出。与 nseel-compiler.c 的 MemCpy 纪律同口径：掩码后基址
+ * + 元素跨度（int64 计算）必须整段落在池块内，否则整次调用拒绝。 */
+static int _eel_span_fits(int32_t offs, int64_t span)
+{
+	if (span < 0)
+		return 0;
+	return (int64_t)((uint32_t)offs & (uint32_t)(NSEEL_RAM_ITEMSPERBLOCK - 1)) + span <= NSEEL_RAM_ITEMSPERBLOCK;
+}
+
 static float NSEEL_CGEN_CALL _eel_matDeterminant(float *blocks, float *start, float *m, float *n)
 {
 	int32_t rows1 = (int32_t)*m;
@@ -10,6 +22,8 @@ static float NSEEL_CGEN_CALL _eel_matDeterminant(float *blocks, float *start, fl
 		return (float)-1;
 	int32_t offs1 = (int32_t)(*start + NSEEL_CLOSEFACTOR);
 	float *matrix = __NSEEL_RAMAlloc(blocks, offs1);
+	/* [PATCHED-AuraDSP P-057] */ if (!_eel_span_fits(offs1, (int64_t)rows1 * cols1))
+		return (float)-1;
 	double *mat = (double*)malloc(rows1 * cols1 * sizeof(double));
 	for (int i = 0; i < rows1 * cols1; i++)
 		mat[i] = matrix[i];
@@ -23,6 +37,8 @@ static float NSEEL_CGEN_CALL _eel_matRank(float *blocks, float *start, float *m,
 	int32_t cols1 = (int32_t)*n;
 	int32_t offs1 = (int32_t)(*start + NSEEL_CLOSEFACTOR);
 	float *matrix = __NSEEL_RAMAlloc(blocks, offs1);
+	/* [PATCHED-AuraDSP P-057] */ if (!_eel_span_fits(offs1, (int64_t)rows1 * cols1))
+		return (float)-1;
 	double *mat = (double*)malloc(rows1 * cols1 * sizeof(double));
 	for (int i = 0; i < rows1 * cols1; i++)
 		mat[i] = matrix[i];
@@ -45,6 +61,8 @@ static float NSEEL_CGEN_CALL _eel_matTranspose(void *opaque, INT_PTR num_param, 
 	float *matrix1 = __NSEEL_RAMAlloc(blocks, offs1);
 	int32_t offs2 = (int32_t)(*parms[3] + NSEEL_CLOSEFACTOR);
 	float *outputMatrix = __NSEEL_RAMAlloc(blocks, offs2);
+	/* [PATCHED-AuraDSP P-057] */ if (!_eel_span_fits(offs1, (int64_t)rows1 * cols1) || !_eel_span_fits(offs2, (int64_t)rows1 * cols1))
+		return 0;
 	transposeFlt(matrix1, outputMatrix, rows1, cols1);
 	return 0;
 }
@@ -60,6 +78,8 @@ static float NSEEL_CGEN_CALL _eel_matPinv(void *opaque, INT_PTR num_param, float
 	float *outputMatrix = __NSEEL_RAMAlloc(blocks, offs2);
 	int32_t offs3 = (int32_t)(*parms[4] + NSEEL_CLOSEFACTOR);
 	float *outputInfo = __NSEEL_RAMAlloc(blocks, offs3);
+	/* [PATCHED-AuraDSP P-057] */ if (!_eel_span_fits(offs1, (int64_t)rows1 * cols1) || !_eel_span_fits(offs2, (int64_t)rows1 * cols1) || !_eel_span_fits(offs3, 2))
+		return 0;
 	int32_t size[2];
 	double *matIn = (double*)malloc(rows1 * cols1 * sizeof(double));
 	double *matOut = (double*)malloc(rows1 * cols1 * sizeof(double));
@@ -86,6 +106,8 @@ static float NSEEL_CGEN_CALL _eel_matPinvFast(void *opaque, INT_PTR num_param, f
 	float *outputMatrix = __NSEEL_RAMAlloc(blocks, offs2);
 	int32_t offs3 = (int32_t)(*parms[4] + NSEEL_CLOSEFACTOR);
 	float *outputInfo = __NSEEL_RAMAlloc(blocks, offs3);
+	/* [PATCHED-AuraDSP P-057] */ if (!_eel_span_fits(offs1, (int64_t)rows1 * cols1) || !_eel_span_fits(offs2, (int64_t)rows1 * cols1) || !_eel_span_fits(offs3, 2))
+		return 0;
 	int32_t size[2];
 	double *matIn = (double*)malloc(rows1 * cols1 * sizeof(double));
 	double *matOut = (double*)malloc(rows1 * cols1 * sizeof(double));
@@ -112,6 +134,8 @@ static float NSEEL_CGEN_CALL _eel_cholesky(void *opaque, INT_PTR num_param, floa
 	float *matrix1 = __NSEEL_RAMAlloc(blocks, offs1);
 	int32_t offs2 = (int32_t)(*parms[3] + NSEEL_CLOSEFACTOR);
 	float *outputMatrix = __NSEEL_RAMAlloc(blocks, offs2);
+	/* [PATCHED-AuraDSP P-057] */ if (!_eel_span_fits(offs1, (int64_t)rows1 * cols1) || !_eel_span_fits(offs2, (int64_t)rows1 * cols1))
+		return (float)-1;
 	double *matIn = (double*)malloc(rows1 * cols1 * sizeof(double));
 	double *matOut = (double*)malloc(rows1 * cols1 * sizeof(double));
 	for (int i = 0; i < rows1 * cols1; i++)
@@ -135,6 +159,8 @@ static float NSEEL_CGEN_CALL _eel_inv_chol(void *opaque, INT_PTR num_param, floa
 	float *matrix1 = __NSEEL_RAMAlloc(blocks, offs1);
 	int32_t offs2 = (int32_t)(*parms[3] + NSEEL_CLOSEFACTOR);
 	float *outputMatrix = __NSEEL_RAMAlloc(blocks, offs2);
+	/* [PATCHED-AuraDSP P-057] */ if (!_eel_span_fits(offs1, (int64_t)rows1 * cols1) || !_eel_span_fits(offs2, (int64_t)rows1 * cols1))
+		return (float)-1;
 	double *matIn = (double*)malloc(rows1 * cols1 * sizeof(double));
 	double *matOut = (double*)malloc(rows1 * cols1 * sizeof(double));
 	for (int i = 0; i < rows1 * cols1; i++)
@@ -158,6 +184,8 @@ static float NSEEL_CGEN_CALL _eel_matInv(void *opaque, INT_PTR num_param, float 
 	float *matrix1 = __NSEEL_RAMAlloc(blocks, offs1);
 	int32_t offs2 = (int32_t)(*parms[3] + NSEEL_CLOSEFACTOR);
 	float *outputMatrix = __NSEEL_RAMAlloc(blocks, offs2);
+	/* [PATCHED-AuraDSP P-057] */ if (!_eel_span_fits(offs1, (int64_t)rows1 * cols1) || !_eel_span_fits(offs2, (int64_t)rows1 * cols1))
+		return (float)-1;
 	double *matIn = (double*)malloc(rows1 * cols1 * sizeof(double));
 	double *matOut = (double*)malloc(rows1 * cols1 * sizeof(double));
 	for (int i = 0; i < rows1 * cols1; i++)
@@ -185,6 +213,8 @@ static float NSEEL_CGEN_CALL _eel_mldivide(void *opaque, INT_PTR num_param, floa
 	float *outputMatrix = __NSEEL_RAMAlloc(blocks, offs3);
 	int32_t offs4 = (int32_t)(*parms[7] + NSEEL_CLOSEFACTOR);
 	float *outputInfo = __NSEEL_RAMAlloc(blocks, offs4);
+	/* [PATCHED-AuraDSP P-057] */ if (!_eel_span_fits(offs1, (int64_t)rows1 * cols1) || !_eel_span_fits(offs2, (int64_t)rows2 * cols2) || !_eel_span_fits(offs4, 2) || !_eel_span_fits(offs3, rows1 == cols1 ? (int64_t)rows2 * cols2 : (int64_t)cols2 * cols1))
+		return 0;
 	int32_t size[2];
 	double *mat1In = (double*)malloc(rows1 * cols1 * sizeof(double));
 	double *mat2In = (double*)malloc(rows2 * cols2 * sizeof(double));
@@ -224,6 +254,8 @@ static float NSEEL_CGEN_CALL _eel_mrdivide(void *opaque, INT_PTR num_param, floa
 	float *outputMatrix = __NSEEL_RAMAlloc(blocks, offs3);
 	int32_t offs4 = (int32_t)(*parms[7] + NSEEL_CLOSEFACTOR);
 	float *outputInfo = __NSEEL_RAMAlloc(blocks, offs4);
+	/* [PATCHED-AuraDSP P-057] */ if (!_eel_span_fits(offs1, (int64_t)rows1 * cols1) || !_eel_span_fits(offs2, (int64_t)rows2 * cols2) || !_eel_span_fits(offs4, 2) || !_eel_span_fits(offs3, rows2 == cols2 ? (int64_t)cols1 * rows1 : (int64_t)rows2 * rows1))
+		return 0;
 	int32_t size[2];
 	double *mat1In = (double*)malloc(rows1 * cols1 * sizeof(double));
 	double *mat2In = (double*)malloc(rows2 * cols2 * sizeof(double));
@@ -281,6 +313,17 @@ static float NSEEL_CGEN_CALL _eel_quadprog(void *opaque, INT_PTR num_param, floa
 	if (ubPtr != -1)
 		ub = __NSEEL_RAMAlloc(blocks, ubPtr);
 	float *ans = __NSEEL_RAMAlloc(blocks, (int32_t)(*parms[11] + NSEEL_CLOSEFACTOR));
+	/* [PATCHED-AuraDSP P-057] */ if (problemLength < 0 || inequalityLen < 0 || equalityLen < 0 ||
+		!_eel_span_fits((int32_t)(*parms[1] + NSEEL_CLOSEFACTOR), (int64_t)problemLength * problemLength) ||
+		!_eel_span_fits((int32_t)(*parms[2] + NSEEL_CLOSEFACTOR), problemLength) ||
+		(A && !_eel_span_fits(APtr, (int64_t)inequalityLen * problemLength)) ||
+		(b && !_eel_span_fits(bPtr, inequalityLen)) ||
+		(Aeq && !_eel_span_fits(AeqPtr, (int64_t)equalityLen * problemLength)) ||
+		(beq && !_eel_span_fits(beqPtr, equalityLen)) ||
+		(lb && !_eel_span_fits(lbPtr, problemLength)) ||
+		(ub && !_eel_span_fits(ubPtr, problemLength)) ||
+		!_eel_span_fits((int32_t)(*parms[11] + NSEEL_CLOSEFACTOR), problemLength))
+		return 0;
 	float fval;
 	double *dH = (double*)malloc(problemLength * problemLength * sizeof(double));
 	for (int i = 0; i < problemLength * problemLength; i++)
@@ -375,6 +418,17 @@ static float NSEEL_CGEN_CALL _eel_lsqlin(void *opaque, INT_PTR num_param, float 
 	if (ubPtr != -1)
 		ub = __NSEEL_RAMAlloc(blocks, ubPtr);
 	float *ans = __NSEEL_RAMAlloc(blocks, (int32_t)(*parms[12] + NSEEL_CLOSEFACTOR));
+	/* [PATCHED-AuraDSP P-057] */ if (equationsLength < 0 || problemLength < 0 || inequalityLen < 0 || equalityLen < 0 ||
+		!_eel_span_fits((int32_t)(*parms[2] + NSEEL_CLOSEFACTOR), (int64_t)equationsLength * problemLength) ||
+		!_eel_span_fits((int32_t)(*parms[3] + NSEEL_CLOSEFACTOR), equationsLength) ||
+		(A && !_eel_span_fits(APtr, (int64_t)inequalityLen * problemLength)) ||
+		(b && !_eel_span_fits(bPtr, inequalityLen)) ||
+		(Aeq && !_eel_span_fits(AeqPtr, (int64_t)equalityLen * problemLength)) ||
+		(beq && !_eel_span_fits(beqPtr, equalityLen)) ||
+		(lb && !_eel_span_fits(lbPtr, problemLength)) ||
+		(ub && !_eel_span_fits(ubPtr, problemLength)) ||
+		!_eel_span_fits((int32_t)(*parms[12] + NSEEL_CLOSEFACTOR), problemLength))
+		return 0;
 	double *hessian = (double*)malloc(problemLength * problemLength * sizeof(double));
 	matrix_transpose_matrix_self_product_float(C, hessian, problemLength, equationsLength);
 	double *linConstraint = (double*)malloc(problemLength * sizeof(double));
@@ -423,6 +477,8 @@ static float NSEEL_CGEN_CALL _eel_roots(void *opaque, INT_PTR num_param, float *
 	float *zeroRe = __NSEEL_RAMAlloc(blocks, offs4);
 	int32_t offs5 = (int32_t)(*parms[4] + NSEEL_CLOSEFACTOR);
 	float *zeroIm = __NSEEL_RAMAlloc(blocks, offs5);
+	/* [PATCHED-AuraDSP P-057] */ if (N < 1 || !_eel_span_fits(offs2, N) || !_eel_span_fits(offs3, N) || !_eel_span_fits(offs4, N - 1) || !_eel_span_fits(offs5, N - 1))
+		return 0;
 	double *mat1In = (double*)malloc(N * sizeof(double));
 	double *mat2In = (double*)malloc(N * sizeof(double));
 	double *mat1Out = (double*)malloc((N - 1) * sizeof(double));
@@ -458,6 +514,8 @@ static float NSEEL_CGEN_CALL _eel_cplxpair(void *opaque, INT_PTR num_param, floa
 	float *sortedRe = __NSEEL_RAMAlloc(blocks, offs4);
 	int32_t offs5 = (int32_t)(*parms[4] + NSEEL_CLOSEFACTOR);
 	float *sortedIm = __NSEEL_RAMAlloc(blocks, offs5);
+	/* [PATCHED-AuraDSP P-057] */ if (N < 1 || !_eel_span_fits(offs2, N) || !_eel_span_fits(offs3, N) || !_eel_span_fits(offs4, N) || !_eel_span_fits(offs5, N))
+		return 0;
 	double *mat1In = (double*)malloc(N * sizeof(double));
 	double *mat2In = (double*)malloc(N * sizeof(double));
 	double *mat1Out = (double*)malloc(N * sizeof(double));
@@ -500,6 +558,8 @@ static float NSEEL_CGEN_CALL _eel_firls(void *opaque, INT_PTR num_param, float *
 		filtertype = 0;
 	if (filtertype > 2)
 		filtertype = 2;
+	/* [PATCHED-AuraDSP P-057] */ if (N < 0 || gridLen < 0 || !_eel_span_fits(offs2, gridLen) || !_eel_span_fits(offs3, gridLen) || (W && !_eel_span_fits(offs4, gridLen >> 1)) || !_eel_span_fits(offs5, (int64_t)N + 1))
+		return (float)-1;
 	double *v1 = (double*)malloc(gridLen * sizeof(double));
 	double *v2 = (double*)malloc(gridLen * sizeof(double));
 	double *v3 = 0;
@@ -548,6 +608,8 @@ static float NSEEL_CGEN_CALL _eel_eqnerror(void *opaque, INT_PTR num_param, floa
 	float *b = __NSEEL_RAMAlloc(blocks, offs5);
 	int32_t offs6 = (int32_t)(*parms[9] + NSEEL_CLOSEFACTOR);
 	float *a = __NSEEL_RAMAlloc(blocks, offs6);
+	/* [PATCHED-AuraDSP P-057] */ if (M < 0 || N < 0 || gridLen < 0 || !_eel_span_fits(offs1, gridLen) || !_eel_span_fits(offs2, gridLen) || !_eel_span_fits(offs3, gridLen) || !_eel_span_fits((int32_t)(*parms[6] + NSEEL_CLOSEFACTOR), gridLen) || !_eel_span_fits(offs5, (int64_t)M + 1) || !_eel_span_fits(offs6, (int64_t)N + 1))
+		return 0;
 	double *v1 = (double*)malloc(gridLen * sizeof(double));
 	double *v2 = (double*)malloc(gridLen * sizeof(double));
 	double *v3 = (double*)malloc(gridLen * sizeof(double));
@@ -579,6 +641,8 @@ static float NSEEL_CGEN_CALL _eel_unwrap(void *opaque, INT_PTR num_param, float 
 	float *blocks = EEL_RAM(c);
 	int32_t N = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
 	float *x = __NSEEL_RAMAlloc(blocks, (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR));
+	/* [PATCHED-AuraDSP P-057] */ if (!_eel_span_fits((int32_t)(*parms[0] + NSEEL_CLOSEFACTOR), N))
+		return 0;
 	double tol = 0.0;
 	if (num_param == 3)
 		tol = *parms[2];
@@ -601,6 +665,8 @@ static float NSEEL_CGEN_CALL _eel_zp2sos(void *opaque, INT_PTR num_param, float 
 	int32_t poleNumRoots = (int32_t)(*parms[5] + NSEEL_CLOSEFACTOR);
 	int32_t offs5 = (int32_t)(*parms[6] + NSEEL_CLOSEFACTOR);
 	float *sosOut = __NSEEL_RAMAlloc(blocks, offs5);
+	/* [PATCHED-AuraDSP P-057] */ if (!_eel_span_fits(offs1, zeroNumRoots) || !_eel_span_fits(offs2, zeroNumRoots) || !_eel_span_fits(offs3, poleNumRoots) || !_eel_span_fits(offs4, poleNumRoots) || !_eel_span_fits(offs5, ((int64_t)max(zeroNumRoots, poleNumRoots) / 2 + 1) * 6))
+		return 0;
 	double *v1 = (double*)malloc(zeroNumRoots * sizeof(double));
 	double *v2 = (double*)malloc(zeroNumRoots * sizeof(double));
 	double *v3 = (double*)malloc(poleNumRoots * sizeof(double));
@@ -640,6 +706,8 @@ static float NSEEL_CGEN_CALL _eel_tf2sos(void *opaque, INT_PTR num_param, float 
 	int32_t aLen = (int32_t)(*parms[3] + NSEEL_CLOSEFACTOR);
 	int32_t offs3 = (int32_t)(*parms[4] + NSEEL_CLOSEFACTOR);
 	float *sosOut = __NSEEL_RAMAlloc(blocks, offs3);
+	/* [PATCHED-AuraDSP P-057] */ if (!_eel_span_fits(offs1, bLen) || !_eel_span_fits(offs2, aLen) || !_eel_span_fits(offs3, ((int64_t)max(bLen, aLen) / 2 + 1) * 6))
+		return 0;
 	double *v1 = (double*)malloc(bLen * sizeof(double));
 	double *v2 = (double*)malloc(aLen * sizeof(double));
 	for (int i = 0; i < bLen; i++)

@@ -1303,3 +1303,39 @@ yquist * 0.999，
   memset 之前。失败路径逐声道释放循环同样在 finalImpulse 为空
   时解引用它，补 `if (finalImpulse)` 守卫（其余到达该路径的
   调用点行为不变）。
+
+## P-056 jdsp/Effects/eel2/glue_port.h — 解释器栈 PUSH 饱和 + MOVE_STACK 钳制（2026-11-25，审查 L15）
+
+- **问题**：字节码解释器 `GLUE_CALL_CODE` 的帧内栈（32KB 局部
+  数组）无任何溢出检查（上游自带 TODO）：`EEL_BC_STACK_PUSH` 只
+  递减 stackptr，深递归/深嵌套脚本可把 stackptr 推过数组底、写坏
+  RT 线程栈；`EEL_BC_MOVE_STACK` 的帧调整量同样无钳制。
+- **修法**：① PUSH 改饱和语义：stackptr 已到栈底时不再递减、写
+  入栈底槽并置 `aura_stack_overflow` 标志（宏保持表达式形态，
+  LOOP 计数等以 PUSH 返回值判读的调用点语义不变）；② MOVE_STACK
+  执行后越界即钳回栈内并置同一标志；③ 派发循环头检查标志，置
+  位即中止本次 execute。合法脚本的嵌套/调用深度远小于 4096 槽，
+  行为不变；病理脚本只损失本次执行，不再内存破坏。
+- **残留**：饱和后本次 execute 的中间结果不可信（栈底槽被覆写），
+  属预期——目标是内存安全而非为病理脚本保结果；VM 的 fp 栈为
+  独立结构，不在本号范围。
+- **验收**：开发机门禁全量 smoke（smoke_liveprog 系列含预算用例
+  10a/10b/10c 不回归）。
+
+## P-057 jdsp/Effects/eel2/eel_matrix.h — 内建矩阵族跨度守卫（2026-11-25，审查 P-052 残留）
+
+- **问题**：eel_matrix 内建族（determinant/rank/transpose/pinv/
+  cholesky/mldivide/quadprog/lsqlin/roots/firls/zp2sos 等 19 个
+  函数）的 rows/cols/长度全部来自脚本：基址已由 P-052 掩码进
+  池，但跨度未钳——「合法基址 + 超大跨度」索引读出池尾，且
+  rows*cols 在 int32 里先行溢出（malloc 尺寸与循环界随之失真）。
+- **修法**：新增 `_eel_span_fits(offs, span)`：掩码后基址 + 元素
+  跨度（int64 计算）必须整段落在池块内，与 nseel-compiler.c 的
+  MemCpy 守卫同口径；19 个函数在首次 malloc/池访问前逐一校验
+  其全部输入/输出跨度（含求解器输出 info 的 2 元跨度、zp2sos/
+  tf2sos 按根数上界估算的 SOS 输出跨度），任一不合即整次调用
+  拒绝（按各函数既有错误口径返回 -1/0），负维度/负长度同样拒绝。
+- **残留**：求解器内部计算量（如大矩阵 determinant 的 CPU 时间）
+  属带宽型消耗，不在本号范围（同 P-053 残留口径）。
+- **验收**：开发机门禁全量 smoke（smoke_liveprog_gmem [A]–[H2]
+  与内置脚本编译/运行不回归）。
