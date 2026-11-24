@@ -299,6 +299,17 @@ const float maxIrSec = h->gate_max_ir_seconds.load(std::memory_order_relaxed);
     const int rc = Convolver1DLoadImpulseResponse(&h->jdsp, proc, ch, out_frames, 1);
     if (rc != 1) {
         free(proc);
+        /* [审查 M3 2026-11-24] vendor 装载开头已销毁旧卷积器并替换
+         * IR 存储，失败后实际已无卷积可用。此前失败路径不清状态：
+         * ir_ready 与元数据仍称旧 IR 就绪、延迟仍计卷积——UI 与实际
+         * 静默不一致（与 P-030 修过的失效模式同型）。失败即如实清零，
+         * 界面/延迟回到「无 IR」口径；存储里的新 IR 副本保留，下次
+         * 加载或 fs 重建可重试。 */
+        h->ir_ready.store(false);
+        h->ir_frames.store(0);
+        h->ir_channels.store(0);
+        h->ir_src_rate.store(0);
+        h->ir_peak.store(0.0f);
         set_error(h, "convolver.ir: internal (vendor load failed, partition select?)");
         return AURADSP_E_STATE;
     }
