@@ -820,7 +820,11 @@ static void GLUE_CALL_CODE(INT_PTR bp, INT_PTR cp, INT_PTR rt)
       break;
       case EEL_BC_MEGABUF:
         {
-		  p1 = ((float*)rt) + (uint32_t)(fp_pop() + NSEEL_CLOSEFACTOR);
+          /* [PATCHED-AuraDSP P-052] gmem 索引掩码回绕进 2^24 池：
+           * 原实现只转 uint32，负索引回绕、≥2^24 落池外堆内存，
+           * 脚本一行 gmem[-1]=x 即可越界读写。与上游 EEL2 原生
+           * 后端的块内寻址语义一致（单块池取模）。 */
+		  p1 = ((float*)rt) + ((uint32_t)(fp_pop() + NSEEL_CLOSEFACTOR) & (uint32_t)(NSEEL_RAM_ITEMSPERBLOCK - 1));
         }
       break;
       case EEL_BC_GENERIC1PARM:

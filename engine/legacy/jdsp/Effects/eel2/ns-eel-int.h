@@ -249,7 +249,10 @@ _codeHandleFunctionRec *eel_createFunctionNamespacedInstance(compileContext *ctx
 const char *nseel_simple_tokenizer(const char **ptr, const char *endptr, int32_t *lenOut, int32_t *state);
 int32_t nseel_filter_escaped_string(char *outbuf, int32_t outbuf_sz, const char *rdptr, size_t rdptr_size, char delim_char); // returns length used, minus NUL char
 opcodeRec *nseel_translate(compileContext *ctx, const char *tmp, size_t tmplen); // tmplen=0 for nul-term
-#define __NSEEL_RAMAlloc(pblocks, w) (pblocks + w)
+/* [PATCHED-AuraDSP P-052] 基址偏移掩码回绕进 2^24 池（与 glue_port
+ * MEGABUF 同口径）：原样相加使 eel_matrix 内建族与 MemSet/MemCpy 的
+ * 基址可落池外；掩码后全部 gmem 寻址关在单块池内取模。 */
+#define __NSEEL_RAMAlloc(pblocks, w) (pblocks + ((w) & (NSEEL_RAM_ITEMSPERBLOCK - 1)))
 float * NSEEL_CGEN_CALL __NSEEL_RAM_MemSet(float *blocks,float *dest, float *v, float *lenptr);
 float * NSEEL_CGEN_CALL __NSEEL_RAM_MemCpy(float *blocks,float *dest, float *src, float *lenptr);
 float *dataSectionToRamDisk(void *opaque, size_t len);
