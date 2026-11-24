@@ -54,16 +54,17 @@ def main():
           and "'channels.mode': 336" in dart
           and "'viz.fftSize': 339" in dart,
           'S3 追加段入块（channels.count@335 … viz.fftSize@339）')
-    check('APO_PARAM_BLOCK_VERSION 4' in c_h
-          and 'const int kApoParamBlockVersion = 4;' in dart
-          and '#define APO_PARAMS_VERSION 4u' in shared,
-          '参数块版本 v4 三方全等')
-    # 第四十一轮：尾段分端点覆写表常量双侧一致（offset =
-    # used bytes 27088（v4：340 槽）；8 条 × 24B；used 扩至 27280）。
-    check('APO_EP_OVERRIDE_OFFSET 27088' in c_h
-          and 'const int kApoEpOverrideOffset = 27088;' in dart
-          and 'APO_BLOCK_USED_BYTES 27280' in c_h
-          and 'const int kApoBlockUsedBytes = 27280;' in dart,
+    check('APO_PARAM_BLOCK_VERSION 5' in c_h
+          and 'const int kApoParamBlockVersion = 5;' in dart
+          and '#define APO_PARAMS_VERSION 5u' in shared,
+          '参数块版本 v5 三方全等')
+    # 第四十一轮：尾段分端点覆写表常量双侧一致。v5（2026-11-24
+    # 审查 Dart-F1）字符串区扩 2048B（两新槽各 1K）后：offset =
+    # 29136；8 条 × 24B；used 扩至 29328。
+    check('APO_EP_OVERRIDE_OFFSET 29136' in c_h
+          and 'const int kApoEpOverrideOffset = 29136;' in dart
+          and 'APO_BLOCK_USED_BYTES 29328' in c_h
+          and 'const int kApoBlockUsedBytes = 29328;' in dart,
           '覆写表尾段常量双侧一致')
     sha_c = re.search(r'sha256\[:16\]=(\w+)', c_h)
     sha_d = re.search(r'sha256\[:16\]=(\w+)', dart)
@@ -73,11 +74,14 @@ def main():
           '动态参数族扩到 param64')
     check("'eq.curve': 0" in dart and "'liveprog.code': 2" in dart,
           'Dart 字符串槽序 eq.curve/arbmag/liveprog.code/graph.order')
+    check("'convolver.ir.path': 4" in dart and "'ddc.load': 5" in dart
+          and '"convolver.ir.path"' in c_h and '"ddc.load"' in c_h,
+          'v5 文件中转槽入块（convolver.ir.path@4 / ddc.load@5）')
 
     # ② ApoShared.h 与生成布局的常量交叉断言
     m = re.search(r'struct ApoParamBlockHeader \{([^}]*)\}', shared)
     check(m is not None and 'writeSeq' in m.group(1) and 'bypass' in m.group(1)
-          and 'strUsed[4]' in m.group(1), 'ApoShared 参数头含 seqlock/bypass/strUsed[4]')
+          and 'strUsed[6]' in m.group(1), 'ApoShared 参数头含 seqlock/bypass/strUsed[6]')
     check('sizeof(ApoParamBlockHeader) == 64' in shared, '参数头 64B 静态断言在位')
     check('APO_BLOCK_HEADER_BYTES 64' in c_h, '生成布局头 64B 与手写头一致')
     check('APO_BLOCK_MASK_OFFSET 64' in c_h and

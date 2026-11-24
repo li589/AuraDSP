@@ -51,7 +51,11 @@
 // 豁免移入白名单（旧「几何由流格式决定」口径已被生效宽口径推
 // 翻），序号 335 插入、尾段 5 槽移位一格；版本全等校验保证新
 // 旧 App/APO 混搭时旧侧整体拒绝（透传降级），不按错位序号误用。
-#define APO_PARAMS_VERSION 4u
+// v5（2026-11-24 审查 Dart-F1）：字符串槽 4→6——convolver.ir.path /
+// ddc.load 追加在字符串区末尾（存量槽偏移不变），头部 strUsed
+// 扩为 [6]、reserved 相应缩为 [5]（头仍 64B）；分端点覆写表偏移
+// 随字符串区扩大后移（见 ApoParamIndex.h 生成值）。
+#define APO_PARAMS_VERSION 5u
 
 struct ApoParamBlockHeader {
     uint32_t magic;        // APO_PARAMS_MAGIC
@@ -59,10 +63,10 @@ struct ApoParamBlockHeader {
     uint32_t writeSeq;     // seqlock 序号（奇=写入中）
     uint32_t bypass;       // 0/1
     uint32_t numCount;     // 数值槽总数（== APO_NUM_PARAM_COUNT）
-    uint32_t strUsed[4];   // 各字符串槽已用字节（不含 NUL）
-    uint32_t reserved[7];  // 凑满 64B 头
+    uint32_t strUsed[6];   // 各字符串槽已用字节（不含 NUL）
+    uint32_t reserved[5];  // 凑满 64B 头
 };
-// 头之后：valid 位图区（64B，bit i ↔ 数值槽 i、bit 325+s ↔
+// 头之后：valid 位图区（64B，bit i ↔ 数值槽 i、bit numCount+s ↔
 // 字符串槽 s；只有置位槽会被 worker 应用——未被 App 写过的
 // 参数必须保留引擎默认值，见生成器头注）→ values[numCount]
 // （u32/槽）→ 字符串槽区（定长，偏移与容量见 ApoParamIndex.h）。

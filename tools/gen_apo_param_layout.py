@@ -26,12 +26,17 @@ id，C 侧（AuraApo worker）与 Dart 侧（isolate publisher）必须共用
     上述全部序号之后——存量序号永不移位；豁免清单 EXEMPT 与
     分类完备性断言见 parse_numeric_params。
 字符串槽（定长，id 与容量在本脚本内登记，属布局契约的一部分）：
-  eq.curve 4K / arbmag.string 4K / liveprog.code 16K / graph.order 1K。
-  convolver.ir.path、ddc.load、liveprogmc.code 不入块（设计 §1 非目标）。
+  eq.curve 4K / arbmag.string 4K / liveprog.code 16K / graph.order 1K /
+  convolver.ir.path 1K / ddc.load 1K（后两槽 v5 起追加在末尾）。
+  liveprogmc.code 不入块（设计 §1 非目标）。convolver.ir.path 与
+  ddc.load 本是 P4 计划书（2026-11-10）的中转专用通道，但生成器
+  一直漏登记——APO 侧围栏与 Dart 侧中转换算俱在、唯独无槽可落，
+  文件效果在 sysapo 下静默不生效（2026-11-24 审查 Dart-F1 定罪，
+  v5 补登记修复）。
 
 块布局（u32 对齐，两侧共用，改布局必须同步 ApoShared.h 并由
 smoke_apo_param_layout 交叉断言）：
-  header 64B（magic/version/writeSeq/bypass/numCount/strUsed[4]+预留）
+  header 64B（magic/version/writeSeq/bypass/numCount/strUsed[6]+预留）
   valid 区：64B 有效位图——bit i 对应数值槽 i，字符串槽 s 的位
     在数值槽总数之后；只有置位的槽会被 APO worker 应用（未置
     位 = 该参数从未被 App 写过，引擎保持其默认值，严禁以块内
@@ -66,11 +71,16 @@ DYNAMIC_FLOAT_IDS = (
 )
 
 # (id, cap bytes) —— 顺序即块内排列顺序，属布局契约。
+# 新槽只许追加在末尾（存量槽偏移永不移位）。
 STRING_SLOTS = (
     ('eq.curve', 4096),
     ('arbmag.string', 4096),
     ('liveprog.code', 16384),
     ('graph.order', 1024),
+    # v5（2026-11-24 审查 Dart-F1）：APO 文件类中转通道（P4 计划书
+    # 原定新增、漏登记至今）——路径串 1K 足够（中转副本路径短）。
+    ('convolver.ir.path', 1024),
+    ('ddc.load', 1024),
 )
 
 HEADER_BYTES = 64
@@ -98,7 +108,12 @@ def sha16(path):
 # v3（第四十一轮）：布局主体不变，尾部（v2 USED_BYTES 起）追加
 # 分端点声道覆写表（8 条 × 24B：idHash u64 + mode i32 + fill i32
 # + flags u32），USED_BYTES 相应扩大；worker 接受 v2/v3（v2 无表）。
-PARAMS_VERSION = 4
+# v5（2026-11-24 审查 Dart-F1）：字符串槽 4→6——convolver.ir.path /
+# ddc.load 追加在字符串区末尾（存量槽偏移不变），分端点覆写表随之
+# 后移（偏移由本生成器统一计算）；头部 strUsed[4]→[6]（reserved
+# 相应 7→5，头仍 64B）。数值槽不变（340）。消费端版本全等校验使
+# 旧 DLL 对 v5 块整体拒绝（安全降级）。
+PARAMS_VERSION = 5
 
 CSSG_TYPE = {'kFloat': 0, 'kInt32': 1, 'kBool': 2}
 
