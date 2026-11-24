@@ -16,7 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ..common import die, log
+from ..common import die, log, open_progress_ui, ui_step
 from ..hashing import merge_sha256sums
 from ..manifest import refresh_dist_manifest
 from ..naming import RESOURCE_TIERS
@@ -129,6 +129,21 @@ def _complete_staging_once(args, done: list[bool]) -> None:
 
 
 def main(argv: list[str]) -> int:
+    # 进度小窗（2026-11-24）：开窗后 [pack] 日志自动镜像（common.log 转发），
+    # 本函数只管终局播报；die 的 SystemExit 也要如实报失败再原样抛出。
+    ui = open_progress_ui("AuraDSP 打包（pack）")
+    try:
+        rc = _main_impl(argv)
+    except SystemExit as exc:
+        if ui is not None:
+            ui.done(ok=False, text=str(exc)[:120])
+        raise
+    if ui is not None:
+        ui.done(ok=rc == 0, text="打包完成" if rc == 0 else f"退出码 {rc}")
+    return rc
+
+
+def _main_impl(argv: list[str]) -> int:
     args = parse_args(argv)
 
     if args.verify:
@@ -160,6 +175,7 @@ def main(argv: list[str]) -> int:
         fn = MODE_FUNCS.get(mode)
         if fn is None:
             raise die(f"未知模式: {mode}（可选 {', '.join(MODE_FUNCS)} 或 all）")
+        ui_step(f"打包模式 {mode}")
         dest = fn(args, ver, out)
         produced.append(dest)
         if not args.what_if and dest.is_file():

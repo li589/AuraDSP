@@ -35,6 +35,8 @@ UI_DIR = os.path.join(TEST_DIR, "ui")
 # PLATFORM_WINDOWS；能在 Linux 跑通的既有 smoke，从 PLATFORM_WINDOWS 摘除即可。
 PLATFORM_ANY = {
     "smoke_platform_isolation.py",
+    # 进度小窗隔离纪律（2026-11-24）：纯源码 + 本地行为，无显示依赖。
+    "smoke_progress_ui.py",
     "smoke_dart_platform_quarantine.py",
     # r44 S4（2026-11-17）：测试页三段化结构门禁（WaveSource/传输
     # 协议/状态保留路径/三卡布局），纯源码扫描，任意平台可跑。
@@ -315,6 +317,25 @@ def platform_supported(required):
     return required == "any" or required == CURRENT_PLATFORM
 
 
+def _progress_ui(title, total=None):
+    """按路径加载 tools/bin/progress_ui.py 的 ProgressUI（进度小窗）。
+
+    加载/构造任何失败都返回 None：小窗全程旁观，runner 照常跑
+    （隔离纪律见 tools/bin/progress_ui.py，2026-11-24）。
+    """
+    try:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "auradsp_progress_ui",
+            os.path.join(ROOT_DIR, "tools", "bin", "progress_ui.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.ProgressUI(title, total=total)
+    except Exception:
+        return None
+
+
 def run_smoke_tests():
     print("========================================")
     print("  Running AuraDSP Engine Smoke Tests   ")
@@ -506,6 +527,8 @@ def run_smoke_tests():
         # M1 平台隔离门禁（2026-10-29）：引擎可移植核心零 OS 头/Win32 符号；
         # 端口头纯声明 + Windows 实现存在 + 扫描器反向自检。
         "smoke_platform_isolation.py",
+        # 进度小窗隔离纪律（2026-11-24）：UI 子进程永不带崩宿主脚本。
+        "smoke_progress_ui.py",
         # M4 Dart 平台隔离门禁（2026-10-29）：lib/ 业务文件零 Platform.is；
         # PlatformProfile 成员齐全；AudioOut 端口/工厂/WASAPI 实现归位。
         "smoke_dart_platform_quarantine.py",
@@ -695,26 +718,41 @@ def run_smoke_tests():
     all_pass = True
     passed = skipped = failed = 0
     skipped_files = []
+    ui = _progress_ui("AuraDSP Smoke Tests", total=len(smoke_files))
     for sf in smoke_files:
         path = os.path.join(SMOKE_DIR, sf)
         if not os.path.exists(path):
             print(f"[WARN] File not found: {sf}")
+            if ui:
+                ui.advance()
+                ui.log(f"[WARN] {sf} not found")
             continue
         req = required_platform(sf)
         if not platform_supported(req):
             print(f"[SKIP] {sf} (requires {req}, current {CURRENT_PLATFORM})")
             skipped += 1
             skipped_files.append(sf)
+            if ui:
+                ui.advance()
+                ui.log(f"[SKIP] {sf}")
             continue
         print(f"\n---> Running {sf}...")
+        if ui:
+            ui.step(sf)
         res = subprocess.run([sys.executable, path], cwd=ROOT_DIR, check=False)
         if res.returncode != 0:
             print(f"[FAIL] {sf} returned code {res.returncode}")
             failed += 1
             all_pass = False
+            if ui:
+                ui.advance()
+                ui.log(f"[FAIL] {sf} (rc={res.returncode})")
         else:
             print(f"[PASS] {sf}")
             passed += 1
+            if ui:
+                ui.advance()
+                ui.log(f"[PASS] {sf}")
     print("\n========================================")
     if all_pass:
         print("  ALL SMOKE TESTS PASSED [100%]        ")
@@ -724,6 +762,9 @@ def run_smoke_tests():
     if skipped_files:
         print("  SKIPPED: " + ", ".join(skipped_files))
     print("========================================")
+    if ui:
+        ui.done(all_pass,
+                f"PASS {passed} | SKIP {skipped} | FAIL {failed}")
     return 0 if all_pass else 1
 
 

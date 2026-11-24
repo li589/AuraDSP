@@ -35,7 +35,13 @@ if str(_INSTALLER_DIR) not in sys.path:
     sys.path.insert(0, str(_INSTALLER_DIR))
 
 from packkit import paths  # noqa: E402
-from packkit.common import die, log, reconfigure_streams  # noqa: E402
+from packkit.common import (  # noqa: E402
+    die,
+    log,
+    open_progress_ui,
+    reconfigure_streams,
+    ui_step,
+)
 from packkit.deliver import (  # noqa: E402
     DeliveryResult,
     make_dir,
@@ -161,6 +167,25 @@ def _split_tiers(raw: str | None) -> list[str] | None:
 
 
 def main(argv: list[str]) -> int:
+    # 进度小窗（2026-11-24）：编排层开窗，[pack] 日志自动镜像；子进程
+    # （pack/build）置 AURADSP_UI_NESTED 抑制另开窗。UI 故障不影响编排。
+    ui = open_progress_ui("AuraDSP 发布编排")
+    if ui is not None:
+        import os
+
+        os.environ.setdefault("AURADSP_UI_NESTED", "1")
+    try:
+        rc = _main_impl(argv)
+    except SystemExit as exc:
+        if ui is not None:
+            ui.done(ok=False, text=str(exc)[:120])
+        raise
+    if ui is not None:
+        ui.done(ok=rc == 0, text="发布编排完成" if rc == 0 else f"退出码 {rc}")
+    return rc
+
+
+def _main_impl(argv: list[str]) -> int:
     reconfigure_streams()
     args = parse_args(argv)
     if args.publish:
@@ -214,6 +239,7 @@ def main(argv: list[str]) -> int:
         raise die("预检未通过：" + "；".join(f"{g.name}={g.detail}" for g in blocking))
 
     if not args.dry_run:
+        ui_step("构建" if args.build else "准备（复用现有产物）")
         plan.prepare(args.build)
         work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -222,6 +248,7 @@ def main(argv: list[str]) -> int:
         out_dir = work_dir / tier
         if not args.dry_run:
             out_dir.mkdir(parents=True, exist_ok=True)
+        ui_step(f"打包档位 {tier}")
         plan.run_pack(tier, modes, out_dir, what_if=args.dry_run)
         # 产物名由各平台命名真相源给：编排层不猜名字
         tier_outputs[tier] = plan.expected_artifacts(tier, modes, out_dir, ver)
@@ -230,6 +257,7 @@ def main(argv: list[str]) -> int:
         print("\n（--dry-run 完成：资产探测通过，未落任何产物）")
         return 0
 
+    ui_step("归集与清单")
     items = plan.collect(tier_outputs, ver)
     dest = make_dir(args.out_root, round_no)
     result = DeliveryResult(dir=dest)
@@ -247,6 +275,7 @@ def main(argv: list[str]) -> int:
         "generated_by": "installer/release.py",
     })
 
+    ui_step("封装自检")
     plan.post_check(result.files, ver)
 
     if args.clean_work:
