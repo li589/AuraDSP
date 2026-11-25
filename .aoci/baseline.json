@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-21T02:23:05Z",
-  "updated_at": "2026-11-25T10:37:01Z",
+  "updated_at": "2026-11-25T15:16:01Z",
   "files": {
     ".ai/README.md": {
       "role": "index",
@@ -221,9 +221,9 @@
     },
     "AGENTS.md": {
       "role": "index",
-      "sha256": "0e75a578a890b3f4dddebe2b909cc77003bb6e1c6ca5e92e24539ae1f4982df3",
-      "size": 15545,
-      "normalized_sha256": "395748ede7a1690c6f55e0acf50b838f5ed5ea4efd06d6e0dcf9e46132695eff"
+      "sha256": "53d4365d25f41196aae26274b64830fd3866494bdb655a3710532c22e759a02b",
+      "size": 15521,
+      "normalized_sha256": "8d0c7ffd3d882741aa29eabc69ae1c8938464ad7920639022d976c9247685e4d"
     },
     "CLAUDE.md": {
       "role": "index",
@@ -257,9 +257,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "2333921ce404d844e0495076f7422a21fe604d7ac9e6f99101ac26c1764edee8",
-      "size": 1171744,
-      "normalized_sha256": "2333921ce404d844e0495076f7422a21fe604d7ac9e6f99101ac26c1764edee8"
+      "sha256": "602d67a31c294e4f96c557d81211674ec81f81ac7cc37d0c3eb2f129aa2cdf50",
+      "size": 1179146,
+      "normalized_sha256": "602d67a31c294e4f96c557d81211674ec81f81ac7cc37d0c3eb2f129aa2cdf50"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -976,9 +976,9 @@
     },
     "app/auradsp_app/lib/core/plugins/plugin_manager_events.dart": {
       "role": "index",
-      "sha256": "c2bc9fda3af5f5de386028828cae07e4c52afa71fd86ddeead8c2aa56fbfe1e5",
-      "size": 11461,
-      "normalized_sha256": "0fa31ed961e8683de605b5a1e8f1159d792a50882ad93f35e5fcaf5d56603624"
+      "sha256": "feac26d42fbac9721df74dc07524d6d776cbee2d21c264de3b0ce166b77e6f6c",
+      "size": 11796,
+      "normalized_sha256": "d87248b31dd2ea4686d2097652da00cf0d402f8c944c4139fb6f572b30a967db"
     },
     "app/auradsp_app/lib/core/plugins/plugin_manager_slots.dart": {
       "role": "index",
@@ -1072,9 +1072,9 @@
     },
     "app/auradsp_app/lib/core/state/state_events.dart": {
       "role": "index",
-      "sha256": "1f185366d4e0415a4e09cc3d07df0773d0c9bb930decb48b0400a7973038e265",
-      "size": 80536,
-      "normalized_sha256": "6e549479dde3e9fb9bd8f54b9f37d3c66384d5c37936caf3d4129c516bcf5b44"
+      "sha256": "d6fbff71025e014bf9e253e6e6355c5977deb2aa53a8ce0785d033f9445594af",
+      "size": 80593,
+      "normalized_sha256": "d65018ac981ed37e36a797e95bb2a34196617c79099873d5ec20107bd0f0a85b"
     },
     "app/auradsp_app/lib/core/state/state_models.dart": {
       "role": "index",
@@ -1138,9 +1138,9 @@
     },
     "app/auradsp_app/lib/engine/apo_transit.dart": {
       "role": "index",
-      "sha256": "3fae24fa3f244f45443fc7ca48a513731fa01bcbdf9a10ad0c1802cd2bbef334",
-      "size": 10618,
-      "normalized_sha256": "3fae24fa3f244f45443fc7ca48a513731fa01bcbdf9a10ad0c1802cd2bbef334"
+      "sha256": "9229815af903d65f21a9b0e1e200fda218d5a01a6c78f0fc7bd4ad3764dbcb8e",
+      "size": 8520,
+      "normalized_sha256": "b2f5d66e420bae007994d18eb2f64e83b139c6dba49bf2135d86e4cbf6393faa"
     },
     "app/auradsp_app/lib/engine/audio_abridge.dart": {
       "role": "index",
@@ -1156,15 +1156,15 @@
     },
     "app/auradsp_app/lib/engine/audio_isolate.dart": {
       "role": "index",
-      "sha256": "84f77f4da0638796b67b376768c8868e4309c87c370ac7297d98d308aa1f54a7",
-      "size": 152843,
-      "normalized_sha256": "be4a4b564645e9ef7b6460a00d0c68e9a24384899fc89dd90bcbd9a69575bc40"
+      "sha256": "c91c25439811439d855752e1b34bee11e22a8810e9bc630afed089ec02ff59b4",
+      "size": 152930,
+      "normalized_sha256": "5c997d5bdf417e29127cdaa27738b6390c779d8a94d4688c90cf06a4e2fbc808"
     },
     "app/auradsp_app/lib/engine/audio_isolate_apo.dart": {
       "role": "index",
-      "sha256": "edb251a876fd37ee74716ad53548631233290bf2bc6973bed61b8d5510c05911",
-      "size": 47448,
-      "normalized_sha256": "edb251a876fd37ee74716ad53548631233290bf2bc6973bed61b8d5510c05911"
+      "sha256": "578eafeeb3d416ac8c93507efa9318dd282c3993a00a25925c665d2126dca958",
+      "size": 49358,
+      "normalized_sha256": "4b24c7340955414894153bfdd92399472d612a9eb4928a7367ee0c3f3166649a"
     },
     "app/auradsp_app/lib/engine/audio_isolate_asio.dart": {
       "role": "index",
@@ -2378,11 +2378,17 @@
       "size": 2548,
       "normalized_sha256": "7e416a817137c7978fb18618705d72401e8083b7db48f8d26e8e25539fbea25a"
     },
+    "app/auradsp_app/test/apo_plugin_publisher_test.dart": {
+      "role": "index",
+      "sha256": "1d7d43ea2f4281110bd70e3d404785d8e94effc802e052c6fb8eef26de026b74",
+      "size": 2396,
+      "normalized_sha256": "1d7d43ea2f4281110bd70e3d404785d8e94effc802e052c6fb8eef26de026b74"
+    },
     "app/auradsp_app/test/apo_transit_gc_test.dart": {
       "role": "index",
-      "sha256": "99d212b17b93e8510314c74c83556b26ef7c3e29ee4a29ee37aa4c09dd729819",
-      "size": 2831,
-      "normalized_sha256": "99d212b17b93e8510314c74c83556b26ef7c3e29ee4a29ee37aa4c09dd729819"
+      "sha256": "09bf86fcda0a2e0c1e7761c85fe1715324f4ff81f16583409317c579649f1eb8",
+      "size": 3922,
+      "normalized_sha256": "127cdd22d2acbecdfc020d7a08cf5aaf920f6982046f0fca156ed8e7b67f0c65"
     },
     "app/auradsp_app/test/asio_virtual_channels_test.dart": {
       "role": "index",
@@ -2938,9 +2944,9 @@
     },
     "app/auradsp_app/test/ui_event_dedup_test.dart": {
       "role": "index",
-      "sha256": "cf70c3f23a601841e0f5a8d7c1c5b49d610715c7a3e299f74de2265560b1a04c",
-      "size": 8989,
-      "normalized_sha256": "a6e01b10949d844fc69da49ab0a1d5ced23a387df9732124d1dde4086f605770"
+      "sha256": "2d178fffb5d02c5194ee21f083c0c6acfca4c8c3320ba91f082f20f090133043",
+      "size": 9769,
+      "normalized_sha256": "59c85647ea929f6c46cd15c3faa7b4d6693bce95943405d4ed7d505e235d7265"
     },
     "app/auradsp_app/test/ui_helpers_test.dart": {
       "role": "index",
@@ -18556,9 +18562,9 @@
     },
     "core/desktop/windows-drivers/03_system_apo/ApoEngineHost.cpp": {
       "role": "index",
-      "sha256": "e0b8320e1926772531ec833c6c540c0c54370f98ea6a9ef3bc42284b99e5b9c6",
-      "size": 45027,
-      "normalized_sha256": "e0b8320e1926772531ec833c6c540c0c54370f98ea6a9ef3bc42284b99e5b9c6"
+      "sha256": "c2e47f2989f1549033e3e22d02267f82d69b61eb38a3eca1ec6043c6ed5a2b53",
+      "size": 46922,
+      "normalized_sha256": "9abcb550eee69d098f64bfe0cf36e860342b50190fe32cdedbfd3ede2335c2fa"
     },
     "core/desktop/windows-drivers/03_system_apo/ApoEngineHost.h": {
       "role": "index",
@@ -18586,9 +18592,9 @@
     },
     "core/desktop/windows-drivers/03_system_apo/ApoShared.h": {
       "role": "index",
-      "sha256": "b9232b39db85e7c511c81c45d2418a0e94be2de757423d761a9b6262e52dd545",
-      "size": 18226,
-      "normalized_sha256": "b9232b39db85e7c511c81c45d2418a0e94be2de757423d761a9b6262e52dd545"
+      "sha256": "6429a1ccf537cec6bd19086c42a7634cf2205fe815dada6e4be20101c07c5362",
+      "size": 18997,
+      "normalized_sha256": "5e5c5910531c9e19ba2c63b8ca9ad4eb443af55daec6d85c7f10a1570fc049eb"
     },
     "core/desktop/windows-drivers/03_system_apo/AuraApo.cpp": {
       "role": "index",
@@ -18634,9 +18640,9 @@
     },
     "core/desktop/windows-drivers/03_system_apo/apo_engine_test.cpp": {
       "role": "index",
-      "sha256": "e235a24b9f4a5f91daaf1b3afdf55feb12dbb0ac22145d24d4b2548f899f09bf",
-      "size": 44532,
-      "normalized_sha256": "e235a24b9f4a5f91daaf1b3afdf55feb12dbb0ac22145d24d4b2548f899f09bf"
+      "sha256": "dd7d52991c3656daaed807699e3b11b08bd99929d2a93a0a11a77102eaa762b1",
+      "size": 55101,
+      "normalized_sha256": "52aaa01f34a384f927a1dfcd0fddea5dac87108d17382e40fe1993608c60f91a"
     },
     "core/desktop/windows-drivers/03_system_apo/apo_inspect.cpp": {
       "role": "index",
@@ -18808,9 +18814,9 @@
     },
     "core/desktop/windows-drivers/CMakeLists.txt": {
       "role": "index",
-      "sha256": "e4b0c3c9bad27580343a05b463145f53031d794c02cb3a3e0db8fee8aa81b07b",
-      "size": 20287,
-      "normalized_sha256": "e4b0c3c9bad27580343a05b463145f53031d794c02cb3a3e0db8fee8aa81b07b"
+      "sha256": "1a22d6dc8894b2944225f883232254ad0fc4b27b173e8b44a0d651a158725792",
+      "size": 22272,
+      "normalized_sha256": "944ef2298bdcbccd3adf6aa73adf407faede23dcdc165ebd3ea9ef8198a741ee"
     },
     "core/desktop/windows-drivers/README.md": {
       "role": "index",
@@ -19366,9 +19372,9 @@
     },
     "docs/20-执行/全量代码审查修复计划-2026-11-25.md": {
       "role": "index",
-      "sha256": "b80d1df6dcc1140bec6f908a4969d3872f0880cd78b6560af5466ff401c0d337",
-      "size": 84516,
-      "normalized_sha256": "b80d1df6dcc1140bec6f908a4969d3872f0880cd78b6560af5466ff401c0d337"
+      "sha256": "6b3eb2d57d2d5f2558e8126c9b754251fa6d3b565bdf24adc0fdbbe750f42c64",
+      "size": 84999,
+      "normalized_sha256": "6b3eb2d57d2d5f2558e8126c9b754251fa6d3b565bdf24adc0fdbbe750f42c64"
     },
     "docs/20-执行/卷积双槽影子立项-2026-11-25.md": {
       "role": "index",
@@ -22804,15 +22810,15 @@
     },
     "installer/packkit/windows/installer_build.py": {
       "role": "index",
-      "sha256": "45f114a4a18a94256c5305a784bac535d09dab8731cc070eff32339ed9dd6eb3",
-      "size": 3676,
-      "normalized_sha256": "45f114a4a18a94256c5305a784bac535d09dab8731cc070eff32339ed9dd6eb3"
+      "sha256": "d0151d68de31f0863a0679adf2989b44bd6f9c109f4e023d05fb36ea91f07078",
+      "size": 3902,
+      "normalized_sha256": "d0151d68de31f0863a0679adf2989b44bd6f9c109f4e023d05fb36ea91f07078"
     },
     "installer/packkit/windows/modes.py": {
       "role": "index",
-      "sha256": "4eca9134ef373ba616342894900a57c5b7c82e768a74e83ebd51557e75cde991",
-      "size": 6205,
-      "normalized_sha256": "4eca9134ef373ba616342894900a57c5b7c82e768a74e83ebd51557e75cde991"
+      "sha256": "e066e3f8e8dfbb9cd9911a64c2dff7edf7e78065dac7058db0f8bfcde4bb6778",
+      "size": 6207,
+      "normalized_sha256": "e066e3f8e8dfbb9cd9911a64c2dff7edf7e78065dac7058db0f8bfcde4bb6778"
     },
     "installer/packkit/windows/payload.py": {
       "role": "index",
@@ -22828,15 +22834,15 @@
     },
     "installer/packkit/windows/setup_image.py": {
       "role": "index",
-      "sha256": "5a4ab4e435a5e038cba31d035603dd924ac254c8bfbba26dee254959cab3b1dc",
-      "size": 4512,
-      "normalized_sha256": "5a4ab4e435a5e038cba31d035603dd924ac254c8bfbba26dee254959cab3b1dc"
+      "sha256": "ee08bcc88e053ca267cc01ef2c52a51ebc9e0db47ce1f8f38626514d5c9402b6",
+      "size": 6593,
+      "normalized_sha256": "ee08bcc88e053ca267cc01ef2c52a51ebc9e0db47ce1f8f38626514d5c9402b6"
     },
     "installer/packkit/windows/signing.py": {
       "role": "index",
-      "sha256": "4992cbd3748d0b9fa5c00aebe5bc5d3c80c7e9f59128592c92b1606398ae619a",
-      "size": 7065,
-      "normalized_sha256": "4992cbd3748d0b9fa5c00aebe5bc5d3c80c7e9f59128592c92b1606398ae619a"
+      "sha256": "5a4ed10ae8fbbd69768c21f0b31bbb2cb1a728ed5009a4050c46bd0f00dfc082",
+      "size": 8446,
+      "normalized_sha256": "d4120855fd594c2120a9812dfc72f625feb86107d882cf8241d1bc8098078c53"
     },
     "installer/packkit/windows/toolchain.py": {
       "role": "index",
@@ -22870,15 +22876,21 @@
     },
     "installer/tests/test_packkit_unit.py": {
       "role": "observe",
-      "sha256": "c05b5e901b4c9b0b25da41f82e9811a7d08f6b83149353fbc665025d1172dd7c",
-      "size": 10656,
-      "normalized_sha256": "c05b5e901b4c9b0b25da41f82e9811a7d08f6b83149353fbc665025d1172dd7c"
+      "sha256": "326b3a60dfca39fc8c4bb8005e239036b22cb567d1620c47be909701f9eea4b3",
+      "size": 11840,
+      "normalized_sha256": "326b3a60dfca39fc8c4bb8005e239036b22cb567d1620c47be909701f9eea4b3"
     },
     "installer/tests/test_release_clean_work.py": {
       "role": "observe",
       "sha256": "ed51059df6863a673c87c8fb466e8717202c69c6b02b5cd258059a9ec7a01620",
       "size": 4110,
       "normalized_sha256": "4e034ed9fe083d1dc763449b3eae330c309d44ceeb0cece38b7f4b0841eb6211"
+    },
+    "installer/tests/test_setup_elevation_integrity.py": {
+      "role": "observe",
+      "sha256": "79889fd59c84d5ed2717a975f1b5b03646b12be6ba201c8002a344f2cb0f3296",
+      "size": 34700,
+      "normalized_sha256": "79889fd59c84d5ed2717a975f1b5b03646b12be6ba201c8002a344f2cb0f3296"
     },
     "installer/windows/README.md": {
       "role": "index",
@@ -22900,15 +22912,15 @@
     },
     "installer/windows/custom_installer/bootstrapper/CMakeLists.txt": {
       "role": "index",
-      "sha256": "7e2590d6f895e98f845b65551efcb52e156c187aabe3ca7b65ac49d29c324d4b",
-      "size": 1025,
-      "normalized_sha256": "7e2590d6f895e98f845b65551efcb52e156c187aabe3ca7b65ac49d29c324d4b"
+      "sha256": "f504ab27eb1b2a1ad67e95593cad1d0d49255d66001a8798b81be35ce3ad0ff6",
+      "size": 2094,
+      "normalized_sha256": "f5c706cbcbe870bcd791ecd0423ea6dc548d14c2f6960e8fa5e47b7ee4b201a7"
     },
     "installer/windows/custom_installer/bootstrapper/bootstrapper.cpp": {
       "role": "index",
-      "sha256": "4e49dcb198c59932e22dd2c655093698d1ea5ddcb7af6e25e0c5768cdd7782d9",
-      "size": 17780,
-      "normalized_sha256": "4e49dcb198c59932e22dd2c655093698d1ea5ddcb7af6e25e0c5768cdd7782d9"
+      "sha256": "5a0da44c378104257836137c9b5742f1f019ee0cb60c2dd42bbdf5e54da391d4",
+      "size": 34334,
+      "normalized_sha256": "1fdedffd8084730917779de9cdeac5b30dc3beb1d8d2637e1083417cb7f00c75"
     },
     "installer/windows/custom_installer/bootstrapper/bootstrapper.manifest": {
       "role": "index",
@@ -22926,6 +22938,12 @@
       "role": "index",
       "sha256": "95fc72420fc78038c8da54a0f768208d9f886f070eb82115997779763bbeed23",
       "size": 65118
+    },
+    "installer/windows/custom_installer/bootstrapper/trusted_publisher.h": {
+      "role": "index",
+      "sha256": "979768eec5a2424f7f9c90fb66f1bf285669d8bd49e91126dceb413bca194192",
+      "size": 354,
+      "normalized_sha256": "979768eec5a2424f7f9c90fb66f1bf285669d8bd49e91126dceb413bca194192"
     },
     "installer/windows/custom_installer/driver/README.txt": {
       "role": "index",
@@ -23019,21 +23037,21 @@
     },
     "installer/windows/custom_installer/wizard/lib/main.dart": {
       "role": "index",
-      "sha256": "ed5f80e2263a4562e8f167a97c14f2f610da97e4650374943e8ccd3e59b586f5",
-      "size": 1444,
-      "normalized_sha256": "ed5f80e2263a4562e8f167a97c14f2f610da97e4650374943e8ccd3e59b586f5"
+      "sha256": "58dae91f99cb7c7594a3b150bf1e678f7203e8c23a57ae09d1990946cefd050c",
+      "size": 1591,
+      "normalized_sha256": "5409d644fcc6cc03c773629ddefb18c2794a4e30d9bff38c7d7dfe79816ed0e5"
     },
     "installer/windows/custom_installer/wizard/lib/src/app.dart": {
       "role": "index",
-      "sha256": "e2284ae547d67e327f1d1b5266b71f8b7de2883fe5de1d7bd31f2a95a198bde1",
-      "size": 42249,
-      "normalized_sha256": "e2284ae547d67e327f1d1b5266b71f8b7de2883fe5de1d7bd31f2a95a198bde1"
+      "sha256": "3524e5abb990e4dce81e4d49e3bc755a13f79fee4e08facfd8dda7f0ceed3874",
+      "size": 43445,
+      "normalized_sha256": "fdb51d4f66e5c7dae1b005f5a205cf43e97390067a05edd010620f21b1dd6a42"
     },
     "installer/windows/custom_installer/wizard/lib/src/args.dart": {
       "role": "index",
-      "sha256": "b4069c336170120f90c5dc81bc250e9e18de75f9a2bc3b9f6d245707e22cc103",
-      "size": 3479,
-      "normalized_sha256": "b4069c336170120f90c5dc81bc250e9e18de75f9a2bc3b9f6d245707e22cc103"
+      "sha256": "1ef3fcbf88ebb7220d8eb27f02cf196b4bd9ae2ed84fbfe165d72332ed41e4b0",
+      "size": 6267,
+      "normalized_sha256": "0d4ecaf65275a91b464edcb067a3a8350d2adbcf97318995d5051374d02a56af"
     },
     "installer/windows/custom_installer/wizard/lib/src/aurora_background.dart": {
       "role": "index",
@@ -23055,21 +23073,21 @@
     },
     "installer/windows/custom_installer/wizard/lib/src/engine/install_engine.dart": {
       "role": "index",
-      "sha256": "ac9ba43dd6ec0d1c4399a5a6f691c3e251374a7402d29b0fc79fd161eda666a0",
-      "size": 36859,
-      "normalized_sha256": "ac9ba43dd6ec0d1c4399a5a6f691c3e251374a7402d29b0fc79fd161eda666a0"
+      "sha256": "6e017b4f445d280ee992908206ac36995a216b6f3a742d88cdc0949b03e16b9b",
+      "size": 39071,
+      "normalized_sha256": "6e017b4f445d280ee992908206ac36995a216b6f3a742d88cdc0949b03e16b9b"
     },
     "installer/windows/custom_installer/wizard/lib/src/engine/models.dart": {
       "role": "index",
-      "sha256": "4b4bd87a5046ca878d1ea1e2d19b1680501d6c42e2814928fea0e014a2d4def7",
-      "size": 7391,
-      "normalized_sha256": "4b4bd87a5046ca878d1ea1e2d19b1680501d6c42e2814928fea0e014a2d4def7"
+      "sha256": "980d10a52103b8da43f8fda95f6ab9c521c4f9629cb0cbd7c71ce4cc4f57bb02",
+      "size": 8071,
+      "normalized_sha256": "bdf4af78d119c0bf2a4ac1ad665819e54533d2e10b2486744a50d98f7bfca607"
     },
     "installer/windows/custom_installer/wizard/lib/src/engine/payload.dart": {
       "role": "index",
-      "sha256": "246147efa4d453a5b6bfa5ad03b775bf9866071351e6d0ffca8c9d792ed6dd13",
-      "size": 8757,
-      "normalized_sha256": "246147efa4d453a5b6bfa5ad03b775bf9866071351e6d0ffca8c9d792ed6dd13"
+      "sha256": "f93454d5bbc84b4e40d46510df8433f9bc1ecdb1d505217c5f2de98549444608",
+      "size": 15222,
+      "normalized_sha256": "f93454d5bbc84b4e40d46510df8433f9bc1ecdb1d505217c5f2de98549444608"
     },
     "installer/windows/custom_installer/wizard/lib/src/engine/update_policy.dart": {
       "role": "index",
@@ -23079,9 +23097,9 @@
     },
     "installer/windows/custom_installer/wizard/lib/src/engine/win32.dart": {
       "role": "index",
-      "sha256": "a0feaef97c0d09947d902fe56268c0889937a47625d0a9b592f19d730a867bbe",
-      "size": 10317,
-      "normalized_sha256": "a0feaef97c0d09947d902fe56268c0889937a47625d0a9b592f19d730a867bbe"
+      "sha256": "614ca0288237f9d559f9ba3833b8610d1b877e7d8e36be6de85877f6d50b9fe8",
+      "size": 16259,
+      "normalized_sha256": "4c8eaf635a905d15b3c15020c4846903753e6ec34572225e38ffb44a64c42f8c"
     },
     "installer/windows/custom_installer/wizard/lib/src/theme.dart": {
       "role": "index",
@@ -23109,9 +23127,9 @@
     },
     "installer/windows/custom_installer/wizard/test/wizard_logic_test.dart": {
       "role": "index",
-      "sha256": "8eb379b1b8c0e59918b794bf0b48a9eb06d91790e38e03939c57a7f406fbb61c",
-      "size": 28404,
-      "normalized_sha256": "8eb379b1b8c0e59918b794bf0b48a9eb06d91790e38e03939c57a7f406fbb61c"
+      "sha256": "02bb73486aa57eccdb448a34ed7e9ca2496a8fef72dbab0afbc93e06579faf44",
+      "size": 30951,
+      "normalized_sha256": "d445ddd695c32d52fb545ca5aafff24d72d3208bc899c18d0be3be274f2cb9a0"
     },
     "installer/windows/custom_installer/wizard/windows/.gitignore": {
       "role": "index",
