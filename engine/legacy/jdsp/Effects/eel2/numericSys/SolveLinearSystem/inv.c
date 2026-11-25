@@ -4,6 +4,9 @@
 #include "../quadprog.h"
 void inv(const double *A, const int32_t n, double *Y)
 {
+	/* [PATCHED-AuraDSP P-058] 非正阶数与工作缓冲分配失败均不得进入数值循环。 */
+	if (n <= 0)
+		return;
 	if (n == 1)
 	{
 		Y[0] = 1.0 / A[0];
@@ -11,12 +14,19 @@ void inv(const double *A, const int32_t n, double *Y)
 	}
 	int32_t i, j, k, yk, i2, jA, ldap1, mmj_tmp, jp1j, jj, ix;
 	double smax, s;
-	char *workingBuffer = (char*)malloc(((n * n * sizeof(double)) + (n * 2 * sizeof(int32_t))) * sizeof(char));
+	size_t matrixBytes = (size_t)n * (size_t)n * sizeof(double);
+	char *workingBuffer = (char*)malloc(matrixBytes + (size_t)n * 2 * sizeof(int32_t));
+	/* [PATCHED-AuraDSP P-058] */
+	if (!workingBuffer)
+	{
+		memset(Y, 0, matrixBytes);
+		return;
+	}
 	double *b_x_data = (double*)workingBuffer;
 	int32_t *perm1 = (int32_t*)(b_x_data + n * n);
 	int32_t *perm2 = perm1 + n;
-	memset(Y, 0, n * n * sizeof(double));
-	memcpy(b_x_data, A, n * n * sizeof(double));
+	memset(Y, 0, matrixBytes);
+	memcpy(b_x_data, A, matrixBytes);
 	perm1[0] = 1;
 	yk = 1;
 	for (k = 2; k <= n; k++)

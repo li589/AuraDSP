@@ -10,6 +10,10 @@ extern double rt_hypotd(double u0, double u1);
 extern void xswap(int32_t rows1, double x_data[], int32_t ix0, int32_t iy0);
 void mrdivide(const double A[], const int32_t rows1, const int32_t cols1, const double b[], const int32_t rows2, const int32_t cols2, double Y[], int32_t Y_size[2])
 {
+	/* [PATCHED-AuraDSP P-058] 所有失败出口都发布空输出，禁止调用方复制未初始化尺寸。 */
+	Y_size[0] = Y_size[1] = 0;
+	if (rows1 <= 0 || cols1 <= 0 || rows2 <= 0 || cols2 <= 0)
+		return;
 	if (cols1 != cols2)
 	{
 		char *msg = "Matrix dimensions must agree.\n";
@@ -25,8 +29,11 @@ void mrdivide(const double A[], const int32_t rows1, const int32_t cols1, const 
 	double beta1;
 	int32_t knt;
 	double smax, s;
-	size_t bufferSize = ((rows1 * cols1) + (rows2 * 3) + cols1 + (rows2 * cols2) + (rows1 * cols1)) * sizeof(double) + (rows2 * 2 + cols1) * sizeof(int32_t);
-	char *workingBuffer = (char*)malloc(bufferSize * sizeof(char));
+	size_t bufferSize = ((size_t)rows1 * cols1 + (size_t)rows2 * 3 + (size_t)cols1 + (size_t)rows2 * cols2 + (size_t)rows1 * cols1) * sizeof(double) + ((size_t)rows2 * 2 + (size_t)cols1) * sizeof(int32_t);
+	char *workingBuffer = (char*)malloc(bufferSize);
+	/* [PATCHED-AuraDSP P-058] */
+	if (!workingBuffer)
+		return;
 	double *b_B_data = (double*)workingBuffer;
 	double *qrWorkBuf = b_B_data + rows1 * cols1;
 	double *tau_data = qrWorkBuf + rows2 * 3;

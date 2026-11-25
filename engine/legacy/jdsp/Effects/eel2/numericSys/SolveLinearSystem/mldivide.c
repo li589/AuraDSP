@@ -74,6 +74,10 @@ void xgetrf(const int32_t m, double A[], int32_t ipiv_data[])
 extern double rt_hypotd(double u0, double u1);
 void mldivide(const double A[], const int32_t rows1, const int32_t cols1, const double b[], const int32_t rows2, const int32_t cols2, double Y[], int32_t Y_size[2])
 {
+	/* [PATCHED-AuraDSP P-058] 所有失败出口都发布空输出，禁止调用方复制未初始化尺寸。 */
+	Y_size[0] = Y_size[1] = 0;
+	if (rows1 <= 0 || cols1 <= 0 || rows2 <= 0 || cols2 <= 0)
+		return;
 	if (rows1 != rows2)
 	{
 		char *msg = "Matrix dimensions must agree.\n";
@@ -91,8 +95,11 @@ void mldivide(const double A[], const int32_t rows1, const int32_t cols1, const 
 	double beta1;
 	int32_t knt;
 	double tol;
-	size_t bufferSize = ((rows2 * cols2) + (rows1 * cols1) + (cols1 * cols2) + (cols1 * 3) + min(rows1, cols1)) * sizeof(double) + max(rows1, cols1) * sizeof(int32_t);
-	char *workingBuffer = (char*)malloc(bufferSize * sizeof(char));
+	size_t bufferSize = ((size_t)rows2 * cols2 + (size_t)rows1 * cols1 + (size_t)cols1 * cols2 + (size_t)cols1 * 3 + (size_t)min(rows1, cols1)) * sizeof(double) + (size_t)max(rows1, cols1) * sizeof(int32_t);
+	char *workingBuffer = (char*)malloc(bufferSize);
+	/* [PATCHED-AuraDSP P-058] */
+	if (!workingBuffer)
+		return;
 	double *B_tmp_data = (double*)workingBuffer;
 	double *b_A_data = B_tmp_data + rows2 * cols2;
 	double *b_Y_data = b_A_data + rows1 * cols1;
@@ -378,11 +385,21 @@ void mldivide(const double A[], const int32_t rows1, const int32_t cols1, const 
 // Column major code, but symmetric matrix don't care
 void NxN_mldivide_mat_vec(const double *A, const double f[], const int32_t n, double H[])
 {
+	/* [PATCHED-AuraDSP P-058] */
+	if (n <= 0)
+		return;
 	int32_t i, j, k;
-	double *A2 = (double*)malloc(n * n * sizeof(double));
-	memcpy(A2, A, n * n * sizeof(double));
-	int32_t *ipiv = (int32_t*)malloc(n * sizeof(int32_t));
-	memcpy(H, f, n * sizeof(double));
+	double *A2 = (double*)malloc((size_t)n * (size_t)n * sizeof(double));
+	if (!A2)
+		return;
+	int32_t *ipiv = (int32_t*)malloc((size_t)n * sizeof(int32_t));
+	if (!ipiv)
+	{
+		free(A2);
+		return;
+	}
+	memcpy(A2, A, (size_t)n * (size_t)n * sizeof(double));
+	memcpy(H, f, (size_t)n * sizeof(double));
 	xgetrf(n, A2, ipiv);
 	double temp;
 	for (i = 0; i < n - 1; i++)

@@ -148,6 +148,7 @@ PLATFORM_WINDOWS = {
     "smoke_guard_flow.py",
     "smoke_liveprog.py",
     "smoke_liveprog_gmem.py",
+    "smoke_eel_matrix_safety.py",
     "smoke_viz_lowfreq.py",
     "smoke_viz_multichannel.py",
     "smoke_latency_probe.py",
@@ -342,6 +343,8 @@ def run_smoke_tests():
         "smoke_liveprog.py",
         # 2026-10-30：gmem 区从「每 VM 内嵌 64MB」改为按需分配，防止回归
         "smoke_liveprog_gmem.py",
+        # C1：矩阵负/零形状、求解器维度失败与输出尺寸契约；子进程隔离崩溃。
+        "smoke_eel_matrix_safety.py",
         "smoke_viz_lowfreq.py",
         "smoke_viz_multichannel.py",
         "smoke_latency_probe.py",
