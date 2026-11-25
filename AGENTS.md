@@ -22,7 +22,9 @@ Entry 的语义必须来自模型对真实证据的理解。不得仅依据路�
 ### 最小使用入口
 
 - `aoci_rules`：取得当前AOCI版本的会话运行合同。
-- `aoci_overview`：建立或恢复本仓库的完整认知。
+- `aoci_overview`：仅在全局理解或 Guide 要求时读取完整认知；状态检查优先 `check_only=true`。
+- `aoci_search` / `aoci_get_entries`：局部任务的默认入口，按关键词、Tag 或精确路径读取相关 Entry。
+- `aoci_header`：仅读取索引头与卷身份，不读取全量 Entry。
 - `aoci_maintain`：受管理对象达到最终稳定状态后检查认知是否需要维护。
 - `aoci_update_entry`：提交与当前证据和源码摘要绑定的完整语义更新批次。
 - `aoci_report`：仅当当前布局和工具状态支持时，在证据不足、无法可靠生成语义时登记待办，不猜写。
@@ -31,6 +33,12 @@ Entry 的语义必须来自模型对真实证据的理解。不得仅依据路�
 
 本区块只规定仓库接入、认知使用和收尾原则。`aoci_rules` 承载当前会话合同，Guide实时输出承载当前Plan的执行顺序与停点，工具Schema、Spec和Validator承载机器结构与判据；Prompt、Description、README和静态文档不能覆盖这些机器事实。
 
+### 读取范围与子代理边界（2026-11-25 owner 裁定）
+
+统一规则见 `.ai/rules/code_cognition_read_scope.md`。局部任务默认 `SCOPED`：先用 CodeGraph 定位符号，再用 `aoci_search` / `aoci_get_entries` 读取相关 Entry，最后回到源码确认。普通 `aoci_overview` 只允许用于全局架构理解、跨域重构、用户明确要求、Guide 要求或已知上下文压缩后的强制恢复；不得因新任务、新阶段或新子代理自动重读。
+
+主代理派发子代理时必须显式声明 `AOCI_READ_MODE: NONE | SCOPED | FULL`、范围、CodeGraph 范围与维护授权；缺省为 `NONE`。子代理不得自行全量读取或维护 AOCI，主代理统一负责完整认知与收尾维护。
+
 ### 建立、生成和恢复认知
 
 1. 每个新的 Agent Run 开始时，应先判断：
@@ -38,7 +46,7 @@ Entry 的语义必须来自模型对真实证据的理解。不得仅依据路�
    - 本仓库是否已经存在可用的完整AOCI索引；
    - 当前上下文中是否已有与本仓库根、当前索引版本和当前AOCI服务相匹配，并且模型仍可可靠使用的完整仓库认知。
 
-2. 仓库已经存在可用的完整索引，但当前Run没有可靠完整认知时，先调用 `aoci_rules`，再调用 `aoci_overview`。
+2. 仓库已经存在可用的完整索引时，默认不调用普通 `aoci_overview`。当前Run没有可靠完整认知但任务为局部范围，先调用 `aoci_rules`（合同不在可靠上下文时），再按 `SCOPED` 使用 `aoci_search` / `aoci_get_entries` 与 CodeGraph；只有命中完整读取条件时才调用普通 `aoci_overview`。
 
    完整认知仍可靠时直接复用。局部不确定本身不要求机械重读系统全貌。
 
