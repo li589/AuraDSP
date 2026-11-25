@@ -228,7 +228,8 @@ bool ApoEngineHost::LoadEngine() {
         auto fnAbi = (FnAbi)GetProcAddress(h, "auradsp_abi");
         fnCreate_ = (FnCreate)GetProcAddress(h, "auradsp_create");
         fnDestroy_ = (FnDestroy)GetProcAddress(h, "auradsp_destroy");
-        fnProcess_ = (FnProcess)GetProcAddress(h, "auradsp_process");
+        fnProcessGeometry_ = (FnProcessGeometry)GetProcAddress(
+            h, "auradsp_process_geometry");
         fnRequestGeometry_ = (FnRequestGeometry)GetProcAddress(
             h, "auradsp_request_geometry");
         fnGetActiveGeometry_ = (FnGetActiveGeometry)GetProcAddress(
@@ -246,8 +247,9 @@ bool ApoEngineHost::LoadEngine() {
         auto pSlotStatus = (FnPluginSlotStatus)GetProcAddress(h, "auradsp_plugin_slot_get_status");
         auto pSetPdc = (FnPluginFlag)GetProcAddress(h, "auradsp_plugin_set_pdc");
         auto pChainEnabled = (FnPluginFlag)GetProcAddress(h, "auradsp_plugin_chain_set_enabled");
-        if (fnAbi && fnAbi() == 2 && fnCreate_ && fnDestroy_ && fnProcess_ &&
-            fnRequestGeometry_ && fnGetActiveGeometry_ && fnSetParam_ &&
+        if (fnAbi && fnAbi() == 2 && fnCreate_ && fnDestroy_ &&
+            fnProcessGeometry_ && fnRequestGeometry_ && fnGetActiveGeometry_ &&
+            fnSetParam_ &&
             fnLatency_ && fnVizRead_) {
             hEngineDll_ = h;
             // 插件通道是可选能力：符号全齐才启用（纪律版风味
@@ -270,7 +272,7 @@ bool ApoEngineHost::LoadEngine() {
         }
         fnCreate_ = nullptr;
         fnDestroy_ = nullptr;
-        fnProcess_ = nullptr;
+        fnProcessGeometry_ = nullptr;
         fnSetParam_ = nullptr;
         fnGetParam_ = nullptr;
         fnLatency_ = nullptr;
@@ -569,6 +571,7 @@ void ApoEngineHost::ProcessDirect(const float* src, float* dst, UINT32 frames) {
         requestedGeometryGeneration_.load(std::memory_order_acquire);
     const UINT32 requestedCh = requestedEngCh_.load(std::memory_order_relaxed);
     const int32_t requestedMode = requestedMode_.load(std::memory_order_relaxed);
+    const auradsp_geometry expected{requested, (int32_t)requestedCh, requestedMode};
     if (active.generation != requested || active.channels != (int32_t)requestedCh ||
         active.mode != requestedMode) {
         // 过渡块只推进引擎 active，不发布新步进。固定 scratch 无分配/锁。
@@ -578,7 +581,8 @@ void ApoEngineHost::ProcessDirect(const float* src, float* dst, UINT32 frames) {
         while (left > 0) {
             const UINT32 chunk = left > 256 ? 256 : left;
             ZeroMemory(scratchIn, sizeof(scratchIn));
-            fnProcess_(engine_, scratchIn, scratchOut, (int)chunk);
+            (void)fnProcessGeometry_(engine_, scratchIn, scratchOut, (int)chunk,
+                                     &expected);
             left -= chunk;
         }
         ZeroMemory(dst, (size_t)frames * streamCh_ * sizeof(float));
@@ -596,14 +600,14 @@ void ApoEngineHost::ProcessDirect(const float* src, float* dst, UINT32 frames) {
         const float* s = src + (size_t)done * strm;
         float* d = dst + (size_t)done * strm;
         if (eng == strm) {
-            fnProcess_(engine_, s, d, (int)n);
+            (void)fnProcessGeometry_(engine_, s, d, (int)n, &active);
         } else if (strm == 1) {
             // mono 流：复制成立体声喂引擎（eng 恒 2），回写取 L。
             for (UINT32 i = 0; i < n; i++) {
                 inBuf_[i * 2] = s[i];
                 inBuf_[i * 2 + 1] = s[i];
             }
-            fnProcess_(engine_, inBuf_, outBuf_, (int)n);
+            (void)fnProcessGeometry_(engine_, inBuf_, outBuf_, (int)n, &active);
             for (UINT32 i = 0; i < n; i++) d[i] = outBuf_[i * 2];
         } else {
             // eng < strm（设置封顶或奇数流宽决议）：gather 到
@@ -618,7 +622,7 @@ void ApoEngineHost::ProcessDirect(const float* src, float* dst, UINT32 frames) {
             } else {
                 FoldGather(s, inBuf_, strm, eng, n);
             }
-            fnProcess_(engine_, inBuf_, outBuf_, (int)n);
+            (void)fnProcessGeometry_(engine_, inBuf_, outBuf_, (int)n, &active);
             chmap_scatter_discrete(outBuf_, (int)eng, d, (int)strm, (int)n);
         }
         done += n;

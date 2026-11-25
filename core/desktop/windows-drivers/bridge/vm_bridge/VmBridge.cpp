@@ -42,6 +42,7 @@ using vmcore::FnEngAbi;
 using vmcore::FnEngDestroy;
 using vmcore::FnEngGetParam;
 using vmcore::FnEngProcess;
+using vmcore::FnEngProcessGeometry;
 using vmcore::FnEngRequestGeometry;
 using vmcore::FnEngGetActiveGeometry;
 using vmcore::FnEngSetParam;
@@ -1155,6 +1156,8 @@ void RebuildEngines(int groups, float sr) {
             (FnEngGetParam)GetProcAddress(g_b.eng, "auradsp_get_param");
         g_b.ctx.process =
             (FnEngProcess)GetProcAddress(g_b.eng, "auradsp_process");
+        g_b.ctx.processGeometry = (FnEngProcessGeometry)GetProcAddress(
+            g_b.eng, "auradsp_process_geometry");
         g_b.ctx.requestGeometry = (FnEngRequestGeometry)GetProcAddress(
             g_b.eng, "auradsp_request_geometry");
         g_b.ctx.getActiveGeometry = (FnEngGetActiveGeometry)GetProcAddress(
@@ -1163,7 +1166,7 @@ void RebuildEngines(int groups, float sr) {
             (FnEngDestroy)GetProcAddress(g_b.eng, "auradsp_destroy");
         g_pluginFns.Resolve(g_b.eng);
     }
-    if (g_b.create && g_b.ctx.process && g_b.ctx.requestGeometry &&
+    if (g_b.create && g_b.ctx.processGeometry && g_b.ctx.requestGeometry &&
         g_b.ctx.getActiveGeometry && g_b.ctx.destroy && g_b.ctx.scratchIn &&
         g_b.ctx.scratchOut) {
         // 懒建句柄：只为路开关打开的组建 DSP 链路（出厂 A1/A2）。
@@ -1545,6 +1548,8 @@ int vb_start(const char* engine_dll, const char* params_json) {
         g_b.create = create;  // CHANGE 重建用；此前漏赋导致重建后零 handle 静默透传
         g_b.ctx.process =
             (FnEngProcess)GetProcAddress(g_b.eng, "auradsp_process");
+        g_b.ctx.processGeometry = (FnEngProcessGeometry)GetProcAddress(
+            g_b.eng, "auradsp_process_geometry");
         g_b.ctx.requestGeometry = (FnEngRequestGeometry)GetProcAddress(
             g_b.eng, "auradsp_request_geometry");
         g_b.ctx.getActiveGeometry = (FnEngGetActiveGeometry)GetProcAddress(
@@ -1562,7 +1567,7 @@ int vb_start(const char* engine_dll, const char* params_json) {
         g_pluginFns.Resolve(g_b.eng);
         const bool abiOk =
             engAbiFn && engAbi == vmcore::kEngineAbiExpected;
-        if (abiOk && create && g_b.ctx.process && g_b.ctx.requestGeometry &&
+        if (abiOk && create && g_b.ctx.processGeometry && g_b.ctx.requestGeometry &&
             g_b.ctx.getActiveGeometry && g_b.ctx.destroy) {
             g_b.ctx.scratchIn =
                 (float*)malloc(sizeof(float) * 8 * vmcore::kMaxNbs);

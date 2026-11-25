@@ -86,7 +86,7 @@ using vmcore::FnEngCreate;
 using vmcore::FnEngAbi;
 using vmcore::FnEngDestroy;
 using vmcore::FnEngGetParam;
-using vmcore::FnEngProcess;
+using vmcore::FnEngProcessGeometry;
 using vmcore::FnEngSetParam;
 using vmcore::FnEngVizRead;
 using vmcore::PumpCtx;
@@ -247,7 +247,7 @@ struct VaioBridgeCtl {
     // 引擎 (auradsp_engine.dll)
     HMODULE hEngineMod = nullptr;
     FnEngCreate fnCreate = nullptr;
-    FnEngProcess fnProcess = nullptr;
+    FnEngProcessGeometry fnProcessGeometry = nullptr;
     auradsp_status (*fnRequestGeometry)(void*, int32_t, int32_t,
                                         uint64_t*) = nullptr;
     auradsp_status (*fnGetActiveGeometry)(void*, auradsp_geometry*) = nullptr;
@@ -373,7 +373,7 @@ void DestroyEngine() {
         g_vaio.hEngineMod = nullptr;
     }
     g_vaio.fnCreate = nullptr;
-    g_vaio.fnProcess = nullptr;
+    g_vaio.fnProcessGeometry = nullptr;
     g_vaio.fnRequestGeometry = nullptr;
     g_vaio.fnGetActiveGeometry = nullptr;
     g_vaio.fnDestroy = nullptr;
@@ -1323,11 +1323,14 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         const int requestedChannels = InterlockedCompareExchange(
             &g_vaio.requestedChannels, 0, 0);
         const int requestedMode = InterlockedCompareExchange(&g_vaio.requestedMode, 0, 0);
+        auradsp_geometry expectedGeometry{
+            requestedGeneration, (int32_t)requestedChannels, (int32_t)requestedMode};
         const bool geometryReady = haveActive &&
             activeGeometry.generation == requestedGeneration &&
             activeGeometry.channels == requestedChannels &&
             activeGeometry.mode == requestedMode;
         if (geometryReady) {
+            expectedGeometry = activeGeometry;
             InterlockedExchange((volatile LONG*)&g_vaio.engineChannels,
                                 activeGeometry.channels);
             InterlockedExchange((volatile LONG*)&g_vaio.chanMode,
@@ -1345,7 +1348,7 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             if (g_vaio.outputVaio) {
                 RemapInterleavedAudio(g_vaio.scratchIn, inCh, g_vaio.scratchProcOut, safeEngineCh, (int)framesToProcess);
             }
-        } else if (g_vaio.pEngine && g_vaio.fnProcess) {
+        } else if (g_vaio.pEngine && g_vaio.fnProcessGeometry) {
             enginePathRan = true;
             // P3 静音门控（单组）：GATED 时整块写零、跳过 DSP；测试注入是
             // 信号、用户旁路已提前返回，两者都不门控。
@@ -1360,8 +1363,9 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                     while (left > 0) {
                         const UINT32 chunk = left > 256 ? 256 : left;
                         memset(transitionIn, 0, sizeof(transitionIn));
-                        g_vaio.fnProcess(g_vaio.pEngine, transitionIn,
-                                         transitionOut, (int)chunk);
+                        (void)g_vaio.fnProcessGeometry(
+                            g_vaio.pEngine, transitionIn, transitionOut, (int)chunk,
+                            &expectedGeometry);
                         left -= chunk;
                     }
                 }
@@ -1395,7 +1399,9 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                 }
 
                 // 2. 21 项音效链处理（交织 float32，严格按 safeEngineCh 步进）
-                g_vaio.fnProcess(g_vaio.pEngine, g_vaio.scratchProcIn, g_vaio.scratchProcOut, (int)framesToProcess);
+                (void)g_vaio.fnProcessGeometry(
+                    g_vaio.pEngine, g_vaio.scratchProcIn, g_vaio.scratchProcOut,
+                    (int)framesToProcess, &expectedGeometry);
 
                 // 3. 计算引擎真实输出峰值
                 float curPeakOut = 0.0f;
@@ -1945,7 +1951,8 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     unsigned engAbi = 0;
     if (g_vaio.hEngineMod) {
         g_vaio.fnCreate = (FnEngCreate)GetProcAddress(g_vaio.hEngineMod, "auradsp_create");
-        g_vaio.fnProcess = (FnEngProcess)GetProcAddress(g_vaio.hEngineMod, "auradsp_process");
+        g_vaio.fnProcessGeometry = (FnEngProcessGeometry)GetProcAddress(
+            g_vaio.hEngineMod, "auradsp_process_geometry");
         g_vaio.fnRequestGeometry = (decltype(g_vaio.fnRequestGeometry))GetProcAddress(
             g_vaio.hEngineMod, "auradsp_request_geometry");
         g_vaio.fnGetActiveGeometry = (decltype(g_vaio.fnGetActiveGeometry))GetProcAddress(
@@ -1964,7 +1971,7 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
         g_pluginFns.Resolve(g_vaio.hEngineMod);
     }
 
-    if (!g_vaio.hEngineMod || !g_vaio.fnCreate || !g_vaio.fnProcess ||
+    if (!g_vaio.hEngineMod || !g_vaio.fnCreate || !g_vaio.fnProcessGeometry ||
         !g_vaio.fnDestroy || !g_vaio.fnRequestGeometry ||
         !g_vaio.fnGetActiveGeometry || !engAbiFn ||
         engAbi != vmcore::kEngineAbiExpected) {

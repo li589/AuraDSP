@@ -345,11 +345,8 @@ abstract final class VizBands {
   }
 }
 
-/// auradsp_viz_frame（1600 字节：8+8+128+128+4+4+128+128 + 4+32+1024+4尾填充）
-///
-/// [Phase B 多声道电平 / ADR-003] 尾部追加段（ABI v2，2026-10-24）：
-/// 前 536B 布局零变化，按旧尺寸读的消费者逐位兼容；本 Struct 定长读，
-/// 必须与引擎同 ABI 版本（加载时强校验，见 [AuraDspLib] 构造）。
+/// 完整声道几何快照（16 字节）：generation 标识同一次请求，channels/mode
+/// 必须与该代一起读取；不得从不同代拼接宿主缓冲步进。
 final class AuraDspGeometry extends Struct {
   @Uint64()
   external int generation;
@@ -361,6 +358,11 @@ final class AuraDspGeometry extends Struct {
   external int mode;
 }
 
+/// auradsp_viz_frame（1600 字节：8+8+128+128+4+4+128+128 + 4+32+1024+4尾填充）
+///
+/// [Phase B 多声道电平 / ADR-003] 尾部追加段（ABI v2，2026-10-24）：
+/// 前 536B 布局零变化，按旧尺寸读的消费者逐位兼容；本 Struct 定长读，
+/// 必须与引擎同 ABI 版本（加载时强校验，见 [AuraDspLib] 构造）。
 final class VizFrame extends Struct {
   @Uint64()
   external int seq;
@@ -485,6 +487,15 @@ final class AuraDspLib {
               NativeFunction<
                   Void Function(Pointer<Void>, Pointer<Float>, Pointer<Float>,
                       Int32)>>('auradsp_process')
+          .asFunction();
+
+  late final int Function(Pointer<Void>, Pointer<Float>, Pointer<Float>, int,
+          Pointer<AuraDspGeometry>) processGeometry =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Pointer<Float>, Pointer<Float>,
+                      Int32, Pointer<AuraDspGeometry>)>>('auradsp_process_geometry')
           .asFunction();
 
   late final int Function(

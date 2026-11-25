@@ -55,6 +55,8 @@ jobs:
         run: cmake --preset linux-x64 -DAURADSP_BUILD_HOST_X86=ON
       - name: Build
         run: cmake --build --preset linux-x64-release
+      - name: Geometry atomic test
+        run: ctest --test-dir build/linux/x64 -R '^geometry_atomic_test$' --output-on-failure
       - name: Upload engine artifact
         uses: actions/upload-artifact@v4
         with:

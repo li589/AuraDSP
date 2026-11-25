@@ -201,6 +201,15 @@ void           auradsp_destroy(auradsp_handle h);
 /* ---- RT 音频（仅音频线程；stereo 或多声道交织，按 channels.count 解释） ---- */
 void auradsp_process(auradsp_handle h, const float* in, float* out, int frames);
 
+/* 带期望几何的块入口：调用方必须按 expected->channels 准备精确交织缓冲。
+ * 引擎只处理 expected：它等于 active 时保留该代（即使期间到达新 pending），
+ * 或等于 pending 时先激活该代。两者皆不符返回 AURADSP_E_STATE，且不触碰
+ * 输入/输出或推进状态；因此宿主无需赢得查询/process 竞态。expected 为空、
+ * generation=0 或非法 channels/mode 返回 E_PARAM。RT 定常时间、零分配/锁/IO/等待。 */
+auradsp_status auradsp_process_geometry(
+    auradsp_handle h, const float* in, float* out, int frames,
+    const auradsp_geometry* expected);
+
 /* 请求只发布 pending；成功时 generation 非空则返回新代号。下一 RT 块开始
  * 才激活完整几何。active 查询为定常时间、无分配/无锁，可在块边界调用；
  * 发布中的瞬时状态返回 AURADSP_E_STATE，调用方须保留上一份完整快照。 */

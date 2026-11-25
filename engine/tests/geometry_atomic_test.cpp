@@ -4,9 +4,13 @@
 #include "auradsp_engine.h"
 #include "geometry_snapshot.h"
 
+#include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <limits>
+#include <thread>
 #include <vector>
 
 #ifdef _WIN32
@@ -22,9 +26,12 @@ using Geometry = auradsp_geometry;
 using FnRequestGeometry = auradsp_status (*)(auradsp_handle, int32_t, int32_t,
                                              uint64_t*);
 using FnGetActiveGeometry = auradsp_status (*)(auradsp_handle, Geometry*);
+using FnProcessGeometry = auradsp_status (*)(
+    auradsp_handle, const float*, float*, int, const Geometry*);
 
 FnRequestGeometry requestGeometry = nullptr;
 FnGetActiveGeometry getActiveGeometry = nullptr;
+FnProcessGeometry processGeometry = nullptr;
 int failures = 0;
 int checks = 0;
 
@@ -43,11 +50,15 @@ void ResolveGeometryAbi() {
         GetProcAddress(module, "auradsp_request_geometry")) : nullptr;
     getActiveGeometry = module ? reinterpret_cast<FnGetActiveGeometry>(
         GetProcAddress(module, "auradsp_get_active_geometry")) : nullptr;
+    processGeometry = module ? reinterpret_cast<FnProcessGeometry>(
+        GetProcAddress(module, "auradsp_process_geometry")) : nullptr;
 #else
     requestGeometry = reinterpret_cast<FnRequestGeometry>(
         dlsym(RTLD_DEFAULT, "auradsp_request_geometry"));
     getActiveGeometry = reinterpret_cast<FnGetActiveGeometry>(
         dlsym(RTLD_DEFAULT, "auradsp_get_active_geometry"));
+    processGeometry = reinterpret_cast<FnProcessGeometry>(
+        dlsym(RTLD_DEFAULT, "auradsp_process_geometry"));
 #endif
 }
 
@@ -63,9 +74,11 @@ bool HasGeometryAbi(const Engine& engine) {
     (void)engine;
     const bool request = requestGeometry != nullptr;
     const bool active = getActiveGeometry != nullptr;
+    const bool process = processGeometry != nullptr;
     Check(request, "auradsp_request_geometry export is available");
     Check(active, "auradsp_get_active_geometry export is available");
-    return request && active;
+    Check(process, "auradsp_process_geometry export is available");
+    return request && active && process;
 }
 
 Geometry Active(auradsp_handle h) {
@@ -262,22 +275,304 @@ void TestHostSimulatorPublishesOnlyMatchingGeneration() {
           "generation mismatch never publishes a partial host geometry");
 }
 
-void TestPendingSnapshotRejectsDeterministicMixedGeneration() {
+class PhaseGate {
+ public:
+    bool WaitFor(int target) {
+        constexpr int kSpins = 10000000;
+        for (int i = 0; i < kSpins; ++i) {
+            if (aborted_.load(std::memory_order_acquire)) return false;
+            if (phase_.load(std::memory_order_acquire) >= target) return true;
+            std::this_thread::yield();
+        }
+        Abort();
+        return false;
+    }
+    void Advance(int phase) {
+        if (!aborted_.load(std::memory_order_relaxed))
+            phase_.store(phase, std::memory_order_release);
+    }
+    void Abort() {
+        aborted_.store(true, std::memory_order_release);
+        phase_.store((std::numeric_limits<int>::max)(), std::memory_order_release);
+    }
+
+ private:
+    std::atomic<int> phase_{0};
+    std::atomic<bool> aborted_{false};
+};
+
+void TestRequestProcessRaceCannotOverwriteExactWidthGuards() {
+    Engine e;
+    if (!e.h || !HasGeometryAbi(e)) return;
+    constexpr int kFrames = 16;
+    constexpr int kPhysicalChannels = 8;
+    constexpr float kGuard = 12345.0f;
+    std::vector<float> in(static_cast<size_t>(kFrames * kPhysicalChannels), 0.001f);
+    std::vector<float> out(static_cast<size_t>(kFrames * kPhysicalChannels), kGuard);
+    PhaseGate gate;
+    Geometry expected{};
+    auradsp_status processStatus = AURADSP_E_STATE;
+
+    // Real reader/writer threads with deterministic phases: the host snapshots
+    // active, then the control thread requests 8ch, then the host enters process.
+    // The allocation is physically 8ch so a RED run cannot corrupt memory;
+    // samples after the expected 2ch block are guard regions.
+    std::thread host([&] {
+        if (getActiveGeometry(e.h, &expected) != AURADSP_OK) {
+            gate.Advance(1);
+            (void)gate.WaitFor(2);
+            gate.Advance(3);
+            return;
+        }
+        gate.Advance(1);
+        if (!gate.WaitFor(2)) {
+            gate.Advance(3);
+            return;
+        }
+        processStatus = processGeometry(
+            e.h, in.data(), out.data(), kFrames, &expected);
+        gate.Advance(3);
+    });
+    const bool hostSnapshotted = gate.WaitFor(1);
+    uint64_t requestedGeneration = 0;
+    const auradsp_status requestStatus = hostSnapshotted
+        ? requestGeometry(e.h, 8, 1, &requestedGeneration) : AURADSP_E_STATE;
+    gate.Advance(2);
+    const bool hostProcessed = gate.WaitFor(3);
+    host.join();
+
+    Check(hostSnapshotted && hostProcessed,
+          "request/process race reached both deterministic phases");
+    Check(requestStatus == AURADSP_OK,
+          "racing request publishes a newer geometry");
+    Check(processStatus == AURADSP_OK,
+          "expected-active block processes without consuming racing request");
+    bool guardsIntact = true;
+    for (int i = kFrames * expected.channels;
+         i < kFrames * kPhysicalChannels; ++i) {
+        if (out[static_cast<size_t>(i)] != kGuard) guardsIntact = false;
+    }
+    Check(guardsIntact, "request/process race cannot write beyond expected width");
+    const Geometry active = Active(e.h);
+    Check(active.generation == expected.generation &&
+              active.channels == expected.channels && active.mode == expected.mode,
+          "request/process race retains the host's expected active geometry");
+}
+
+void TestStaleExpectedGeometryFailsClosedBeforeBufferAccess() {
+    Engine e;
+    if (!e.h || !HasGeometryAbi(e)) return;
+    const Geometry initial = Active(e.h);
+    uint64_t first = 0, latest = 0;
+    Check(requestGeometry(e.h, 4, 0, &first) == AURADSP_OK,
+          "publish first pending geometry");
+    Check(requestGeometry(e.h, 8, 1, &latest) == AURADSP_OK,
+          "replace pending before stale host block");
+    const Geometry stale{first, 4, 0};
+    const Geometry current{latest, 8, 1};
+    constexpr int kFrames = 16;
+    constexpr float kGuard = 54321.0f;
+    std::vector<float> in(static_cast<size_t>(kFrames * 8), 0.001f);
+    std::vector<float> out(static_cast<size_t>(kFrames * 8), kGuard);
+
+    Check(processGeometry(e.h, in.data(), out.data(), kFrames, &stale) ==
+              AURADSP_E_STATE,
+          "stale expected geometry is rejected before processing");
+    bool untouched = true;
+    for (float sample : out) {
+        if (sample != kGuard) untouched = false;
+    }
+    Check(untouched, "rejected expected geometry leaves output untouched");
+    const Geometry before = Active(e.h);
+    Check(before.generation == initial.generation &&
+              before.channels == initial.channels && before.mode == initial.mode,
+          "rejected expected geometry does not advance active");
+
+    Check(processGeometry(e.h, in.data(), out.data(), kFrames, &current) ==
+              AURADSP_OK,
+          "latest complete expected geometry can activate");
+    const Geometry after = Active(e.h);
+    Check(after.generation == latest && after.channels == 8 && after.mode == 1,
+          "latest expected geometry activates as one complete snapshot");
+
+    const Geometry invalid{0, 8, 1};
+    Check(processGeometry(e.h, in.data(), out.data(), kFrames, &invalid) ==
+              AURADSP_E_PARAM,
+          "sentinel expected geometry is rejected as invalid");
+    std::fill(out.begin(), out.end(), kGuard);
+    Check(processGeometry(e.h, in.data(), out.data(), kFrames, nullptr) ==
+              AURADSP_E_PARAM,
+          "null expected geometry cannot fall back to the racy legacy entry");
+    untouched = true;
+    for (float sample : out) {
+        if (sample != kGuard) untouched = false;
+    }
+    Check(untouched, "null expected geometry leaves output untouched");
+}
+
+template <typename Begin, typename Finish, typename Load>
+void TestSnapshotPublicationPhases(Begin begin, Finish finish, Load load) {
     std::atomic<uint64_t> generation{7};
     std::atomic<int32_t> channels{6};
     std::atomic<int32_t> mode{0};
-    auradsp_detail::PendingGeometrySnapshot snapshot{};
-    const bool loaded = auradsp_detail::load_pending_geometry_snapshot(
-        generation, channels, mode, &snapshot, [&] {
-            // 控制线程在 RT 已读旧 generation 后完整发布下一代。
-            channels.store(8, std::memory_order_relaxed);
-            mode.store(1, std::memory_order_relaxed);
-            generation.store(8, std::memory_order_release);
+    PhaseGate gate;
+    bool readerFinished = false;
+    bool sentinelRejected = false;
+    bool payloadRejected = false;
+    bool complete = false;
+    auradsp_detail::GeometrySnapshot snapshot{};
+
+    std::thread reader([&] {
+        if (!gate.WaitFor(1)) return;
+        snapshot = {77, 77, 77};
+        sentinelRejected = !load(generation, channels, mode, &snapshot) &&
+            snapshot.generation == 77 && snapshot.channels == 77 && snapshot.mode == 77;
+        gate.Advance(2);
+        if (!gate.WaitFor(3)) return;
+        snapshot = {77, 77, 77};
+        payloadRejected = !load(generation, channels, mode, &snapshot) &&
+            snapshot.generation == 77 && snapshot.channels == 77 && snapshot.mode == 77;
+        gate.Advance(4);
+        if (!gate.WaitFor(5)) return;
+        snapshot = {};
+        complete = load(generation, channels, mode, &snapshot) &&
+            snapshot.generation == 8 && snapshot.channels == 8 && snapshot.mode == 1;
+        readerFinished = true;
+    });
+
+    begin(generation);
+    gate.Advance(1);
+    const bool reachedPayload = gate.WaitFor(2);
+    channels.store(8, std::memory_order_seq_cst);
+    mode.store(1, std::memory_order_seq_cst);
+    gate.Advance(3);
+    const bool reachedPublish = gate.WaitFor(4);
+    const bool finished = finish(generation, 8);
+    gate.Advance(5);
+    reader.join();
+
+    Check(readerFinished && reachedPayload && reachedPublish,
+          "writer/reader phase test completed without timeout");
+    Check(sentinelRejected,
+          "snapshot read rejects generation sentinel before payload writes");
+    Check(payloadRejected,
+          "snapshot read rejects sentinel while complete payload is prepared");
+    Check(finished && complete,
+          "snapshot read accepts only the final release-published generation");
+}
+
+template <typename LoadWithCallback>
+void TestSnapshotMixedGenerationInterleave(LoadWithCallback load) {
+    std::atomic<uint64_t> generation{7};
+    std::atomic<int32_t> channels{6};
+    std::atomic<int32_t> mode{0};
+    PhaseGate gate;
+    bool callbackCompleted = false;
+    bool loaded = true;
+    auradsp_detail::GeometrySnapshot snapshot{};
+
+    std::thread reader([&] {
+        loaded = load(generation, channels, mode, &snapshot, [&] {
+            gate.Advance(1);
+            callbackCompleted = gate.WaitFor(2);
         });
+    });
+    const bool interleaved = gate.WaitFor(1);
+    if (interleaved) {
+        auradsp_detail::begin_geometry_publication(generation);
+        channels.store(8, std::memory_order_seq_cst);
+        mode.store(1, std::memory_order_seq_cst);
+        auradsp_detail::finish_geometry_publication(generation, 8);
+    }
+    gate.Advance(2);
+    reader.join();
+
+    Check(callbackCompleted, "mixed-generation reader/writer interleave completed");
     Check(!loaded,
-          "pending snapshot rejects old generation paired with newer fields");
+          "snapshot rejects old generation paired with a newer payload");
     Check(snapshot.generation == 0 && snapshot.channels == 0 && snapshot.mode == 0,
-          "rejected pending snapshot cannot expose a mixed geometry");
+          "rejected snapshot cannot expose mixed geometry");
+}
+
+void TestPendingSnapshotWriterReaderPhases() {
+    TestSnapshotPublicationPhases(
+        [](std::atomic<uint64_t>& g) {
+            auradsp_detail::begin_geometry_publication(g);
+        },
+        [](std::atomic<uint64_t>& g, uint64_t next) {
+            return auradsp_detail::finish_geometry_publication(g, next);
+        },
+        [](const std::atomic<uint64_t>& g, const std::atomic<int32_t>& ch,
+           const std::atomic<int32_t>& mode,
+           auradsp_detail::GeometrySnapshot* out) {
+            return auradsp_detail::load_pending_geometry_snapshot(
+                g, ch, mode, out);
+        });
+    TestSnapshotMixedGenerationInterleave(
+        [](const std::atomic<uint64_t>& g, const std::atomic<int32_t>& ch,
+           const std::atomic<int32_t>& mode,
+           auradsp_detail::GeometrySnapshot* out, auto&& after_generation) {
+            return auradsp_detail::load_pending_geometry_snapshot(
+                g, ch, mode, out,
+                std::forward<decltype(after_generation)>(after_generation));
+        });
+}
+
+void TestActiveSnapshotWriterReaderPhases() {
+    TestSnapshotPublicationPhases(
+        [](std::atomic<uint64_t>& g) {
+            auradsp_detail::begin_geometry_publication(g);
+        },
+        [](std::atomic<uint64_t>& g, uint64_t next) {
+            return auradsp_detail::finish_geometry_publication(g, next);
+        },
+        [](const std::atomic<uint64_t>& g, const std::atomic<int32_t>& ch,
+           const std::atomic<int32_t>& mode,
+           auradsp_detail::GeometrySnapshot* out) {
+            return auradsp_detail::load_active_geometry_snapshot(
+                g, ch, mode, out);
+        });
+    TestSnapshotMixedGenerationInterleave(
+        [](const std::atomic<uint64_t>& g, const std::atomic<int32_t>& ch,
+           const std::atomic<int32_t>& mode,
+           auradsp_detail::GeometrySnapshot* out, auto&& after_generation) {
+            return auradsp_detail::load_active_geometry_snapshot(
+                g, ch, mode, out,
+                std::forward<decltype(after_generation)>(after_generation));
+        });
+}
+
+void TestGenerationTaggedResetClaimCannotLoseNewerReset() {
+    std::atomic<uint64_t> reset{8};
+    Check(!auradsp_detail::claim_geometry_reset(reset, 7) &&
+              reset.load(std::memory_order_seq_cst) == 8,
+          "reset for a future generation is restored, not consumed early");
+
+    reset.store(7, std::memory_order_seq_cst);
+    Check(auradsp_detail::claim_geometry_reset(reset, 7) &&
+              reset.load(std::memory_order_seq_cst) == 0,
+          "reset for the active generation is consumed exactly once");
+
+    reset.store(8, std::memory_order_seq_cst);
+    const bool claimed = auradsp_detail::claim_geometry_reset(reset, 7, [&] {
+        // Deterministic new request landing after the old reset was claimed.
+        reset.store(9, std::memory_order_seq_cst);
+    });
+    Check(!claimed && reset.load(std::memory_order_seq_cst) == 9,
+          "restoring a stale reset cannot overwrite a newer generation reset");
+}
+
+void TestGenerationExhaustionFailsClosed() {
+    uint64_t next = 123;
+    Check(!auradsp_detail::next_geometry_generation(0, &next) && next == 123,
+          "sentinel generation cannot be incremented");
+    Check(!auradsp_detail::next_geometry_generation(
+              (std::numeric_limits<uint64_t>::max)(), &next) && next == 123,
+          "generation exhaustion fails closed without wrapping");
+    Check(auradsp_detail::next_geometry_generation(
+              (std::numeric_limits<uint64_t>::max)() - 1, &next) &&
+              next == (std::numeric_limits<uint64_t>::max)(),
+          "last usable generation is published without wrap");
 }
 
 using TestFn = void (*)();
@@ -293,7 +588,12 @@ int main() {
         TestInvalidRequestsKeepPendingAndActiveGeneration,
         TestLegacySetParamWrappersDeferActivation,
         TestHostSimulatorPublishesOnlyMatchingGeneration,
-        TestPendingSnapshotRejectsDeterministicMixedGeneration,
+        TestRequestProcessRaceCannotOverwriteExactWidthGuards,
+        TestStaleExpectedGeometryFailsClosedBeforeBufferAccess,
+        TestPendingSnapshotWriterReaderPhases,
+        TestActiveSnapshotWriterReaderPhases,
+        TestGenerationTaggedResetClaimCannotLoseNewerReset,
+        TestGenerationExhaustionFailsClosed,
     };
     for (TestFn test : tests) test();
     std::fprintf(stderr, "geometry_atomic_test: %d checks, %d failures\n",

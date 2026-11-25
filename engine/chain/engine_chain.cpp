@@ -208,7 +208,7 @@ int reverb_path_kind(auradsp_handle h) {
  *
  * [PATCHED-AuraDSP P-047] 拆成「控制侧」+「RT 侧」两段（L-02）：
  *   - 控制侧（reset_channel_state，控制线程）：只做控制线程自己的事
- *     （池重载、vendor 段重建、liveprog 声道数）+ 置位 reset_req 标志；
+ *     （池重载、vendor 段重建、liveprog 声道数）+ 写入目标代 reset_req；
  *   - RT 侧（reset_channel_state_rt，音频线程）：真正清理 RT 独占状态。
  * 原实现在控制线程直清 gate / filter / dyneq / tube / limiter / haas /
  * spatial 等 RT 正在使用的非原子状态 ⇒ 数据竞争（切通道数或空间开关时可能
@@ -233,7 +233,7 @@ int reverb_path_kind(auradsp_handle h) {
  * 调用点：set_channels_mode/count、hook_spatial_binaural、
  * hook_spatial_enable；set_reverb_preset 只重置混响状态，不全量 reset。
  * 控制线程调用；不得在音频线程执行。 */
-void reset_channel_state(auradsp_handle h) {
+void reset_channel_state(auradsp_handle h, uint64_t target_generation) {
     if (!h) return;
 
     /* 1. 池重载（控制线程；P-047 双槽化后与 RT 零交集） */
@@ -257,8 +257,14 @@ void reset_channel_state(auradsp_handle h) {
     LiveProgSetChannels(&h->jdsp, cur_ch > 0 ? cur_ch : 2);
     if (h->mc_lp) mc_liveprog_set_channels(h->mc_lp, cur_ch > 0 ? cur_ch : 2);
 
-    /* 5. 请求 RT 侧清理独占状态（RT 在 auradsp_process 入口消费） */
-    h->reset_req.store(1, std::memory_order_release);
+    /* 5. 请求 RT 侧清理独占状态。几何请求显式携带下一代；非几何重置
+     * 绑定当前 pending（准备期间则绑定仍在本 RT 生效的 active）。 */
+    if (target_generation == 0) {
+        target_generation = h->pending_generation.load(std::memory_order_seq_cst);
+        if (target_generation == 0)
+            target_generation = h->active_generation.load(std::memory_order_seq_cst);
+    }
+    h->reset_req.store(target_generation, std::memory_order_release);
 }
 
 /* RT 侧：清理全部 RT 独占的逐声道 / 逐块状态。

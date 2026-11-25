@@ -70,6 +70,8 @@ using FnUnreg = long(__stdcall*)();
 // ---- 引擎桥（auradsp_engine.dll 动态加载；与 app/ffi 候选路径同源） ----
 using FnEngCreate = void*(__cdecl*)(float, int);
 using FnEngProcess = void(__cdecl*)(void*, const float*, float*, int);
+using FnEngProcessGeometry = int(__cdecl*)(
+    void*, const float*, float*, int, const auradsp_geometry*);
 using FnEngRequestGeometry = int(__cdecl*)(void*, int32_t, int32_t, uint64_t*);
 using FnEngGetActiveGeometry = int(__cdecl*)(void*, auradsp_geometry*);
 using FnEngDestroy = void(__cdecl*)(void*);
@@ -94,7 +96,8 @@ constexpr double kVmFanInWaitMs = 2.0;
 constexpr uint64_t kVmFanInSpinLimit = 200000ull;
 
 struct PumpCtx {
-    FnEngProcess process = nullptr;
+    FnEngProcess process = nullptr;  // 仅无几何 ABI 的驱动无关测试兼容路径。
+    FnEngProcessGeometry processGeometry = nullptr;
     FnEngRequestGeometry requestGeometry = nullptr;
     FnEngGetActiveGeometry getActiveGeometry = nullptr;
     FnEngDestroy destroy = nullptr;
@@ -235,6 +238,7 @@ struct PumpCtx {
     long curChanMode = 0;      // 块快照：声道模式（第四十七轮 S2，与 procCh 同批发布）
     long curGeometryReady = 0; // 全组 active 与各自请求同代且同宽才为 1
     LONG curGeometryAdvance = 0; // 错代组位图：本块只用零输入推进 active
+    auradsp_geometry curExpectedGeometry[kMaxGroups] = {}; // worker 块快照
     long curTestKind = 0;      // 块快照：testKind 翻转只影响下一块
     volatile LONG testReady = 0;      // bitmap：bit g = scratchInG[g] 已由 RT 预填测试信号
     // 共享量 per-group 中间槽：worker 写、RT fan-in 后归约。max/OR 与顺序
@@ -450,7 +454,7 @@ inline bool BusSlotsSilent(VbAudioBuffer* ab, long base, const int* slots,
 // 份完整几何，本块静音并仅推进错代组，禁止跨组/跨代部分切换。
 inline LONG SyncGeometryAtBlockStart(PumpCtx* c, int groups, long mask) {
     // 02 冻结参照与不带几何 ABI 的驱动无关泵测试沿用旧工作宽；生产 VM
-    // 加载器强制两个几何符号齐全，不会进入这条兼容路径。
+    // 加载器强制 request/active/processGeometry 齐全，不会进入兼容路径。
     if (!c->getActiveGeometry) {
         c->curGeometryReady = 1;
         c->curGeometryAdvance = 0;
@@ -469,15 +473,19 @@ inline LONG SyncGeometryAtBlockStart(PumpCtx* c, int groups, long mask) {
             &c->requestedChannels[g], 0, 0);
         const int32_t mode = InterlockedCompareExchange(
             &c->requestedMode[g], 0, 0);
+        auradsp_geometry expected{requested, channels, mode};
         const bool matches = c->getActiveGeometry &&
             c->getActiveGeometry(c->eng[g], &active) == AURADSP_OK &&
             requested != 0 && active.generation == requested &&
             active.channels == channels && active.mode == mode;
-        if (!matches) {
+        if (matches) {
+            expected = active;
+        } else {
             ready = false;
             advance |= 1L << g;
-            continue;
         }
+        c->curExpectedGeometry[g] = expected;
+        if (!matches) continue;
         if (!haveGeometry) {
             common = active;
             haveGeometry = true;
@@ -494,6 +502,18 @@ inline LONG SyncGeometryAtBlockStart(PumpCtx* c, int groups, long mask) {
     return advance;
 }
 
+inline bool ProcessEngineGeometry(PumpCtx* c, void* eng, const float* in,
+                                  float* out, int frames,
+                                  const auradsp_geometry& expected) {
+    if (c->processGeometry)
+        return c->processGeometry(eng, in, out, frames, &expected) == AURADSP_OK;
+    if (c->process) {
+        c->process(eng, in, out, frames);
+        return true;
+    }
+    return false;
+}
+
 // Z17：单组处理主体——串行/并行共用的唯一实现（两条路径必须逐位同义）。
 // 由原 OnVbCallback 内联 for 循环体原样提取；差异仅：
 //  1) scratch 改取每组独占对 scratchInG/OutG（并行时 worker 间零共享写；
@@ -508,7 +528,8 @@ inline LONG SyncGeometryAtBlockStart(PumpCtx* c, int groups, long mask) {
 inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
                            long mask, bool haveEng, int procCh, bool binaural,
                            long testKind, bool testReady, long chanMode,
-                           bool geometryReady, bool advanceGeometry) {
+                           bool geometryReady, bool advanceGeometry,
+                           auradsp_geometry expectedGeometry) {
     const long base = (long)g * 8;
     // v2：每组主对（base+0/1）恒进该组引擎；procCh>2 时组内前 procCh 路
     // 一并进引擎（逐声道处理/矩阵上混后回写）。组外通道不归本组管；
@@ -606,7 +627,8 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
             float* sOut = c->scratchOutG[g] ? c->scratchOutG[g] : c->scratchOut;
             if (sIn && sOut) {
                 memset(sIn, 0, (size_t)n * 8 * sizeof(float));
-                c->process(eng, sIn, sOut, (int)n);
+                (void)ProcessEngineGeometry(c, eng, sIn, sOut, (int)n,
+                                            expectedGeometry);
             }
         }
         for (long ch = base; ch < base + 8; ++ch) {
@@ -703,8 +725,18 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
             // L0：per-group process 耗时打点（QPC ~50ns × 8 组，可忽略）。
             LARGE_INTEGER gt0, gt1;
             QueryPerformanceCounter(&gt0);
-            c->process(eng, sIn, sOut, (int)n);
+            const bool processed = ProcessEngineGeometry(
+                c, eng, sIn, sOut, (int)n, expectedGeometry);
             QueryPerformanceCounter(&gt1);
+            if (!processed) {
+                memset(sOut, 0, (size_t)n * 8 * sizeof(float));
+                for (long ch = base; ch < base + 8; ++ch) {
+                    if (ab->w[ch]) memset(ab->w[ch], 0, (size_t)n * sizeof(float));
+                }
+                c->maxDiffGrp[g] = 0;
+                if (c->gate[g].enabled) c->gate[g].NoteOutput(0.0f);
+                return;
+            }
             if (g < 8) {
                 const uint64_t gt = (uint64_t)(gt1.QuadPart - gt0.QuadPart);
                 if (gt > c->maxGroupTicks[g]) c->maxGroupTicks[g] = gt;
@@ -983,7 +1015,8 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
             for (LONG b = bit; !(b & 1); b >>= 1) ++g;
             ProcessGroupVm(c, ab, g, n, mask, haveEng, procCh, binaural,
                            testKind, (testRdy & bit) != 0, chanMode,
-                           geometryReady, (geometryAdvance & bit) != 0);
+                           geometryReady, (geometryAdvance & bit) != 0,
+                           c->curExpectedGeometry[g]);
             VmWorkComplete(c, newGen, bit);
         }
         // fan-in：音频线程禁阻塞 API，纯自旋（YieldProcessor 降耗降温）。
@@ -1060,7 +1093,8 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
             if (stuck & (1L << g)) continue;
             ProcessGroupVm(c, ab, g, n, mask, haveEng, procCh, binaural,
                            testKind, false, chanMode, geometryReady,
-                           (geometryAdvance & (1L << g)) != 0);
+                           (geometryAdvance & (1L << g)) != 0,
+                           c->curExpectedGeometry[g]);
         }
         c->curTodo = 0;  // 本块无并行发布：清账，防下一块误判 straggler
     }
@@ -1147,7 +1181,8 @@ static DWORD WINAPI VmWorkerMain(LPVOID param) {
             for (LONG b = bit; !(b & 1); b >>= 1) ++g;
             ProcessGroupVm(c, ab, g, n, mask, haveEng, procCh, binaural,
                            testKind, (testRdy & bit) != 0, chanMode,
-                           geometryReady, (geometryAdvance & bit) != 0);
+                           geometryReady, (geometryAdvance & bit) != 0,
+                           c->curExpectedGeometry[g]);
             VmWorkComplete(c, gen, bit);
         }
     }

@@ -247,7 +247,7 @@ add_executable(geometry_atomic_test
     "${API}/tests/geometry_atomic_test.cpp"
 )
 target_include_directories(geometry_atomic_test PRIVATE "${API}")
-target_link_libraries(geometry_atomic_test PRIVATE auradsp_engine ${CMAKE_DL_LIBS})
+target_link_libraries(geometry_atomic_test PRIVATE auradsp_engine ${CMAKE_DL_LIBS} Threads::Threads)
 set_property(TARGET geometry_atomic_test PROPERTY CXX_STANDARD 20)
 add_test(NAME geometry_atomic_test COMMAND geometry_atomic_test)
 

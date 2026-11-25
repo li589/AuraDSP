@@ -102,16 +102,19 @@ static auradsp_status request_geometry_locked(auradsp_handle h, int32_t channels
         (mode != 0 && mode != 1)) {
         return AURADSP_E_PARAM;
     }
-    const int32_t old_channels = h->pending_channels.load(std::memory_order_relaxed);
-    const int32_t old_mode = h->pending_mode.load(std::memory_order_relaxed);
-    uint64_t next = h->pending_generation.load(std::memory_order_relaxed) + 1;
-    if (next == 0) next = 1;  /* 0 保留给发布中的瞬时标记。 */
-    /* 先将 pending 代号置 0，再改字段，最后 release 新代号。RT 双读代号，
-     * 发布途中或跨代读取都失败关闭并保留旧 active，绝不拼接快照。 */
-    h->pending_generation.store(0, std::memory_order_release);
-    h->pending_channels.store(channels, std::memory_order_relaxed);
-    h->pending_mode.store(mode, std::memory_order_relaxed);
-    h->pending_generation.store(next, std::memory_order_release);
+    const int32_t old_channels = h->pending_channels.load(std::memory_order_seq_cst);
+    const int32_t old_mode = h->pending_mode.load(std::memory_order_seq_cst);
+    uint64_t next = 0;
+    if (!auradsp_detail::next_geometry_generation(
+            h->pending_generation.load(std::memory_order_seq_cst), &next)) {
+        return AURADSP_E_STATE;  /* 0 或耗尽：失败关闭，绝不回绕压掉真实变更。 */
+    }
+    /* 整个控制侧准备期间 pending generation 保持哨兵 0。RT 只能保留旧
+     * active；channel hint、reverb/liveprog 重配与 reset_req 全部就绪后，
+     * 才最后发布新代号。 */
+    auradsp_detail::begin_geometry_publication(h->pending_generation);
+    h->pending_channels.store(channels, std::memory_order_seq_cst);
+    h->pending_mode.store(mode, std::memory_order_seq_cst);
     if (old_channels != channels) {
         const int32_t old_def = (int32_t)ch_mask_no_lfe_for(old_channels);
         const int32_t new_def = (int32_t)ch_mask_no_lfe_for(channels);
@@ -122,11 +125,26 @@ static auradsp_status request_geometry_locked(auradsp_handle h, int32_t channels
         auradsp::plugin_chain_set_channel_hint(h, channels);
     }
     if (old_channels != channels || old_mode != mode) {
-        reset_channel_state(h);
         compute_latency(h, &h->latency_ms);
+        reset_channel_state(h, next);  /* 最后置 reset_req；下一次激活同块消费。 */
     }
+    if (!auradsp_detail::finish_geometry_publication(h->pending_generation, next))
+        return AURADSP_E_STATE;
     if (generation) *generation = next;
     return AURADSP_OK;
+}
+
+template <typename A, typename B>
+static bool geometry_equal(const A& a, const B& b) {
+    return a.generation == b.generation && a.channels == b.channels &&
+           a.mode == b.mode;
+}
+
+static bool geometry_valid(const auradsp_geometry& g) {
+    return g.generation != 0 &&
+           (g.channels == 2 || g.channels == 4 || g.channels == 6 ||
+            g.channels == 8) &&
+           (g.mode == 0 || g.mode == 1);
 }
 
 /* ================= ABI 实现 ================= */
@@ -333,51 +351,68 @@ auradsp_status auradsp_request_geometry(auradsp_handle h, int32_t channels,
 auradsp_status auradsp_get_active_geometry(auradsp_handle h,
                                            auradsp_geometry* out) {
     if (!h || !out) return AURADSP_E_PARAM;
-    const uint64_t generation = h->active_generation.load(std::memory_order_acquire);
-    if (generation == 0) return AURADSP_E_STATE;
-    const int32_t channels = h->active_channels.load(std::memory_order_relaxed);
-    const int32_t mode = h->active_mode.load(std::memory_order_relaxed);
-    if (h->active_generation.load(std::memory_order_acquire) != generation) {
+    auradsp_detail::GeometrySnapshot snapshot;
+    if (!auradsp_detail::load_active_geometry_snapshot(
+            h->active_generation, h->active_channels, h->active_mode, &snapshot))
         return AURADSP_E_STATE;
-    }
-    out->generation = generation;
-    out->channels = channels;
-    out->mode = mode;
+    out->generation = snapshot.generation;
+    out->channels = snapshot.channels;
+    out->mode = snapshot.mode;
     return AURADSP_OK;
 }
 
-void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) {
+static auradsp_status process_impl(auradsp_handle h, const float* in, float* out,
+                                   int frames,
+                                   const auradsp_geometry* expected) {
     /* ABI 是公开边界：空缓冲指针在内部 FFI 契约里虽不会出现，但违规调用
      * 会直接踩空；一次分支换内存安全（RT 开销可忽略）。 */
-    if (!h || !in || !out || !h->open.load(std::memory_order_acquire) || frames <= 0) return;
+    if (!h || !in || !out || frames <= 0) return AURADSP_E_PARAM;
+    if (!h->open.load(std::memory_order_acquire)) return AURADSP_E_STATE;
+    if (expected && !geometry_valid(*expected)) return AURADSP_E_PARAM;
+
+    /* expected 入口只允许处理 expected 自身：它必须等于当前 active（宿主
+     * 已按该宽度备缓冲），或等于完整 pending（宿主用足够 scratch 推进）。
+     * 两者皆不符时在触碰任何样本前返回 E_STATE，从协议上消除查询/process
+     * 竞态下把新宽度解释进旧精确缓冲的可能。 */
+    auradsp_detail::GeometrySnapshot active;
+    if (!auradsp_detail::load_active_geometry_snapshot(
+            h->active_generation, h->active_channels, h->active_mode, &active))
+        return AURADSP_E_STATE;
+    auradsp_detail::GeometrySnapshot pending;
+    const bool have_pending = auradsp_detail::load_pending_geometry_snapshot(
+        h->pending_generation, h->pending_channels, h->pending_mode, &pending);
+    if (expected) {
+        const bool matches_active = geometry_equal(active, *expected);
+        const bool matches_pending =
+            have_pending && geometry_equal(pending, *expected);
+        if (!matches_active && !matches_pending) return AURADSP_E_STATE;
+        if (matches_pending && !matches_active) {
+            h->channel_count.store(pending.channels, std::memory_order_seq_cst);
+            h->p.channels_mode.store(pending.mode, std::memory_order_seq_cst);
+            auradsp_detail::publish_active_geometry_snapshot(
+                h->active_generation, h->active_channels, h->active_mode,
+                pending.generation, pending.channels, pending.mode);
+            active = pending;
+        }
+    } else if (have_pending && !geometry_equal(pending, active)) {
+        h->channel_count.store(pending.channels, std::memory_order_seq_cst);
+        h->p.channels_mode.store(pending.mode, std::memory_order_seq_cst);
+        auradsp_detail::publish_active_geometry_snapshot(
+            h->active_generation, h->active_channels, h->active_mode,
+            pending.generation, pending.channels, pending.mode);
+        active = pending;
+    }
+
+    /* reset_req 绑定目标代：旧 active 不能吞掉准备中或竞争到来的新代 reset。
+     * claim 与恢复均为定常时间；CAS 只防止恢复旧值时覆盖控制侧刚写入的新值。 */
+    if (auradsp_detail::claim_geometry_reset(h->reset_req, active.generation))
+        reset_channel_state_rt(h);
+
     /* 内存安全防御：防御驱动层 frames > max_block 导致的 scratch 堆缓冲区溢出 */
     const int frames_in = frames;
     if (frames > h->max_block) frames = h->max_block;
     /* E-03：给控制侧延迟计算留一个无竞争的设备域块长快照。 */
     h->lat_block_frames.store(frames, std::memory_order_relaxed);
-
-    /* [PATCHED-AuraDSP P-047] L-02：消费拓扑变更的 RT 状态重置请求。
-     * 控制线程（reset_channel_state）只置位 reset_req；真正的状态清理在 RT
-     * 执行 —— 控制线程直清 RT 正在使用的非原子状态是数据竞争（gate/filter/
-     * dyneq/tube/limiter/haas/spatial）。放在此处的理由：早于门控与任一处理
-     * 分支，保证本块按新拓扑开始时状态已是干净的。 */
-    /* 在块头一次性激活同一代 pending；channels/mode/generation 对外只能
-     * 作为完整快照出现。新请求即使在本次发布途中到达，也只会留到下一块。 */
-    auradsp_detail::PendingGeometrySnapshot pending;
-    if (auradsp_detail::load_pending_geometry_snapshot(
-            h->pending_generation, h->pending_channels, h->pending_mode, &pending) &&
-        pending.generation != h->active_generation.load(std::memory_order_relaxed)) {
-        h->active_generation.store(0, std::memory_order_release);
-        h->channel_count.store(pending.channels, std::memory_order_relaxed);
-        h->p.channels_mode.store(pending.mode, std::memory_order_relaxed);
-        h->active_channels.store(pending.channels, std::memory_order_relaxed);
-        h->active_mode.store(pending.mode, std::memory_order_relaxed);
-        h->active_generation.store(pending.generation, std::memory_order_release);
-    }
-
-    if (h->reset_req.exchange(0, std::memory_order_acq_rel) != 0) {
-        reset_channel_state_rt(h);
-    }
 
     ScopedFtzDazGuard ftzGuard;
     const int st = h->state.load(std::memory_order_relaxed);
@@ -448,7 +483,7 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
                 h->frames_since_viz %= vizIntG;
                 emit_viz(h);
             }
-            return;
+            return AURADSP_OK;
         }
     }
 
@@ -462,7 +497,7 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
             const int n = frames * ch;
             for (int i = 0; i < n; ++i)
                 out[i] = std::isfinite(in[i]) ? in[i] : 0.0f;
-            return;
+            return AURADSP_OK;
         }
         /* 多声道输入门控处理：缩放写入 mx_scratch 并统计本级 IN / OUT 电平 */
         float pk_in_l = 0.0f, pk_in_r = 0.0f;
@@ -538,7 +573,7 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
                 /* 模式 0: 矩阵混音 (Phase A 修复版: 彻底解决左右环绕串扰与镜像颠倒) */
                 if (!mx_downmix(h, h->mx_scratch, h->shelf_scratch, frames, ch) || !h->mx_stereo) {
                     memcpy(out, in, (size_t)frames * ch * sizeof(float));
-                    return;
+                    return AURADSP_OK;
                 }
                 process_stereo_chain(h, h->shelf_scratch, h->mx_stereo, frames);
                 mx_upmix(h, out, h->mx_stereo, frames, ch);
@@ -578,14 +613,14 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
             }
             gate_update(h, pk_in_max, pk_out_max, frames);
         }
-        return;
+        return AURADSP_OK;
     }
 
     if (st != AURADSP_STATE_PROCESSING) {
         const int n = frames * 2;
         for (int i = 0; i < n; ++i)
             out[i] = std::isfinite(in[i]) ? in[i] : 0.0f;
-        return;
+        return AURADSP_OK;
     }
     /* 立体声输入门控处理：写入 shelf_scratch 作为链前置工作区 */
     const float g0 = master_lin * h->p.input_ch_gain[0].load(std::memory_order_relaxed);
@@ -629,6 +664,18 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
                 h->ch_out_peak[0] > h->ch_out_peak[1] ? h->ch_out_peak[0]
                                                       : h->ch_out_peak[1],
                 frames);
+    return AURADSP_OK;
+}
+
+void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) {
+    (void)process_impl(h, in, out, frames, nullptr);
+}
+
+auradsp_status auradsp_process_geometry(auradsp_handle h, const float* in,
+                                        float* out, int frames,
+                                        const auradsp_geometry* expected) {
+    if (!expected) return AURADSP_E_PARAM;
+    return process_impl(h, in, out, frames, expected);
 }
 
 #include "engine_param_table.h"

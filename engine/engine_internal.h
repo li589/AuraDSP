@@ -550,11 +550,10 @@ struct auradsp_handle_s {
     std::atomic<int> state{AURADSP_STATE_BYPASS};
     std::atomic<bool> open{false};
     /* [PATCHED-AuraDSP P-047] 拓扑变更的 RT 状态重置请求（L-02）。
-     * 控制线程（reset_channel_state）只置位本标志并完成控制侧工作；RT 在
-     * auradsp_process 入口消费并执行真正的 RT 状态清理 —— 控制线程不再直清
-     * RT 正在使用的非原子状态（gate / filter / dyneq / tube / limiter / ...）。
-     * 同范式见 McReverbState::reset_req（dsp_mc_reverb.cpp）。 */
-    std::atomic<int> reset_req{0};
+     * 值是要重置的目标 generation（0=无请求），不是无代际布尔位。控制线程
+     * 完成控制侧准备后 release 写入；RT 只消费 active 代的请求，未来代请求
+     * 保留到该代激活，避免查询/激活竞态吞掉新拓扑的 reset。 */
+    std::atomic<uint64_t> reset_req{0};
     float sample_rate = 48000.0f;
     int max_block = 2048;
     double latency_ms = 0.0;
@@ -848,9 +847,9 @@ struct auradsp_handle_s {
 
     /* [ADR-003 Phase A] 多声道矩阵工作区 */
     std::atomic<int> channel_count{2};   /* active RT 交织缓冲声道数 */
-    /* 控制线程在 ctrl_mutex 下成对写 pending；RT 仅在 process 块头激活。
-     * pending/active_generation=0 都是发布中的瞬时标记；pending 由 RT 双读
-     * 校验，active 由查询方双读校验，任何跨代快照都失败关闭。 */
+    /* 控制线程在 ctrl_mutex 下准备 pending；准备期间 generation=0，全部
+     * payload/代号访问 seq_cst，最后发布新代。RT 仅在 process 块头激活；
+     * active 同样以 0 哨兵 + seq_cst 双读校验。代号耗尽失败关闭，不回绕。 */
     std::atomic<uint64_t> pending_generation{1};
     std::atomic<int32_t> pending_channels{2};
     std::atomic<int32_t> pending_mode{0};
@@ -915,7 +914,7 @@ int reverb_path_kind(auradsp_handle h);
  * [PATCHED-AuraDSP P-047] 拆为控制侧（本函数，控制线程）+ RT 侧
  * （reset_channel_state_rt，音频线程）：控制线程不再直清 RT 正在使用的
  * 非原子状态（L-02）。逐模块清单见 engine_chain.cpp 的函数体注释。 */
-void reset_channel_state(auradsp_handle h);
+void reset_channel_state(auradsp_handle h, uint64_t target_generation = 0);
 /* [PATCHED-AuraDSP P-047] L-02：RT 侧状态清理。只在音频线程调用
  * （auradsp_process 入口消费 reset_req 时）。 */
 void reset_channel_state_rt(auradsp_handle h);

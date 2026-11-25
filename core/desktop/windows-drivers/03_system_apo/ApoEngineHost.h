@@ -62,7 +62,8 @@ class ApoEngineHost {
     using FnAbi = uint32_t (*)();
     using FnCreate = auradsp_handle (*)(float, int);
     using FnDestroy = void (*)(auradsp_handle);
-    using FnProcess = void (*)(auradsp_handle, const float*, float*, int);
+    using FnProcessGeometry = auradsp_status (*)(
+        auradsp_handle, const float*, float*, int, const auradsp_geometry*);
     using FnRequestGeometry = auradsp_status (*)(auradsp_handle, int32_t, int32_t,
                                                  uint64_t*);
     using FnGetActiveGeometry = auradsp_status (*)(auradsp_handle,
@@ -106,7 +107,7 @@ class ApoEngineHost {
     auradsp_handle engine_ = nullptr;
     FnCreate fnCreate_ = nullptr;
     FnDestroy fnDestroy_ = nullptr;
-    FnProcess fnProcess_ = nullptr;
+    FnProcessGeometry fnProcessGeometry_ = nullptr;
     FnRequestGeometry fnRequestGeometry_ = nullptr;
     FnGetActiveGeometry fnGetActiveGeometry_ = nullptr;
     FnSetParam fnSetParam_ = nullptr;

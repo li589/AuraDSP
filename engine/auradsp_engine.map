@@ -8,6 +8,7 @@
     auradsp_create;
     auradsp_destroy;
     auradsp_process;
+    auradsp_process_geometry;
     auradsp_request_geometry;
     auradsp_get_active_geometry;
     auradsp_set_param;
