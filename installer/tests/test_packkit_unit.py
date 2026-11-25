@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import io
+import json
 import struct
 import sys
 import tempfile
@@ -208,8 +209,10 @@ def test_setup_image() -> None:
         payload_sha = hashing.sha256_bytes(payload)
         wizard = _stored_zip({
             "auradsp_setup.exe": b"MZ-wizard",
-            "wizard_manifest.json": (
-                '{"payloadSha256": "%s"}' % payload_sha).encode(),
+            "wizard_manifest.json": json.dumps({
+                "payloadSha256": payload_sha,
+                "payloadFiles": setup_image.payload_file_manifest(payload),
+            }).encode(),
         })
         shell = b"MZ-shell" + b"\0" * 64
 
@@ -220,6 +223,29 @@ def test_setup_image() -> None:
 
         ok = setup_image.verify(exe)
         check("自检通过", ok)
+
+        wizard_src = base / "wizard-src"
+        wizard_src.mkdir()
+        (wizard_src / "auradsp_setup.exe").write_bytes(b"MZ-wizard")
+        setup_image.build_wizard_zip(
+            wizard_src, base / "built-wizard.zip",
+            {"AURADSP_VERSION": "0.1.0",
+             "AURADSP_FULL_VERSION": "0.1.0.1"}, payload)
+        with zipfile.ZipFile(base / "built-wizard.zip") as built:
+            built_manifest = json.loads(built.read("wizard_manifest.json"))
+        check("构建器写入真实 ZIP-P 完整清单",
+              built_manifest["payloadFiles"] ==
+              setup_image.payload_file_manifest(payload))
+
+        bad_wizard = _stored_zip({
+            "auradsp_setup.exe": b"MZ-wizard",
+            "wizard_manifest.json": json.dumps({
+                "payloadSha256": payload_sha, "payloadFiles": [],
+            }).encode(),
+        })
+        bad_manifest = base / "bad-manifest.exe"
+        setup_image.assemble(bad_manifest, shell, bad_wizard, payload)
+        check("可信清单缺失条目则自检失败", not setup_image.verify(bad_manifest))
 
         blob = bytearray(exe.read_bytes())
         blob[exe.stat().st_size - 80 - 1] ^= 0xFF  # 改载荷最后一字节

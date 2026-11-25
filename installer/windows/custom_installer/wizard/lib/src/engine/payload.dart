@@ -2,14 +2,28 @@
 /// 再按组件过滤流式解压到安装目录，逐文件算 SHA256 生成清单条目。
 library;
 
+import 'dart:ffi';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
+import 'package:ffi/ffi.dart';
 import 'package:path/path.dart' as p;
+import 'package:win32/win32.dart';
 
 import 'models.dart';
 import 'update_policy.dart';
+
+class _DigestSink implements Sink<Digest> {
+  Digest? value;
+
+  @override
+  void add(Digest data) => value = data;
+
+  @override
+  void close() {}
+}
 
 /// 解压上限（2026-11-08 审计 F4）：条目数与解压总量设顶，防高膨胀
 /// 比载荷写满安装盘（引导壳侧对段长有硬顶，向导侧此前无对应约束）。
@@ -77,24 +91,112 @@ Future<void> writeEntryResilient(
   await attempt();
 }
 
-/// 把 setupExe 中 [off, off+len) 的字节段写到 destFile（分块拷贝）。
-Future<void> slicePayloadToFile(
-    String setupExe, int off, int len, String destFile) async {
-  final src = await File(setupExe).open();
+/// 在同一 FILE_SHARE_READ 句柄内完成摘要与切片，杜绝验后替换/修改。
+Future<void> verifyAndSlicePayload(
+  String setupExe,
+  int off,
+  int len,
+  String? expected,
+  String destFile,
+) async {
+  if (expected == null || !RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(expected)) {
+    throw StateError('missing trusted payload SHA256');
+  }
+  if (off < 0 || len < 0) throw StateError('invalid payload range');
+  final nativePath = p.canonicalize(p.absolute(setupExe)).toNativeUtf16();
+  final handle = CreateFile(
+    nativePath,
+    GENERIC_READ,
+    FILE_SHARE_READ,
+    nullptr,
+    OPEN_EXISTING,
+    FILE_ATTRIBUTE_NORMAL,
+    0,
+  );
+  free(nativePath);
+  if (handle == INVALID_HANDLE_VALUE) {
+    throw StateError('cannot open setup payload: ${GetLastError()}');
+  }
+
+  final buffer = calloc<Uint8>(1 << 20);
+  final read = calloc<DWORD>();
+  final digestOutput = _DigestSink();
+  final digestInput = sha256.startChunkedConversion(digestOutput);
   final sink = File(destFile).openWrite();
+  var sinkClosed = false;
   try {
-    await src.setPosition(off);
+    if (SetFilePointerEx(handle, off, nullptr, 0) == 0) {
+      throw StateError('cannot seek setup payload: ${GetLastError()}');
+    }
     var left = len;
     while (left > 0) {
       final want = left > (1 << 20) ? (1 << 20) : left;
-      final chunk = await src.read(want);
-      if (chunk.isEmpty) throw StateError('载荷段读取不完整');
+      if (ReadFile(handle, buffer, want, read, nullptr) == 0) {
+        throw StateError('cannot read setup payload: ${GetLastError()}');
+      }
+      if (read.value == 0 || read.value > left) {
+        throw StateError('载荷段读取不完整');
+      }
+      final chunk = Uint8List.fromList(buffer.asTypedList(read.value));
+      digestInput.add(chunk);
       sink.add(chunk);
-      left -= chunk.length;
+      left -= read.value;
+    }
+    digestInput.close();
+    await sink.close();
+    sinkClosed = true;
+    if (digestOutput.value.toString() != expected.toLowerCase()) {
+      throw StateError('elevated payload SHA256 mismatch');
     }
   } finally {
+    if (!sinkClosed) await sink.close();
+    CloseHandle(handle);
+    calloc.free(buffer);
+    calloc.free(read);
+  }
+}
+
+/// 从提权 bootstrapper 固定在 protected session 的完整 Setup 映像生成
+/// 卸载器。复制源包含 bootstrapper、ZIP-W、ZIP-P 与 footer，因而可独立
+/// 启动；原 Setup 路径在载荷切片后可能已被替换，不再作为卸载器来源。
+Future<void> copyProtectedSetupUninstaller(
+  String setupImage,
+  String destFile,
+) async {
+  final nativePath = p.canonicalize(p.absolute(setupImage)).toNativeUtf16();
+  final handle = CreateFile(
+    nativePath,
+    GENERIC_READ,
+    FILE_SHARE_READ,
+    nullptr,
+    OPEN_EXISTING,
+    FILE_ATTRIBUTE_NORMAL,
+    0,
+  );
+  free(nativePath);
+  if (handle == INVALID_HANDLE_VALUE) {
+    throw StateError('cannot open protected setup image: ${GetLastError()}');
+  }
+
+  final buffer = calloc<Uint8>(1 << 20);
+  final read = calloc<DWORD>();
+  final sink = File(destFile).openWrite();
+  var sinkClosed = false;
+  try {
+    while (true) {
+      if (ReadFile(handle, buffer, 1 << 20, read, nullptr) == 0) {
+        throw StateError('cannot read protected setup image: ${GetLastError()}');
+      }
+      if (read.value == 0) break;
+      sink.add(Uint8List.fromList(buffer.asTypedList(read.value)));
+    }
     await sink.close();
-    await src.close();
+    sinkClosed = true;
+  } finally {
+    if (!sinkClosed) await sink.close();
+    CloseHandle(handle);
+    calloc.free(buffer);
+    calloc.free(read);
   }
 }
 
@@ -109,6 +211,101 @@ bool Function(String rel) componentFilter({required bool ddcPresets}) {
   };
 }
 
+String _payloadRelativePath(String name) {
+  var rel = name.replaceAll('\\', '/');
+  if (!rel.startsWith('payload/')) {
+    throw StateError('载荷条目缺少 payload/ 前缀: $name');
+  }
+  rel = rel.substring('payload/'.length);
+  final normalized = p.posix.normalize(rel);
+  if (rel.isEmpty ||
+      normalized != rel ||
+      normalized == '.' ||
+      normalized.startsWith('../') ||
+      p.posix.isAbsolute(normalized) ||
+      RegExp(r'^[A-Za-z]:').hasMatch(normalized)) {
+    throw StateError('载荷含非法路径: $name');
+  }
+  return normalized;
+}
+
+Map<String, ManifestFile> _trustedPayloadFiles(List<ManifestFile> files) {
+  final trusted = <String, ManifestFile>{};
+  for (final file in files) {
+    final path = _payloadRelativePath('payload/${file.path}');
+    final key = path.toLowerCase();
+    if (trusted.containsKey(key)) {
+      throw StateError('可信载荷清单含重复路径: $path');
+    }
+    if (file.size < 0 || !RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(file.sha256)) {
+      throw StateError('可信载荷清单条目无效: $path');
+    }
+    trusted[key] = ManifestFile(
+      path: path,
+      size: file.size,
+      sha256: file.sha256.toLowerCase(),
+    );
+  }
+  return trusted;
+}
+
+/// 独立解码一遍做全量预检，避免把全部解压内容留在内存中。
+Future<void> _preflightPayload(
+  String zipPath,
+  List<ManifestFile> trustedFiles,
+) async {
+  final trusted = _trustedPayloadFiles(trustedFiles);
+  final actual = <String>{};
+  final input = InputFileStream(zipPath);
+  try {
+    final decoder = ZipDecoder();
+    final archive = decoder.decodeStream(input);
+    final rawFiles = decoder.directory.fileHeaders.where((header) {
+      final entryMode = header.externalFileAttributes >> 16;
+      return !header.filename.endsWith('/') &&
+          !header.filename.endsWith('\\') &&
+          (entryMode & 0xF000) != 0x4000;
+    }).toList();
+    if (rawFiles.length > _kMaxPayloadEntries ||
+        rawFiles.length != trusted.length) {
+      throw StateError('载荷文件集合与可信清单不一致');
+    }
+    for (final header in rawFiles) {
+      final path = _payloadRelativePath(header.filename);
+      final key = path.toLowerCase();
+      if (!trusted.containsKey(key)) {
+        throw StateError('载荷含可信清单外条目: $path');
+      }
+      if (!actual.add(key)) {
+        throw StateError('载荷含重复条目: $path');
+      }
+    }
+    final entries = archive.files.where((file) => file.isFile).toList();
+    if (entries.length != rawFiles.length) {
+      throw StateError('载荷中央目录与文件集合不一致');
+    }
+    for (final entry in entries) {
+      final path = _payloadRelativePath(entry.name);
+      final expected = trusted[path.toLowerCase()]!;
+      final bytes = entry.readBytes();
+      if (bytes == null ||
+          bytes.length != entry.size ||
+          entry.size != expected.size) {
+        throw StateError('载荷条目大小与可信清单不一致: $path');
+      }
+      if (sha256.convert(bytes).toString() != expected.sha256) {
+        throw StateError('载荷条目摘要与可信清单不一致: $path');
+      }
+      await entry.close();
+    }
+    if (actual.length != trusted.length) {
+      throw StateError('载荷缺少可信清单条目');
+    }
+  } finally {
+    await input.close();
+  }
+}
+
 /// 解压载荷 zip 到 destDir（含 payload/ 前缀剥离与路径穿越防护）。
 /// onFile 每完成一个文件回调一次（进度与日志）。
 ///
@@ -120,12 +317,15 @@ Future<List<ManifestFile>> extractPayload(
   String zipPath,
   String destDir, {
   required bool Function(String rel) include,
+  required List<ManifestFile> trustedFiles,
   void Function(String rel, int done, int total)? onFile,
   void Function(String warning)? onWarning,
   FileErrorHandler? onFileError,
   List<String>? skippedSink,
   List<String>? asideSink,
 }) async {
+  await _preflightPayload(zipPath, trustedFiles);
+  await Directory(destDir).create(recursive: true);
   final input = InputFileStream(zipPath);
   final archive = ZipDecoder().decodeStream(input);
   final entries = archive.files.where((f) => f.isFile).toList();
@@ -139,9 +339,8 @@ Future<List<ManifestFile>> extractPayload(
   var totalBytes = 0;
   try {
     for (final entry in entries) {
-      var rel = entry.name.replaceAll('\\', '/');
-      if (rel.startsWith('payload/')) rel = rel.substring('payload/'.length);
-      if (rel.isEmpty || !include(rel)) {
+      final rel = _payloadRelativePath(entry.name);
+      if (!include(rel)) {
         done++;
         continue;
       }
@@ -174,9 +373,10 @@ Future<List<ManifestFile>> extractPayload(
               asidePath = ap;
               asideSink?.add(ap);
               onWarning?.call(
-                  '$rel 仍被其他进程占用，已将旧文件改名让位'
-                  '（${p.basename(ap)}），新版已写入；'
-                  '让位文件将在下次安装/卸载时清理');
+                '$rel 仍被其他进程占用，已将旧文件改名让位'
+                '（${p.basename(ap)}），新版已写入；'
+                '让位文件将在下次安装/卸载时清理',
+              );
             },
           );
           // 流式算 SHA + 长度（2026-11-12 内存治理）：旧实现把每个
@@ -184,20 +384,24 @@ Future<List<ManifestFile>> extractPayload(
           // MB 级 DLL/资源）逐个制造同等大小的内存峰值；改 1MB 分块
           // 流式摘要后峰值与文件大小脱钩。
           final digest = await sha256.bind(target.openRead()).single;
-          written.add(ManifestFile(
-            path: rel,
-            size: await target.length(),
-            sha256: digest.toString(),
-          ));
+          written.add(
+            ManifestFile(
+              path: rel,
+              size: await target.length(),
+              sha256: digest.toString(),
+            ),
+          );
           break;
         } catch (e) {
           if (onFileError == null || e is InstallCancelled) rethrow;
-          final decision = await onFileError(FileErrorPrompt(
-            step: 'extract',
-            relPath: rel,
-            errorText: '$e',
-            critical: isCriticalPayloadPath(rel),
-          ));
+          final decision = await onFileError(
+            FileErrorPrompt(
+              step: 'extract',
+              relPath: rel,
+              errorText: '$e',
+              critical: isCriticalPayloadPath(rel),
+            ),
+          );
           if (decision == FileErrorDecision.retry) continue;
           if (decision == FileErrorDecision.cancel) {
             throw const InstallCancelled();

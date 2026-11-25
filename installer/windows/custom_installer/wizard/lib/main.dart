@@ -12,6 +12,7 @@ import 'src/engine/models.dart';
 Future<void> main(List<String> argv) async {
   WidgetsFlutterBinding.ensureInitialized();
   final args = SetupArgs.parse(argv);
+  args.validateProtectedSession();
 
   await windowManager.ensureInitialized();
   const options = WindowOptions(
@@ -35,11 +36,19 @@ Future<void> main(List<String> argv) async {
 /// 开发直跑（无清单）时用占位版本，保证 UI 可预览。
 WizardManifest _loadWizardManifest() {
   try {
-    final f = File(p.join(p.dirname(Platform.resolvedExecutable), 'wizard_manifest.json'));
+    final f = File(
+      p.join(p.dirname(Platform.resolvedExecutable), 'wizard_manifest.json'),
+    );
     if (f.existsSync()) {
       return WizardManifest.fromJson(
-          jsonDecode(f.readAsStringSync()) as Map<String, dynamic>);
+        jsonDecode(f.readAsStringSync()) as Map<String, dynamic>,
+      );
     }
   } catch (_) {}
-  return const WizardManifest(version: '0.1.0', fullVersion: '0.1.0.1', payloadSha256: '');
+  return const WizardManifest(
+    version: '0.1.0',
+    fullVersion: '0.1.0.1',
+    payloadSha256: '',
+    payloadFiles: [],
+  );
 }

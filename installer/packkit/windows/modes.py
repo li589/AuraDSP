@@ -127,7 +127,7 @@ def mode_setup(args, ver: dict[str, str], out: Path) -> Path:
         payload_sha = hashlib.sha256(payload_bytes).hexdigest()
 
         wizard_zip = Path(td.name) / "wizard.zip"
-        build_wizard_zip(inst_dir / "wizard", wizard_zip, ver, payload_sha)
+        build_wizard_zip(inst_dir / "wizard", wizard_zip, ver, payload_bytes)
         wizard_bytes = wizard_zip.read_bytes()
         shell_bytes = (inst_dir / "bootstrapper.exe").read_bytes()
 

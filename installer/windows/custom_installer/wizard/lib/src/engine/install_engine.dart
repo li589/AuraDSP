@@ -18,9 +18,7 @@ import 'win32.dart';
 String env(String name) => Platform.environment[name] ?? '';
 
 String defaultInstallDir(bool allUsers) => normalizeInstallDir(
-      allUsers
-          ? r'C:\Program Files'
-          : p.join(env('LOCALAPPDATA'), 'Programs'),
+      allUsers ? r'C:\Program Files' : p.join(env('LOCALAPPDATA'), 'Programs'),
       r'C:\AuraDSP',
     );
 
@@ -49,7 +47,9 @@ Future<InstalledInfo?> readInstalledInfo() async {
     InstallManifest? manifest;
     try {
       final f = File(p.join(dir, 'install_manifest.json'));
-      if (await f.exists()) manifest = InstallManifest.decode(await f.readAsString());
+      if (await f.exists()) {
+        manifest = InstallManifest.decode(await f.readAsString());
+      }
     } catch (e) {
       // 清单损坏：按「无清单」处理，升级走保守路径（不主动删旧文件）。
       lastManifestError = '$e';
@@ -101,6 +101,12 @@ class InstallEngine {
     UpdatePlan? plan,
     FileErrorHandler? onFileError,
   }) async {
+    args.validateProtectedSession();
+    final trustedPayloadSha = args.payloadSha256;
+    if (trustedPayloadSha == null ||
+        trustedPayloadSha.toLowerCase() != wizard.payloadSha256.toLowerCase()) {
+      throw StateError('wizard payload manifest is not bound to setup footer');
+    }
     _allUsers = o.allUsers;
     final warnings = <String>[];
     final createdFiles = <ManifestFile>[];
@@ -138,30 +144,39 @@ class InstallEngine {
       //      （资源计划 Stage 0 / §8.1）。
       if (overwrite) {
         sink(const ProgressEvent('apo', 'detach', 0.03));
-        await _cleanupApo(o.installDir,
-            elevated: elevated, warnings: warnings);
+        await _cleanupApo(o.installDir, elevated: elevated, warnings: warnings);
         // 1.6) 分离后等 audiodg 真正解除 DLL 映射再动文件：
         //      服务重启返回与映射释放之间存在排空窗口，裸跑到
         //      备份/覆盖步会撞 errno 32（2026-11-12 业主实测）。
         sink(const ProgressEvent('apo', 'unlock', 0.035));
         await _sweepAsideFiles(o.installDir);
-        await _ensureApoUnlocked(o.installDir,
-            elevated: elevated, warnings: warnings);
+        await _ensureApoUnlocked(
+          o.installDir,
+          elevated: elevated,
+          warnings: warnings,
+        );
       }
 
       // 2) 覆盖升级前备份将被替换的旧程序文件（用户数据不备份、不覆盖）
       if (overwrite) {
         sink(const ProgressEvent('backup', 'snapshot', 0.04));
-        backupDir = p.join(session, 'update-backup-${DateTime.now().millisecondsSinceEpoch}');
-        final backupFiles =
-            plan!.previous?.manifest?.files ?? <ManifestFile>[];
+        backupDir = p.join(
+          session,
+          'update-backup-${DateTime.now().millisecondsSinceEpoch}',
+        );
+        final backupFiles = plan!.previous?.manifest?.files ?? <ManifestFile>[];
         for (var bi = 0; bi < backupFiles.length; bi++) {
           final f = backupFiles[bi];
           if (isUserPath(f.path)) continue;
           // 逐文件报进度分数：备份可达数千文件，此前全程无分数、
           // 进度条长时间停在不确定态（2026-11-12 降载配套）。
-          sink(ProgressEvent('backup', f.path,
-              0.04 + 0.009 * (bi + 1) / backupFiles.length));
+          sink(
+            ProgressEvent(
+              'backup',
+              f.path,
+              0.04 + 0.009 * (bi + 1) / backupFiles.length,
+            ),
+          );
           final src = File(p.join(o.installDir, f.path));
           if (!await src.exists()) continue;
           final dst = File(p.join(backupDir, f.path));
@@ -172,23 +187,38 @@ class InstallEngine {
             // 备份单个文件失败不再整单陪葬：登记 backupFailed，
             // 回滚时保留该文件的新版而非删成缺失（见 catch）。
             backupFailed.add(f.path);
-            warnings.add('备份跳过被占用文件 ${f.path}'
-                '（${e.osError?.message ?? e.message}）；'
-                '若安装失败，该文件将保留新版不回滚');
+            warnings.add(
+              '备份跳过被占用文件 ${f.path}'
+              '（${e.osError?.message ?? e.message}）；'
+              '若安装失败，该文件将保留新版不回滚',
+            );
           }
         }
       }
 
-      // 3) 载荷解压（关键步，失败回滚）
+      // 3) 载荷解压（关键步，失败回滚）。同一拒绝写/删除共享的句柄
+      // 完成原 Setup 摘要与切片；ZIP-P 全量条目再对照已签名 ZIP-W 中
+      // 的构建期清单预检，组件过滤不会缩小预检范围。
       sink(const ProgressEvent('extract', 'slice', 0.05));
-      await slicePayloadToFile(args.setupExe!, args.payloadOff!, args.payloadLen!, zipPath);
-      await Directory(o.installDir).create(recursive: true);
+      await verifyAndSlicePayload(
+        args.setupExe!,
+        args.payloadOff!,
+        args.payloadLen!,
+        trustedPayloadSha,
+        zipPath,
+      );
       final files = await extractPayload(
         zipPath,
         o.installDir,
         include: componentFilter(ddcPresets: o.ddcPresets),
-        onFile: (rel, done, total) => sink(ProgressEvent('extract', rel,
-            total == 0 ? null : 0.05 + 0.70 * done / total)),
+        trustedFiles: wizard.payloadFiles,
+        onFile: (rel, done, total) => sink(
+          ProgressEvent(
+            'extract',
+            rel,
+            total == 0 ? null : 0.05 + 0.70 * done / total,
+          ),
+        ),
         onWarning: warnings.add,
         onFileError: onFileError,
         skippedSink: skippedFiles,
@@ -196,9 +226,11 @@ class InstallEngine {
       );
       createdFiles.addAll(files);
       if (skippedFiles.isNotEmpty) {
-        warnings.add('已跳过 ${skippedFiles.length} 个写入失败的文件'
-            '（可能缺失或仍为旧版）：${skippedFiles.take(5).join('、')}'
-            '${skippedFiles.length > 5 ? ' …' : ''}');
+        warnings.add(
+          '已跳过 ${skippedFiles.length} 个写入失败的文件'
+          '（可能缺失或仍为旧版）：${skippedFiles.take(5).join('、')}'
+          '${skippedFiles.length > 5 ? ' …' : ''}',
+        );
       }
 
       // 4) ASIO 注册（用户态 COM，不受内核驱动签名限制；降级警告）
@@ -211,8 +243,10 @@ class InstallEngine {
           try {
             final rc = await registerAsioDll(dll, register: true);
             if (rc != 0) {
-              warnings.add('ASIO 注册失败（regsvr32 退出码 $rc）'
-                  '${elevated ? '' : '；未提权时 DAW 可见性受限'}');
+              warnings.add(
+                'ASIO 注册失败（regsvr32 退出码 $rc）'
+                '${elevated ? '' : '；未提权时 DAW 可见性受限'}',
+              );
             }
           } catch (e) {
             warnings.add('ASIO 注册失败: $e');
@@ -225,30 +259,48 @@ class InstallEngine {
       //    且该脚本按源码树找包、依赖 WDK signtool，随包环境不可用。
       if (o.vaio) {
         sink(const ProgressEvent('driver', 'install', 0.86));
-        final script = p.join(o.installDir, kDriverManualDirRel, 'install_vaio.ps1');
+        final script = p.join(
+          o.installDir,
+          kDriverManualDirRel,
+          'install_vaio.ps1',
+        );
         if (!elevated) {
-          warnings.add('VAIO 驱动需要管理员权限，已跳过（可事后以管理员运行 '
-              '$kDriverManualDirRel\\install_vaio.ps1 -Action install）');
+          warnings.add(
+            'VAIO 驱动需要管理员权限，已跳过（可事后以管理员运行 '
+            '$kDriverManualDirRel\\install_vaio.ps1 -Action install）',
+          );
         } else if (!File(script).existsSync()) {
           warnings.add('载荷缺少 $kDriverManualDirRel\\install_vaio.ps1，驱动安装跳过');
           warnings.add(kDriverSigningNotice);
         } else {
           final r = await Process.run(
-            'powershell.exe',
-            ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
-             '-Action', 'install'],
-            workingDirectory: p.dirname(script),
-          ).timeout(const Duration(minutes: 5), onTimeout: () {
-            throw StateError('驱动安装超时');
-          });
+                  'powershell.exe',
+                  [
+                    '-NoProfile',
+                    '-ExecutionPolicy',
+                    'Bypass',
+                    '-File',
+                    script,
+                    '-Action',
+                    'install',
+                  ],
+                  workingDirectory: p.dirname(script))
+              .timeout(
+            const Duration(minutes: 5),
+            onTimeout: () {
+              throw StateError('驱动安装超时');
+            },
+          );
           if (r.exitCode == kDriverSigningRequired) {
             warnings.add(kDriverSigningNotice);
           } else {
             if (r.exitCode == kDriverRebootRequired) {
               warnings.add('VAIO 驱动已安装；旧驱动尚在内存中，重启电脑后新驱动完全生效');
             } else if (r.exitCode != 0) {
-              warnings.add('VAIO 驱动安装失败（退出码 ${r.exitCode}），应用本体不受影响；'
-                  '可查看 %TEMP%\\auradsp-vaio-install.log 后手动重试');
+              warnings.add(
+                'VAIO 驱动安装失败（退出码 ${r.exitCode}），应用本体不受影响；'
+                '可查看 %TEMP%\\auradsp-vaio-install.log 后手动重试',
+              );
             }
             warnings.add(kDriverSigningShort);
           }
@@ -268,33 +320,50 @@ class InstallEngine {
       }
       if (o.startMenuShortcut) {
         final base = o.allUsers
-            ? p.join(env('ProgramData'), r'Microsoft\Windows\Start Menu\Programs', 'AuraDSP')
-            : p.join(env('APPDATA'), r'Microsoft\Windows\Start Menu\Programs', 'AuraDSP');
+            ? p.join(
+                env('ProgramData'),
+                r'Microsoft\Windows\Start Menu\Programs',
+                'AuraDSP',
+              )
+            : p.join(
+                env('APPDATA'),
+                r'Microsoft\Windows\Start Menu\Programs',
+                'AuraDSP',
+              );
         await Directory(base).create(recursive: true);
         final lnk = p.join(base, 'AuraDSP.lnk');
-        if (await _createShortcut(lnk, exe, o.installDir)) createdShortcuts.add(lnk);
+        if (await _createShortcut(lnk, exe, o.installDir)) {
+          createdShortcuts.add(lnk);
+        }
         // 开始菜单同文件夹加「卸载 AuraDSP」（第四十九轮
         // S5，user 要求）：指向安装目录的 uninstall.exe
         // （第 7 步才落盘，lnk 先行指向无碍）；一并记入
         // createdShortcuts，卸载/回滚时随清单清除。
         final unLnk = p.join(base, '卸载 AuraDSP.lnk');
         if (await _createShortcut(
-            unLnk, p.join(o.installDir, 'uninstall.exe'), o.installDir)) {
+          unLnk,
+          p.join(o.installDir, 'uninstall.exe'),
+          o.installDir,
+        )) {
           createdShortcuts.add(unLnk);
         } else {
           warnings.add('卸载快捷方式创建失败');
         }
       }
       if (o.autostart) {
-        registryWriteValues(kHkeyCurrentUser,
-            r'Software\Microsoft\Windows\CurrentVersion\Run', {'AuraDSP': '"$exe"'});
+        registryWriteValues(
+          kHkeyCurrentUser,
+          r'Software\Microsoft\Windows\CurrentVersion\Run',
+          {'AuraDSP': '"$exe"'},
+        );
       }
 
       // 7) 卸载器 + 清单 + 注册表
       sink(const ProgressEvent('uninstaller', 'emit', 0.94));
-      if (args.setupExe != null) {
-        await File(args.setupExe!).copy(p.join(o.installDir, 'uninstall.exe'));
-      }
+      await copyProtectedSetupUninstaller(
+        args.setupExe!,
+        p.join(o.installDir, 'uninstall.exe'),
+      );
       final manifest = InstallManifest(
         version: wizard.version,
         fullVersion: wizard.fullVersion,
@@ -328,7 +397,8 @@ class InstallEngine {
       registryWriteValues(_hive, r'Software\AuraDSP', {
         'InstallDir': o.installDir,
         'Version': wizard.fullVersion,
-        if (plan?.previous != null) 'PreviousVersion': plan!.previous!.fullVersion,
+        if (plan?.previous != null)
+          'PreviousVersion': plan!.previous!.fullVersion,
         'UpdateMode': manifest.updateMode,
       });
       if (!regOk) warnings.add('卸载注册表项写入失败（不影响使用与文件卸载）');
@@ -336,8 +406,11 @@ class InstallEngine {
       // 8) 升级成功：清理旧版遗留（旧清单有、新清单没有的随包文件），
       //    再删备份快照。这些旧文件都在备份里，若此步抛错仍可回滚恢复。
       if (overwrite && hasOldManifest) {
-        final stale = staleUpgradePaths(plan!.previous!.manifest, createdFiles,
-            alsoPresent: skippedFiles.toSet());
+        final stale = staleUpgradePaths(
+          plan!.previous!.manifest,
+          createdFiles,
+          alsoPresent: skippedFiles.toSet(),
+        );
         for (final rel in stale) {
           // 删除守卫（2026-11-08 审计 F2）：上一版清单是磁盘数据，
           // 其相对路径拼安装目录后必须仍在目录内才可删。
@@ -355,12 +428,17 @@ class InstallEngine {
       // 不再等下次安装/卸载才扫。
       final leftovers = await _retireAsides(installAsides);
       if (leftovers.isNotEmpty) {
-        warnings.add('有 ${leftovers.length} 个被占用的旧文件已改名让位，'
-            '将在向导退出后自动清理');
+        warnings.add(
+          '有 ${leftovers.length} 个被占用的旧文件已改名让位，'
+          '将在向导退出后自动清理',
+        );
       }
       sink(const ProgressEvent('done', '', 1.0));
       return EngineResult(
-          ok: true, warnings: warnings, leftoverPaths: leftovers);
+        ok: true,
+        warnings: warnings,
+        leftoverPaths: leftovers,
+      );
     } catch (e) {
       // 回滚：覆盖升级先恢复旧程序文件，再删本次新增文件；用户数据一律不动。
       if (overwrite && hasOldManifest && backupDir != null) {
@@ -396,9 +474,7 @@ class InstallEngine {
       // 文件占用类错误给可行动的人话（2026-11-12 业主实测：错误
       // 页曾直接展示裸 PathAccessException，用户无从下手）。
       final errorText = e is InstallCancelled
-          ? (overwrite
-              ? '安装已被取消，已回滚到安装前的状态。'
-              : '安装已被取消，已清除本次写入的文件。')
+          ? (overwrite ? '安装已被取消，已回滚到安装前的状态。' : '安装已被取消，已清除本次写入的文件。')
           : e is FileSystemException
               ? '文件被其他进程占用或无法访问：${e.path ?? ''}\n'
                   '请关闭正在播放音频的程序、退出 AuraDSP 后重试。\n'
@@ -406,10 +482,11 @@ class InstallEngine {
                   '${e.osError != null ? '，errno ${e.osError!.errorCode}' : ''}）'
               : '$e';
       return EngineResult(
-          ok: false,
-          error: errorText,
-          warnings: warnings,
-          leftoverPaths: installAsides);
+        ok: false,
+        error: errorText,
+        warnings: warnings,
+        leftoverPaths: installAsides,
+      );
     }
   }
 
@@ -439,25 +516,36 @@ class InstallEngine {
     final tool = p.join(installDir, kDriverManualDirRel, 'apo_config.exe');
     if (!await File(tool).exists()) return;
     if (!elevated) {
-      warnings.add('未以管理员运行：System APO 未分离。'
-          '请先在 AuraDSP 设置中点「一键卸载」分离 APO，'
-          '或以管理员重新运行本向导；已附加端点会继续占用 AuraApo.dll');
+      warnings.add(
+        '未以管理员运行：System APO 未分离。'
+        '请先在 AuraDSP 设置中点「一键卸载」分离 APO，'
+        '或以管理员重新运行本向导；已附加端点会继续占用 AuraApo.dll',
+      );
       return;
     }
     try {
       final r = await Process.run(
-        tool,
-        const ['uninstall', '--yes', '--json'],
-        stdoutEncoding: utf8,
-      ).timeout(const Duration(minutes: 2), onTimeout: () {
-        throw StateError('APO 分离超时');
-      });
+              tool,
+              const [
+                'uninstall',
+                '--yes',
+                '--json',
+              ],
+              stdoutEncoding: utf8)
+          .timeout(
+        const Duration(minutes: 2),
+        onTimeout: () {
+          throw StateError('APO 分离超时');
+        },
+      );
       if (r.exitCode != 0) {
         final out = r.stdout.toString().trim();
         final tail = out.length > 200 ? out.substring(out.length - 200) : out;
-        warnings.add('System APO 分离返回 ${r.exitCode}'
-            '${tail.isEmpty ? '' : '：$tail'}'
-            '（可手动以管理员运行 driver\\apo_config.exe uninstall --yes）');
+        warnings.add(
+          'System APO 分离返回 ${r.exitCode}'
+          '${tail.isEmpty ? '' : '：$tail'}'
+          '（可手动以管理员运行 driver\\apo_config.exe uninstall --yes）',
+        );
       }
     } catch (e) {
       warnings.add('System APO 分离失败: $e');
@@ -500,23 +588,29 @@ class InstallEngine {
     if (elevated && await _restartAudioService()) {
       if (await waitUnlocked(const Duration(seconds: 8))) return;
     }
-    warnings.add('AuraApo.dll 仍被音频服务占用：写入时将自动改名'
-        '让位旧文件，新版可正常安装（让位文件下次安装/卸载时清理）');
+    warnings.add(
+      'AuraApo.dll 仍被音频服务占用：写入时将自动改名'
+      '让位旧文件，新版可正常安装（让位文件下次安装/卸载时清理）',
+    );
   }
 
   /// 重启 Windows 音频服务（audiodg 随之回收，镜像锁释放）。
   /// 全程尽力而为：任一步失败返回 false，不阻塞安装。
   Future<bool> _restartAudioService() async {
     try {
-      await Process.run('sc.exe', ['stop', 'Audiosrv'])
-          .timeout(const Duration(seconds: 30));
+      await Process.run('sc.exe', [
+        'stop',
+        'Audiosrv',
+      ]).timeout(const Duration(seconds: 30));
       for (var i = 0; i < 30; i++) {
         final q = await Process.run('sc.exe', ['query', 'Audiosrv']);
         if (q.stdout.toString().contains('STOPPED')) break;
         await Future<void>.delayed(const Duration(milliseconds: 500));
       }
-      final r = await Process.run('sc.exe', ['start', 'Audiosrv'])
-          .timeout(const Duration(seconds: 30));
+      final r = await Process.run('sc.exe', [
+        'start',
+        'Audiosrv',
+      ]).timeout(const Duration(seconds: 30));
       return r.exitCode == 0 || r.exitCode == 1056; // 已在运行
     } catch (_) {
       return false;
@@ -524,10 +618,11 @@ class InstallEngine {
   }
 
   /// 扫除上次改名让位遗留的 `.aside-*` 文件（此时多已解锁）。
-  Future<void> _sweepAsideFiles(String installDir,
-      {List<String>? failed}) async {
-    final driverDir =
-        Directory(p.join(installDir, kDriverManualDirRel));
+  Future<void> _sweepAsideFiles(
+    String installDir, {
+    List<String>? failed,
+  }) async {
+    final driverDir = Directory(p.join(installDir, kDriverManualDirRel));
     if (!await driverDir.exists()) return;
     await for (final e in driverDir.list()) {
       if (e is! File || !e.path.contains('.aside-')) continue;
@@ -542,29 +637,32 @@ class InstallEngine {
   /// 安装目录可写性预检：建目录（递归）+ 写删一个探针文件。
   /// 失败时把裸异常翻译成可行动文案（见 writabilityFailureMessage）。
   Future<void> _probeWritable(String dir, {required bool elevated}) async {
-    String rawOf(FileSystemException e) =>
-        '${e.osError?.message ?? e.message}'
+    String rawOf(FileSystemException e) => '${e.osError?.message ?? e.message}'
         '${e.osError != null ? ' (errno ${e.osError!.errorCode})' : ''}';
     try {
       await Directory(dir).create(recursive: true);
     } on FileSystemException catch (e) {
-      throw StateError(writabilityFailureMessage(
-        dir: dir,
-        errorCode: e.osError?.errorCode,
-        rawError: rawOf(e),
-        elevated: elevated,
-      ));
+      throw StateError(
+        writabilityFailureMessage(
+          dir: dir,
+          errorCode: e.osError?.errorCode,
+          rawError: rawOf(e),
+          elevated: elevated,
+        ),
+      );
     }
     final probe = File(p.join(dir, '.auradsp-write-probe'));
     try {
       await probe.writeAsBytes(const <int>[0], flush: true);
     } on FileSystemException catch (e) {
-      throw StateError(writabilityFailureMessage(
-        dir: dir,
-        errorCode: e.osError?.errorCode,
-        rawError: rawOf(e),
-        elevated: elevated,
-      ));
+      throw StateError(
+        writabilityFailureMessage(
+          dir: dir,
+          errorCode: e.osError?.errorCode,
+          rawError: rawOf(e),
+          elevated: elevated,
+        ),
+      );
     } finally {
       try {
         await probe.delete();
@@ -619,11 +717,17 @@ class InstallEngine {
   }
 
   /// 完成页「创建桌面快捷方式」：安装结束后仍可补建或取消（幂等）。
-  Future<bool> setDesktopShortcut(String installDir, {required bool create}) async {
+  Future<bool> setDesktopShortcut(
+    String installDir, {
+    required bool create,
+  }) async {
     final lnk = p.join(env('USERPROFILE'), 'Desktop', 'AuraDSP.lnk');
     if (create) {
       return _createShortcut(
-          lnk, p.join(installDir, 'auradsp_app.exe'), installDir);
+        lnk,
+        p.join(installDir, 'auradsp_app.exe'),
+        installDir,
+      );
     }
     try {
       final f = File(lnk);
@@ -634,7 +738,11 @@ class InstallEngine {
     return true;
   }
 
-  Future<bool> _createShortcut(String lnk, String target, String workDir) async {
+  Future<bool> _createShortcut(
+    String lnk,
+    String target,
+    String workDir,
+  ) async {
     const script = r'''
 $w = New-Object -ComObject WScript.Shell
 $s = $w.CreateShortcut($env:AURA_LNK)
@@ -679,12 +787,18 @@ $s.Save()
       //    保持附加（资源计划 Stage 0 / §8.1 定罪：此前向导全
       //    程无 apo 处理，卸载后 APO 仍附加、更新覆盖写失败）。
       sink(const ProgressEvent('apo', 'detach', 0.10));
-      await _cleanupApo(manifest.installDir,
-          elevated: elevated, warnings: warnings);
+      await _cleanupApo(
+        manifest.installDir,
+        elevated: elevated,
+        warnings: warnings,
+      );
       // 1.1) 等 audiodg 解除映射再删文件，并扫除历史让位文件
       //      （删不掉的进 failed，走退出后清理脚本既有通道）。
-      await _ensureApoUnlocked(manifest.installDir,
-          elevated: elevated, warnings: warnings);
+      await _ensureApoUnlocked(
+        manifest.installDir,
+        elevated: elevated,
+        warnings: warnings,
+      );
       await _sweepAsideFiles(manifest.installDir, failed: failed);
 
       // 2) ASIO：只要 DLL 在就反注册（含用户事后手动注册的情况），幂等。
@@ -694,7 +808,9 @@ $s.Save()
         try {
           final rc = await registerAsioDll(dll, register: false);
           if (rc != 0) {
-            warnings.add('ASIO 反注册返回 $rc（可手动运行 driver\\register_asio.ps1 -Unregister）');
+            warnings.add(
+              'ASIO 反注册返回 $rc（可手动运行 driver\\register_asio.ps1 -Unregister）',
+            );
           }
         } catch (e) {
           warnings.add('ASIO 反注册失败: $e');
@@ -708,20 +824,35 @@ $s.Save()
       if (await File(script).exists()) {
         sink(const ProgressEvent('driver', 'uninstall', 0.32));
         if (!elevated) {
-          warnings.add('未以管理员运行：VAIO 驱动、设备节点与测试证书未清理。'
-              '请手动以管理员执行 driver\\install_vaio.ps1 -Action uninstall -RemoveTestCert');
+          warnings.add(
+            '未以管理员运行：VAIO 驱动、设备节点与测试证书未清理。'
+            '请手动以管理员执行 driver\\install_vaio.ps1 -Action uninstall -RemoveTestCert',
+          );
         } else {
           final r = await Process.run(
-            'powershell.exe',
-            ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
-             '-Action', 'uninstall', '-RemoveTestCert'],
-            workingDirectory: driverDir,
-          ).timeout(const Duration(minutes: 3), onTimeout: () {
-            throw StateError('驱动卸载超时');
-          });
+                  'powershell.exe',
+                  [
+                    '-NoProfile',
+                    '-ExecutionPolicy',
+                    'Bypass',
+                    '-File',
+                    script,
+                    '-Action',
+                    'uninstall',
+                    '-RemoveTestCert',
+                  ],
+                  workingDirectory: driverDir)
+              .timeout(
+            const Duration(minutes: 3),
+            onTimeout: () {
+              throw StateError('驱动卸载超时');
+            },
+          );
           if (r.exitCode != 0) {
-            warnings.add('VAIO 驱动卸载返回 ${r.exitCode}，'
-                '详见 %TEMP%\\auradsp-vaio-install.log');
+            warnings.add(
+              'VAIO 驱动卸载返回 ${r.exitCode}，'
+              '详见 %TEMP%\\auradsp-vaio-install.log',
+            );
           }
         }
       }
@@ -737,7 +868,11 @@ $s.Save()
       final groupBases = <String>[];
       for (final v in linkDirs) {
         links.add(p.join(v, 'Desktop', 'AuraDSP.lnk'));
-        final g = p.join(v, r'Microsoft\Windows\Start Menu\Programs', 'AuraDSP');
+        final g = p.join(
+          v,
+          r'Microsoft\Windows\Start Menu\Programs',
+          'AuraDSP',
+        );
         groupBases.add(g);
         links.add(p.join(g, 'AuraDSP.lnk'));
       }
@@ -766,14 +901,21 @@ $s.Save()
       sink(const ProgressEvent('registry', 'clean', 0.55));
       for (final hive in const [kHkeyCurrentUser, kHkeyLocalMachine]) {
         registryDeleteTree(
-            hive, r'Software\Microsoft\Windows\CurrentVersion\Uninstall\AuraDSP');
+          hive,
+          r'Software\Microsoft\Windows\CurrentVersion\Uninstall\AuraDSP',
+        );
         registryDeleteTree(hive, r'Software\AuraDSP');
         registryDeleteValue(
-            hive, r'Software\Microsoft\Windows\CurrentVersion\Run', 'AuraDSP');
+          hive,
+          r'Software\Microsoft\Windows\CurrentVersion\Run',
+          'AuraDSP',
+        );
       }
       if (manifest.allUsers && !elevated) {
-        warnings.add('未提权：HKLM 下的卸载注册表项可能未清除，'
-            '建议以管理员重新运行卸载');
+        warnings.add(
+          '未提权：HKLM 下的卸载注册表项可能未清除，'
+          '建议以管理员重新运行卸载',
+        );
       }
 
       // 6) 文件：按清单分类逐文件删除，不再整目录 delete(recursive)。
@@ -792,7 +934,8 @@ $s.Save()
           }
         } catch (_) {}
         for (final e in allFiles) {
-          final rel = p.relative(e.path, from: manifest.installDir)
+          final rel = p
+              .relative(e.path, from: manifest.installDir)
               .replaceAll(r'\', '/');
           final action = classifyUninstallPath(rel, programPaths, keepData);
           if (action == UninstallAction.keepUserData) continue;
@@ -846,16 +989,27 @@ $s.Save()
       } catch (_) {}
 
       if (failed.isNotEmpty) {
-        warnings.add('有 ${failed.length} 个文件被其他进程占用，'
-            '已安排在向导退出后自动清理：'
-            '${failed.take(3).join('、')}${failed.length > 3 ? ' …' : ''}');
+        warnings.add(
+          '有 ${failed.length} 个文件被其他进程占用，'
+          '已安排在向导退出后自动清理：'
+          '${failed.take(3).join('、')}${failed.length > 3 ? ' …' : ''}',
+        );
       }
       sink(const ProgressEvent('done', '', 1.0));
-      return EngineResult(ok: true, warnings: warnings,
-          keptPaths: keptPaths, leftoverPaths: leftovers);
+      return EngineResult(
+        ok: true,
+        warnings: warnings,
+        keptPaths: keptPaths,
+        leftoverPaths: leftovers,
+      );
     } catch (e) {
-      return EngineResult(ok: false, error: '$e', warnings: warnings,
-          keptPaths: keptPaths, leftoverPaths: leftovers);
+      return EngineResult(
+        ok: false,
+        error: '$e',
+        warnings: warnings,
+        keptPaths: keptPaths,
+        leftoverPaths: leftovers,
+      );
     }
   }
 
@@ -863,7 +1017,9 @@ $s.Save()
   Future<void> _pruneEmptyDirs(String root) async {
     final dirs = <Directory>[];
     try {
-      await for (final e in Directory(root).list(recursive: true, followLinks: false)) {
+      await for (final e in Directory(
+        root,
+      ).list(recursive: true, followLinks: false)) {
         if (e is Directory) dirs.add(e);
       }
     } catch (_) {

@@ -3,6 +3,10 @@
 /// 纯逻辑、无平台依赖，可单测。
 library;
 
+import 'package:path/path.dart' as p;
+
+import 'engine/win32.dart';
+
 enum SetupMode { install, uninstall }
 
 class SetupArgs {
@@ -11,7 +15,9 @@ class SetupArgs {
     this.setupExe,
     this.payloadOff,
     this.payloadLen,
+    this.payloadSha256,
     this.sessionDir,
+    this.protectedSession,
     this.silent = false,
     this.elevated = false,
     this.resumeOptions,
@@ -29,8 +35,14 @@ class SetupArgs {
   final int? payloadOff;
   final int? payloadLen;
 
+  /// 提权前计算并跨 UAC 固定的原 ZIP-P SHA256（64 位十六进制）。
+  final String? payloadSha256;
+
   /// 引导壳的临时会话目录（向导退出时自清理）。
   final String? sessionDir;
+
+  /// 提权引导壳新建的管理员-only session；普通安装为 null。
+  final String? protectedSession;
 
   /// /silent 或 --silent：无交互直跑（QuietUninstallString 用）。
   final bool silent;
@@ -50,14 +62,63 @@ class SetupArgs {
   /// 提权重启时继承的「保留用户数据」选择；null = 使用 UI 默认值。
   final bool? keepData;
 
-  bool get hasPayload => setupExe != null && payloadOff != null && payloadLen != null;
+  bool get hasPayload =>
+      setupExe != null && payloadOff != null && payloadLen != null;
+
+  /// 提权向导不得继承交互用户可写的 session 或状态文件路径。路径相等
+  /// 只是第一关；根与 session 还必须在最终句柄上具有精确的 SYSTEM/
+  /// Administrators owner/DACL、无 reparse，并与声明路径一致。
+  void validateProtectedSession({
+    ProtectedDirectoryInspector inspector = inspectProtectedDirectory,
+  }) {
+    if (!elevated) return;
+    final protectedDir = protectedSession;
+    if (protectedDir == null ||
+        protectedDir.isEmpty ||
+        !p.isAbsolute(protectedDir)) {
+      throw StateError('missing protected session');
+    }
+    final current = sessionDir;
+    if (current == null ||
+        !p.isAbsolute(current) ||
+        !p.equals(p.normalize(current), p.normalize(protectedDir))) {
+      throw StateError('elevated wizard session is not protected');
+    }
+    final resume = resumeOptions;
+    if (resume != null &&
+        !p.isWithin(p.normalize(protectedDir), p.normalize(resume))) {
+      throw StateError('resume options are outside the protected session');
+    }
+    final root = p.dirname(protectedDir);
+    final rootAttributes = inspector(root);
+    final sessionAttributes = inspector(protectedDir);
+    if (!hasProtectedDirectorySecurity(rootAttributes) ||
+        !hasProtectedDirectorySecurity(sessionAttributes)) {
+      throw StateError('protected session security descriptor is untrusted');
+    }
+    final normalizedRoot = p.normalize(root);
+    final normalizedSession = p.normalize(protectedDir);
+    if (!p.equals(p.normalize(rootAttributes.finalPath), normalizedRoot) ||
+        !p.equals(
+          p.normalize(sessionAttributes.finalPath),
+          normalizedSession,
+        ) ||
+        !p.equals(
+          p.dirname(sessionAttributes.finalPath),
+          rootAttributes.finalPath,
+        )) {
+      throw StateError('protected session final path does not match');
+    }
+  }
 
   static SetupArgs parse(List<String> argv) {
     var mode = SetupMode.install;
     String? setupExe;
     int? off;
     int? len;
+    String? payloadSha256;
     String? session;
+    String? protectedSession;
     String? resume;
     var silent = false;
     var elevated = false;
@@ -66,7 +127,9 @@ class SetupArgs {
     bool? keepData;
 
     String? valueAfter(int i) =>
-        i + 1 < argv.length && !argv[i + 1].startsWith('--') ? argv[i + 1] : null;
+        i + 1 < argv.length && !argv[i + 1].startsWith('--')
+            ? argv[i + 1]
+            : null;
 
     for (var i = 0; i < argv.length; i++) {
       final a = argv[i];
@@ -85,8 +148,14 @@ class SetupArgs {
         case '--payload-len':
           len = int.tryParse(valueAfter(i) ?? '');
           i++;
+        case '--payload-sha256':
+          payloadSha256 = valueAfter(i);
+          i++;
         case '--session-dir':
           session = valueAfter(i);
+          i++;
+        case '--protected-session':
+          protectedSession = valueAfter(i);
           i++;
         case '--resume-options':
           resume = valueAfter(i);
@@ -113,7 +182,9 @@ class SetupArgs {
       setupExe: setupExe,
       payloadOff: off,
       payloadLen: len,
+      payloadSha256: payloadSha256,
       sessionDir: session,
+      protectedSession: protectedSession,
       silent: silent,
       elevated: elevated,
       resumeOptions: resume,

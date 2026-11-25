@@ -29,16 +29,45 @@ assert FOOTER_SIZE == 80, FOOTER_SIZE
 FOOTER_VERSION = 1
 
 
+def payload_file_manifest(payload_bytes: bytes) -> list[dict[str, object]]:
+    """从构建时的真实 ZIP-P 生成受信完整文件清单。"""
+    entries: list[dict[str, object]] = []
+    seen: set[str] = set()
+    with zipfile.ZipFile(io.BytesIO(payload_bytes)) as zf:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            name = info.filename.replace("\\", "/")
+            if not name.startswith("payload/"):
+                raise ValueError(f"payload entry lacks payload/ prefix: {info.filename}")
+            rel = name[len("payload/"):]
+            parts = rel.split("/")
+            if (not rel or rel.startswith("/") or ":" in rel
+                    or any(part in ("", ".", "..") for part in parts)):
+                raise ValueError(f"invalid payload entry path: {info.filename}")
+            key = rel.casefold()
+            if key in seen:
+                raise ValueError(f"duplicate payload entry: {rel}")
+            seen.add(key)
+            content = zf.read(info)
+            if len(content) != info.file_size:
+                raise ValueError(f"payload entry size mismatch: {rel}")
+            entries.append({"path": rel, "size": len(content),
+                            "sha256": sha256_bytes(content)})
+    return entries
+
+
 def build_wizard_zip(
-    wizard_src: Path, dest_zip: Path, ver: dict[str, str], payload_sha: str,
+    wizard_src: Path, dest_zip: Path, ver: dict[str, str], payload_bytes: bytes,
 ) -> None:
-    """打 ZIP-W：全部向导文件 + wizard_manifest.json，一律 STORED。"""
+    """打 ZIP-W：向导、ZIP-P 摘要及构建期完整文件清单，一律 STORED。"""
     files = sorted(p for p in wizard_src.rglob("*") if p.is_file())
     manifest = {
         "product": "AuraDSP",
         "version": ver["AURADSP_VERSION"],
         "fullVersion": ver["AURADSP_FULL_VERSION"],
-        "payloadSha256": payload_sha,
+        "payloadSha256": sha256_bytes(payload_bytes),
+        "payloadFiles": payload_file_manifest(payload_bytes),
         "files": {f.relative_to(wizard_src).as_posix(): sha256_file(f)
                   for f in files},
     }
@@ -101,6 +130,11 @@ def verify(path: Path) -> bool:
         payload = fh.read(len_p)
     digest = sha256_bytes(payload)
     check("payload sha256", digest.encode() == sha.hex().encode(), f"({digest[:12]}…)")
+    try:
+        payload_files = payload_file_manifest(payload)
+    except Exception as exc:  # noqa: BLE001
+        check("payload file manifest", False, f"({exc})")
+        payload_files = None
 
     for label, off, ln in (("wizard", off_w, len_w), ("payload", off_p, len_p)):
         with path.open("rb") as fh:
@@ -113,6 +147,13 @@ def verify(path: Path) -> bool:
             if label == "wizard":
                 man = json.loads(zf.read("wizard_manifest.json"))
                 check("manifest payloadSha256", man.get("payloadSha256") == digest)
+                expected_files = sorted(payload_files or [],
+                                        key=lambda entry: str(entry["path"]).casefold())
+                actual_files = sorted(man.get("payloadFiles", []),
+                                      key=lambda entry: str(entry["path"]).casefold())
+                check("manifest payloadFiles",
+                      payload_files is not None and actual_files == expected_files,
+                      f"({len(actual_files)} entries)")
         except Exception as exc:  # noqa: BLE001
             check(f"{label} zip", False, f"({exc})")
     return ok

@@ -59,12 +59,20 @@ class InstallOptions {
 }
 
 class ManifestFile {
-  const ManifestFile({required this.path, required this.size, required this.sha256});
+  const ManifestFile({
+    required this.path,
+    required this.size,
+    required this.sha256,
+  });
   final String path; // 相对安装目录，正斜杠
   final int size;
   final String sha256;
 
-  Map<String, dynamic> toJson() => {'path': path, 'size': size, 'sha256': sha256};
+  Map<String, dynamic> toJson() => {
+        'path': path,
+        'size': size,
+        'sha256': sha256,
+      };
   factory ManifestFile.fromJson(Map<String, dynamic> j) => ManifestFile(
         path: j['path'] as String,
         size: j['size'] as int,
@@ -95,8 +103,10 @@ class InstallManifest {
   final List<ManifestFile> files;
   final List<String> shortcuts; // .lnk 绝对路径
   final String installedAtIso;
+
   /// 升级前的版本（全新安装为 null），用于完成页展示与升级台账。
   final String? previousFullVersion;
+
   /// fresh / upgrade / repair
   final String updateMode;
 
@@ -140,22 +150,38 @@ class InstallManifest {
 
 /// 向导运行时自带清单（pack.py 写入 ZIP-W 根，向导启动时读）。
 class WizardManifest {
-  const WizardManifest({required this.version, required this.fullVersion, required this.payloadSha256});
+  const WizardManifest({
+    required this.version,
+    required this.fullVersion,
+    required this.payloadSha256,
+    required this.payloadFiles,
+  });
   final String version;
   final String fullVersion;
   final String payloadSha256;
+  final List<ManifestFile> payloadFiles;
 
-  factory WizardManifest.fromJson(Map<String, dynamic> j) => WizardManifest(
-        version: j['version'] as String? ?? '0.0.0',
-        fullVersion: j['fullVersion'] as String? ?? '',
-        payloadSha256: j['payloadSha256'] as String? ?? '',
-      );
+  factory WizardManifest.fromJson(Map<String, dynamic> j) {
+    final payloadFiles = j['payloadFiles'];
+    if (payloadFiles is! List) {
+      throw const FormatException('missing trusted payloadFiles');
+    }
+    return WizardManifest(
+      version: j['version'] as String? ?? '0.0.0',
+      fullVersion: j['fullVersion'] as String? ?? '',
+      payloadSha256: j['payloadSha256'] as String? ?? '',
+      payloadFiles: payloadFiles
+          .map((e) => ManifestFile.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
 }
 
 /// 安装/卸载进度事件（引擎 → Progress 页）。
 class ProgressEvent {
   const ProgressEvent(this.step, this.detail, [this.fraction]);
-  final String step; // guard/extract/asio/driver/shortcuts/registry/uninstaller/cleanup
+  final String
+      step; // guard/extract/asio/driver/shortcuts/registry/uninstaller/cleanup
   final String detail;
   final double? fraction; // 0..1（该步内或全局，由引擎保持单调）
 }
@@ -189,8 +215,9 @@ class FileErrorPrompt {
   final bool critical;
 }
 
-typedef FileErrorHandler =
-    Future<FileErrorDecision> Function(FileErrorPrompt prompt);
+typedef FileErrorHandler = Future<FileErrorDecision> Function(
+  FileErrorPrompt prompt,
+);
 
 /// 用户在失败弹窗选择「取消」：终止安装并走既有回滚。
 class InstallCancelled implements Exception {
@@ -211,8 +238,10 @@ class EngineResult {
   final bool ok;
   final String? error;
   final List<String> warnings;
+
   /// 卸载时明确保留的用户数据位置（完成页展示，避免「以为数据没了」）。
   final List<String> keptPaths;
+
   /// 被占用、需等向导进程退出后由隐藏清理脚本删除的文件（绝对路径）。
   final List<String> leftoverPaths;
 }

@@ -8,16 +8,32 @@ import 'package:auradsp_setup/src/engine/models.dart';
 import 'package:auradsp_setup/src/engine/payload.dart';
 import 'package:auradsp_setup/src/engine/update_policy.dart';
 import 'package:auradsp_setup/src/engine/win32.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+List<ManifestFile> trustedPayload(Iterable<MapEntry<String, String>> entries) =>
+    entries
+        .map(
+          (entry) => ManifestFile(
+            path: entry.key.substring('payload/'.length),
+            size: entry.value.codeUnits.length,
+            sha256: sha256.convert(entry.value.codeUnits).toString(),
+          ),
+        )
+        .toList();
 
 void main() {
   group('SetupArgs.parse', () {
     test('引导壳标准参数', () {
       final a = SetupArgs.parse([
-        '--setup-exe', r'C:\dl\AuraDSP-Setup-x64-v0.1.0.exe',
-        '--payload-off', '123456',
-        '--payload-len', '7890',
-        '--session-dir', r'C:\Temp\AuraDSP-Setup\ab12-34',
+        '--setup-exe',
+        r'C:\dl\AuraDSP-Setup-x64-v0.1.0.exe',
+        '--payload-off',
+        '123456',
+        '--payload-len',
+        '7890',
+        '--session-dir',
+        r'C:\Temp\AuraDSP-Setup\ab12-34',
       ]);
       expect(a.mode, SetupMode.install);
       expect(a.hasPayload, isTrue);
@@ -42,12 +58,18 @@ void main() {
 
   group('normalizeInstallDir（末段自动补 AuraDSP）', () {
     test('普通目录自动补、已有尾段保持不变', () {
-      expect(normalizeInstallDir(r'D:\Games', r'C:\AuraDSP'),
-          r'D:\Games\AuraDSP');
-      expect(normalizeInstallDir(r'D:\Apps\AuraDSP', r'C:\AuraDSP'),
-          r'D:\Apps\AuraDSP');
-      expect(normalizeInstallDir(r'D:\Apps\auradsp', r'C:\AuraDSP'),
-          r'D:\Apps\auradsp');
+      expect(
+        normalizeInstallDir(r'D:\Games', r'C:\AuraDSP'),
+        r'D:\Games\AuraDSP',
+      );
+      expect(
+        normalizeInstallDir(r'D:\Apps\AuraDSP', r'C:\AuraDSP'),
+        r'D:\Apps\AuraDSP',
+      );
+      expect(
+        normalizeInstallDir(r'D:\Apps\auradsp', r'C:\AuraDSP'),
+        r'D:\Apps\auradsp',
+      );
     });
 
     test('空串 / 盘符根 / 尾部斜杠 / 正斜杠 / UNC', () {
@@ -55,12 +77,18 @@ void main() {
       expect(normalizeInstallDir('   ', ''), r'C:\AuraDSP');
       expect(normalizeInstallDir('D:', r'C:\AuraDSP'), r'D:\AuraDSP');
       expect(normalizeInstallDir('D:\\', r'C:\AuraDSP'), r'D:\AuraDSP');
-      expect(normalizeInstallDir(r'D:\Games\\\', r'C:\AuraDSP'),
-          r'D:\Games\AuraDSP');
-      expect(normalizeInstallDir('D:/Games/AuraDSP/', r'C:\AuraDSP'),
-          r'D:\Games\AuraDSP');
-      expect(normalizeInstallDir(r'\\server\share', r'C:\AuraDSP'),
-          r'\\server\share\AuraDSP');
+      expect(
+        normalizeInstallDir(r'D:\Games\\\', r'C:\AuraDSP'),
+        r'D:\Games\AuraDSP',
+      );
+      expect(
+        normalizeInstallDir('D:/Games/AuraDSP/', r'C:\AuraDSP'),
+        r'D:\Games\AuraDSP',
+      );
+      expect(
+        normalizeInstallDir(r'\\server\share', r'C:\AuraDSP'),
+        r'\\server\share\AuraDSP',
+      );
     });
   });
 
@@ -75,9 +103,10 @@ void main() {
 
     test('全新安装用用户目录并补尾段', () {
       final p = planUpdate(
-          newFullVersion: '0.2.0.1',
-          requestedDir: r'D:\Games',
-          defaultDir: r'C:\AuraDSP');
+        newFullVersion: '0.2.0.1',
+        requestedDir: r'D:\Games',
+        defaultDir: r'C:\AuraDSP',
+      );
       expect(p.mode, UpdateMode.fresh);
       expect(p.installDir, r'D:\Games\AuraDSP');
       expect(p.isOverwrite, isFalse);
@@ -89,7 +118,9 @@ void main() {
         requestedDir: r'Z:\Elsewhere',
         defaultDir: r'C:\AuraDSP',
         installed: InstalledInfo(
-            fullVersion: '0.1.0.1', installDir: r'C:\Program Files\AuraDSP'),
+          fullVersion: '0.1.0.1',
+          installDir: r'C:\Program Files\AuraDSP',
+        ),
       );
       expect(p.mode, UpdateMode.upgrade);
       expect(p.installDir, r'C:\Program Files\AuraDSP');
@@ -99,19 +130,25 @@ void main() {
 
     test('同版本 = 修复，低版本 = 拦截', () {
       final repair = planUpdate(
-          newFullVersion: '0.1.0.1',
-          requestedDir: r'C:\AuraDSP',
-          defaultDir: r'C:\AuraDSP',
-          installed: const InstalledInfo(
-              fullVersion: '0.1.0.1', installDir: r'C:\Apps\AuraDSP'));
+        newFullVersion: '0.1.0.1',
+        requestedDir: r'C:\AuraDSP',
+        defaultDir: r'C:\AuraDSP',
+        installed: const InstalledInfo(
+          fullVersion: '0.1.0.1',
+          installDir: r'C:\Apps\AuraDSP',
+        ),
+      );
       expect(repair.mode, UpdateMode.repair);
       expect(repair.isOverwrite, isTrue);
       final down = planUpdate(
-          newFullVersion: '0.1.0.1',
-          requestedDir: r'C:\AuraDSP',
-          defaultDir: r'C:\AuraDSP',
-          installed: const InstalledInfo(
-              fullVersion: '0.9.0.1', installDir: r'C:\Apps\AuraDSP'));
+        newFullVersion: '0.1.0.1',
+        requestedDir: r'C:\AuraDSP',
+        defaultDir: r'C:\AuraDSP',
+        installed: const InstalledInfo(
+          fullVersion: '0.9.0.1',
+          installDir: r'C:\Apps\AuraDSP',
+        ),
+      );
       expect(down.mode, UpdateMode.downgradeBlocked);
       expect(down.isBlocked, isTrue);
     });
@@ -141,8 +178,12 @@ void main() {
     });
 
     test('键不存在时为空表', () {
-      expect(parseRegQuery('ERROR: The system was unable to find the specified registry key.'),
-          isEmpty);
+      expect(
+        parseRegQuery(
+          'ERROR: The system was unable to find the specified registry key.',
+        ),
+        isEmpty,
+      );
     });
   });
 
@@ -189,9 +230,10 @@ void main() {
       expect(back.updateMode, 'upgrade');
       // 旧版清单没有新字段：按 fresh / null 兜底，不抛异常。
       final legacy = InstallManifest.decode(
-          '{"version":"0.1.0","fullVersion":"0.1.0.1",'
-          '"installDir":"C:\\\\Apps\\\\AuraDSP","allUsers":false,'
-          '"components":["app"],"files":[],"shortcuts":[],"installedAt":"x"}');
+        '{"version":"0.1.0","fullVersion":"0.1.0.1",'
+        '"installDir":"C:\\\\Apps\\\\AuraDSP","allUsers":false,'
+        '"components":["app"],"files":[],"shortcuts":[],"installedAt":"x"}',
+      );
       expect(legacy.updateMode, 'fresh');
       expect(legacy.previousFullVersion, isNull);
     });
@@ -207,8 +249,10 @@ void main() {
       expect(v['DisplayName'], 'AuraDSP');
       expect(v['DisplayVersion'], '0.1.0');
       expect(v['UninstallString'], r'"C:\Program Files\AuraDSP\uninstall.exe"');
-      expect(v['QuietUninstallString'],
-          r'"C:\Program Files\AuraDSP\uninstall.exe" /silent');
+      expect(
+        v['QuietUninstallString'],
+        r'"C:\Program Files\AuraDSP\uninstall.exe" /silent',
+      );
       expect(v['URLInfoAbout'], 'https://github.com/li589/AuraDSP');
       expect(v['NoModify'], 1);
       expect(v['EstimatedSize'], 145000);
@@ -219,8 +263,11 @@ void main() {
     test('driver/ 恒保留；DDC 仍按勾选门控', () {
       final f = componentFilter(ddcPresets: false);
       expect(f('auradsp_app.exe'), isTrue);
-      expect(f('driver/AuraVaioDriver.sys'), isTrue,
-          reason: '不勾选 VAIO 也必须保留驱动与手动安装脚本');
+      expect(
+        f('driver/AuraVaioDriver.sys'),
+        isTrue,
+        reason: '不勾选 VAIO 也必须保留驱动与手动安装脚本',
+      );
       expect(f('driver/install_vaio.ps1'), isTrue);
       expect(f('resources/ddc/a.vdc'), isFalse);
       expect(f('resources/liveprog/a.eel'), isTrue);
@@ -232,7 +279,11 @@ void main() {
 
   group('InstallOptions', () {
     test('JSON 往返（提权重启动协议）', () {
-      final o = InstallOptions(installDir: r'D:\Apps\AuraDSP', allUsers: true, vaio: false);
+      final o = InstallOptions(
+        installDir: r'D:\Apps\AuraDSP',
+        allUsers: true,
+        vaio: false,
+      );
       final back = InstallOptions.fromJson(o.toJson());
       expect(back.installDir, r'D:\Apps\AuraDSP');
       expect(back.allUsers, isTrue);
@@ -242,16 +293,18 @@ void main() {
 
     test('升级沿用旧目录与旧组件选择', () {
       final o = InstallOptions(installDir: r'D:\Temp');
-      o.applyFrom(InstallManifest(
-        version: '0.1.0',
-        fullVersion: '0.1.0.1',
-        installDir: r'C:\Program Files\AuraDSP',
-        allUsers: true,
-        components: const ['app', 'asio'],
-        files: const [],
-        shortcuts: const [],
-        installedAtIso: 'x',
-      ));
+      o.applyFrom(
+        InstallManifest(
+          version: '0.1.0',
+          fullVersion: '0.1.0.1',
+          installDir: r'C:\Program Files\AuraDSP',
+          allUsers: true,
+          components: const ['app', 'asio'],
+          files: const [],
+          shortcuts: const [],
+          installedAtIso: 'x',
+        ),
+      );
       expect(o.installDir, r'C:\Program Files\AuraDSP');
       expect(o.allUsers, isTrue);
       expect(o.asio, isTrue);
@@ -267,21 +320,35 @@ void main() {
         'resources/ddc/a.vdc',
         'driver/AuraVaioDriver.sys',
       };
-      expect(classifyUninstallPath('auradsp_app.exe', program, true),
-          UninstallAction.deleteProgram);
-      expect(classifyUninstallPath('resources/ddc/a.vdc', program, true),
-          UninstallAction.deleteProgram);
-      expect(classifyUninstallPath('resources/ddc/my_own.vdc', program, true),
-          UninstallAction.keepUserData);
-      expect(classifyUninstallPath('resources/ddc/my_own.vdc', program, false),
-          UninstallAction.deleteAllUserData);
+      expect(
+        classifyUninstallPath('auradsp_app.exe', program, true),
+        UninstallAction.deleteProgram,
+      );
+      expect(
+        classifyUninstallPath('resources/ddc/a.vdc', program, true),
+        UninstallAction.deleteProgram,
+      );
+      expect(
+        classifyUninstallPath('resources/ddc/my_own.vdc', program, true),
+        UninstallAction.keepUserData,
+      );
+      expect(
+        classifyUninstallPath('resources/ddc/my_own.vdc', program, false),
+        UninstallAction.deleteAllUserData,
+      );
       // 卸载器与清单自身必须总是删除，否则下次安装会误判「已安装」。
-      expect(classifyUninstallPath('install_manifest.json', program, true),
-          UninstallAction.deleteProgram);
-      expect(classifyUninstallPath('uninstall.exe', program, true),
-          UninstallAction.deleteProgram);
-      expect(classifyUninstallPath(r'resources\ddc\my.vdc', program, true),
-          UninstallAction.keepUserData);
+      expect(
+        classifyUninstallPath('install_manifest.json', program, true),
+        UninstallAction.deleteProgram,
+      );
+      expect(
+        classifyUninstallPath('uninstall.exe', program, true),
+        UninstallAction.deleteProgram,
+      );
+      expect(
+        classifyUninstallPath(r'resources\ddc\my.vdc', program, true),
+        UninstallAction.keepUserData,
+      );
     });
 
     test('升级遗留 = 旧清单有、新清单没有，且非用户数据/生成物', () {
@@ -314,15 +381,21 @@ void main() {
 
   group('提权协议参数（UAC 后自动继续）', () {
     test('auto-start / auto-uninstall / keep-data 解析', () {
-      final a = SetupArgs.parse(
-          ['--resume-options', 'x', '--elevated', '--auto-start']);
+      final a = SetupArgs.parse([
+        '--resume-options',
+        'x',
+        '--elevated',
+        '--auto-start',
+      ]);
       expect(a.autoStart, isTrue);
       expect(a.autoUninstall, isFalse);
       expect(a.keepData, isNull);
 
       final b = SetupArgs.parse([
-        '--auto-uninstall', '--keep-data',
-        '--setup-exe', r'C:\Program Files\AuraDSP\uninstall.exe'
+        '--auto-uninstall',
+        '--keep-data',
+        '--setup-exe',
+        r'C:\Program Files\AuraDSP\uninstall.exe',
       ]);
       expect(b.mode, SetupMode.uninstall);
       expect(b.autoUninstall, isTrue);
@@ -349,8 +422,11 @@ void main() {
       expect(s, contains("O''Brien"));
       expect(s, contains('Remove-Item -LiteralPath'));
       expect(s, contains(r'$PSCommandPath'));
-      expect(s.contains('-WindowStyle Hidden'), isFalse,
-          reason: '窗口隐藏由启动参数负责，脚本内不重复');
+      expect(
+        s.contains('-WindowStyle Hidden'),
+        isFalse,
+        reason: '窗口隐藏由启动参数负责，脚本内不重复',
+      );
       // PowerShell 数组字面量不允许尾随逗号，曾导致「',' 后缺少表达式」。
       final targetLine =
           s.split('\n').firstWhere((l) => l.startsWith(r'$targets = @'));
@@ -391,13 +467,15 @@ void main() {
       };
       final owned = ownedProcessPids(paths, r'C:\Program Files\AuraDSP');
       expect(owned, <int>{100, 101, 102});
-      expect(ownedProcessPids(paths, ''), isEmpty,
-          reason: '没有安装目录时宁可不杀');
+      expect(ownedProcessPids(paths, ''), isEmpty, reason: '没有安装目录时宁可不杀');
     });
 
     test('大小写与斜杠归一', () {
       final owned = ownedProcessPids(<int, String>{
-        300: 'c:/program files/auradsp/PLUGIN_HOST_X64.EXE'.replaceAll('/', r'\'),
+        300: 'c:/program files/auradsp/PLUGIN_HOST_X64.EXE'.replaceAll(
+          '/',
+          r'\',
+        ),
       }, r'C:\Program Files\AuraDSP\');
       expect(owned, <int>{300});
     });
@@ -428,11 +506,22 @@ void main() {
           'payload/../AuraDSP2/evil.txt': 'evil',
         });
         await expectLater(
-          extractPayload(zip.path, dest.path, include: (_) => true),
+          extractPayload(
+            zip.path,
+            dest.path,
+            include: (_) => true,
+            trustedFiles: trustedPayload(const [
+              MapEntry('payload/ok.txt', 'fine'),
+              MapEntry('payload/../AuraDSP2/evil.txt', 'evil'),
+            ]),
+          ),
           throwsStateError,
         );
-        expect(File('${tmp.path}/AuraDSP2/evil.txt').existsSync(), isFalse,
-            reason: '越界条目不得落到同前缀兄弟目录');
+        expect(
+          File('${tmp.path}/AuraDSP2/evil.txt').existsSync(),
+          isFalse,
+          reason: '越界条目不得落到同前缀兄弟目录',
+        );
       } finally {
         await tmp.delete(recursive: true);
       }
@@ -440,17 +529,19 @@ void main() {
 
     test('isLockError 只认 32/33 占用码', () {
       expect(
-          isLockError(const FileSystemException(
-              'm', 'p', OSError('sharing', 32))),
-          isTrue);
+        isLockError(
+          const FileSystemException('m', 'p', OSError('sharing', 32)),
+        ),
+        isTrue,
+      );
       expect(
-          isLockError(
-              const FileSystemException('m', 'p', OSError('lock', 33))),
-          isTrue);
+        isLockError(const FileSystemException('m', 'p', OSError('lock', 33))),
+        isTrue,
+      );
       expect(
-          isLockError(const FileSystemException(
-              'm', 'p', OSError('denied', 5))),
-          isFalse);
+        isLockError(const FileSystemException('m', 'p', OSError('denied', 5))),
+        isFalse,
+      );
       expect(isLockError(StateError('x')), isFalse);
     });
 
@@ -481,8 +572,7 @@ void main() {
           writeAttempt: () async {
             attempts++;
             if (attempts <= 3) {
-              throw const FileSystemException(
-                  'm', 'p', OSError('sharing', 32));
+              throw const FileSystemException('m', 'p', OSError('sharing', 32));
             }
             // 让位后的写：模拟真实落盘
             await target.writeAsString('NEW');
@@ -490,8 +580,7 @@ void main() {
         );
         expect(attempts, 4, reason: '3 次重试 + 让位后 1 次');
         expect(aside, isNotNull);
-        expect(File(aside!).readAsStringSync(), 'OLD',
-            reason: '旧文件被改名保留，未被覆盖');
+        expect(File(aside!).readAsStringSync(), 'OLD', reason: '旧文件被改名保留，未被覆盖');
         expect(target.readAsStringSync(), 'NEW');
       } finally {
         await tmp.delete(recursive: true);
@@ -508,8 +597,8 @@ void main() {
             entry,
             target,
             sleep: (_) async {},
-            writeAttempt: () async => throw const FileSystemException(
-                'm', 'p', OSError('denied', 5)),
+            writeAttempt: () async =>
+                throw const FileSystemException('m', 'p', OSError('denied', 5)),
           ),
           throwsA(isA<FileSystemException>()),
         );
@@ -527,10 +616,19 @@ void main() {
           'payload/app.exe': 'bin',
           'payload/resources/x.txt': 'res',
         });
-        final written =
-            await extractPayload(zip.path, dest.path, include: (_) => true);
-        expect(written.map((f) => f.path),
-            containsAll(<String>['app.exe', 'resources/x.txt']));
+        final written = await extractPayload(
+          zip.path,
+          dest.path,
+          include: (_) => true,
+          trustedFiles: trustedPayload(const [
+            MapEntry('payload/app.exe', 'bin'),
+            MapEntry('payload/resources/x.txt', 'res'),
+          ]),
+        );
+        expect(
+          written.map((f) => f.path),
+          containsAll(<String>['app.exe', 'resources/x.txt']),
+        );
         expect(File('${dest.path}/app.exe').existsSync(), isTrue);
         expect(File('${dest.path}/resources/x.txt').existsSync(), isTrue);
       } finally {
@@ -551,10 +649,11 @@ void main() {
 
     test('writabilityFailureMessage：未提权拒绝访问给提权/改目录指引', () {
       final m = writabilityFailureMessage(
-          dir: r'C:\Program Files\AuraDSP',
-          errorCode: 5,
-          rawError: 'denied-raw',
-          elevated: false);
+        dir: r'C:\Program Files\AuraDSP',
+        errorCode: 5,
+        rawError: 'denied-raw',
+        elevated: false,
+      );
       expect(m, contains('管理员'));
       expect(m, contains('改选'));
       expect(m, contains('denied-raw'));
@@ -562,19 +661,21 @@ void main() {
 
     test('writabilityFailureMessage：已提权拒绝访问指引查权限', () {
       final m = writabilityFailureMessage(
-          dir: r'D:\Apps\AuraDSP',
-          errorCode: 5,
-          rawError: 'denied-raw',
-          elevated: true);
+        dir: r'D:\Apps\AuraDSP',
+        errorCode: 5,
+        rawError: 'denied-raw',
+        elevated: true,
+      );
       expect(m, contains('安全软件'));
     });
 
     test('writabilityFailureMessage：其它错误通用文案带原文', () {
       final m = writabilityFailureMessage(
-          dir: r'D:\Apps\AuraDSP',
-          errorCode: 112,
-          rawError: 'disk-full-raw',
-          elevated: false);
+        dir: r'D:\Apps\AuraDSP',
+        errorCode: 112,
+        rawError: 'disk-full-raw',
+        elevated: false,
+      );
       expect(m, contains(r'D:\Apps\AuraDSP'));
       expect(m, contains('disk-full-raw'));
     });
@@ -593,15 +694,18 @@ void main() {
         shortcuts: const [],
         installedAtIso: '2026-01-01T00:00:00',
       );
-      expect(staleUpgradePaths(prev, const [], alsoPresent: {'a.dll'}),
-          {'b.dll'});
+      expect(staleUpgradePaths(prev, const [], alsoPresent: {'a.dll'}), {
+        'b.dll',
+      });
       expect(staleUpgradePaths(prev, const []), {'a.dll', 'b.dll'});
     });
   });
 
   group('extractPayload 失败决策（重试/跳过/取消，S3\'）', () {
     Future<File> writeZip(
-        Directory dir, List<MapEntry<String, String>> entries) async {
+      Directory dir,
+      List<MapEntry<String, String>> entries,
+    ) async {
       final archive = Archive();
       for (final e in entries) {
         archive.addFile(ArchiveFile(e.key, e.value.length, e.value.codeUnits));
@@ -631,14 +735,14 @@ void main() {
           zip.path,
           dest.path,
           include: (_) => true,
+          trustedFiles: trustedPayload(fixture('resources')),
           skippedSink: skipped,
           onFileError: (pr) async {
             prompts.add(pr);
             return FileErrorDecision.skip;
           },
         );
-        expect(written.map((f) => f.path),
-            ['resources/blob.bin', 'ok.txt']);
+        expect(written.map((f) => f.path), ['resources/blob.bin', 'ok.txt']);
         expect(skipped, ['resources/blob.bin/inner.dat']);
         expect(prompts, hasLength(1));
         expect(prompts.single.critical, isFalse);
@@ -659,6 +763,7 @@ void main() {
           zip.path,
           dest.path,
           include: (_) => true,
+          trustedFiles: trustedPayload(fixture('driver')),
           onFileError: (pr) async {
             prompts.add(pr);
             return FileErrorDecision.skip;
@@ -681,6 +786,7 @@ void main() {
           zip.path,
           dest.path,
           include: (_) => true,
+          trustedFiles: trustedPayload(fixture('resources')),
           skippedSink: skipped,
           onFileError: (pr) async {
             calls++;
@@ -706,6 +812,7 @@ void main() {
             zip.path,
             dest.path,
             include: (_) => true,
+            trustedFiles: trustedPayload(fixture('resources')),
             onFileError: (pr) async => FileErrorDecision.cancel,
           ),
           throwsA(isA<InstallCancelled>()),
@@ -721,7 +828,12 @@ void main() {
         final dest = Directory('${tmp.path}/AuraDSP');
         final zip = await writeZip(tmp, fixture('resources'));
         await expectLater(
-          extractPayload(zip.path, dest.path, include: (_) => true),
+          extractPayload(
+            zip.path,
+            dest.path,
+            include: (_) => true,
+            trustedFiles: trustedPayload(fixture('resources')),
+          ),
           throwsA(isA<FileSystemException>()),
         );
       } finally {

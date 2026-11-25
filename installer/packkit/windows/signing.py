@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -136,6 +137,28 @@ def check_driver_payload_signed(dest: Path, *, warn_only: bool) -> None:
         log(f"驱动签名门通过: {cat.name} 签名者 {signer_thumb[:8]}…")
 
 
+def resolve_signer_thumbprint(args) -> str:
+    """解析构建期发布者 pin；PFX 与显式 thumbprint 使用同一真相源。"""
+    thumb = (getattr(args, "cert_thumbprint", "")
+             or os.environ.get("AURADSP_CERT_THUMBPRINT", ""))
+    pfx = os.environ.get("AURADSP_SIGN_PFX", "")
+    if not thumb and pfx and os.name == "nt":
+        ps_path = pfx.replace("'", "''")
+        ps_pass = os.environ.get("AURADSP_SIGN_PASS", "").replace("'", "''")
+        r = _run_ps(
+            "$c = [System.Security.Cryptography.X509Certificates."
+            f"X509Certificate2]::new('{ps_path}', '{ps_pass}'); "
+            "Write-Output $c.Thumbprint; $c.Dispose()")
+        out = (r.stdout or "").strip()
+        if r.returncode != 0 or not out:
+            raise RuntimeError(f"无法从 PFX 读取发布者指纹: {pfx}")
+        thumb = out.splitlines()[0].strip()
+    thumb = thumb.replace(" ", "")
+    if thumb and not re.fullmatch(r"[0-9a-fA-F]{40}", thumb):
+        raise die("发布者证书 thumbprint 必须是 40 位 SHA-1 十六进制")
+    return thumb.upper()
+
+
 def sign_file(args, path: Path) -> None:
     """可选产物签名：证书未配置时跳过（不阻断打包）。"""
     if not args.sign:
@@ -143,7 +166,9 @@ def sign_file(args, path: Path) -> None:
     if os.name != "nt":
         log(f"sign: 非 Windows 平台跳过 {path.name}（钩子仅在 Windows 生效）")
         return
-    thumb = args.cert_thumbprint or os.environ.get("AURADSP_CERT_THUMBPRINT", "")
+    thumb = resolve_signer_thumbprint(args)
+    explicit_thumb = (getattr(args, "cert_thumbprint", "")
+                      or os.environ.get("AURADSP_CERT_THUMBPRINT", ""))
     pfx = os.environ.get("AURADSP_SIGN_PFX", "")
     if not thumb and not pfx:
         log(f"sign: 未配置证书（--cert-thumbprint 或 AURADSP_SIGN_PFX），"
@@ -151,7 +176,7 @@ def sign_file(args, path: Path) -> None:
         return
     cmd = [args.signtool, "sign", "/fd", "SHA256", "/tr",
            "http://timestamp.digicert.com", "/td", "SHA256"]
-    if thumb:
+    if explicit_thumb:
         cmd += ["/sha1", thumb]
     else:
         cmd += ["/f", pfx, "/p", os.environ.get("AURADSP_SIGN_PASS", "")]

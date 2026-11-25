@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from ..common import die, log
+from .signing import resolve_signer_thumbprint
 from ..paths import (
     BOOTSTRAPPER_SRC,
     BUILD_DIR,
@@ -33,8 +34,12 @@ def build_installer_artifacts(args) -> Path:
     boot_build = BUILD_DIR / "installer" / "bootstrapper"
 
     log("构建引导壳（cmake）…")
-    subprocess.run(["cmake", "-S", str(BOOTSTRAPPER_SRC), "-B", str(boot_build),
-                    "-A", "x64"], check=True)
+    configure = ["cmake", "-S", str(BOOTSTRAPPER_SRC), "-B", str(boot_build),
+                 "-A", "x64"]
+    publisher_thumb = resolve_signer_thumbprint(args)
+    if publisher_thumb:
+        configure.append(f"-DAURADSP_PUBLISHER_THUMBPRINT={publisher_thumb}")
+    subprocess.run(configure, check=True)
     subprocess.run(["cmake", "--build", str(boot_build), "--config", "Release"],
                    check=True)
     shell = boot_build / "Release" / "bootstrapper.exe"

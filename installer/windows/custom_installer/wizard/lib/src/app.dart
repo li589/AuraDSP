@@ -254,28 +254,25 @@ class _SetupShellState extends State<SetupShell> {
     required bool autoUninstall,
   }) async {
     final session = widget.args.sessionDir ?? Directory.systemTemp.path;
+    final setupExe = widget.args.setupExe;
+    final payloadSha256 = widget.args.payloadSha256;
+    if (setupExe == null ||
+        payloadSha256 == null ||
+        !RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(payloadSha256)) {
+      throw StateError('missing trusted setup path or payload SHA256');
+    }
     final stateFile = File(p.join(session, 'resume_options.json'));
     await stateFile.writeAsString(jsonEncode(_options.toJson()));
-    final params =
-        StringBuffer('--resume-options "${stateFile.path}" --elevated');
+    // 只提权原 Setup：临时目录中的向导与旧 session 都不能成为
+    // 提权后的执行/状态来源。原摘要由 elevated bootstrapper 重新计算复核。
+    final params = StringBuffer(
+        '--elevated-resume "$session" --payload-sha256 "$payloadSha256"');
     if (autoStart) params.write(' --auto-start');
     if (autoUninstall) {
       params.write(' --auto-uninstall --mode uninstall');
       params.write(_keepData ? ' --keep-data' : ' --no-keep-data');
     }
-    if (widget.args.setupExe != null) {
-      params.write(' --setup-exe "${widget.args.setupExe}"');
-    }
-    if (widget.args.payloadOff != null) {
-      params.write(' --payload-off ${widget.args.payloadOff}');
-    }
-    if (widget.args.payloadLen != null) {
-      params.write(' --payload-len ${widget.args.payloadLen}');
-    }
-    if (widget.args.sessionDir != null) {
-      params.write(' --session-dir "${widget.args.sessionDir}"');
-    }
-    return relaunchElevated(Platform.resolvedExecutable, params.toString());
+    return relaunchElevated(setupExe, params.toString());
   }
 
   /// ShellExecute 是同步 FFI：先把「等待授权」层渲染出来再调用，

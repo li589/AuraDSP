@@ -30,12 +30,181 @@ bool isElevated() {
       return false;
     }
     final ok = GetTokenInformation(
-        token.value, _tokenElevation, elevation, 4, len);
+      token.value,
+      _tokenElevation,
+      elevation,
+      4,
+      len,
+    );
     return ok != 0 && elevation.value != 0;
   } finally {
     calloc.free(token);
     calloc.free(elevation);
     calloc.free(len);
+  }
+}
+
+/// 由 bootstrapper 创建的保护目录在句柄上的真实安全属性。
+/// 测试夹具可构造不同的 SDDL/reparse/finalPath，生产只由下面的
+/// [inspectProtectedDirectory] 返回 Win32 查询结果。
+class ProtectedDirectoryAttributes {
+  const ProtectedDirectoryAttributes({
+    required this.finalPath,
+    required this.securityDescriptor,
+    this.isDirectory = true,
+    this.isReparsePoint = false,
+  });
+
+  final String finalPath;
+  final String securityDescriptor;
+  final bool isDirectory;
+  final bool isReparsePoint;
+}
+
+typedef ProtectedDirectoryInspector = ProtectedDirectoryAttributes Function(
+  String path,
+);
+
+bool hasProtectedDirectorySecurity(ProtectedDirectoryAttributes value) {
+  const system = 'O:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)';
+  const administrators = 'O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)';
+  return value.isDirectory &&
+      !value.isReparsePoint &&
+      (value.securityDescriptor == system ||
+          value.securityDescriptor == administrators);
+}
+
+final _kernel32 = DynamicLibrary.open('kernel32.dll');
+final _advapi32 = DynamicLibrary.open('advapi32.dll');
+final _getFileInformationByHandleEx = _kernel32.lookupFunction<
+    Int32 Function(IntPtr, Int32, Pointer<Void>, Uint32),
+    int Function(int, int, Pointer<Void>, int)>('GetFileInformationByHandleEx');
+final _getSecurityInfo = _advapi32.lookupFunction<
+    Uint32 Function(
+      IntPtr,
+      Uint32,
+      Uint32,
+      Pointer<Pointer<Void>>,
+      Pointer<Pointer<Void>>,
+      Pointer<Pointer<Void>>,
+      Pointer<Pointer<Void>>,
+      Pointer<Pointer<Void>>,
+    ),
+    int Function(
+      int,
+      int,
+      int,
+      Pointer<Pointer<Void>>,
+      Pointer<Pointer<Void>>,
+      Pointer<Pointer<Void>>,
+      Pointer<Pointer<Void>>,
+      Pointer<Pointer<Void>>,
+    )>('GetSecurityInfo');
+final _securityDescriptorToSddl = _advapi32.lookupFunction<
+    Int32 Function(
+      Pointer<Void>,
+      Uint32,
+      Uint32,
+      Pointer<Pointer<Utf16>>,
+      Pointer<Uint32>,
+    ),
+    int Function(
+      Pointer<Void>,
+      int,
+      int,
+      Pointer<Pointer<Utf16>>,
+      Pointer<Uint32>,
+    )>('ConvertSecurityDescriptorToStringSecurityDescriptorW');
+
+/// 以 OPEN_REPARSE_POINT 打开最终目录，并在同一句柄上读取属性、owner/DACL
+/// 与最终 DOS 路径。任何查询失败都抛出，调用方必须失败关闭。
+ProtectedDirectoryAttributes inspectProtectedDirectory(String path) {
+  const readControl = 0x00020000;
+  const fileReadAttributes = 0x00000080;
+  const fileAttributeTagInfo = 9;
+  const ownerSecurityInformation = 0x00000001;
+  const daclSecurityInformation = 0x00000004;
+  final nativePath = path.toNativeUtf16();
+  final tag = calloc<Uint32>(2);
+  final sd = calloc<Pointer<Void>>();
+  final sddl = calloc<Pointer<Utf16>>();
+  final finalBuffer = calloc<Uint16>(32768);
+  var handle = INVALID_HANDLE_VALUE;
+  try {
+    handle = CreateFile(
+      nativePath,
+      readControl | fileReadAttributes,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+      nullptr,
+      OPEN_EXISTING,
+      FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+      0,
+    );
+    if (handle == INVALID_HANDLE_VALUE) {
+      throw StateError('cannot open protected directory: $path');
+    }
+    if (_getFileInformationByHandleEx(
+          handle,
+          fileAttributeTagInfo,
+          tag.cast(),
+          8,
+        ) ==
+        0) {
+      throw StateError('cannot inspect protected directory attributes');
+    }
+    final attributes = tag[0];
+    if (_getSecurityInfo(
+          handle,
+          1, // SE_FILE_OBJECT
+          ownerSecurityInformation | daclSecurityInformation,
+          nullptr,
+          nullptr,
+          nullptr,
+          nullptr,
+          sd,
+        ) !=
+        0) {
+      throw StateError('cannot inspect protected directory security');
+    }
+    if (_securityDescriptorToSddl(
+          sd.value,
+          1, // SDDL_REVISION_1
+          ownerSecurityInformation | daclSecurityInformation,
+          sddl,
+          nullptr,
+        ) ==
+        0) {
+      throw StateError('cannot decode protected directory security');
+    }
+    final length = GetFinalPathNameByHandle(
+      handle,
+      finalBuffer.cast(),
+      32768,
+      0,
+    );
+    if (length == 0 || length >= 32768) {
+      throw StateError('cannot resolve protected directory final path');
+    }
+    var finalPath = finalBuffer.cast<Utf16>().toDartString(length: length);
+    if (!finalPath.startsWith(r'\\?\')) {
+      throw StateError('unsupported protected directory final path');
+    }
+    finalPath = finalPath.substring(4);
+    return ProtectedDirectoryAttributes(
+      finalPath: finalPath,
+      securityDescriptor: sddl.value.toDartString(),
+      isDirectory: attributes & FILE_ATTRIBUTE_DIRECTORY != 0,
+      isReparsePoint: attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0,
+    );
+  } finally {
+    if (sddl.value != nullptr) LocalFree(sddl.value.cast());
+    if (sd.value != nullptr) LocalFree(sd.value);
+    if (handle != INVALID_HANDLE_VALUE) CloseHandle(handle);
+    calloc.free(finalBuffer);
+    calloc.free(sddl);
+    calloc.free(sd);
+    calloc.free(tag);
+    calloc.free(nativePath);
   }
 }
 
@@ -61,16 +230,21 @@ bool registryDeleteValue(int hive, String subKey, String valueName) {
 
 /// 在 hive 下创建/打开键并写入一组值（字符串与 DWORD 混合）。
 /// 返回是否全部成功。
-bool registryWriteValues(
-  int hive,
-  String subKey,
-  Map<String, Object> values,
-) {
+bool registryWriteValues(int hive, String subKey, Map<String, Object> values) {
   final keyPtr = calloc<IntPtr>();
   final sub = subKey.toNativeUtf16();
   try {
-    final rc = RegCreateKeyEx(hive, sub, 0, nullptr, 0, _keyWrite, nullptr,
-        keyPtr, nullptr);
+    final rc = RegCreateKeyEx(
+      hive,
+      sub,
+      0,
+      nullptr,
+      0,
+      _keyWrite,
+      nullptr,
+      keyPtr,
+      nullptr,
+    );
     if (rc != 0) return false;
     final hKey = keyPtr.value;
     var ok = true;
@@ -79,14 +253,26 @@ bool registryWriteValues(
       try {
         if (value is String) {
           final data = value.toNativeUtf16();
-          final rc2 = RegSetValueEx(hKey, namePtr, 0, _regSz,
-              data.cast<Uint8>(), (value.length + 1) * 2);
+          final rc2 = RegSetValueEx(
+            hKey,
+            namePtr,
+            0,
+            _regSz,
+            data.cast<Uint8>(),
+            (value.length + 1) * 2,
+          );
           calloc.free(data);
           ok = ok && rc2 == 0;
         } else if (value is int) {
           final data = calloc<Uint32>()..value = value;
           final rc2 = RegSetValueEx(
-              hKey, namePtr, 0, _regDword, data.cast<Uint8>(), 4);
+            hKey,
+            namePtr,
+            0,
+            _regDword,
+            data.cast<Uint8>(),
+            4,
+          );
           calloc.free(data);
           ok = ok && rc2 == 0;
         }
@@ -142,7 +328,14 @@ bool relaunchElevated(String exe, String parameters) {
   final file = exe.toNativeUtf16();
   final params = parameters.toNativeUtf16();
   try {
-    final rc = ShellExecute(0, op, file, params, nullptr, 1 /* SW_SHOWNORMAL */);
+    final rc = ShellExecute(
+      0,
+      op,
+      file,
+      params,
+      nullptr,
+      1 /* SW_SHOWNORMAL */,
+    );
     return rc > 32;
   } finally {
     calloc.free(op);
@@ -218,12 +411,16 @@ Future<List<int>> guardedPids({required String? installDir}) async {
       'Where-Object { \$names -contains \$_.Name } |\n'
       '  ForEach-Object { "\$(\$_.ProcessId)|\$(\$_.ExecutablePath)" }';
   try {
-    final r = await Process.run(
-        'powershell.exe', ['-NoProfile', '-Command', script]);
+    final r = await Process.run('powershell.exe', [
+      '-NoProfile',
+      '-Command',
+      script,
+    ]);
     if (r.exitCode != 0) return <int>[];
     return ownedProcessPids(
-            parseProcessPaths(r.stdout.toString()), installDir)
-        .toList();
+      parseProcessPaths(r.stdout.toString()),
+      installDir,
+    ).toList();
   } catch (_) {
     // 查询失败宁可不杀：绝不退化成按进程名全杀。
     return <int>[];
@@ -256,8 +453,9 @@ Future<void> closeGuardedProcesses({required String? installDir}) async {
 Map<String, String> parseRegQuery(String output) {
   final result = <String, String>{};
   final re = RegExp(
-      r'^\s*(\S+)\s+REG_(?:SZ|EXPAND_SZ|DWORD|QWORD)\s+(.+?)\s*$',
-      multiLine: true);
+    r'^\s*(\S+)\s+REG_(?:SZ|EXPAND_SZ|DWORD|QWORD)\s+(.+?)\s*$',
+    multiLine: true,
+  );
   for (final m in re.allMatches(output)) {
     result[m.group(1)!] = m.group(2)!.trim();
   }

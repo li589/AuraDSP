@@ -20,6 +20,14 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <bcrypt.h>
+#include <wincrypt.h>
+#include <wintrust.h>
+#include <softpub.h>
+#include <shlobj.h>
+#include <sddl.h>
+#include <aclapi.h>
+
+#include <trusted_publisher.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -104,6 +112,279 @@ bool Sha256Range(HANDLE h, std::uint64_t off, std::uint64_t len,
     if (hash) BCryptDestroyHash(hash);
     if (alg) BCryptCloseAlgorithmProvider(alg, 0);
     return ok;
+}
+
+int HexValue(wchar_t c) {
+    if (c >= L'0' && c <= L'9') return c - L'0';
+    if (c >= L'a' && c <= L'f') return c - L'a' + 10;
+    if (c >= L'A' && c <= L'F') return c - L'A' + 10;
+    return -1;
+}
+
+bool ParseSha256(const std::wstring& text, std::uint8_t out[32]) {
+    if (text.size() != 64) return false;
+    for (int i = 0; i < 32; ++i) {
+        int hi = HexValue(text[2 * i]), lo = HexValue(text[2 * i + 1]);
+        if (hi < 0 || lo < 0) return false;
+        out[i] = (std::uint8_t)((hi << 4) | lo);
+    }
+    return true;
+}
+
+std::wstring Sha256Hex(const std::uint8_t sha[32]) {
+    static const wchar_t* kHex = L"0123456789abcdef";
+    std::wstring out(64, L'0');
+    for (int i = 0; i < 32; ++i) {
+        out[2 * i] = kHex[sha[i] >> 4];
+        out[2 * i + 1] = kHex[sha[i] & 15];
+    }
+    return out;
+}
+
+struct ElevationArgs {
+    bool resume = false;
+    bool externalSession = false;
+    std::wstring resumeSession;
+    std::wstring expectedSha;
+    std::wstring forwarded;
+};
+
+// Parse only the elevated-resume channel. The normal path retains its legacy
+// forwarding behavior; the elevated path forwards a small allowlist and never
+// trusts caller-supplied setup/session/payload locations.
+bool ParseElevationArgs(ElevationArgs* out) {
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) return false;
+    for (int i = 1; i < argc; ++i) {
+        std::wstring a = argv[i];
+        auto value = [&](std::wstring* dst) {
+            if (i + 1 >= argc) return false;
+            *dst = argv[++i];
+            return true;
+        };
+        if (a == L"--elevated-resume") {
+            out->resume = true;
+            value(&out->resumeSession);
+        } else if (a == L"--payload-sha256") {
+            value(&out->expectedSha);
+        } else if (a == L"--protected-session" || a == L"--session-dir") {
+            out->externalSession = true;
+            if (i + 1 < argc) ++i;
+        } else if (a == L"--auto-start" || a == L"--auto-uninstall" ||
+                   a == L"--keep-data" || a == L"--no-keep-data" ||
+                   a == L"--silent" || a == L"/silent" || a == L"/S" ||
+                   a == L"--uninstall") {
+            out->forwarded += L" " + a;
+        } else if (a == L"--mode" && i + 1 < argc &&
+                   std::wstring(argv[i + 1]) == L"uninstall") {
+            out->forwarded += L" --mode uninstall";
+            ++i;
+        }
+    }
+    LocalFree(argv);
+    return !out->resume || !out->resumeSession.empty();
+}
+
+bool IsProcessElevated() {
+#ifdef AURADSP_SETUP_TEST_HARNESS
+    return true;
+#else
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
+    TOKEN_ELEVATION elevation{};
+    DWORD size = 0;
+    bool ok = GetTokenInformation(token, TokenElevation, &elevation,
+                                  sizeof(elevation), &size) &&
+              elevation.TokenIsElevated != 0;
+    CloseHandle(token);
+    return ok;
+#endif
+}
+
+bool VerifyTrustedPublisher(const std::wstring& path, HANDLE file) {
+#ifdef AURADSP_SETUP_UNSIGNED_TEST_ONLY
+    (void)path;
+    (void)file;
+    return true;
+#else
+    WINTRUST_FILE_INFO fileInfo{};
+    fileInfo.cbStruct = sizeof(fileInfo);
+    fileInfo.pcwszFilePath = path.c_str();
+    fileInfo.hFile = file;
+    WINTRUST_DATA trust{};
+    trust.cbStruct = sizeof(trust);
+    trust.dwUIChoice = WTD_UI_NONE;
+    trust.fdwRevocationChecks = WTD_REVOKE_NONE;
+    trust.dwUnionChoice = WTD_CHOICE_FILE;
+    trust.pFile = &fileInfo;
+    trust.dwStateAction = WTD_STATEACTION_VERIFY;
+    trust.dwProvFlags = WTD_REVOCATION_CHECK_NONE;
+    GUID policy = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    LONG status = WinVerifyTrust(nullptr, &policy, &trust);
+    trust.dwStateAction = WTD_STATEACTION_CLOSE;
+    WinVerifyTrust(nullptr, &policy, &trust);
+    if (status != ERROR_SUCCESS) return false;
+
+    HCERTSTORE store = nullptr;
+    HCRYPTMSG message = nullptr;
+    bool ok = CryptQueryObject(CERT_QUERY_OBJECT_FILE, path.c_str(),
+        CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED, CERT_QUERY_FORMAT_FLAG_BINARY,
+        0, nullptr, nullptr, nullptr, &store, &message, nullptr) != 0;
+    PCCERT_CONTEXT signer = nullptr;
+    DWORD signerCount = 0;
+    DWORD signerCountSize = sizeof(signerCount);
+    std::vector<std::uint8_t> certIdBytes;
+    if (ok && (!CryptMsgGetParam(message, CMSG_SIGNER_COUNT_PARAM, 0,
+                                 &signerCount, &signerCountSize) ||
+               signerCount != 1)) {
+        ok = false;
+    }
+    if (ok) {
+        DWORD certIdSize = 0;
+        if (!CryptMsgGetParam(message, CMSG_SIGNER_CERT_ID_PARAM, 0,
+                              nullptr, &certIdSize)) {
+            ok = false;
+        } else {
+            certIdBytes.resize(certIdSize);
+            if (!CryptMsgGetParam(message, CMSG_SIGNER_CERT_ID_PARAM, 0,
+                                  certIdBytes.data(), &certIdSize)) {
+                ok = false;
+            } else {
+                signer = CertFindCertificateInStore(store,
+                    X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, 0,
+                    CERT_FIND_CERT_ID, certIdBytes.data(), nullptr);
+            }
+        }
+    }
+    std::uint8_t thumb[20];
+    DWORD thumbLen = sizeof(thumb);
+    if (signer && !CryptHashCertificate(0, CALG_SHA1, 0,
+            signer->pbCertEncoded, signer->cbCertEncoded, thumb, &thumbLen))
+        ok = false;
+    if (ok && signer) {
+        std::uint8_t expected[20];
+        std::wstring pin = AURADSP_TRUSTED_PUBLISHER_THUMBPRINT;
+        if (pin.size() != 40) {
+            ok = false;
+        } else {
+            for (int i = 0; i < 20; ++i) {
+                int hi = HexValue(pin[2 * i]), lo = HexValue(pin[2 * i + 1]);
+                if (hi < 0 || lo < 0) {
+                    ok = false;
+                    break;
+                }
+                expected[i] = (std::uint8_t)((hi << 4) | lo);
+            }
+            if (ok && memcmp(thumb, expected, 20) != 0) ok = false;
+        }
+    } else {
+        ok = false;
+    }
+    if (signer) CertFreeCertificateContext(signer);
+    if (message) CryptMsgClose(message);
+    if (store) CertCloseStore(store, 0);
+    return ok;
+#endif
+}
+
+bool EnsureDir(const std::wstring& path);
+bool NormalizePath(const std::wstring& in, std::wstring* out);
+
+// Inspect the final object behind a directory handle, not just its path. The
+// SDDL comparison intentionally accepts exactly the owner/DACL emitted below:
+// no inheritance, no extra interactive-user ACE, and no reparse redirection.
+bool ValidateProtectedDirectory(const std::wstring& path, std::wstring* finalPath) {
+    HANDLE dir = CreateFileW(path.c_str(), READ_CONTROL | FILE_READ_ATTRIBUTES,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+        OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+        nullptr);
+    if (dir == INVALID_HANDLE_VALUE) return false;
+    bool ok = false;
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    LPWSTR sddl = nullptr;
+    do {
+        FILE_ATTRIBUTE_TAG_INFO tag{};
+        if (!GetFileInformationByHandleEx(dir, FileAttributeTagInfo, &tag,
+                                          sizeof(tag)) ||
+            !(tag.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+            (tag.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+            break;
+        if (GetSecurityInfo(dir, SE_FILE_OBJECT,
+                OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                nullptr, nullptr, nullptr, nullptr, &sd) != ERROR_SUCCESS)
+            break;
+        if (!ConvertSecurityDescriptorToStringSecurityDescriptorW(sd,
+                SDDL_REVISION_1,
+                OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                &sddl, nullptr))
+            break;
+        const wchar_t* kSystem =
+            L"O:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
+        const wchar_t* kAdmins =
+            L"O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
+        if (wcscmp(sddl, kSystem) != 0 && wcscmp(sddl, kAdmins) != 0)
+            break;
+        std::wstring final(32768, L'\0');
+        DWORD len = GetFinalPathNameByHandleW(dir, final.data(),
+                                               (DWORD)final.size(), 0);
+        if (len == 0 || len >= final.size()) break;
+        final.resize(len);
+        if (final.compare(0, 4, L"\\\\?\\") != 0) break;
+        final.erase(0, 4);
+        std::wstring normalized;
+        if (!NormalizePath(path, &normalized) ||
+            _wcsicmp(final.c_str(), normalized.c_str()) != 0)
+            break;
+        if (finalPath) *finalPath = final;
+        ok = true;
+    } while (false);
+    if (sddl) LocalFree(sddl);
+    if (sd) LocalFree(sd);
+    CloseHandle(dir);
+    return ok;
+}
+
+bool ApplyProtectedDacl(const std::wstring& path) {
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            L"D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)", SDDL_REVISION_1,
+            &sd, nullptr))
+        return false;
+    PACL dacl = nullptr;
+    BOOL present = FALSE, defaulted = FALSE;
+    bool ok = GetSecurityDescriptorDacl(sd, &present, &dacl, &defaulted) &&
+              present && dacl &&
+              SetNamedSecurityInfoW((LPWSTR)path.c_str(), SE_FILE_OBJECT,
+                  DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                  nullptr, nullptr, dacl, nullptr) == ERROR_SUCCESS;
+    LocalFree(sd);
+    return ok;
+}
+
+bool CreateProtectedSession(const std::wstring& tag, std::wstring* out) {
+    wchar_t programData[MAX_PATH];
+    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_COMMON_APPDATA, nullptr, 0,
+                                programData)))
+        return false;
+    std::wstring base = std::wstring(programData) + L"\\AuraDSP-Setup-Protected";
+    if (CreateDirectoryW(base.c_str(), nullptr)) {
+        if (!ApplyProtectedDacl(base)) return false;
+    } else {
+        if (GetLastError() != ERROR_ALREADY_EXISTS) return false;
+        // Never repair and then reuse an attacker-supplied root: its existing
+        // owner, DACL, final path and reparse state must already be trusted.
+    }
+    if (!ValidateProtectedDirectory(base, nullptr)) return false;
+    std::wstring session = base + L"\\" + tag + L"-" +
+                           std::to_wstring(GetCurrentProcessId());
+    if (!CreateDirectoryW(session.c_str(), nullptr) ||
+        !ApplyProtectedDacl(session))
+        return false;
+    std::wstring finalSession;
+    if (!ValidateProtectedDirectory(session, &finalSession)) return false;
+    *out = finalSession;
+    return true;
 }
 
 bool EnsureDir(const std::wstring& path) {
@@ -291,6 +572,36 @@ bool IEquals(const std::wstring& a, const wchar_t* b) {
     return _wcsicmp(a.c_str(), b) == 0;
 }
 
+// Copy the already verified Setup through its original read-only handle. The
+// destination is a new fixed-name file inside the protected session; never
+// reopen the replaceable source path for this handoff.
+bool CopySetupImage(HANDLE source, std::uint64_t size,
+                    const std::wstring& dest) {
+    HANDLE out = CreateFileW(dest.c_str(), GENERIC_WRITE, 0, nullptr,
+                             CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (out == INVALID_HANDLE_VALUE) return false;
+    std::vector<std::uint8_t> chunk(1 << 20);
+    std::uint64_t done = 0;
+    bool ok = true;
+    while (done < size) {
+        DWORD want = (DWORD)std::min<std::uint64_t>(size - done, chunk.size());
+        if (!ReadExact(source, done, chunk.data(), want)) {
+            ok = false;
+            break;
+        }
+        DWORD written = 0;
+        if (!WriteFile(out, chunk.data(), want, &written, nullptr) ||
+            written != want) {
+            ok = false;
+            break;
+        }
+        done += written;
+    }
+    CloseHandle(out);
+    if (!ok) DeleteFileW(dest.c_str());
+    return ok;
+}
+
 }  // namespace
 
 int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
@@ -299,12 +610,39 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
         return Fail(L"Cannot resolve the setup executable path.");
     std::wstring self(selfPath);
 
+    ElevationArgs elevation;
+    if (!ParseElevationArgs(&elevation))
+        return Fail(L"Invalid elevated setup resume arguments.");
+    std::uint8_t expectedSha[32];
+    HANDLE file = INVALID_HANDLE_VALUE;
+    if (elevation.resume) {
+        if (elevation.externalSession)
+            return Fail(L"Elevated setup does not accept external session paths.");
+        if (!IsProcessElevated())
+            return Fail(L"Elevated setup resume requires an elevated process.");
+        if (!ParseSha256(elevation.expectedSha, expectedSha))
+            return Fail(L"Missing or invalid trusted payload SHA256.");
+        // Open before verification and deny write/delete sharing until footer,
+        // payload and ZIP-W have all been consumed. Path-based CMSG inspection
+        // is then pinned to this same non-replaceable filesystem object.
+        file = CreateFileW(self.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                           nullptr, OPEN_EXISTING, 0, nullptr);
+        if (file == INVALID_HANDLE_VALUE)
+            return Fail(L"Cannot open the setup executable.");
+        if (!VerifyTrustedPublisher(self, file)) {
+            CloseHandle(file);
+            return Fail(L"Setup Authenticode or publisher verification failed.");
+        }
+    }
+
     // Fast single-instance pre-check: the wizard holds this mutex
     // for its whole lifetime (see the wizard runner). Advisory
     // only -- two shells can both pass before either wizard starts,
     // so the wizard re-checks authoritatively. Skips the expensive
-    // payload hash + extraction when an instance is already up.
-    {
+    // payload hash + extraction when an instance is already up. Elevated
+    // resume skips this pre-check: the wizard's authoritative --resume-options
+    // path waits for the unelevated owner to exit and release the mutex.
+    if (!elevation.resume) {
         HANDLE existing =
             OpenMutexW(SYNCHRONIZE, FALSE, L"AuraDSP-Setup-Instance");
         if (existing) {
@@ -326,10 +664,12 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
         }
     }
 
-    HANDLE file = CreateFileW(self.c_str(), GENERIC_READ, FILE_SHARE_READ,
-                              nullptr, OPEN_EXISTING, 0, nullptr);
-    if (file == INVALID_HANDLE_VALUE)
-        return Fail(L"Cannot open the setup executable.");
+    if (file == INVALID_HANDLE_VALUE) {
+        file = CreateFileW(self.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                           nullptr, OPEN_EXISTING, 0, nullptr);
+        if (file == INVALID_HANDLE_VALUE)
+            return Fail(L"Cannot open the setup executable.");
+    }
     LARGE_INTEGER sizeLi;
     if (!GetFileSizeEx(file, &sizeLi) || sizeLi.QuadPart < (LONGLONG)kFooterSize) {
         CloseHandle(file);
@@ -358,7 +698,8 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
     // 1) Verify product payload integrity before running anything.
     std::uint8_t gotSha[32];
     if (!Sha256Range(file, offP, lenP, gotSha) ||
-        memcmp(gotSha, wantSha, 32) != 0) {
+        memcmp(gotSha, wantSha, 32) != 0 ||
+        (elevation.resume && memcmp(gotSha, expectedSha, 32) != 0)) {
         CloseHandle(file);
         return Fail(L"Payload integrity check failed (SHA256 mismatch).\n"
                     L"Please re-download the installer.");
@@ -377,34 +718,57 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
         CloseHandle(file);
         return Fail(L"Cannot read the wizard segment.");
     }
-    CloseHandle(file);
 
-    wchar_t tempRoot[MAX_PATH];
-    if (!GetTempPathW((DWORD)std::size(tempRoot), tempRoot))
-        return Fail(L"Cannot resolve the temp directory.");
-    std::wstring base = std::wstring(tempRoot) + L"AuraDSP-Setup";
-    EnsureDir(base);
-    // Best-effort sweep of stale session dirs from earlier runs.
-    {
-        WIN32_FIND_DATAW fd;
-        HANDLE h = FindFirstFileW((base + L"\\*").c_str(), &fd);
-        if (h != INVALID_HANDLE_VALUE) {
-            do {
-                if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-                    std::wstring name = fd.cFileName;
-                    if (name != L"." && name != L"..")
-                        DeleteTreeBestEffort(base + L"\\" + name);
-                }
-            } while (FindNextFileW(h, &fd));
-            FindClose(h);
+    std::wstring session;
+    if (elevation.resume) {
+        if (!CreateProtectedSession(std::wstring(shaTag, shaTag + 8), &session)) {
+            CloseHandle(file);
+            return Fail(L"Cannot create the protected elevated session.");
         }
+    } else {
+        CloseHandle(file);
+        file = INVALID_HANDLE_VALUE;
+        wchar_t tempRoot[MAX_PATH];
+        if (!GetTempPathW((DWORD)std::size(tempRoot), tempRoot))
+            return Fail(L"Cannot resolve the temp directory.");
+        std::wstring base = std::wstring(tempRoot) + L"AuraDSP-Setup";
+        EnsureDir(base);
+        // Best-effort sweep of stale session dirs from earlier runs.
+        {
+            WIN32_FIND_DATAW fd;
+            HANDLE h = FindFirstFileW((base + L"\\*").c_str(), &fd);
+            if (h != INVALID_HANDLE_VALUE) {
+                do {
+                    if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                        std::wstring name = fd.cFileName;
+                        if (name != L"." && name != L"..")
+                            DeleteTreeBestEffort(base + L"\\" + name);
+                    }
+                } while (FindNextFileW(h, &fd));
+                FindClose(h);
+            }
+        }
+        session = base + L"\\" + std::wstring(shaTag, shaTag + 8) + L"-" +
+                  std::to_wstring(GetCurrentProcessId());
+        if (!EnsureDir(session))
+            return Fail(L"Cannot create the temp extraction directory.");
     }
-    std::wstring session =
-        base + L"\\" + std::wstring(shaTag, shaTag + 8) + L"-" +
-        std::to_wstring(GetCurrentProcessId());
+    std::wstring setupImage = self;
+    if (elevation.resume) {
+        setupImage = session + L"\\setup-image.exe";
+        if (!CopySetupImage(file, fileSize, setupImage)) {
+            CloseHandle(file);
+            DeleteTreeBestEffort(session);
+            return Fail(L"Cannot protect the complete setup image.");
+        }
+        CloseHandle(file);
+        file = INVALID_HANDLE_VALUE;
+    }
     std::wstring wizardDir = session + L"\\wizard";
-    if (!EnsureDir(session) || !EnsureDir(wizardDir))
-        return Fail(L"Cannot create the temp extraction directory.");
+    if (!EnsureDir(wizardDir)) {
+        DeleteTreeBestEffort(session);
+        return Fail(L"Cannot create the wizard extraction directory.");
+    }
     if (!ExtractStoredZip(zipW.data(), zipW.size(), wizardDir)) {
         DeleteTreeBestEffort(session);
         return Fail(L"Failed to extract the wizard runtime.");
@@ -415,18 +779,44 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
         return Fail(L"Wizard executable is missing from the package.");
     }
 
-    // 3) Launch the wizard with forwarded + appended arguments.
-    std::wstring tail = CommandLineTail(GetCommandLineW());
+    // 3) Launch the wizard. Elevated resume uses only allowlisted UI state;
+    // all executable, payload and session locations are rebuilt locally.
+    std::wstring tail = elevation.resume ? elevation.forwarded
+                                         : CommandLineTail(GetCommandLineW());
     std::wstring cmd = L"\"" + wizardExe + L"\"";
     if (!tail.empty()) cmd += L" " + tail;
     bool uninstall = IEquals(BaseName(self), L"uninstall.exe") ||
                      tail.find(L"--uninstall") != std::wstring::npos;
     if (uninstall && tail.find(L"--mode") == std::wstring::npos)
         cmd += L" --mode uninstall";
-    cmd += L" --setup-exe \"" + self + L"\" --payload-off ";
+    if (elevation.resume && uninstall) {
+        size_t slash = self.find_last_of(L"\\/");
+        std::wstring oldManifest =
+            self.substr(0, slash == std::wstring::npos ? 0 : slash + 1) +
+            L"install_manifest.json";
+        std::wstring newManifest = session + L"\\install_manifest.json";
+        if (!CopyFileW(oldManifest.c_str(), newManifest.c_str(), FALSE)) {
+            DeleteTreeBestEffort(session);
+            return Fail(L"Cannot protect the elevated uninstall manifest.");
+        }
+    }
+    if (elevation.resume) {
+        std::wstring oldState = elevation.resumeSession + L"\\resume_options.json";
+        std::wstring newState = session + L"\\resume_options.json";
+        if (GetFileAttributesW(oldState.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            if (!CopyFileW(oldState.c_str(), newState.c_str(), FALSE)) {
+                DeleteTreeBestEffort(session);
+                return Fail(L"Cannot protect the elevated resume state.");
+            }
+            cmd += L" --resume-options \"" + newState + L"\"";
+        }
+        cmd += L" --elevated --protected-session \"" + session + L"\"";
+    }
+    cmd += L" --setup-exe \"" + setupImage + L"\" --payload-off ";
     cmd += std::to_wstring(offP);
     cmd += L" --payload-len ";
     cmd += std::to_wstring(lenP);
+    cmd += L" --payload-sha256 \"" + Sha256Hex(gotSha) + L"\"";
     cmd += L" --session-dir \"" + session + L"\"";
 
     std::vector<wchar_t> cmdBuf(cmd.begin(), cmd.end());
