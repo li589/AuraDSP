@@ -32,11 +32,17 @@
 // 对象所有者本人，不恢复 Everyone 面。
 #define AURA_APO_SHARED_SDDL L"D:(A;;GA;;;LS)(A;;GA;;;IU)(A;;GA;;;OW)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)"
 
+// 插件块不再信任同用户写入：生产 App/OWNER RIGHTS 只读，LocalService
+// 保留创建与读取所需全权。参数块与 telemetry 块继续使用上面的协议
+// SDDL；只有显式受控测试宿主可用旧写权限预建 fixture 块。
+#define AURA_APO_PLUGINS_SDDL L"D:(A;;GA;;;LS)(A;;GR;;;IU)(A;;GR;;;OW)(A;;GR;;;S-1-15-2-1)(A;;GR;;;S-1-15-2-2)"
+
 // Win7 退路口径：AppContainer 机构（S-1-15-2-*）为 Win8+ 概念
 // （微软 WELL_KNOWN_SID_TYPE 文档标 Win7 不可用；含该 ACE 的
 // SDDL 在 Win7 上的解析成败文档未载）。转换失败时退回本口径
 // ——LS/IU 两条在 Win7 语义完整，功能不受影响。
 #define AURA_APO_SHARED_SDDL_FALLBACK L"D:(A;;GA;;;LS)(A;;GA;;;IU)(A;;GA;;;OW)"
+#define AURA_APO_PLUGINS_SDDL_FALLBACK L"D:(A;;GA;;;LS)(A;;GR;;;IU)(A;;GR;;;OW)"
 
 // ---- 参数块（App → APO） ----
 // 写协议（seqlock）：写者先令 writeSeq 为奇数（写入中），写完全部

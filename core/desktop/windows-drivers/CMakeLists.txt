@@ -219,7 +219,11 @@ set_target_properties(apo_probe_crash PROPERTIES
     OUTPUT_NAME "probe_crash" SUFFIX ".clap" PREFIX ""
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
-target_link_libraries(apo_engine_test PRIVATE ole32 audiomediatypecrt)
+target_link_libraries(apo_engine_test PRIVATE ole32 audiomediatypecrt advapi32)
+# The executable is test-only too: it drives both the production DLL and the
+# explicitly trusted fixture DLL. Production AuraApo never receives this macro.
+target_compile_definitions(apo_engine_test PRIVATE
+    AURADSP_APO_PLUGIN_TRUSTED_TEST_ONLY=1)
 target_compile_options(apo_engine_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET apo_engine_test PROPERTY CXX_STANDARD 20)
 set_property(TARGET apo_engine_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
@@ -272,6 +276,32 @@ set_property(TARGET AuraApo PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
 target_link_libraries(AuraApo PRIVATE
     audiobaseprocessingobject ole32 advapi32 uuid version audioeng
     audiomediatypecrt legacy_stdio_definitions delayimp)
+
+# Test-only host for the controlled gain/crash fixtures. Keeping this as a
+# separate DLL is load-bearing: apo_engine_test.exe does not compile
+# ApoEngineHost.cpp, so defining the macro on the executable alone would leave
+# the production DLL unchanged and could not test the trusted loading path.
+add_library(AuraApoTrustedTest SHARED EXCLUDE_FROM_ALL
+    "${APO}/AuraApo.cpp"
+    "${APO}/ApoEngineHost.cpp"
+    "${APO}/ApoClassFactory.cpp"
+    "${APO}/AuraApoMain.cpp"
+    "${APO}/AuraApo.def"
+)
+target_compile_definitions(AuraApoTrustedTest PRIVATE
+    AURADSP_APO_PLUGIN_TRUSTED_TEST_ONLY=1)
+target_include_directories(AuraApoTrustedTest PRIVATE "${APO}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
+target_compile_options(AuraApoTrustedTest PRIVATE /utf-8 /W1 /EHsc /guard:cf)
+target_link_options(AuraApoTrustedTest PRIVATE /guard:cf
+    "/DELAYLOAD:advapi32.dll")
+set_property(TARGET AuraApoTrustedTest PROPERTY CXX_STANDARD 20)
+set_property(TARGET AuraApoTrustedTest PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+target_link_libraries(AuraApoTrustedTest PRIVATE
+    audiobaseprocessingobject ole32 advapi32 uuid version audioeng
+    audiomediatypecrt legacy_stdio_definitions delayimp)
+add_dependencies(apo_engine_test
+    AuraApoTrustedTest apo_probe_gain apo_probe_crash)
 
 
 add_executable(classfact_probe

@@ -2252,12 +2252,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 // 插件文件先异步中转再开始影子加载——复制全程落在
                 // 槽位忙态（加载动画）窗口内，且不冻结事件循环。
                 // 中转失败 = 本次加载失败（fail-closed，与宿主围栏
-                // 同口径）：按普通加载失败的事件形状收口，镜像保
-                // 持空，绝不下发原始路径。
+                // 同口径）：沿用插件槽位终态事件并携带明确原因，镜像
+                // 保持空，绝不下发原始路径。
                 if (apoPluginPublisher.active) {
-                  final t =
+                  final transit =
                       await apoPluginPublisher.preparePluginTransit(path);
-                  if (t == null) {
+                  if (transit.path == null) {
                     pluginMirror[slot] = PluginSlotCfg();
                     slotLoadInFlight.remove(slot);
                     send({
@@ -2272,6 +2272,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                       'rc': 0,
                       'status':
                           AuraDspLib.pluginSlotGetStatusJson(l, h, slot),
+                      'errorMessage': transit.errorMessage,
                       'stage': 3,
                       'busy': false,
                     });

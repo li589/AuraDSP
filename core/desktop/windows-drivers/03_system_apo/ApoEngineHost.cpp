@@ -77,14 +77,22 @@ bool IsUnderTransitRoot(const std::string& utf8Path) {
            p.compare(0, rootNorm.size(), rootNorm) == 0;
 }
 
-HANDLE CreateSharedMapping(const wchar_t* name, DWORD bytes) {
+HANDLE CreateSharedMapping(const wchar_t* name, DWORD bytes, bool pluginBlock) {
+    const wchar_t* primary = AURA_APO_SHARED_SDDL;
+    const wchar_t* fallback = AURA_APO_SHARED_SDDL_FALLBACK;
+    if (pluginBlock) {
+#ifndef AURADSP_APO_PLUGIN_TRUSTED_TEST_ONLY
+        primary = AURA_APO_PLUGINS_SDDL;
+        fallback = AURA_APO_PLUGINS_SDDL_FALLBACK;
+#endif
+    }
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            AURA_APO_SHARED_SDDL, SDDL_REVISION_1, &sd, nullptr) &&
+            primary, SDDL_REVISION_1, &sd, nullptr) &&
         // Win7 退路（见 ApoShared.h 的 FALLBACK 注）：含
         // AppContainer ACE 的 SDDL 若解析失败，退回 LS/IU 口径。
         !ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            AURA_APO_SHARED_SDDL_FALLBACK, SDDL_REVISION_1, &sd, nullptr))
+            fallback, SDDL_REVISION_1, &sd, nullptr))
         return nullptr;
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof(sa);
@@ -122,7 +130,7 @@ bool ApoEngineHost::OpenTelemetry() {
         AuraApoTelemetryNameFor(endpointHash_, nameBuf, 80);
         name = nameBuf;
     }
-    hTeleMap_ = CreateSharedMapping(name, APO_TELEMETRY_BYTES);
+    hTeleMap_ = CreateSharedMapping(name, APO_TELEMETRY_BYTES, false);
     if (!hTeleMap_) return false;
     void* v = MapViewOfFile(hTeleMap_, FILE_MAP_ALL_ACCESS, 0, 0, APO_TELEMETRY_BYTES);
     if (!v) {
@@ -350,7 +358,8 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels,
     // 持句柄保活：标准用户的 App 进程无 SeCreateGlobalPrivilege
     // 建不了 Global 对象，只能 Open 既有块（发布者口径）。块建
     // 不出时引擎照常跑（参数保持默认，applied 恒 0 可见）。
-    hParamMap_ = CreateSharedMapping(AuraApoParamsName(), APO_BLOCK_MAPPING_BYTES);
+    hParamMap_ = CreateSharedMapping(AuraApoParamsName(), APO_BLOCK_MAPPING_BYTES,
+                                     false);
     if (hParamMap_) {
         const void* v = MapViewOfFile(hParamMap_, FILE_MAP_READ, 0, 0,
                                       APO_BLOCK_MAPPING_BYTES);
@@ -364,7 +373,8 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels,
 
     // 插件块（Part I Q2）：与参数块同一创建口径（本进程创建、
     // 持句柄保活）；建不出时通道禁用，引擎照常跑。
-    hPluginMap_ = CreateSharedMapping(AuraApoPluginsName(), APO_PLUGIN_BLOCK_BYTES);
+    hPluginMap_ = CreateSharedMapping(AuraApoPluginsName(), APO_PLUGIN_BLOCK_BYTES,
+                                      true);
     if (hPluginMap_) {
         const void* v = MapViewOfFile(hPluginMap_, FILE_MAP_READ, 0, 0,
                                       APO_PLUGIN_BLOCK_BYTES);
@@ -918,6 +928,15 @@ void ApoEngineHost::ApplyPlugins() {
                 ap.loadGen = want.loadGen;
                 ap.stateGen = want.stateGen;
             } else {
+#ifndef AURADSP_APO_PLUGIN_TRUSTED_TEST_ONLY
+                // C2 fail-closed boundary: production never loads a DLL from
+                // this user-influenced channel. Keep this before every path
+                // check and fnSlotLoad_ call; restoring the capability needs
+                // an authenticated proxy/out-of-process design.
+                ap.loaded = false;
+                ap.loadGen = want.loadGen;
+                ap.stateGen = want.stateGen;
+#else
                 char path[APO_PLUGIN_PATH_BYTES + 1];
                 uint32_t pn = (uint32_t)strnlen(
                     (const char*)(base + APO_PLUGIN_SLOT_HEADER_BYTES),
@@ -974,6 +993,7 @@ void ApoEngineHost::ApplyPlugins() {
                     // 成功后补应用。
                     ap.loaded = false;
                 }
+#endif
             }
             ap.seen = true;
         } else if (ap.loaded) {

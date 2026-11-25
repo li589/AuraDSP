@@ -18,6 +18,7 @@
 
 #include <audioenginebaseapo.h>
 #include <audiomediatype.h>
+#include <sddl.h>
 #include <ks.h>
 #include <ksmedia.h>
 #include <mmdeviceapi.h>
@@ -93,6 +94,49 @@ void FillSine(float* b, int frames, int startIdx) {
     }
 }
 
+void CheckProductionPluginAcl() {
+#ifndef AURA_APO_PLUGINS_SDDL
+    check("production plugin SDDL is present", false,
+          "AURA_APO_PLUGINS_SDDL missing");
+#else
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            AURA_APO_PLUGINS_SDDL, SDDL_REVISION_1, &sd, nullptr) &&
+        !ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            AURA_APO_PLUGINS_SDDL_FALLBACK, SDDL_REVISION_1, &sd, nullptr)) {
+        check("production plugin SDDL parses", false);
+        return;
+    }
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = sd;
+    wchar_t name[96];
+    swprintf(name, 96, L"Local\\AuraDSP_ApoPluginsAclTest_%lu",
+             (unsigned long)GetCurrentProcessId());
+    HANDLE created = CreateFileMappingW(INVALID_HANDLE_VALUE, &sa,
+                                        PAGE_READWRITE, 0, 4096, name);
+    LocalFree(sd);
+    if (!created) {
+        check("production plugin ACL fixture mapping", false);
+        return;
+    }
+    HANDLE hRead = OpenFileMappingW(FILE_MAP_READ, FALSE, name);
+    SetLastError(ERROR_SUCCESS);
+    HANDLE hWrite = OpenFileMappingW(FILE_MAP_WRITE, FALSE, name);
+    const DWORD writeErr = GetLastError();
+    char detail[96];
+    snprintf(detail, sizeof(detail), "read=%p write=%p err=%lu",
+             hRead, hWrite, (unsigned long)writeErr);
+    check("production plugin mapping: standard user read only",
+          hRead != nullptr && hWrite == nullptr &&
+              writeErr == ERROR_ACCESS_DENIED,
+          detail);
+    if (hRead) CloseHandle(hRead);
+    if (hWrite) CloseHandle(hWrite);
+    CloseHandle(created);
+#endif
+}
+
 }  // namespace
 
 // N1 transit fence (2026-11-22): the APO host only loads plugin
@@ -101,7 +145,8 @@ void FillSine(float* b, int frames, int startIdx) {
 // The test mirrors that contract: copy the probe fixtures into
 // the transit root and publish the TRANSIT paths, never the
 // build-tree originals. Returns false when the copy fails.
-bool TransitCopy(const wchar_t* srcPath, wchar_t* outPath, size_t cap) {
+bool TransitCopy(const wchar_t* srcPath, wchar_t* outPath, size_t cap,
+                 const wchar_t* fixtureName = nullptr) {
     wchar_t pd[MAX_PATH] = {};
     DWORD n = GetEnvironmentVariableW(L"ProgramData", pd, MAX_PATH);
     std::wstring root = (n > 0 && n < MAX_PATH) ? pd : L"C:\\ProgramData";
@@ -111,30 +156,50 @@ bool TransitCopy(const wchar_t* srcPath, wchar_t* outPath, size_t cap) {
     CreateDirectoryW(root.c_str(), nullptr);
     root += L"\\apo_engine_test";
     CreateDirectoryW(root.c_str(), nullptr);
-    const wchar_t* slash = wcsrchr(srcPath, L'\\');
-    root += slash ? slash : L"\\fixture.clap";
+    root += L"\\";
+    if (fixtureName) {
+        root += fixtureName;
+    } else {
+        const wchar_t* slash = wcsrchr(srcPath, L'\\');
+        root += slash ? slash + 1 : L"fixture.clap";
+    }
     if (root.size() + 1 > cap) return false;
     wcscpy(outPath, root.c_str());
     return CopyFileW(srcPath, outPath, FALSE) != 0;
 }
 
-int main() {
+int RunApoEngineSuite(bool trustedFixture) {
+    g_fail = 0;
+    printf("apo_engine_test mode: %s\n",
+           trustedFixture ? "trusted-fixture" : "production");
+    CheckProductionPluginAcl();
     const bool local = !HasGlobalPrivilege();
     if (local) {
         SetEnvironmentVariableA("AURAAPO_CHANNELS_LOCAL", "1");
         printf("note: no SeCreateGlobalPrivilege, channels via Local\\ names\n");
     }
+    // Pre-create only the fixture mapping with the test user's DACL. This
+    // deliberately gives the suite write access even against the production
+    // DLL, so direct shared-block tampering reaches its fail-closed branch.
+    HANDLE testPluginMap = CreateFileMappingW(
+        INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0,
+        APO_PLUGIN_BLOCK_BYTES, AuraApoPluginsName());
+    check("test plugin mapping writable fixture", testPluginMap != nullptr);
+    if (!testPluginMap) return 1;
     if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
         check("CoInitializeEx", false);
         return 1;
     }
-    // AuraApo.dll：exe 同目录加载。
+    // Production and explicitly trusted fixture hosts are separate DLLs.
     wchar_t self[MAX_PATH] = {0};
     GetModuleFileNameW(nullptr, self, MAX_PATH);
     wchar_t* slash = wcsrchr(self, L'\\');
-    wcscpy(slash ? slash + 1 : self, L"AuraApo.dll");
+    wcscpy(slash ? slash + 1 : self,
+           trustedFixture ? L"AuraApoTrustedTest.dll" : L"AuraApo.dll");
     HMODULE dll = LoadLibraryW(self);
-    check("LoadLibrary AuraApo.dll", dll != nullptr);
+    check(trustedFixture ? "LoadLibrary AuraApoTrustedTest.dll"
+                         : "LoadLibrary production AuraApo.dll",
+          dll != nullptr);
     if (!dll) return 1;
     using GetClassFn = HRESULT(__stdcall*)(REFCLSID, REFIID, void**);
     auto getClass = (GetClassFn)GetProcAddress(dll, "DllGetClassObject");
@@ -348,15 +413,119 @@ int main() {
         wcscpy(pslash ? pslash + 1 : plugPath, L"probe_gain.clap");
         bool haveProbe =
             GetFileAttributesW(plugPath) != INVALID_FILE_ATTRIBUTES;
-        if (haveProbe) {
-            wchar_t transitPath[MAX_PATH];
-            if (TransitCopy(plugPath, transitPath, MAX_PATH))
+        if (haveProbe && trustedFixture) {
+            wchar_t transitPath[MAX_PATH], fixtureName[80];
+            swprintf(fixtureName, 80, L"apo_task2_trusted_gain_%lu.clap",
+                     (unsigned long)GetCurrentProcessId());
+            if (TransitCopy(plugPath, transitPath, MAX_PATH, fixtureName)) {
                 wcscpy(plugPath, transitPath);
-            else
+            } else {
+                check("trusted gain fixture copied to transit", false);
                 haveProbe = false;
+            }
         }
         if (!haveProbe) {
             printf("[SKIP] plugin section (probe_gain.clap absent)\n");
+        } else if (!trustedFixture) {
+            wchar_t productionPath[MAX_PATH], tamperedPath[MAX_PATH];
+            wchar_t productionName[80], tamperedName[80];
+            swprintf(productionName, 80, L"apo_task2_production_gain_%lu.clap",
+                     (unsigned long)GetCurrentProcessId());
+            swprintf(tamperedName, 80, L"apo_task2_tampered_gain_%lu.clap",
+                     (unsigned long)GetCurrentProcessId());
+            const bool copied =
+                TransitCopy(plugPath, productionPath, MAX_PATH,
+                            productionName) &&
+                TransitCopy(plugPath, tamperedPath, MAX_PATH,
+                            tamperedName);
+            check("production rejection fixtures copied", copied);
+            HANDLE hPlug = copied
+                ? OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE,
+                                   AuraApoPluginsName())
+                : nullptr;
+            uint8_t* pb = hPlug ? (uint8_t*)MapViewOfFile(
+                                      hPlug, FILE_MAP_ALL_ACCESS, 0, 0,
+                                      APO_PLUGIN_BLOCK_BYTES)
+                                : nullptr;
+            check("production rejection: writable tamper view", pb != nullptr);
+            if (pb) {
+                auto* phdr = (ApoPluginBlockHeader*)pb;
+                if (phdr->magic != APO_PLUGINS_MAGIC) {
+                    memset(pb, 0, APO_PLUGIN_BLOCK_USED_BYTES);
+                    phdr->magic = APO_PLUGINS_MAGIC;
+                    phdr->version = APO_PLUGINS_VERSION;
+                    phdr->blockBytes = APO_PLUGIN_BLOCK_BYTES;
+                    phdr->chainEnabled = 1;
+                }
+                auto* slotHdr = (ApoPluginSlotHeader*)(pb +
+                    APO_PLUGIN_BLOCK_HEADER_BYTES);
+                uint8_t* pathReg = pb + APO_PLUGIN_BLOCK_HEADER_BYTES +
+                                   APO_PLUGIN_SLOT_HEADER_BYTES;
+                uint8_t* idReg = pathReg + APO_PLUGIN_PATH_BYTES;
+                auto publish = [&](const wchar_t* path, uint32_t gen) {
+                    char pathU8[MAX_PATH * 3];
+                    const int pn = WideCharToMultiByte(
+                        CP_UTF8, 0, path, -1, pathU8, sizeof(pathU8),
+                        nullptr, nullptr);
+                    const uint32_t seq = phdr->writeSeq;
+                    phdr->writeSeq = seq + 1;
+                    memset(pathReg, 0, APO_PLUGIN_PATH_BYTES);
+                    memcpy(pathReg, pathU8, (size_t)pn - 1);
+                    memset(idReg, 0, APO_PLUGIN_ID_BYTES);
+                    memcpy(idReg, "com.auradsp.probe.gain", 22);
+                    slotHdr->format = 2;
+                    slotHdr->insertStage = 0;
+                    slotHdr->channelMask = 0xFF;
+                    slotHdr->bypass = 0;
+                    slotHdr->loadGen = gen;
+                    slotHdr->stateGen = 0;
+                    slotHdr->pathBytes = (uint32_t)pn - 1;
+                    slotHdr->stateBytes = 0;
+                    MemoryBarrier();
+                    phdr->writeSeq = seq + 2;
+                };
+                auto checkRejected = [&](const char* label, uint32_t gen,
+                                         double unity, int block) {
+                    Sleep(800);
+                    if (tele) {
+                        char td[128];
+                        snprintf(td, sizeof(td),
+                                 "loaded=%u gen=%lu expectedGen=%lu",
+                                 tele->plugins[0].loaded,
+                                 (unsigned long)tele->plugins[0].appliedLoadGen,
+                                 (unsigned long)gen);
+                        check(label, tele->plugins[0].loaded == 0 &&
+                                         tele->plugins[0].appliedLoadGen == gen,
+                              td);
+                    }
+                    double rejectedRms = 0;
+                    runBlocks(block, rejectedRms);
+                    snprintf(d, sizeof(d), "rms=%.4f unity=%.4f ratio=%.3f",
+                             rejectedRms, unity, rejectedRms / unity);
+                    check("production plugin rejection keeps passthrough",
+                          rejectedRms / unity > 0.85 &&
+                              rejectedRms / unity < 1.18,
+                          d);
+                };
+                publish(productionPath, 1);
+                checkRejected("production transit fixture is not loaded", 1,
+                              unityRms, 3 * kBlocks);
+                // Same writable block, now directly re-pointed to another
+                // user-created .clap. No trusted publisher call is involved.
+                publish(tamperedPath, 2);
+                checkRejected("tampered user-writable plugin path is not loaded",
+                              2, unityRms, 4 * kBlocks);
+                const uint32_t seq = phdr->writeSeq;
+                phdr->writeSeq = seq + 1;
+                slotHdr->format = 0;
+                slotHdr->pathBytes = 0;
+                slotHdr->loadGen = 3;
+                MemoryBarrier();
+                phdr->writeSeq = seq + 2;
+                Sleep(400);
+                UnmapViewOfFile(pb);
+            }
+            if (hPlug) CloseHandle(hPlug);
         } else {
             HANDLE hPlug = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE,
                                             AuraApoPluginsName());
@@ -468,8 +637,8 @@ int main() {
     // 类别 7=process_crash、有效旁路），槽 0 继续处理，整机不
     // 进透传闩锁（tele->fault 保持 0、座位仍在）。决定性比率：
     // input.gain -12dB × 增益插件 0.5 ≈ 0.126——透传会是 1.0、
-    // 邻槽同死会是 0.251，三者可分。
-    {
+    // 邻槽同死会是 0.251，三者可分。仅显式可信测试宿主执行。
+    if (trustedFixture) {
         wchar_t gainPath[MAX_PATH], crashPath[MAX_PATH];
         wcscpy(gainPath, self);
         wchar_t* gs = wcsrchr(gainPath, L'\\');
@@ -482,11 +651,17 @@ int main() {
             GetFileAttributesW(gainPath) != INVALID_FILE_ATTRIBUTES;
         if (haveCrash) {
             wchar_t tGain[MAX_PATH], tCrash[MAX_PATH];
-            if (TransitCopy(gainPath, tGain, MAX_PATH) &&
-                TransitCopy(crashPath, tCrash, MAX_PATH)) {
+            wchar_t gainName[80], crashName[80];
+            swprintf(gainName, 80, L"apo_task2_crash_gain_%lu.clap",
+                     (unsigned long)GetCurrentProcessId());
+            swprintf(crashName, 80, L"apo_task2_crash_probe_%lu.clap",
+                     (unsigned long)GetCurrentProcessId());
+            if (TransitCopy(gainPath, tGain, MAX_PATH, gainName) &&
+                TransitCopy(crashPath, tCrash, MAX_PATH, crashName)) {
                 wcscpy(gainPath, tGain);
                 wcscpy(crashPath, tCrash);
             } else {
+                check("trusted crash fixtures copied to transit", false);
                 haveCrash = false;
             }
         }
@@ -982,6 +1157,23 @@ int main() {
     unk->Release();
     fmt->Release();
     CoUninitialize();
-    printf("apo_engine_test: %s (%d failures)\n", g_fail ? "FAIL" : "PASS", g_fail);
+    CloseHandle(testPluginMap);
+    printf("apo_engine_test %s: %s (%d failures)\n",
+           trustedFixture ? "trusted-fixture" : "production",
+           g_fail ? "FAIL" : "PASS", g_fail);
     return g_fail ? 1 : 0;
+}
+
+int main() {
+    const int production = RunApoEngineSuite(false);
+    if (production != 0) return production;
+    wchar_t trustedPath[MAX_PATH] = {0};
+    GetModuleFileNameW(nullptr, trustedPath, MAX_PATH);
+    wchar_t* slash = wcsrchr(trustedPath, L'\\');
+    wcscpy(slash ? slash + 1 : trustedPath, L"AuraApoTrustedTest.dll");
+    if (GetFileAttributesW(trustedPath) == INVALID_FILE_ATTRIBUTES) {
+        printf("[SKIP] trusted fixture suite (AuraApoTrustedTest.dll absent)\n");
+        return 0;
+    }
+    return RunApoEngineSuite(true);
 }

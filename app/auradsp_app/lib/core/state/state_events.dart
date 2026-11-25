@@ -1448,6 +1448,7 @@ extension StateEvents on AppModel {
           raw['rc'] as int,
           raw['status'],
           (raw['stage'] as num).toInt(),
+          errorMessage: raw['errorMessage'] as String?,
         );
         scheduleAutoSave();
         _notifyUi();

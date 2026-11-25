@@ -11,9 +11,9 @@
 // 裁定：界面保留现状，内部处理走副本）。
 //
 // 本类只被 APO 参数发布者（audio_isolate_apo）使用：非 APO 模
-// 式的引擎在 App 进程内、直接读原路径，永不经此。全部失败吞
-// 掉并留日志——中转失败时发布者写空路径（引擎卸载该文件），
-// 绝不把 audiodg 读不到的原始路径写进参数块假装可用。
+// 式的引擎在 App 进程内、直接读原路径，永不经此。文件中转失败
+// 吞错并留日志，发布者写空路径（引擎卸载该文件）；插件中转则返回
+// 带原因的结构化失败，经现有槽位终态事件呈现，绝不假装可用。
 
 import 'dart:io';
 
@@ -21,6 +21,13 @@ import 'package:crypto/crypto.dart';
 
 import '../platform/port/windows_system.dart';
 import 'debug_log.dart';
+
+final class ApoPluginTransitResult {
+  const ApoPluginTransitResult({this.path, this.errorMessage});
+
+  final String? path;
+  final String? errorMessage;
+}
 
 abstract final class ApoTransit {
   static bool _rootReady = false;
@@ -63,84 +70,21 @@ abstract final class ApoTransit {
     }
   }
 
-  static final Set<String> _copiedBundles = {};
+  static const String pluginUnsupportedMessage = '当前版本不支持在系统 APO 内加载第三方插件';
 
-  /// 插件路径中转（2026-11-22 审查 N1，与文件效果叠加围栏；
-  /// 2026-11-23 改异步——用户裁定：复制不得冻结隔离体事件
-  /// 循环，且全程应被槽位加载动画窗口包含）：
-  /// APO 宿主只加载中转根下的插件二进制（ApoEngineHost 围栏），
-  /// 发布侧因此必须先中转再下发路径，中转失败返回 null（发布者
-  /// 写空路径、绝不下发原始路径假装可用，与文件效果同口径）。
-  ///
-  /// - 单文件插件（VST2 .dll / CLAP .clap / 单文件 .vst3）：
-  ///   走 [transitPathForAsync] 内容哈希复制；
-  /// - VST3 bundle（目录）：整树复制到 `<哈希>.vst3` 目录，
-  ///   哈希取 bundle 内主模块（Contents\x86_64-win\*.vst3）
-  ///   的内容；引擎侧 resolvePluginBundleBinary 按原布局解析。
-  static Future<String?> transitPluginPathForAsync(String source) async {
-    try {
-      if (source.isEmpty) return source;
-      if (isTransitPath(source)) return source;
-      if (await File(source).exists()) return await transitPathForAsync(source);
-      final dir = Directory(source);
-      if (!await dir.exists()) {
-        dbgLog('apo transit: plugin source missing: $source');
-        return null;
-      }
-      _ensureRoot();
-      final sep = Platform.pathSeparator;
-      // 主模块定位：Contents\x86_64-win\*.vst3 优先，其次树内
-      // 任一 .vst3 文件，再次树内第一个普通文件。
-      File? module;
-      final archDir = Directory('$source${sep}Contents${sep}x86_64-win');
-      if (await archDir.exists()) {
-        await for (final e in archDir.list()) {
-          if (e is File && e.path.toLowerCase().endsWith('.vst3')) {
-            module = e;
-            break;
-          }
-        }
-      }
-      if (module == null) {
-        File? firstFile;
-        await for (final e in dir.list(recursive: true)) {
-          if (e is! File) continue;
-          firstFile ??= e;
-          if (e.path.toLowerCase().endsWith('.vst3')) {
-            module = e;
-            break;
-          }
-        }
-        module ??= firstFile;
-      }
-      if (module == null) {
-        dbgLog('apo transit: plugin bundle empty: $source');
-        return null;
-      }
-      final hash = sha256.convert(await module.readAsBytes()).toString();
-      final dest = '$root$sep$hash.vst3';
-      if (_copiedBundles.contains(dest)) return dest;
-      final destDir = Directory(dest);
-      if (!await destDir.exists()) {
-        await destDir.create(recursive: true);
-        await for (final e in dir.list(recursive: true)) {
-          var rel = e.path.substring(source.length);
-          if (!rel.startsWith(sep)) rel = '$sep$rel';
-          final target = '$dest$rel';
-          if (e is Directory) {
-            await Directory(target).create(recursive: true);
-          } else if (e is File) {
-            await File(target).writeAsBytes(await e.readAsBytes(), flush: true);
-          }
-        }
-        dbgLog('apo transit: bundle copied $source -> $dest');
-      }
-      _copiedBundles.add(dest);
-      return dest;
-    } catch (e) {
-      dbgLog('apo transit: plugin copy failed for $source: $e');
-      return null;
+  /// APO 插件入口失败关闭：空路径仍用于显式卸载；任何非空插件路径
+  /// 都返回带明确原因的失败结果，让现有槽位终态事件把“不支持”传给
+  /// 状态消费方。不得复制后再返回路径，把生产宿主禁止的能力伪装成可用。
+  static Future<ApoPluginTransitResult> transitPluginPathForAsync(
+    String source,
+  ) {
+    if (source.isEmpty) {
+      return Future.value(ApoPluginTransitResult(path: source));
     }
+    dbgLog('apo transit: $pluginUnsupportedMessage: $source');
+    return Future.value(
+      const ApoPluginTransitResult(errorMessage: pluginUnsupportedMessage),
+    );
   }
 
   /// [transitPathFor] 的异步孪生（插件单文件路径专用，与同步版

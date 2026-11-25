@@ -45,8 +45,9 @@ extension PluginManagerEvents on PluginManager {
     String path,
     int rc,
     dynamic rawStatus,
-    int stage,
-  ) {
+    int stage, {
+    String? errorMessage,
+  }) {
     _journalPluginLoaded(path);
     if (slot >= 0 && slot < PluginManager.kMaxSlots) {
       _slotBusy[slot] = false; // C3：任务终态，忙态清除
@@ -64,7 +65,11 @@ extension PluginManagerEvents on PluginManager {
             break;
           }
         }
-        if (known != null &&
+        if (errorMessage != null && errorMessage.isNotEmpty) {
+          // APO 等中转层已经给出确定原因时优先使用，不能退化为按磁盘
+          // 文件猜测的通用加载失败，否则“不支持”永远不会到达用户。
+          _lastError = errorMessage;
+        } else if (known != null &&
             !known.isCompatible &&
             known.errorMessage.isNotEmpty) {
           _lastError = '${known.name}：${known.errorMessage}';

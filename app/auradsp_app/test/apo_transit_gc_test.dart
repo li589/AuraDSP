@@ -51,8 +51,11 @@ void main() {
       expect(removed, 2, reason: 'stale file + stale bundle dir');
       expect(kept.existsSync(), isTrue);
       expect(stale.existsSync(), isFalse);
-      expect(fresh.existsSync(), isTrue,
-          reason: 'young unreferenced entries are the safety margin');
+      expect(
+        fresh.existsSync(),
+        isTrue,
+        reason: 'young unreferenced entries are the safety margin',
+      );
       expect(bundle.existsSync(), isFalse);
     });
 
@@ -60,8 +63,7 @@ void main() {
       expect(
         ApoTransit.collectOrphans(
           const {},
-          rootOverride:
-              '${tmp.path}${Platform.pathSeparator}does-not-exist',
+          rootOverride: '${tmp.path}${Platform.pathSeparator}does-not-exist',
           nowOverride: now,
         ),
         0,
@@ -77,6 +79,31 @@ void main() {
       );
       expect(removed, 0);
       expect(kept.existsSync(), isTrue);
+    });
+  });
+
+  group('ApoTransit.transitPluginPathForAsync', () {
+    test(
+      'rejects non-empty APO plugin paths instead of publishing them',
+      () async {
+        // Already-transit-shaped input takes the old fast path without any IO;
+        // the new contract must reject it before that path can be published.
+        final source =
+            '${ApoTransit.root}${Platform.pathSeparator}'
+            'task2-controlled-fixture.clap';
+        final result = await ApoTransit.transitPluginPathForAsync(source);
+        expect(result, isNotNull);
+        expect(result.path, isNull);
+        expect(result.errorMessage, contains('不支持'));
+        expect(result.errorMessage, contains('系统 APO'));
+      },
+    );
+
+    test('keeps empty path as an explicit unload', () async {
+      final result = await ApoTransit.transitPluginPathForAsync('');
+      expect(result, isNotNull);
+      expect(result.path, '');
+      expect(result.errorMessage, isNull);
     });
   });
 }

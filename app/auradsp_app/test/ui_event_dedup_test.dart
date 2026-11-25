@@ -3,6 +3,7 @@ import 'package:auradsp_app/core/notice.dart';
 import 'package:auradsp_app/core/plugins/plugin_manager.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
+import 'package:auradsp_app/engine/apo_transit.dart';
 import 'package:auradsp_app/features/notice_host.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -108,6 +109,27 @@ void main() {
       m.handleMessageForTesting(
           _guardMsg('liveprog.code', 'syntax error at line 3'));
       expect(m.lpError, 'syntax error at line 3');
+    });
+  });
+
+  group('APO 插件不支持状态', () {
+    test('经 pluginSlotLoaded 现有路由到达插件状态消费方', () async {
+      final m = AppModel(testing: true);
+      const reason = '当前版本不支持在系统 APO 内加载第三方插件';
+      final transit = await ApoTransit.transitPluginPathForAsync(
+        r'C:\fixtures\unsupported.clap',
+      );
+      m.handleMessageForTesting({
+        'evt': 'pluginSlotLoaded',
+        'slot': 0,
+        'path': r'C:\fixtures\unsupported.clap',
+        'rc': 0,
+        'status': '{}',
+        'stage': 3,
+        'errorMessage': transit.errorMessage,
+      });
+      expect(m.pluginManager.lastError, reason);
+      m.dispose();
     });
   });
 
