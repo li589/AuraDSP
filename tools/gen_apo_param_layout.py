@@ -129,6 +129,9 @@ CUSTOM_NUMERIC = {
     # 声道数量设置在 APO 模式生效；r46 宿主决议分支此前因
     # 本豁免成死代码，宾机实证输出恒为流宽。）
     'channels.count': 1,
+    # set/get_channels_mode: int32；几何 pending/active 改造后改用
+    # PARAM_CUSTOM，仍须保留原有 APO 数值槽与块布局。
+    'channels.mode': 1,
 }
 
 # 明确豁免（不入块）及理由——分类完备性断言要求表中每个 id 必须

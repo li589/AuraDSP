@@ -243,6 +243,14 @@ target_link_libraries(auradsp_engine PRIVATE
     m
 )
 
+add_executable(geometry_atomic_test
+    "${API}/tests/geometry_atomic_test.cpp"
+)
+target_include_directories(geometry_atomic_test PRIVATE "${API}")
+target_link_libraries(geometry_atomic_test PRIVATE auradsp_engine ${CMAKE_DL_LIBS})
+set_property(TARGET geometry_atomic_test PROPERTY CXX_STANDARD 20)
+add_test(NAME geometry_atomic_test COMMAND geometry_atomic_test)
+
 # 进程外宿主 plugin_host_x64（双宿主架构，Linux 无扩展名）：与
 # Windows 的 auradsp_plugin_host 目标对位——宿主自带一份插件层
 # （driver/formats/posix 平台层，HOST_INPROC 语义），经 IPC 协议

@@ -224,6 +224,47 @@ def layout_of(fields):
     return [(n, getattr(T, n).offset, ctypes.sizeof(t)) for n, t in fields], ctypes.sizeof(T)
 
 
+def check_geometry(problems: list[str]) -> int:
+    """H2 几何快照：C 与 Dart 的字段顺序/宽度必须保持 16B ABI。"""
+    expected = [("generation", 0, 8, "Uint64"),
+                ("channels", 8, 4, "Int32"),
+                ("mode", 12, 4, "Int32")]
+    try:
+        header_text = H_PATH.read_text(encoding="utf-8", errors="replace")
+        fields = parse_c_struct(header_text, "auradsp_geometry")
+        layout, size = layout_of(fields)
+    except ValueError as e:
+        problems.append("[G1] 解析 auradsp_geometry 失败：%s" % e)
+        return 0
+    if len(layout) != len(expected):
+        problems.append("[G1] auradsp_geometry 字段数 %d != 3" % len(layout))
+    for i, (name, offset, field_size) in enumerate(layout):
+        if i >= len(expected):
+            break
+        want_name, want_offset, want_size, _ = expected[i]
+        if (name, offset, field_size) != (want_name, want_offset, want_size):
+            problems.append("[G1] 几何字段 %d 为 %s/off=%d/size=%d，期望 %s/off=%d/size=%d"
+                            % (i, name, offset, field_size,
+                               want_name, want_offset, want_size))
+    if size != 16:
+        problems.append("[G1] sizeof(auradsp_geometry)=%d != 16" % size)
+
+    dart_text = re.sub(r"\s+", " ", DART_PATH.read_text(
+        encoding="utf-8", errors="replace"))
+    match = re.search(
+        r"final class AuraDspGeometry extends Struct\s*\{(.*?)\}", dart_text)
+    if not match:
+        problems.append("[G2] Dart 缺少 AuraDspGeometry Struct")
+        return size
+    dart_fields = re.findall(
+        r"@(\w+)\(\)\s+external int (\w+)\s*;", match.group(1))
+    want_dart = [(annotation, name) for name, _off, _size, annotation in expected]
+    if dart_fields != want_dart:
+        problems.append("[G2] Dart 几何字段 %r 与 C 期望 %r 不一致"
+                        % (dart_fields, want_dart))
+    return size
+
+
 def load_viz_mirror():
     """导入 tools/bin/viz_frame.py（唯一 Python 镜像）。
 
@@ -558,6 +599,7 @@ def main() -> int:
     bridges_only = "--bridges-only" in sys.argv
     problems: list[str] = []
     n_exports = 0
+    geometry_size = 0
 
     if not viz_only and not bridges_only:
         for p in (DEF_PATH, H_PATH, DART_PATH):
@@ -605,6 +647,7 @@ def main() -> int:
                 problems.append(f".def 导出 {name} 未列入 .map global")
             for name in sorted(map_syms - exports):
                 problems.append(f".map global {name} 不是 .def 导出（多导出）")
+        geometry_size = check_geometry(problems)
 
     # 4) §7-1 viz 帧布局
     frame_size, n_fields = 0, 0
@@ -636,6 +679,7 @@ def main() -> int:
           f"元数全部一致")
     print(f"[PASS] version script 一致：.map global 符号集与 .def 恒等"
           f"（{n_exports} 个）")
+    print(f"[PASS] 几何快照布局一致：C/Dart 3 字段 / {geometry_size} 字节")
     print(f"[PASS] viz 帧布局一致：{n_fields} 字段 / {frame_size} 字节，"
           f"C 头 ↔ Python 镜像逐字段对齐，无重复镜像")
     print(f"[PASS] 三座桥 ABI 一致：{n_bridges} 座桥共 {n_bridge_syms} 个导出与头文件"

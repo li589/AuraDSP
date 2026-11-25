@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(auradsp LANGUAGES C CXX)
 
+enable_testing()
+
 option(AURADSP_BUILD_PROJECTM_BRIDGE
        "Build the optional libprojectM visualizer bridge"
        OFF)

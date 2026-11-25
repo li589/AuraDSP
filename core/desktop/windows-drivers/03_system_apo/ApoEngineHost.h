@@ -63,6 +63,10 @@ class ApoEngineHost {
     using FnCreate = auradsp_handle (*)(float, int);
     using FnDestroy = void (*)(auradsp_handle);
     using FnProcess = void (*)(auradsp_handle, const float*, float*, int);
+    using FnRequestGeometry = auradsp_status (*)(auradsp_handle, int32_t, int32_t,
+                                                 uint64_t*);
+    using FnGetActiveGeometry = auradsp_status (*)(auradsp_handle,
+                                                   auradsp_geometry*);
     using FnSetParam = auradsp_status (*)(auradsp_handle, const char*, const void*, uint32_t);
     // 生效值回读（第三十五轮）：可选符号，缺失则 v6 段不写。
     using FnGetParam = auradsp_status (*)(auradsp_handle, const char*, void*, uint32_t);
@@ -103,6 +107,8 @@ class ApoEngineHost {
     FnCreate fnCreate_ = nullptr;
     FnDestroy fnDestroy_ = nullptr;
     FnProcess fnProcess_ = nullptr;
+    FnRequestGeometry fnRequestGeometry_ = nullptr;
+    FnGetActiveGeometry fnGetActiveGeometry_ = nullptr;
     FnSetParam fnSetParam_ = nullptr;
     FnGetParam fnGetParam_ = nullptr;
     FnGetLatencyMs fnLatency_ = nullptr;
@@ -146,6 +152,9 @@ class ApoEngineHost {
     int32_t effMode_ = 0;
     std::atomic<UINT32> liveEngCh_{2};
     std::atomic<bool> liveTrunc_{false};
+    std::atomic<UINT32> requestedEngCh_{2};
+    std::atomic<int32_t> requestedMode_{0};
+    std::atomic<uint64_t> requestedGeometryGeneration_{0};
     UINT32 ResolveEngCh() const;
     void ApplyEngChResolution();
 

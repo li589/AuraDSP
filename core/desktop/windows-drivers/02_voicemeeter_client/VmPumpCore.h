@@ -23,6 +23,7 @@
 
 #include <windows.h>
 
+#include "auradsp_engine.h"  // 几何 ABI 类型；函数仍由宿主运行期解析
 #include "SilenceGate.h"
 #include "chain/channel_map.h"  // 声道适配统一表（第五十五轮）
 
@@ -69,6 +70,8 @@ using FnUnreg = long(__stdcall*)();
 // ---- 引擎桥（auradsp_engine.dll 动态加载；与 app/ffi 候选路径同源） ----
 using FnEngCreate = void*(__cdecl*)(float, int);
 using FnEngProcess = void(__cdecl*)(void*, const float*, float*, int);
+using FnEngRequestGeometry = int(__cdecl*)(void*, int32_t, int32_t, uint64_t*);
+using FnEngGetActiveGeometry = int(__cdecl*)(void*, auradsp_geometry*);
 using FnEngDestroy = void(__cdecl*)(void*);
 using FnEngSetParam = int(__cdecl*)(void*, const char*, const void*, unsigned int);
 using FnEngGetParam = int(__cdecl*)(void*, const char*, void*, unsigned int);
@@ -92,6 +95,8 @@ constexpr uint64_t kVmFanInSpinLimit = 200000ull;
 
 struct PumpCtx {
     FnEngProcess process = nullptr;
+    FnEngRequestGeometry requestGeometry = nullptr;
+    FnEngGetActiveGeometry getActiveGeometry = nullptr;
     FnEngDestroy destroy = nullptr;
     static constexpr int kMaxGroups = 8;
     void* eng[kMaxGroups] = {};  // 主线程按版型预建（RT 内禁分配）
@@ -110,6 +115,9 @@ struct PumpCtx {
     // 用户旁路三条非处理路径）——r46 宾机实证设 5.1 时
     // BL/BR 原样直通、输出恒 7.1，定罪于此。
     volatile LONG chanMode = 0;
+    volatile LONG requestedChannels[kMaxGroups] = {2, 2, 2, 2, 2, 2, 2, 2};
+    volatile LONG requestedMode[kMaxGroups] = {};
+    volatile LONGLONG requestedGeneration[kMaxGroups] = {};
     // 双耳生效判定（与引擎同口径）：spatial.binaural && spatial.enable &&
     // workCh>=4。只用于“组内其余通道静音”；工作声道数只由 workCh 决定。
     volatile LONG spatialBinaural = 0;
@@ -225,6 +233,8 @@ struct PumpCtx {
     long curBinaural = 0;      // 块快照：生效双耳（worker 与 RT 预填须同口径）
     long curWorkCh = 2;        // 块快照：引擎工作声道数（与 handle 的 count 同步）
     long curChanMode = 0;      // 块快照：声道模式（第四十七轮 S2，与 procCh 同批发布）
+    long curGeometryReady = 0; // 全组 active 与各自请求同代且同宽才为 1
+    LONG curGeometryAdvance = 0; // 错代组位图：本块只用零输入推进 active
     long curTestKind = 0;      // 块快照：testKind 翻转只影响下一块
     volatile LONG testReady = 0;      // bitmap：bit g = scratchInG[g] 已由 RT 预填测试信号
     // 共享量 per-group 中间槽：worker 写、RT fan-in 后归约。max/OR 与顺序
@@ -435,6 +445,55 @@ inline bool BusSlotsSilent(VbAudioBuffer* ab, long base, const int* slots,
     return true;
 }
 
+// 块首统一读取每组完整 active 几何。只有所有处理组都与各自请求同代、
+// 且 channels/mode 完全一致时才发布全局 workCh/chanMode；否则保留上一
+// 份完整几何，本块静音并仅推进错代组，禁止跨组/跨代部分切换。
+inline LONG SyncGeometryAtBlockStart(PumpCtx* c, int groups, long mask) {
+    // 02 冻结参照与不带几何 ABI 的驱动无关泵测试沿用旧工作宽；生产 VM
+    // 加载器强制两个几何符号齐全，不会进入这条兼容路径。
+    if (!c->getActiveGeometry) {
+        c->curGeometryReady = 1;
+        c->curGeometryAdvance = 0;
+        return 0;
+    }
+    LONG advance = 0;
+    bool ready = true;
+    bool haveGeometry = false;
+    auradsp_geometry common{0, 0, 0};
+    for (int g = 0; g < groups; ++g) {
+        if (!c->eng[g] || (mask & (1L << g)) == 0) continue;
+        auradsp_geometry active{0, 0, 0};
+        const uint64_t requested = (uint64_t)InterlockedCompareExchange64(
+            &c->requestedGeneration[g], 0, 0);
+        const int32_t channels = InterlockedCompareExchange(
+            &c->requestedChannels[g], 0, 0);
+        const int32_t mode = InterlockedCompareExchange(
+            &c->requestedMode[g], 0, 0);
+        const bool matches = c->getActiveGeometry &&
+            c->getActiveGeometry(c->eng[g], &active) == AURADSP_OK &&
+            requested != 0 && active.generation == requested &&
+            active.channels == channels && active.mode == mode;
+        if (!matches) {
+            ready = false;
+            advance |= 1L << g;
+            continue;
+        }
+        if (!haveGeometry) {
+            common = active;
+            haveGeometry = true;
+        } else if (active.channels != common.channels || active.mode != common.mode) {
+            ready = false;
+        }
+    }
+    if (ready && haveGeometry) {
+        InterlockedExchange(&c->workCh, common.channels);
+        InterlockedExchange(&c->chanMode, common.mode);
+    }
+    c->curGeometryReady = ready && haveGeometry ? 1 : 0;
+    c->curGeometryAdvance = advance;
+    return advance;
+}
+
 // Z17：单组处理主体——串行/并行共用的唯一实现（两条路径必须逐位同义）。
 // 由原 OnVbCallback 内联 for 循环体原样提取；差异仅：
 //  1) scratch 改取每组独占对 scratchInG/OutG（并行时 worker 间零共享写；
@@ -448,7 +507,8 @@ inline bool BusSlotsSilent(VbAudioBuffer* ab, long base, const int* slots,
 // 多线程并发即数据竞争，且各组按 g 顺序消费同一信号流才逐位一致。
 inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
                            long mask, bool haveEng, int procCh, bool binaural,
-                           long testKind, bool testReady, long chanMode) {
+                           long testKind, bool testReady, long chanMode,
+                           bool geometryReady, bool advanceGeometry) {
     const long base = (long)g * 8;
     // v2：每组主对（base+0/1）恒进该组引擎；procCh>2 时组内前 procCh 路
     // 一并进引擎（逐声道处理/矩阵上混后回写）。组外通道不归本组管；
@@ -536,6 +596,23 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
     if (eng == nullptr) {
         if (outL != inL) memcpy(outL, inL, (size_t)n * sizeof(float));
         if (outR != inR) memcpy(outR, inR, (size_t)n * sizeof(float));
+        return;
+    }
+    if (!geometryReady) {
+        // 只在错代组推进引擎；其余组不处理真实样本。输出整块静音，
+        // workCh/chanMode 保持上一完整代，下一块重新做全组代际判定。
+        if (advanceGeometry) {
+            float* sIn = c->scratchInG[g] ? c->scratchInG[g] : c->scratchIn;
+            float* sOut = c->scratchOutG[g] ? c->scratchOutG[g] : c->scratchOut;
+            if (sIn && sOut) {
+                memset(sIn, 0, (size_t)n * 8 * sizeof(float));
+                c->process(eng, sIn, sOut, (int)n);
+            }
+        }
+        for (long ch = base; ch < base + 8; ++ch) {
+            if (ab->w[ch]) memset(ab->w[ch], 0, (size_t)n * sizeof(float));
+        }
+        if (c->gate[g].enabled) c->gate[g].NoteOutput(0.0f);
         return;
     }
     // 静音空转（组独立，EAPO 同式）。
@@ -800,6 +877,9 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
     // 也按块快照（原 per-group 活读，翻转时组间可撕裂；并行预填更必须同口径，
     // 否则 FillTestSignal 的共享相位/RNG 状态会数据竞争）。
     const long mask = InterlockedCompareExchange(&c->busMask, 0, 0);
+    SyncGeometryAtBlockStart(c, ng, mask);
+    const bool geometryReady = c->curGeometryReady != 0;
+    const LONG geometryAdvance = c->curGeometryAdvance;
     // procCh 必须与引擎 channels.count 一致；binaural 只在真正生效时静音
     // 组内其余通道（与 auradsp_engine.cpp 的 binaural 分支同口径）。
     const int procCh = NormalizeWorkCh(
@@ -849,7 +929,7 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
         // 才与串行路径逐位一致。只预填将真正进 DSP 的组（与 ProcessGroupVm
         // 内的 gather 条件同口径：eng 在、mask 开、非 idle）。B2：冻结组
         // 不预填——它本块不消费信号流（输出冻结），恢复后无缝续接。
-        if (testKind != 0 && haveEng) {
+        if (testKind != 0 && haveEng && geometryReady) {
             for (int g = 0; g < ng; ++g) {
                 if (stuck & (1L << g)) continue;
                 const long base = (long)g * 8;
@@ -902,7 +982,8 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
             int g = 0;
             for (LONG b = bit; !(b & 1); b >>= 1) ++g;
             ProcessGroupVm(c, ab, g, n, mask, haveEng, procCh, binaural,
-                           testKind, (testRdy & bit) != 0, chanMode);
+                           testKind, (testRdy & bit) != 0, chanMode,
+                           geometryReady, (geometryAdvance & bit) != 0);
             VmWorkComplete(c, newGen, bit);
         }
         // fan-in：音频线程禁阻塞 API，纯自旋（YieldProcessor 降耗降温）。
@@ -978,7 +1059,8 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
         for (int g = 0; g < ng; ++g) {
             if (stuck & (1L << g)) continue;
             ProcessGroupVm(c, ab, g, n, mask, haveEng, procCh, binaural,
-                           testKind, false, chanMode);
+                           testKind, false, chanMode, geometryReady,
+                           (geometryAdvance & (1L << g)) != 0);
         }
         c->curTodo = 0;  // 本块无并行发布：清账，防下一块误判 straggler
     }
@@ -1046,6 +1128,8 @@ static DWORD WINAPI VmWorkerMain(LPVOID param) {
         const bool binaural = c->curBinaural != 0;
         const long chanMode = c->curChanMode;
         const long testKind = c->curTestKind;
+        const bool geometryReady = c->curGeometryReady != 0;
+        const LONG geometryAdvance = c->curGeometryAdvance;
         const LONG testRdy = InterlockedCompareExchange(&c->testReady, 0, 0);
         for (;;) {
             const LONGLONG cur =
@@ -1062,7 +1146,8 @@ static DWORD WINAPI VmWorkerMain(LPVOID param) {
             int g = 0;
             for (LONG b = bit; !(b & 1); b >>= 1) ++g;
             ProcessGroupVm(c, ab, g, n, mask, haveEng, procCh, binaural,
-                           testKind, (testRdy & bit) != 0, chanMode);
+                           testKind, (testRdy & bit) != 0, chanMode,
+                           geometryReady, (geometryAdvance & bit) != 0);
             VmWorkComplete(c, gen, bit);
         }
     }

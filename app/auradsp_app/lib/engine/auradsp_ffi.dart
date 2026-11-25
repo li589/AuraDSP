@@ -350,6 +350,17 @@ abstract final class VizBands {
 /// [Phase B 多声道电平 / ADR-003] 尾部追加段（ABI v2，2026-10-24）：
 /// 前 536B 布局零变化，按旧尺寸读的消费者逐位兼容；本 Struct 定长读，
 /// 必须与引擎同 ABI 版本（加载时强校验，见 [AuraDspLib] 构造）。
+final class AuraDspGeometry extends Struct {
+  @Uint64()
+  external int generation;
+
+  @Int32()
+  external int channels;
+
+  @Int32()
+  external int mode;
+}
+
 final class VizFrame extends Struct {
   @Uint64()
   external int seq;
@@ -474,6 +485,23 @@ final class AuraDspLib {
               NativeFunction<
                   Void Function(Pointer<Void>, Pointer<Float>, Pointer<Float>,
                       Int32)>>('auradsp_process')
+          .asFunction();
+
+  late final int Function(
+          Pointer<Void>, int, int, Pointer<Uint64>) requestGeometry =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Int32, Int32,
+                      Pointer<Uint64>)>>('auradsp_request_geometry')
+          .asFunction();
+
+  late final int Function(Pointer<Void>, Pointer<AuraDspGeometry>)
+      getActiveGeometry = dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>,
+                      Pointer<AuraDspGeometry>)>>('auradsp_get_active_geometry')
           .asFunction();
 
   late final int Function(Pointer<Void>, Pointer<Uint8>, Pointer<Void>, int)

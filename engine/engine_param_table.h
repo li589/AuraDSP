@@ -683,12 +683,8 @@ static auradsp_status set_channels_mode(auradsp_handle h, const void* value, uin
         set_error(h, "channels.mode: out of range (0=matrix, 1=discrete)");
         return AURADSP_E_PARAM;
     }
-    h->p.channels_mode.store(v);
-    /* 模式切换会改变拓扑与输入布局；WP6：统一调用 reset_channel_state
-     * 全模块重置逐通道状态，并重算延迟。 */
-    reset_channel_state(h);
-    compute_latency(h, &h->latency_ms);
-    return AURADSP_OK;
+    return request_geometry_locked(
+        h, h->pending_channels.load(std::memory_order_relaxed), v, nullptr);
 }
 
 static auradsp_status set_channels_count(auradsp_handle h, const void* value, uint32_t bytes) {
@@ -698,35 +694,19 @@ static auradsp_status set_channels_count(auradsp_handle h, const void* value, ui
         set_error(h, "channels.count: out of range (2/4/6/8 only)");
         return AURADSP_E_PARAM;
     }
-    const int32_t old_ch = h->channel_count.load(std::memory_order_relaxed);
-    h->channel_count.store(v);
-    /* X-6 修复（2026-10-26）：dyneq/exciter 的 no-LFE 默认掩码随布局平移。
-     * 0xF7 是 8ch 位定义（bit3=LFE）；4ch Quad 布局下 bit3=BR，0xF7 会默认
-     * 跳过 BR。仅当掩码仍等于旧布局默认值（说明用户未自定义）时才改写为
-     * 新布局默认；用户自定义掩码原样保留（位位置语义，跨布局不做映射）。
-     * 其余效果默认 kChMaskAll(0xFF) 在所有布局下均含全部有效声道，无需平移。 */
-    if (old_ch != v) {
-        const int32_t old_def = (int32_t)ch_mask_no_lfe_for(old_ch);
-        const int32_t new_def = (int32_t)ch_mask_no_lfe_for(v);
-        if (h->p.dyneq_channels.load(std::memory_order_relaxed) == old_def)
-            h->p.dyneq_channels.store(new_def, std::memory_order_relaxed);
-        if (h->p.exciter_channels.load(std::memory_order_relaxed) == old_def)
-            h->p.exciter_channels.store(new_def, std::memory_order_relaxed);
-        auradsp::plugin_chain_set_channel_hint(h, v);
-        /* 通道数变化改变拓扑；WP6：统一调用 reset_channel_state
-         * 全模块重置逐通道状态，并重算延迟。
-         * W6（2026-11-24）：只在**真变化**时做。参数块每轮重放整个
-         * 镜像（含 channels.count），无条件重置会把「拖任意参数」
-         * 变成周期性全模块状态清零——实测表现为爆音/断续。 */
-        reset_channel_state(h);
-        compute_latency(h, &h->latency_ms);
-    }
+    return request_geometry_locked(
+        h, v, h->pending_mode.load(std::memory_order_relaxed), nullptr);
+}
+
+static auradsp_status get_channels_mode(auradsp_handle h, void* out_value, uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    *(int32_t*)out_value = h->pending_mode.load(std::memory_order_relaxed);
     return AURADSP_OK;
 }
 
 static auradsp_status get_channels_count(auradsp_handle h, void* out_value, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
-    *(int32_t*)out_value = h->channel_count.load();
+    *(int32_t*)out_value = h->pending_channels.load(std::memory_order_relaxed);
     return AURADSP_OK;
 }
 
@@ -1501,7 +1481,7 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_CUSTOM_GET_ONLY("gr.dyneq.b2", get_gr_dyneq_b2),
     PARAM_CUSTOM_GET_ONLY("gr.dyneq.b3", get_gr_dyneq_b3),
     PARAM_CUSTOM("channels.count", set_channels_count, get_channels_count),
-    PARAM_CUSTOM_SET_STANDARD_GET("channels.mode", channels_mode, ParamType::kInt32, set_channels_mode),
+    PARAM_CUSTOM("channels.mode", set_channels_mode, get_channels_mode),
     /* WP0 脚手架：channels.count 的自动/手动模式状态载体（纯状态）。 */
     PARAM_INT("channels.countMode", channels_count_mode, 0, 1, nullptr),
     /* [channels.upmix_fill] 矩阵上混回填策略：1=铺满未使用声道，

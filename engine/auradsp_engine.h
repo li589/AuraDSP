@@ -67,6 +67,16 @@ extern "C" {
 
 typedef struct auradsp_handle_s* auradsp_handle;
 
+/* 完整声道几何。generation 在每次成功请求时递增；active 快照只在
+ * auradsp_process 块边界切换，宿主不得拼接不同代的 channels/mode。 */
+typedef struct auradsp_geometry {
+    uint64_t generation;
+    int32_t channels;
+    int32_t mode;
+} auradsp_geometry;
+typedef char auradsp_geometry_size_must_be_16[
+    (sizeof(auradsp_geometry) == 16) ? 1 : -1];
+
 typedef enum auradsp_status {
     AURADSP_OK = 0,
     AURADSP_E_PARAM = -1,          /* 参数 ID 未知或值越界 */
@@ -190,6 +200,14 @@ void           auradsp_destroy(auradsp_handle h);
 
 /* ---- RT 音频（仅音频线程；stereo 或多声道交织，按 channels.count 解释） ---- */
 void auradsp_process(auradsp_handle h, const float* in, float* out, int frames);
+
+/* 请求只发布 pending；成功时 generation 非空则返回新代号。下一 RT 块开始
+ * 才激活完整几何。active 查询为定常时间、无分配/无锁，可在块边界调用；
+ * 发布中的瞬时状态返回 AURADSP_E_STATE，调用方须保留上一份完整快照。 */
+auradsp_status auradsp_request_geometry(auradsp_handle h, int32_t channels,
+                                        int32_t mode, uint64_t* generation);
+auradsp_status auradsp_get_active_geometry(auradsp_handle h,
+                                           auradsp_geometry* out);
 
 /* ---- 参数与状态（控制线程） ---- */
 auradsp_status auradsp_set_param(auradsp_handle h, const char* id,

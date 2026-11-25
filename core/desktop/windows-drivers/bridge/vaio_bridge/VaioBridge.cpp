@@ -248,6 +248,9 @@ struct VaioBridgeCtl {
     HMODULE hEngineMod = nullptr;
     FnEngCreate fnCreate = nullptr;
     FnEngProcess fnProcess = nullptr;
+    auradsp_status (*fnRequestGeometry)(void*, int32_t, int32_t,
+                                        uint64_t*) = nullptr;
+    auradsp_status (*fnGetActiveGeometry)(void*, auradsp_geometry*) = nullptr;
     FnEngDestroy fnDestroy = nullptr;
     FnEngSetParam fnSetParam = nullptr;
     FnEngGetParam fnGetParam = nullptr;
@@ -308,7 +311,10 @@ struct VaioBridgeCtl {
     int32_t engineChannels = 2;   // 引擎当前实际运行声道数 (2, 4, 6, 8)
     int32_t countMode = 0;        // 0 = 自动跟随驱动环 (ringChannels), 1 = 手动锁定 (manualChannels)
     int32_t manualChannels = 2;   // 手动模式下用户指定的声道数 (2, 4, 6, 8)
-    int32_t chanMode = 0;         // channels.mode 镜像（0=矩阵，1=离散）；离散时泵内适配走截断（第四十六轮 S2）
+    int32_t chanMode = 0;         // active 块几何模式；RT 只在代匹配后发布
+    volatile LONG requestedChannels = 2;
+    volatile LONG requestedMode = 0;
+    volatile LONGLONG requestedGeneration = 0;
 
     // 运行态与 RT 统计
     HANDLE hPumpThread = nullptr;
@@ -368,6 +374,8 @@ void DestroyEngine() {
     }
     g_vaio.fnCreate = nullptr;
     g_vaio.fnProcess = nullptr;
+    g_vaio.fnRequestGeometry = nullptr;
+    g_vaio.fnGetActiveGeometry = nullptr;
     g_vaio.fnDestroy = nullptr;
     g_vaio.fnSetParam = nullptr;
     g_vaio.fnGetParam = nullptr;
@@ -497,12 +505,26 @@ void FreeScratchBuffers() {
     }
 }
 
+bool SetEngineGeometry(int32_t count, int32_t mode) {
+    if ((count != 2 && count != 4 && count != 6 && count != 8) ||
+        (mode != 0 && mode != 1)) return false;
+    const LONG oldCount = InterlockedCompareExchange(&g_vaio.requestedChannels, 0, 0);
+    const LONG oldMode = InterlockedCompareExchange(&g_vaio.requestedMode, 0, 0);
+    if (InterlockedCompareExchange64(&g_vaio.requestedGeneration, 0, 0) != 0 &&
+        oldCount == count && oldMode == mode) return true;
+    if (!g_vaio.pEngine || !g_vaio.fnRequestGeometry) return false;
+    uint64_t generation = 0;
+    if (g_vaio.fnRequestGeometry(g_vaio.pEngine, count, mode, &generation) !=
+        AURADSP_OK) return false;
+    InterlockedExchange(&g_vaio.requestedChannels, count);
+    InterlockedExchange(&g_vaio.requestedMode, mode);
+    InterlockedExchange64(&g_vaio.requestedGeneration, (LONGLONG)generation);
+    return true;
+}
+
 void SetEngineChannels(int32_t count) {
-    if (count != 2 && count != 4 && count != 6 && count != 8) return;
-    if (g_vaio.pEngine && g_vaio.fnSetParam) {
-        g_vaio.fnSetParam(g_vaio.pEngine, "channels.count", &count, sizeof(count));
-    }
-    InterlockedExchange((volatile LONG*)&g_vaio.engineChannels, (LONG)count);
+    const int32_t mode = InterlockedCompareExchange(&g_vaio.requestedMode, 0, 0);
+    (void)SetEngineGeometry(count, mode);
 }
 
 // 零分配交织音频重映射：安全适配驱动共享环、DSP处理链与WASAPI输出三者之间的声道拓扑差异
@@ -645,8 +667,10 @@ void ReplayMirroredParams() {
             continue;
         }
         if (strcmp(e.id, "channels.mode") == 0) {
-            // 记录供泵内适配分流；本体仍走下方通用转发（引擎需要）。
-            g_vaio.chanMode = (e.isFloat ? (int32_t)e.f : e.i) != 0 ? 1 : 0;
+            const int32_t mode = (e.isFloat ? (int32_t)e.f : e.i) != 0 ? 1 : 0;
+            const int32_t count = InterlockedCompareExchange(&g_vaio.requestedChannels, 0, 0);
+            (void)SetEngineGeometry(count, mode);
+            continue;
         }
         const void* v = e.isFloat ? (const void*)&e.f : (const void*)&e.i;
         g_vaio.fnSetParam(g_vaio.pEngine, e.id, v, 4);
@@ -684,14 +708,18 @@ void ApplyParamsString(const char* s) {
             const float f = (float)atof(vs);
             MirrorSet(id, true, &f);
             if (strcmp(id, "channels.mode") == 0) {
-                g_vaio.chanMode = ((int)f != 0) ? 1 : 0;
+                const int32_t count = InterlockedCompareExchange(&g_vaio.requestedChannels, 0, 0);
+                if (SetEngineGeometry(count, ((int)f != 0) ? 1 : 0))
+                    ++g_vaio.paramsApplied;
+                else
+                    ++g_vaio.paramsFailed;
             }
             if (strcmp(id, "channels.countMode") == 0) {
                 g_vaio.countMode = ((int)f != 0) ? 1 : 0;
             } else if (strcmp(id, "channels.count") == 0) {
                 const int32_t cnt = (int32_t)f;
                 if (cnt == 2 || cnt == 4 || cnt == 6 || cnt == 8) g_vaio.manualChannels = cnt;
-            } else {
+            } else if (strcmp(id, "channels.mode") != 0) {
                 if (g_vaio.fnSetParam(g_vaio.pEngine, id, &f, 4) != 0) {
                     ++g_vaio.paramsFailed;
                 } else {
@@ -702,13 +730,17 @@ void ApplyParamsString(const char* s) {
             const int32_t iv = (int32_t)atoi(vs);
             MirrorSet(id, false, &iv);
             if (strcmp(id, "channels.mode") == 0) {
-                g_vaio.chanMode = (iv != 0) ? 1 : 0;
+                const int32_t count = InterlockedCompareExchange(&g_vaio.requestedChannels, 0, 0);
+                if (SetEngineGeometry(count, (iv != 0) ? 1 : 0))
+                    ++g_vaio.paramsApplied;
+                else
+                    ++g_vaio.paramsFailed;
             }
             if (strcmp(id, "channels.countMode") == 0) {
                 g_vaio.countMode = (iv != 0) ? 1 : 0;
             } else if (strcmp(id, "channels.count") == 0) {
                 if (iv == 2 || iv == 4 || iv == 6 || iv == 8) g_vaio.manualChannels = iv;
-            } else {
+            } else if (strcmp(id, "channels.mode") != 0) {
                 if (g_vaio.fnSetParam(g_vaio.pEngine, id, &iv, 4) != 0) {
                     ++g_vaio.paramsFailed;
                 } else {
@@ -1283,6 +1315,24 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         }
         g_vaio.peakIn = (double)curPeakIn;
 
+        auradsp_geometry activeGeometry{0, 0, 0};
+        const bool haveActive = g_vaio.fnGetActiveGeometry &&
+            g_vaio.fnGetActiveGeometry(g_vaio.pEngine, &activeGeometry) == AURADSP_OK;
+        const uint64_t requestedGeneration = (uint64_t)InterlockedCompareExchange64(
+            &g_vaio.requestedGeneration, 0, 0);
+        const int requestedChannels = InterlockedCompareExchange(
+            &g_vaio.requestedChannels, 0, 0);
+        const int requestedMode = InterlockedCompareExchange(&g_vaio.requestedMode, 0, 0);
+        const bool geometryReady = haveActive &&
+            activeGeometry.generation == requestedGeneration &&
+            activeGeometry.channels == requestedChannels &&
+            activeGeometry.mode == requestedMode;
+        if (geometryReady) {
+            InterlockedExchange((volatile LONG*)&g_vaio.engineChannels,
+                                activeGeometry.channels);
+            InterlockedExchange((volatile LONG*)&g_vaio.chanMode,
+                                activeGeometry.mode);
+        }
         const int engineCh = (int)InterlockedCompareExchange((volatile LONG*)&g_vaio.engineChannels, 0, 0);
         const int safeEngineCh = (engineCh == 4 || engineCh == 6 || engineCh == 8) ? engineCh : 2;
 
@@ -1300,7 +1350,28 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             // P3 静音门控（单组）：GATED 时整块写零、跳过 DSP；测试注入是
             // 信号、用户旁路已提前返回，两者都不门控。
             const bool gateOn = g_vaio.gate.enabled && g_vaio.tc.testKind == 0;
-            if (gateOn && g_vaio.gate.Tick((float)curPeakIn, (long long)framesToProcess)) {
+            if (!geometryReady) {
+                // 保留旧 engineChannels/chanMode 给输出环；用 active 宽私有
+                // scratch 推进一代，过渡输出静音，不跨代解释真实样本。
+                if (haveActive) {
+                    float transitionIn[256 * 8];
+                    float transitionOut[256 * 8];
+                    UINT32 left = framesToProcess;
+                    while (left > 0) {
+                        const UINT32 chunk = left > 256 ? 256 : left;
+                        memset(transitionIn, 0, sizeof(transitionIn));
+                        g_vaio.fnProcess(g_vaio.pEngine, transitionIn,
+                                         transitionOut, (int)chunk);
+                        left -= chunk;
+                    }
+                }
+                memset(g_vaio.scratchOut, 0,
+                       (size_t)framesToProcess * wasapiChannels * sizeof(float));
+                memset(g_vaio.scratchProcOut, 0,
+                       (size_t)framesToProcess * safeEngineCh * sizeof(float));
+                g_vaio.peakOut = 0.0;
+                if (g_vaio.gate.enabled) g_vaio.gate.NoteOutput(0.0f);
+            } else if (gateOn && g_vaio.gate.Tick((float)curPeakIn, (long long)framesToProcess)) {
                 memset(g_vaio.scratchOut, 0, (size_t)framesToProcess * wasapiChannels * sizeof(float));
                 memset(g_vaio.scratchProcOut, 0, (size_t)framesToProcess * safeEngineCh * sizeof(float));
                 if (g_vaio.gate.enabled) g_vaio.gate.NoteOutput(0.0f);
@@ -1875,6 +1946,10 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     if (g_vaio.hEngineMod) {
         g_vaio.fnCreate = (FnEngCreate)GetProcAddress(g_vaio.hEngineMod, "auradsp_create");
         g_vaio.fnProcess = (FnEngProcess)GetProcAddress(g_vaio.hEngineMod, "auradsp_process");
+        g_vaio.fnRequestGeometry = (decltype(g_vaio.fnRequestGeometry))GetProcAddress(
+            g_vaio.hEngineMod, "auradsp_request_geometry");
+        g_vaio.fnGetActiveGeometry = (decltype(g_vaio.fnGetActiveGeometry))GetProcAddress(
+            g_vaio.hEngineMod, "auradsp_get_active_geometry");
         g_vaio.fnDestroy = (FnEngDestroy)GetProcAddress(g_vaio.hEngineMod, "auradsp_destroy");
         g_vaio.fnSetParam = (FnEngSetParam)GetProcAddress(g_vaio.hEngineMod, "auradsp_set_param");
         g_vaio.fnGetParam = (FnEngGetParam)GetProcAddress(g_vaio.hEngineMod, "auradsp_get_param");
@@ -1890,7 +1965,9 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     }
 
     if (!g_vaio.hEngineMod || !g_vaio.fnCreate || !g_vaio.fnProcess ||
-        !g_vaio.fnDestroy || !engAbiFn || engAbi != vmcore::kEngineAbiExpected) {
+        !g_vaio.fnDestroy || !g_vaio.fnRequestGeometry ||
+        !g_vaio.fnGetActiveGeometry || !engAbiFn ||
+        engAbi != vmcore::kEngineAbiExpected) {
         if (!engAbiFn || engAbi == vmcore::kEngineAbiExpected)
             snprintf(g_vaio.note, sizeof(g_vaio.note), "engine-load-failed");
         UnmapAndCloseRing();
@@ -2154,6 +2231,9 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
         return -12;
     }
 
+    InterlockedExchange(&g_vaio.requestedChannels, 2);
+    InterlockedExchange(&g_vaio.requestedMode, 0);
+    InterlockedExchange64(&g_vaio.requestedGeneration, 1);
     const int32_t initCh = (int32_t)(g_vaio.ringChannels > 0 ? g_vaio.ringChannels : 2);
     SetEngineChannels(initCh);
 
@@ -2440,13 +2520,10 @@ int vaio_set_param(const char* id, int isFloat, const void* v4) {
     MirrorSet(id, isFloat != 0, v4);
 
     if (strcmp(id, "channels.mode") == 0) {
-        // 泵内适配分流（离散截断 / 矩阵折叠）只看 g_vaio.chanMode，
-        // 必须与引擎同步更新。本参数桥与引擎双消费，故不提前返回：
-        // 记桥内影子后继续走下方通用转发送进引擎（第五十三轮定罪：
-        // r46 接线漏了本入口，运行中切离散不生效、泵恒按矩阵折叠，
-        // 只有桥重启时 ReplayMirroredParams 回放镜像才自愈）。
-        g_vaio.chanMode = ((isFloat ? (int32_t)*(const float*)v4
-                                    : *(const int32_t*)v4) != 0) ? 1 : 0;
+        const int32_t mode = ((isFloat ? (int32_t)*(const float*)v4
+                                       : *(const int32_t*)v4) != 0) ? 1 : 0;
+        const int32_t count = InterlockedCompareExchange(&g_vaio.requestedChannels, 0, 0);
+        return SetEngineGeometry(count, mode) ? 0 : -1;
     }
 
     if (strcmp(id, "channels.countMode") == 0) {

@@ -18,6 +18,7 @@
  */
 #include "auradsp_engine.h"
 #include "engine_internal.h"
+#include "geometry_snapshot.h"
 #include "platform/port/env.h"
 #include "plugins/integration/plugin_chain_adapter.h"
 
@@ -92,6 +93,40 @@ void global_unref() {
     std::lock_guard<std::mutex> lk(g_global_mutex);
     if (g_global_ref > 0) --g_global_ref;
     /* 有意不调用 JamesDSPGlobalMemoryDeallocation：NSEEL 卸载期风险 > 退出前泄漏 */
+}
+
+/* 调用方必须持有 h->ctrl_mutex。只发布 pending，绝不从控制线程改 active。 */
+static auradsp_status request_geometry_locked(auradsp_handle h, int32_t channels,
+                                              int32_t mode, uint64_t* generation) {
+    if (!h || (channels != 2 && channels != 4 && channels != 6 && channels != 8) ||
+        (mode != 0 && mode != 1)) {
+        return AURADSP_E_PARAM;
+    }
+    const int32_t old_channels = h->pending_channels.load(std::memory_order_relaxed);
+    const int32_t old_mode = h->pending_mode.load(std::memory_order_relaxed);
+    uint64_t next = h->pending_generation.load(std::memory_order_relaxed) + 1;
+    if (next == 0) next = 1;  /* 0 保留给发布中的瞬时标记。 */
+    /* 先将 pending 代号置 0，再改字段，最后 release 新代号。RT 双读代号，
+     * 发布途中或跨代读取都失败关闭并保留旧 active，绝不拼接快照。 */
+    h->pending_generation.store(0, std::memory_order_release);
+    h->pending_channels.store(channels, std::memory_order_relaxed);
+    h->pending_mode.store(mode, std::memory_order_relaxed);
+    h->pending_generation.store(next, std::memory_order_release);
+    if (old_channels != channels) {
+        const int32_t old_def = (int32_t)ch_mask_no_lfe_for(old_channels);
+        const int32_t new_def = (int32_t)ch_mask_no_lfe_for(channels);
+        if (h->p.dyneq_channels.load(std::memory_order_relaxed) == old_def)
+            h->p.dyneq_channels.store(new_def, std::memory_order_relaxed);
+        if (h->p.exciter_channels.load(std::memory_order_relaxed) == old_def)
+            h->p.exciter_channels.store(new_def, std::memory_order_relaxed);
+        auradsp::plugin_chain_set_channel_hint(h, channels);
+    }
+    if (old_channels != channels || old_mode != mode) {
+        reset_channel_state(h);
+        compute_latency(h, &h->latency_ms);
+    }
+    if (generation) *generation = next;
+    return AURADSP_OK;
 }
 
 /* ================= ABI 实现 ================= */
@@ -288,6 +323,29 @@ void auradsp_destroy(auradsp_handle h) {
     global_unref();
 }
 
+auradsp_status auradsp_request_geometry(auradsp_handle h, int32_t channels,
+                                        int32_t mode, uint64_t* generation) {
+    if (!h) return AURADSP_E_PARAM;
+    std::lock_guard<std::mutex> lk(h->ctrl_mutex);
+    return request_geometry_locked(h, channels, mode, generation);
+}
+
+auradsp_status auradsp_get_active_geometry(auradsp_handle h,
+                                           auradsp_geometry* out) {
+    if (!h || !out) return AURADSP_E_PARAM;
+    const uint64_t generation = h->active_generation.load(std::memory_order_acquire);
+    if (generation == 0) return AURADSP_E_STATE;
+    const int32_t channels = h->active_channels.load(std::memory_order_relaxed);
+    const int32_t mode = h->active_mode.load(std::memory_order_relaxed);
+    if (h->active_generation.load(std::memory_order_acquire) != generation) {
+        return AURADSP_E_STATE;
+    }
+    out->generation = generation;
+    out->channels = channels;
+    out->mode = mode;
+    return AURADSP_OK;
+}
+
 void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) {
     /* ABI 是公开边界：空缓冲指针在内部 FFI 契约里虽不会出现，但违规调用
      * 会直接踩空；一次分支换内存安全（RT 开销可忽略）。 */
@@ -303,6 +361,20 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
      * 执行 —— 控制线程直清 RT 正在使用的非原子状态是数据竞争（gate/filter/
      * dyneq/tube/limiter/haas/spatial）。放在此处的理由：早于门控与任一处理
      * 分支，保证本块按新拓扑开始时状态已是干净的。 */
+    /* 在块头一次性激活同一代 pending；channels/mode/generation 对外只能
+     * 作为完整快照出现。新请求即使在本次发布途中到达，也只会留到下一块。 */
+    auradsp_detail::PendingGeometrySnapshot pending;
+    if (auradsp_detail::load_pending_geometry_snapshot(
+            h->pending_generation, h->pending_channels, h->pending_mode, &pending) &&
+        pending.generation != h->active_generation.load(std::memory_order_relaxed)) {
+        h->active_generation.store(0, std::memory_order_release);
+        h->channel_count.store(pending.channels, std::memory_order_relaxed);
+        h->p.channels_mode.store(pending.mode, std::memory_order_relaxed);
+        h->active_channels.store(pending.channels, std::memory_order_relaxed);
+        h->active_mode.store(pending.mode, std::memory_order_relaxed);
+        h->active_generation.store(pending.generation, std::memory_order_release);
+    }
+
     if (h->reset_req.exchange(0, std::memory_order_acq_rel) != 0) {
         reset_channel_state_rt(h);
     }

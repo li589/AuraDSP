@@ -847,7 +847,16 @@ struct auradsp_handle_s {
 #endif
 
     /* [ADR-003 Phase A] 多声道矩阵工作区 */
-    std::atomic<int> channel_count{2};   /* 驱动层交织缓冲的声道数（2=立体声） */
+    std::atomic<int> channel_count{2};   /* active RT 交织缓冲声道数 */
+    /* 控制线程在 ctrl_mutex 下成对写 pending；RT 仅在 process 块头激活。
+     * pending/active_generation=0 都是发布中的瞬时标记；pending 由 RT 双读
+     * 校验，active 由查询方双读校验，任何跨代快照都失败关闭。 */
+    std::atomic<uint64_t> pending_generation{1};
+    std::atomic<int32_t> pending_channels{2};
+    std::atomic<int32_t> pending_mode{0};
+    std::atomic<uint64_t> active_generation{1};
+    std::atomic<int32_t> active_channels{2};
+    std::atomic<int32_t> active_mode{0};
     float* mx_scratch = nullptr;         /* max_block*kMxMaxChannels，留存各声道 */
     float* mx_stereo = nullptr;          /* max_block*2，下混后的立体声链输出 */
     /* [channels.upmix_fill] 源活动保持窗（帧，RT 独占；0=该声道不填充）。

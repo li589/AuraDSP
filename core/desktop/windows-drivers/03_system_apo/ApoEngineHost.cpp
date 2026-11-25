@@ -229,6 +229,10 @@ bool ApoEngineHost::LoadEngine() {
         fnCreate_ = (FnCreate)GetProcAddress(h, "auradsp_create");
         fnDestroy_ = (FnDestroy)GetProcAddress(h, "auradsp_destroy");
         fnProcess_ = (FnProcess)GetProcAddress(h, "auradsp_process");
+        fnRequestGeometry_ = (FnRequestGeometry)GetProcAddress(
+            h, "auradsp_request_geometry");
+        fnGetActiveGeometry_ = (FnGetActiveGeometry)GetProcAddress(
+            h, "auradsp_get_active_geometry");
         fnSetParam_ = (FnSetParam)GetProcAddress(h, "auradsp_set_param");
         fnLatency_ = (FnGetLatencyMs)GetProcAddress(h, "auradsp_get_latency_ms");
         fnVizRead_ = (FnVizRead)GetProcAddress(h, "auradsp_viz_read");
@@ -243,7 +247,8 @@ bool ApoEngineHost::LoadEngine() {
         auto pSetPdc = (FnPluginFlag)GetProcAddress(h, "auradsp_plugin_set_pdc");
         auto pChainEnabled = (FnPluginFlag)GetProcAddress(h, "auradsp_plugin_chain_set_enabled");
         if (fnAbi && fnAbi() == 2 && fnCreate_ && fnDestroy_ && fnProcess_ &&
-            fnSetParam_ && fnLatency_ && fnVizRead_) {
+            fnRequestGeometry_ && fnGetActiveGeometry_ && fnSetParam_ &&
+            fnLatency_ && fnVizRead_) {
             hEngineDll_ = h;
             // 插件通道是可选能力：符号全齐才启用（纪律版风味
             // 恒齐；若某构建缺符号则整通道静默禁用）。
@@ -335,18 +340,21 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels,
         ReleaseSeat();
         return false;
     }
-    // 初始引擎宽 = 流宽决议（参数块 channels.count 到达后由
-    // worker 的 ApplyEngChResolution 封顶修正，第四十六轮
-    // S2；旧「流几何压过设置」决议已推翻）。
-    int32_t cnt = (int32_t)engCh_;
-    fnSetParam_(engine_, "channels.count", &cnt, sizeof(cnt));
-    // 声道族覆写（第四十一轮）：本端点 FX 属性集给了 mode/fill
-    // 时以覆写为准，创建即下发；其后由 ApplySnapshot 持续压过
-    // 参数块同项（块侧变化不影响本端点）。
-    if (epModeValid_) {
-        int32_t m = epMode_;
-        if (fnSetParam_(engine_, "channels.mode", &m, sizeof(m)) == 0)
-            appliedEpMode_ = epMode_;
+    // 初始声道数与模式作为同一代请求发布；RT 只在 active 代匹配后
+    // 更新 liveEngCh_/liveTrunc_，不在控制线程提前切换缓冲步进。
+    const int32_t initialMode = epModeValid_ ? epMode_ : 0;
+    // create 的完整 active 快照是 generation=1 / 2ch / matrix；初始请求
+    // 失败也必须留在这份几何，而不是以 generation=0 永久错代静音。
+    requestedEngCh_.store(2, std::memory_order_relaxed);
+    requestedMode_.store(0, std::memory_order_relaxed);
+    requestedGeometryGeneration_.store(1, std::memory_order_release);
+    uint64_t generation = 0;
+    if (fnRequestGeometry_(engine_, (int32_t)engCh_, initialMode, &generation) ==
+        AURADSP_OK) {
+        requestedEngCh_.store(engCh_, std::memory_order_relaxed);
+        requestedMode_.store(initialMode, std::memory_order_relaxed);
+        requestedGeometryGeneration_.store(generation, std::memory_order_release);
+        if (epModeValid_) appliedEpMode_ = epMode_;
     }
     if (epFillValid_) {
         int32_t f = epFill_;
@@ -516,16 +524,23 @@ UINT32 ApoEngineHost::ResolveEngCh() const {
 }
 
 void ApoEngineHost::ApplyEngChResolution() {
-    if (!engine_ || !fnSetParam_) return;
+    if (!engine_ || !fnRequestGeometry_) return;
     const UINT32 want = ResolveEngCh();
-    if (want != engCh_) {
-        int32_t cnt = (int32_t)want;
-        if (fnSetParam_(engine_, "channels.count", &cnt, sizeof(cnt)) == 0) {
-            engCh_ = want;
-        }
+    const int32_t mode = effMode_;
+    if (requestedGeometryGeneration_.load(std::memory_order_acquire) != 0 &&
+        requestedEngCh_.load(std::memory_order_relaxed) == want &&
+        requestedMode_.load(std::memory_order_relaxed) == mode) {
+        return;
     }
-    liveEngCh_.store(engCh_);
-    liveTrunc_.store(effMode_ == 1);
+    uint64_t generation = 0;
+    if (fnRequestGeometry_(engine_, (int32_t)want, mode, &generation) !=
+        AURADSP_OK) {
+        return;  // 失败保留上一份完整 pending/active 几何。
+    }
+    engCh_ = want;
+    requestedEngCh_.store(want, std::memory_order_relaxed);
+    requestedMode_.store(mode, std::memory_order_relaxed);
+    requestedGeometryGeneration_.store(generation, std::memory_order_release);
 }
 
 // 矩阵模式的折叠 gather（系数与 VAIO 桥 RemapInterleavedAudio
@@ -545,6 +560,32 @@ static void FoldGather(const float* s, float* in, UINT32 srcCh, UINT32 engCh,
 // chmap_gather_discrete / chmap_scatter_discrete 直接使用。
 
 void ApoEngineHost::ProcessDirect(const float* src, float* dst, UINT32 frames) {
+    auradsp_geometry active{0, 0, 0};
+    if (fnGetActiveGeometry_(engine_, &active) != AURADSP_OK) {
+        ZeroMemory(dst, (size_t)frames * streamCh_ * sizeof(float));
+        return;
+    }
+    const uint64_t requested =
+        requestedGeometryGeneration_.load(std::memory_order_acquire);
+    const UINT32 requestedCh = requestedEngCh_.load(std::memory_order_relaxed);
+    const int32_t requestedMode = requestedMode_.load(std::memory_order_relaxed);
+    if (active.generation != requested || active.channels != (int32_t)requestedCh ||
+        active.mode != requestedMode) {
+        // 过渡块只推进引擎 active，不发布新步进。固定 scratch 无分配/锁。
+        float scratchIn[256 * 8];
+        float scratchOut[256 * 8];
+        UINT32 left = frames;
+        while (left > 0) {
+            const UINT32 chunk = left > 256 ? 256 : left;
+            ZeroMemory(scratchIn, sizeof(scratchIn));
+            fnProcess_(engine_, scratchIn, scratchOut, (int)chunk);
+            left -= chunk;
+        }
+        ZeroMemory(dst, (size_t)frames * streamCh_ * sizeof(float));
+        return;
+    }
+    liveEngCh_.store((UINT32)active.channels, std::memory_order_relaxed);
+    liveTrunc_.store(active.mode == 1, std::memory_order_relaxed);
     const UINT32 eng = liveEngCh_.load();
     const bool trunc = liveTrunc_.load();
     const UINT32 strm = streamCh_;
@@ -703,14 +744,9 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
             appliedNum_[i] = values[i];
             continue;
         }
-        // 有效 mode 的块侧基线（覆写时以覆写为准，见循环后）。
-        if (strcmp(id, "channels.mode") == 0 && !modeOvr) {
-            lastBlockMode_ = (int32_t)values[i];
-        }
-        // 声道族覆写（第四十一轮）：本端点有覆写的项，块值仅记
-        // 账（diff 基线）、不下发引擎——覆写由循环后的对齐段独占
-        // 下发（单一路径，失败可重试）。
-        if (modeOvr && strcmp(id, "channels.mode") == 0) {
+        // mode 与 count 只能在循环后的同代几何请求中下发，避免跨代拼接。
+        if (strcmp(id, "channels.mode") == 0) {
+            if (!modeOvr) lastBlockMode_ = (int32_t)values[i];
             appliedNum_[i] = values[i];
             continue;
         }
@@ -725,13 +761,7 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
     // 覆写对齐：块从未写过 mode/fill（有效位未置、上面的循环没
     // 覆盖到）时，覆写仍须生效——与已下发哨兵比对后补下发；覆写
     // 值变化（实时表改值）时哨兵失配、自动重新下发。
-    if (modeOvr && appliedEpMode_ != modeOvrVal) {
-        int32_t m = modeOvrVal;
-        if (fnSetParam_(engine_, "channels.mode", &m, sizeof(m)) == 0) {
-            appliedEpMode_ = modeOvrVal;
-            applied++;
-        }
-    }
+    // mode 覆写由 ApplyEngChResolution 与 count 同代下发。
     if (fillOvr && appliedEpFill_ != fillOvrVal) {
         int32_t f = fillOvrVal;
         if (fnSetParam_(engine_, "channels.upmix_fill", &f, sizeof(f)) == 0) {
@@ -744,6 +774,10 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
     // 时仅原子发布，零引擎调用）。
     effMode_ = modeOvr ? modeOvrVal : lastBlockMode_;
     ApplyEngChResolution();
+    if (modeOvr && requestedMode_.load(std::memory_order_relaxed) == modeOvrVal) {
+        if (appliedEpMode_ != modeOvrVal) applied++;
+        appliedEpMode_ = modeOvrVal;
+    }
     for (uint32_t s = 0; s < APO_STR_SLOT_COUNT; s++) {
         if (!bitSet(APO_NUM_PARAM_COUNT + s)) continue;  // 同上，有效位门
         uint32_t used = hdr[5 + s];

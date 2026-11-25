@@ -204,7 +204,6 @@ const List<ParamDefaultRow> kParamDefaultRows = [
   ParamDefaultRow('limiter.threshold', 'limiter_threshold', -0.1),
   ParamDefaultRow('limiter.link', 'limiter_link', 1),
   ParamDefaultRow('limiter.lookahead', 'limiter_lookahead', 0),
-  ParamDefaultRow('channels.mode', 'channels_mode', 0),
   ParamDefaultRow('channels.countMode', 'channels_count_mode', 0),
   ParamDefaultRow('channels.upmix_fill', 'upmix_fill', 0),
 ];
@@ -244,6 +243,7 @@ const List<String> kEngineCustomOnlyParamIds = [
   'gr.dyneq.b2',
   'gr.dyneq.b3',
   'channels.count',
+  'channels.mode',
   'gate.maxIrSeconds',
   'gate.maxFileMb',
   'viz.fftSize',
@@ -442,5 +442,5 @@ const List<ParamRangeRow> kEngineRangeRows = [
 
 /// 引擎源码行数哨兵（param_table / internal / create 的行数）。
 /// header/create 变更而未重生 fixture → param_contract_test 行数断言失败。
-const String kContractLineCounts = 'param_table:1542;internal:986;create:683';
+const String kContractLineCounts = 'param_table:1522;internal:995;create:755';
 

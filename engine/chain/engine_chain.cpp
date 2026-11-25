@@ -195,11 +195,11 @@ void apply_reverb(auradsp_handle h) {
  * reverb.engine 只读参数与 WP1 的 apply_reverb 必须共用本判定。 */
 int reverb_path_kind(auradsp_handle h) {
     if (!h) return 1;
-    if (h->p.channels_mode.load(std::memory_order_relaxed) == 0) return 0;
+    if (h->pending_mode.load(std::memory_order_relaxed) == 0) return 0;
     const bool binaural =
         h->p.spatial_binaural.load(std::memory_order_relaxed) != 0 &&
         h->p.spatial_enable.load(std::memory_order_relaxed) != 0 &&
-        h->channel_count.load(std::memory_order_relaxed) >= 4;
+        h->pending_channels.load(std::memory_order_relaxed) >= 4;
     return binaural ? 0 : 1;
 }
 
@@ -253,7 +253,7 @@ void reset_channel_state(auradsp_handle h) {
     }
 
     /* 4. liveprog 环境感知 [PATCHED-AuraDSP P-038] */
-    const int cur_ch = h->channel_count.load(std::memory_order_relaxed);
+    const int cur_ch = h->pending_channels.load(std::memory_order_relaxed);
     LiveProgSetChannels(&h->jdsp, cur_ch > 0 ? cur_ch : 2);
     if (h->mc_lp) mc_liveprog_set_channels(h->mc_lp, cur_ch > 0 ? cur_ch : 2);
 
@@ -503,7 +503,7 @@ void apply_liveprogmc(auradsp_handle h) {
     if (!h->mc_lp) return;
     mc_liveprog_set_sample_rate(h->mc_lp,
         (h->jdsp.trueSampleRate > 0.0f) ? h->jdsp.trueSampleRate : h->jdsp.fs);
-    const int cur_ch = h->channel_count.load(std::memory_order_relaxed);
+    const int cur_ch = h->pending_channels.load(std::memory_order_relaxed);
     mc_liveprog_set_channels(h->mc_lp, cur_ch > 0 ? cur_ch : 2);
     mc_liveprog_set_enabled(h->mc_lp,
         h->p.lp_mc_enable.load(std::memory_order_relaxed) ? 1 : 0);

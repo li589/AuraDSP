@@ -199,6 +199,16 @@ add_library(auradsp_engine SHARED
     "${API}/auradsp_engine.def"
 )
 target_link_libraries(auradsp_engine PRIVATE auradsp_core auradsp_wincompat)
+
+add_executable(geometry_atomic_test
+    "${API}/tests/geometry_atomic_test.cpp"
+)
+target_include_directories(geometry_atomic_test PRIVATE "${API}")
+target_link_libraries(geometry_atomic_test PRIVATE auradsp_engine)
+target_compile_options(geometry_atomic_test PRIVATE /utf-8 /W4 /EHsc)
+set_property(TARGET geometry_atomic_test PROPERTY CXX_STANDARD 20)
+set_property(TARGET geometry_atomic_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+add_test(NAME geometry_atomic_test COMMAND geometry_atomic_test)
 target_include_directories(auradsp_engine PRIVATE
     "${API}"
     "${API}/chain"

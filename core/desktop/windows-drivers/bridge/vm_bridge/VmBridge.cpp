@@ -42,6 +42,8 @@ using vmcore::FnEngAbi;
 using vmcore::FnEngDestroy;
 using vmcore::FnEngGetParam;
 using vmcore::FnEngProcess;
+using vmcore::FnEngRequestGeometry;
+using vmcore::FnEngGetActiveGeometry;
 using vmcore::FnEngSetParam;
 using vmcore::FnEngVizRead;
 using vmcore::FnReg;
@@ -681,48 +683,90 @@ void MirrorSet(const char* id, bool isFloat, const void* v4) {
     ++g_mirrorN;
 }
 
-// 引擎工作声道数 = 泵的块步进数，channels.count 是唯一真相。二者一旦错位，
-// auradsp_process 会按错误步长解释交织缓冲（8ch 缓冲喂给 2/4/6 档位 =
-// 4×/2×/1.33× 速的持续断续）。只有全部 live handle 接受后才发布影子，
-// 避免“部分引擎已换档、泵仍按旧档步进”的中间态。
-int ApplyWorkChannels(FnEngSetParam setParam, int32_t requested) {
-    if (!setParam) return 0;
-    const int32_t ch = (requested == 4 || requested == 6 || requested == 8)
-                           ? requested : 2;
+int32_t RequestedWorkChannels() {
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        if (g_b.ctx.eng[g]) {
+            return vmcore::NormalizeWorkCh(InterlockedCompareExchange(
+                &g_b.ctx.requestedChannels[g], 0, 0));
+        }
+    }
+    return vmcore::NormalizeWorkCh(
+        InterlockedCompareExchange(&g_b.ctx.workCh, 0, 0));
+}
+
+int32_t RequestedWorkMode() {
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        if (g_b.ctx.eng[g]) {
+            return InterlockedCompareExchange(&g_b.ctx.requestedMode[g], 0, 0) == 1
+                       ? 1 : 0;
+        }
+    }
+    return InterlockedCompareExchange(&g_b.ctx.chanMode, 0, 0) == 1 ? 1 : 0;
+}
+
+bool RequestGroupGeometry(int g, void* engine, int32_t channels, int32_t mode) {
+    if (!engine || !g_b.ctx.requestGeometry ||
+        (channels != 2 && channels != 4 && channels != 6 && channels != 8) ||
+        (mode != 0 && mode != 1)) return false;
+    uint64_t generation = 0;
+    if (g_b.ctx.requestGeometry(engine, channels, mode, &generation) != AURADSP_OK)
+        return false;
+    InterlockedExchange(&g_b.ctx.requestedChannels[g], channels);
+    InterlockedExchange(&g_b.ctx.requestedMode[g], mode);
+    InterlockedExchange64(&g_b.ctx.requestedGeneration[g], (LONGLONG)generation);
+    return true;
+}
+
+// 控制线程只发布每组 pending 与请求代号，绝不直接切换 RT 的 workCh。
+// 任一组失败时把已请求组回滚到旧 pending；泵在块首仍只认全组同代同宽。
+int ApplyWorkGeometry(int32_t requestedChannels, int32_t requestedMode) {
+    const int32_t channels = (requestedChannels == 4 || requestedChannels == 6 ||
+                              requestedChannels == 8) ? requestedChannels : 2;
+    if (requestedMode != 0 && requestedMode != 1) return 0;
+    const int live = LiveEngineCount();
+    if (live <= 0 || !g_b.ctx.requestGeometry) return 0;
+    int32_t oldChannels[PumpCtx::kMaxGroups] = {};
+    int32_t oldMode[PumpCtx::kMaxGroups] = {};
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        oldChannels[g] = InterlockedCompareExchange(
+            &g_b.ctx.requestedChannels[g], 0, 0);
+        oldMode[g] = InterlockedCompareExchange(&g_b.ctx.requestedMode[g], 0, 0);
+    }
     int ok = 0;
     for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
-        if (g_b.ctx.eng[g] && setParam(g_b.ctx.eng[g], "channels.count", &ch,
-                                       sizeof(ch)) == 0)
-            ++ok;
+        if (!g_b.ctx.eng[g]) continue;
+        if (!RequestGroupGeometry(g, g_b.ctx.eng[g], channels, requestedMode))
+            break;
+        ++ok;
     }
-    // 懒建句柄后 nEng 是版型槽数，实际在用句柄按 live 计数比较。
-    const int live = LiveEngineCount();
-    if (live > 0 && ok == live) InterlockedExchange(&g_b.ctx.workCh, ch);
+    if (ok != live) {
+        int rolledBack = 0;
+        for (int g = 0; g < PumpCtx::kMaxGroups && rolledBack < ok; ++g) {
+            if (!g_b.ctx.eng[g]) continue;
+            (void)RequestGroupGeometry(g, g_b.ctx.eng[g], oldChannels[g], oldMode[g]);
+            ++rolledBack;
+        }
+        return 0;
+    }
     return ok;
 }
 
-// 重建回放后把泵影子同步到镜像里的 channels.count（缺失/非法按 2）。
-void SyncWorkChFromMirror(FnEngSetParam setParam) {
-    int32_t ch = 2;
-    for (int i = 0; i < g_mirrorN; ++i) {
-        if (!g_mirror[i].isFloat &&
-            strcmp(g_mirror[i].id, "channels.count") == 0) {
-            ch = g_mirror[i].i;
-            break;
-        }
-    }
-    ApplyWorkChannels(setParam, ch);
-    // 声道模式影子同路同步（第四十七轮 S2）：重建后泵的折叠/
-    // 清零纪律必须与镜像一致，缺失按矩阵（引擎默认）。
+int ApplyWorkChannels(FnEngSetParam, int32_t requested) {
+    return ApplyWorkGeometry(requested, RequestedWorkMode());
+}
+
+// 重建回放后只发一代组合几何（缺失/非法按 2ch 矩阵），不直接改泵影子。
+void SyncWorkChFromMirror(FnEngSetParam) {
+    int32_t channels = 2;
     int32_t mode = 0;
     for (int i = 0; i < g_mirrorN; ++i) {
-        if (!g_mirror[i].isFloat &&
-            strcmp(g_mirror[i].id, "channels.mode") == 0) {
+        if (g_mirror[i].isFloat) continue;
+        if (strcmp(g_mirror[i].id, "channels.count") == 0)
+            channels = g_mirror[i].i;
+        else if (strcmp(g_mirror[i].id, "channels.mode") == 0)
             mode = g_mirror[i].i;
-            break;
-        }
     }
-    InterlockedExchange(&g_b.ctx.chanMode, mode == 1 ? 1 : 0);
+    (void)ApplyWorkGeometry(channels, mode == 1 ? 1 : 0);
 }
 
 void MirrorReplay(FnEngSetParam setParam) {
@@ -732,7 +776,9 @@ void MirrorReplay(FnEngSetParam setParam) {
         const MirrorEnt& e = g_mirror[i];
         // 脚本启用位留到代码回放之后（加载顺序：效果器 → 脚本编译 → 已应用
         // 才启用）。这里先跳过，由 ApplyLiveprogEnableAll 收尾。
-        if (strcmp(e.id, "liveprog.enable") == 0) continue;
+        if (strcmp(e.id, "liveprog.enable") == 0 ||
+            strcmp(e.id, "channels.count") == 0 ||
+            strcmp(e.id, "channels.mode") == 0) continue;
         const void* v = e.isFloat ? (const void*)&e.f : (const void*)&e.i;
         bool all = LiveEngineCount() > 0;
         for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
@@ -918,14 +964,26 @@ void ReplayPluginsForEnabledGroups() {
 // 已发布后被销毁的指针。等待期在控制线程，音频线程零成本。
 
 // 只把一个句柄回放镜像（效果器参数；liveprog.enable 单独留到脚本之后）。
-static void MirrorReplayOne(void* e, FnEngSetParam setP) {
-    if (!e || !setP) return;
+static bool MirrorReplayOne(int g, void* e, FnEngSetParam setP) {
+    if (!e || !setP) return false;
+    int32_t channels = 2;
+    int32_t mode = 0;
     for (int i = 0; i < g_mirrorN; ++i) {
         const MirrorEnt& m = g_mirror[i];
         if (strcmp(m.id, "liveprog.enable") == 0) continue;
+        if (!m.isFloat && strcmp(m.id, "channels.count") == 0) {
+            channels = m.i;
+            continue;
+        }
+        if (!m.isFloat && strcmp(m.id, "channels.mode") == 0) {
+            mode = m.i;
+            continue;
+        }
         const void* v = m.isFloat ? (const void*)&m.f : (const void*)&m.i;
         setP(e, m.id, v, 4);
     }
+    channels = (channels == 4 || channels == 6 || channels == 8) ? channels : 2;
+    return RequestGroupGeometry(g, e, channels, mode == 1 ? 1 : 0);
 }
 
 // 脚本"已应用"位：只有用户点过"应用"（liveprog.enable=1）才回放为启用。
@@ -974,8 +1032,12 @@ static bool CreateGroupEngineLocked(int g, float sr) {
     g_grpCreateFail[g].store(false, std::memory_order_release);
     g_grpFailed[g].store(0, std::memory_order_release);
     g_grpWaitAt[g].store(GetTickCount64(), std::memory_order_release);
-    // 1) 效果器：镜像里的启用状态逐条回放；关闭的效果器在引擎内直通。
-    MirrorReplayOne(e, setP);
+    // 1) 效果器：镜像里的启用状态逐条回放；几何组合请求失败则不发布半配句柄。
+    if (!MirrorReplayOne(g, e, setP)) {
+        if (g_b.ctx.destroy) g_b.ctx.destroy(e);
+        g_grpCreateFail[g].store(true, std::memory_order_release);
+        return false;
+    }
     // 2) 脚本：先编译代码；编译成功后才按"已应用"状态启用。
     for (int i = 0; i < g_strMirrorN; ++i) {
         const StrMirrorEnt& s = g_strMirror[i];
@@ -1093,11 +1155,16 @@ void RebuildEngines(int groups, float sr) {
             (FnEngGetParam)GetProcAddress(g_b.eng, "auradsp_get_param");
         g_b.ctx.process =
             (FnEngProcess)GetProcAddress(g_b.eng, "auradsp_process");
+        g_b.ctx.requestGeometry = (FnEngRequestGeometry)GetProcAddress(
+            g_b.eng, "auradsp_request_geometry");
+        g_b.ctx.getActiveGeometry = (FnEngGetActiveGeometry)GetProcAddress(
+            g_b.eng, "auradsp_get_active_geometry");
         g_b.ctx.destroy =
             (FnEngDestroy)GetProcAddress(g_b.eng, "auradsp_destroy");
         g_pluginFns.Resolve(g_b.eng);
     }
-    if (g_b.create && g_b.ctx.process && g_b.ctx.destroy && g_b.ctx.scratchIn &&
+    if (g_b.create && g_b.ctx.process && g_b.ctx.requestGeometry &&
+        g_b.ctx.getActiveGeometry && g_b.ctx.destroy && g_b.ctx.scratchIn &&
         g_b.ctx.scratchOut) {
         // 懒建句柄：只为路开关打开的组建 DSP 链路（出厂 A1/A2）。
         // 关掉的路不建句柄 = 不占 DSP/效果器/脚本/插件内存；按需开路再建。
@@ -1111,6 +1178,8 @@ void RebuildEngines(int groups, float sr) {
             // 新句柄的装载等待窗口从此开始：超时（kRouteSettleMs）未集齐即
             // 判失败，routeState 不会永远停在"加载中"。
             if (g_b.ctx.eng[g]) {
+                // CreateGroupEngineLocked/MirrorReplayOne 已登记本次完整
+                // 几何请求；此处不得再覆盖成初始代，否则 active 切换后永久错代。
                 ClearGroupLoadFlags(g);
                 g_grpWaitAt[g].store(GetTickCount64(), std::memory_order_release);
             } else {
@@ -1168,6 +1237,18 @@ void ApplyParamsString(const char* s) {
         bool okAll = LiveEngineCount() > 0;
         if (strchr(vs, '.') || strchr(vs, 'e') || strchr(vs, 'E')) {
             const float f = (float)atof(vs);
+            if (strcmp(id, "channels.count") == 0 ||
+                strcmp(id, "channels.mode") == 0) {
+                const int32_t iv = (int32_t)f;
+                const int ok = strcmp(id, "channels.count") == 0
+                    ? ApplyWorkChannels(setParam, iv)
+                    : ApplyWorkGeometry(RequestedWorkChannels(), iv);
+                if (ok > 0 && ok == LiveEngineCount())
+                    ++g_b.paramsApplied;
+                else
+                    ++g_b.paramsFailed;
+                continue;
+            }
             for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
                 if (!g_b.ctx.eng[g]) continue;
                 if (setParam(g_b.ctx.eng[g], id, &f, 4) != 0) {
@@ -1177,6 +1258,17 @@ void ApplyParamsString(const char* s) {
             }
         } else {
             const int32_t iv = (int32_t)atoi(vs);
+            if (strcmp(id, "channels.count") == 0 ||
+                strcmp(id, "channels.mode") == 0) {
+                const int ok = strcmp(id, "channels.count") == 0
+                    ? ApplyWorkChannels(setParam, iv)
+                    : ApplyWorkGeometry(RequestedWorkChannels(), iv);
+                if (ok > 0 && ok == LiveEngineCount())
+                    ++g_b.paramsApplied;
+                else
+                    ++g_b.paramsFailed;
+                continue;
+            }
             for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
                 if (!g_b.ctx.eng[g]) continue;
                 if (setParam(g_b.ctx.eng[g], id, &iv, 4) != 0) {
@@ -1185,13 +1277,7 @@ void ApplyParamsString(const char* s) {
                 }
             }
             if (okAll) {
-                // 泵步进影子必须与引擎同值（channels.count 是唯一真相）。
-                if (strcmp(id, "channels.count") == 0)
-                    InterlockedExchange(&g_b.ctx.workCh,
-                                        vmcore::NormalizeWorkCh(iv));
-                else if (strcmp(id, "channels.mode") == 0)
-                    InterlockedExchange(&g_b.ctx.chanMode, iv == 1 ? 1 : 0);
-                else if (strcmp(id, "spatial.binaural") == 0)
+                if (strcmp(id, "spatial.binaural") == 0)
                     InterlockedExchange(&g_b.ctx.spatialBinaural, iv ? 1 : 0);
                 else if (strcmp(id, "spatial.enable") == 0)
                     InterlockedExchange(&g_b.ctx.spatialEnable, iv ? 1 : 0);
@@ -1459,6 +1545,10 @@ int vb_start(const char* engine_dll, const char* params_json) {
         g_b.create = create;  // CHANGE 重建用；此前漏赋导致重建后零 handle 静默透传
         g_b.ctx.process =
             (FnEngProcess)GetProcAddress(g_b.eng, "auradsp_process");
+        g_b.ctx.requestGeometry = (FnEngRequestGeometry)GetProcAddress(
+            g_b.eng, "auradsp_request_geometry");
+        g_b.ctx.getActiveGeometry = (FnEngGetActiveGeometry)GetProcAddress(
+            g_b.eng, "auradsp_get_active_geometry");
         g_b.ctx.destroy =
             (FnEngDestroy)GetProcAddress(g_b.eng, "auradsp_destroy");
         g_b.vizRead =
@@ -1472,7 +1562,8 @@ int vb_start(const char* engine_dll, const char* params_json) {
         g_pluginFns.Resolve(g_b.eng);
         const bool abiOk =
             engAbiFn && engAbi == vmcore::kEngineAbiExpected;
-        if (abiOk && create && g_b.ctx.process && g_b.ctx.destroy) {
+        if (abiOk && create && g_b.ctx.process && g_b.ctx.requestGeometry &&
+            g_b.ctx.getActiveGeometry && g_b.ctx.destroy) {
             g_b.ctx.scratchIn =
                 (float*)malloc(sizeof(float) * 8 * vmcore::kMaxNbs);
             g_b.ctx.scratchOut =
@@ -1493,6 +1584,9 @@ int vb_start(const char* engine_dll, const char* params_json) {
                 if (((bm0 >> g) & 1) == 0) continue;
                 g_b.ctx.eng[g] = create(sr0, 2048);
                 if (g_b.ctx.eng[g]) {
+                    InterlockedExchange(&g_b.ctx.requestedChannels[g], 2);
+                    InterlockedExchange(&g_b.ctx.requestedMode[g], 0);
+                    InterlockedExchange64(&g_b.ctx.requestedGeneration[g], 1);
                     ClearGroupLoadFlags(g);
                     g_grpWaitAt[g].store(GetTickCount64(),
                                          std::memory_order_release);
@@ -1759,28 +1853,28 @@ int vb_set_param(const char* id, int isFloat, const void* v4) {
                             (on && g_b.ctx.nWorkers > 0) ? 1 : 0);
         return g_b.ctx.parallelOn ? LiveEngineCount() : 0;
     }
-    // channels.count 走专用通道：归一化 → 全部 handle 生效 → 才更新泵影子。
-    // 否则“引擎 4ch / 泵按 8ch 步进”会让输入帧率瞬间变成 2×，表现为持续哒哒。
-    if (!isFloat && strcmp(id, "channels.count") == 0) {
-        const int32_t ch = *(const int32_t*)v4;
-        MirrorSet(id, false, &ch);
-        return ApplyWorkChannels(setParam, ch);
+    // count/mode 组合走 pending 代际通道；控制线程不更新泵块步进。
+    if (strcmp(id, "channels.count") == 0 || strcmp(id, "channels.mode") == 0) {
+        const int32_t value = isFloat ? (int32_t)*(const float*)v4
+                                      : *(const int32_t*)v4;
+        const bool isCount = strcmp(id, "channels.count") == 0;
+        const int ok = isCount ? ApplyWorkChannels(setParam, value)
+                               : ApplyWorkGeometry(RequestedWorkChannels(), value);
+        if (ok > 0 && ok == LiveEngineCount()) {
+            const int32_t mirrored = isCount
+                ? (value == 4 || value == 6 || value == 8 ? value : 2)
+                : value;
+            MirrorSet(id, false, &mirrored);
+        }
+        return ok;
     }
     MirrorSet(id, isFloat != 0, v4);  // 重建后要靠它回放
     int ok = 0;
     for (int g = 0; g < g_b.ctx.nEng; ++g) {
         if (g_b.ctx.eng[g] && setParam(g_b.ctx.eng[g], id, v4, 4) == 0) ++ok;
     }
-    // 泵影子与引擎同值（与批量应用路径同一口径）：channels.mode 漏在
-    // 此处时，实时改声道模式只进引擎不进泵影子——vb_start 清零后泵
-    // 恒按矩阵折叠、引擎按离散逐声道处理已折叠信号（r64 验收定
-    // 罪：VB 离散除 7.1 外全折叠；7.1 因折叠分支被 procCh<8 门挡
-    // 住独免）。
-    if (!isFloat && strcmp(id, "channels.mode") == 0)
-        InterlockedExchange(&g_b.ctx.chanMode,
-                            *(const int32_t*)v4 == 1 ? 1 : 0);
     // 双耳是否真正生效由泵按“两个开关 && 工作声道数>=4”判定（与引擎同口径）。
-    else if (!isFloat && strcmp(id, "spatial.binaural") == 0)
+    if (!isFloat && strcmp(id, "spatial.binaural") == 0)
         InterlockedExchange(&g_b.ctx.spatialBinaural, *(const int32_t*)v4 ? 1 : 0);
     else if (!isFloat && strcmp(id, "spatial.enable") == 0)
         InterlockedExchange(&g_b.ctx.spatialEnable, *(const int32_t*)v4 ? 1 : 0);
