@@ -396,6 +396,25 @@ target_compile_options(vaio_pump_wait_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET vaio_pump_wait_test PROPERTY CXX_STANDARD 20)
 set_property(TARGET vaio_pump_wait_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
+# Deterministic host-only geometry regressions. The test includes the
+# production bridge TU to exercise its real control helpers without a device.
+add_executable(vaio_geometry_test
+    "${VAIOBRIDGE}/vaio_geometry_test.cpp"
+)
+target_include_directories(vaio_geometry_test PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine"
+    "${VMCLIENT}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/01_vaio_driver/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/common"
+    "${BRIDGECOMMON}"
+    "${VAIOBRIDGE}"
+)
+target_compile_options(vaio_geometry_test PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET vaio_geometry_test PROPERTY CXX_STANDARD 20)
+set_property(TARGET vaio_geometry_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_link_libraries(vaio_geometry_test PRIVATE ole32 avrt version setupapi cfgmgr32)
+add_test(NAME vaio_geometry_test COMMAND vaio_geometry_test)
+
 add_executable(vaio_multichannel_probe
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/vaio_multichannel_probe.cpp"
 )

@@ -6,6 +6,7 @@
 #include "ApoEndpointProps.h"
 #include <sddl.h>
 #include <cmath>
+#include <cstdio>
 #include <cwctype>
 #include <cstdlib>  // pluginSnap_ 的 malloc/free（S4 / APO-10）
 #include <cstring>
@@ -322,9 +323,9 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels,
         engCh_ = 2;  // mono 复制 / 宽声道取前二，步长适配
         adapt_ = true;
     }
-    // 第四十六轮 S2：发布 RT 视图初值（参数块 channels.count
-    // 到达后由 ApplyEngChResolution 再决议封顶）。
-    liveEngCh_.store(engCh_);
+    // 安全初值仅为 create 的契约几何；真实 active 快照在 create 后查询，
+    // 请求中的流宽度绝不提前发布给 RT。
+    liveEngCh_.store(2);
     liveTrunc_.store(false);
     if (!ClaimSeat()) return false;
     if (!LoadEngine()) {
@@ -342,21 +343,55 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels,
         ReleaseSeat();
         return false;
     }
-    // 初始声道数与模式作为同一代请求发布；RT 只在 active 代匹配后
-    // 更新 liveEngCh_/liveTrunc_，不在控制线程提前切换缓冲步进。
-    const int32_t initialMode = epModeValid_ ? epMode_ : 0;
-    // create 的完整 active 快照是 generation=1 / 2ch / matrix；初始请求
-    // 失败也必须留在这份几何，而不是以 generation=0 永久错代静音。
-    requestedEngCh_.store(2, std::memory_order_relaxed);
-    requestedMode_.store(0, std::memory_order_relaxed);
-    requestedGeometryGeneration_.store(1, std::memory_order_release);
-    uint64_t generation = 0;
-    if (fnRequestGeometry_(engine_, (int32_t)engCh_, initialMode, &generation) ==
-        AURADSP_OK) {
-        requestedEngCh_.store(engCh_, std::memory_order_relaxed);
-        requestedMode_.store(initialMode, std::memory_order_relaxed);
-        requestedGeometryGeneration_.store(generation, std::memory_order_release);
-        if (epModeValid_) appliedEpMode_ = epMode_;
+    // create 的 active 几何是 RT 的唯一初始真相；先发布这份完整请求基线，
+    // 再单独发布流宽度/端点模式请求。RT 仅在完整 active==request 后切步进。
+    const UINT32 initialWant = engCh_;
+    auradsp_geometry initialActive{0, 0, 0};
+    if (!fnGetActiveGeometry_ ||
+        fnGetActiveGeometry_(engine_, &initialActive) != AURADSP_OK ||
+        !aurahost::ValidGeometry({initialActive.generation, initialActive.channels,
+                                  initialActive.mode})) {
+        loadStage_ = APO_LOAD_STAGE_CREATE;
+        loadErr_ = 0;
+        PublishLoadDiag();
+        fnDestroy_(engine_);
+        engine_ = nullptr;
+        FreeLibrary(hEngineDll_);
+        hEngineDll_ = nullptr;
+        ReleaseSeat();
+        return false;
+    }
+    requestedGeometry_.Reset();
+    if (!requestedGeometry_.Publish({initialActive.generation,
+                                     initialActive.channels,
+                                     initialActive.mode})) {
+        loadStage_ = APO_LOAD_STAGE_CREATE;
+        loadErr_ = 0;
+        PublishLoadDiag();
+        fnDestroy_(engine_);
+        engine_ = nullptr;
+        FreeLibrary(hEngineDll_);
+        hEngineDll_ = nullptr;
+        ReleaseSeat();
+        return false;
+    }
+    engCh_ = (UINT32)initialActive.channels;
+    liveEngCh_.store((UINT32)initialActive.channels, std::memory_order_relaxed);
+    liveTrunc_.store(initialActive.mode == 1, std::memory_order_relaxed);
+    const int32_t initialMode = epModeValid_ ? epMode_ : initialActive.mode;
+    if ((UINT32)initialActive.channels != initialWant ||
+        initialActive.mode != initialMode) {
+        uint64_t generation = 0;
+        if (fnRequestGeometry_(engine_, (int32_t)initialWant, initialMode,
+                               &generation) == AURADSP_OK) {
+            (void)requestedGeometry_.Publish(
+                {generation, (int32_t)initialWant, initialMode});
+        }
+    }
+    aurahost::GeometrySnapshot requested{};
+    if (epModeValid_ && requestedGeometry_.Load(&requested) &&
+        requested.mode == initialMode) {
+        appliedEpMode_ = initialMode;
     }
     if (epFillValid_) {
         int32_t f = epFill_;
@@ -413,6 +448,10 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels,
     tele_->sampleRate = rate_;
     tele_->channels = streamCh_;
     tele_->paramsApplied = 0;
+    tele_->engChHost = liveEngCh_.load();
+    tele_->engChEngine = liveEngCh_.load();
+    tele_->effChannelsMode = liveTrunc_.load() ? 1u : 0u;
+    tele_->effValid = 0;
     tele_->fault = 0;
     tele_->loadStage = APO_LOAD_STAGE_READY;
     tele_->loadErr = 0;
@@ -525,24 +564,25 @@ UINT32 ApoEngineHost::ResolveEngCh() const {
     return cap;
 }
 
-void ApoEngineHost::ApplyEngChResolution() {
-    if (!engine_ || !fnRequestGeometry_) return;
+uint32_t ApoEngineHost::ApplyEngChResolution() {
+    if (!engine_ || !fnRequestGeometry_) return 0;
     const UINT32 want = ResolveEngCh();
     const int32_t mode = effMode_;
-    if (requestedGeometryGeneration_.load(std::memory_order_acquire) != 0 &&
-        requestedEngCh_.load(std::memory_order_relaxed) == want &&
-        requestedMode_.load(std::memory_order_relaxed) == mode) {
-        return;
-    }
+    aurahost::GeometrySnapshot current{};
+    if (!requestedGeometry_.Load(&current)) return 0;
+    if ((uint32_t)current.channels == want && current.mode == mode) return 0;
     uint64_t generation = 0;
     if (fnRequestGeometry_(engine_, (int32_t)want, mode, &generation) !=
         AURADSP_OK) {
-        return;  // 失败保留上一份完整 pending/active 几何。
+        return 0;  // 失败保留上一份完整 pending/active 几何。
     }
+    const aurahost::GeometrySnapshot next{generation, (int32_t)want, mode};
+    if (!requestedGeometry_.Publish(next)) return 0;
     engCh_ = want;
-    requestedEngCh_.store(want, std::memory_order_relaxed);
-    requestedMode_.store(mode, std::memory_order_relaxed);
-    requestedGeometryGeneration_.store(generation, std::memory_order_release);
+    uint32_t applied = 0;
+    if ((uint32_t)current.channels != want) applied |= 1u;
+    if (current.mode != mode) applied |= 2u;
+    return applied;
 }
 
 // 矩阵模式的折叠 gather（系数与 VAIO 桥 RemapInterleavedAudio
@@ -567,14 +607,16 @@ void ApoEngineHost::ProcessDirect(const float* src, float* dst, UINT32 frames) {
         ZeroMemory(dst, (size_t)frames * streamCh_ * sizeof(float));
         return;
     }
-    const uint64_t requested =
-        requestedGeometryGeneration_.load(std::memory_order_acquire);
-    const UINT32 requestedCh = requestedEngCh_.load(std::memory_order_relaxed);
-    const int32_t requestedMode = requestedMode_.load(std::memory_order_relaxed);
-    const auradsp_geometry expected{requested, (int32_t)requestedCh, requestedMode};
-    if (active.generation != requested || active.channels != (int32_t)requestedCh ||
-        active.mode != requestedMode) {
-        // 过渡块只推进引擎 active，不发布新步进。固定 scratch 无分配/锁。
+    aurahost::GeometrySnapshot requestedSnapshot{};
+    const bool haveRequested = requestedGeometry_.Load(&requestedSnapshot);
+    const auradsp_geometry requested{requestedSnapshot.generation,
+                                     requestedSnapshot.channels,
+                                     requestedSnapshot.mode};
+    if (!haveRequested || active.generation != requested.generation ||
+        active.channels != requested.channels || active.mode != requested.mode) {
+        // 过渡块只推进完整 active/request，不发布新步进。固定 scratch
+        // 无分配/锁；请求发布中则用旧 active 安全推进。
+        const auradsp_geometry* advance = haveRequested ? &requested : &active;
         float scratchIn[256 * 8];
         float scratchOut[256 * 8];
         UINT32 left = frames;
@@ -582,7 +624,7 @@ void ApoEngineHost::ProcessDirect(const float* src, float* dst, UINT32 frames) {
             const UINT32 chunk = left > 256 ? 256 : left;
             ZeroMemory(scratchIn, sizeof(scratchIn));
             (void)fnProcessGeometry_(engine_, scratchIn, scratchOut, (int)chunk,
-                                     &expected);
+                                     advance);
             left -= chunk;
         }
         ZeroMemory(dst, (size_t)frames * streamCh_ * sizeof(float));
@@ -590,8 +632,8 @@ void ApoEngineHost::ProcessDirect(const float* src, float* dst, UINT32 frames) {
     }
     liveEngCh_.store((UINT32)active.channels, std::memory_order_relaxed);
     liveTrunc_.store(active.mode == 1, std::memory_order_relaxed);
-    const UINT32 eng = liveEngCh_.load();
-    const bool trunc = liveTrunc_.load();
+    const UINT32 eng = (UINT32)active.channels;
+    const bool trunc = active.mode == 1;
     const UINT32 strm = streamCh_;
     UINT32 done = 0;
     while (done < frames) {
@@ -658,6 +700,8 @@ void ApoEngineHost::WorkerLoop() {
         }
         // 插件块应用（Part I Q2）：与参数同周期；通道不可用自跳过。
         ApplyPlugins();
+        // active 可能由 RT 过渡块推进；即使参数块尚无效也要刷新生效遥测。
+        ReadbackEffective();
         // viz 泵：抽干积压帧，只报最后一帧（telemetry 是状态面非流）。
         if (engine_ && fnVizRead_) {
             uint32_t n = fnVizRead_(engine_, vizFrames_, 4);
@@ -777,10 +821,11 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
     // 块 count 与流宽定引擎宽；每轮快照后统一收敛（无变化
     // 时仅原子发布，零引擎调用）。
     effMode_ = modeOvr ? modeOvrVal : lastBlockMode_;
-    ApplyEngChResolution();
-    if (modeOvr && requestedMode_.load(std::memory_order_relaxed) == modeOvrVal) {
-        if (appliedEpMode_ != modeOvrVal) applied++;
-        appliedEpMode_ = modeOvrVal;
+    const uint32_t geometryApplied = ApplyEngChResolution();
+    if (geometryApplied & 1u) applied++;
+    if (geometryApplied & 2u) {
+        applied++;
+        if (modeOvr) appliedEpMode_ = modeOvrVal;
     }
     for (uint32_t s = 0; s < APO_STR_SLOT_COUNT; s++) {
         if (!bitSet(APO_NUM_PARAM_COUNT + s)) continue;  // 同上，有效位门
@@ -810,7 +855,6 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
         appliedTotal_ += applied;
         if (tele_) tele_->paramsApplied = appliedTotal_;
     }
-    ReadbackEffective();
 }
 
 // 引擎生效值回读（第三十五轮，telemetry v6）：应用计数变化时
@@ -821,28 +865,33 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
 // effValid 恒 0，读者据此显示「未知」而非误报 0 值）。
 void ApoEngineHost::ReadbackEffective() {
     if (!tele_ || !engine_) return;
-    // 声道决议回显（第四十七轮 S3）：宿主侧两值不依赖引擎
-    // 符号，每轮直写；引擎回读值在下方节流段随 mode/fill 同
-    // 步。三者对照即知设置在哪一段丢失。
-    tele_->engChHost = liveEngCh_.load();
+    // 宿主步进仍只由完整 active==request 的 RT 块发布；引擎生效值
+    // 则读取完整 active 快照，避免通用 getter 的 pending 值冒充生效值。
+    tele_->engChHost = liveEngCh_.load(std::memory_order_relaxed);
     tele_->userChSeen = userCh_;
+    auradsp_geometry active{0, 0, 0};
+    const bool okActive =
+        fnGetActiveGeometry_(engine_, &active) == AURADSP_OK;
+    if (!okActive) {
+        tele_->engChEngine = 0;
+        tele_->effValid = 0;
+        return;
+    }
+    tele_->engChEngine = (uint32_t)active.channels;
+    tele_->effChannelsMode = (uint32_t)active.mode;
     if (!fnGetParam_) return;
     if (appliedTotal_ == effReadbackApplied_ && ++effReadbackTick_ < 20)
         return;
     effReadbackTick_ = 0;
     effReadbackApplied_ = appliedTotal_;
-    int32_t mode = 0, fill = 0, count = 0;
-    const bool okMode =
-        fnGetParam_(engine_, "channels.mode", &mode, sizeof(mode)) == 0;
+    int32_t fill = 0;
     const bool okFill = fnGetParam_(engine_, "channels.upmix_fill", &fill,
                                     sizeof(fill)) == 0;
-    if (okMode && okFill) {
-        tele_->effChannelsMode = (uint32_t)mode;
+    if (okFill) {
         tele_->effUpmixFill = (uint32_t)fill;
         tele_->effValid = 1;
-    }
-    if (fnGetParam_(engine_, "channels.count", &count, sizeof(count)) == 0) {
-        tele_->engChEngine = (uint32_t)count;
+    } else {
+        tele_->effValid = 0;
     }
 }
 

@@ -19,6 +19,7 @@
 
 #include "ApoParamIndex.h"
 #include "ApoShared.h"
+#include "../common/HostGeometry.h"
 #include "auradsp_engine.h"  // 仅类型与签名（符号运行期解析，不静态链接）
 
 class ApoEngineHost {
@@ -153,11 +154,10 @@ class ApoEngineHost {
     int32_t effMode_ = 0;
     std::atomic<UINT32> liveEngCh_{2};
     std::atomic<bool> liveTrunc_{false};
-    std::atomic<UINT32> requestedEngCh_{2};
-    std::atomic<int32_t> requestedMode_{0};
-    std::atomic<uint64_t> requestedGeometryGeneration_{0};
+    aurahost::GeometryState requestedGeometry_;
     UINT32 ResolveEngCh() const;
-    void ApplyEngChResolution();
+    // 返回成功应用的有效几何分量位：bit0=count，bit1=mode。
+    uint32_t ApplyEngChResolution();
 
     // telemetry（座位与回传）
     HANDLE hTeleMap_ = nullptr;

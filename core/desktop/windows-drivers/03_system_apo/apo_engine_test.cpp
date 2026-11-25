@@ -94,6 +94,42 @@ void FillSine(float* b, int frames, int startIdx) {
     }
 }
 
+bool PublishNumericParam(const char* id, uint32_t value) {
+    uint32_t idx = UINT32_MAX;
+    for (uint32_t i = 0; i < APO_NUM_PARAM_COUNT; ++i) {
+        if (strcmp(kApoNumParamIds[i], id) == 0) {
+            idx = i;
+            break;
+        }
+    }
+    if (idx == UINT32_MAX) return false;
+    HANDLE h = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, AuraApoParamsName());
+    if (!h) return false;
+    auto* pb = (uint8_t*)MapViewOfFile(h, FILE_MAP_ALL_ACCESS, 0, 0,
+                                       APO_BLOCK_MAPPING_BYTES);
+    if (!pb) {
+        CloseHandle(h);
+        return false;
+    }
+    auto* hdr = (ApoParamBlockHeader*)pb;
+    if (hdr->magic != APO_PARAMS_MAGIC || hdr->version != APO_PARAMS_VERSION) {
+        memset(pb, 0, APO_BLOCK_USED_BYTES);
+        hdr->magic = APO_PARAMS_MAGIC;
+        hdr->version = APO_PARAMS_VERSION;
+        hdr->numCount = APO_NUM_PARAM_COUNT;
+        hdr->writeSeq = 0;
+    }
+    const uint32_t seq = hdr->writeSeq;
+    hdr->writeSeq = seq + 1;
+    pb[APO_BLOCK_MASK_OFFSET + idx / 8] |= (uint8_t)(1u << (idx % 8));
+    memcpy(pb + APO_BLOCK_VALUES_OFFSET + 4 * idx, &value, sizeof(value));
+    MemoryBarrier();
+    hdr->writeSeq = seq + 2;
+    UnmapViewOfFile(pb);
+    CloseHandle(h);
+    return true;
+}
+
 void CheckProductionPluginAcl() {
 #ifndef AURA_APO_PLUGINS_SDDL
     check("production plugin SDDL is present", false,
@@ -311,6 +347,54 @@ int RunApoEngineSuite(bool trustedFixture) {
         check("baseline processed (defaults, near unity)",
               baseRms / rmsIn > 0.7 && baseRms / rmsIn < 1.35, d);
     }
+
+    // Geometry host regression: a mode request is pending until the next
+    // process block, counts exactly one applied parameter, and telemetry
+    // reports active (not pending) mode on both sides of that boundary.
+    check("geometry mode baseline publish", PublishNumericParam("channels.mode", 0));
+    Sleep(200);
+    const uint32_t modeAppliedBase = tele ? tele->paramsApplied : 0;
+    check("geometry mode request publish", PublishNumericParam("channels.mode", 1));
+    Sleep(1100);  // also crosses the legacy telemetry readback throttle
+    if (tele) {
+        char d[160];
+        snprintf(d, sizeof(d),
+                 "applied=%lu->%lu eff=%lu host=%lu engine=%lu (pending mode=1)",
+                 (unsigned long)modeAppliedBase,
+                 (unsigned long)tele->paramsApplied,
+                 (unsigned long)tele->effChannelsMode,
+                 (unsigned long)tele->engChHost,
+                 (unsigned long)tele->engChEngine);
+        check("geometry mode counts once and telemetry stays active pre-process",
+              tele->paramsApplied == modeAppliedBase + 1 &&
+                  tele->effChannelsMode == 0 && tele->engChHost == 2 &&
+                  tele->engChEngine == 2,
+              d);
+    }
+    double modeRms = 0.0;
+    runBlocks(0, modeRms);
+    Sleep(150);
+    if (tele) {
+        char d[96];
+        snprintf(d, sizeof(d), "eff=%lu host=%lu engine=%lu",
+                 (unsigned long)tele->effChannelsMode,
+                 (unsigned long)tele->engChHost,
+                 (unsigned long)tele->engChEngine);
+        check("geometry telemetry follows active mode after process",
+              tele->effChannelsMode == 1 && tele->engChHost == 2 &&
+                  tele->engChEngine == 2,
+              d);
+    }
+    const uint32_t modeAppliedDiscrete = tele ? tele->paramsApplied : 0;
+    check("geometry mode restore publish", PublishNumericParam("channels.mode", 0));
+    Sleep(200);
+    if (tele) {
+        check("geometry mode restore counts once",
+              tele->paramsApplied == modeAppliedDiscrete + 1);
+    }
+    runBlocks(kBlocks, modeRms);
+    Sleep(150);
+    if (tele) check("geometry active mode restored", tele->effChannelsMode == 0);
 
     // 扮演 App 发布者：input.gain=-12dB ≈ ×0.2512（该参数单位
     // 是 dB、量程 ±15——首跑实测 +0.25dB 得比率 1.030 与理论
@@ -912,7 +996,9 @@ int RunApoEngineSuite(bool trustedFixture) {
         const wchar_t* kIdA = L"{0.0.0.00000000}.{aaaaaaaa-0000-4000-8000-0000000000a1}";
         const wchar_t* kIdB = L"{0.0.0.00000000}.{bbbbbbbb-0000-4000-8000-0000000000b2}";
 
-        auto makeInstance = [&](FakeStore* store, IAudioProcessingObjectConfiguration** outCfg,
+        auto makeInstance = [&](FakeStore* store,
+                                IAudioProcessingObjectConfiguration** outCfg,
+                                IAudioProcessingObjectRT** outRt,
                                 IUnknown** outUnk) -> bool {
             APOInitSystemEffects init{};
             init.APOInit.cbSize = sizeof(APOInitBaseStruct);
@@ -926,18 +1012,22 @@ int RunApoEngineSuite(bool trustedFixture) {
             if (hr != S_OK || !u) return false;
             IAudioProcessingObject* a = nullptr;
             u->QueryInterface(IID_IAudioProcessingObject, (void**)&a);
+            IAudioProcessingObjectRT* r = nullptr;
+            u->QueryInterface(IID_IAudioProcessingObjectRT, (void**)&r);
             IAudioProcessingObjectConfiguration* c = nullptr;
             u->QueryInterface(IID_IAudioProcessingObjectConfiguration, (void**)&c);
-            bool ok = a && c &&
+            bool ok = a && r && c &&
                       a->Initialize(sizeof(init), (BYTE*)&init) == S_OK &&
                       c->LockForProcess(1, pins, 1, pouts) == S_OK;
             if (a) a->Release();
             if (!ok) {
+                if (r) r->Release();
                 if (c) c->Release();
                 u->Release();
                 return false;
             }
             *outCfg = c;
+            *outRt = r;
             *outUnk = u;
             return true;
         };
@@ -951,11 +1041,16 @@ int RunApoEngineSuite(bool trustedFixture) {
         storeB->mode = 1;
         storeB->fill = 1;
         IAudioProcessingObjectConfiguration *cfgA = nullptr, *cfgB = nullptr;
+        IAudioProcessingObjectRT *rtA = nullptr, *rtB = nullptr;
         IUnknown *unkA = nullptr, *unkB = nullptr;
-        bool okA = makeInstance(storeA, &cfgA, &unkA);
-        bool okB = makeInstance(storeB, &cfgB, &unkB);
+        bool okA = makeInstance(storeA, &cfgA, &rtA, &unkA);
+        bool okB = makeInstance(storeB, &cfgB, &rtB, &unkB);
         check("multi-endpoint: both instances lock", okA && okB);
         Sleep(400);
+        auto processBoth = [&] {
+            if (rtA) rtA->APOProcess(1, pinProps, 1, poutProps);
+            if (rtB) rtB->APOProcess(1, pinProps, 1, poutProps);
+        };
 
         auto openTeleFor = [&](const wchar_t* id) -> const ApoTelemetryBlock* {
             wchar_t nm[80];
@@ -1027,6 +1122,8 @@ int RunApoEngineSuite(bool trustedFixture) {
         if (teleA && teleB) {
             writeBlock(1, 1);
             Sleep(600);
+            processBoth();
+            Sleep(100);
             char d[128];
             snprintf(d, sizeof(d), "A eff=%lu/%lu valid=%lu (expect 0/0/1)",
                      (unsigned long)teleA->effChannelsMode,
@@ -1038,6 +1135,8 @@ int RunApoEngineSuite(bool trustedFixture) {
                   d);
             writeBlock(0, 0);
             Sleep(600);
+            processBoth();
+            Sleep(100);
             snprintf(d, sizeof(d), "B eff=%lu/%lu valid=%lu (expect 1/1/1)",
                      (unsigned long)teleB->effChannelsMode,
                      (unsigned long)teleB->effUpmixFill,
@@ -1073,6 +1172,8 @@ int RunApoEngineSuite(bool trustedFixture) {
                 CloseHandle(h);
             }
             Sleep(600);
+            processBoth();
+            Sleep(100);
             char d[128];
             snprintf(d, sizeof(d), "A eff=%lu/%lu (expect 1/1 live)",
                      (unsigned long)teleA->effChannelsMode,
@@ -1089,6 +1190,8 @@ int RunApoEngineSuite(bool trustedFixture) {
         if (cfgB) cfgB->UnlockForProcess();
         if (teleA) UnmapViewOfFile(teleA);
         if (teleB) UnmapViewOfFile(teleB);
+        if (rtA) rtA->Release();
+        if (rtB) rtB->Release();
         if (cfgA) cfgA->Release();
         if (cfgB) cfgB->Release();
         if (unkA) unkA->Release();
@@ -1100,6 +1203,8 @@ int RunApoEngineSuite(bool trustedFixture) {
     // ---- 第四十二轮 S1：同实例改几何重锁（系统设置改声道模式的
     // 宿主侧等价面）——2ch 解锁后以 8ch 重锁，引擎须按新几何
     // 重建（APO-8 决议），telemetry 声道随新几何；再回 2ch。
+    check("geometry count baseline publish", PublishNumericParam("channels.count", 8));
+    Sleep(200);
     check("UnlockForProcess (pre-geometry)", cfg->UnlockForProcess() == S_OK);
     {
         UNCOMPRESSEDAUDIOFORMAT uf8{};
@@ -1124,15 +1229,102 @@ int RunApoEngineSuite(bool trustedFixture) {
               cfg->LockForProcess(1, pins8, 1, pouts8) == S_OK);
         Sleep(300);
         if (tele) {
-            char d[96];
-            snprintf(d, sizeof(d), "seat=%ld ch=%lu fault=%lu",
+            char d[160];
+            snprintf(d, sizeof(d),
+                     "seat=%ld stream=%lu host=%lu engine=%lu mode=%lu fault=%lu",
                      tele->seatState, (unsigned long)tele->channels,
+                     (unsigned long)tele->engChHost,
+                     (unsigned long)tele->engChEngine,
+                     (unsigned long)tele->effChannelsMode,
                      (unsigned long)tele->fault);
             check("geometry relock: seat+8ch",
                   tele->seatState == 1 && tele->channels == 8 &&
                       tele->fault == 0,
                   d);
+            check("8ch relock keeps create-active 2ch until first process",
+                  tele->engChHost == 2 && tele->engChEngine == 2 &&
+                      tele->effChannelsMode == 0,
+                  d);
         }
+        static float in8Buf[kFrames * 8], out8Buf[kFrames * 8];
+        for (int i = 0; i < kFrames * 8; ++i) {
+            in8Buf[i] = 0.1f;
+            out8Buf[i] = 0.0f;
+        }
+        APO_CONNECTION_PROPERTY in8Prop{}, out8Prop{};
+        in8Prop.pBuffer = (UINT_PTR)in8Buf;
+        in8Prop.u32ValidFrameCount = kFrames;
+        in8Prop.u32BufferFlags = BUFFER_VALID;
+        out8Prop.pBuffer = (UINT_PTR)out8Buf;
+        out8Prop.u32ValidFrameCount = kFrames;
+        out8Prop.u32BufferFlags = BUFFER_VALID;
+        APO_CONNECTION_PROPERTY* pin8Props[1] = {&in8Prop};
+        APO_CONNECTION_PROPERTY* pout8Props[1] = {&out8Prop};
+        auto waitEngineCh = [&](uint32_t want) {
+            if (!tele) return false;
+            const volatile ApoTelemetryBlock* shared = tele;
+            for (int i = 0; i < 150; ++i) {
+                MemoryBarrier();
+                if (shared->engChEngine == want) return true;
+                Sleep(20);
+            }
+            return false;
+        };
+        auto waitEngCh = [&](uint32_t want) {
+            if (!tele) return false;
+            const volatile ApoTelemetryBlock* shared = tele;
+            for (int i = 0; i < 150; ++i) {
+                MemoryBarrier();
+                if (shared->engChHost == want && shared->engChEngine == want)
+                    return true;
+                Sleep(20);
+            }
+            return false;
+        };
+        rt->APOProcess(1, pin8Props, 1, pout8Props);
+        const bool transitioned8 = waitEngineCh(8);
+        char transition8Detail[128];
+        snprintf(transition8Detail, sizeof(transition8Detail),
+                 "host=%lu engine=%lu mode=%lu fault=%lu",
+                 tele ? (unsigned long)tele->engChHost : 0,
+                 tele ? (unsigned long)tele->engChEngine : 0,
+                 tele ? (unsigned long)tele->effChannelsMode : 0,
+                 tele ? (unsigned long)tele->fault : 0);
+        check("8ch transition activates engine before host stepping",
+              transitioned8 && tele && tele->engChHost == 2,
+              transition8Detail);
+        rt->APOProcess(1, pin8Props, 1, pout8Props);
+        const bool active8 = waitEngCh(8);
+        char active8Detail[128];
+        snprintf(active8Detail, sizeof(active8Detail),
+                 "host=%lu engine=%lu mode=%lu fault=%lu",
+                 tele ? (unsigned long)tele->engChHost : 0,
+                 tele ? (unsigned long)tele->engChEngine : 0,
+                 tele ? (unsigned long)tele->effChannelsMode : 0,
+                 tele ? (unsigned long)tele->fault : 0);
+        check("8ch host stepping publishes on matching active block", active8,
+              active8Detail);
+        const uint32_t countAppliedBase = tele ? tele->paramsApplied : 0;
+        check("geometry count 4 publish", PublishNumericParam("channels.count", 4));
+        Sleep(200);
+        if (tele) {
+            char d[128];
+            snprintf(d, sizeof(d), "applied=%lu->%lu host=%lu engine=%lu",
+                     (unsigned long)countAppliedBase,
+                     (unsigned long)tele->paramsApplied,
+                     (unsigned long)tele->engChHost,
+                     (unsigned long)tele->engChEngine);
+            check("geometry count counts once and telemetry stays active pre-process",
+                  tele->paramsApplied == countAppliedBase + 1 &&
+                      tele->engChHost == 8 && tele->engChEngine == 8,
+                  d);
+        }
+        rt->APOProcess(1, pin8Props, 1, pout8Props);
+        const bool transitioned4 = waitEngineCh(4);
+        check("4ch transition activates engine before host stepping",
+              transitioned4 && tele && tele->engChHost == 8);
+        rt->APOProcess(1, pin8Props, 1, pout8Props);
+        check("4ch host stepping publishes on matching active block", waitEngCh(4));
         check("UnlockForProcess 8ch", cfg->UnlockForProcess() == S_OK);
         check("LockForProcess back to 2ch",
               cfg->LockForProcess(1, pins, 1, pouts) == S_OK);
