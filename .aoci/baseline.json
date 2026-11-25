@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-21T02:23:05Z",
-  "updated_at": "2026-11-24T18:24:50Z",
+  "updated_at": "2026-11-25T10:37:01Z",
   "files": {
     ".ai/README.md": {
       "role": "index",
@@ -171,6 +171,12 @@
       "size": 66684,
       "normalized_sha256": "6ac238de035910b8ef0e7eb4cd37986a2d8a93539c73fafae375111a107a4258"
     },
+    ".ai/rules/code_cognition_read_scope.md": {
+      "role": "index",
+      "sha256": "70d8ec1e176c5c49ba3955739382d8fd4d09e91199eae3ce5ca495d9b79c4b34",
+      "size": 3442,
+      "normalized_sha256": "70d8ec1e176c5c49ba3955739382d8fd4d09e91199eae3ce5ca495d9b79c4b34"
+    },
     ".ai/rules/ui_design_spec.md": {
       "role": "index",
       "sha256": "721ba97d73670c6ffbd41d9cc9dc2e84ca5c089d1c0552760651dc18f024e024",
@@ -209,21 +215,21 @@
     },
     "AGENT.md": {
       "role": "index",
-      "sha256": "fd193a2b29f84726ef92f009d6f7862d1ac7a7d17a405439a61213f001058d10",
-      "size": 24292,
-      "normalized_sha256": "fd193a2b29f84726ef92f009d6f7862d1ac7a7d17a405439a61213f001058d10"
+      "sha256": "bac2870d55d0c17a70dc4d733d2fa59349d384d9ac8cf4f988ba2a01d32797eb",
+      "size": 25142,
+      "normalized_sha256": "cf204ede3a3dcd30367b7f1c19d422503560960f11173c0afc6dcbaa558ca294"
     },
     "AGENTS.md": {
       "role": "index",
-      "sha256": "e18491ec8e58722d0f06aa7be7a0f61f2f465480b403e6b78814d8861cf831f3",
-      "size": 14187,
-      "normalized_sha256": "e18491ec8e58722d0f06aa7be7a0f61f2f465480b403e6b78814d8861cf831f3"
+      "sha256": "0e75a578a890b3f4dddebe2b909cc77003bb6e1c6ca5e92e24539ae1f4982df3",
+      "size": 15545,
+      "normalized_sha256": "395748ede7a1690c6f55e0acf50b838f5ed5ea4efd06d6e0dcf9e46132695eff"
     },
     "CLAUDE.md": {
       "role": "index",
-      "sha256": "d8f02dfd5ff11033b668bf21aa84399a1c88d47287556e5aad8fc3e5c384a243",
-      "size": 8253,
-      "normalized_sha256": "d8f02dfd5ff11033b668bf21aa84399a1c88d47287556e5aad8fc3e5c384a243"
+      "sha256": "c162463a4d7bc657ce8b68eff3957f11f91df5578461ef3c5e3141575f897874",
+      "size": 8821,
+      "normalized_sha256": "81b6ae7edac317f9048610dd1d9cac1cbfcacc058e30ca8f2d5be9c2e1db3d8a"
     },
     "CMakeLists.txt": {
       "role": "index",
@@ -251,9 +257,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "15f48e72b219c992d8061a071e21b3c7c1780d1ecbbaa878c0db7708dbd3f3ab",
-      "size": 1168055,
-      "normalized_sha256": "15f48e72b219c992d8061a071e21b3c7c1780d1ecbbaa878c0db7708dbd3f3ab"
+      "sha256": "2333921ce404d844e0495076f7422a21fe604d7ac9e6f99101ac26c1764edee8",
+      "size": 1171744,
+      "normalized_sha256": "2333921ce404d844e0495076f7422a21fe604d7ac9e6f99101ac26c1764edee8"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -5484,14 +5490,14 @@
     },
     "core/android/spike-global-effect/aidl-src/android_hardware_interfaces/audio/aidl/common/tests/streamworker_tests.cpp": {
       "role": "observe",
-      "sha256": "85785b02e9efbc8951203c1c5a027efb6fe8d28111adc46e592af55a44d6d46c",
-      "size": 9567,
+      "sha256": "5e909c692484c95e5f980c871f1be56482ff630cf0bfdd3e2bf49d9881a8fe1c",
+      "size": 9873,
       "normalized_sha256": "85785b02e9efbc8951203c1c5a027efb6fe8d28111adc46e592af55a44d6d46c"
     },
     "core/android/spike-global-effect/aidl-src/android_hardware_interfaces/audio/aidl/common/tests/utils_tests.cpp": {
       "role": "observe",
-      "sha256": "2555ec4be0a363240a6b8031746226c502d64596241b91b5fc9518abd5421a08",
-      "size": 8177,
+      "sha256": "18817b0ce790034b4814348dcb1df6e57241b4da961ffe7d46df9b5e86a81f63",
+      "size": 8367,
       "normalized_sha256": "2555ec4be0a363240a6b8031746226c502d64596241b91b5fc9518abd5421a08"
     },
     "core/android/spike-global-effect/aidl-src/android_hardware_interfaces/audio/aidl/default/AidlConversionXsdc.cpp": {
@@ -6408,14 +6414,14 @@
     },
     "core/android/spike-global-effect/aidl-src/android_hardware_interfaces/audio/aidl/default/tests/AlsaUtilsTest.cpp": {
       "role": "observe",
-      "sha256": "e76fbe8a43a149c879b05b4a3be7ef7e10ecb0b2a115bfe3fd940b8ce86ab29c",
-      "size": 10712,
+      "sha256": "44d0ee6fca4933ccd94bdbdfaa6fa65e0d6a7ccb72344f5f8316c79ffe584a12",
+      "size": 10965,
       "normalized_sha256": "e76fbe8a43a149c879b05b4a3be7ef7e10ecb0b2a115bfe3fd940b8ce86ab29c"
     },
     "core/android/spike-global-effect/aidl-src/android_hardware_interfaces/audio/aidl/default/tests/AudioPolicyConfigXmlConverterTest.cpp": {
       "role": "observe",
-      "sha256": "b02db5a16f811e839970c01ee1b41c848d45f8840c04472366979d672bae77c6",
-      "size": 1814,
+      "sha256": "51b91c5704ae9eb439349831c7aafdcabe5f13428194b131581e3f5f018808e4",
+      "size": 1864,
       "normalized_sha256": "b02db5a16f811e839970c01ee1b41c848d45f8840c04472366979d672bae77c6"
     },
     "core/android/spike-global-effect/aidl-src/android_hardware_interfaces/audio/aidl/default/usb/ModuleUsb.cpp": {
@@ -7761,8 +7767,8 @@
     },
     "core/android/spike-global-effect/aidl-src/frameworks_native/libs/binder/libbinder.map": {
       "role": "observe",
-      "sha256": "4ca3e531bf01e4b045f9af4a282949351727be57d42b3415efb2cbcb10555be7",
-      "size": 89,
+      "sha256": "bcd094643e04075463b912907845b3be239accb453db544f36a73e4a123f2f48",
+      "size": 94,
       "normalized_sha256": "4ca3e531bf01e4b045f9af4a282949351727be57d42b3415efb2cbcb10555be7"
     },
     "core/android/spike-global-effect/aidl-src/frameworks_native/libs/binder/libbinder_rpc_unstable.cpp": {
@@ -8031,56 +8037,56 @@
     },
     "core/android/spike-global-effect/aidl-src/frameworks_native/libs/binder/ndk/tests/Android.bp": {
       "role": "observe",
-      "sha256": "0f9b977dbb711ecb021320a3978e8b22638c2b1d4ba0830401b34d2cab44b1c4",
-      "size": 3949,
+      "sha256": "5f8a91907c78093fd44a7461ea83d9e479817bda88fe6543486ff671770a19b9",
+      "size": 4106,
       "normalized_sha256": "0f9b977dbb711ecb021320a3978e8b22638c2b1d4ba0830401b34d2cab44b1c4"
     },
     "core/android/spike-global-effect/aidl-src/frameworks_native/libs/binder/ndk/tests/IBinderNdkUnitTest.aidl": {
       "role": "observe",
-      "sha256": "ee5cf7d0ad325bdaec73d787b9ddf1e015f7d8252ef7f5752514f954a1092129",
-      "size": 1136,
+      "sha256": "6b6e01d437ebb26b34b042c87a3f65cf1ce588c7916f3bbb7dffb7cb98640f5b",
+      "size": 1171,
       "normalized_sha256": "ee5cf7d0ad325bdaec73d787b9ddf1e015f7d8252ef7f5752514f954a1092129"
     },
     "core/android/spike-global-effect/aidl-src/frameworks_native/libs/binder/ndk/tests/IBinderVendorDoubleLoadTest.aidl": {
       "role": "observe",
-      "sha256": "b34fe59e37db262de95ff9f37657ca8f8778d88d5d381d5cc521759833975924",
-      "size": 727,
+      "sha256": "17f1e848ae3e50658b5c195a99af20019091dc260e1045f6c1cda84b49e236c1",
+      "size": 746,
       "normalized_sha256": "b34fe59e37db262de95ff9f37657ca8f8778d88d5d381d5cc521759833975924"
     },
     "core/android/spike-global-effect/aidl-src/frameworks_native/libs/binder/ndk/tests/IEmpty.aidl": {
       "role": "observe",
-      "sha256": "38e74441bfb8fa40a6cd03cdc95827fc9ac9316c668ea87a77914c4161802fbf",
-      "size": 642,
+      "sha256": "e2e65b9b7f4d2b77486a184e9fe9c46ab714ab4a163e3ac41d3e607b952220fa",
+      "size": 659,
       "normalized_sha256": "38e74441bfb8fa40a6cd03cdc95827fc9ac9316c668ea87a77914c4161802fbf"
     },
     "core/android/spike-global-effect/aidl-src/frameworks_native/libs/binder/ndk/tests/binderVendorDoubleLoadTest.cpp": {
       "role": "observe",
-      "sha256": "5b61f42a6fd69d10d62d66e75ada48481bedba07ff07a7aee8dc22e8760add75",
-      "size": 5914,
+      "sha256": "4017664df1891829667b52b10dd9789e22515daec7a981b9c639478449ca91ef",
+      "size": 6080,
       "normalized_sha256": "5b61f42a6fd69d10d62d66e75ada48481bedba07ff07a7aee8dc22e8760add75"
     },
     "core/android/spike-global-effect/aidl-src/frameworks_native/libs/binder/ndk/tests/iface.cpp": {
       "role": "observe",
-      "sha256": "ff26f84030727c21a916dfaf8fd0910072c015eb83a1eef4b112a2bbd1a8d7c7",
-      "size": 6210,
+      "sha256": "09dbbfb211539a5f363fb42ece8211b93aac2f94c6f5dd5956b3de30f228ee4c",
+      "size": 6406,
       "normalized_sha256": "ff26f84030727c21a916dfaf8fd0910072c015eb83a1eef4b112a2bbd1a8d7c7"
     },
     "core/android/spike-global-effect/aidl-src/frameworks_native/libs/binder/ndk/tests/include/iface/iface.h": {
       "role": "observe",
-      "sha256": "943714e820517a20b57ca84bde88f183b6d91440cb149f3dd76f5654ade44c2e",
-      "size": 2303,
+      "sha256": "7b02b9ec54dd77fe5368789d7fdea53298c01c46dc0463402ffd111324fac7ca",
+      "size": 2364,
       "normalized_sha256": "943714e820517a20b57ca84bde88f183b6d91440cb149f3dd76f5654ade44c2e"
     },
     "core/android/spike-global-effect/aidl-src/frameworks_native/libs/binder/ndk/tests/libbinder_ndk_unit_test.cpp": {
       "role": "observe",
-      "sha256": "fbb101eb95c1751006f075adf7365dacaf275f384781dfe009e4ed5c52068f76",
-      "size": 43636,
+      "sha256": "ae3a6fc6926f49246c6fc66c5055efb6ac81ba0838d652ea597721c2dbb54760",
+      "size": 44873,
       "normalized_sha256": "fbb101eb95c1751006f075adf7365dacaf275f384781dfe009e4ed5c52068f76"
     },
     "core/android/spike-global-effect/aidl-src/frameworks_native/libs/binder/ndk/tests/libbinder_ndk_unit_test_host.cpp": {
       "role": "observe",
-      "sha256": "8b3f3d212f0467c3b4ef651e30eca1639910bc89922afa1709dfe439c133f12c",
-      "size": 3379,
+      "sha256": "f4da2058c719714df84ecf36454d0a39ad490eb8882f4d898a8e3e991e2106d9",
+      "size": 3483,
       "normalized_sha256": "8b3f3d212f0467c3b4ef651e30eca1639910bc89922afa1709dfe439c133f12c"
     },
     "core/android/spike-global-effect/aidl-src/frameworks_native/libs/binder/run_rpc_tests.sh": {
@@ -8259,104 +8265,104 @@
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/Android.bp": {
       "role": "observe",
-      "sha256": "94e494830cf83376f6a91026b9dd29dcb21663295791c6d14aa859b1519cd6ae",
-      "size": 4345,
+      "sha256": "c15fb1c019e7b58636bdb84d88e5bb85ce8078415c29a38593690f57bf00451f",
+      "size": 4528,
       "normalized_sha256": "94e494830cf83376f6a91026b9dd29dcb21663295791c6d14aa859b1519cd6ae"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/aidl/Android.bp": {
       "role": "observe",
-      "sha256": "2e5e42a84fac48e67b18dde3456a2da200bfd05e875dce18c964c81fc2aa60dc",
-      "size": 607,
+      "sha256": "fc79259d2edda623d0f8777a510c5e9859f412ea904fd83d5df183891aab3804",
+      "size": 639,
       "normalized_sha256": "2e5e42a84fac48e67b18dde3456a2da200bfd05e875dce18c964c81fc2aa60dc"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/aidl/android/fmq/test/EventFlagBits.aidl": {
       "role": "observe",
-      "sha256": "fd28290ba9aa594c307a9867dc758b6138339d147d792c38c075dbe78bd2a0f7",
-      "size": 166,
+      "sha256": "6e7d5682019c1e3a2458f81e982e057380ca0c8463783f247db2a0ec4d88e1e0",
+      "size": 175,
       "normalized_sha256": "fd28290ba9aa594c307a9867dc758b6138339d147d792c38c075dbe78bd2a0f7"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/aidl/android/fmq/test/FixedParcelable.aidl": {
       "role": "observe",
-      "sha256": "4e71bdc1a9f6e6108c05e4f76f0162b917e6a780c0cd52c2a04335823fc5891b",
-      "size": 806,
+      "sha256": "fb55dd46a89024369d2ed627a74196329ac3d133db7cbfe08c6de5983f966e26",
+      "size": 833,
       "normalized_sha256": "4e71bdc1a9f6e6108c05e4f76f0162b917e6a780c0cd52c2a04335823fc5891b"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/aidl/android/fmq/test/FixedUnion.aidl": {
       "role": "observe",
-      "sha256": "a2fe76ee22b30d5d32c285a8e679d9a9e09241cb90875243f34cbf3beb8fc58d",
-      "size": 744,
+      "sha256": "9071405a562c2b28c9d697211e3898b42982878e5d8d1d1ed46c6d3164d91ee0",
+      "size": 769,
       "normalized_sha256": "a2fe76ee22b30d5d32c285a8e679d9a9e09241cb90875243f34cbf3beb8fc58d"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/aidl/android/fmq/test/ITestAidlMsgQ.aidl": {
       "role": "observe",
-      "sha256": "f468adcb6343b5d61c7a2ca8eb237eef66348121aea110ec37ceafb104972e89",
-      "size": 4242,
+      "sha256": "65c91241fa8c5ee807c11ae4d4c6a03d1938f7ab0d868d9c02482caa1807eafa",
+      "size": 4364,
       "normalized_sha256": "f468adcb6343b5d61c7a2ca8eb237eef66348121aea110ec37ceafb104972e89"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/aidl/default/Android.bp": {
       "role": "observe",
-      "sha256": "65f6ac9598f324bfb9df772d070c6e6e66deb42c4f76844f757a105d6d0074b3",
-      "size": 1466,
+      "sha256": "8712d3ad197e2526c64c48015fa06254e10dacd76794a610d98ac1942f36abba",
+      "size": 1540,
       "normalized_sha256": "65f6ac9598f324bfb9df772d070c6e6e66deb42c4f76844f757a105d6d0074b3"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/aidl/default/TestAidlMsgQ.cpp": {
       "role": "observe",
-      "sha256": "3a96fd78ea261cf2ba26fd197f14f4d3ee38e111ea4b6ffaef18f5b6c63c314f",
-      "size": 5677,
+      "sha256": "80090f1ba71292e5d0c575808d579c92f81d3de5688f0ef859d5071b9316084b",
+      "size": 5834,
       "normalized_sha256": "3a96fd78ea261cf2ba26fd197f14f4d3ee38e111ea4b6ffaef18f5b6c63c314f"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/aidl/default/TestAidlMsgQ.h": {
       "role": "observe",
-      "sha256": "cb309e76643268ca3e38ac63c8be160d1c2a6296fc27e016febf3c1b03055bf1",
-      "size": 3171,
+      "sha256": "3ecdb17d80e029afbbfaec0974c5f53de09d49f3cbc78a3fc326d49f64b1fc6f",
+      "size": 3251,
       "normalized_sha256": "cb309e76643268ca3e38ac63c8be160d1c2a6296fc27e016febf3c1b03055bf1"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/aidl/default/TestAidlMsgQ.rs": {
       "role": "observe",
-      "sha256": "12c2c066278aa908e0d53e2a3451e3842558660440c18fa6c6520e57b00b816d",
-      "size": 5152,
+      "sha256": "f2fa4f8fbdd2c1422e65532dc572884fb41897c615c93dcc915902584b9d6179",
+      "size": 5301,
       "normalized_sha256": "12c2c066278aa908e0d53e2a3451e3842558660440c18fa6c6520e57b00b816d"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/aidl/default/mq_test_service.rs": {
       "role": "observe",
-      "sha256": "e8e24d104b02b16a1f719bf50c79bf9f6c79db406eed35531e2836a21a274d12",
-      "size": 1420,
+      "sha256": "55890a988d7526715a6e7264a7b3206bf0d6c1642d0d508d5caff38d687c8ccf",
+      "size": 1461,
       "normalized_sha256": "e8e24d104b02b16a1f719bf50c79bf9f6c79db406eed35531e2836a21a274d12"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/fmq_test.py": {
       "role": "observe",
-      "sha256": "68955c20876bdb10a60c7f486c508ad3c4ffc47645a2ed406f5812a7fd174237",
-      "size": 4011,
+      "sha256": "d1f9ecd1ceea7837d06755a4ccf04f3358b8e6a538a5cdb286e78766c5d00f96",
+      "size": 4110,
       "normalized_sha256": "68955c20876bdb10a60c7f486c508ad3c4ffc47645a2ed406f5812a7fd174237"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/fmq_test.rs": {
       "role": "observe",
-      "sha256": "e707170704d5b196703a74c305f696e6c3abbda0385a370352f68932e8d87344",
-      "size": 2417,
+      "sha256": "1268d8f969b88a5939e93dd644f7ed57ff72496cf14052754860a9f5297d7b8b",
+      "size": 2507,
       "normalized_sha256": "e707170704d5b196703a74c305f696e6c3abbda0385a370352f68932e8d87344"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/fmq_test.xml": {
       "role": "observe",
-      "sha256": "ceda8e7e45cb052f60e1434940337fbf3b00de07ef470d4f18243f02c3b1dd18",
-      "size": 2743,
+      "sha256": "bf28d1901c628b222a38345ee40b986a84a1df4a4472e24f355bc7bef43c4cfd",
+      "size": 2787,
       "normalized_sha256": "ceda8e7e45cb052f60e1434940337fbf3b00de07ef470d4f18243f02c3b1dd18"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/fmq_unit_tests.cpp": {
       "role": "observe",
-      "sha256": "3099a8fa60fd5d2cfd464d9562b64b321d84715709108791ac29c5f8e59b1237",
-      "size": 61760,
+      "sha256": "c32252f61a826fc2e566066013b8a74325b81484d93e98842d791e89f76e32b7",
+      "size": 63364,
       "normalized_sha256": "3099a8fa60fd5d2cfd464d9562b64b321d84715709108791ac29c5f8e59b1237"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/msgq_rust_test_client.rs": {
       "role": "observe",
-      "sha256": "8e5634c6eeb712e0853b8a522c341a0ea24b19291a55ea1cbff1099bff7b4d6e",
-      "size": 2669,
+      "sha256": "c6ecbe44fc87c70b3fa877ab1aff104abc777765dfe4b7bc90257d245a59b4f7",
+      "size": 2746,
       "normalized_sha256": "8e5634c6eeb712e0853b8a522c341a0ea24b19291a55ea1cbff1099bff7b4d6e"
     },
     "core/android/spike-global-effect/aidl-src/libfmq/tests/msgq_test_client.cpp": {
       "role": "observe",
-      "sha256": "2a1f1e6767d4f2bc3ced1ec018935aee81bbf9ff7356155a461f5038f8dbce8e",
-      "size": 52198,
+      "sha256": "f84b54c3bbce8cdbf0f28fb4407a29eb25848b8e58a4391fa322f13649e98cb1",
+      "size": 53578,
       "normalized_sha256": "2a1f1e6767d4f2bc3ced1ec018935aee81bbf9ff7356155a461f5038f8dbce8e"
     },
     "core/android/spike-global-effect/aidl-src/platform_system_hardware_interfaces/.clang-format": {
@@ -14563,14 +14569,14 @@
     },
     "core/android/vendor-src/android_hardware_interfaces/audio/aidl/common/tests/streamworker_tests.cpp": {
       "role": "observe",
-      "sha256": "85785b02e9efbc8951203c1c5a027efb6fe8d28111adc46e592af55a44d6d46c",
-      "size": 9567,
+      "sha256": "5e909c692484c95e5f980c871f1be56482ff630cf0bfdd3e2bf49d9881a8fe1c",
+      "size": 9873,
       "normalized_sha256": "85785b02e9efbc8951203c1c5a027efb6fe8d28111adc46e592af55a44d6d46c"
     },
     "core/android/vendor-src/android_hardware_interfaces/audio/aidl/common/tests/utils_tests.cpp": {
       "role": "observe",
-      "sha256": "2555ec4be0a363240a6b8031746226c502d64596241b91b5fc9518abd5421a08",
-      "size": 8177,
+      "sha256": "18817b0ce790034b4814348dcb1df6e57241b4da961ffe7d46df9b5e86a81f63",
+      "size": 8367,
       "normalized_sha256": "2555ec4be0a363240a6b8031746226c502d64596241b91b5fc9518abd5421a08"
     },
     "core/android/vendor-src/android_hardware_interfaces/audio/aidl/default/AidlConversionXsdc.cpp": {
@@ -15487,14 +15493,14 @@
     },
     "core/android/vendor-src/android_hardware_interfaces/audio/aidl/default/tests/AlsaUtilsTest.cpp": {
       "role": "observe",
-      "sha256": "e76fbe8a43a149c879b05b4a3be7ef7e10ecb0b2a115bfe3fd940b8ce86ab29c",
-      "size": 10712,
+      "sha256": "44d0ee6fca4933ccd94bdbdfaa6fa65e0d6a7ccb72344f5f8316c79ffe584a12",
+      "size": 10965,
       "normalized_sha256": "e76fbe8a43a149c879b05b4a3be7ef7e10ecb0b2a115bfe3fd940b8ce86ab29c"
     },
     "core/android/vendor-src/android_hardware_interfaces/audio/aidl/default/tests/AudioPolicyConfigXmlConverterTest.cpp": {
       "role": "observe",
-      "sha256": "b02db5a16f811e839970c01ee1b41c848d45f8840c04472366979d672bae77c6",
-      "size": 1814,
+      "sha256": "51b91c5704ae9eb439349831c7aafdcabe5f13428194b131581e3f5f018808e4",
+      "size": 1864,
       "normalized_sha256": "b02db5a16f811e839970c01ee1b41c848d45f8840c04472366979d672bae77c6"
     },
     "core/android/vendor-src/android_hardware_interfaces/audio/aidl/default/usb/ModuleUsb.cpp": {
@@ -16289,56 +16295,56 @@
     },
     "core/android/vendor-src/frameworks_native/binder-ndk/tests/Android.bp": {
       "role": "observe",
-      "sha256": "0f9b977dbb711ecb021320a3978e8b22638c2b1d4ba0830401b34d2cab44b1c4",
-      "size": 3949,
+      "sha256": "5f8a91907c78093fd44a7461ea83d9e479817bda88fe6543486ff671770a19b9",
+      "size": 4106,
       "normalized_sha256": "0f9b977dbb711ecb021320a3978e8b22638c2b1d4ba0830401b34d2cab44b1c4"
     },
     "core/android/vendor-src/frameworks_native/binder-ndk/tests/IBinderNdkUnitTest.aidl": {
       "role": "observe",
-      "sha256": "ee5cf7d0ad325bdaec73d787b9ddf1e015f7d8252ef7f5752514f954a1092129",
-      "size": 1136,
+      "sha256": "6b6e01d437ebb26b34b042c87a3f65cf1ce588c7916f3bbb7dffb7cb98640f5b",
+      "size": 1171,
       "normalized_sha256": "ee5cf7d0ad325bdaec73d787b9ddf1e015f7d8252ef7f5752514f954a1092129"
     },
     "core/android/vendor-src/frameworks_native/binder-ndk/tests/IBinderVendorDoubleLoadTest.aidl": {
       "role": "observe",
-      "sha256": "b34fe59e37db262de95ff9f37657ca8f8778d88d5d381d5cc521759833975924",
-      "size": 727,
+      "sha256": "17f1e848ae3e50658b5c195a99af20019091dc260e1045f6c1cda84b49e236c1",
+      "size": 746,
       "normalized_sha256": "b34fe59e37db262de95ff9f37657ca8f8778d88d5d381d5cc521759833975924"
     },
     "core/android/vendor-src/frameworks_native/binder-ndk/tests/IEmpty.aidl": {
       "role": "observe",
-      "sha256": "38e74441bfb8fa40a6cd03cdc95827fc9ac9316c668ea87a77914c4161802fbf",
-      "size": 642,
+      "sha256": "e2e65b9b7f4d2b77486a184e9fe9c46ab714ab4a163e3ac41d3e607b952220fa",
+      "size": 659,
       "normalized_sha256": "38e74441bfb8fa40a6cd03cdc95827fc9ac9316c668ea87a77914c4161802fbf"
     },
     "core/android/vendor-src/frameworks_native/binder-ndk/tests/binderVendorDoubleLoadTest.cpp": {
       "role": "observe",
-      "sha256": "5b61f42a6fd69d10d62d66e75ada48481bedba07ff07a7aee8dc22e8760add75",
-      "size": 5914,
+      "sha256": "4017664df1891829667b52b10dd9789e22515daec7a981b9c639478449ca91ef",
+      "size": 6080,
       "normalized_sha256": "5b61f42a6fd69d10d62d66e75ada48481bedba07ff07a7aee8dc22e8760add75"
     },
     "core/android/vendor-src/frameworks_native/binder-ndk/tests/iface.cpp": {
       "role": "observe",
-      "sha256": "ff26f84030727c21a916dfaf8fd0910072c015eb83a1eef4b112a2bbd1a8d7c7",
-      "size": 6210,
+      "sha256": "09dbbfb211539a5f363fb42ece8211b93aac2f94c6f5dd5956b3de30f228ee4c",
+      "size": 6406,
       "normalized_sha256": "ff26f84030727c21a916dfaf8fd0910072c015eb83a1eef4b112a2bbd1a8d7c7"
     },
     "core/android/vendor-src/frameworks_native/binder-ndk/tests/include/iface/iface.h": {
       "role": "observe",
-      "sha256": "943714e820517a20b57ca84bde88f183b6d91440cb149f3dd76f5654ade44c2e",
-      "size": 2303,
+      "sha256": "7b02b9ec54dd77fe5368789d7fdea53298c01c46dc0463402ffd111324fac7ca",
+      "size": 2364,
       "normalized_sha256": "943714e820517a20b57ca84bde88f183b6d91440cb149f3dd76f5654ade44c2e"
     },
     "core/android/vendor-src/frameworks_native/binder-ndk/tests/libbinder_ndk_unit_test.cpp": {
       "role": "observe",
-      "sha256": "fbb101eb95c1751006f075adf7365dacaf275f384781dfe009e4ed5c52068f76",
-      "size": 43636,
+      "sha256": "ae3a6fc6926f49246c6fc66c5055efb6ac81ba0838d652ea597721c2dbb54760",
+      "size": 44873,
       "normalized_sha256": "fbb101eb95c1751006f075adf7365dacaf275f384781dfe009e4ed5c52068f76"
     },
     "core/android/vendor-src/frameworks_native/binder-ndk/tests/libbinder_ndk_unit_test_host.cpp": {
       "role": "observe",
-      "sha256": "8b3f3d212f0467c3b4ef651e30eca1639910bc89922afa1709dfe439c133f12c",
-      "size": 3379,
+      "sha256": "f4da2058c719714df84ecf36454d0a39ad490eb8882f4d898a8e3e991e2106d9",
+      "size": 3483,
       "normalized_sha256": "8b3f3d212f0467c3b4ef651e30eca1639910bc89922afa1709dfe439c133f12c"
     },
     "core/android/vendor-src/libfmq/.clang-format": {
@@ -16493,104 +16499,104 @@
     },
     "core/android/vendor-src/libfmq/tests/Android.bp": {
       "role": "observe",
-      "sha256": "94e494830cf83376f6a91026b9dd29dcb21663295791c6d14aa859b1519cd6ae",
-      "size": 4345,
+      "sha256": "c15fb1c019e7b58636bdb84d88e5bb85ce8078415c29a38593690f57bf00451f",
+      "size": 4528,
       "normalized_sha256": "94e494830cf83376f6a91026b9dd29dcb21663295791c6d14aa859b1519cd6ae"
     },
     "core/android/vendor-src/libfmq/tests/aidl/Android.bp": {
       "role": "observe",
-      "sha256": "2e5e42a84fac48e67b18dde3456a2da200bfd05e875dce18c964c81fc2aa60dc",
-      "size": 607,
+      "sha256": "fc79259d2edda623d0f8777a510c5e9859f412ea904fd83d5df183891aab3804",
+      "size": 639,
       "normalized_sha256": "2e5e42a84fac48e67b18dde3456a2da200bfd05e875dce18c964c81fc2aa60dc"
     },
     "core/android/vendor-src/libfmq/tests/aidl/android/fmq/test/EventFlagBits.aidl": {
       "role": "observe",
-      "sha256": "fd28290ba9aa594c307a9867dc758b6138339d147d792c38c075dbe78bd2a0f7",
-      "size": 166,
+      "sha256": "6e7d5682019c1e3a2458f81e982e057380ca0c8463783f247db2a0ec4d88e1e0",
+      "size": 175,
       "normalized_sha256": "fd28290ba9aa594c307a9867dc758b6138339d147d792c38c075dbe78bd2a0f7"
     },
     "core/android/vendor-src/libfmq/tests/aidl/android/fmq/test/FixedParcelable.aidl": {
       "role": "observe",
-      "sha256": "4e71bdc1a9f6e6108c05e4f76f0162b917e6a780c0cd52c2a04335823fc5891b",
-      "size": 806,
+      "sha256": "fb55dd46a89024369d2ed627a74196329ac3d133db7cbfe08c6de5983f966e26",
+      "size": 833,
       "normalized_sha256": "4e71bdc1a9f6e6108c05e4f76f0162b917e6a780c0cd52c2a04335823fc5891b"
     },
     "core/android/vendor-src/libfmq/tests/aidl/android/fmq/test/FixedUnion.aidl": {
       "role": "observe",
-      "sha256": "a2fe76ee22b30d5d32c285a8e679d9a9e09241cb90875243f34cbf3beb8fc58d",
-      "size": 744,
+      "sha256": "9071405a562c2b28c9d697211e3898b42982878e5d8d1d1ed46c6d3164d91ee0",
+      "size": 769,
       "normalized_sha256": "a2fe76ee22b30d5d32c285a8e679d9a9e09241cb90875243f34cbf3beb8fc58d"
     },
     "core/android/vendor-src/libfmq/tests/aidl/android/fmq/test/ITestAidlMsgQ.aidl": {
       "role": "observe",
-      "sha256": "f468adcb6343b5d61c7a2ca8eb237eef66348121aea110ec37ceafb104972e89",
-      "size": 4242,
+      "sha256": "65c91241fa8c5ee807c11ae4d4c6a03d1938f7ab0d868d9c02482caa1807eafa",
+      "size": 4364,
       "normalized_sha256": "f468adcb6343b5d61c7a2ca8eb237eef66348121aea110ec37ceafb104972e89"
     },
     "core/android/vendor-src/libfmq/tests/aidl/default/Android.bp": {
       "role": "observe",
-      "sha256": "65f6ac9598f324bfb9df772d070c6e6e66deb42c4f76844f757a105d6d0074b3",
-      "size": 1466,
+      "sha256": "8712d3ad197e2526c64c48015fa06254e10dacd76794a610d98ac1942f36abba",
+      "size": 1540,
       "normalized_sha256": "65f6ac9598f324bfb9df772d070c6e6e66deb42c4f76844f757a105d6d0074b3"
     },
     "core/android/vendor-src/libfmq/tests/aidl/default/TestAidlMsgQ.cpp": {
       "role": "observe",
-      "sha256": "3a96fd78ea261cf2ba26fd197f14f4d3ee38e111ea4b6ffaef18f5b6c63c314f",
-      "size": 5677,
+      "sha256": "80090f1ba71292e5d0c575808d579c92f81d3de5688f0ef859d5071b9316084b",
+      "size": 5834,
       "normalized_sha256": "3a96fd78ea261cf2ba26fd197f14f4d3ee38e111ea4b6ffaef18f5b6c63c314f"
     },
     "core/android/vendor-src/libfmq/tests/aidl/default/TestAidlMsgQ.h": {
       "role": "observe",
-      "sha256": "cb309e76643268ca3e38ac63c8be160d1c2a6296fc27e016febf3c1b03055bf1",
-      "size": 3171,
+      "sha256": "3ecdb17d80e029afbbfaec0974c5f53de09d49f3cbc78a3fc326d49f64b1fc6f",
+      "size": 3251,
       "normalized_sha256": "cb309e76643268ca3e38ac63c8be160d1c2a6296fc27e016febf3c1b03055bf1"
     },
     "core/android/vendor-src/libfmq/tests/aidl/default/TestAidlMsgQ.rs": {
       "role": "observe",
-      "sha256": "12c2c066278aa908e0d53e2a3451e3842558660440c18fa6c6520e57b00b816d",
-      "size": 5152,
+      "sha256": "f2fa4f8fbdd2c1422e65532dc572884fb41897c615c93dcc915902584b9d6179",
+      "size": 5301,
       "normalized_sha256": "12c2c066278aa908e0d53e2a3451e3842558660440c18fa6c6520e57b00b816d"
     },
     "core/android/vendor-src/libfmq/tests/aidl/default/mq_test_service.rs": {
       "role": "observe",
-      "sha256": "e8e24d104b02b16a1f719bf50c79bf9f6c79db406eed35531e2836a21a274d12",
-      "size": 1420,
+      "sha256": "55890a988d7526715a6e7264a7b3206bf0d6c1642d0d508d5caff38d687c8ccf",
+      "size": 1461,
       "normalized_sha256": "e8e24d104b02b16a1f719bf50c79bf9f6c79db406eed35531e2836a21a274d12"
     },
     "core/android/vendor-src/libfmq/tests/fmq_test.py": {
       "role": "observe",
-      "sha256": "68955c20876bdb10a60c7f486c508ad3c4ffc47645a2ed406f5812a7fd174237",
-      "size": 4011,
+      "sha256": "d1f9ecd1ceea7837d06755a4ccf04f3358b8e6a538a5cdb286e78766c5d00f96",
+      "size": 4110,
       "normalized_sha256": "68955c20876bdb10a60c7f486c508ad3c4ffc47645a2ed406f5812a7fd174237"
     },
     "core/android/vendor-src/libfmq/tests/fmq_test.rs": {
       "role": "observe",
-      "sha256": "e707170704d5b196703a74c305f696e6c3abbda0385a370352f68932e8d87344",
-      "size": 2417,
+      "sha256": "1268d8f969b88a5939e93dd644f7ed57ff72496cf14052754860a9f5297d7b8b",
+      "size": 2507,
       "normalized_sha256": "e707170704d5b196703a74c305f696e6c3abbda0385a370352f68932e8d87344"
     },
     "core/android/vendor-src/libfmq/tests/fmq_test.xml": {
       "role": "observe",
-      "sha256": "ceda8e7e45cb052f60e1434940337fbf3b00de07ef470d4f18243f02c3b1dd18",
-      "size": 2743,
+      "sha256": "bf28d1901c628b222a38345ee40b986a84a1df4a4472e24f355bc7bef43c4cfd",
+      "size": 2787,
       "normalized_sha256": "ceda8e7e45cb052f60e1434940337fbf3b00de07ef470d4f18243f02c3b1dd18"
     },
     "core/android/vendor-src/libfmq/tests/fmq_unit_tests.cpp": {
       "role": "observe",
-      "sha256": "3099a8fa60fd5d2cfd464d9562b64b321d84715709108791ac29c5f8e59b1237",
-      "size": 61760,
+      "sha256": "c32252f61a826fc2e566066013b8a74325b81484d93e98842d791e89f76e32b7",
+      "size": 63364,
       "normalized_sha256": "3099a8fa60fd5d2cfd464d9562b64b321d84715709108791ac29c5f8e59b1237"
     },
     "core/android/vendor-src/libfmq/tests/msgq_rust_test_client.rs": {
       "role": "observe",
-      "sha256": "8e5634c6eeb712e0853b8a522c341a0ea24b19291a55ea1cbff1099bff7b4d6e",
-      "size": 2669,
+      "sha256": "c6ecbe44fc87c70b3fa877ab1aff104abc777765dfe4b7bc90257d245a59b4f7",
+      "size": 2746,
       "normalized_sha256": "8e5634c6eeb712e0853b8a522c341a0ea24b19291a55ea1cbff1099bff7b4d6e"
     },
     "core/android/vendor-src/libfmq/tests/msgq_test_client.cpp": {
       "role": "observe",
-      "sha256": "2a1f1e6767d4f2bc3ced1ec018935aee81bbf9ff7356155a461f5038f8dbce8e",
-      "size": 52198,
+      "sha256": "f84b54c3bbce8cdbf0f28fb4407a29eb25848b8e58a4391fa322f13649e98cb1",
+      "size": 53578,
       "normalized_sha256": "2a1f1e6767d4f2bc3ced1ec018935aee81bbf9ff7356155a461f5038f8dbce8e"
     },
     "core/android/vendor-src/libjamesdsp/cpthread.c": {
@@ -18478,8 +18484,8 @@
     },
     "core/desktop/windows-drivers/01_vaio_driver/tools/test_drv04_exclusive.py": {
       "role": "observe",
-      "sha256": "073c7752fbebd545f48e00b89e8f10c2bb828019c88f27acfbc8a9bd808d1f2a",
-      "size": 11227,
+      "sha256": "355ef444048ca1e149b16b10011249a02cb62da699d25973ba5360893b9b0308",
+      "size": 11527,
       "normalized_sha256": "073c7752fbebd545f48e00b89e8f10c2bb828019c88f27acfbc8a9bd808d1f2a"
     },
     "core/desktop/windows-drivers/01_vaio_driver/tools/vaio_probe.cpp": {
@@ -19357,6 +19363,12 @@
       "sha256": "43e41ac44187091c47bb46805a7aa9391dda8d99c4839a948d1c0e62ffadca02",
       "size": 9505,
       "normalized_sha256": "10e6014dbac500fd9402e59bd429afe7ba1fb07158aea0c1e33f3da2ce78eb1a"
+    },
+    "docs/20-执行/全量代码审查修复计划-2026-11-25.md": {
+      "role": "index",
+      "sha256": "b80d1df6dcc1140bec6f908a4969d3872f0880cd78b6560af5466ff401c0d337",
+      "size": 84516,
+      "normalized_sha256": "b80d1df6dcc1140bec6f908a4969d3872f0880cd78b6560af5466ff401c0d337"
     },
     "docs/20-执行/卷积双槽影子立项-2026-11-25.md": {
       "role": "index",
@@ -20890,8 +20902,8 @@
     },
     "engine/auradsp_engine.map": {
       "role": "observe",
-      "sha256": "7e94ef91ccb73d29294dfbe677ba89648592765512418a108895c0203b7523a2",
-      "size": 2245,
+      "sha256": "d7e242ccfdd8c6d7305c586d27cd93ad28fbceced33c660c9d7500f6b9ed1aee",
+      "size": 2312,
       "normalized_sha256": "7e94ef91ccb73d29294dfbe677ba89648592765512418a108895c0203b7523a2"
     },
     "engine/auradsp_gcc_shim.h": {
@@ -21070,9 +21082,9 @@
     },
     "engine/legacy/PATCHES.md": {
       "role": "index",
-      "sha256": "82aa3aa4f1c1c000adfdfbf3e591cd04bc6e3c2713d84c4901326b4a815d8ea4",
-      "size": 105132,
-      "normalized_sha256": "82aa3aa4f1c1c000adfdfbf3e591cd04bc6e3c2713d84c4901326b4a815d8ea4"
+      "sha256": "0b1551e22ead870d072f87ad2392d4c4b1c4ef57e45b25e2b362ea5f265463dc",
+      "size": 107868,
+      "normalized_sha256": "fdb52d82089a166eaff428e582e1f8b338e8074f9db522eb2e92d6f827980cbf"
     },
     "engine/legacy/cpthread.c": {
       "role": "index",
@@ -21190,9 +21202,9 @@
     },
     "engine/legacy/jdsp/Effects/eel2/eel_matrix.h": {
       "role": "index",
-      "sha256": "b020c7de7dffdadda18cd045daaf662cf336c0a31f1d3e24bae5f5ec4bab70dc",
-      "size": 29725,
-      "normalized_sha256": "b020c7de7dffdadda18cd045daaf662cf336c0a31f1d3e24bae5f5ec4bab70dc"
+      "sha256": "823c7f3bcc044670ef15e384073a5f775da41eaeb009d938355885081b517807",
+      "size": 35743,
+      "normalized_sha256": "8cb56afcdca65e4fb6da46890ae9eb395ddaf73452da86e58483a8b969d46390"
     },
     "engine/legacy/jdsp/Effects/eel2/fft.c": {
       "role": "index",
@@ -21646,21 +21658,21 @@
     },
     "engine/legacy/jdsp/Effects/eel2/numericSys/SolveLinearSystem/inv.c": {
       "role": "index",
-      "sha256": "c83b423e48205f7c60d8836c92e7702d9e2877ba9ae8912b5eaeb7d63638aa6b",
-      "size": 2424,
-      "normalized_sha256": "c83b423e48205f7c60d8836c92e7702d9e2877ba9ae8912b5eaeb7d63638aa6b"
+      "sha256": "db5b09dd701eb5e054f4993b2cf886f54cba57195273a2a32f31449ed7f01d29",
+      "size": 2791,
+      "normalized_sha256": "0d8aaf06530e67bfd252a28125d1bc6a04e15ffad60e3846c34d6d8fd83ccecf"
     },
     "engine/legacy/jdsp/Effects/eel2/numericSys/SolveLinearSystem/mldivide.c": {
       "role": "index",
-      "sha256": "ec2e2947893e9993932a35d58e40ce60714165071df95df0ef961b6bb465c4a9",
-      "size": 9865,
-      "normalized_sha256": "ec2e2947893e9993932a35d58e40ce60714165071df95df0ef961b6bb465c4a9"
+      "sha256": "623bb1dd7cd5856b48e312cad98b1fb564c52b08b180b05d3510438ec87dfc06",
+      "size": 10759,
+      "normalized_sha256": "3da7cb34eff00cc6b4057aa6e3ed32c99809816e1f4526aca0e6d10688fd34df"
     },
     "engine/legacy/jdsp/Effects/eel2/numericSys/SolveLinearSystem/mrdivide.c": {
       "role": "index",
-      "sha256": "74f4d824fbb17122ec985b0b8a569a81b6f8a452006f3461705690c0117aff91",
-      "size": 8942,
-      "normalized_sha256": "74f4d824fbb17122ec985b0b8a569a81b6f8a452006f3461705690c0117aff91"
+      "sha256": "01aafd5c02779a3106a199d7c939c36cdf59e64c222a0b834c271fd29f77a486",
+      "size": 9627,
+      "normalized_sha256": "f74a4fd1738d0519e8fe42b24f348c752a3ace95e1e2b0d86fd38ed84ba142c9"
     },
     "engine/legacy/jdsp/Effects/eel2/numericSys/SolveLinearSystem/pinv.c": {
       "role": "index",
@@ -22402,32 +22414,32 @@
     },
     "engine/plugins/tests/plugin_chain_consistency.cpp": {
       "role": "observe",
-      "sha256": "27e17b53f4e2d6d2adbb5e6dcf9fea5ab8163487553b50dd44cac1c1ca5e8336",
-      "size": 7528,
+      "sha256": "a1af5fd22dc2e1e9775045a9660992db1f236e34c174a47621d43984e9465a08",
+      "size": 7711,
       "normalized_sha256": "27e17b53f4e2d6d2adbb5e6dcf9fea5ab8163487553b50dd44cac1c1ca5e8336"
     },
     "engine/plugins/tests/plugin_host_direct.cpp": {
       "role": "observe",
-      "sha256": "7703d3412ac770175ec7726d5f327a243156da27dce84c9c488ccecd54740573",
-      "size": 8070,
+      "sha256": "91350c1fe47c31ebf959cb6780e4ac99bf2457fdda142616aaff3c1ec9d16af1",
+      "size": 8246,
       "normalized_sha256": "7703d3412ac770175ec7726d5f327a243156da27dce84c9c488ccecd54740573"
     },
     "engine/plugins/tests/plugin_host_quarantine.cpp": {
       "role": "observe",
-      "sha256": "dac6d615c7c114fa67308172d9abdc47326b87222e067ec10afff21bb54b9d72",
-      "size": 7276,
+      "sha256": "3d24e253d546d488a52eb21d90ab09c5c1a99d9585520edf70581199255bb65b",
+      "size": 7446,
       "normalized_sha256": "dac6d615c7c114fa67308172d9abdc47326b87222e067ec10afff21bb54b9d72"
     },
     "engine/plugins/tests/test_dll_dirs.cpp": {
       "role": "observe",
-      "sha256": "c405af447ab7c1429d246e76701623bcc4f78f31f2bd13365751a9ac64d58089",
-      "size": 7696,
+      "sha256": "09143dffa14a2bd287356b9c690ef340517db34fc0180b0e7a9c02b23ce169fe",
+      "size": 7855,
       "normalized_sha256": "c405af447ab7c1429d246e76701623bcc4f78f31f2bd13365751a9ac64d58089"
     },
     "engine/plugins/tests/test_latency_plugin_clap.cpp": {
       "role": "observe",
-      "sha256": "b301bcc3b2bc3d8e6e0f84d65dfb9d21651667a64249d1360d77d88202f8db22",
-      "size": 6866,
+      "sha256": "cb82e6af0deab3df10e9122ffe4b0b64909f51de8bb2819884e59014da9e227b",
+      "size": 7045,
       "normalized_sha256": "b301bcc3b2bc3d8e6e0f84d65dfb9d21651667a64249d1360d77d88202f8db22"
     },
     "installer/README.md": {
@@ -22864,8 +22876,8 @@
     },
     "installer/tests/test_release_clean_work.py": {
       "role": "observe",
-      "sha256": "4e034ed9fe083d1dc763449b3eae330c309d44ceeb0cece38b7f4b0841eb6211",
-      "size": 3997,
+      "sha256": "ed51059df6863a673c87c8fb466e8717202c69c6b02b5cd258059a9ec7a01620",
+      "size": 4110,
       "normalized_sha256": "4e034ed9fe083d1dc763449b3eae330c309d44ceeb0cece38b7f4b0841eb6211"
     },
     "installer/windows/README.md": {
@@ -23222,8 +23234,8 @@
     },
     "installer/windows/tests/test_pack_fixture.py": {
       "role": "observe",
-      "sha256": "9b3cbf53c05252ffde31718c5fffe4ea7cc3dd11b14f9165c8386a182ea48847",
-      "size": 16448,
+      "sha256": "e7db5b456ab2a2c4a5adc16f73d1a14d7fae0a5f0e2f47bd692e0489256f6e7f",
+      "size": 16776,
       "normalized_sha256": "9b3cbf53c05252ffde31718c5fffe4ea7cc3dd11b14f9165c8386a182ea48847"
     },
     "promo-site/DESIGN.md": {
@@ -23316,11 +23328,1164 @@
       "size": 45716,
       "normalized_sha256": "c91a64f42d1c96a7ac76951d9bc7f3390d90f47a60d97e4547a952f827307f81"
     },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "9bf160ae24d7753746d33db6f8be46e4af1e4a35902f4d184ec93b539ccfef51",
+      "size": 1129,
+      "normalized_sha256": "26d973f4a970c9e48ce4c00a06c92c9e533f61ebc8f15c67f4f96f753707d764"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/data/test-comma.csv": {
+      "role": "observe",
+      "sha256": "fe006c40ed975f719d1710738d617f9147c5f7d4c5bbaa5af7e35eed0654d922",
+      "size": 43,
+      "normalized_sha256": "9a74214aad413a5fcb3d628d7ae756deea8d35484a72aa45c385b7b2f4ee42e8"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/data/test-data-correctness.csv": {
+      "role": "observe",
+      "sha256": "c3ff4de2b822b7d1fb7505cfbea843f475bb377e5a4e3731b599a9867ed5a2ec",
+      "size": 309,
+      "normalized_sha256": "7251bb45085fe2c8dda2367fd28642ff48a2e093579b40853a2df41a34a87f5e"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/data/test-data-text-delim-double-quotes.csv": {
+      "role": "observe",
+      "sha256": "2253b4896baa1ccaeed5f34e6e33b512c7263ea06383541cc1aa6ec7eafbd1ac",
+      "size": 77,
+      "normalized_sha256": "029500f1544993a973f50a007395bb120352089a886bacd425647859cf38c346"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/data/test-data-text-delim-quotes.csv": {
+      "role": "observe",
+      "sha256": "d69eac59089bd7593c7ec680b5b337d93770b0d5b96dc6e0f8bd4281ef61d899",
+      "size": 77,
+      "normalized_sha256": "186b0385977dc8e41505b44e207d5a53850713c0990414e8a7cf4b8d80eda7c1"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/data/test-empty-fields-complex-separator.csv": {
+      "role": "observe",
+      "sha256": "b181a66378f2b02b1b7db21544127483558a3b8a65fdd6e444df977e34d7fad2",
+      "size": 42,
+      "normalized_sha256": "736ce46c64b5198c64159a3a86fd48379efb381b74e6f39ec9d7b7d813eb95d7"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/data/test-empty-fields.csv": {
+      "role": "observe",
+      "sha256": "fd320743b2754edab300639cbad7caa5d7207ab826e64fd79fa4b2c7044d1bf5",
+      "size": 8,
+      "normalized_sha256": "b5382518c0de74072504afb32979ffdafe6c5d3a0dd2e06761531e40196db21f"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/data/test-field-end-triple-quotes.csv": {
+      "role": "observe",
+      "sha256": "c38c2dbb2c8c1985efab25da452e818184e95ebda7f8baa88253848f726630db",
+      "size": 71,
+      "normalized_sha256": "709ad15f1d92bc1960164992e3d26ecf49c9fe28ba94912a02261470af6420a9"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/data/test-field-with-cr.csv": {
+      "role": "observe",
+      "sha256": "e95f274e52b97e98980b36d766c128f4be00b26358b630d3cc662931cfd82131",
+      "size": 75,
+      "normalized_sha256": "e95f274e52b97e98980b36d766c128f4be00b26358b630d3cc662931cfd82131"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/data/test-field-with-crlf-long.csv": {
+      "role": "observe",
+      "sha256": "0769bce902b309ee6853d1a393463a4c872e354500dea10ff86416ff6bf8a47d",
+      "size": 68,
+      "normalized_sha256": "d7933844589e558f96c3753b0c2e8a4c17a3f047c87cf1c525557f7588a3b5dd"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/data/test-field-with-crlf.csv": {
+      "role": "observe",
+      "sha256": "73c5502d4b256a2cd2ec6b7001f58bec81111f390072c8521d3606d8fadc04a2",
+      "size": 39,
+      "normalized_sha256": "36d172baf651de5122894403915c7e9b6b05a608a7091ef3963684f721d8164f"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/data/test-field-with-dquotes.csv": {
+      "role": "observe",
+      "sha256": "e0e36598243f954aa8971cb61fee21836714a5201c12a562106ca18f446ce4d0",
+      "size": 61,
+      "normalized_sha256": "dc8be02af74bc62f05c06acc515b072d2a98872bc6c8ad69eaeccd3598de4e05"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/data/test-multirow-data.csv": {
+      "role": "observe",
+      "sha256": "01bfe0bda2f4cd2b460492f6470406c10949479d99b4018259eb0fdccecb2040",
+      "size": 64,
+      "normalized_sha256": "c8b377e90371b98efe2fceba5269d5f90480219d1fddf72f16ab016a1e3c4a75"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/data/test-semicolon.csv": {
+      "role": "observe",
+      "sha256": "77b9665afe8786e272941421457efb93d239a1e75c711d3d5973deb6b697d922",
+      "size": 16,
+      "normalized_sha256": "cb1198c79105c9bf5d5880720aba4f11882473e96b022763ebc8a026747a0979"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/data/test.file.dots.csv": {
+      "role": "observe",
+      "sha256": "16c01a0cfec531e5b3ae888f14423c96ab564458949a56c4053570833122073d",
+      "size": 28,
+      "normalized_sha256": "c6bde6671baf146cc96dfef2da68392a4686a90570aadc971b258210a124f7a9"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/testreader.cpp": {
+      "role": "observe",
+      "sha256": "3d11f85714fb1336f7a1f1ca28dd3a5c628e61de161d626a1abd80aac9f0814c",
+      "size": 19868,
+      "normalized_sha256": "35bd954c6fba3b90589b2965d58084456f33d8a6e519abed0dc7f557a9ddd6b9"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/testreader.h": {
+      "role": "observe",
+      "sha256": "445ce856fb7ebec26213bb596446cc68b55f8129a4c9b952e571d78e5132ffac",
+      "size": 2082,
+      "normalized_sha256": "003d48cbdd26a4e4707fde05134ca7a01abe1796efba1040437720297d105ead"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/tests.pro": {
+      "role": "observe",
+      "sha256": "ddf8e3a7f4abb8634d84834ee82a616909dfdde8a45354249b9e4f1b9bad377c",
+      "size": 2233,
+      "normalized_sha256": "02e330001d90de715c9d73b51a75b23f926ef07bdf31b66210dce1f8e9f8c095"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/teststringdata.cpp": {
+      "role": "observe",
+      "sha256": "59060aa7a35d9fdf971b23759a356a9ef87dfbaaf37c0f5f2688c76341cc1909",
+      "size": 9019,
+      "normalized_sha256": "6e1093c2b432cf13cf364b64291a0f6963944ca37341761c2a75042d0572e8e6"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/teststringdata.h": {
+      "role": "observe",
+      "sha256": "2638d106ce914ec5aa857b9bc41d7656a526929334901070be4128157b6225b8",
+      "size": 650,
+      "normalized_sha256": "e6d3e24d8eca993f8661184b9ec8e3e679c102c209b97de8f3820b6fc695afb6"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/testvariantdata.cpp": {
+      "role": "observe",
+      "sha256": "15474e1414e61c57cc11c55b1412acdb126316e07fc2f12473f28ffd86d28e4b",
+      "size": 11149,
+      "normalized_sha256": "32aaf50ce772aeace2921c6a70990e1d2499917fba7705e9f3f4159ee4d4be40"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/testvariantdata.h": {
+      "role": "observe",
+      "sha256": "47adbb42524ca9e046b9bd207c9e75a89e3b60e5a801698f674a44ce68fd78ca",
+      "size": 676,
+      "normalized_sha256": "d17648ce9b0a738469b8b8bacd777371cbd4e0e9aefd6f95dab40bf4ccc9f9ca"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/testwriter.cpp": {
+      "role": "observe",
+      "sha256": "c24bf84c28c8a6accc0e3e3d99eca6b3d3527b70a47a1ba9cbef26728351ddb9",
+      "size": 14704,
+      "normalized_sha256": "b266d38cadbcf5714a9d415caa685df57f3d11a1073cb77c897467f694d422ab"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/testwriter.h": {
+      "role": "observe",
+      "sha256": "e5eb156392b9b5ec79caaf9dde81ad61c1ab0983a623e4f8645e2765e52049d5",
+      "size": 968,
+      "normalized_sha256": "42683ca5c149697476abb0e7e86ce2e753c52d5dbcde0a662494840ec37ad5af"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv-qt5/tests/tst_testmain.cpp": {
+      "role": "observe",
+      "sha256": "c69caf636e63c571462d866c5c383ed77633a88954ded673d82d1b141370921c",
+      "size": 496,
+      "normalized_sha256": "a46a2a01e8ad26e107c4ab3be20fd700b360d6154205a549955fd3b9cc2da724"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "b279d604aa7b3ecf227f2b98d1cae3cdf84ab4941b6a17447d602823c11938bc",
+      "size": 879,
+      "normalized_sha256": "13de6a68fee9397267bf9de8d8da78bf35ca2a4dc6c98a24b0e44180b7915bd8"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/data/test-comma.csv": {
+      "role": "observe",
+      "sha256": "fe006c40ed975f719d1710738d617f9147c5f7d4c5bbaa5af7e35eed0654d922",
+      "size": 43,
+      "normalized_sha256": "9a74214aad413a5fcb3d628d7ae756deea8d35484a72aa45c385b7b2f4ee42e8"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/data/test-data-correctness.csv": {
+      "role": "observe",
+      "sha256": "c3ff4de2b822b7d1fb7505cfbea843f475bb377e5a4e3731b599a9867ed5a2ec",
+      "size": 309,
+      "normalized_sha256": "7251bb45085fe2c8dda2367fd28642ff48a2e093579b40853a2df41a34a87f5e"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/data/test-data-text-delim-double-quotes.csv": {
+      "role": "observe",
+      "sha256": "2253b4896baa1ccaeed5f34e6e33b512c7263ea06383541cc1aa6ec7eafbd1ac",
+      "size": 77,
+      "normalized_sha256": "029500f1544993a973f50a007395bb120352089a886bacd425647859cf38c346"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/data/test-data-text-delim-quotes.csv": {
+      "role": "observe",
+      "sha256": "d69eac59089bd7593c7ec680b5b337d93770b0d5b96dc6e0f8bd4281ef61d899",
+      "size": 77,
+      "normalized_sha256": "186b0385977dc8e41505b44e207d5a53850713c0990414e8a7cf4b8d80eda7c1"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/data/test-empty-fields-complex-separator.csv": {
+      "role": "observe",
+      "sha256": "b181a66378f2b02b1b7db21544127483558a3b8a65fdd6e444df977e34d7fad2",
+      "size": 42,
+      "normalized_sha256": "736ce46c64b5198c64159a3a86fd48379efb381b74e6f39ec9d7b7d813eb95d7"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/data/test-empty-fields.csv": {
+      "role": "observe",
+      "sha256": "fd320743b2754edab300639cbad7caa5d7207ab826e64fd79fa4b2c7044d1bf5",
+      "size": 8,
+      "normalized_sha256": "b5382518c0de74072504afb32979ffdafe6c5d3a0dd2e06761531e40196db21f"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/data/test-field-end-triple-quotes.csv": {
+      "role": "observe",
+      "sha256": "c38c2dbb2c8c1985efab25da452e818184e95ebda7f8baa88253848f726630db",
+      "size": 71,
+      "normalized_sha256": "709ad15f1d92bc1960164992e3d26ecf49c9fe28ba94912a02261470af6420a9"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/data/test-field-with-cr.csv": {
+      "role": "observe",
+      "sha256": "e95f274e52b97e98980b36d766c128f4be00b26358b630d3cc662931cfd82131",
+      "size": 75,
+      "normalized_sha256": "e95f274e52b97e98980b36d766c128f4be00b26358b630d3cc662931cfd82131"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/data/test-field-with-crlf-long.csv": {
+      "role": "observe",
+      "sha256": "0769bce902b309ee6853d1a393463a4c872e354500dea10ff86416ff6bf8a47d",
+      "size": 68,
+      "normalized_sha256": "d7933844589e558f96c3753b0c2e8a4c17a3f047c87cf1c525557f7588a3b5dd"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/data/test-field-with-crlf.csv": {
+      "role": "observe",
+      "sha256": "73c5502d4b256a2cd2ec6b7001f58bec81111f390072c8521d3606d8fadc04a2",
+      "size": 39,
+      "normalized_sha256": "36d172baf651de5122894403915c7e9b6b05a608a7091ef3963684f721d8164f"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/data/test-field-with-dquotes.csv": {
+      "role": "observe",
+      "sha256": "e0e36598243f954aa8971cb61fee21836714a5201c12a562106ca18f446ce4d0",
+      "size": 61,
+      "normalized_sha256": "dc8be02af74bc62f05c06acc515b072d2a98872bc6c8ad69eaeccd3598de4e05"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/data/test-multirow-data.csv": {
+      "role": "observe",
+      "sha256": "01bfe0bda2f4cd2b460492f6470406c10949479d99b4018259eb0fdccecb2040",
+      "size": 64,
+      "normalized_sha256": "c8b377e90371b98efe2fceba5269d5f90480219d1fddf72f16ab016a1e3c4a75"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/data/test-semicolon.csv": {
+      "role": "observe",
+      "sha256": "77b9665afe8786e272941421457efb93d239a1e75c711d3d5973deb6b697d922",
+      "size": 16,
+      "normalized_sha256": "cb1198c79105c9bf5d5880720aba4f11882473e96b022763ebc8a026747a0979"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/data/test.file.dots.csv": {
+      "role": "observe",
+      "sha256": "16c01a0cfec531e5b3ae888f14423c96ab564458949a56c4053570833122073d",
+      "size": 28,
+      "normalized_sha256": "c6bde6671baf146cc96dfef2da68392a4686a90570aadc971b258210a124f7a9"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/testreader.cpp": {
+      "role": "observe",
+      "sha256": "a660e666f3d49db327c5203bd619c91465fc2c362b9a680ca9cf16bacd01ba54",
+      "size": 19489,
+      "normalized_sha256": "afb366fcfc9fe35fcd1a8be0665bbdfb97afdadd63906d63d29d06fa1f86d2b6"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/testreader.h": {
+      "role": "observe",
+      "sha256": "474fe9625288839226b7d1eb1850bc570d364d3f27f2edb0faccd19dfc243a12",
+      "size": 2091,
+      "normalized_sha256": "0f372816ddb3a72208db827c5441c0837a9708e606c5176168a7e7dfd5702a70"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/tests.pro": {
+      "role": "observe",
+      "sha256": "ddf8e3a7f4abb8634d84834ee82a616909dfdde8a45354249b9e4f1b9bad377c",
+      "size": 2233,
+      "normalized_sha256": "02e330001d90de715c9d73b51a75b23f926ef07bdf31b66210dce1f8e9f8c095"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/teststringdata.cpp": {
+      "role": "observe",
+      "sha256": "a41ae5cda48f4acebfec0a02c17cb3b64654062ac90ebccdf394a3ab393a0972",
+      "size": 8890,
+      "normalized_sha256": "c76071d2df2360fa1fd879eaaaa34bec51cd7c2e81bba88b1a1649cf70fb78e5"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/teststringdata.h": {
+      "role": "observe",
+      "sha256": "c81a74058ceb8dd7fe9394aa65aea1bcba9a80e60311e5bbfbf1379818da0116",
+      "size": 659,
+      "normalized_sha256": "158242217a20139ffd6b8381943ededeb5e45a7604164c0588e51e10ecd086ec"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/testvariantdata.cpp": {
+      "role": "observe",
+      "sha256": "b945c657510e1971b392eea5f96b7af90d69d77190dfd0186627d528ef87b794",
+      "size": 10960,
+      "normalized_sha256": "f066bfd64395da9957562598f5f5815597dcbb4bfbe6f40b9170bfceae44a529"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/testvariantdata.h": {
+      "role": "observe",
+      "sha256": "1794dbc1aa1c5db781755036c091aa13f717dbfffcf5d7e74fee25c28c54e5db",
+      "size": 685,
+      "normalized_sha256": "35a9c30320236c5d446b3ab180012c3ccdea23be62137afb73b0cb8b24747382"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/testwriter.cpp": {
+      "role": "observe",
+      "sha256": "718880df84b89be66d739cb97b1cde4a3ada247cb3e13aae86dad07773ca5070",
+      "size": 12787,
+      "normalized_sha256": "5fccae69e2a0c213e9f06e844f4af5844ac296810c70d0c64548bd25af3e5d31"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/testwriter.h": {
+      "role": "observe",
+      "sha256": "07e3b65672b3b767cfdfef550b9fe75ae4e26faaf7fc972dbd994d131f8a0446",
+      "size": 975,
+      "normalized_sha256": "e5681a6ac4097aeacc3a085589a35a276405b48aa88cae514b47c159e558bb47"
+    },
+    "source/JDSP4Linux/3rdparty/qtcsv/tests/tst_testmain.cpp": {
+      "role": "observe",
+      "sha256": "d0bd30f43d36a6941579c812c4bccbb8baa7e803f28e03eaa9be03e1c1c45699",
+      "size": 495,
+      "normalized_sha256": "50b181f5fbf4ab774f427e201ed9d48d6d382b55c42121cf49a5a5b1c2952eb6"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "85a01cd275187a5e533975fb63a3ae8e3b2ef1c26c7d77e879a948116b201a2c",
+      "size": 153,
+      "normalized_sha256": "cd4d1bb4c6c6a9c735fa429de51f8dfe840cd64c15e63fb0175d92ab85e0d809"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "6f6e222988b750d4f0cc87cbc83ee21ff451f29620d463b64eb0df22ef22c488",
+      "size": 29,
+      "normalized_sha256": "ef36ba70aabf4ef42e767d87b8805ce8a285091f1aebcb4310bc776f829c6e68"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "fe5f2f6fb9da470c9928aeacba4ce0e5d2452adf702a480fb076978e8ff5ee9c",
+      "size": 351,
+      "normalized_sha256": "1bb6821d81e50147898bbe29ccf816eceba105b3d201960bda968c4ba791fa10"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/benchmark/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "a45805512658402c220d90086045b915761dfd8da554b477658a2075c168e57d",
+      "size": 73,
+      "normalized_sha256": "09f46afd2c129b99a477b7353ea141e927ba591d6e978b79a28ccc66b962391b"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/benchmark/tst_benchmark.cpp": {
+      "role": "observe",
+      "sha256": "5567c3be8451b6bb42d1f864ec3833e1d8a300d58f71109a1bef86adb7dec05f",
+      "size": 10418,
+      "normalized_sha256": "0a8cd9d35644ec5700384b5eb5a22edf4babc165c8c13d5d3676ad6dfe2752a9"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/cpp14/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "ae17346ef73cca86dee197d9e080d516e7cecfce24fa361ee60d3803e0bf7244",
+      "size": 373,
+      "normalized_sha256": "5562784c5376a8dd014d6231a95c1d70b63e3d683ea08847862ede359c7cb8ab"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/cpp14/tst_argsof_lambda_auto.cpp": {
+      "role": "observe",
+      "sha256": "023314a3a674f5062a4b9ab6b2be7edd405edd9d83be3c2c44241e227bf46be0",
+      "size": 888,
+      "normalized_sha256": "a671c507477479de7af07f8facb787ee289131a6503e962c58dda7fecde408ba"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/cpp14/tst_resolver_lambda_auto.cpp": {
+      "role": "observe",
+      "sha256": "355a3f07c998ab21e7ab7a8cc8b2042f3f3f7884e62422cdffe482ea83809d48",
+      "size": 2099,
+      "normalized_sha256": "d8d1f4c4523e4f79580701e480b293fb3b2e1afde91649f2c11d32eaac151e07"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/deprecations/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "19a90e7b4dd6b12ffc2103593e505ce2bec6d806102b48f41115373778735208",
+      "size": 411,
+      "normalized_sha256": "f757a7e55eb082c64dc4a8d484c7fc977211789f5b2ed73155a110e8ec405f73"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/deprecations/tst_helpers_qpromise.cpp": {
+      "role": "observe",
+      "sha256": "58db5f372ac5166d946b9a8db844c98f579f8aff958f1e77efc353bd5581b028",
+      "size": 8379,
+      "normalized_sha256": "d8df7d4072febbbf30b08907fe1df3bb9942d6fab26eed3e419d5824a9441c8f"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/deprecations/tst_helpers_qpromiseall.cpp": {
+      "role": "observe",
+      "sha256": "fe8bcccf4d5310abac590fa2e00e5d25c3414193d7866225a3b325232deb319f",
+      "size": 7795,
+      "normalized_sha256": "ae3ef5d6ceca6d9a079f032e6e3f0b6803d60424bf681cbba8446d3b8b82e04b"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/deprecations/tst_qpromise_all.cpp": {
+      "role": "observe",
+      "sha256": "f409a348d73cb19f61129153a65addce0fb53e9f3558d2b1a6ad5d8994fddc18",
+      "size": 7840,
+      "normalized_sha256": "dadc790f7901c54393287c9c0cd5ee795012c5c33f749ace6b309e0fb76ed3c1"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/exceptions/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "de0e17db19c97e7a659097fd8bf6b63b51d0345458ec448b3c46ec35d54f41da",
+      "size": 75,
+      "normalized_sha256": "bd72682ca5804fe026c57a162becc0482124bae87adf207736cb105c1634ce9a"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/exceptions/tst_exceptions.cpp": {
+      "role": "observe",
+      "sha256": "2cf660cd90f51136a6b95c38b716b847fe14521e9920d064ec6020b251fd5119",
+      "size": 1346,
+      "normalized_sha256": "0fe46d492afc37faa72f0b39c1e111818ca49c3079ac2068baaf29ac29de9c6b"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/future/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "a64689c546c311223f3d90ec682b71f80ffc1a00fb92ff1835c1b608938f9424",
+      "size": 67,
+      "normalized_sha256": "92ef3ba9845d9ea183a329f46ce403919b2c5a838a663159a4b08f59926c8c4d"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/future/tst_future.cpp": {
+      "role": "observe",
+      "sha256": "4103ac08b6d81e1f409c3cdaccb332ef120e88d53ba5f187f649a0b149ec61ba",
+      "size": 8727,
+      "normalized_sha256": "d190dc61c841f13423da0f8a3af4515fa4568e264f574f85ca713006a387bdf9"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/helpers/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "1af9aeca5c771edab59978dd6ec5a90ae92241b8e3ad029a511e5898ea1ee873",
+      "size": 256,
+      "normalized_sha256": "155106e96734a879e74558fbbd23976889521159af7f50e23b8dbbafe2ebc09c"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/helpers/tst_all.cpp": {
+      "role": "observe",
+      "sha256": "ceabee8bd238d759c1efca24be7775b2969577272857d23ba63d78c6e67113d9",
+      "size": 7498,
+      "normalized_sha256": "ec01636b924ded57afeef2fdc8fb01b0883f4b0fa16e254dd8c259ed28a67310"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/helpers/tst_attempt.cpp": {
+      "role": "observe",
+      "sha256": "75dcd325d27b8da6541d81bd4f21e11e92fc89a823903a4de88d9cc75e5d5948",
+      "size": 2675,
+      "normalized_sha256": "14591e5d6864f566b8f09048746a4436481882b4e45e641335d112f87ee6ab5a"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/helpers/tst_connect.cpp": {
+      "role": "observe",
+      "sha256": "594505c59e03c9f2991cc93dabe444807a95e41aaf7e5aa23f62d283c7cb6727",
+      "size": 7238,
+      "normalized_sha256": "3d508126d65b3bff17729c19af85c6c1db32583e00208a25a794273e74aa2a6e"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/helpers/tst_each.cpp": {
+      "role": "observe",
+      "sha256": "389043d5b1caa7426ab3f0b436ceacf2e4393bb7c6d1ce282eb3a6e48e49b84a",
+      "size": 4728,
+      "normalized_sha256": "5c1267cb25da4c50a6610f1902ef4c13b43cdb8dc3bdeb9018cec28d41f1f0c1"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/helpers/tst_filter.cpp": {
+      "role": "observe",
+      "sha256": "7bbcc57d7c59571c96da71e2120dd25f4f018797c56ae31d3a28da62cc515518",
+      "size": 4492,
+      "normalized_sha256": "768edc391cbb63e358354e581d26b372a5d6894f95af75a90fc9e9bea3423bac"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/helpers/tst_map.cpp": {
+      "role": "observe",
+      "sha256": "60bfe48d421da3747a75d20153393cfe4fdc412f8a3a1ba2a92dd8c1f0d8e373",
+      "size": 4603,
+      "normalized_sha256": "2474e0fb4749ee13c96fb077672b1646ed9a083c375b05857ee98e135dd681f5"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/helpers/tst_reduce.cpp": {
+      "role": "observe",
+      "sha256": "5de044674291f59cfa709ef4baf0040c58bf29be9b704ca8e7ab48fce565812f",
+      "size": 9421,
+      "normalized_sha256": "ed4ca0ec49ff3b2b94fb868627d72901e53c0689a3b6a5e1d1d60e47def28b81"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/helpers/tst_reject.cpp": {
+      "role": "observe",
+      "sha256": "f382ae179c7e9b1755f19905b9d262a0ddca98e01972018d43b969826af57592",
+      "size": 1716,
+      "normalized_sha256": "3afe7f04b5949fef6210054281a652c6803c5cacdcb0fd60056f188284d60e0a"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/helpers/tst_resolve.cpp": {
+      "role": "observe",
+      "sha256": "f8c730c49f848aa4a4ac7af3680e33935612f2f6703e32263c2efe3593ce74fb",
+      "size": 8178,
+      "normalized_sha256": "5906fef8994d43e8d8afc5cbe05d2cc731ccd50795071e3bc6b8180ecbd6a502"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/internals/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "2414787e7312b1b6aa91601e05d74a946e0e0265aea15a470c9d24b09b07b03e",
+      "size": 77,
+      "normalized_sha256": "4bfb73845542df7740ae499e7bfc50ddc528fad3fcc4827d9800f824682103d0"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/internals/tst_argsof.cpp": {
+      "role": "observe",
+      "sha256": "5558fde2730fb7d181a67f148af8c90b0a2007db0eb02928b157e4c517cf7fb6",
+      "size": 5445,
+      "normalized_sha256": "f9f1a1678195a5f880f6094ff25257f215906f7672c496444d43561a9569a5f2"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "dbe4f75b1e8f6516bf3199e441d0ef3f6382ba69ae649e6543fa9559bf9bac3b",
+      "size": 404,
+      "normalized_sha256": "a85f7e02618d94e6635fafc90aae891d97339432a321fc320bcb467fdff4974b"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/tst_construct.cpp": {
+      "role": "observe",
+      "sha256": "abc6867c52ecc22597dd31fc3e5b51a3565924b3ba69aaddad2d8110d677d589",
+      "size": 10559,
+      "normalized_sha256": "931b3a91a2614547cd511e7fc06ea081e266c6c2c0924c448b0337c1e838356d"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/tst_convert.cpp": {
+      "role": "observe",
+      "sha256": "2f0e85110ff0e2848739c2ff52a63e478dd437709bcb4bab13152a7361da37a4",
+      "size": 7755,
+      "normalized_sha256": "c3fe38019e005077dffd2687fc5574d9c4976c8797dd1e1d8ee7339b0f6e93f0"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/tst_delay.cpp": {
+      "role": "observe",
+      "sha256": "bd47aa469295ed4ebe11e3d03a03142875c62da8ec594956193bb2febeffc749",
+      "size": 2676,
+      "normalized_sha256": "9f6fd59f86180381de37404a73e849133a060e1c04d1e97ca49ae556ae7093f0"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/tst_each.cpp": {
+      "role": "observe",
+      "sha256": "22458fcf23752dab8515e21c1fd5620ece408f4e034c76de2eaeb1234f98f6be",
+      "size": 5455,
+      "normalized_sha256": "efd332e7899f104e95b39bcebba67bcebe45eda782ab8127d910940ea5329717"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/tst_fail.cpp": {
+      "role": "observe",
+      "sha256": "1702e1c4c87faaab6b63e4fa7c0d7cea0cda922bd45365fd4ea75937ced488e4",
+      "size": 8941,
+      "normalized_sha256": "6105449d38b3501ebd386f4534c050742c34d7ba084aac5523b93be7ee1789e0"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/tst_filter.cpp": {
+      "role": "observe",
+      "sha256": "066498348d885b74a981cab7e2f84c5094acd5a0ce7cbf4b89785983ed8ee5c5",
+      "size": 4948,
+      "normalized_sha256": "a6b89483041838d37637318cb170bbf5ac13d3b098fa6d9b047caf30f177f9c9"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/tst_finally.cpp": {
+      "role": "observe",
+      "sha256": "c035b1a5f8e134365714277cd0b5eaaecb1b54eaf20cbff4dd82c810061cc541",
+      "size": 6204,
+      "normalized_sha256": "026598cf858c690563bb88a1ba49025c06bf08a3d5b381583f2a2a840188a68f"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/tst_map.cpp": {
+      "role": "observe",
+      "sha256": "4f54bce83c1446d47bfb184811578686167535f0888ec14f011b7ad13e0c2983",
+      "size": 5206,
+      "normalized_sha256": "423b35ad8d6c651cfd9c9706d24c68f889097ad790424a5a0ce2ec20ae08059c"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/tst_operators.cpp": {
+      "role": "observe",
+      "sha256": "e8befb70629b9e41682ff2e0bf43e20be7b89bc6e5be31dcd8bfee3501eb8914",
+      "size": 6305,
+      "normalized_sha256": "bc13e7035a4e7bb14751042cfd1eef83ca26783497231e536ba6c10dfd1b6817"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/tst_reduce.cpp": {
+      "role": "observe",
+      "sha256": "381218d50b713f3baa8aa2fdec318570a4cefe96788a4d68995b66b84185d439",
+      "size": 9635,
+      "normalized_sha256": "fee1dc90e4e69c3a62d55391e54207673c5b1744ad335d4d8872ca3186ed12f9"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/tst_resolve.cpp": {
+      "role": "observe",
+      "sha256": "fbad2fd9a4b599850bf7fafec63ab4978f5ed8c29706c63b370322193fda14b1",
+      "size": 4832,
+      "normalized_sha256": "e924ad32a5daf23c04b714ee4d64c7c22cca4fe383d586201bbc961a07b8b1a2"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/tst_tap.cpp": {
+      "role": "observe",
+      "sha256": "50eb61168cf7e46cfa7b9bc5403e1acb90ae63327b705290cb8b9b8832b7988b",
+      "size": 3738,
+      "normalized_sha256": "9bf1912cb32c61342c50a05d0ad3a35fdc498e6dcf4c02cc62ba6344f1665f67"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/tst_tapfail.cpp": {
+      "role": "observe",
+      "sha256": "4c2dd234abd10818d860f8cc7120aea6bcce8a0d17e91e7e4cb14f4adab7f262",
+      "size": 4053,
+      "normalized_sha256": "c648c4f0223c56663b5d479f530fffcd36de15c06a8571c819f899b31c79ae89"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/tst_then.cpp": {
+      "role": "observe",
+      "sha256": "6c3b03f41171c1c634092e884b4a0b509f4225fbb8a127549ec9be96945389ab",
+      "size": 9599,
+      "normalized_sha256": "7af4c25377be6d027cb8a56406dd2ba0d91f2618ef4dd334bc64f2fc5ea1fc88"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromise/tst_timeout.cpp": {
+      "role": "observe",
+      "sha256": "e7df363c47a619386c1e2f7573d54b5c7284d8b8bbdea02f53f0490a714b7aac",
+      "size": 5215,
+      "normalized_sha256": "e5d2ab63656511d65b92380ea961d2a7945181428d7c302f787d697c89d333fc"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromiseconnections/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "91a098743fdce2e5630312617b7451e4db15824162111f095f13f0767234d899",
+      "size": 93,
+      "normalized_sha256": "8f6feac13edd851b0d03aeead18e4b1e7168b36a3f49ed2ca6c9eea997ff1ab1"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/qpromiseconnections/tst_qpromiseconnections.cpp": {
+      "role": "observe",
+      "sha256": "03ea7b35ab900175a4409dee67694e1ddcd5fbd0376d3d0195ee5d990c81a75e",
+      "size": 2195,
+      "normalized_sha256": "06383e9201e4038bcf8c0d583a8a3bee380bd153680f8383636ac421c8f95814"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/requirements/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "e328f6fcf090b42887fae2877ce9a9c1de2214b7d0dbc5121ed24100c280f7af",
+      "size": 79,
+      "normalized_sha256": "360868643a114ed5bf315f34809f4af98a4f9e0f22d91a4e06c904d0f2e3b7a9"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/requirements/tst_requirements.cpp": {
+      "role": "observe",
+      "sha256": "75f87a6d800ec6b55db69348f63eda4cd31f3c17ee8c637a8caa4045924bba06",
+      "size": 13689,
+      "normalized_sha256": "70742872564bdf67f48eb9f4a3e5aae187b6d4fb3159eae1f15bec0ba938e554"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/shared/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "e0d763ada8db6058ed2c675c9852668d8b7b2b277261bd44d8b2dd41dae49c5d",
+      "size": 211,
+      "normalized_sha256": "2298716d63dc08e3ac12183186e486239c35393e0219ac73513ecea5358f02ab"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/shared/data.h": {
+      "role": "observe",
+      "sha256": "7045987827ed0ef38509881baf074e71baf54202b4dcb67bd2365c8ae7b111e8",
+      "size": 2302,
+      "normalized_sha256": "552f714349d92866b23f97df1a4241fb42b4e501c6155d9b577518df467f75b9"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/shared/object.h": {
+      "role": "observe",
+      "sha256": "474615e57d530a81abe890f8a3938400e1ee67f948cca81b7ce2ddaa11256710",
+      "size": 852,
+      "normalized_sha256": "20c42ae202399650d90e54da0276378c42ff03265daff447b3ff8ab2e6241df8"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/shared/utils.h": {
+      "role": "observe",
+      "sha256": "c098979ecb0fc2d6dc775ae14e9ecb66028707064089b27c474e507821846ed7",
+      "size": 1724,
+      "normalized_sha256": "3c19adfc5dbec6fed55d2439d4127cbf6d248a0bd4ddf5928694892ee22d1ee8"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/thread/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "715aadcff164f2a8158ed4e72469b75b9bf7666723931266d056b4f326ccee7a",
+      "size": 67,
+      "normalized_sha256": "7c47f7f9bff1c240eeffc88292d9eb83d922d25f4ed3fdee4804f0415e63af54"
+    },
+    "source/JDSP4Linux/3rdparty/qtpromise/tests/auto/qtpromise/thread/tst_thread.cpp": {
+      "role": "observe",
+      "sha256": "36f76c2dd36cfc4c8e62cd03b4cbe614ae7938e66a1aa8824c531da810a5b1c8",
+      "size": 6082,
+      "normalized_sha256": "881e10132a0fe8308bb61086043b5fa582ba493fa52996ba7c7a0b1f52dd1eca"
+    },
+    "source/LiveprogIDE/src/fonts/CONSOLA.TTF": {
+      "role": "observe",
+      "sha256": "5f8d58e719a7d724be036145f506acf38b0942e253a7c331887c7056b93deac8",
+      "size": 98520
+    },
+    "source/LiveprogIDE/src/fonts/CONSOLAB.TTF": {
+      "role": "observe",
+      "sha256": "5295a046a10ef96b7050891920212295ee8e86e4dd8177ceb6cf054ec1dba5f1",
+      "size": 100436
+    },
     "source/ORIGIN.md": {
       "role": "index",
       "sha256": "8e7572db9b96b4e52edea1c3fb9ba384e93c118096438c021aea91d98c1a65b3",
       "size": 8058,
       "normalized_sha256": "8e7572db9b96b4e52edea1c3fb9ba384e93c118096438c021aea91d98c1a65b3"
+    },
+    "source/PeaceTXT-to-EEL-converter/jszip.min.js": {
+      "role": "observe",
+      "sha256": "f12f367798e35ee2d9993dba6167fc61ddb52fb89880f5a99fbb606335188410",
+      "size": 97642,
+      "normalized_sha256": "acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e"
+    },
+    "source/ViPER4Windows/ViPER4Windows/assets/fonts/Inter-LICENSE.txt": {
+      "role": "observe",
+      "sha256": "b3195af0fb14368d1b3b10fb9d3fe503b7163ea083859d2ee553bc74da07c320",
+      "size": 4472,
+      "normalized_sha256": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a"
+    },
+    "source/ViPER4Windows/ViPER4Windows/assets/fonts/Inter.ttf": {
+      "role": "observe",
+      "sha256": "4989b125924991b90d05b2d16e0e388c48f7d5bb8b30539bbf9c755278d0ccaf",
+      "size": 879708
+    },
+    "source/element/data/fonts/Roboto-Regular.ttf": {
+      "role": "observe",
+      "sha256": "319cff6e7a31f0f2a41c475dca42890aa5d19fe16017e2290f8c1d4e14f76481",
+      "size": 168260
+    },
+    "source/lsp-plugins/modules/lsp-plugins-shared/res/doc/fonts/notosansdisplay-condensed-webfont.woff": {
+      "role": "observe",
+      "sha256": "9d42fe720fa8e117d15f44af20e42098124f1e22624f366ae97f161676dca1f5",
+      "size": 27448
+    },
+    "source/lsp-plugins/modules/lsp-plugins-shared/res/doc/fonts/notosansdisplay-condensed-webfont.woff2": {
+      "role": "observe",
+      "sha256": "7854d5403112bccc2fc84bed76efb0f0a687bbf1f7c5b93fe8f40c00d81de877",
+      "size": 20968
+    },
+    "source/lsp-plugins/modules/lsp-plugins-shared/res/doc/fonts/notosansdisplay-condensed.ttf": {
+      "role": "observe",
+      "sha256": "8e26ee5efe165ce90f57b2d495e1a4fa0f095fad00d535f414a2bf2d37f6c7e0",
+      "size": 451340
+    },
+    "source/lsp-plugins/modules/lsp-plugins-shared/res/fonts/lsp-icons.sfd": {
+      "role": "observe",
+      "sha256": "cb2eddefcc402848e39569cfb5b075184f1f0a4165c5b56089ca172a3896f807",
+      "size": 334158,
+      "normalized_sha256": "cb2eddefcc402848e39569cfb5b075184f1f0a4165c5b56089ca172a3896f807"
+    },
+    "source/lsp-plugins/modules/lsp-plugins-shared/res/main/fonts/NotoSansDisplay-Regular.ttf": {
+      "role": "observe",
+      "sha256": "6d0734a0edc1daeefea89626c31f76196f64afc57e01f5ff0f881982a997259c",
+      "size": 455268
+    },
+    "source/lsp-plugins/modules/lsp-plugins-shared/res/main/fonts/lsp-icons.ttf": {
+      "role": "observe",
+      "sha256": "e53b3013c7049b627797b60ee7ea54cb48c2aae923543fe04bf3dc731a1603f9",
+      "size": 34280
+    },
+    "source/lsp-plugins/modules/lsp-plugins-shared/res/main/fonts/lsp-logo.ttf": {
+      "role": "observe",
+      "sha256": "1750a88545f785deef7f2212217b4a21713d7fb10f780ac1396e4ef6185e85e8",
+      "size": 8488
+    },
+    "source/projectm/presets/tests/000-empty.milk": {
+      "role": "observe",
+      "sha256": "b857c20a7982852281d68df5aec602e134a8bae0bfca6cbf6e1153aa1c193c2e",
+      "size": 120,
+      "normalized_sha256": "79f6a03143e38ec0a06c1f697b4216758afd7c31aff83bbb2519909e254a7ae1"
+    },
+    "source/projectm/presets/tests/001-line.milk": {
+      "role": "observe",
+      "sha256": "a7fe0e3c9fd49a13da0e834d428ebf63a0a455f8686af2a3e91488a3e63bb1ff",
+      "size": 242,
+      "normalized_sha256": "0927cdb46b69bfe19d73da3a58fe953c6fbfd9f9dce6353b93b108939d3fc741"
+    },
+    "source/projectm/presets/tests/100-square.milk": {
+      "role": "observe",
+      "sha256": "f5a1a38e28f2325f8612372d11d942c85e313aa2b66f004215770e77917a40e6",
+      "size": 211,
+      "normalized_sha256": "a22cfaf02fc47872b8a714696b38b2bf5a05f92b37dd663b783f9746e30a996f"
+    },
+    "source/projectm/presets/tests/101-per_frame.milk": {
+      "role": "observe",
+      "sha256": "ec001fb66a043fc74e0143c153455bff5614e8a726b33e3a2314a2f1b5ed0266",
+      "size": 298,
+      "normalized_sha256": "c67614510e18383559ad2ac2a76362ca241a07b865f3ad59731736ae3f7d6ea7"
+    },
+    "source/projectm/presets/tests/102-per_frame3.milk": {
+      "role": "observe",
+      "sha256": "e561db1350f5bbf4459a98639425fde3a99a6fbde8833056aea36953a4c37bc5",
+      "size": 377,
+      "normalized_sha256": "32cd13736c991be3508ddbadf1d8e615543b4e3f23c9f527b30102c8320ec365"
+    },
+    "source/projectm/presets/tests/103-multiple-eqn.milk": {
+      "role": "observe",
+      "sha256": "8bd851ab8b3f0cec35f37f11775ae6ca1ee45802a1bf3332405cd4ab37707261",
+      "size": 345,
+      "normalized_sha256": "ecf25553c16c648d3b900a297b776045c83da5a0bed5bc9609aab793f2e245eb"
+    },
+    "source/projectm/presets/tests/104-continued-eqn.milk": {
+      "role": "observe",
+      "sha256": "628df03e76cf01e44dd7393f3bcfc94c67affe11daae47673c8086cc8547174c",
+      "size": 310,
+      "normalized_sha256": "9dee9039abf889f4ea9c3ddf0014f92d8b76831da763763d4e05827ced334e0b"
+    },
+    "source/projectm/presets/tests/105-per_frame_init.milk": {
+      "role": "observe",
+      "sha256": "3acb2f0dbd266a6074d4eba0d44059d5bf6cda3d4b98373a84bdbb41ea1aa0b8",
+      "size": 301,
+      "normalized_sha256": "435f2424ccd8ca3614a348c2ec76c1e4bea65c0a32bae90bc8889d702d106a5b"
+    },
+    "source/projectm/presets/tests/110-per_pixel.milk": {
+      "role": "observe",
+      "sha256": "b673e445e8338f825fcac3de32d16ccbd74d58e1a5a6285b8b64bcc03f011bba",
+      "size": 377,
+      "normalized_sha256": "8d58b7fcc30241a8dfcd805ee8499863f2efcd70cd862d39d05275bdbec5799f"
+    },
+    "source/projectm/presets/tests/200-wave.milk": {
+      "role": "observe",
+      "sha256": "cb96df006ee2e491dd6a01cf09bc37af3ed36b94fddd7c2d1c3f3cd590caf24a",
+      "size": 190,
+      "normalized_sha256": "afa1f7df14ef80ea6dd90f22b277e5edcaa62784b22ea913e8664dffe4d95cf5"
+    },
+    "source/projectm/presets/tests/201-wave.milk": {
+      "role": "observe",
+      "sha256": "047b19b477d0699e69d6c6f34a00a6e8ca325678dae73722600137433b5c564e",
+      "size": 164,
+      "normalized_sha256": "821cfc6f502ffffd2b48959dc1df558c2b32676222bc60065b28de9fb265df66"
+    },
+    "source/projectm/presets/tests/202-wave.milk": {
+      "role": "observe",
+      "sha256": "4a712463e61e875c64c2de26d7ed63024d2d9444a71dda9ae316aa5d1b999980",
+      "size": 157,
+      "normalized_sha256": "5d962c4b49dedfe49b5f610329a767f8bc9598122b6d921c26c43b9bc1f12c9e"
+    },
+    "source/projectm/presets/tests/203-wave.milk": {
+      "role": "observe",
+      "sha256": "2def0a387c12ef3e731418d4d4e0111cdd7a7d98e36c20611fc945b46c2e3dc7",
+      "size": 159,
+      "normalized_sha256": "d0a2df0eb65022fe722217d06bfe6dbad0102d2084618c4d4b7e3d819d5d637b"
+    },
+    "source/projectm/presets/tests/204-wave.milk": {
+      "role": "observe",
+      "sha256": "ff8620953f83bdb73dc3ee791e9cdae06d458ff0702e4b2d0a05aa11ab07f7fa",
+      "size": 166,
+      "normalized_sha256": "e4125fec139966e2f96ec36a29fbce335f07e90bd8e958e47e00b750210cb533"
+    },
+    "source/projectm/presets/tests/205-wave.milk": {
+      "role": "observe",
+      "sha256": "c4eaa626c9cb5455580f7447641455c3eae3e33e56eaf92acdc0cf848ec0cfb5",
+      "size": 159,
+      "normalized_sha256": "fc3159f8d7413d8d50772619af53ece96d2e8404d59f7cddc8169b2cba741697"
+    },
+    "source/projectm/presets/tests/206-wave.milk": {
+      "role": "observe",
+      "sha256": "4dffb27ec18dcf61c1d404bac150260dbb04577a1b0a942768a95ff542d6c32e",
+      "size": 158,
+      "normalized_sha256": "dd77dd517d4a94346a1560002edb184bc8c88f715049de0d3b2ef1e34f22a868"
+    },
+    "source/projectm/presets/tests/207-wave.milk": {
+      "role": "observe",
+      "sha256": "b996c1e7351a9adf0676dee734fad5ecd0ca8749cc088d1145ea2797d0c991da",
+      "size": 164,
+      "normalized_sha256": "e361f753c8f2aa11db85f4a475ef355e5899cbb633862fc6e9ee0bfdb36f8f55"
+    },
+    "source/projectm/presets/tests/208-wave.milk": {
+      "role": "observe",
+      "sha256": "bfe215a85b71933799d2dfb0d999354e2e54684aa76e7d35a285fd3ba323bc00",
+      "size": 164,
+      "normalized_sha256": "d471fa8f6b51c8f0566d0d26a3e9423c1b1f68f7414090a47eef80f4d32f4a11"
+    },
+    "source/projectm/presets/tests/209-wave.milk": {
+      "role": "observe",
+      "sha256": "09976d444fdca0689b98b1dba1df794b245d3587cfdb6e140c8c964ad2dbae7a",
+      "size": 164,
+      "normalized_sha256": "6e15e930d2fe235c47f57cfd79d7f8f56cd8cdc161a92807e08bb8e027a32780"
+    },
+    "source/projectm/presets/tests/210-wave.milk": {
+      "role": "observe",
+      "sha256": "52844e26d4227169662952b87c8299b4ae2db7518eaf221e3c9e01076df88950",
+      "size": 165,
+      "normalized_sha256": "958b37fa3bb7f16a3404f8c0ce0d1bcc69f435f02506a6c5a63843c7519cf90a"
+    },
+    "source/projectm/presets/tests/211-wave.milk": {
+      "role": "observe",
+      "sha256": "8b4fe299a46009929dc3c7a3622cdb17c0f77f0a982484954d3221569001cb5f",
+      "size": 165,
+      "normalized_sha256": "e096daeefaa5cbdb041dc92b5c8a89c722ee5ab813bddcbfb33245b0e56208f3"
+    },
+    "source/projectm/presets/tests/212-wave.milk": {
+      "role": "observe",
+      "sha256": "06b9564789873fd94acb86d13a7fd93bc54c3959b4da1b37fa724473d97c7b60",
+      "size": 165,
+      "normalized_sha256": "8f401c45477fa8f5ddbba3e44697bb7652bd983fe9b4055aa377efd3d7f06baa"
+    },
+    "source/projectm/presets/tests/213-wave.milk": {
+      "role": "observe",
+      "sha256": "0e7b040a8a1e0c73a96e48f2aae9b136eeaff46d1e1f55e0be7f3669210d956b",
+      "size": 165,
+      "normalized_sha256": "ae8403decff761b437a50c8fa20f4e2a8515378356e669c249b11bbd9cbc6429"
+    },
+    "source/projectm/presets/tests/214-wave.milk": {
+      "role": "observe",
+      "sha256": "35f4b0e78ae93ff7cbac78ba361498057c47b7c8b5e191f3672f35a4e2a0b11f",
+      "size": 165,
+      "normalized_sha256": "a434865f550e62e8c10c9b5654dcada0a0e236edd86ddcca6cb2c9575579b4fd"
+    },
+    "source/projectm/presets/tests/215-wave.milk": {
+      "role": "observe",
+      "sha256": "f17295154e92b4408876c7bce90096fbf5f483698937d3d7e0203dfb4374953b",
+      "size": 165,
+      "normalized_sha256": "7eaec45d637b297aa9018cd38afca29e0f4a1c094669864c667e7c8ec666d73d"
+    },
+    "source/projectm/presets/tests/240-wave-smooth-00.milk": {
+      "role": "observe",
+      "sha256": "10474138f68e415407877109aff6e1a11f14cd1f72a429b37cb2df4474ebeadd",
+      "size": 477,
+      "normalized_sha256": "02a6e72ae58edc6187ba1d348aec3ecce67b23a39d14980f0a7b116e9a664dbe"
+    },
+    "source/projectm/presets/tests/241-wave-smooth-01.milk": {
+      "role": "observe",
+      "sha256": "65e07d7584a0c0a691f69e250307448023c050f115665086019c183bb1a9d3cd",
+      "size": 480,
+      "normalized_sha256": "9cfe286d3f3fe9e3ecd8a926dae00c65509012fc7e3f7d8bdadabf38ced0dce0"
+    },
+    "source/projectm/presets/tests/242-wave-smooth-80.milk": {
+      "role": "observe",
+      "sha256": "776ce53cdc669a6a7ff02e71bf7a68b6af335b1d75e875c198d10d162fa83193",
+      "size": 480,
+      "normalized_sha256": "a7dca4b82fddd94e044a10b75dbd9e8213da470db8456590147f7daed29505ea"
+    },
+    "source/projectm/presets/tests/243-wave-smooth-90.milk": {
+      "role": "observe",
+      "sha256": "6aeec1dc42c8826eed84b5545ebfaeeee8e74a7806ef1e20ba0badee14150791",
+      "size": 470,
+      "normalized_sha256": "2010f298a844da3e5b6091eafae67b6d253dcf09a665f9d6ab2e31d9918ce1bc"
+    },
+    "source/projectm/presets/tests/244-wave-smooth-99.milk": {
+      "role": "observe",
+      "sha256": "279f4460f4e83d79ab73c16b60b4f8b70082791ac3f7d077c9bad7bce9801cb3",
+      "size": 480,
+      "normalized_sha256": "2be06049b53ca4c50d9a6cf17971ce82cb31575f3944f1ce7a473ac69fa7527c"
+    },
+    "source/projectm/presets/tests/245-wave-smooth-100.milk": {
+      "role": "observe",
+      "sha256": "5e31a7401be2dc7264f21afbeb33dfbec92ed85635d5e09bb020e0591239fa78",
+      "size": 480,
+      "normalized_sha256": "fd74e76671ca42aacf265c45af199776bd8f08c6228a27cdb5cf1fccda373a30"
+    },
+    "source/projectm/presets/tests/250-wavecode.milk": {
+      "role": "observe",
+      "sha256": "4c1f3c64e3321076d278b62aa6daf13d0af0b66ce48627c2b5aa14f3bcfde878",
+      "size": 673,
+      "normalized_sha256": "501548257965af34322931fd7648f96e7264b8f5a04fea9337acee241ecea2a4"
+    },
+    "source/projectm/presets/tests/251-wavecode-spectrum.milk": {
+      "role": "observe",
+      "sha256": "f85b7851012f3aeda948282cb389f8d7b3c02afe5df626d0d2b49b89efb5215c",
+      "size": 641,
+      "normalized_sha256": "9a13747c1a22d85c02abb032ff8e1b55995dbce688c81b99148003ea6606e9b2"
+    },
+    "source/projectm/presets/tests/252-wavecode-spectrum2.milk": {
+      "role": "observe",
+      "sha256": "89f304b2964f77d4fb2fc2392ce49d47d101b0759f1b5c46a81acf165e6764a1",
+      "size": 1552,
+      "normalized_sha256": "5cce7d7ba85bdead24373e7c92aa47017e265d18d99433ff2c7628b997c1ac80"
+    },
+    "source/projectm/presets/tests/260-compshader-noise_lq.milk": {
+      "role": "observe",
+      "sha256": "d49a3deb04eed498e95c8a8027e15aae6532875e58917068510df7f8ffe6970a",
+      "size": 254,
+      "normalized_sha256": "447102d59d0480373adfffec2a277765d1a072ed36dce210f5ac9070d41c43cc"
+    },
+    "source/projectm/presets/tests/261-compshader-noisevol_lq.milk": {
+      "role": "observe",
+      "sha256": "d934f885f030f0fe0634e56c996eeb7b42aa5c3ab7593bf987270600a7c69311",
+      "size": 327,
+      "normalized_sha256": "628d622e463cf14db3be48f9c2635b812438dd348a50250db93039ac6e00fe47"
+    },
+    "source/projectm/presets/tests/300-beatdetect-bassmidtreb.milk": {
+      "role": "observe",
+      "sha256": "1fece74119de37b4867e8b130e47ea14cbef2f1f825a94e5640572627a8f0753",
+      "size": 1441,
+      "normalized_sha256": "b5d7bf8e812a50b568b8427fd93f7faba6a4f0d64463ab71c9482af38aa0ec65"
+    },
+    "source/projectm/presets/tests/README.md": {
+      "role": "observe",
+      "sha256": "37993a8d9d1c2df121d7ac76711224f26923033fd546da62d6aa6ee9c30c2557",
+      "size": 124,
+      "normalized_sha256": "c2e8f28148c7bf8c318bfe78c44fb6dd4d5742a18f6f4b7d806abdf390088261"
+    },
+    "source/projectm/scripts/test-macos-framework.sh": {
+      "role": "observe",
+      "sha256": "d565c5b6b3780964f6ab187d7fb5e443cf639050f8234f50c0bcbfd3675f0f21",
+      "size": 13206,
+      "normalized_sha256": "bc2721a3a6fad0da9acf1924fdc1382cc6d591b1c3e23d984710bfd776203212"
+    },
+    "source/projectm/tests/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "bdc7656ff72190fc9e9d2074e373624eb9c86703bd73369c763f46f46798b7d0",
+      "size": 59,
+      "normalized_sha256": "7f590c45068fe7d5de66ff4b1501370686f869c51764b5ad8769ee0523504913"
+    },
+    "source/projectm/tests/cxx-interface/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "6689ddd1aa6f20a2131a3f8f6d5f8b343ee9b6ac83b3ad38997b5a6be49e7301",
+      "size": 516,
+      "normalized_sha256": "2f820b9de9b70152ba43952f44a034f4f7379e6b30b12e6f780c2705874c7dcc"
+    },
+    "source/projectm/tests/cxx-interface/ReadMe.md": {
+      "role": "observe",
+      "sha256": "ba4c16c005ea5a34a22629708aed6a62f11287f5cf7c8a372813a9c13502132a",
+      "size": 395,
+      "normalized_sha256": "0ce4c4c9d8092bcf7e35838c9d88f975d1f34022e623d538d454a27d8a5f75bb"
+    },
+    "source/projectm/tests/cxx-interface/main.cpp": {
+      "role": "observe",
+      "sha256": "819484848072de3d5803d85ee05381103019d6a31687b7b62fd04bf64c055d6d",
+      "size": 253,
+      "normalized_sha256": "29aad081c3773503fb4d212b65af686ec9cca1dd04ffb229f4748e042ea1f8cb"
+    },
+    "source/projectm/tests/cxx-interface/vcpkg-configuration.json": {
+      "role": "observe",
+      "sha256": "ef7ce37c5a216713f68f069f9635c79f0d14990c07a686eb458b442f75f9cab2",
+      "size": 173,
+      "normalized_sha256": "2e144c1971d7359179bd353bd8380bb0a1a992b0d9c2a0d92af55f6f2c7de356"
+    },
+    "source/projectm/tests/cxx-interface/vcpkg.json": {
+      "role": "observe",
+      "sha256": "82f0354f279f160b6bfcdce2da787e5bcb5ed5f60e205493342f67996f85c0b8",
+      "size": 411,
+      "normalized_sha256": "b5cb8edd632b1f855f6196da2eaccaa534f8aa314e324151777687aea8a101cb"
+    },
+    "source/projectm/tests/libprojectM/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "06c474e0dc94150592cf00d75fe9d12dc45b8722377919da5334c84d10d618f1",
+      "size": 2656,
+      "normalized_sha256": "a32d971e720e1d6ebda385b2ccc9a3811215b5ea04945781c53b436f6588deaf"
+    },
+    "source/projectm/tests/libprojectM/EquationCompileErrorTest.cpp": {
+      "role": "observe",
+      "sha256": "c8db5551eab810b651bc33894e84c73a2c1d609b6429dfe75348e4e5a8a72fd6",
+      "size": 1623,
+      "normalized_sha256": "e16e77a5dc7c736d2a53d7efd4ae8c074be5d7685f4effe1ec3265675d9c1d45"
+    },
+    "source/projectm/tests/libprojectM/HLSLAlternateMultiplyTest.cpp": {
+      "role": "observe",
+      "sha256": "818852822c1248dbfbcaff68d32caebf56e8c2071572c75aa167f0ee904d4973",
+      "size": 2399,
+      "normalized_sha256": "562a8878a77b3703a4ef5b0d560fdee7681f2d6d599df81b92c67e5b9b23a568"
+    },
+    "source/projectm/tests/libprojectM/HLSLModuloTest.cpp": {
+      "role": "observe",
+      "sha256": "635ea4d1e9a68c0755967aeeb5c22f558fb16f25f517a122f26bf67790f4fedb",
+      "size": 6798,
+      "normalized_sha256": "828df2ee62cce13ad1a7f96cbe941a6665a0338e2d2814f53c68d8f975f8dc22"
+    },
+    "source/projectm/tests/libprojectM/HLSLParserTest.cpp": {
+      "role": "observe",
+      "sha256": "a2126b97fb0a51ceaedea351b907629949e9e8b4f34518a48d0c60681e38e0ab",
+      "size": 3672,
+      "normalized_sha256": "06d9138d84b06cd9fe0b5390038acd37699cda09b0381eff09c25a159f2ca7c7"
+    },
+    "source/projectm/tests/libprojectM/LoggingTest.cpp": {
+      "role": "observe",
+      "sha256": "6bffca85aaf29fc6d045b1f05c48c66a0c8cc652b52083579f04ef3df9e6dbd7",
+      "size": 8008,
+      "normalized_sha256": "36c9f2b9d306c9281c399e36f214811af71f5e290a4da4412a31e3cd4182d88f"
+    },
+    "source/projectm/tests/libprojectM/MilkdropShaderCommentParsingTest.cpp": {
+      "role": "observe",
+      "sha256": "416ecc2528b3644a7fc36d348e90dfdb527340513dce2dc151eab45c13c82759",
+      "size": 30128,
+      "normalized_sha256": "8f4c5d33cd15da0571a6661166808a1cec188c3bdb2911bc7b9942492f3ca3aa"
+    },
+    "source/projectm/tests/libprojectM/PCMTest.cpp": {
+      "role": "observe",
+      "sha256": "2c9def5150cee552f7d3eb013c7ab77cc5d17ee3f2685c8e490376c8339b8637",
+      "size": 262,
+      "normalized_sha256": "3c3f09e23b8b16c671c7e42ecb810198c9ae8e17228f4eb1cfc135884214bf36"
+    },
+    "source/projectm/tests/libprojectM/PresetFileParserTest.cpp": {
+      "role": "observe",
+      "sha256": "85f08c8e8dd1add1f091f67c726482d0898c9fed18eb0b043380b98cdfbc523d",
+      "size": 6115,
+      "normalized_sha256": "d39194ab82e2d0a6b48b4e41358a3162719ca939aab7ffc0bd5b15a5b094aea0"
+    },
+    "source/projectm/tests/libprojectM/UtilsTest.cpp": {
+      "role": "observe",
+      "sha256": "7bcdb619b4f83b285b89ba3e855ea2185f837912e0a4b427c6bdd2e3697d8750",
+      "size": 832,
+      "normalized_sha256": "1854811b02a7698e89e3e467ff5d1fcc0cc84f457c3bf10dba40203105e8748f"
+    },
+    "source/projectm/tests/libprojectM/WaveformAlignerTest.cpp": {
+      "role": "observe",
+      "sha256": "fda9a75d44ab7ee1b56f8392fbebbfc2019c1d621dd698b9d6e9bbbf0178b4b8",
+      "size": 3048,
+      "normalized_sha256": "7bee90dd58e16fc1ebd18dbf8e2da9298726156bbdf46b4baaeed39100366f2e"
+    },
+    "source/projectm/tests/libprojectM/data/PresetFileParser/parser-code.milk": {
+      "role": "observe",
+      "sha256": "f3c8d7977f21b4b71f48980bff24cf42b25578227f9859a5806e9b4152bf29c3",
+      "size": 1087,
+      "normalized_sha256": "cf934eccf31e5262839456ca7301f39beee8fd2eb6bf9375e9862c52e9fbbb5f"
+    },
+    "source/projectm/tests/libprojectM/data/PresetFileParser/parser-empty.milk": {
+      "role": "observe",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "source/projectm/tests/libprojectM/data/PresetFileParser/parser-nullbyte.milk": {
+      "role": "observe",
+      "sha256": "0719fa9331893afb84d4161363009f8d42ce6f47129504e7ae431405fcc8ad61",
+      "size": 56
+    },
+    "source/projectm/tests/libprojectM/data/PresetFileParser/parser-repeatedkey.milk": {
+      "role": "observe",
+      "sha256": "52b70a3cc58262ddb10a5010ec3a286c3e4de2a0dbd3179bdaec452f7b759139",
+      "size": 99,
+      "normalized_sha256": "02bc27a685bc314c71f7eadce16d80d1c44209869654cc43a63e1644463e3993"
+    },
+    "source/projectm/tests/libprojectM/data/PresetFileParser/parser-simple.milk": {
+      "role": "observe",
+      "sha256": "32c052fbf5b96e3e959762ba2a1a14352a92adc2f13e8bc33e708a2641783494",
+      "size": 188,
+      "normalized_sha256": "e13ea77c2219994f617cc82f49e1de5a3aeff5470b4dad68bc6c89f3035da3f8"
+    },
+    "source/projectm/tests/libprojectM/data/PresetFileParser/parser-valueconversion.milk": {
+      "role": "observe",
+      "sha256": "bfa30fffe8fbc8abc3221cc9b71e087d87870dc59a03698cfa76a139eefbdc84",
+      "size": 224,
+      "normalized_sha256": "9e160c8bfd5ac11f451a5e277db8c28b442fcf69fe76e976e6cb7d9b255f3fb8"
+    },
+    "source/projectm/tests/playlist/APITest.cpp": {
+      "role": "observe",
+      "sha256": "ce0657c6ee66cd5b31a2146e5b74174d5247ce5e47f4b5a858f1208cf69dfef3",
+      "size": 22495,
+      "normalized_sha256": "f5a14384903da497e243bf5d273ea7b4be5ccc095b1752101e78a9c6c8901c6a"
+    },
+    "source/projectm/tests/playlist/CMakeLists.txt": {
+      "role": "observe",
+      "sha256": "ae99373526195ab26ac4be52040b5c4be201f4352aa8702c320f3a96cb6508c1",
+      "size": 2228,
+      "normalized_sha256": "d4fec7691fc770a5c11e85baa66103c968919e43645558af70aff311a43894ba"
+    },
+    "source/projectm/tests/playlist/FilterTest.cpp": {
+      "role": "observe",
+      "sha256": "19e6e7f15ae258cab7f642f273f43349f5a890af74dd7bb9c9a382472c61b0f0",
+      "size": 6341,
+      "normalized_sha256": "a48111e5018e45ac202cd4bcc0cd9129a0fac45e1117ec15ee09bc147c6ea8f3"
+    },
+    "source/projectm/tests/playlist/ItemTest.cpp": {
+      "role": "observe",
+      "sha256": "583192456da09dd972c9cdeb4ae7121794e65ff87f0680e20c4cf3ccc28690b0",
+      "size": 514,
+      "normalized_sha256": "5b1c140a41c86312511b985e727f2ab8292b100e4adf71b9face38a94441dc30"
+    },
+    "source/projectm/tests/playlist/PlaylistCWrapperMock.h": {
+      "role": "observe",
+      "sha256": "e2c03baa6bb07695da81be31dcc31bacf1c6bd279b100dd112078dda76ba3b45",
+      "size": 1744,
+      "normalized_sha256": "32c3ea70e86f6e47a0bf55cea94f70689eff395f525d6224b237b94435c6ffa3"
+    },
+    "source/projectm/tests/playlist/PlaylistTest.cpp": {
+      "role": "observe",
+      "sha256": "02404b5d5232adfd4723cbc25a8902ec5ec9027ab839b5cef7c53c4dc397a114",
+      "size": 26193,
+      "normalized_sha256": "3a6bc0c9a1e059260464b63a674d479b7b6f6bf2e064030b0fe329e80a547dab"
+    },
+    "source/projectm/tests/playlist/ProjectMAPIMocks.cpp": {
+      "role": "observe",
+      "sha256": "cfed94ee0f511715b8891733d43c97f8d5040c149659c48ca61e53138ef9f2c2",
+      "size": 871,
+      "normalized_sha256": "cd1b82e76be3630dccca57146eb3cc6a5ce0dc1f91455f4f0cded0c90751c737"
+    },
+    "source/projectm/tests/playlist/data/presets/Other.file": {
+      "role": "observe",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "source/projectm/tests/playlist/data/presets/Test_A.milk": {
+      "role": "observe",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "source/projectm/tests/playlist/data/presets/Test_B.milk": {
+      "role": "observe",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "source/projectm/tests/playlist/data/presets/Test_C.milk": {
+      "role": "observe",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "source/projectm/tests/playlist/data/presets/subdir/Test_D.milk": {
+      "role": "observe",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "source/tympan-apo/tests/realtime_safety.rs": {
+      "role": "observe",
+      "sha256": "db70e6f37d0f53167741f4fb51197a91c6ce8ca5b8740e76878d0e739da60037",
+      "size": 3783,
+      "normalized_sha256": "8cb8d2563c04d75d78c34aa724ee7b8f69f4b1c03a837ed813676d481e86f8d4"
+    },
+    "source/tympan-apo/tests/register_apo.rs": {
+      "role": "observe",
+      "sha256": "882220cead3bb5d7a33cf2f6535a6be866cdd402e8e4443d956432562f9236c0",
+      "size": 6211,
+      "normalized_sha256": "43e4cec2b917e115899bb8d986984faa4a6c6e8fbd95b17ad43d83e1c8304604"
+    },
+    "source/tympan-apo/tests/tier3_aec_lifecycle.rs": {
+      "role": "observe",
+      "sha256": "db8a29df8bbdabb27c65e9e1c6727f67000c47dc8e68ecb43c9c60ef6ca5ae25",
+      "size": 10971,
+      "normalized_sha256": "cd51835e49798c67cd8dc3b1ea5ed6da58bf1e46f6363842d85833d36b243d55"
+    },
+    "source/tympan-apo/tests/tier3_lifecycle.rs": {
+      "role": "observe",
+      "sha256": "7825b4f14c3ec63a189f2367057aba79c722980eec08aad894c6477aba09c200",
+      "size": 14118,
+      "normalized_sha256": "f256602dc9fe36865e26c6809bb57f7e22a40e35f6820907e25f3916560484ae"
     },
     "test/README.md": {
       "role": "index",
@@ -24278,11 +25443,91 @@
       "size": 2968,
       "normalized_sha256": "b6a620efd6bdc30f3c6bd782f3d478476fcb7cea85dc17a7c26003d857e19d3d"
     },
+    "test/plugins/DPF-Plugins-v1.7-linux-i686/DPF-Plugins-v1.7/ProM.clap/resources/fonts/Vera.ttf": {
+      "role": "observe",
+      "sha256": "c4c45690b345435b2cba52ecabe275f05e49b389b39fe68ad03afbb551288d3d",
+      "size": 65932
+    },
+    "test/plugins/DPF-Plugins-v1.7-linux-i686/DPF-Plugins-v1.7/ProM.clap/resources/fonts/VeraMono.ttf": {
+      "role": "observe",
+      "sha256": "da4281dc7db17a3dfce64a62ced92875c5895340055ec8ba24a3914eb97b349d",
+      "size": 49224
+    },
+    "test/plugins/DPF-Plugins-v1.7-linux-i686/DPF-Plugins-v1.7/ProM.lv2/resources/fonts/Vera.ttf": {
+      "role": "observe",
+      "sha256": "c4c45690b345435b2cba52ecabe275f05e49b389b39fe68ad03afbb551288d3d",
+      "size": 65932
+    },
+    "test/plugins/DPF-Plugins-v1.7-linux-i686/DPF-Plugins-v1.7/ProM.lv2/resources/fonts/VeraMono.ttf": {
+      "role": "observe",
+      "sha256": "da4281dc7db17a3dfce64a62ced92875c5895340055ec8ba24a3914eb97b349d",
+      "size": 49224
+    },
+    "test/plugins/DPF-Plugins-v1.7-linux-i686/DPF-Plugins-v1.7/ProM.vst/resources/fonts/Vera.ttf": {
+      "role": "observe",
+      "sha256": "c4c45690b345435b2cba52ecabe275f05e49b389b39fe68ad03afbb551288d3d",
+      "size": 65932
+    },
+    "test/plugins/DPF-Plugins-v1.7-linux-i686/DPF-Plugins-v1.7/ProM.vst/resources/fonts/VeraMono.ttf": {
+      "role": "observe",
+      "sha256": "da4281dc7db17a3dfce64a62ced92875c5895340055ec8ba24a3914eb97b349d",
+      "size": 49224
+    },
+    "test/plugins/DPF-Plugins-v1.7-linux-i686/DPF-Plugins-v1.7/ProM.vst3/Contents/Resources/fonts/Vera.ttf": {
+      "role": "observe",
+      "sha256": "c4c45690b345435b2cba52ecabe275f05e49b389b39fe68ad03afbb551288d3d",
+      "size": 65932
+    },
+    "test/plugins/DPF-Plugins-v1.7-linux-i686/DPF-Plugins-v1.7/ProM.vst3/Contents/Resources/fonts/VeraMono.ttf": {
+      "role": "observe",
+      "sha256": "da4281dc7db17a3dfce64a62ced92875c5895340055ec8ba24a3914eb97b349d",
+      "size": 49224
+    },
+    "test/plugins/DPF-Plugins-v1.7-linux-x86_64/DPF-Plugins-v1.7/ProM.clap/resources/fonts/Vera.ttf": {
+      "role": "observe",
+      "sha256": "c4c45690b345435b2cba52ecabe275f05e49b389b39fe68ad03afbb551288d3d",
+      "size": 65932
+    },
+    "test/plugins/DPF-Plugins-v1.7-linux-x86_64/DPF-Plugins-v1.7/ProM.clap/resources/fonts/VeraMono.ttf": {
+      "role": "observe",
+      "sha256": "da4281dc7db17a3dfce64a62ced92875c5895340055ec8ba24a3914eb97b349d",
+      "size": 49224
+    },
+    "test/plugins/DPF-Plugins-v1.7-linux-x86_64/DPF-Plugins-v1.7/ProM.lv2/resources/fonts/Vera.ttf": {
+      "role": "observe",
+      "sha256": "c4c45690b345435b2cba52ecabe275f05e49b389b39fe68ad03afbb551288d3d",
+      "size": 65932
+    },
+    "test/plugins/DPF-Plugins-v1.7-linux-x86_64/DPF-Plugins-v1.7/ProM.lv2/resources/fonts/VeraMono.ttf": {
+      "role": "observe",
+      "sha256": "da4281dc7db17a3dfce64a62ced92875c5895340055ec8ba24a3914eb97b349d",
+      "size": 49224
+    },
+    "test/plugins/DPF-Plugins-v1.7-linux-x86_64/DPF-Plugins-v1.7/ProM.vst/resources/fonts/Vera.ttf": {
+      "role": "observe",
+      "sha256": "c4c45690b345435b2cba52ecabe275f05e49b389b39fe68ad03afbb551288d3d",
+      "size": 65932
+    },
+    "test/plugins/DPF-Plugins-v1.7-linux-x86_64/DPF-Plugins-v1.7/ProM.vst/resources/fonts/VeraMono.ttf": {
+      "role": "observe",
+      "sha256": "da4281dc7db17a3dfce64a62ced92875c5895340055ec8ba24a3914eb97b349d",
+      "size": 49224
+    },
+    "test/plugins/DPF-Plugins-v1.7-linux-x86_64/DPF-Plugins-v1.7/ProM.vst3/Contents/Resources/fonts/Vera.ttf": {
+      "role": "observe",
+      "sha256": "c4c45690b345435b2cba52ecabe275f05e49b389b39fe68ad03afbb551288d3d",
+      "size": 65932
+    },
+    "test/plugins/DPF-Plugins-v1.7-linux-x86_64/DPF-Plugins-v1.7/ProM.vst3/Contents/Resources/fonts/VeraMono.ttf": {
+      "role": "observe",
+      "sha256": "da4281dc7db17a3dfce64a62ced92875c5895340055ec8ba24a3914eb97b349d",
+      "size": 49224
+    },
     "test/runner.py": {
       "role": "index",
-      "sha256": "98cc287f98e04be7d75580c480dd638de3e60ca3798f0a96db83ea6bf8f654c0",
-      "size": 45844,
-      "normalized_sha256": "98cc287f98e04be7d75580c480dd638de3e60ca3798f0a96db83ea6bf8f654c0"
+      "sha256": "44d428b6880bd6df9200d1f15474e9280955701b4ed67d77842e7fece26c73b1",
+      "size": 46930,
+      "normalized_sha256": "b9a17ebc24d1d4fdd19dab27304dc5fe0a0278ee71ec1c6c7d5f493fe4e3379c"
     },
     "test/smoke/_tmpcleanup.py": {
       "role": "index",
@@ -24751,6 +25996,12 @@
       "sha256": "ac29380d5332c8e6c271ef71e508c33d4a8e64c735f180c7886299ce840d24a5",
       "size": 8649,
       "normalized_sha256": "ac29380d5332c8e6c271ef71e508c33d4a8e64c735f180c7886299ce840d24a5"
+    },
+    "test/smoke/smoke_eel_matrix_safety.py": {
+      "role": "index",
+      "sha256": "f01fe7ccd82a81daa157d931193a313118c0022778afe9efdba13854878ddd6c",
+      "size": 8611,
+      "normalized_sha256": "f01fe7ccd82a81daa157d931193a313118c0022778afe9efdba13854878ddd6c"
     },
     "test/smoke/smoke_effects_allparams.py": {
       "role": "index",
@@ -25474,26 +26725,26 @@
     },
     "test/smoke/test_cross_system_verify.py": {
       "role": "observe",
-      "sha256": "aac13bde32aba8db7bdc452811121acf2853e244f7ec1626bae69b8ec62389db",
-      "size": 8704,
+      "sha256": "b7268e43bbe2d68e5398201ed0bf04b26614aa73c18fe6112a51dbac139b91df",
+      "size": 8905,
       "normalized_sha256": "aac13bde32aba8db7bdc452811121acf2853e244f7ec1626bae69b8ec62389db"
     },
     "test/smoke/test_editor_size_c4.py": {
       "role": "observe",
-      "sha256": "95e42deafbc1d7380080f03c8d53d01022f7563423ad2a535eb0da55f7220eba",
-      "size": 12830,
+      "sha256": "6c4ae3879d2527806493fd498ec99560cca6d2868dd0e838ca31be156f4a507c",
+      "size": 13139,
       "normalized_sha256": "95e42deafbc1d7380080f03c8d53d01022f7563423ad2a535eb0da55f7220eba"
     },
     "test/smoke/test_editor_topology.py": {
       "role": "observe",
-      "sha256": "f74447b5bdb0f6ea5fc54ff02a9eef545657495cf7e80a69e61e4fecd9e0b2d4",
-      "size": 8087,
+      "sha256": "95e1ab59415b511826a24be5bb7fc5a3954f396d940611c6de6dbedd49a4456a",
+      "size": 8297,
       "normalized_sha256": "f74447b5bdb0f6ea5fc54ff02a9eef545657495cf7e80a69e61e4fecd9e0b2d4"
     },
     "test/smoke/test_iem_and_fabfilter.py": {
       "role": "observe",
-      "sha256": "c8d44bfbfca9c42bb17466c1319118c5136b178a8efb7591342631ae5635aa43",
-      "size": 4714,
+      "sha256": "ecb88427fd30999d5b5516e039e888d25d5b690d98cd9de454a715877063b38e",
+      "size": 4832,
       "normalized_sha256": "c8d44bfbfca9c42bb17466c1319118c5136b178a8efb7591342631ae5635aa43"
     },
     "test/smoke/vdc_resampler_test.c": {

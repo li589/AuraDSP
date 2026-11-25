@@ -3,9 +3,9 @@
 ===D:/temp_desktop/Proj/JamesDSP/===
 .gitattributes[FV6T]: F:声明仓库换行、平台行尾、Shell与desktop规则、二进制属性，并钉死三卷AOCI索引为LF | R:code:.gitignore,code:AGENT.md | A:减少跨平台CRLF噪声、保护二进制、保证AOCI卷工作树与blob同字节 | S:Shell和desktop必须LF否则脚本或appimagetool失败；aoci.txt/meta/code必须eol=lf否则checkout成CRLF被判line_ending_rewrite阻断维护
 .gitignore[FV7S]: F:定义第三方源码、参考手册、本机环境、IDE与智能体harness目录、构建产物、临时文件、资源包和测试工件的版本控制边界 | R:code:.gitattributes,code:AGENT.md,code:source/ORIGIN.md | A:将可追踪源码文档与本机构建、资源和过程产物分离，保护仓库体积与发布许可边界 | S:AOCI资产aoci.txt、aoci.meta.txt、aoci.code.txt及AGENTS.md未被忽略；.mcp.json与.codegraph/属本机状态不入库，source/*仅ORIGIN.md例外入库
-AGENT.md[SG9L]: F:提供AuraDSP全仓智能体协作总纲，说明架构分层、目录职责、构建测试、RT安全、UI规范、测试挂载、分支策略与代码认知工具规矩（§3.8） | R:code:CLAUDE.md,code:app/auradsp_app/AGENT.md,code:docs/项目架构与开发规范.md | A:是AI修改项目代码前的主约束入口，要求以引擎契约、数据驱动和门禁验证维持跨平台一致性 | S:任何音频路径修改都必须保持RT线程零分配、零锁、零系统调用；AOCI与CodeGraph仅作索引证据，改代码与定罪必须read源码加grep全量核对，冲突以源码为准
-AGENTS.md[SG7S]: F:补充仓库级智能体操作约定，约束代码导航、构建验证、目录分流和跨层改动前的影响核对，并登记代码认知工具规矩与历轮打包/同步/门禁事故教训 | R:code:AGENT.md,code:CLAUDE.md,code:.ai/memory/MEMORY.md | A:作为协作代理的快速入口，强调先读项目规范、再按真实构建区与测试入口执行；教训条目按日期归档、只增补不改写 | S:CodeGraph只能覆盖语言内调用关系，ABI导出、Dart FFI和字符串契约必须额外按符号名核查；门禁宿主禁用Start-Process -Wait带重定向等构建（两连挂），改日志轮询判完成
-CLAUDE.md[SG7S]: F:为Claude类代码代理提供AuraDSP架构、构建测试命令、分支策略与关键工程约束的项目指南，含代码认知工具规则（规则6，与AGENT.md §3.8同源） | R:code:AGENT.md,code:CMakePresets.json,code:test/runner.py | A:把引擎、驱动、Flutter、资源、测试和工具的入口与风险集中说明，便于代理按项目流程工作 | S:Windows和Flutter发布构建必须保留--no-tree-shake-icons，第三方source目录只读且禁止嵌套.git；ABI导出影响面禁止用CodeGraph图谱评估，必须按符号名grep宿主加载点
+AGENT.md[SG9L]: F:提供AuraDSP全仓智能体协作总纲，说明架构分层、目录职责、构建测试、RT安全、UI规范、测试挂载、分支策略与代码认知工具规矩及按范围读取/子代理委派边界（§3.8）。 | R:code:CLAUDE.md,code:app/auradsp_app/AGENT.md,code:docs/项目架构与开发规范.md,code:.ai/rules/code_cognition_read_scope.md | A:是AI修改项目代码前的主约束入口，要求以引擎契约、数据驱动和门禁验证维持跨平台一致性。 | S:任何音频路径修改都必须保持RT线程零分配、零锁、零系统调用；AOCI与CodeGraph仅作索引证据，改代码与定罪必须read源码加grep全量核对，冲突以源码为准；局部任务默认SCOPED，普通Overview仅全局架构、跨域重构、用户要求、Guide或压缩恢复时触发，子代理缺省NONE且不得自行维护AOCI。
+AGENTS.md[SG7S]: F:补充仓库级智能体操作约定，约束代码导航、构建验证、目录分流和跨层改动前的影响核对，并登记AOCI/CodeGraph按范围读取、子代理边界与历轮打包/同步/门禁事故教训。 | R:code:AGENT.md,code:CLAUDE.md,code:.ai/memory/MEMORY.md,code:.ai/rules/code_cognition_read_scope.md | A:作为协作代理的快速入口，强调先读项目规范、再按真实构建区与测试入口执行；教训条目按日期归档、只增补不改写。 | S:局部任务默认SCOPED，子代理缺省NONE；普通Overview仅全局架构、跨域重构、用户要求、Guide或压缩恢复。CodeGraph盲区仍须按符号名grep；门禁宿主禁用Start-Process -Wait带重定向等构建。
+CLAUDE.md[SG7T]: F:为Claude类代码代理提供AuraDSP架构、构建测试命令、分支策略与关键工程约束，含AOCI/CodeGraph按范围读取和子代理认知边界规则。 | R:code:AGENT.md,code:CMakePresets.json,code:test/runner.py,code:.ai/rules/code_cognition_read_scope.md | A:把引擎、驱动、Flutter、资源、测试和工具的入口与风险集中说明，便于代理按项目流程工作。 | S:Windows和Flutter发布构建必须保留--no-tree-shake-icons，第三方source目录只读且禁止嵌套.git；ABI导出影响面禁止用CodeGraph图谱评估，必须按符号名grep宿主加载点；局部任务默认SCOPED，子代理缺省NONE，普通Overview仅显式全局或压缩恢复场景。
 CMakeLists.txt[FV8T]: F:提供AuraDSP统一CMake根入口，按Windows或Linux加入对应桌面子工程，并保留子工程独立配置能力；含可选projectM桥开关AURADSP_BUILD_PROJECTM_BRIDGE（默认关） | R:code:CMakePresets.json,code:core/desktop/windows,code:core/desktop/linux,code:core/desktop/windows-drivers,code:core/desktop/visualizer/projectm_bridge | A:Windows可选构建桥与驱动套件，Linux进入核心引擎平台适配，Android暂不接入根构建 | S:未安装Steinberg ASIO SDK时必须关闭AURADSP_BUILD_BRIDGES，Android仍走独立NDK脚本
 CMakePresets.json[FV7T]: F:声明Windows、Linux和Android占位配置预设及Debug/Release构建预设，统一中间目录和生成器选择 | R:code:CMakeLists.txt,code:core/desktop/windows,code:core/desktop/linux,code:core/android | A:Windows使用VS 2026 x64，Linux使用Ninja并将产物写回子工程out目录，Android预设仅作占位 | S:构建树统一落build/<platform>/<arch>，历史脚本与产物同步依赖子工程out/<Config>路径不变
 LICENSE[ZG5L]: F:声明项目采用GNU General Public License Version 3并附完整授权、免责声明和再分发条件 | R:code:README.md,code:source/ORIGIN.md | A:为AuraDSP源码、修改和分发提供项目级开源许可边界，第三方代码仍需分别核对其许可 | S:GPL文本本身不可修改；第三方无许可证或不兼容代码只能作为只读参考，不能直接合入项目
@@ -45,6 +45,7 @@ MEMORY.md[ZG7L]: F:沉淀AuraDSP长期架构、工程约束与高频坑，覆盖
 
 ===D:/temp_desktop/Proj/JamesDSP/.ai/rules/===
 ui_design_spec.md[SU7S]: F:定义AuraDSP跨端UI视觉层级、帮助徽标、效果卡片、滑块与输出增益框的强制交互规范 | R:code:app/auradsp_app/README.md,code:app/auradsp_app/AGENT.md | A:以InfoBadge、AdvancedSection、OutputGainFrame和统一labelOf为核心，约束桌面与触屏语义及复位行为 | S:触屏徽标由真实触摸输入与滚动唤醒控制，不能仅按窗口宽度判断移动端语义
+code_cognition_read_scope.md[SG7T]: F:规定 AOCI-Code 与 CodeGraph 的读取模式、全索引触发条件、子代理派发边界和维护归属，避免重复加载全仓认知。 | R:code:AGENT.md,code:AGENTS.md,code:CLAUDE.md | A:局部任务默认 SCOPED；子代理缺省 NONE；主代理显式声明 FULL 原因与维护授权，CodeGraph 先定位、AOCI 按范围补充、源码最终确认。 | S:普通 aoci_overview 仅用于全局架构、跨域重构、用户明确要求、Guide 要求或上下文压缩恢复；子代理不得自行全量读取或维护 AOCI。
 
 ===D:/temp_desktop/Proj/JamesDSP/.github/workflows/===
 ci.yml[OV8M]: F:定义AuraDSP跨平台CI门禁，覆盖静态检查、Linux与Windows引擎构建、smoke、ABI、Dart测试、资源守卫和Linux App构建 | R:code:CMakePresets.json,code:test/runner.py,code:tools/bin/abi_consistency.py | A:作业按构建产物和needs串联，Linux引擎产物在同一run内传递给smoke与App验证 | S:Flutter构建必须显式带--no-tree-shake-icons，资源门禁禁止把.irs/.vdc重新纳入Git
@@ -3905,6 +3906,7 @@ state-dart拆分方案-2026-10-22.md[SG5L]: F:state.dart拆分方案：入口+9�
 VAIO-WASAPI-2x2组合模型方案-2026-11-23.md[SU5M]: F:VAIO/WASAPI 2×2组合模型方案：输入输出双轴独立二选一、四格行为矩阵与S1至S5分段实施计划 | R:code:docs/20-执行/r65细节方案-ASIO遥测-VB双修-MilkDrop内置-2026-11-23.md | A:三点业主裁定（镜像目标沿用WASAPI输出选择、监听开关仅VAIO输出存在、内录对象为输入选择器扬声器）与四格验收口径 | S:关键新工程量是VAIO入加VAIO出格的处理后回写录制通道，原驱动无此通道不得假装镜像等价
 r65细节方案-ASIO遥测-VB双修-MilkDrop内置-2026-11-23.md[SU5M]: F:r65细节方案：ASIO遥测v3逐声道、VB甲乙双修与MilkDrop三内置真.milk的定罪依据与修复设计 | R:code:docs/20-执行/VAIO-WASAPI-2x2组合模型方案-2026-11-23.md | A:四症逐项定罪（泵影子漏同步、冻结缓冲重处理、遥测只有立体声折叠、builtin伪路径被拒）与处置顺序裁定 | S:MilkDrop预设库扩展走resources资源包并默认设定预设位置，为已批准的后续项而非本轮范围
 卷积双槽影子立项-2026-11-25.md[SG6T]: F:卷积双槽影子立项：审查M4（卷积段RT路径持jdsp_lock等待控制面IR加载）单独立项方案，含问题证据、Phase 0可行性探针、内存与APO兼容约束及验收口径；审查L5并案于此 | R:code:docs/30-审查/全量代码审查-2026-11-24.md,code:engine/chain/engine_convolver.cpp | A:按P-047双池范式设计影子槽：控制面完整建新槽、RT在块边界原子换槽，默认无crossfade；三档IR状态字节数与直读点盘点为Phase 0先行项 | S:本项仅立项未开工，排期由业主决定；L5（拓扑复位卷积历史残留）不得另行单修，并案由影子换槽一并解决
+全量代码审查修复计划-2026-11-25.md[SQ8L]: F:feature/linux 相对 main 的全面代码审查修复实施计划：汇总 2 项 Critical、11 项 High、8 项 Medium 与 vm-win10 六组 14 条真机症状，给出 Task 1–20 的文件、接口、失败测试、修复步骤、验收矩阵与收口标准。 | R:code:AGENT.md,code:docs/项目架构与开发规范.md,code:docs/30-审查/全量代码审查-2026-11-24.md,code:engine/chain/channel_map.h,code:core/desktop/windows-drivers/03_system_apo/ApoEngineHost.cpp,code:app/auradsp_app/lib/engine/audio_isolate.dart,code:core/desktop/visualizer/projectm_bridge/projectm_bridge.cpp | A:按 Phase 0 安全与内存阻断、Phase 1 RT 音频正确性、Phase 2 发布签名与 CI、Phase 3 运维与 Flutter 生命周期、Phase 4 vm-win10 真机缺陷五阶段推进；每项先写回归测试再最小修复，Critical/High 清零前禁止合并，真机项先锁定二进制与 telemetry，完成后按 AOCI 合同维护认知。 | S:当前状态仅规划，未运行构建、测试或设备；静态确认不得写成真机根因。ASIO W6 与 APO Dart-F1 已收口仍复现，先核 vm-win10 实际二进制哈希再判回归。Task 16 依赖 Task 7 先恢复 channels.count 统一派发。APO 引擎 DLL 同卷 rename/move 属正常 loader 语义，不得据此判缺陷或擅加占用锁。未定案线索与既有设计债务不得自动并入本计划。
 
 ===D:/temp_desktop/Proj/JamesDSP/docs/30-审查/===
 APO安装借鉴PartII收口-2026-11-10.md[SH4T]: F:APO安装借鉴PartII收口：跨模式清理/状态反推/doctor自检 | R:- | A:W1-W3三阶落地，书签版本化v2与doctor --fix接管退路 | S:OS版本改读CurrentBuildNumber，GetVersionEx在无清单Win10谎报6.2
@@ -4171,7 +4173,7 @@ dsp_spatial.cpp[KD7L]: F:空间音效：参数化HRTF加早期反射（影院/�
 
 ===D:/temp_desktop/Proj/JamesDSP/engine/legacy/===
 MemoryUsage.h[LZ3T]: F:上游内存用量统计头（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP源码（GPL-3.0），仅可经[PATCHED-AuraDSP P-NNN]注释补丁并在PATCHES.md登记，禁止直接改写上游逻辑 | S:-
-PATCHES.md[SG8L]: F:legacy补丁台账：全部[PATCHED-AuraDSP P-NNN]补丁的编号、缘由与落点登记，现行57条（含P-052 gmem钳制、P-053迭代预算托管口径修订、P-054懒分配补登记、P-055卷积空指针序、P-056解释器栈饱和、P-057矩阵跨度守卫） | R:code:engine/legacy/jamesdsp.c | A:改legacy的唯一合法通道记录；标记格式已统一为标准形，裸标记与合并标记清零 | S:新增补丁必须先在此登记编号再落码，台账与代码注释编号必须一致
+PATCHES.md[SG8L]: F:legacy补丁台账：全部[PATCHED-AuraDSP P-NNN]补丁的编号、缘由与落点登记，现行58条（含P-057矩阵跨度守卫、P-058矩阵形状/分配/求解失败契约） | R:code:engine/legacy/jamesdsp.c | A:改legacy的唯一合法通道记录；标记格式已统一为标准形，裸标记与合并标记清零 | S:新增补丁必须先在此登记编号再落码，台账与代码注释编号必须一致
 cpthread.c[LZ3S]: F:上游跨平台线程封装实现（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP源码（GPL-3.0），仅可经[PATCHED-AuraDSP P-NNN]注释补丁并在PATCHES.md登记，禁止直接改写上游逻辑 | S:-
 cpthread.h[LZ3T]: F:上游跨平台线程封装声明（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP源码（GPL-3.0），仅可经[PATCHED-AuraDSP P-NNN]注释补丁并在PATCHES.md登记，禁止直接改写上游逻辑 | S:-
 essential.h[LZ3S]: F:上游基础宏与类型定义头（JamesDSP遗产） | R:code:engine/legacy/PATCHES.md | A:上游JamesDSP源码（GPL-3.0），仅可经[PATCHED-AuraDSP P-NNN]注释补丁并在PATCHES.md登记，禁止直接改写上游逻辑 | S:-
@@ -4201,7 +4203,7 @@ dr_flac.h[LZ4L]: F:dr_flac单头FLAC解码库（第三方遗产，供EEL2音频�
 dr_mp3.h[LZ4L]: F:dr_mp3单头MP3解码库（第三方遗产） | R:code:engine/chain/engine_audiofile.cpp | A:引擎测试放音的MP3解码来源，全仓唯一实现实例化在engine_audiofile.cpp | S:-
 dr_wav.h[LZ4L]: F:dr_wav单头WAV解码库（第三方遗产，供EEL2音频读取） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
 eelCommon.h[LZ4T]: F:EEL2公共常量与共享定义头（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
-eel_matrix.h[LZ4L]: F:EEL2矩阵运算内建族头（上游遗产）：19个矩阵与滤波设计内建函数；含P-057跨度守卫_eel_span_fits，基址加跨度整段落池内才执行 | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
+eel_matrix.h[LZ4L]: F:EEL2矩阵与滤波内建包装层：P-057池跨度守卫及P-058正形状、安全乘积、分配检查和求解输出尺寸契约 | R:code:engine/legacy/PATCHES.md,code:test/smoke/smoke_eel_matrix_safety.py | A:上游遗产仅经登记补丁修改；pinv_svd/pinv_fast/mldivide/mrdivide先独立验证并清零合法outputInfo，再处理形状及矩阵跨度失败 | S:outputInfo两格跨度非法时不得写内存；其结果合法时，任何后续失败都必须发布{0,0}，只有正结果尺寸且不超过已验证容量才复制输出
 fft.c[LZ4L]: F:EEL2内嵌FFT实现（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
 fft.h[LZ4T]: F:EEL2内嵌FFT声明（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
 glue_port.h[LZ4L]: F:EEL2与宿主之间的胶水端口定义（上游遗产）；含字节码执行器与gmem寻址（P-052掩码回绕）、解释器栈PUSH饱和与MOVE_STACK钳制（P-056） | R:code:engine/legacy/PATCHES.md | A:上游EEL2遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写；GLUE_CALL_CODE支持托管预算指针入参，栈饱和时派发头中止本次execute | S:-
@@ -4303,9 +4305,9 @@ const27.h[LZ3T]: F:HPFloat多精度常数表const27.h（上游遗产，按精度
 const31.h[LZ3T]: F:HPFloat多精度常数表const31.h（上游遗产，按精度档分文件） | R:code:engine/legacy/PATCHES.md | A:上游HPFloat高精度浮点库遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
 
 ===D:/temp_desktop/Proj/JamesDSP/engine/legacy/jdsp/Effects/eel2/numericSys/SolveLinearSystem/===
-inv.c[LZ4S]: F:numericSys线性求解：矩阵求逆实现（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游数值库遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
-mldivide.c[LZ4S]: F:numericSys线性求解：左除实现（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游数值库遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
-mrdivide.c[LZ4S]: F:numericSys线性求解：右除实现（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游数值库遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
+inv.c[LZ4S]: F:numericSys矩阵求逆实现；P-058拒绝非正阶数，以size_t计算工作缓冲并在分配失败时清零输出 | R:code:engine/legacy/jdsp/Effects/eel2/eel_matrix.h,code:engine/legacy/PATCHES.md | A:上游数值库遗产仅经登记补丁修改；n==1走直接倒数，其余阶数使用矩阵与双置换工作区 | S:-
+mldivide.c[LZ4L]: F:numericSys左除与方阵向量求解；P-058入口预置Y_size={0,0}，拒绝非正形状并检查工作分配 | R:code:engine/legacy/jdsp/Effects/eel2/eel_matrix.h,code:engine/legacy/PATCHES.md | A:上游数值库遗产仅经登记补丁修改；方阵与一般求解共用size_t工作缓冲，NxN辅助路径逐块释放已得资源 | S:维度不匹配、非正形状或分配失败均保持空输出尺寸，调用方不得据此复制结果矩阵
+mrdivide.c[LZ4M]: F:numericSys右除实现；P-058入口预置Y_size={0,0}，拒绝非正形状并以size_t工作缓冲处理分配失败 | R:code:engine/legacy/jdsp/Effects/eel2/eel_matrix.h,code:engine/legacy/PATCHES.md | A:上游数值库遗产仅经登记补丁修改；维度不匹配、非正形状或分配失败均保持空输出尺寸 | S:-
 pinv.c[LZ4S]: F:numericSys线性求解：伪逆实现（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游数值库遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
 qr_fact.c[LZ4S]: F:numericSys线性求解：QR分解实现（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游数值库遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
 qr_fact.h[LZ4T]: F:numericSys线性求解：QR分解声明（上游遗产） | R:code:engine/legacy/PATCHES.md | A:上游数值库遗产源码，仅可经[PATCHED-AuraDSP P-NNN]补丁并在PATCHES.md登记，禁止直接改写 | S:-
@@ -4661,7 +4663,7 @@ ORIGIN.md[SG7S]: F:第三方源码登记册：source/下克隆项目的来源、
 ===D:/temp_desktop/Proj/JamesDSP/test/===
 README.md[TQ6S]: F:test目录规范：构建树位置与测试组织口径 | R:code:test/runner.py | A:编译验证树一律test/build/<name>，禁止仓库根随手建build_* | S:违反构建树规范的产物不得入库
 engine_artifact.py[TQ7T]: F:引擎构建产物路径的单一解析器：find_engine_lib按平台与配置定位引擎库 | R:code:test/runner.py | A:此前百余smoke各自拼路径且有硬编码作者机绝对路径，S1起只许在此定义一次 | S:smoke与工具禁止再自行拼引擎产物路径，一律经本解析器
-runner.py[TQ8L]: F:测试总入口：smoke全量、UI自动化与性能回归调度，按平台集合分发并接进度小窗取消 | R:code:test/engine_artifact.py,code:test/README.md | A:新smoke登记进对应平台集合与run_smoke_tests主清单两处，并由smoke_runner_registry三向对账守恒；进度小窗取消在每条smoke前查，--no-progress-ui可关窗 | S:纯源码smoke必须进PLATFORM_ANY，误放Windows段会在Linux静默跳过假绿
+runner.py[TQ8L]: F:测试总入口：smoke全量、UI自动化与性能回归调度，按平台集合分发并接进度小窗取消 | R:code:test/engine_artifact.py,code:test/README.md,code:test/smoke/smoke_eel_matrix_safety.py | A:新smoke登记进对应平台集合与run_smoke_tests主清单两处，并由smoke_runner_registry三向对账守恒；进度小窗取消在每条smoke前查，--no-progress-ui可关窗 | S:纯源码smoke必须进PLATFORM_ANY，误放Windows段会在Linux静默跳过假绿
 
 ===D:/temp_desktop/Proj/JamesDSP/test/data/===
 reverb_presets.json[TQ4S]: F:混响预设测试数据：供混响相关测试加载的预设样本 | R:code:test/runner.py | A:测试夹具数据 | S:-
@@ -4940,6 +4942,7 @@ x11_min.h[TQ3T]: F:X11最小声明头：供Linux UI探针编译的最小X11定�
 x11_tree_check.c[TQ4S]: F:X11窗口树检查：Linux插件窗口挂载的原生核验 | R:- | A:原生测试件 | S:-
 smoke_progress_ui.py[TQ8M]: F:进度小窗隔离纪律门禁：NO_UI、坏可执行文件、管道炸裂、嵌套抑制、事件协议、EOF自终止、四处接线与取消回传，含中继模式与只读调用不开窗 | R:code:tools/bin/progress_ui.py,code:test/runner.py | A:纯源码+本地行为烟测任意平台可跑，逐行JSON事件形状与取消通道判别 | S:管道断裂后宿主自动失效但脚本照跑完，关窗永远不等于取消；UI异常绝不带崩脚本是立身之本
 smoke_runner_registry.py[TQ6T]: F:smoke登记三向对账自检：磁盘文件、runner平台集合与run_smoke_tests主清单互洽且无重名，防漏注册静默不跑 | R:code:test/runner.py | A:AST解析runner.py做集合对账，批A工具链F-1随8条漏跑smoke补注册一并新增 | S:新smoke只写文件不登记即被本烟测判红
+smoke_eel_matrix_safety.py[TS6M]: F:EEL2矩阵负/零形状、池跨度与求解失败尺寸契约的DLL活体回归，19个独立子进程用例 | R:code:engine/legacy/jdsp/Effects/eel2/eel_matrix.h,code:test/runner.py | A:逐用例create/destroy并限30秒，检查编译、音频有限、合法outputInfo预置7后失败清零；父进程限长收集输出并拒绝ASan/UBSan标记 | S:SVD包装器脚本名为pinv_svd；16777215是2^24池最后元素，用于制造多元素输入/输出跨度失败，同时保持gmem[48:50]输出信息合法
 
 ===D:/temp_desktop/Proj/JamesDSP/test/ui/===
 ui_assert.py[TQ5S]: F:UI断言库：UI自动化验证共用的断言原语 | R:- | A:UI验证基础设施 | S:-
