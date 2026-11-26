@@ -816,9 +816,18 @@ extension StateCore on AppModel {
   }
 
   @visibleForTesting
-  void handleMessageForTesting(dynamic raw) => _onMessage(raw);
+  void handleMessageForTesting(dynamic raw) {
+    // 旧测试夹具在 generation 字段引入前只伪造显示载荷；给缺字段的
+    // fake viz 补当前代际，显式带代际的矩阵用例仍走生产严格过滤。
+    if (raw is Map && raw['evt'] == 'viz' && raw['generation'] == null) {
+      raw = Map<String, dynamic>.from(raw)
+        ..['generation'] = _vizGeneration;
+    }
+    _onMessage(raw);
+  }
 
   void _restartIsolate() {
+    _advanceVizGeneration();
     final token = ++_restartToken;
     unawaited(_restartIsolateAsync(token));
   }
@@ -916,6 +925,9 @@ extension StateCore on AppModel {
           level: NoticeLevel.warning);
       return;
     }
+    // 停止/换源与后端切换同口径：先作废旧代际并清屏，再发 source
+    // 命令；旧泵已经入队的迟到帧不得恢复频谱、PCM 或电平。
+    _advanceVizGeneration();
     sourceKind = kind == 'stop' ? '' : kind;
     // 文件源记住扩展名（isolate 侧按扩展名选解码器）。
     // 第四十四轮 S4：路径跨源保留——切到波形源/停止不卸载

@@ -49,6 +49,18 @@ extension StateEvents on AppModel {
     refreshDisplayChannelCount();
   }
 
+  /// 推进 active pipeline 代际并立即清理所有 viz 消费面。控制命令与
+  /// 后续模式/音源命令经同一 SendPort 保序，isolate 的 send 出口会
+  /// 给本地、桥和 APO/ASIO telemetry 的既有 viz 事件统一补上代际。
+  void _advanceVizGeneration() {
+    _vizGeneration++;
+    vizSource = null;
+    _vizLastFrameAt = null;
+    _vizSilentSince = null;
+    _clearVizState();
+    send({'cmd': 'setVizGeneration', 'value': _vizGeneration});
+  }
+
   /// 可视化清屏看门狗（第四十九轮 S4，user 定案的统一机制）：
   /// 1 秒一拍——数据断流（>3s 无被接受的新帧）或持续全静默
   /// （>3s 帧帧无声）即 _clearVizState 清屏，治「切换/停播后
@@ -69,7 +81,7 @@ extension StateEvents on AppModel {
   }
 
   void _onMessage(dynamic raw) {
-    if (raw is! Map) return;
+    if (_disposed || raw is! Map) return;
     switch (raw['evt'] as String) {
       case 'isoReady':
         _toIso = raw['port'] as SendPort;
@@ -77,6 +89,7 @@ extension StateEvents on AppModel {
         // AppModel 当前有效 token（含已确认请求），后续 ready/asiomode
         // 才能激活并落块。
         _replayAsioVirtualChannelRequest();
+        send({'cmd': 'setVizGeneration', 'value': _vizGeneration});
         if (!window.isVisible) {
           send({'cmd': 'setVizSuspended', 'value': true});
         }
@@ -1016,6 +1029,18 @@ extension StateEvents on AppModel {
         break;
       case 'viz':
         if (!window.isVisible) break;
+        // active pipeline 代际是主过滤键；来源标签仍负责拒绝同代际的
+        // 非预期后端。旧代际必须再清一次，覆盖「清屏通知之后才落地
+        // 的旧帧」以及 stop/dispose 边界；未来代际只丢弃，等待控制面对账。
+        final rawGeneration = raw['generation'];
+        if (rawGeneration is! num) break;
+        final frameGeneration = rawGeneration.toInt();
+        if (frameGeneration != _vizGeneration) {
+          if (frameGeneration < _vizGeneration) _clearVizState();
+          dbgLog('viz: dropped generation $frameGeneration '
+              '(active $_vizGeneration)');
+          break;
+        }
         // 丢弃模式切换或清屏前在途产生或过时的迟到帧
         final frameTs = (raw['ts'] as num?)?.toInt() ?? 0;
         if (frameTs > 0 && frameTs < _vizClearTimeMs) {

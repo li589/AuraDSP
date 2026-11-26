@@ -379,11 +379,16 @@ class _SpectrumCardState extends State<_SpectrumCard> {
 
   void _onSpectrumFrame() => _syncGate();
 
-  /// 门控唯一入口：不满足条件即停止转发（保留最后一帧）；
-  /// 恢复后由下一帧续上，不会停留在陈旧柱体上。
+  /// 门控唯一入口：不满足条件即停止转发非零帧（保留最后一帧）；
+  /// 但来源切换/停止产生的零帧即使活动门已关闭也必须透传，清除
+  /// 代理里仍持有的旧热帧。恢复后由下一帧有声数据续上。
   void _syncGate() {
-    if (!_effective) return;
-    _gatedSpectrum.value = widget.model.spectrum.value;
+    final bands = widget.model.spectrum.value;
+    if (!_effective) {
+      if (bands.every((v) => v == 0.0)) _gatedSpectrum.value = bands;
+      return;
+    }
+    _gatedSpectrum.value = bands;
   }
 
   @override

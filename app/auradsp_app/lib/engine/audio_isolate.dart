@@ -107,7 +107,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // UI 拉取节流：与 config.vizFps 同源，不再是写死的 33ms
   final vizIntervalMs = (1000.0 / vizFps).round();
 
-  void send(Map<String, dynamic> m) => toMain.send(m);
+  // 所有 viz 生产者共用一个出口：本地/WASAPI、三桥以及 APO/ASIO
+  // telemetry 都沿用 evt=viz，仅在此补当前 active pipeline 代际。
+  var vizGeneration = 0;
+  void send(Map<String, dynamic> m) {
+    if (m['evt'] == 'viz') m['generation'] = vizGeneration;
+    toMain.send(m);
+  }
 
   AuraDspLib? lib;
   Pointer<Void>? handle;
@@ -391,10 +397,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   var lastStageLen = 32; // 与 kEngineStageCount 对齐
 
   void sendIdleViz() {
-    if (idleVizSent) return;
+    if (vizSuspended || idleVizSent) return;
     idleVizSent = true;
     send({
       'evt': 'viz',
+      'backend': 'local',
       'spectrum': List<double>.filled(lastSpectrumLen, 0.0),
       'eqIn': List<double>.filled(lastSpectrumLen, 0.0),
       'l': -90.0,
@@ -2670,6 +2677,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
             break;
           }
+        case 'setVizGeneration':
+          vizGeneration = (m['value'] as num?)?.toInt() ?? vizGeneration;
+          break;
         case 'setVizSuspended':
           vizSuspended = (m['value'] as bool?) ?? false;
           break;
@@ -3199,6 +3209,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               }
               send({
                 'evt': 'viz',
+                'backend': 'local',
                 'spectrum': sp,
                 'pcmSource': pcmSnapshot.isEmpty ? null : pcmSource,
                 'pcm': pcmSnapshot,

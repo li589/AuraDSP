@@ -1316,6 +1316,11 @@ class AppModel extends ChangeNotifier {
   /// 第二十三轮按数据来源治理频谱残留的状态面。
   String? vizSource;
 
+  /// 当前 active pipeline 的可视化代际。模式/路由/音源停止及 isolate
+  /// 重启都会推进；evt=viz 只接受携带此代际的帧，旧 isolate/旧桥迟到
+  /// 帧不得重新涂热已清理的显示面。
+  int _vizGeneration = 0;
+
   /// 上次「切换清零」时的预期来源基线（见 state_audio_modes 的
   /// expectedVizBackend / _syncVizSourceOnSwitch）。
   String? _vizSourceBaseline;
@@ -1834,6 +1839,7 @@ class AppModel extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _vizGeneration++; // 销毁后的迟到 viz 一律失效
     hbTick.dispose();
     appearanceTick.dispose();
     connTick.dispose();
