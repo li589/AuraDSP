@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-21T02:23:05Z",
-  "updated_at": "2026-11-26T18:24:33Z",
+  "updated_at": "2026-11-26T23:08:36Z",
   "files": {
     ".ai/README.md": {
       "role": "index",
@@ -257,9 +257,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "26bb4f28aefec10dbc2a81f7e2d8d58d2f9591fab55c4c5d8bb2cdced55cabd8",
-      "size": 1197548,
-      "normalized_sha256": "26bb4f28aefec10dbc2a81f7e2d8d58d2f9591fab55c4c5d8bb2cdced55cabd8"
+      "sha256": "29a87d9caf92ea37374e2945f73440f8dd62822c65291828b6a4c61cc74f48c8",
+      "size": 1197590,
+      "normalized_sha256": "29a87d9caf92ea37374e2945f73440f8dd62822c65291828b6a4c61cc74f48c8"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -1036,9 +1036,9 @@
     },
     "app/auradsp_app/lib/core/state.dart": {
       "role": "index",
-      "sha256": "4b6ffd89a466dd9a3c7007d5879a50ebfbf84ef7c5d10d61922dc3d59a2beed2",
-      "size": 89851,
-      "normalized_sha256": "4b6ffd89a466dd9a3c7007d5879a50ebfbf84ef7c5d10d61922dc3d59a2beed2"
+      "sha256": "af5d5094cce812a721dec3b093a3b35421ba3ca8ba9b9685806329e0e0bd622a",
+      "size": 90160,
+      "normalized_sha256": "af5d5094cce812a721dec3b093a3b35421ba3ca8ba9b9685806329e0e0bd622a"
     },
     "app/auradsp_app/lib/core/state/state_audio_modes.dart": {
       "role": "index",
@@ -1072,9 +1072,9 @@
     },
     "app/auradsp_app/lib/core/state/state_events.dart": {
       "role": "index",
-      "sha256": "7ae27691dd598d9e0eb25715ecb72ae77877e70207e0f9b271066e7b61c6433b",
-      "size": 81510,
-      "normalized_sha256": "7ae27691dd598d9e0eb25715ecb72ae77877e70207e0f9b271066e7b61c6433b"
+      "sha256": "71870ee8ed05d5395cf29da79f644f3c98a9e382d35f21d781c3409b44f73a84",
+      "size": 85242,
+      "normalized_sha256": "71870ee8ed05d5395cf29da79f644f3c98a9e382d35f21d781c3409b44f73a84"
     },
     "app/auradsp_app/lib/core/state/state_models.dart": {
       "role": "index",
@@ -1126,21 +1126,21 @@
     },
     "app/auradsp_app/lib/engine/apo_param_index.dart": {
       "role": "index",
-      "sha256": "ef462de458788b3798035c3e34b27cfeb10d8060d0e54f77f0b738266f4ca633",
-      "size": 11337,
-      "normalized_sha256": "ef462de458788b3798035c3e34b27cfeb10d8060d0e54f77f0b738266f4ca633"
+      "sha256": "392b5bbae3636c7593fdbbb5dfd3cfff089cce19ebebe166abb346a31d4642ca",
+      "size": 11391,
+      "normalized_sha256": "392b5bbae3636c7593fdbbb5dfd3cfff089cce19ebebe166abb346a31d4642ca"
     },
     "app/auradsp_app/lib/engine/apo_plugin_block.dart": {
       "role": "index",
-      "sha256": "0189078687a8a1a542a82dcf5c8cfba319c17a5962f29cdae5e3357c25f7155f",
-      "size": 2810,
-      "normalized_sha256": "e3cf113f78a08db52b81af968d3f3effa62c5fad882b383d60e56f6221511005"
+      "sha256": "0314f14d6decf48c8728469374e432154abdc96dd743dd0a76cbcf6c5a3bbdb3",
+      "size": 3165,
+      "normalized_sha256": "d83fefba8055059f5e28a07062dd082e2fb17011e94ca6a98984778acbedfaa5"
     },
     "app/auradsp_app/lib/engine/apo_transit.dart": {
       "role": "index",
-      "sha256": "19132fe8f87863c01822d651e4c929f563c35422d2211999e94a48727ddcb28a",
-      "size": 21446,
-      "normalized_sha256": "b0df74a37cd73e94cb197e20eddc613e825bb030b70a0e934c7fce0b24a7907f"
+      "sha256": "18ee548c139135442fa2136f4ad8c510864b17de94eb633882bca1571fee6410",
+      "size": 22759,
+      "normalized_sha256": "88969a896ae2b1450eea6b0b57ff62fce0dd5e88aa10e64a7376854ea6f392f8"
     },
     "app/auradsp_app/lib/engine/audio_abridge.dart": {
       "role": "index",
@@ -1156,15 +1156,15 @@
     },
     "app/auradsp_app/lib/engine/audio_isolate.dart": {
       "role": "index",
-      "sha256": "9ca728e4456d4ea472f1f0dc93958e37dc7c1df9046ceaeefecc32b53aa7f53f",
-      "size": 152071,
-      "normalized_sha256": "9ca728e4456d4ea472f1f0dc93958e37dc7c1df9046ceaeefecc32b53aa7f53f"
+      "sha256": "86dc3fa7aebcc67aa11a9f36ca0e70f238b89c8999549bb371995e54c8ed5a90",
+      "size": 152398,
+      "normalized_sha256": "86dc3fa7aebcc67aa11a9f36ca0e70f238b89c8999549bb371995e54c8ed5a90"
     },
     "app/auradsp_app/lib/engine/audio_isolate_apo.dart": {
       "role": "index",
-      "sha256": "578eafeeb3d416ac8c93507efa9318dd282c3993a00a25925c665d2126dca958",
-      "size": 49358,
-      "normalized_sha256": "4b24c7340955414894153bfdd92399472d612a9eb4928a7367ee0c3f3166649a"
+      "sha256": "9f98bb858a531dd43de735f991bb4f19cab5c2be25be7c9722488d583db4f9cd",
+      "size": 53043,
+      "normalized_sha256": "9f98bb858a531dd43de735f991bb4f19cab5c2be25be7c9722488d583db4f9cd"
     },
     "app/auradsp_app/lib/engine/audio_isolate_asio.dart": {
       "role": "index",
@@ -2374,9 +2374,9 @@
     },
     "app/auradsp_app/test/apo_multi_endpoint_test.dart": {
       "role": "index",
-      "sha256": "7e416a817137c7978fb18618705d72401e8083b7db48f8d26e8e25539fbea25a",
-      "size": 2548,
-      "normalized_sha256": "7e416a817137c7978fb18618705d72401e8083b7db48f8d26e8e25539fbea25a"
+      "sha256": "1b4357ef871970f9e7f8f60677b6d66a4a669e9f151157da578091c1edd5f3a1",
+      "size": 2879,
+      "normalized_sha256": "565b81075330514ee3b63ca64331f5c3d0b80cd7e18e890561175132e63f4f20"
     },
     "app/auradsp_app/test/apo_plugin_publisher_test.dart": {
       "role": "index",
@@ -2950,9 +2950,9 @@
     },
     "app/auradsp_app/test/ui_event_dedup_test.dart": {
       "role": "index",
-      "sha256": "2d178fffb5d02c5194ee21f083c0c6acfca4c8c3320ba91f082f20f090133043",
-      "size": 9769,
-      "normalized_sha256": "59c85647ea929f6c46cd15c3faa7b4d6693bce95943405d4ed7d505e235d7265"
+      "sha256": "ec5163fa01bd9bfccc305b3bdd523fb0e31130c3ea225a5b3a6c93c80b65344a",
+      "size": 11092,
+      "normalized_sha256": "ec5163fa01bd9bfccc305b3bdd523fb0e31130c3ea225a5b3a6c93c80b65344a"
     },
     "app/auradsp_app/test/ui_helpers_test.dart": {
       "role": "index",
@@ -18586,15 +18586,15 @@
     },
     "core/desktop/windows-drivers/03_system_apo/ApoEngineHost.cpp": {
       "role": "index",
-      "sha256": "8f29555b6e8f89cc31eb4302dce0e2687b3230cd6ddfd57476daa721d0f25aae",
-      "size": 50954,
-      "normalized_sha256": "5f6f20e306fcc702c113a57575c66ffe603993807a09a45b73f41ac18ec4b5dd"
+      "sha256": "d0b04593242496e09543c5c7b3f521fade33156a932240d778057766fbaaab1c",
+      "size": 61780,
+      "normalized_sha256": "ac922098ac95192b62b8eb45cffb3a82dd8badbf34890d8346a22068d930e099"
     },
     "core/desktop/windows-drivers/03_system_apo/ApoEngineHost.h": {
       "role": "index",
-      "sha256": "87ca29e684faea5545a9949ca945a8e46919a541fac49cfa46640b2d50db13cc",
-      "size": 9887,
-      "normalized_sha256": "8435e5abe25f74a294fcadf57711f04a20a7b83730b0d487b7d160497f1bcee8"
+      "sha256": "9776a0cbdb16497cde58c9a159cd23f2af9d09666b8a069ef01b785549dfea54",
+      "size": 11556,
+      "normalized_sha256": "aa5adde013b7daa3a2c394ee497ad24ccf6531f91254f93ec580e7f52c83c412"
     },
     "core/desktop/windows-drivers/03_system_apo/ApoInspector.cpp": {
       "role": "index",
@@ -18610,21 +18610,21 @@
     },
     "core/desktop/windows-drivers/03_system_apo/ApoParamIndex.h": {
       "role": "index",
-      "sha256": "e9c0242aaafeb5d1c8cb8f0eb1001213ec679cbac0088e838efb1caa6af9fb9d",
-      "size": 10632,
-      "normalized_sha256": "e9c0242aaafeb5d1c8cb8f0eb1001213ec679cbac0088e838efb1caa6af9fb9d"
+      "sha256": "d8091f20b3d78bdf9e1bb963b9a514602eb02f8a9914617dff11aa300e836a79",
+      "size": 10680,
+      "normalized_sha256": "d8091f20b3d78bdf9e1bb963b9a514602eb02f8a9914617dff11aa300e836a79"
     },
     "core/desktop/windows-drivers/03_system_apo/ApoShared.h": {
       "role": "index",
-      "sha256": "6429a1ccf537cec6bd19086c42a7634cf2205fe815dada6e4be20101c07c5362",
-      "size": 18997,
-      "normalized_sha256": "5e5c5910531c9e19ba2c63b8ca9ad4eb443af55daec6d85c7f10a1570fc049eb"
+      "sha256": "b6bdca8f656e746a810d69e3f16b103586c7e4c522ec314a0010ec6c5f6ce095",
+      "size": 20687,
+      "normalized_sha256": "0cc5dbacd9d9d749bff4a5cff79e60959c18bde0ac9352698e75b1fdc640fdd8"
     },
     "core/desktop/windows-drivers/03_system_apo/AuraApo.cpp": {
       "role": "index",
-      "sha256": "fbcbd07ef08bf379327f01f9b9f8ae94c5b671ab673f29909fe55a6fb031b2d3",
-      "size": 14822,
-      "normalized_sha256": "fbcbd07ef08bf379327f01f9b9f8ae94c5b671ab673f29909fe55a6fb031b2d3"
+      "sha256": "c2cdd6970e5e985a83c603b4fcf045074dc07c6fd490cc3f44a7a72f203fef8c",
+      "size": 15428,
+      "normalized_sha256": "8babce750b22f91bc8b7759e5324117b29f73d56ff8c163066b282d466d99b3f"
     },
     "core/desktop/windows-drivers/03_system_apo/AuraApo.def": {
       "role": "index",
@@ -18634,9 +18634,9 @@
     },
     "core/desktop/windows-drivers/03_system_apo/AuraApo.h": {
       "role": "index",
-      "sha256": "1abf5387639ee2b6408364b73b25d9f1c61ab5dd7af14725443286c14374451a",
-      "size": 4636,
-      "normalized_sha256": "bf9364015ce3cae9cc88e82bca89c886ab37d4b86218fcafb62cf436f444b57c"
+      "sha256": "b72a9b51142426a1dc3d975e8946e7565b924fca63a1da2c5c2b63a1fe0ce781",
+      "size": 4797,
+      "normalized_sha256": "b778e4894a2e65eb58017b26fc07e8f58e363d33d80204c5efaf0357e901364b"
     },
     "core/desktop/windows-drivers/03_system_apo/AuraApoGuid.h": {
       "role": "index",
@@ -18664,9 +18664,9 @@
     },
     "core/desktop/windows-drivers/03_system_apo/apo_engine_test.cpp": {
       "role": "index",
-      "sha256": "b7fc633db1046dd0720467d44e288bf77fafc3351252805f2a24309f82269d76",
-      "size": 63892,
-      "normalized_sha256": "daef76e15c3e884623a2a37f48f102fbb197cdfaa9c54cd88534e029bbeb7593"
+      "sha256": "443d0bbc070a8bfd5d8ae955e1a57551853ea08b10d22c490ddd1f167e20d610",
+      "size": 93974,
+      "normalized_sha256": "19a53902c3b18391fb08c56a8823f533426578ad0e1725c80a03a86b9e8f1593"
     },
     "core/desktop/windows-drivers/03_system_apo/apo_inspect.cpp": {
       "role": "index",
@@ -19414,9 +19414,9 @@
     },
     "docs/20-执行/全量代码审查修复计划-2026-11-25.md": {
       "role": "index",
-      "sha256": "6890cdbea26c2f5a4494a887739becbb063d17272b35cf16b6dabf3e7322515e",
-      "size": 85564,
-      "normalized_sha256": "6890cdbea26c2f5a4494a887739becbb063d17272b35cf16b6dabf3e7322515e"
+      "sha256": "0e1eb121d5a7286603398cdd28496abe067753437beefce9c9f6532a24f0d397",
+      "size": 85710,
+      "normalized_sha256": "0e1eb121d5a7286603398cdd28496abe067753437beefce9c9f6532a24f0d397"
     },
     "docs/20-执行/卷积双槽影子立项-2026-11-25.md": {
       "role": "index",
@@ -21118,9 +21118,9 @@
     },
     "engine/engine_param_table.h": {
       "role": "index",
-      "sha256": "f3c90d3b58b0e4373073f7ede229df4d478ff54ab75afc2d048ad1e99c3eddd2",
-      "size": 72350,
-      "normalized_sha256": "cdd0fd1b62281212ab8ea7dc32af3acd94c8530a71cd74a11d5a59a0c2a75097"
+      "sha256": "3c10066720d8b96a1f0814958bf506145758fc0a7593b3f73a2b4e4813fc0ad6",
+      "size": 74087,
+      "normalized_sha256": "760dc398f0f9d75e6fc50b427bd3dc76f9f1d11ba19f572d6d61bb54561cc17c"
     },
     "engine/geometry_snapshot.h": {
       "role": "index",
@@ -21886,9 +21886,9 @@
     },
     "engine/legacy/jdsp/Effects/vdc.c": {
       "role": "index",
-      "sha256": "dd8f6073d58c40b4fa4492dd9ad686fe191e02a0b8445975b652d1aeb94b29f7",
-      "size": 16420,
-      "normalized_sha256": "dd8f6073d58c40b4fa4492dd9ad686fe191e02a0b8445975b652d1aeb94b29f7"
+      "sha256": "48847a48066d18e26e630f5fdc4980825aeedeb211a451749c45b3c8d43d75e8",
+      "size": 17774,
+      "normalized_sha256": "db93ceadad2a8b654f7dad6bf90d8ff757696b1eee9ca44082d5b7da5136e819"
     },
     "engine/legacy/jdsp/binaryBlobs.c": {
       "role": "index",
@@ -21970,9 +21970,9 @@
     },
     "engine/legacy/jdsp/jdsp_header.h": {
       "role": "index",
-      "sha256": "3f12fd5659af84bad50d1eea2dd0f41b91cd140eadc11cf359121f4c61009b61",
-      "size": 41364,
-      "normalized_sha256": "3f12fd5659af84bad50d1eea2dd0f41b91cd140eadc11cf359121f4c61009b61"
+      "sha256": "2cf62af2af07cf9459d2df80a09675607639ced69110e41b1482eff79db81977",
+      "size": 42341,
+      "normalized_sha256": "ff744407259806b50b880679292910e4bcc476c4ca856127f29aa82feba8bf9c"
     },
     "engine/platform/android/README.md": {
       "role": "index",
@@ -25729,9 +25729,9 @@
     },
     "test/smoke/smoke_apo_param_layout.py": {
       "role": "index",
-      "sha256": "5e5737b188cabbdd50eba58aafe45fd0d2ec436e3b117a390f31f66ec6fd039d",
-      "size": 4711,
-      "normalized_sha256": "5e5737b188cabbdd50eba58aafe45fd0d2ec436e3b117a390f31f66ec6fd039d"
+      "sha256": "726b280fde979b1d83fde3428d4e8b37e9325e32aa36c2986e6b379a1a8d0f5a",
+      "size": 5287,
+      "normalized_sha256": "170ef1c5e82683435ddabc1e4dfa0d540cc8efc839acf643bbc1ba0bdf2da618"
     },
     "test/smoke/smoke_apo_plan.py": {
       "role": "index",
@@ -25741,9 +25741,9 @@
     },
     "test/smoke/smoke_apo_plugin_layout.py": {
       "role": "index",
-      "sha256": "3bc831c8cfcd0b7529485fa739876579650f0daa900c2a1d18439c7cd7692868",
-      "size": 4876,
-      "normalized_sha256": "3bc831c8cfcd0b7529485fa739876579650f0daa900c2a1d18439c7cd7692868"
+      "sha256": "1e491d6d6ce539e4c76eb6af7f50a122f955d4b07f4af8338ae0587da47c666a",
+      "size": 6007,
+      "normalized_sha256": "e9eb7013c721a48beb605d821db43c16a096efb6c1aa01645c7df1a1d91ddc93"
     },
     "test/smoke/smoke_apo_register.py": {
       "role": "index",
@@ -25759,9 +25759,9 @@
     },
     "test/smoke/smoke_apo_transit_contract.py": {
       "role": "index",
-      "sha256": "62bd1bb3dfa73229fdac57ed90f422dc5c1807f530b694238e5f4fa55c605bea",
-      "size": 2941,
-      "normalized_sha256": "62bd1bb3dfa73229fdac57ed90f422dc5c1807f530b694238e5f4fa55c605bea"
+      "sha256": "22161c484430e37153e3c6aa2c3c3ecb76b9b81020758b4cb9e91165b13a1d09",
+      "size": 5686,
+      "normalized_sha256": "94e21cb8baca432660788078fefdc03a3b819fde40aa8e31f486545a1436a920"
     },
     "test/smoke/smoke_arbmag.py": {
       "role": "index",
@@ -27103,9 +27103,9 @@
     },
     "tools/gen_apo_param_layout.py": {
       "role": "index",
-      "sha256": "777b6cfcedd583ea5bdd0d6d7a68889a83240a86b78fcf75dc1dd2b93abb1d6f",
-      "size": 16154,
-      "normalized_sha256": "35a255d3182b5b80b3aab9909351d28eadadf5c2b6995cb51d62d343f903b7f4"
+      "sha256": "415fc7630a3ea42a2fa1138ebdd267953299e6b82f8163a070429205c78ad9cb",
+      "size": 16722,
+      "normalized_sha256": "c542a23c9e0998bc9acbf80cc135b8e6150be33e1536c500395c4b4e1054bdcf"
     },
     "tools/gen_param_contract.py": {
       "role": "index",
