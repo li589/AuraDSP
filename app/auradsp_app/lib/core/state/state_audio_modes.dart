@@ -20,6 +20,18 @@ bool idsConflictResolved(String capId, String outId, String defaultRenderId) {
   return capId.isEmpty && outId.isEmpty;
 }
 
+/// 虚拟 ASIO 档位请求的 App 侧代际。原生遥测 ABI 不含请求代号，
+/// 因此用请求序号 + 请求时的 asioInfo 对象身份区分「新请求尚未确认」
+/// 与「旧实例回声」；asiostatus 每次到达都会替换 asioInfo。
+class _AsioVirtualChannelRequest {
+  int generation = 0;
+  int acknowledgedGeneration = 0;
+  int? requestedCh;
+  Object? telemetryAtRequest;
+}
+
+final _asioVirtualChannelRequests = Expando<_AsioVirtualChannelRequest>();
+
 extension AudioModesState on AppModel {
 
   // ---- 模式与管线 ----
@@ -1531,16 +1543,14 @@ extension AudioModesState on AppModel {
   /// 虚拟 ASIO 形态的工作声道数（状态侧唯一口径）。
   ///
   /// 虚拟形态下 App 自身不跑处理引擎——DAW 进程内的引擎实例才是真
-  /// 处理者，其宽度恒由驱动档位（HKCU Channels）决定：标准 ASIO
-  /// 路径下 DAW 不能改宽，驱动 createBuffers 按档位交织。因此：
-  /// - DAW 活着（遥测活跃且有合法 dawCh）→ 用 dawCh 回读值（档位
-  ///   在驱动实例侧实际生效的回声；档位变更后旧实例未重建时以
-  ///   它为准）；
-  /// - 否则用档位镜像 [asioDriverChannels]（2/4/6/8）。
+  /// 处理者，其宽度由驱动档位（HKCU Channels）与 DAW 协商值共同决定。
+  /// 新档位请求在收到请求之后到达的匹配遥测前保持权威，避免活跃旧
+  /// 实例的 dawCh 把显示/能力钉回旧宽度；确认后重新以实际协商值为准。
+  /// 无请求时仅采信活跃 DAW 的合法 dawCh，否则回落档位镜像。
   ///
   /// 注意必须要求「活跃」：驱动遥测块会跨 DAW 会话驻留，块里留着
   /// 上次会话的 dawCh（常见 2）。若只要块在就采信，关掉 DAW 后
-  /// 档位改了也会被残留值钉在 2——正是本次要修的症状之一。
+  /// 档位改了也会被残留值钉在 2。
   ///
   /// ASIO Client 形态与其它模式返回 null——那边由 isolate 起桥预置
   /// 与协商结果自行供给，状态侧不得越权钳制。
@@ -1552,12 +1562,36 @@ extension AudioModesState on AppModel {
   int? _asioVirtualWorkCh() {
     if (audioMode != 'asio') return null;
     if (config.asioFlavor != AudioModes.asioVirtual) return null;
-    final dawLive = asioActive ||
-        ((asioInfo['dawActive'] as num?)?.toInt() ?? 0) == 1;
+    final dawLive =
+        asioActive || ((asioInfo['dawActive'] as num?)?.toInt() ?? 0) == 1;
     final daw = (asioInfo['dawCh'] as num?)?.toInt() ?? 0;
+    final request = _asioVirtualChannelRequests[this];
+    final requested = request?.requestedCh;
+    if (request != null &&
+        requested != null &&
+        request.acknowledgedGeneration != request.generation) {
+      if (dawLive &&
+          (daw == 2 || daw == 4 || daw == 6 || daw == 8) &&
+          daw == requested &&
+          !identical(asioInfo, request.telemetryAtRequest)) {
+        request.acknowledgedGeneration = request.generation;
+        request.requestedCh = null;
+        request.telemetryAtRequest = asioInfo;
+        return daw;
+      }
+      return requested;
+    }
     if (dawLive && (daw == 2 || daw == 4 || daw == 6 || daw == 8)) return daw;
     final d = asioDriverChannels;
     return (d == 4 || d == 6 || d == 8) ? d : 2;
+  }
+
+  void _requestAsioVirtualChannels(int count) {
+    final request = _asioVirtualChannelRequests[this] ??=
+        _AsioVirtualChannelRequest();
+    request.generation++;
+    request.requestedCh = count;
+    request.telemetryAtRequest = asioInfo;
   }
 
   /// 把分模式能力发给 isolate 钳制器（第四十二轮 S1 立 chcap，
@@ -1807,35 +1841,19 @@ extension AudioModesState on AppModel {
     _notifyUi();
   }
 
+  bool _writeAsioDriverChannels(int ch) =>
+      registry.writeDword(r'HKCU\SOFTWARE\AuraDSP\AsioDriver', 'Channels', ch);
+
   /// 设置 AuraDSP 虚拟 ASIO 驱动的声道档位（全面复审 S3 / ASIO-4）。
   /// 写 HKCU 注册表值（驱动下次被 DAW 创建时读取生效）；成功返回
-  /// true。档位外数值直接拒绝。
+  /// true。档位外数值直接拒绝。虚拟形态随后经统一入口同步工作宽度、
+  /// typed channels.count 与能力发布；Client 形态保持原行为。
   bool setAsioDriverChannels(int ch) {
     if (!const {2, 4, 6, 8}.contains(ch)) return false;
-    final ok = registry.writeDword(
-      r'HKCU\SOFTWARE\AuraDSP\AsioDriver',
-      'Channels',
-      ch,
-    );
-    if (ok) {
-      asioDriverChannels = ch;
-      // 虚拟 ASIO：档位即工作宽度，声道数量镜像同步跟随（两控件
-      // 同说一件事，避免「档位 8 / 声道数 2」自相矛盾）。
-      if (audioMode == 'asio' &&
-          config.asioFlavor == AudioModes.asioVirtual &&
-          channelsCount != ch) {
-        channelsCount = ch;
-        config.channelsCount = ch;
-        persistRoutingChange();
-      }
-      // 档位即虚拟形态的声道能力（见 _asioVirtualWorkCh）：改档后
-      // 立即重算能力并下发，让 isolate 解除旧档钳制、显示面同步。
-      _displayGen++;
-      _sendChCap();
-      refreshDisplayChannelCount();
-      _notifyUi();
-    }
-    return ok;
+    if (!_writeAsioDriverChannels(ch)) return false;
+    asioDriverChannels = ch;
+    _applyChannelsCount(ch, syncAsioRegistry: false);
+    return true;
   }
 
   /// 设置虚拟 ASIO 汇的后端渲染端点（S3）。[endpointId] 为端点

@@ -1041,19 +1041,40 @@ extension StateCore on AppModel {
   /// 设置手动工作声道数（2, 4, 6, 8）
   void setChannelsCount(int count) {
     if (count == 2 || count == 4 || count == 6 || count == 8) {
-      _displayGen++; // S3：显示合成代际
-      channelsCount = count;
-      config.channelsCount = count;
-      ConfigManager.save(config);
-      setInt('channels.count', count);
-      // 虚拟 ASIO：声道数量与驱动档位是同一事实——驱动 getChannels()
-      // 报的就是这个宽度，DAW 据此分配缓冲。只改声道数量而档位仍是
-      // 2，DAW 只会拿到 2 通道（真机 2026-11-21：设 7.1 实际仍 2.0）。
-      // 反向由 setAsioDriverChannels 维护镜像，两控件不各说一套。
-      if (audioMode == 'asio' &&
-          config.asioFlavor == AudioModes.asioVirtual) {
-        setAsioDriverChannels(count);
-      }
+      _applyChannelsCount(count, syncAsioRegistry: true);
     }
+  }
+
+  /// 声道宽度唯一写入口：虚拟 ASIO 档位与手动工作声道共用同一套
+  /// config/UI/typed channels.count/能力发布路径，且不递归调用 setter。
+  void _applyChannelsCount(int count, {required bool syncAsioRegistry}) {
+    if (count != 2 && count != 4 && count != 6 && count != 8) return;
+    final virtualAsio =
+        audioMode == 'asio' && config.asioFlavor == AudioModes.asioVirtual;
+    if (syncAsioRegistry && virtualAsio) {
+      // 注册表是虚拟驱动档位真源；失败时保持 config/UI/param 不变。
+      if (!_writeAsioDriverChannels(count)) return;
+      asioDriverChannels = count;
+    }
+    if (!syncAsioRegistry && !virtualAsio) {
+      // 驱动档位 setter 的 Client/非 ASIO 调用只更新驱动镜像与显示，
+      // 不得顺带改写工作宽度或派发 channels.count（保留既有行为）。
+      _displayGen++;
+      _sendChCap();
+      refreshDisplayChannelCount();
+      _notifyUi();
+      return;
+    }
+    if (virtualAsio) {
+      asioDriverChannels = count;
+      _requestAsioVirtualChannels(count);
+    }
+    _displayGen++;
+    channelsCount = count;
+    config.channelsCount = count;
+    ConfigManager.save(config);
+    _sendChCap();
+    // setInt 负责 typed 派发、乐观镜像与 UI/display 刷新。
+    setInt('channels.count', count);
   }
 }
