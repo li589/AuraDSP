@@ -66,7 +66,14 @@ class _AsioVirtualChannelRequest {
     required int writerPid,
     required bool driverRunning,
   }) {
-    if (_invalidated || token != requestSeq || writerPid <= 0) return false;
+    if (_invalidated || writerPid <= 0) return false;
+    if (token != requestSeq) {
+      // 迟到旧 token 仍证明该 writer 已存在，但不能把旧 running/stopped
+      // 状态冒充当前 token 的 epoch 证据。
+      _lastWriterPid = writerPid;
+      _writerEpochs.putIfAbsent(writerPid, () => false);
+      return false;
+    }
     _lastWriterPid = writerPid;
     final firstForToken = !_writerEpochs.containsKey(writerPid);
     final stoppedForToken = _writerEpochs[writerPid] ?? false;

@@ -615,6 +615,53 @@ void main() {
       expect(m.vizChannelCount.value, 6);
     });
 
+    test('迟到旧 token 的同 writer 不充当新 writerPid', () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      final commands = _IsoCommands(m);
+      addTearDown(commands.close);
+      addTearDown(m.dispose);
+      m.asioActive = true;
+      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 100, 'dawCh': 2};
+
+      expect(m.setAsioDriverChannels(4), isTrue);
+      expect(m.setAsioDriverChannels(8), isTrue);
+      await commands.flush();
+      final oldToken = commands.requestSeqs.first;
+      final newToken = commands.requestSeqs.last;
+
+      // 请求发生后才迟到的旧 token 仍证明该 writer 早已存在。
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: oldToken,
+        writerPid: 100,
+        frames: 101,
+      ));
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: newToken,
+        writerPid: 100,
+        frames: 102,
+      ));
+      expect(m.displayChannelCount, 8);
+      expect(m.vizChannelCount.value, 8);
+
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: newToken,
+        writerPid: 100,
+        running: false,
+        frames: 103,
+      ));
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 6,
+        requestSeq: newToken,
+        writerPid: 100,
+        frames: 1,
+      ));
+      expect(m.displayChannelCount, 6);
+    });
+
     test('新 writerPid 可确认 token，重叠旧 writer 不污染已确认几何', () async {
       final registry = _FakeRegistry();
       final m = _virtualAsio(registry: registry);
