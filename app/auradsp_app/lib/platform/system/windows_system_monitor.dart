@@ -55,6 +55,8 @@ class WindowsSystemMonitor implements WindowsSystemMonitorPort {
 
   Timer? _timer;
   bool _busy = false;
+  bool _stopped = false;
+  int _generation = 0;
   int _tickCount = 0;
   int _consecutiveFailures = 0;
   Map<String, dynamic>? _prevScan;
@@ -62,14 +64,21 @@ class WindowsSystemMonitor implements WindowsSystemMonitorPort {
 
   bool get running => _timer != null;
 
+  bool _isCurrent(int generation) =>
+      !_stopped && generation == _generation;
+
   @override
   void start() {
     if (_timer != null) return;
+    _stopped = false;
+    _generation++;
     _timer = Timer.periodic(interval, (_) => tick());
   }
 
   @override
   void stop() {
+    _stopped = true;
+    _generation++;
     _timer?.cancel();
     _timer = null;
   }
@@ -174,8 +183,12 @@ class WindowsSystemMonitor implements WindowsSystemMonitorPort {
 
   /// 一轮监听（定时器与测试共用入口；在飞合并）。
   Future<void> tick() async {
-    if (_busy) return;
-    if (gate != null && !gate!()) return;
+    if (_busy || _stopped) return;
+    final generation = _generation;
+    if (gate != null) {
+      final allowed = gate!();
+      if (!allowed || !_isCurrent(generation)) return;
+    }
     _busy = true;
     try {
       Map<String, dynamic>? scan;
@@ -185,6 +198,7 @@ class WindowsSystemMonitor implements WindowsSystemMonitorPort {
         swallow(e, st);
         scan = null;
       }
+      if (!_isCurrent(generation)) return;
       if (scan == null) {
         _consecutiveFailures++;
         return;
@@ -196,16 +210,20 @@ class WindowsSystemMonitor implements WindowsSystemMonitorPort {
           detail:
               'scan recovered after $_consecutiveFailures failed probe(s)',
         ));
+        if (!_isCurrent(generation)) return;
         _consecutiveFailures = 0;
       }
       final prev = _prevScan;
       if (prev != null && signatureOf(prev) != signatureOf(scan)) {
         for (final e in classify(prev, scan)) {
+          if (!_isCurrent(generation)) return;
           onEvent(e);
+          if (!_isCurrent(generation)) return;
         }
       }
       _prevScan = scan;
       onTick?.call(scan);
+      if (!_isCurrent(generation)) return;
       _tickCount++;
       final probe = apoProbe;
       if (probe != null && apoEveryTicks > 0 && _tickCount % apoEveryTicks == 0) {
@@ -216,6 +234,7 @@ class WindowsSystemMonitor implements WindowsSystemMonitorPort {
           swallow(e, st);
           ids = null;
         }
+        if (!_isCurrent(generation)) return;
         if (ids != null) {
           final old = _apoIds;
           if (old != null &&
@@ -229,6 +248,7 @@ class WindowsSystemMonitor implements WindowsSystemMonitorPort {
               detail:
                   'added=${ids.difference(old).length} removed=${old.difference(ids).length}',
             ));
+            if (!_isCurrent(generation)) return;
           }
           _apoIds = ids;
         }

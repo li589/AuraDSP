@@ -1293,6 +1293,7 @@ extension AudioModesState on AppModel {
   /// 描（应用尾巴里 _applyDeviceScan 会连带 S1 chcap 重发与
   /// S3 显示收敛）；服务重启与 APO 拓扑变化走完整状态对账。
   void _onSysMonEvent(SysMonEvent e) {
+    if (_disposed) return;
     dbgLog('sysmon: ${e.kind.name} ${e.detail}');
     switch (e.kind) {
       case SysMonEventKind.deviceSetChanged:
@@ -1334,6 +1335,7 @@ extension AudioModesState on AppModel {
   /// 和复核（旧看守 S6 例外口径——不持续应用则消失设备的修
   /// 复永不落定）。
   void _onSysMonTick(Map<String, dynamic> scan) {
+    if (_disposed) return;
     if (_reconcileAbsentSince.isEmpty) return;
     if (_deviceRefreshInFlight) return;
     _deviceRefreshInFlight = true;

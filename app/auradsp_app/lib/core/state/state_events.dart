@@ -56,6 +56,7 @@ extension StateEvents on AppModel {
   /// 共用同一清屏实现，全平台全后端一致。已清零态直接返回，
   /// 不重复通知。[now] 供单测注入时钟。
   void vizWatchdogTick([DateTime? now]) {
+    if (_disposed) return;
     if (_vizDisplayCleared) return;
     final t = now ?? DateTime.now();
     final last = _vizLastFrameAt;

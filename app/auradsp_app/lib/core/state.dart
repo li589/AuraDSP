@@ -1331,8 +1331,8 @@ class AppModel extends ChangeNotifier {
   DateTime? _vizSilentSince;
   bool _vizDisplayCleared = true;
   int _vizClearTimeMs = 0;
-  // 看门狗 Timer 由事件循环持有（Timer.periodic 不依赖外部引用存活），
-  // App 生命周期单例无取消路径，故不留字段句柄（避免 unused_field）。
+  // 看门狗句柄由模型持有，dispose 时取消，避免退出后继续写可视化状态。
+  Timer? _vizWatchdogTimer;
 
   // 动态衰减量计量 (Gain Reduction, dB, 负值或 0.0)
   final grLimiter = ValueNotifier<double>(0.0);
@@ -1539,9 +1539,11 @@ class AppModel extends ChangeNotifier {
     if (!testing) {
       // 可视化清屏看门狗（第四十九轮 S4）：1 秒一拍，断流或
       // 持续静默超 3 秒即统一清屏（见 state_events 的
-      // vizWatchdogTick）。App 生命周期单例，随进程存续；
-      // 无可取消路径，故不持句柄（见字段处注释）。
-      Timer.periodic(const Duration(seconds: 1), (_) => vizWatchdogTick());
+      // vizWatchdogTick）。句柄随模型释放。
+      _vizWatchdogTimer = Timer.periodic(
+        const Duration(seconds: 1),
+        (_) => vizWatchdogTick(),
+      );
       checkAsioDriverStatus();
       checkApoStatus(silent: true);
       // VAIO 崩溃断路器消费点：必须早于 isolate ready 的自动
@@ -1846,6 +1848,8 @@ class AppModel extends ChangeNotifier {
     _trayVisibilitySubscribed = false;
     _debounceSaveTimer?.cancel();
     _lpCodeReloadTimer?.cancel();
+    _vizWatchdogTimer?.cancel();
+    _vizWatchdogTimer = null;
     _sysMonitor?.stop();
     _sysMonitor = null;
     _linuxSysMonitor?.stop();
@@ -1880,6 +1884,9 @@ class AppModel extends ChangeNotifier {
     inputMeterInR.dispose();
     inputMeterOutL.dispose();
     inputMeterOutR.dispose();
+    vizChannelCount.dispose();
+    vizChannelLevels.dispose();
+    vizStageChLevels.dispose();
     grLimiter.dispose();
     grComp.dispose();
     grGate.dispose();

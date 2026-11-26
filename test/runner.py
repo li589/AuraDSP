@@ -35,6 +35,8 @@ UI_DIR = os.path.join(TEST_DIR, "ui")
 # PLATFORM_WINDOWS；能在 Linux 跑通的既有 smoke，从 PLATFORM_WINDOWS 摘除即可。
 PLATFORM_ANY = {
     "smoke_platform_isolation.py",
+    # Task 13：Windows 监听与可视化释放契约，纯源码扫描。
+    "smoke_viz_lifecycle.py",
     # 进度小窗隔离纪律（2026-11-24）：纯源码 + 本地行为，无显示依赖。
     "smoke_progress_ui.py",
     "smoke_dart_platform_quarantine.py",
@@ -539,6 +541,8 @@ def run_smoke_tests():
         "smoke_runner_registry.py",
         # Task 12：证书身份与 SSH 主机密钥必须失败关闭；无网络/信任库副作用。
         "smoke_remote_security.py",
+        # Task 13：停止监听后在途回调失效，退出释放可视化资源。
+        "smoke_viz_lifecycle.py",
         "smoke_dart_chcap_authority.py",
         "smoke_apo_engch_truncate.py",
         "smoke_dart_r46_display_list.py",
