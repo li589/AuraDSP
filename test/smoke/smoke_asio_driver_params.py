@@ -27,6 +27,8 @@ def read(rel):
 
 SHARED = "core/desktop/windows-drivers/04_asio_driver/AsioDriverShared.h"
 DRIVER = "core/desktop/windows-drivers/04_asio_driver/AuraAsioDriver.cpp"
+LOADER = "core/desktop/windows-drivers/04_asio_driver/AuraAsioEngineLoader.h"
+BRIDGE = "core/desktop/windows-drivers/bridge/asio_bridge/AsioBridge.cpp"
 DART_ASIO = "app/auradsp_app/lib/engine/audio_isolate_asio.dart"
 DART_ISO = "app/auradsp_app/lib/engine/audio_isolate.dart"
 DART_MODES = "app/auradsp_app/lib/core/state/state_audio_modes.dart"
@@ -44,6 +46,8 @@ def check(name, cond, detail=""):
 
 shared = read(SHARED)
 driver = read(DRIVER)
+loader = read(LOADER)
+bridge = read(BRIDGE)
 dart_asio = read(DART_ASIO)
 dart_iso = read(DART_ISO)
 dart_modes = read(DART_MODES)
@@ -75,7 +79,54 @@ check("driver applies via ApplyParamsString",
 check("driver bypass from block",
       "m_bypass.store(bypass != 0" in driver)
 check("driver absent-block retry", "m_paramsRetry" in driver)
-check("pump pulls params per block", "PullParamsFromBlock();" in driver)
+i_pump = driver.find("DWORD AuraAsioDriver::PumpLoop()")
+pump_body = driver[i_pump:] if i_pump >= 0 else ""
+check("non-RT control worker pulls params",
+      "PullParamsFromBlock();" in driver and
+      "PullParamsFromBlock();" not in pump_body)
+check("MMCSS pump never applies params or requests geometry",
+      bool(pump_body) and
+      "ApplyParamsString" not in pump_body and
+      "SetParam" not in pump_body and
+      "RequestGeometry" not in pump_body and
+      "PullParamsFromBlock" not in pump_body)
+check("MMCSS pump consumes expected active geometry only",
+      "GetActiveGeometry" in pump_body and
+      "ProcessGeometry" in pump_body and
+      "m_engineLoader.Process(" not in pump_body)
+check("driver publishes width/mode only from active snapshot",
+      "m_engineCh = active.channels;" in pump_body and
+      "m_channelMode = active.mode;" in pump_body)
+i_clamp = driver.find("int ClampEngineChannels(int ch)")
+i_clamp_end = driver.find("}", i_clamp)
+clamp_body = driver[i_clamp:i_clamp_end] if 0 <= i_clamp < i_clamp_end else ""
+check("engine width normalization rejects odd tiers",
+      "(ch + 1) & ~1" in clamp_body and
+      "return 2;" in clamp_body and "return 8;" in clamp_body)
+check("loader requires complete geometry ABI",
+      all('"' + name + '"' in loader for name in (
+          "auradsp_process_geometry", "auradsp_request_geometry",
+          "auradsp_get_active_geometry")) and
+      "m_pfnProcessGeometry" in loader and "m_pfnRequestGeometry" in loader and
+      "m_pfnGetActiveGeometry" in loader)
+
+# ---- ASIO Client bridge: exact ioCh buffers never reach legacy process ----
+i_bridge_sink = bridge.find("void BridgeSink(")
+i_bridge_apply = bridge.find("void ApplyParamsString(", i_bridge_sink)
+bridge_sink = bridge[i_bridge_sink:i_bridge_apply] if 0 <= i_bridge_sink < i_bridge_apply else ""
+check("bridge sink never calls legacy width-guessed process",
+      bool(bridge_sink) and "c->process(" not in bridge_sink)
+check("bridge sink processes a complete expected geometry",
+      "processGeometry" in bridge_sink and
+      "requestedGeometry.Load" in bridge_sink)
+check("bridge adapts both width directions with chmap",
+      "chmap_gather_discrete" in bridge_sink and
+      "chmap_fold" in bridge_sink and
+      "chmap_scatter_discrete" in bridge_sink)
+check("bridge uses preallocated bounded engine scratch",
+      "scratchFrames" in bridge and "engIn" in bridge and "engOut" in bridge and
+      "frames > c->scratchFrames" in bridge_sink)
+
 i_init = driver.find("ASIOBool AuraAsioDriver::init")
 i_load_channels = driver.find("LoadConfiguredChannels();", i_init)
 i_capture_request = driver.find("CaptureChannelRequestSeq();", i_init)
@@ -118,7 +169,7 @@ check("publisher writes request token inside odd/even seq",
 check("publisher carries channels.count (W6 width authority)",
       "if (id == 'channels.count') continue;" not in dart_asio)
 check("publisher carries graph.order only",
-      "_strMirror?['graph.order']" in dart_asio)
+      "strMirror?['graph.order']" in dart_asio)
 check("publisher debounced", "noteChanged" in dart_asio)
 
 # ---- W6 流宽/引擎宽解耦 与 W7 端点热切换（2026-11-24）----
@@ -153,7 +204,7 @@ check("isoReady replays pending token after binding the new port",
 # ---- 总闸静音（r61 验收修复） ----
 check("header mute field", "volatile long mute;" in shared)
 check("driver reads mute", "m_params->mute" in driver and
-      "m_paramsMuted = (mute != 0)" in driver)
+      "m_paramsMuted.store(mute != 0" in driver)
 check("driver pump zeroes when muted", "if (m_paramsMuted)" in driver)
 check("publisher writes mute at i32[5]",
       "_i32![5] = (_muteOf?.call() ?? false) ? 1 : 0;" in dart_asio)

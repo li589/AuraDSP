@@ -41,3 +41,20 @@ int clampChannelsToCapability(int want, int cap) {
   final c = cap >= 8 ? 8 : cap >= 6 ? 6 : cap >= 4 ? 4 : 2;
   return w <= c ? w : c;
 }
+
+/// isolate 侧四路同源重派：本地引擎、APO、虚拟 ASIO 参数块与活动桥。
+/// 只传播能力钳制后的生效值；[userChCount] 原值由调用方保留。
+void dispatchChannelsToCapability({
+  required int userChCount,
+  required int capabilityCh,
+  required int Function(int channels) applyEngineChannels,
+  required void Function(double channels) publishApo,
+  required void Function(double channels) publishAsio,
+  required void Function(double channels)? publishBridge,
+}) {
+  final effective = clampChannelsToCapability(userChCount, capabilityCh);
+  applyEngineChannels(effective);
+  publishApo(effective.toDouble());
+  publishAsio(effective.toDouble());
+  publishBridge?.call(effective.toDouble());
+}

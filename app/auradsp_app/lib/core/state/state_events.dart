@@ -73,7 +73,8 @@ extension StateEvents on AppModel {
       case 'isoReady':
         _toIso = raw['port'] as SendPort;
         // 新 isolate 的 AsioParamPublisher._requestSeq 从 0 重置；先重放
-        // AppModel 当前未确认 token，后续 ready/asiomode 才能激活并落块。
+        // AppModel 当前有效 token（含已确认请求），后续 ready/asiomode
+        // 才能激活并落块。
         _replayAsioVirtualChannelRequest();
         if (!window.isVisible) {
           send({'cmd': 'setVizSuspended', 'value': true});
@@ -1142,10 +1143,16 @@ extension StateEvents on AppModel {
         // stageCh 21×8），缺列 -120，UI 侧统一索引。
         if (raw['chCount'] != null) {
           final cc = (raw['chCount'] as num).toInt();
-          noteStreamChannelCount(cc); // S3：登记流真值与到达时刻
+          final streamAccepted = noteStreamChannelCount(
+            cc,
+            eventTimestampMs: (raw['ts'] as num?)?.toInt(),
+          ); // S3：登记流真值与到达时刻
           // 第四十六轮 S1：显示宽按生效宽钳制（原始 cc 仍供
-          // 下方 stageCh 切片等来源真相用途）。
-          vizChannelCount.value = clampStreamChForDisplay(cc);
+          // 下方 stageCh 切片等来源真相用途）。形态切换前生成的迟到
+          // ASIO 帧只更新电平，不重建已失效的流宽 epoch。
+          if (streamAccepted) {
+            vizChannelCount.value = clampStreamChForDisplay(cc);
+          }
           final cl = (raw['chLevels'] as List?)
                   ?.cast<num>()
                   .map((e) => e.toDouble())

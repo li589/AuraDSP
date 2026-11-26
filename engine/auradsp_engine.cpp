@@ -102,11 +102,18 @@ static auradsp_status request_geometry_locked(auradsp_handle h, int32_t channels
         (mode != 0 && mode != 1)) {
         return AURADSP_E_PARAM;
     }
+    const uint64_t current =
+        h->pending_generation.load(std::memory_order_seq_cst);
     const int32_t old_channels = h->pending_channels.load(std::memory_order_seq_cst);
     const int32_t old_mode = h->pending_mode.load(std::memory_order_seq_cst);
+    if (current != 0 && old_channels == channels && old_mode == mode) {
+        /* 相同请求不制造新代，也不重新 arm reset；宿主继续等待当前 pending
+         * 激活即可，不会被自身重复请求永久卡在过渡块。 */
+        if (generation) *generation = current;
+        return AURADSP_OK;
+    }
     uint64_t next = 0;
-    if (!auradsp_detail::next_geometry_generation(
-            h->pending_generation.load(std::memory_order_seq_cst), &next)) {
+    if (!auradsp_detail::next_geometry_generation(current, &next)) {
         return AURADSP_E_STATE;  /* 0 或耗尽：失败关闭，绝不回绕压掉真实变更。 */
     }
     /* 整个控制侧准备期间 pending generation 保持哨兵 0。RT 只能保留旧

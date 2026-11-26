@@ -9,6 +9,8 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:auradsp_app/core/state.dart';
+import 'package:auradsp_app/engine/audio_isolate.dart';
+import 'package:auradsp_app/engine/local_channel_policy.dart';
 import 'package:auradsp_app/platform/platform_profile.dart';
 
 const _in20 = '{0.0.1.00000000}.{aaaaaaa1-0000-0000-0000-000000000001}';
@@ -34,6 +36,41 @@ AppModel _vaioModel({String outName = '', int outCh = 0}) {
 }
 
 void main() {
+  group('isolate 生效声道重派', () {
+    test('8→6 能力钳制把 6 发给 ASIO，且不改写用户 8', () {
+      final applied = <int>[];
+      final apo = <double>[];
+      final asio = <double>[];
+      final bridge = <double>[];
+      dispatchChannelsToCapability(
+        userChCount: 8,
+        capabilityCh: 6,
+        applyEngineChannels: (ch) {
+          applied.add(ch);
+          return ch;
+        },
+        publishApo: apo.add,
+        publishAsio: asio.add,
+        publishBridge: bridge.add,
+      );
+      expect(applied, [6]);
+      expect(apo, [6.0]);
+      expect(asio, [6.0]);
+      expect(bridge, [6.0]);
+    });
+
+    test('ASIO 序列化使用生效 6，镜像仍保留用户 8', () {
+      final mirror = <String, ({bool isFloat, double value})>{
+        'channels.count': (isFloat: false, value: 8.0),
+      };
+      expect(
+        serializeAsioParamPayload(mirror, const {}, effectiveChannels: 6),
+        'channels.count=6',
+      );
+      expect(mirror['channels.count']!.value, 8.0);
+    });
+  });
+
   if (!PlatformProfile.isWindows) {
     test('non-windows: capability matrix is windows-scoped', () {
       expect(PlatformProfile.isWindows, isFalse);

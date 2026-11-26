@@ -440,13 +440,17 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   /// 经 applyEngineChannels、APO 发布、活动桥）。本地侧同值时
   /// applyEngineChannels 零开销短路；桥/发布侧同值重发无害。
   void redispatchChannels() {
-    final eff = clampChannelsToCapability(userChCount, capabilityCh);
-    applyEngineChannels(eff);
-    apoPublisher.onNumeric('channels.count', eff.toDouble());
-    final b = bridgeManager.active;
-    if (b != null) {
-      b.setParam('channels.count', isFloat: false, value: eff.toDouble());
-    }
+    dispatchChannelsToCapability(
+      userChCount: userChCount,
+      capabilityCh: capabilityCh,
+      applyEngineChannels: applyEngineChannels,
+      publishApo: (ch) => apoPublisher.onNumeric('channels.count', ch),
+      publishAsio: (ch) => asioPublisher.setEffectiveChannels(ch.toInt()),
+      publishBridge: (ch) {
+        bridgeManager.active?.setParam('channels.count',
+            isFloat: false, value: ch);
+      },
+    );
   }
 
   /// 输出路径声道能力更新。来源（第四十五轮 S1/S2 收敛后只剩
@@ -1102,7 +1106,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             value: (m['value'] as num).toDouble()
           );
           apoPublisher.onNumeric(m['id'] as String, dispatchValue);
-          asioPublisher.noteChanged();
+          if (isCount) {
+            asioPublisher.setEffectiveChannels(dispatchValue.toInt());
+          } else {
+            asioPublisher.noteChanged();
+          }
           final brcBridge = bridgeManager.active;
           if (brcBridge != null) {
             final bridgeId = bridgeManager.activeId ?? '?';

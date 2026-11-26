@@ -21,12 +21,14 @@
 #include "JsonEscape.h"
 #include "../../04_asio_client/AsioHost.h"
 #include "AsioDriverShared.h"  // 虚拟 ASIO 驱动遥测契约（S3）
+#include "../../common/HostGeometry.h"
 #include "../../02_voicemeeter_client/VmPumpCore.h"  // TryLoadEngine / FillTestSignal / FnEng*
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <mutex>
 
 // ---- ASIO 控制线程（r57 P0）----
 // 【定罪 2026-11-19】IASIO 是 Apartment 模型 COM 类且无 proxy/stub，
@@ -135,7 +137,9 @@ using vmcore::FnEngCreate;
 using vmcore::FnEngAbi;
 using vmcore::FnEngDestroy;
 using vmcore::FnEngGetParam;
-using vmcore::FnEngProcess;
+using vmcore::FnEngGetActiveGeometry;
+using vmcore::FnEngProcessGeometry;
+using vmcore::FnEngRequestGeometry;
 using vmcore::FnEngSetParam;
 using vmcore::FnEngVizRead;
 using vmcore::PumpCtx;
@@ -152,7 +156,9 @@ struct BridgeCtl {
     // 引擎（动态加载；单 handle——ASIO v1 只取一个立体声对进链）
     HMODULE engMod = nullptr;
     FnEngCreate create = nullptr;
-    FnEngProcess process = nullptr;
+    FnEngProcessGeometry processGeometry = nullptr;
+    FnEngRequestGeometry requestGeometry = nullptr;
+    FnEngGetActiveGeometry getActiveGeometry = nullptr;
     FnEngDestroy destroy = nullptr;
     FnEngSetParam setParam = nullptr;
     FnEngGetParam getParam = nullptr;
@@ -165,6 +171,13 @@ struct BridgeCtl {
     std::string driverRaw;        // 注册表原始名（SDK load 键；status 调试用）
     long outPair = 0;
     int ioCh = 2;                 // io 声道数（2/4/6/8；start 定稿，RT 只读）
+    // 控制侧发布完整 expected geometry；RT 只读原子快照，按该宽度使用
+    // 预分配 scratch，绝不把 ioCh 精确缓冲交给另一宽度的 legacy process。
+    aurahost::GeometryState requestedGeometry;
+    std::mutex geometryMutex;
+    float* engIn = nullptr;
+    float* engOut = nullptr;
+    int scratchFrames = 0;
     long inCh = 0, outCh = 0, inLat = 0, outLat = 0;
     double sr = 0.0;
     long nbs = 0;
@@ -194,6 +207,73 @@ static aurabridge::SilentVizEmitter g_silentViz;
 auraplugin::Fns g_pluginFns;
 auraplugin::Mirror g_pluginMirror;
 
+void FreeEngineScratch() {
+    if (g_b.engIn) _aligned_free(g_b.engIn);
+    if (g_b.engOut) _aligned_free(g_b.engOut);
+    g_b.engIn = nullptr;
+    g_b.engOut = nullptr;
+    g_b.scratchFrames = 0;
+}
+
+bool AllocateEngineScratch(int frames) {
+    FreeEngineScratch();
+    if (frames <= 0) return false;
+    const size_t samples = (size_t)frames * 8u;
+    g_b.engIn = (float*)_aligned_malloc(samples * sizeof(float), 64);
+    g_b.engOut = (float*)_aligned_malloc(samples * sizeof(float), 64);
+    if (!g_b.engIn || !g_b.engOut) {
+        FreeEngineScratch();
+        return false;
+    }
+    g_b.scratchFrames = frames;
+    return true;
+}
+
+bool SeedBridgeGeometry() {
+    if (!g_b.engine || !g_b.getActiveGeometry) return false;
+    auradsp_geometry active{};
+    if (g_b.getActiveGeometry(g_b.engine, &active) != AURADSP_OK ||
+        !aurahost::ValidGeometry({active.generation, active.channels, active.mode}))
+        return false;
+    return g_b.requestedGeometry.Publish(
+        {active.generation, active.channels, active.mode});
+}
+
+bool RequestBridgeGeometryLocked(int32_t channels, int32_t mode) {
+    if (!g_b.engine || !g_b.requestGeometry ||
+        (channels != 2 && channels != 4 && channels != 6 && channels != 8) ||
+        (mode != 0 && mode != 1))
+        return false;
+    aurahost::GeometrySnapshot current{};
+    if (g_b.requestedGeometry.Load(&current) &&
+        current.channels == channels && current.mode == mode)
+        return true;
+    uint64_t generation = 0;
+    if (g_b.requestGeometry(g_b.engine, channels, mode, &generation) !=
+        AURADSP_OK)
+        return false;
+    return g_b.requestedGeometry.Publish({generation, channels, mode});
+}
+
+bool RequestBridgeGeometry(int32_t channels, int32_t mode) {
+    std::lock_guard<std::mutex> lock(g_b.geometryMutex);
+    return RequestBridgeGeometryLocked(channels, mode);
+}
+
+bool RequestBridgeChannels(int32_t channels) {
+    std::lock_guard<std::mutex> lock(g_b.geometryMutex);
+    aurahost::GeometrySnapshot current{};
+    if (!g_b.requestedGeometry.Load(&current)) return false;
+    return RequestBridgeGeometryLocked(channels, current.mode);
+}
+
+bool RequestBridgeMode(int32_t mode) {
+    std::lock_guard<std::mutex> lock(g_b.geometryMutex);
+    aurahost::GeometrySnapshot current{};
+    if (!g_b.requestedGeometry.Load(&current)) return false;
+    return RequestBridgeGeometryLocked(current.channels, mode);
+}
+
 // ---- RT sink（驱动 bufferSwitch 线程调用；零锁零分配零 syscall）----
 void BridgeSink(void* ctx, float* in, float* out, int frames) {
     auto* c = static_cast<BridgeCtl*>(ctx);
@@ -213,7 +293,7 @@ void BridgeSink(void* ctx, float* in, float* out, int frames) {
         memcpy(out, in, bytes);
         return;
     }
-    if (c->process && c->engine) {
+    if (c->processGeometry && c->engine) {
         // P3 静音门控（单组）。测试注入是信号、旁路已提前返回，两者都不门控。
         const int testKind = InterlockedCompareExchange(&c->tc.testKind, 0, 0);
         if (c->gate.enabled && testKind == 0) {
@@ -226,7 +306,46 @@ void BridgeSink(void* ctx, float* in, float* out, int frames) {
                 return;
             }
         }
-        c->process(c->engine, in, out, frames);
+        aurahost::GeometrySnapshot expected{};
+        if (frames > c->scratchFrames || !c->engIn || !c->engOut ||
+            !c->requestedGeometry.Load(&expected)) {
+            memset(out, 0, bytes);
+            c->gate.NoteOutput(0.0f);
+            return;
+        }
+        const float* engineIn = in;
+        float* engineOut = out;
+        if (expected.channels != ch) {
+            if (expected.mode == 1) {
+                chmap_gather_discrete(in, ch, c->engIn, expected.channels,
+                                      frames);
+            } else if (expected.channels < ch) {
+                chmap_fold(in, ch, c->engIn, expected.channels, frames);
+            } else {
+                chmap_scatter_discrete(in, ch, c->engIn, expected.channels,
+                                       frames);
+            }
+            engineIn = c->engIn;
+            engineOut = c->engOut;
+        }
+        const auradsp_geometry expectedAbi{
+            expected.generation, expected.channels, expected.mode};
+        if (c->processGeometry(c->engine, engineIn, engineOut, frames,
+                               &expectedAbi) != AURADSP_OK) {
+            // 控制请求竞争中 expected 可能已不再是 active/pending；失败关闭，
+            // 不猜宽度、不触碰错误 stride 的输出缓冲。
+            memset(out, 0, bytes);
+            c->gate.NoteOutput(0.0f);
+            return;
+        }
+        if (expected.channels != ch) {
+            if (expected.mode == 0 && expected.channels > ch) {
+                chmap_fold(engineOut, expected.channels, out, ch, frames);
+            } else {
+                chmap_scatter_discrete(engineOut, expected.channels, out, ch,
+                                       frames);
+            }
+        }
         if (c->gate.enabled) {
             c->gate.NoteOutput(
                 aurabridge::GateScanInterleaved(out, (long long)frames * ch));
@@ -237,14 +356,19 @@ void BridgeSink(void* ctx, float* in, float* out, int frames) {
 }
 
 // "id=f1.5;gain=i3" 解析并下发引擎 handle（Dart 线程，无 RT 约束）。
-void ApplyParamsString(const char* s) {
-    if (!s || !*s || !g_b.setParam || !g_b.engine) {
-        if (s && *s && (!g_b.setParam || !g_b.engine)) ++g_b.paramsFailed;
+void ApplyParamsString(const char* s, int forcedChannels) {
+    if (!g_b.setParam || !g_b.engine || !g_b.requestGeometry) {
+        ++g_b.paramsFailed;
         return;
     }
+    int32_t desiredChannels = (int32_t)forcedChannels;
+    int32_t desiredMode = 0;
+    aurahost::GeometrySnapshot current{};
+    if (g_b.requestedGeometry.Load(&current)) desiredMode = current.mode;
+    bool geometrySeen = false;
     char buf[4096] = {0};
-    strncpy_s(buf, s, sizeof(buf) - 1);
-    // strtok 单线程调用（Dart 线程串行，无重入问题；同 05）。
+    if (s && *s) strncpy_s(buf, s, sizeof(buf) - 1);
+    // strtok 单线程调用（启动控制路径，无 RT 重入）。
     for (char* tok = strtok(buf, ";"); tok != nullptr; tok = strtok(nullptr, ";")) {
         char* eq = strchr(tok, '=');
         if (!eq || eq == tok) {
@@ -254,6 +378,17 @@ void ApplyParamsString(const char* s) {
         *eq = '\0';
         const char* id = tok;
         const char* vs = eq + 1;
+        if (strcmp(id, "channels.count") == 0) {
+            // ASIO ioCh 是宿主缓冲事实；参数镜像中的旧 count 不得覆盖它。
+            desiredChannels = (int32_t)forcedChannels;
+            geometrySeen = true;
+            continue;
+        }
+        if (strcmp(id, "channels.mode") == 0) {
+            desiredMode = (atoi(vs) != 0) ? 1 : 0;
+            geometrySeen = true;
+            continue;
+        }
         if (strchr(vs, '.') || strchr(vs, 'e') || strchr(vs, 'E')) {
             const float f = (float)atof(vs);
             if (g_b.setParam(g_b.engine, id, &f, 4) != 0) ++g_b.paramsFailed;
@@ -264,6 +399,11 @@ void ApplyParamsString(const char* s) {
             else ++g_b.paramsApplied;
         }
     }
+    if (!RequestBridgeGeometry(desiredChannels, desiredMode)) {
+        ++g_b.paramsFailed;
+    } else if (geometrySeen) {
+        ++g_b.paramsApplied;
+    }
 }
 
 void DestroyEngine() {
@@ -272,13 +412,17 @@ void DestroyEngine() {
     if (g_b.engMod) FreeLibrary(g_b.engMod);
     g_b.engMod = nullptr;
     g_b.create = nullptr;
-    g_b.process = nullptr;
+    g_b.processGeometry = nullptr;
+    g_b.requestGeometry = nullptr;
+    g_b.getActiveGeometry = nullptr;
     g_b.setParam = nullptr;
     g_b.getParam = nullptr;
     g_b.vizRead = nullptr;
     g_b.pcmRead = nullptr;
     g_b.destroy = nullptr;
     g_b.enginePath.clear();
+    FreeEngineScratch();
+    g_b.requestedGeometry.Reset();
     // P3：引擎没了门控一并作废（下次 start 会重新 Configure）。
     g_b.gate.Reset();
     g_b.gate.enabled = false;
@@ -402,7 +546,12 @@ int asio_start_ex(const char* driver_name, const char* engine_dll,
     unsigned engAbi = 0;
     if (g_b.engMod) {
         g_b.create = (FnEngCreate)GetProcAddress(g_b.engMod, "auradsp_create");
-        g_b.process = (FnEngProcess)GetProcAddress(g_b.engMod, "auradsp_process");
+        g_b.processGeometry = (FnEngProcessGeometry)GetProcAddress(
+            g_b.engMod, "auradsp_process_geometry");
+        g_b.requestGeometry = (FnEngRequestGeometry)GetProcAddress(
+            g_b.engMod, "auradsp_request_geometry");
+        g_b.getActiveGeometry = (FnEngGetActiveGeometry)GetProcAddress(
+            g_b.engMod, "auradsp_get_active_geometry");
         g_b.destroy = (FnEngDestroy)GetProcAddress(g_b.engMod, "auradsp_destroy");
         g_b.setParam = (FnEngSetParam)GetProcAddress(g_b.engMod, "auradsp_set_param");
         g_b.getParam = (FnEngGetParam)GetProcAddress(g_b.engMod, "auradsp_get_param");
@@ -415,7 +564,8 @@ int asio_start_ex(const char* driver_name, const char* engine_dll,
         engAbi = engAbiFn ? engAbiFn() : 0;
         g_pluginFns.Resolve(g_b.engMod);
     }
-    if (!g_b.engMod || !g_b.create || !g_b.process || !g_b.destroy ||
+    if (!g_b.engMod || !g_b.create || !g_b.processGeometry ||
+        !g_b.requestGeometry || !g_b.getActiveGeometry || !g_b.destroy ||
         !engAbiFn || engAbi != vmcore::kEngineAbiExpected) {
         if (engAbiFn && engAbi != vmcore::kEngineAbiExpected)
             snprintf(g_b.note, sizeof(g_b.note),
@@ -522,21 +672,29 @@ int asio_start_ex(const char* driver_name, const char* engine_dll,
             }
         }
 
+        if (!SeedBridgeGeometry()) {
+            snprintf(g_b.note, sizeof(g_b.note), "engine-geometry-snapshot-failed");
+            DestroyEngine();
+            g_b.host.close();
+            g_b.startRc = -6;
+            return -6;
+        }
+
         // 7) 挂 sink（必须在 start 前；RT 启动后不再更改指针）
         // P3：采样率/缓冲已定稿，配置静音门控（AURADSP_GATE=0 时禁用）。
         g_b.gate.Configure((long long)(g_b.sr > 0.0 ? g_b.sr : 48000.0));
+        if (!AllocateEngineScratch((int)g_b.nbs)) {
+            snprintf(g_b.note, sizeof(g_b.note), "engine-scratch-failed");
+            DestroyEngine();
+            g_b.host.close();
+            g_b.startRc = -6;
+            return -6;
+        }
         g_b.host.set_process_sink(&BridgeSink, &g_b);
 
-        // 8) 预下发参数 + 启动
-        ApplyParamsString(params_json);
-        // 传输声道数与引擎处理声道数必须等宽（process 读写按 channels.count 定 stride，
-        // 不等宽会错位）。桥以 io 声道数为权威，最后覆盖 mirror 可能带来的旧值。
-        if (g_b.setParam && g_b.engine) {
-            const int32_t cc = (int32_t)nCh;
-            if (g_b.setParam(g_b.engine, "channels.count", &cc, 4) != 0) {
-                snprintf(g_b.note, sizeof(g_b.note), "channels.count set failed (%ld)", nCh);
-            }
-        }
+        // 8) 预下发参数 + 启动。几何只经完整 request/expected 路径；ioCh
+        // 是宿主缓冲事实，参数镜像中的旧 channels.count 不得覆盖它。
+        ApplyParamsString(params_json, (int)nCh);
         if (!g_b.host.start()) {
             snprintf(g_b.note, sizeof(g_b.note), "asio-start-failed");
             DestroyEngine();
@@ -722,7 +880,7 @@ int asio_status(char* out, int cap) {
         g_b.dropouts,
         g_b.gate.enabled && g_b.gate.gated ? 1 : 0, g_b.gate.IdleMs(),
         eng,
-        (g_b.engine && g_b.process) ? "true" : "false",
+        (g_b.engine && g_b.processGeometry) ? "true" : "false",
         daw.seen ? 1 : 0, daw.active ? 1 : 0,
         (unsigned long long)daw.frames,
         (double)daw.peakIn, (double)daw.peakOut, daw.sr, daw.ch,
@@ -735,6 +893,14 @@ int asio_set_param(const char* id, int isFloat, const void* v4) {
     (void)isFloat;  // 引擎按 id 自身语义取 4 字节；isFloat 仅调用方提示用
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;
     if (!id || !v4 || !g_b.setParam || !g_b.engine) return -2;
+    if (strcmp(id, "channels.count") == 0 || strcmp(id, "channels.mode") == 0) {
+        int32_t value = 0;
+        memcpy(&value, v4, sizeof(value));
+        const bool ok = strcmp(id, "channels.count") == 0
+                            ? RequestBridgeChannels(value)
+                            : RequestBridgeMode(value != 0 ? 1 : 0);
+        return ok ? 0 : -3;
+    }
     return (g_b.setParam(g_b.engine, id, v4, 4) == 0) ? 0 : -3;
 }
 

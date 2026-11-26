@@ -116,6 +116,36 @@ void TestRequestIsPendingUntilProcess() {
           "first process block activates the complete requested geometry");
 }
 
+void TestIdenticalGeometryRequestIsNoOp() {
+    Engine e;
+    if (!e.h || !HasGeometryAbi(e)) return;
+    const Geometry initial = Active(e.h);
+    uint64_t first = 0;
+    Check(requestGeometry(e.h, 4, 1, &first) == AURADSP_OK,
+          "request initial quad discrete geometry");
+    uint64_t repeatedPending = 0;
+    Check(requestGeometry(e.h, 4, 1, &repeatedPending) == AURADSP_OK,
+          "identical pending geometry request succeeds");
+    Check(repeatedPending == first,
+          "identical pending request returns the current generation");
+    Check(Active(e.h).generation == initial.generation,
+          "identical pending request does not activate geometry early");
+    Process(e.h, 4);
+    const Geometry activated = Active(e.h);
+    Check(activated.generation == first && activated.channels == 4 &&
+              activated.mode == 1,
+          "first request still activates after the identical no-op");
+    uint64_t repeatedActive = 0;
+    Check(requestGeometry(e.h, 4, 1, &repeatedActive) == AURADSP_OK,
+          "identical active geometry request succeeds");
+    Check(repeatedActive == first,
+          "identical active request does not allocate a new generation");
+    uint64_t changed = 0;
+    Check(requestGeometry(e.h, 6, 0, &changed) == AURADSP_OK &&
+              changed == first + 1,
+          "changed geometry advances exactly once after identical requests");
+}
+
 void TestSequentialRequestsHaveOneWidthPerBlock() {
     Engine e;
     if (!e.h || !HasGeometryAbi(e)) return;
@@ -136,7 +166,9 @@ void TestSequentialRequestsHaveOneWidthPerBlock() {
         Check(after.generation == generation && after.channels == width &&
                   (after.mode == 0 || after.mode == 1),
               "post-block geometry has exactly the requested width and mode");
-        Check(after.generation > previous, "active generation increases per request");
+        Check(width == 2 ? after.generation == previous
+                         : after.generation > previous,
+              "changed requests advance generation while identical stereo is a no-op");
         previous = generation;
     }
 }
@@ -583,6 +615,7 @@ int main() {
     ResolveGeometryAbi();
     const TestFn tests[] = {
         TestRequestIsPendingUntilProcess,
+        TestIdenticalGeometryRequestIsNoOp,
         TestSequentialRequestsHaveOneWidthPerBlock,
         TestLatestRequestPublishesWholeGeometry,
         TestInvalidRequestsKeepPendingAndActiveGeneration,

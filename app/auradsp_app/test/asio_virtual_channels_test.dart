@@ -126,10 +126,10 @@ Map<String, dynamic> _paramsEvt({
       'channelsCountMode': channelsCountMode,
     };
 
-Map<String, dynamic> _vizEvt(int channelCount) => {
+Map<String, dynamic> _vizEvt(int channelCount, {int? ts}) => {
       'evt': 'viz',
       'backend': 'asio',
-      'ts': DateTime.now().millisecondsSinceEpoch,
+      'ts': ts ?? DateTime.now().millisecondsSinceEpoch,
       'spectrum': List<double>.filled(32, 0.0),
       'eqIn': List<double>.filled(32, 0.0),
       'l': -90.0,
@@ -537,7 +537,7 @@ void main() {
       expect(m.vizChannelCount.value, 8);
     });
 
-    test('匹配的新 token 无需重启/回退证据即可确认请求', () async {
+    test('首次请求只见活跃旧 writer 不确认，停启后才接受协商', () async {
       final registry = _FakeRegistry();
       final m = _virtualAsio(registry: registry);
       final commands = _IsoCommands(m);
@@ -546,24 +546,51 @@ void main() {
       m.asioActive = true;
       m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 100, 'dawCh': 2};
 
-      expect(m.setAsioDriverChannels(4), isTrue);
       expect(m.setAsioDriverChannels(8), isTrue);
       await commands.flush();
-      final newToken = commands.requestSeqs.last;
+      final token = commands.requestSeqs.single;
 
-      // 没有 stop，也没有 processedFrames 回退；精确 token 才是确认依据。
+      // 请求前没有该 writer 的 stopped 基线：首次 running=1 可能属于旧实例。
       m.handleMessageForTesting(
-          _asioStatusEvt(dawCh: 8, requestSeq: newToken, frames: 101));
-      // 确认后，后续真实协商宽度重新成为真源。
+          _asioStatusEvt(dawCh: 2, requestSeq: token, frames: 101));
+      expect(m.displayChannelCount, 8);
+      expect(m.vizChannelCount.value, 8);
+
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: token,
+        running: false,
+        frames: 102,
+      ));
       m.handleMessageForTesting(
-          _asioStatusEvt(dawCh: 2, requestSeq: newToken, frames: 102));
-      expect(m.displayChannelCount, 2);
-      expect(
-        m.sentParamsForTesting
-            .where((m) => m['id'] == 'channels.count')
-            .map((m) => m['value']),
-        [4, 8],
-      );
+          _asioStatusEvt(dawCh: 6, requestSeq: token, frames: 1));
+      expect(m.displayChannelCount, 6);
+      expect(m.vizChannelCount.value, 6);
+    });
+
+    test('请求前可信 stopped 基线允许首个 live token 确认', () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      final commands = _IsoCommands(m);
+      addTearDown(commands.close);
+      addTearDown(m.dispose);
+      m.asioInfo = {
+        'version': 4,
+        'writerPid': 100,
+        'driverRunning': false,
+        'dawSeen': 1,
+        'dawActive': 0,
+        'dawFrames': 100,
+        'dawCh': 2,
+      };
+
+      expect(m.setAsioDriverChannels(8), isTrue);
+      await commands.flush();
+      final token = commands.requestSeqs.single;
+      m.handleMessageForTesting(
+          _asioStatusEvt(dawCh: 6, requestSeq: token, frames: 1));
+      expect(m.displayChannelCount, 6);
+      expect(m.vizChannelCount.value, 6);
     });
 
     test('旧 running=1 + 新 token 不确认，停启 epoch 后才接受 dawCh', () async {
@@ -578,6 +605,13 @@ void main() {
       expect(m.setAsioDriverChannels(4), isTrue);
       await commands.flush();
       final oldToken = commands.requestSeqs.last;
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: oldToken,
+        writerPid: 100,
+        running: false,
+        frames: 99,
+      ));
       m.handleMessageForTesting(_asioStatusEvt(
         dawCh: 2,
         requestSeq: oldToken,
@@ -662,7 +696,7 @@ void main() {
       expect(m.displayChannelCount, 6);
     });
 
-    test('新 writerPid 可确认 token，重叠旧 writer 不污染已确认几何', () async {
+    test('新 writerPid 停启后确认 token，重叠旧 writer 不污染已确认几何', () async {
       final registry = _FakeRegistry();
       final m = _virtualAsio(registry: registry);
       final commands = _IsoCommands(m);
@@ -674,6 +708,13 @@ void main() {
       expect(m.setAsioDriverChannels(4), isTrue);
       await commands.flush();
       final oldToken = commands.requestSeqs.last;
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: oldToken,
+        writerPid: 100,
+        running: false,
+        frames: 99,
+      ));
       m.handleMessageForTesting(_asioStatusEvt(
         dawCh: 2,
         requestSeq: oldToken,
@@ -692,10 +733,17 @@ void main() {
       ));
       expect(m.displayChannelCount, 8);
       m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: token,
+        writerPid: 200,
+        running: false,
+        frames: 1,
+      ));
+      m.handleMessageForTesting(_asioStatusEvt(
         dawCh: 6,
         requestSeq: token,
         writerPid: 200,
-        frames: 1,
+        frames: 2,
       ));
       expect(m.displayChannelCount, 6);
 
@@ -726,6 +774,13 @@ void main() {
         dawCh: 2,
         requestSeq: firstToken,
         writerPid: 100,
+        running: false,
+        frames: 99,
+      ));
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: firstToken,
+        writerPid: 100,
         frames: 100,
       ));
       expect(m.displayChannelCount, 2);
@@ -734,21 +789,29 @@ void main() {
       await commands.flush();
       final secondToken = commands.requestSeqs.last;
       m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: secondToken,
+        writerPid: 200,
+        running: false,
+        frames: 1,
+      ));
+      m.handleMessageForTesting(_asioStatusEvt(
         dawCh: 6,
         requestSeq: secondToken,
         writerPid: 200,
-        frames: 1,
+        frames: 2,
       ));
       expect(m.displayChannelCount, 6);
 
-      // T1 的迟到事件只能登记 writer 身份，不能替换 T2 的当前历史。
+      // T1 的迟到事件只能登记 writer 身份，不能替换 T2 的当前历史；
+      // 但 live v4 token 已漂移，因此 accepted=6 不得继续冒充当前几何。
       m.handleMessageForTesting(_asioStatusEvt(
         dawCh: 2,
         requestSeq: firstToken,
         writerPid: 100,
         frames: 101,
       ));
-      expect(m.displayChannelCount, 6);
+      expect(m.displayChannelCount, 8);
 
       expect(m.setAsioDriverChannels(4), isTrue);
       await commands.flush();
@@ -841,6 +904,46 @@ void main() {
             .map((m) => m['value']),
         [8],
       );
+    });
+
+    test('已确认 token 在 isoReady 重放，异 live token 不复用 acceptedDawCh',
+        () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      addTearDown(m.dispose);
+      m.asioInfo = {
+        'version': 4,
+        'writerPid': 100,
+        'driverRunning': false,
+        'dawSeen': 1,
+        'dawActive': 0,
+        'dawFrames': 100,
+        'dawCh': 2,
+      };
+      final first = _IsoCommands(m);
+      addTearDown(first.close);
+
+      expect(m.setAsioDriverChannels(8), isTrue);
+      await first.flush();
+      final token = first.requestSeqs.single;
+      m.handleMessageForTesting(
+          _asioStatusEvt(dawCh: 6, requestSeq: token, frames: 1));
+      expect(m.displayChannelCount, 6);
+
+      final restarted = _IsoCommands(m);
+      addTearDown(restarted.close);
+      await restarted.flush();
+      expect(restarted.requestSeqs, [token]);
+
+      // 已确认几何只属于原 token；异 token 的 live v4 块不得回放 accepted=6。
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: token + 1,
+        writerPid: 100,
+        frames: 2,
+      ));
+      expect(m.displayChannelCount, 8);
+      expect(m.vizChannelCount.value, 8);
     });
 
     test('同实例 stop/start 保留旧 token，帧回退不再误确认', () async {
@@ -968,6 +1071,25 @@ void main() {
       ));
       expect(m.displayChannelCount, 8);
       expect(m.vizChannelCount.value, 8);
+    });
+
+    test('virtual→Client 清除旧 viz epoch，迟到旧帧不重建流宽', () {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      addTearDown(m.dispose);
+      m.asioDriverChannels = 8;
+      m.noteStreamChannelCount(8);
+      m.vizChannelCount.value = 8;
+      expect(m.displayChannelCount, 8);
+
+      m.setAsioFlavor(AudioModes.asioClient);
+      expect(m.displayChannelCount, 2);
+      expect(m.vizChannelCount.value, 2);
+
+      // 帧在形态切换前生成、之后才送达：频谱可收，但不得重建旧流 epoch。
+      m.handleMessageForTesting(_vizEvt(8, ts: 1));
+      expect(m.displayChannelCount, 2);
+      expect(m.vizChannelCount.value, 2);
     });
 
     test('virtual→Client→driver4→virtual 不复活旧请求', () {

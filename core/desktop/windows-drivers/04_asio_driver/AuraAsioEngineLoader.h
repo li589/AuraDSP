@@ -22,7 +22,13 @@ class AuraAsioEngineLoader {
 public:
     using FnEngCreate = void*(__cdecl*)(float sampleRate, int maxBlockFrames);
     using FnEngDestroy = void(__cdecl*)(void* handle);
-    using FnEngProcess = void(__cdecl*)(void* handle, const float* in, float* out, int frames);
+    using FnEngProcessGeometry = auradsp_status(__cdecl*)(
+        void* handle, const float* in, float* out, int frames,
+        const auradsp_geometry* expected);
+    using FnEngRequestGeometry = auradsp_status(__cdecl*)(
+        void* handle, int32_t channels, int32_t mode, uint64_t* generation);
+    using FnEngGetActiveGeometry = auradsp_status(__cdecl*)(
+        void* handle, auradsp_geometry* out);
     using FnEngSetParam = int(__cdecl*)(void* handle, const char* id, const void* value, unsigned int bytes);
     using FnEngGetParam = int(__cdecl*)(void* handle, const char* id, void* outValue, unsigned int bytes);
     // S4：viz 帧读取（频谱回传）。帧结构以引擎公共头为准。
@@ -34,7 +40,9 @@ public:
     }
 
     bool Load() {
-        if (m_hModule && m_pfnProcess) return true;
+        if (m_hModule && m_pfnProcessGeometry && m_pfnRequestGeometry &&
+            m_pfnGetActiveGeometry)
+            return true;
 
         // 加载纪律（2026-11-22 审查 N4 裁定，与 APO 侧 A2 对齐）：
         // 候选只许两处——① 本驱动 DLL 同目录；② 安装目录
@@ -70,17 +78,25 @@ public:
             if (h) {
                 auto fnCreate = (FnEngCreate)GetProcAddress(h, "auradsp_create");
                 auto fnDestroy = (FnEngDestroy)GetProcAddress(h, "auradsp_destroy");
-                auto fnProcess = (FnEngProcess)GetProcAddress(h, "auradsp_process");
+                auto fnProcessGeometry = (FnEngProcessGeometry)GetProcAddress(
+                    h, "auradsp_process_geometry");
+                auto fnRequestGeometry = (FnEngRequestGeometry)GetProcAddress(
+                    h, "auradsp_request_geometry");
+                auto fnGetActiveGeometry = (FnEngGetActiveGeometry)GetProcAddress(
+                    h, "auradsp_get_active_geometry");
                 auto fnSetParam = (FnEngSetParam)GetProcAddress(h, "auradsp_set_param");
                 auto fnGetParam = (FnEngGetParam)GetProcAddress(h, "auradsp_get_param");
                 // viz 为可选绑定：缺失只丢频谱回传，不否决引擎装载。
                 auto fnVizRead = (FnEngVizRead)GetProcAddress(h, "auradsp_viz_read");
 
-                if (fnCreate && fnDestroy && fnProcess) {
+                if (fnCreate && fnDestroy && fnProcessGeometry &&
+                    fnRequestGeometry && fnGetActiveGeometry) {
                     m_hModule = h;
                     m_pfnCreate = fnCreate;
                     m_pfnDestroy = fnDestroy;
-                    m_pfnProcess = fnProcess;
+                    m_pfnProcessGeometry = fnProcessGeometry;
+                    m_pfnRequestGeometry = fnRequestGeometry;
+                    m_pfnGetActiveGeometry = fnGetActiveGeometry;
                     m_pfnSetParam = fnSetParam;
                     m_pfnGetParam = fnGetParam;
                     m_pfnVizRead = fnVizRead;
@@ -100,7 +116,9 @@ public:
         }
         m_pfnCreate = nullptr;
         m_pfnDestroy = nullptr;
-        m_pfnProcess = nullptr;
+        m_pfnProcessGeometry = nullptr;
+        m_pfnRequestGeometry = nullptr;
+        m_pfnGetActiveGeometry = nullptr;
         m_pfnSetParam = nullptr;
         m_pfnGetParam = nullptr;
         m_pfnVizRead = nullptr;
@@ -108,7 +126,8 @@ public:
     }
 
     bool IsLoaded() const {
-        return m_hModule != nullptr && m_pfnProcess != nullptr;
+        return m_hModule != nullptr && m_pfnProcessGeometry != nullptr &&
+               m_pfnRequestGeometry != nullptr && m_pfnGetActiveGeometry != nullptr;
     }
 
     const std::wstring& GetLoadedPath() const {
@@ -139,13 +158,28 @@ public:
 
     bool HasViz() const { return m_pfnVizRead != nullptr; }
 
-    void Process(void* handle, const float* in, float* out, int frames,
-                 int channels) {
-        if (m_pfnProcess && handle) {
-            m_pfnProcess(handle, in, out, frames);
-        } else if (out && in && frames > 0 && channels > 0) {
-            memcpy(out, in, (size_t)frames * (size_t)channels * sizeof(float));
+    auradsp_status ProcessGeometry(void* handle, const float* in, float* out,
+                                   int frames,
+                                   const auradsp_geometry* expected) {
+        if (m_pfnProcessGeometry && handle) {
+            return m_pfnProcessGeometry(handle, in, out, frames, expected);
         }
+        return AURADSP_E_STATE;
+    }
+
+    auradsp_status RequestGeometry(void* handle, int32_t channels, int32_t mode,
+                                   uint64_t* generation) {
+        if (m_pfnRequestGeometry && handle) {
+            return m_pfnRequestGeometry(handle, channels, mode, generation);
+        }
+        return AURADSP_E_STATE;
+    }
+
+    auradsp_status GetActiveGeometry(void* handle, auradsp_geometry* out) {
+        if (m_pfnGetActiveGeometry && handle) {
+            return m_pfnGetActiveGeometry(handle, out);
+        }
+        return AURADSP_E_STATE;
     }
 
     int SetParam(void* handle, const char* id, const void* value, unsigned int bytes) {
@@ -177,6 +211,11 @@ public:
             *eq = '\0';
             const char* id = tok;
             const char* vs = eq + 1;
+            // Geometry is one control-side transaction; legacy setters would
+            // publish count/mode separately and make the RT pump guess widths.
+            if (strcmp(id, "channels.count") == 0 ||
+                strcmp(id, "channels.mode") == 0)
+                continue;
             if (strchr(vs, '.') || strchr(vs, 'e') || strchr(vs, 'E')) {
                 const float f = (float)atof(vs);
                 if (m_pfnSetParam(handle, id, &f, sizeof(float)) == 0) ++applied;
@@ -195,7 +234,9 @@ private:
     std::wstring m_loadedPath;
     FnEngCreate m_pfnCreate = nullptr;
     FnEngDestroy m_pfnDestroy = nullptr;
-    FnEngProcess m_pfnProcess = nullptr;
+    FnEngProcessGeometry m_pfnProcessGeometry = nullptr;
+    FnEngRequestGeometry m_pfnRequestGeometry = nullptr;
+    FnEngGetActiveGeometry m_pfnGetActiveGeometry = nullptr;
     FnEngSetParam m_pfnSetParam = nullptr;
     FnEngGetParam m_pfnGetParam = nullptr;
     FnEngVizRead m_pfnVizRead = nullptr;

@@ -24,6 +24,7 @@
 #include "AuraAsioWasapiSink.h"
 #include "AuraAsioEngineLoader.h"
 #include "AsioDriverShared.h"
+#include "../common/HostGeometry.h"
 
 class AuraAsioDriver : public IASIO {
 public:
@@ -72,7 +73,9 @@ public:
 
 private:
     static DWORD WINAPI AudioPumpThreadProc(LPVOID param);
+    static DWORD WINAPI AudioControlThreadProc(LPVOID param);
     DWORD PumpLoop();
+    DWORD ControlLoop();
     void LoadConfiguredChannels();  // 启动前从注册表读取档位（默认 2）
     void CaptureChannelRequestSeq(); // init 时捕获参数块请求代号（start 不重捕）
 
@@ -92,6 +95,7 @@ private:
     // 声道数回落引擎默认 2，多声道流被当成立体声处理（2026-11-24
     // 宾机实测定罪；回归钉在 smoke_asio_driver 的 REAPER 调用序段）。
     void FinishEngineSetup();
+    bool RequestEngineGeometry(int32_t channels, int32_t mode);
     HANDLE m_hTelemetryMap = nullptr;
     AsioDriverTelemetryBlock* m_telemetry = nullptr;
     // S4 参数块（只读映射；App 未运行时缺席，引擎保持默认参数
@@ -100,7 +104,7 @@ private:
     const AsioDriverParamsBlock* m_params = nullptr;
     long m_lastParamSeq = 0;  // 上次应用的 writeSeq（v2 偶数稳定值）
     int m_paramsRetry = 0;
-    bool m_paramsMuted = false;  // 泵线程独占（Pull 与消费同线程）
+    std::atomic<bool> m_paramsMuted{false};  // control worker 发布，pump 消费
 
     std::atomic<long> m_refCount{1};
 
@@ -127,6 +131,8 @@ private:
     // 时钟与线程
     HANDLE m_hThread = nullptr;
     HANDLE m_hStopEvent = nullptr;
+    HANDLE m_hControlThread = nullptr;
+    HANDLE m_hControlStopEvent = nullptr;
     int m_toggle = 0;
 
     // Phase 2：WASAPI 默认端点直通渲染汇
@@ -151,10 +157,10 @@ private:
     float* m_foldR = nullptr;
     float* m_multiOut = nullptr;
 
-    // W6：流宽 ↔ 引擎宽解耦。m_engineCh 是 channels.count 的影子
-    // （参数块下发，缺省跟随 DAW 协商流宽），m_channelMode 是
-    // channels.mode 影子（0=矩阵 / 1=离散）。两者只在泵线程写读；
-    // createBuffers / FinishEngineSetup 在建引擎时同步。
+    // W6：流宽 ↔ 引擎宽解耦。requestedGeometry 由非 RT 控制 worker 发布；
+    // m_engineCh/m_channelMode 只由泵在完整 active 与 requested 同代同宽
+    // 匹配后发布（0=矩阵 / 1=离散）。控制侧失败绝不提前改写宿主步进。
+    aurahost::GeometryState m_requestedGeometry;
     int m_engineCh = 2;
     int m_channelMode = 0;
     // 宽度不一致时的适配缓冲（bufferSize * kMaxChannels）。离散用
@@ -163,7 +169,7 @@ private:
     float* m_engOut = nullptr;
     // W7：输出端点热切换——参数块 reserved1[0] 的序号变化即触发重开汇。
     long m_lastEndpointSeq = -1;  // L4：-1 = 尚未采纳基线，首个稳定块直接采纳现值不触发重开汇
-    bool m_sinkReloadReq = false;  // 泵线程独占（Pull 置位、块边界消费）
+    std::atomic<bool> m_sinkReloadReq{false};  // worker 置位，pump 块边界消费
 
     char m_errorMessage[128] = {0};
 };

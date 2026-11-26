@@ -16,13 +16,12 @@ import sys
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-CANDS = [
-    os.environ.get("AURADSP_ENGINE_DLL", ""),
-    os.path.join(ROOT, "test", "auradsp_engine.dll"),
-    os.path.join(ROOT, "core", "desktop", "windows", "out", "Release",
-                 "auradsp_engine.dll"),
-]
-DLL = next((p for p in CANDS if p and os.path.exists(p)), None)
+sys.path.insert(0, os.path.join(ROOT, "test"))
+from engine_artifact import find_engine_lib  # noqa: E402
+
+# Explicit override remains available for sanitizer/fault-injection builds;
+# otherwise the canonical Release artifact wins over stale test/ copies.
+DLL = os.environ.get("AURADSP_ENGINE_DLL") or find_engine_lib(platform="windows")
 SR, N = 48000.0, 256
 EEL_MATRIX_RT_FORBIDDEN = -10.0
 RT_PROCESS_LIMIT_SECONDS = 3.0

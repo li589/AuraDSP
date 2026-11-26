@@ -32,12 +32,12 @@ int ParseParamInt(const std::string& s, const char* id, int def) {
     return def;
 }
 
-// 引擎宽度合法区间：1..8（与 AuraAsioDriver::kMaxChannels 同值；
-// 匿名命名空间在类外，取字面量并在此注明来源）。
+// 引擎只接受 2/4/6/8。非法/奇数输入先钳到 [2,8]，再向上取最近偶数：
+// 1→2、3→4、5→6、7→8；请求失败时宿主仍保留上一份完整 active 几何。
 int ClampEngineChannels(int ch) {
-    if (ch < 1) return 1;
+    if (ch < 2) return 2;
     if (ch > 8) return 8;
-    return ch;
+    return (ch + 1) & ~1;
 }
 
 }  // namespace
@@ -194,17 +194,32 @@ void AuraAsioDriver::FinishEngineSetup() {
     if (!m_pendingParamString.empty()) {
         m_engineLoader.ApplyParamsString(m_engine, m_pendingParamString.c_str());
     }
-    // W6：不再把 channels.count 钉成流宽——App 的 4.0/2.0 档位要让
-    // 引擎按窄宽度处理，宽度不一致由泵内 chmap 适配层承担（gather/
-    // fold/scatter）。参数串未下发时按流宽起步，避免引擎默认 2 声道
-    // 误读 8 宽流；参数串已下发则以 App 值为准（幂等重放一次）。
+    // 参数串中的 count/mode 只决定请求，不在控制侧发布 active 宿主宽度。
     const int fromParams =
         ParseParamInt(m_pendingParamString, "channels.count", 0);
-    m_engineCh = (fromParams > 0) ? ClampEngineChannels(fromParams)
-                                  : ClampEngineChannels((int)m_channels);
-    m_channelMode = ParseParamInt(m_pendingParamString, "channels.mode", 0);
-    int nCh = m_engineCh;
-    m_engineLoader.SetParam(m_engine, "channels.count", &nCh, (uint32_t)sizeof(nCh));
+    const int channels = fromParams > 0
+                             ? ClampEngineChannels(fromParams)
+                             : ClampEngineChannels((int)m_channels);
+    const int mode = ParseParamInt(m_pendingParamString, "channels.mode", 0) != 0
+                         ? 1
+                         : 0;
+    (void)RequestEngineGeometry(channels, mode);
+}
+
+bool AuraAsioDriver::RequestEngineGeometry(int32_t channels, int32_t mode) {
+    if (!m_engine ||
+        (channels != 2 && channels != 4 && channels != 6 && channels != 8) ||
+        (mode != 0 && mode != 1))
+        return false;
+    aurahost::GeometrySnapshot current{};
+    if (m_requestedGeometry.Load(&current) &&
+        current.channels == channels && current.mode == mode)
+        return true;
+    uint64_t generation = 0;
+    if (m_engineLoader.RequestGeometry(m_engine, channels, mode, &generation) !=
+        AURADSP_OK)
+        return false;
+    return m_requestedGeometry.Publish({generation, channels, mode});
 }
 
 ASIOError AuraAsioDriver::setSampleRate(ASIOSampleRate sampleRate) {
@@ -213,6 +228,8 @@ ASIOError AuraAsioDriver::setSampleRate(ASIOSampleRate sampleRate) {
     m_sampleRate = sampleRate;
     if (m_engine) {
         m_engineLoader.DestroyEngine(m_engine);
+        m_engine = nullptr;
+        m_requestedGeometry.Reset();
         m_engine = m_engineLoader.CreateEngine((float)m_sampleRate, (int)m_bufferSize);
         FinishEngineSetup();
     }
@@ -327,6 +344,7 @@ ASIOError AuraAsioDriver::createBuffers(ASIOBufferInfo* bufferInfos, long numCha
         m_engineLoader.Load();
     }
     if (m_engineLoader.IsLoaded()) {
+        m_requestedGeometry.Reset();
         m_engine = m_engineLoader.CreateEngine((float)m_sampleRate, (int)m_bufferSize);
         FinishEngineSetup();
     }
@@ -379,6 +397,9 @@ ASIOError AuraAsioDriver::disposeBuffers() {
         m_engineLoader.DestroyEngine(m_engine);
         m_engine = nullptr;
     }
+    m_requestedGeometry.Reset();
+    m_paramsMuted.store(false, std::memory_order_release);
+    m_sinkReloadReq.store(false, std::memory_order_release);
 
     if (m_interleavedIn) {
         _aligned_free(m_interleavedIn);
@@ -616,8 +637,8 @@ void AuraAsioDriver::CloseParams() {
 // v2 奇偶 seqlock（与 APO 参数块同协议）：读前 writeSeq 必须为偶数
 // 且与上次应用值不同；拷完载荷/bypass/mute 后再读一次，两次相同才
 // 采信——写者处于奇数写入窗口、或拷贝期间又写一轮，必被识破，本轮
-// 放弃、下块重试。泵线程调用（非 RT 回调），引擎 set_param 的线程
-// 安全口径与 APO worker 应用参数同级。
+// 放弃、下块重试。非 RT control worker 调用；参数应用、几何请求与可能
+// 分配/重建的 set_param 全部留在该线程，MMCSS pump 只消费原子快照。
 void AuraAsioDriver::PullParamsFromBlock() {
     if (!m_params) {
         // 块缺席（App 后启）：低频重试打开（约每 600 块一次），
@@ -647,12 +668,12 @@ void AuraAsioDriver::PullParamsFromBlock() {
     if (m_params->writeSeq != s1) return;  // 拷贝期间写者又写一轮，下块重试
     m_lastParamSeq = s1;
     m_pendingParamString = snapshot;
-    // W6：参数串是引擎宽度的权威（App 的 4.0/2.0 档位经此到达
-    // DAW 进程内引擎）；串里没有时跟流宽，绝不让引擎沿用旧窄宽度
-    // 去误读更宽的流。
-    m_engineCh = ClampEngineChannels(
+    // W6：参数串是引擎请求宽度的权威；串里没有时跟流宽。这里只归一化
+    // 并请求完整几何，m_engineCh/m_channelMode 仍由 pump 的 active 快照发布。
+    const int requestedChannels = ClampEngineChannels(
         ParseParamInt(snapshot, "channels.count", (int)m_channels));
-    m_channelMode = ParseParamInt(snapshot, "channels.mode", 0);
+    const int requestedMode =
+        ParseParamInt(snapshot, "channels.mode", 0) != 0 ? 1 : 0;
     // W7：端点序号变化即请求重开汇（reserved1[0]，旧 App 恒 0 不触发）。
     // [审查 L4 2026-11-25] 首个稳定块直接采纳现值作基线：App 跨会话
     // 切换过端点时序号已非 0，旧初值 0 会让 DAW 启动首块多一次无谓
@@ -662,13 +683,14 @@ void AuraAsioDriver::PullParamsFromBlock() {
         m_lastEndpointSeq = epSeq;
     } else if (epSeq != m_lastEndpointSeq) {
         m_lastEndpointSeq = epSeq;
-        m_sinkReloadReq = true;
+        m_sinkReloadReq.store(true, std::memory_order_release);
     }
-    m_paramsMuted = (mute != 0);
+    m_paramsMuted.store(mute != 0, std::memory_order_release);
     m_bypass.store(bypass != 0, std::memory_order_relaxed);
     if (m_engine && !snapshot.empty()) {
         m_engineLoader.ApplyParamsString(m_engine, snapshot.c_str());
     }
+    (void)RequestEngineGeometry(requestedChannels, requestedMode);
 }
 
 void AuraAsioDriver::PublishTelemetrySinkState() {
@@ -700,10 +722,38 @@ ASIOError AuraAsioDriver::start() {
     OpenTelemetry();
     OpenParams();
 
-    m_hThread = CreateThread(nullptr, 0, AudioPumpThreadProc, this, 0, nullptr);
-    if (!m_hThread) {
+    m_hControlStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!m_hControlStopEvent) {
         CloseHandle(m_hStopEvent);
         m_hStopEvent = nullptr;
+        CloseTelemetry();
+        CloseParams();
+        return ASE_HWMalfunction;
+    }
+    m_hControlThread = CreateThread(
+        nullptr, 0, AudioControlThreadProc, this, 0, nullptr);
+    if (!m_hControlThread) {
+        CloseHandle(m_hControlStopEvent);
+        m_hControlStopEvent = nullptr;
+        CloseHandle(m_hStopEvent);
+        m_hStopEvent = nullptr;
+        CloseTelemetry();
+        CloseParams();
+        return ASE_HWMalfunction;
+    }
+
+    m_hThread = CreateThread(nullptr, 0, AudioPumpThreadProc, this, 0, nullptr);
+    if (!m_hThread) {
+        SetEvent(m_hControlStopEvent);
+        WaitForSingleObject(m_hControlThread, 2000);
+        CloseHandle(m_hControlThread);
+        m_hControlThread = nullptr;
+        CloseHandle(m_hControlStopEvent);
+        m_hControlStopEvent = nullptr;
+        CloseHandle(m_hStopEvent);
+        m_hStopEvent = nullptr;
+        CloseTelemetry();
+        CloseParams();
         return ASE_HWMalfunction;
     }
 
@@ -714,13 +764,29 @@ ASIOError AuraAsioDriver::start() {
 
 ASIOError AuraAsioDriver::stop() {
     if (!m_started) return ASE_OK;
-    m_started = false;
 
-    if (m_hStopEvent) {
-        SetEvent(m_hStopEvent);
+    if (m_hControlStopEvent) SetEvent(m_hControlStopEvent);
+    if (m_hStopEvent) SetEvent(m_hStopEvent);
+    const bool controlExited =
+        !m_hControlThread ||
+        WaitForSingleObject(m_hControlThread, 2000) == WAIT_OBJECT_0;
+    const bool pumpExited =
+        !m_hThread || WaitForSingleObject(m_hThread, 2000) == WAIT_OBJECT_0;
+    if (!controlExited || !pumpExited) {
+        // 任一控制/泵线程仍可能触碰引擎或映射：失败关闭，保留句柄与
+        // m_started 供下一次 stop 重试，绝不提前 unmap/destroy 造成 UAF。
+        return ASE_HWMalfunction;
+    }
+    m_started = false;
+    if (m_hControlThread) {
+        CloseHandle(m_hControlThread);
+        m_hControlThread = nullptr;
+    }
+    if (m_hControlStopEvent) {
+        CloseHandle(m_hControlStopEvent);
+        m_hControlStopEvent = nullptr;
     }
     if (m_hThread) {
-        WaitForSingleObject(m_hThread, 2000);
         CloseHandle(m_hThread);
         m_hThread = nullptr;
     }
@@ -734,6 +800,21 @@ ASIOError AuraAsioDriver::stop() {
 }
 
 // ---------------- RT 时钟泵线程 ----------------
+
+DWORD WINAPI AuraAsioDriver::AudioControlThreadProc(LPVOID param) {
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    auto* self = static_cast<AuraAsioDriver*>(param);
+    const DWORD result = self->ControlLoop();
+    if (SUCCEEDED(hr)) CoUninitialize();
+    return result;
+}
+
+DWORD AuraAsioDriver::ControlLoop() {
+    while (WaitForSingleObject(m_hControlStopEvent, 2) == WAIT_TIMEOUT) {
+        PullParamsFromBlock();
+    }
+    return 0;
+}
 
 DWORD WINAPI AuraAsioDriver::AudioPumpThreadProc(LPVOID param) {
     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
@@ -766,8 +847,7 @@ DWORD AuraAsioDriver::PumpLoop() {
     while (WaitForSingleObject(m_hStopEvent, 0) == WAIT_TIMEOUT) {
         qpcNext.QuadPart += ticksPerBlock;
 
-        // S4：参数块拉取（seq 未变时仅一次原子读，开销可忽略）。
-        PullParamsFromBlock();
+        // 参数/几何应用已移到非 RT control worker；pump 只读取完整快照。
 
         // W7：端点序号变化 → 块边界重开汇。重开会阻塞几十 ms
         // （COM + Initialize），换输出设备本来就要断音，DAW 侧只
@@ -786,12 +866,30 @@ DWORD AuraAsioDriver::PumpLoop() {
 
         // Phase 2 / Phase 3：提取对立半区（DAW 在上一个时钟周期已填毕的数据）
         const long ch = m_channels;
-        // W6：引擎宽度（channels.count 影子）。不等宽时走适配层，
-        // 等宽时保持零拷贝旧路径。
-        const int engCh = (m_engineCh >= 1 && m_engineCh <= (int)kMaxChannels)
-                              ? m_engineCh
-                              : (int)ch;
-        const bool widthAdapt = (engCh != (int)ch);
+        aurahost::GeometrySnapshot requested{};
+        aurahost::GeometrySnapshot active{};
+        auradsp_geometry activeAbi{};
+        const bool haveRequested = m_requestedGeometry.Load(&requested);
+        bool haveActive =
+            m_engineLoader.GetActiveGeometry(m_engine, &activeAbi) == AURADSP_OK;
+        if (haveActive) {
+            active = {activeAbi.generation, activeAbi.channels, activeAbi.mode};
+        }
+        haveActive = haveActive &&
+            aurahost::ValidGeometry(
+                {active.generation, active.channels, active.mode});
+        const bool geometryReady =
+            haveRequested && haveActive &&
+            requested.generation == active.generation &&
+            requested.channels == active.channels &&
+            requested.mode == active.mode;
+        if (geometryReady) {
+            // 唯一宿主宽度发布点：完整 active 与 requested 一致后才生效。
+            m_engineCh = active.channels;
+            m_channelMode = active.mode;
+        }
+        const int engCh = m_engineCh;  // telemetry/旧完整宿主几何
+        const bool widthAdapt = geometryReady && (engCh != (int)ch);
         const long playIndex = 1 - currentToggle;
 
         float telePeakIn = 0.0f, telePeakOut = 0.0f;
@@ -812,47 +910,71 @@ DWORD AuraAsioDriver::PumpLoop() {
                 // 遥测峰值随折叠归零、频谱走清零分支。
                 memset(m_proc, 0, (size_t)m_bufferSize * (size_t)ch * sizeof(float));
             } else if (m_engine && !m_bypass.load(std::memory_order_relaxed)) {
-                // W6：流宽 ↔ 引擎宽适配。
-                //   离散（mode=1）：按 chmap_stream_pos 取声道，映射外
-                //     丢弃——4ch 引擎的 BL/BR 取自 8 宽流的 6/7，不会
-                //     把 C/LFE 误当 BL/BR（本轮 4.0 错位的根因）。
-                //   矩阵（mode=0）收窄：chmap_fold 折叠保能量（8→6 时
-                //     BL/BR 折进 SL/SR）。
-                //   矩阵扩张：按布局放置，静音槽交给引擎上混/填充。
-                const float* engIn = m_interleavedIn;
-                float* engOut = m_interleavedOut;
-                if (widthAdapt) {
-                    if (m_channelMode != 0) {
-                        chmap_gather_discrete(m_interleavedIn, (int)ch,
-                                              m_engIn, engCh,
-                                              (int)m_bufferSize);
-                    } else if (engCh < (int)ch) {
-                        chmap_fold(m_interleavedIn, (int)ch, m_engIn, engCh,
+                if (!geometryReady) {
+                    // 过渡块只用固定 scratch 以零输入激活完整 requested；
+                    // 宿主仍保留上一份 active 步进并输出静音。请求竞争导致
+                    // E_STATE 时同样静音，绝不按旧宽度解释当前块。
+                    memset(m_proc, 0,
+                           (size_t)m_bufferSize * (size_t)ch * sizeof(float));
+                    if (haveRequested && m_engIn && m_engOut) {
+                        const int target = requested.channels;
+                        memset(m_engIn, 0,
+                               (size_t)m_bufferSize * (size_t)target *
+                                   sizeof(float));
+                        const auradsp_geometry expected{
+                            requested.generation, requested.channels,
+                            requested.mode};
+                        if (m_engineLoader.ProcessGeometry(
+                                m_engine, m_engIn, m_engOut,
+                                (int)m_bufferSize, &expected) == AURADSP_OK) {
+                            m_dspProcessedFrames.fetch_add(
+                                (uint64_t)m_bufferSize,
+                                std::memory_order_relaxed);
+                        }
+                    }
+                } else {
+                    // W6：流宽 ↔ active 引擎宽适配。expected 与宿主实际
+                    // scratch/精确缓冲同宽，legacy process 不再进入 pump。
+                    const float* engIn = m_interleavedIn;
+                    float* engOut = m_interleavedOut;
+                    if (widthAdapt) {
+                        if (m_channelMode != 0) {
+                            chmap_gather_discrete(m_interleavedIn, (int)ch,
+                                                  m_engIn, engCh,
+                                                  (int)m_bufferSize);
+                        } else if (engCh < (int)ch) {
+                            chmap_fold(m_interleavedIn, (int)ch, m_engIn, engCh,
+                                       (int)m_bufferSize);
+                        } else {
+                            chmap_scatter_discrete(m_interleavedIn, (int)ch,
+                                                   m_engIn, engCh,
+                                                   (int)m_bufferSize);
+                        }
+                        engIn = m_engIn;
+                        engOut = m_engOut;
+                    }
+                    const auradsp_geometry expected{
+                        active.generation, active.channels, active.mode};
+                    const auradsp_status status = m_engineLoader.ProcessGeometry(
+                        m_engine, engIn, engOut, (int)m_bufferSize, &expected);
+                    if (status != AURADSP_OK) {
+                        memset(m_proc, 0,
+                               (size_t)m_bufferSize * (size_t)ch * sizeof(float));
+                    } else if (!widthAdapt) {
+                        memcpy(m_proc, engOut,
+                               (size_t)m_bufferSize * (size_t)ch * sizeof(float));
+                    } else if (m_channelMode == 0 && engCh > (int)ch) {
+                        chmap_fold(engOut, engCh, m_proc, (int)ch,
                                    (int)m_bufferSize);
                     } else {
-                        chmap_scatter_discrete(m_interleavedIn, (int)ch,
-                                               m_engIn, engCh,
+                        chmap_scatter_discrete(engOut, engCh, m_proc, (int)ch,
                                                (int)m_bufferSize);
                     }
-                    engIn = m_engIn;
-                    engOut = m_engOut;
+                    if (status == AURADSP_OK) {
+                        m_dspProcessedFrames.fetch_add(
+                            (uint64_t)m_bufferSize, std::memory_order_relaxed);
+                    }
                 }
-                m_engineLoader.Process(m_engine, engIn, engOut,
-                                       (int)m_bufferSize, engCh);
-                if (!widthAdapt) {
-                    memcpy(m_proc, engOut,
-                           (size_t)m_bufferSize * (size_t)ch * sizeof(float));
-                } else if (m_channelMode == 0 && engCh > (int)ch) {
-                    // 上混后的宽引擎输出折回窄流
-                    chmap_fold(engOut, engCh, m_proc, (int)ch,
-                               (int)m_bufferSize);
-                } else {
-                    // 引擎窄：按布局放回流（离散与矩阵同口径；scatter
-                    // 整帧先清零，未被引擎覆盖的流声道保持静音）。
-                    chmap_scatter_discrete(engOut, engCh, m_proc, (int)ch,
-                                           (int)m_bufferSize);
-                }
-                m_dspProcessedFrames.fetch_add((uint64_t)m_bufferSize, std::memory_order_relaxed);
             } else {
                 // 旁路直通（或未加载引擎时安全透传）
                 memcpy(m_proc, m_interleavedIn, (size_t)m_bufferSize * (size_t)ch * sizeof(float));

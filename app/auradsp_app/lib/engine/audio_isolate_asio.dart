@@ -36,6 +36,37 @@ const int _asioTelemetryBytes = 4096;
 // APO 的 LPAC 穿透描述符（读者不是 AppContainer）。
 const String _asioSharedSddl = 'D:(A;;GA;;;IU)(A;;GA;;;OW)';
 
+/// 参数块载荷序列化。effectiveChannels 只覆盖 channels.count 的发送值，
+/// 不修改镜像中的用户原值；能力恢复后可由 isolate 重新派发。
+String serializeAsioParamPayload(
+  Map<String, ({bool isFloat, double value})> mirror,
+  Map<String, String>? strMirror, {
+  int? effectiveChannels,
+}) {
+  final parts = <String>[];
+  final ids = mirror.keys.toList()..sort();
+  for (final id in ids) {
+    final e = mirror[id]!;
+    if (!e.value.isFinite) continue;
+    final value = id == 'channels.count' && effectiveChannels != null
+        ? effectiveChannels.toDouble()
+        : e.value;
+    if (e.isFloat) {
+      parts.add('$id=$value');
+    } else {
+      parts.add('$id=${value.toInt()}');
+    }
+  }
+  final order = strMirror?['graph.order'];
+  if (order != null &&
+      order.isNotEmpty &&
+      !order.contains(';') &&
+      !order.contains('=')) {
+    parts.add('graph.order=$order');
+  }
+  return parts.join(';');
+}
+
 /// 参数块发布者（虚拟形态激活；Client 形态下恒空操作）。
 class AsioParamPublisher {
   Map<String, ({bool isFloat, double value})>? _mirror;
@@ -53,6 +84,7 @@ class AsioParamPublisher {
   bool _permFail = false;
   int _seq = 0;
   int _requestSeq = 0;
+  int? _effectiveChannels;
   Timer? _debounce;
 
   void bind({
@@ -155,25 +187,11 @@ class AsioParamPublisher {
   String _serialize() {
     final mirror = _mirror;
     if (mirror == null) return '';
-    final parts = <String>[];
-    final ids = mirror.keys.toList()..sort();
-    for (final id in ids) {
-      final e = mirror[id]!;
-      if (!e.value.isFinite) continue;
-      if (e.isFloat) {
-        parts.add('$id=${e.value}');
-      } else {
-        parts.add('$id=${e.value.toInt()}');
-      }
-    }
-    final order = _strMirror?['graph.order'];
-    if (order != null &&
-        order.isNotEmpty &&
-        !order.contains(';') &&
-        !order.contains('=')) {
-      parts.add('graph.order=$order');
-    }
-    return parts.join(';');
+    return serializeAsioParamPayload(
+      mirror,
+      _strMirror,
+      effectiveChannels: _effectiveChannels,
+    );
   }
 
   /// 全量落块（v2 奇偶 seqlock，与 APO 参数块同协议）：
@@ -231,6 +249,12 @@ class AsioParamPublisher {
     _requestSeq = requestSeq & 0xFFFFFFFF;
     if (!active) return;
     flushAll();
+  }
+
+  /// 记录能力钳制后的生效声道数并触发落块；用户原值仍只存在于镜像。
+  void setEffectiveChannels(int channels) {
+    _effectiveChannels = channels;
+    noteChanged();
   }
 
   /// 参数镜像变更通知（setParam/setParamStr/bypass 派发点调用）：
