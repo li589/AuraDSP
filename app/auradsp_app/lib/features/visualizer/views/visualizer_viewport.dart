@@ -4,7 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/design.dart';
+import '../../../core/nav.dart';
+import '../../../core/state.dart';
 import '../../../ui/widgets.dart' show FreqAxis;
+import '../../visualizer_page.dart';
 import '../controllers/cava_feature_engine.dart';
 import '../controllers/peak_physics_engine.dart';
 import '../controllers/waveform_synthesizer.dart';
@@ -165,6 +168,14 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final page = context.findAncestorWidgetOfExactType<VisualizerPage>();
+    _bindProjectmModel(page?.model);
+    _syncProjectmSession();
+  }
+
+  @override
   void didUpdateWidget(VisualizerCanvasViewport oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.time != widget.time) {
@@ -185,6 +196,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   // PCM by construction, so they keep falling back to procedural
   // rendering — never feed synthesized or zero-filled audio here.
   Timer? _pmTimer;
+  AppModel? _projectmModel;
   bool _pmInitInFlight = false;
   DateTime? _pmInitFailedAt;
   String? _pmLoadedPath;
@@ -205,25 +217,49 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
     return _synthPcmBuffer;
   }
 
-  void _syncProjectmSession() {
+  void _bindProjectmModel(AppModel? model) {
+    if (identical(_projectmModel, model)) return;
+    final previous = _projectmModel;
+    previous?.visiblePage.removeListener(_syncProjectmSession);
+    previous?.removeListener(_syncProjectmSession);
+    previous?.window.visibleListenable.removeListener(_syncProjectmSession);
+    _projectmModel = model;
+    model?.visiblePage.addListener(_syncProjectmSession);
+    model?.addListener(_syncProjectmSession);
+    model?.window.visibleListenable.addListener(_syncProjectmSession);
+  }
+
+  bool get _projectmShouldRun {
+    final model = _projectmModel;
     final bridge = widget.projectMBridge;
-    final want = widget.config.style == VisualizerStyle.projectM &&
+    return mounted &&
+        model != null &&
+        model.visiblePage.value == AppPage.visualizer &&
+        model.window.isVisible &&
+        model.liveSpectrum &&
+        widget.config.style == VisualizerStyle.projectM &&
         bridge != null &&
         bridge.isNative;
-    if (!want) {
+  }
+
+  void _syncProjectmSession() {
+    if (!_projectmShouldRun) {
       _pmTimer?.cancel();
       _pmTimer = null;
       return;
     }
     _pmTimer ??= Timer.periodic(
-        const Duration(milliseconds: 33), (_) => _pmTick());
+      const Duration(milliseconds: 33),
+      (_) => _pmTick(),
+    );
   }
 
   void _pmTick() {
-    final bridge = widget.projectMBridge;
-    if (bridge == null || widget.config.style != VisualizerStyle.projectM) {
+    if (!_projectmShouldRun) {
+      _syncProjectmSession();
       return;
     }
+    final bridge = widget.projectMBridge!;
     if (!bridge.isAvailable) {
       final failedAt = _pmInitFailedAt;
       if (_pmInitInFlight ||
@@ -308,6 +344,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
 
   @override
   void dispose() {
+    _bindProjectmModel(null);
     _pmTimer?.cancel();
     _pmTimer = null;
     widget.time.removeListener(_onTime);
