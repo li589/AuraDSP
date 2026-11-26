@@ -111,6 +111,8 @@ jobs:
           if ($cwCode -ne 0) {
             throw "release clean-work tests failed"
           }
+          python installer/tests/test_release_atomic.py
+          if ($LASTEXITCODE -ne 0) { throw "release atomic tests failed" }
           # --plan 在无 staging 的 CI 上会把缺件标 FAIL 但退出 0（只读门禁表）。
           python installer/release.py --plan
           if ($LASTEXITCODE -ne 0) { throw "release plan failed" }
