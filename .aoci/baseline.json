@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-21T02:23:05Z",
-  "updated_at": "2026-11-26T10:51:10Z",
+  "updated_at": "2026-11-26T13:46:54Z",
   "files": {
     ".ai/README.md": {
       "role": "index",
@@ -191,21 +191,21 @@
     },
     ".github/workflows/ci.yml": {
       "role": "index",
-      "sha256": "10c9aa6a96e6e9695549ed0cd407da061f4405c9cae1eaa2f6f46da3b413b434",
-      "size": 17519,
-      "normalized_sha256": "9851f7013986fa5eb6b1f9618845688c0755b1e43e9491d958e91d009c2ae99f"
+      "sha256": "2d577ac82b866ffb2a461bdfc976b20537b426b93457fa2f649449f1556380bd",
+      "size": 18895,
+      "normalized_sha256": "c4d38e984bcaa9ea58886e024044ca5b6617bdc4518ace0806ec0e0511cf302c"
     },
     ".github/workflows/linux-pack.yml": {
       "role": "index",
-      "sha256": "725a7e33de3adcf521a1c604480e736fa6a1bb143da6afff89f458f9f47feef1",
-      "size": 5498,
-      "normalized_sha256": "6c23aefc12ffde6fee514f52559f43f150398ebf411195a99a0bdab8ca51168f"
+      "sha256": "4749f90032cffc34a5c3c03da5a71ef37087f15405e5363b71d175628d602628",
+      "size": 5875,
+      "normalized_sha256": "f0a41a47728b67ac6b66482d87f92d56ae55bb0af09d6f4dcce4c8f0d7110da1"
     },
     ".github/workflows/windows-installer.yml": {
       "role": "index",
-      "sha256": "808441322d7754492f37c7c700c2d5bb581993e190eb91dbee4b3677395372a1",
-      "size": 5829,
-      "normalized_sha256": "719481a6420b86c20a8696b2d2e249a79330e1bcdad02c5b1ae6984f1a0310a5"
+      "sha256": "31836404f859146a982a819aa2f0191f23545a7490d2ba587b1d9adeaffb6bd0",
+      "size": 6291,
+      "normalized_sha256": "dd7af5d701bc09b612d76da9e78fe669f92986e95b0785dec50f46f88ce28450"
     },
     ".gitignore": {
       "role": "index",
@@ -257,9 +257,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "c91845729a714cb3ae2936309606b892560c86a04340a00cdc5610b7e57050c7",
-      "size": 1190531,
-      "normalized_sha256": "c91845729a714cb3ae2936309606b892560c86a04340a00cdc5610b7e57050c7"
+      "sha256": "257d41844305042a45e5212ff0a1b2573094faf218d44519578d2be8a93c29c8",
+      "size": 1195782,
+      "normalized_sha256": "257d41844305042a45e5212ff0a1b2573094faf218d44519578d2be8a93c29c8"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -1036,15 +1036,15 @@
     },
     "app/auradsp_app/lib/core/state.dart": {
       "role": "index",
-      "sha256": "75a7cc105ae93e0ca572a3a1c3b18c3c6c1275d3e2256e188be825c01bd0f565",
-      "size": 91465,
-      "normalized_sha256": "ac01e98172385b42905875a601b22687319163f58a25881759c5a4959d0ad84b"
+      "sha256": "31e303b01f08ad93d09094bd3c6b01989905fa0df13b44a9aeb645ada82863f5",
+      "size": 91523,
+      "normalized_sha256": "8ea2b2557a802945ad02f2b2e368bf3e8573299fd6bc07b1a0f967b5a03a3531"
     },
     "app/auradsp_app/lib/core/state/state_audio_modes.dart": {
       "role": "index",
-      "sha256": "73ce0cb8628b45bc3fbb23002a7fd932cb27d68e1a24a07b125b0e41ca5c3fc3",
-      "size": 114900,
-      "normalized_sha256": "bdc0b92aa68add0cd18e8ce336bbfe9f90fde82c8a2de0880c204a03f2fc1abc"
+      "sha256": "c5aea27516d5b49349772a885dbab2cf7cf4d85a48f65a1da7a2c5fb650829ee",
+      "size": 114956,
+      "normalized_sha256": "a62df37e9faa367c6c66ae95fe05684ef44fec5ab503c56aed953d6d19e3b7af"
     },
     "app/auradsp_app/lib/core/state/state_chain.dart": {
       "role": "index",
@@ -1072,9 +1072,9 @@
     },
     "app/auradsp_app/lib/core/state/state_events.dart": {
       "role": "index",
-      "sha256": "a50118a634b4544ae360ef630317170afd9f587fb99fc2e06baf41ae492ca0c7",
-      "size": 82128,
-      "normalized_sha256": "48760e0d396278f61be1199501fc6ae23021e3e9750cd100ff98e1201943c5bc"
+      "sha256": "57befbaae96274db35b21923a9288cf039a741c03492a0c06db769c8a2940725",
+      "size": 82156,
+      "normalized_sha256": "e63c284637d21bf9c98b646e535ca5f1c7998bc2fecc951c64b3ed67dc45a7fa"
     },
     "app/auradsp_app/lib/core/state/state_models.dart": {
       "role": "index",
@@ -1978,9 +1978,9 @@
     },
     "app/auradsp_app/lib/features/visualizer/views/visualizer_viewport.dart": {
       "role": "index",
-      "sha256": "8d5a6cb4896cfdbbaf6363397377e7372173ffdf00ef075522e390242c4c4a3e",
-      "size": 21369,
-      "normalized_sha256": "7bfd6450c839d4f32ec869b350eaef35f4bd046ae33b15265223727e94d3d27b"
+      "sha256": "d9be5ec74114caf7a3d331e27b8db4f6a7cee2d354aa78a6ce23b85ad7ab1afb",
+      "size": 22565,
+      "normalized_sha256": "b411ef42b14cc3a66d9620a35a1e892071fa35432c9caa8480a021db13237bd4"
     },
     "app/auradsp_app/lib/features/visualizer_page.dart": {
       "role": "index",
@@ -2200,9 +2200,9 @@
     },
     "app/auradsp_app/lib/platform/system/windows_system_monitor.dart": {
       "role": "index",
-      "sha256": "0c90132d3a92333190fde3a727d0c3185131e40bc782e018f4205cccda81bb09",
-      "size": 8571,
-      "normalized_sha256": "cc29c3ea9a74735ade486c0d319ebadab1ac93a27d458a9add04fa423c6f0b4c"
+      "sha256": "a75be52e2ef693a4de4c8bf5ed4e3cd1fd207972d5f52b09102bd1c040240fdb",
+      "size": 9245,
+      "normalized_sha256": "fdf8784b2e9825d651ad467126fba1a50319582ad4ecff321eca771aac695093"
     },
     "app/auradsp_app/lib/platform/system/windows_system_tools.dart": {
       "role": "index",
@@ -2906,6 +2906,12 @@
       "size": 9111,
       "normalized_sha256": "a8f586e6e763a7e4f01148c7362ddaa0c3f8157e7f27cd2d194070505145a36c"
     },
+    "app/auradsp_app/test/system_monitor_lifecycle_test.dart": {
+      "role": "index",
+      "sha256": "6759ee1c70a23e33105aa62816f1d3bd0ff3976d21e396fb98869f6a31f3d5f2",
+      "size": 4944,
+      "normalized_sha256": "6759ee1c70a23e33105aa62816f1d3bd0ff3976d21e396fb98869f6a31f3d5f2"
+    },
     "app/auradsp_app/test/system_monitor_test.dart": {
       "role": "index",
       "sha256": "e5ce9732e60541537012688267de11728687fb8098fd2868b0e7101fc1124cb9",
@@ -2989,6 +2995,12 @@
       "sha256": "8b7aff8767fa0c666ce010912343516273ac64db1b43bc223b0180a9246738c5",
       "size": 8270,
       "normalized_sha256": "8b7aff8767fa0c666ce010912343516273ac64db1b43bc223b0180a9246738c5"
+    },
+    "app/auradsp_app/test/visualizer_projectm_lifecycle_test.dart": {
+      "role": "index",
+      "sha256": "2c4c83837bfd4d37530f3109381636ed6607d0f373e0e44d3ade92fb94afedda",
+      "size": 6142,
+      "normalized_sha256": "2c4c83837bfd4d37530f3109381636ed6607d0f373e0e44d3ade92fb94afedda"
     },
     "app/auradsp_app/test/visualizer_refactor_test.dart": {
       "role": "index",
@@ -19396,9 +19408,9 @@
     },
     "docs/20-执行/全量代码审查修复计划-2026-11-25.md": {
       "role": "index",
-      "sha256": "3eb41b3b08526418bbeaac70cd49e70f299b4ab2d99cf557c2866286727b4d97",
-      "size": 85664,
-      "normalized_sha256": "3eb41b3b08526418bbeaac70cd49e70f299b4ab2d99cf557c2866286727b4d97"
+      "sha256": "7680e0cafdeb2d28c2e5f3f30ded8f3d99ebbd5270c8eb527993c0f0470a3cd9",
+      "size": 85640,
+      "normalized_sha256": "7680e0cafdeb2d28c2e5f3f30ded8f3d99ebbd5270c8eb527993c0f0470a3cd9"
     },
     "docs/20-执行/卷积双槽影子立项-2026-11-25.md": {
       "role": "index",
@@ -22696,9 +22708,9 @@
     },
     "installer/packkit/deliver.py": {
       "role": "index",
-      "sha256": "0dd316dc7a9bfa245f959c82c23f488920ddc16e6b3bb2a27334a1ffb2f432b0",
-      "size": 3511,
-      "normalized_sha256": "0dd316dc7a9bfa245f959c82c23f488920ddc16e6b3bb2a27334a1ffb2f432b0"
+      "sha256": "ceb84c945bf5ec7e94bab58dec44e7ee36169c5d46a3dd43c6bbf7159b58d2f1",
+      "size": 4414,
+      "normalized_sha256": "ceb84c945bf5ec7e94bab58dec44e7ee36169c5d46a3dd43c6bbf7159b58d2f1"
     },
     "installer/packkit/hashing.py": {
       "role": "index",
@@ -22804,9 +22816,9 @@
     },
     "installer/packkit/resources.py": {
       "role": "index",
-      "sha256": "780a25f3bacaa84e93c95f6b544975ba87a99c417e32f26913f84c2442c9a02f",
-      "size": 7234,
-      "normalized_sha256": "780a25f3bacaa84e93c95f6b544975ba87a99c417e32f26913f84c2442c9a02f"
+      "sha256": "127ad66acb2a8848857b0e5ec63efa89e18cc615a87b30bbe7fd9af5417ebb26",
+      "size": 7874,
+      "normalized_sha256": "127ad66acb2a8848857b0e5ec63efa89e18cc615a87b30bbe7fd9af5417ebb26"
     },
     "installer/packkit/staging.py": {
       "role": "index",
@@ -22876,9 +22888,9 @@
     },
     "installer/packkit/windows/signing.py": {
       "role": "index",
-      "sha256": "5a4ed10ae8fbbd69768c21f0b31bbb2cb1a728ed5009a4050c46bd0f00dfc082",
-      "size": 8446,
-      "normalized_sha256": "d4120855fd594c2120a9812dfc72f625feb86107d882cf8241d1bc8098078c53"
+      "sha256": "58d71c52ba5bb251f7fd29539f711877ff042903210db52d47220d9b7fbfb531",
+      "size": 8555,
+      "normalized_sha256": "885818de8e37092d6ad968b8735097cd4d69011de3449f3f15b161f60dcbf62d"
     },
     "installer/packkit/windows/toolchain.py": {
       "role": "index",
@@ -22888,9 +22900,9 @@
     },
     "installer/release.py": {
       "role": "index",
-      "sha256": "64858d5100aba50173bbea0bddeed81d8c7ca928e0040bc59c42085a38a178bd",
-      "size": 12682,
-      "normalized_sha256": "64858d5100aba50173bbea0bddeed81d8c7ca928e0040bc59c42085a38a178bd"
+      "sha256": "6606e8f38a78919a369546e9874e5311afd8f6c62a91a6bcf4b68d7bcb9f6277",
+      "size": 14456,
+      "normalized_sha256": "1d7745b931b670330c63f8e478a7b9c00704677a5d5a3c4b82cf02a73334eb39"
     },
     "installer/shared/README.md": {
       "role": "index",
@@ -22912,9 +22924,15 @@
     },
     "installer/tests/test_packkit_unit.py": {
       "role": "observe",
-      "sha256": "326b3a60dfca39fc8c4bb8005e239036b22cb567d1620c47be909701f9eea4b3",
-      "size": 11840,
-      "normalized_sha256": "326b3a60dfca39fc8c4bb8005e239036b22cb567d1620c47be909701f9eea4b3"
+      "sha256": "1f40080f932fd2c78766b0b0d0d3ea7a95fb20155eb2f06cc19a4d93125a53fe",
+      "size": 15156,
+      "normalized_sha256": "1f40080f932fd2c78766b0b0d0d3ea7a95fb20155eb2f06cc19a4d93125a53fe"
+    },
+    "installer/tests/test_release_atomic.py": {
+      "role": "observe",
+      "sha256": "d04001e8e98671cc23f35697fbb888a9d92c7a2efda2da7d8fff2a423a21a78e",
+      "size": 7630,
+      "normalized_sha256": "d04001e8e98671cc23f35697fbb888a9d92c7a2efda2da7d8fff2a423a21a78e"
     },
     "installer/tests/test_release_clean_work.py": {
       "role": "observe",
@@ -25579,9 +25597,9 @@
     },
     "test/runner.py": {
       "role": "index",
-      "sha256": "44d428b6880bd6df9200d1f15474e9280955701b4ed67d77842e7fece26c73b1",
-      "size": 46930,
-      "normalized_sha256": "b9a17ebc24d1d4fdd19dab27304dc5fe0a0278ee71ec1c6c7d5f493fe4e3379c"
+      "sha256": "877a328234197c33b76f252b04c9c13067ab4a3fcc49e88480d93adc1e8bd4d5",
+      "size": 47304,
+      "normalized_sha256": "b6d35bdb39022ae25a0e64d05f730991a0051587333b88159416fe9415594a10"
     },
     "test/smoke/_tmpcleanup.py": {
       "role": "index",
@@ -26525,6 +26543,12 @@
       "size": 3638,
       "normalized_sha256": "9c48dd9ffa09527d047c75267441b6bd196c0203b8a4b8c3fbd797b9d6cd057d"
     },
+    "test/smoke/smoke_remote_security.py": {
+      "role": "index",
+      "sha256": "935f7567c40b4d67f35c490d1216aaf07dc2ad380c0ce950e1051146a8595fec",
+      "size": 5588,
+      "normalized_sha256": "935f7567c40b4d67f35c490d1216aaf07dc2ad380c0ce950e1051146a8595fec"
+    },
     "test/smoke/smoke_reverb.py": {
       "role": "index",
       "sha256": "5d02aae1d1f86721efca76ebf64179d5df0aea3b5168dd9ae7baece92385c0f9",
@@ -26704,6 +26728,12 @@
       "sha256": "dad9c28f81815bad9b49b4f81fd0df026a70df0c8a20f8d4b538712877d84087",
       "size": 7737,
       "normalized_sha256": "b02d0e7386a6518b5fcd5ea79d874f78d0af7df11401fcc054d0d83bef66d283"
+    },
+    "test/smoke/smoke_viz_lifecycle.py": {
+      "role": "index",
+      "sha256": "e002685bbf3cb763bf0996daa880eab330b81b495f9cb8a47872216bb9c2fb77",
+      "size": 3192,
+      "normalized_sha256": "e002685bbf3cb763bf0996daa880eab330b81b495f9cb8a47872216bb9c2fb77"
     },
     "test/smoke/smoke_viz_lowfreq.py": {
       "role": "index",
@@ -26995,9 +27025,9 @@
     },
     "tools/bin/run_dart_tests.py": {
       "role": "index",
-      "sha256": "d7b3f10d22232fcc8c971512a8fb0a910572f6d6406955e1ff7587c54aa041a8",
-      "size": 5596,
-      "normalized_sha256": "d7b3f10d22232fcc8c971512a8fb0a910572f6d6406955e1ff7587c54aa041a8"
+      "sha256": "7d9fd1d1486a82de07f3570183cb5102163ea3025d5b33cab774beed22116c5a",
+      "size": 5846,
+      "normalized_sha256": "85ca6bd7888a0ecd88bea8773179b6c655b7a0a1ee7d68adf66cec91f626342e"
     },
     "tools/bin/run_tests.py": {
       "role": "index",
@@ -27283,9 +27313,9 @@
     },
     "tools/remote/Invoke-GuestScript.ps1": {
       "role": "index",
-      "sha256": "e3ae4e3372f5651384526df2e3efd09f98caa922045e0ada114106a6dbcadfe8",
-      "size": 3018,
-      "normalized_sha256": "e3ae4e3372f5651384526df2e3efd09f98caa922045e0ada114106a6dbcadfe8"
+      "sha256": "35da213e694801c52b937955ad517761e7f9dd82aa65f5298a8a247328a3a013",
+      "size": 3364,
+      "normalized_sha256": "73a13ebcce778cd81719a975199b382eb87aa5a21957d1ba8022ee3ba335366a"
     },
     "tools/remote/README.md": {
       "role": "index",
@@ -27295,15 +27325,15 @@
     },
     "tools/remote/Restore-DriverCertTrust.ps1": {
       "role": "index",
-      "sha256": "0fe4ceabe10e988ac94b50758bbed342115af50a2a5855541875325d19317449",
-      "size": 1892,
-      "normalized_sha256": "0fe4ceabe10e988ac94b50758bbed342115af50a2a5855541875325d19317449"
+      "sha256": "d7944d0d9d6bfe0886e8312abe14e1acb9a28d8c83379d4c608777a93f72145f",
+      "size": 2397,
+      "normalized_sha256": "229ad99bb2008ce35f3600edb4df1f7e77370de685ea260ac570c562eb70720a"
     },
     "tools/remote/Send-ToGuest.ps1": {
       "role": "index",
-      "sha256": "e203d939ca23fedba7364ef80dad3c28f188a24209917785b54b2051a1652c04",
-      "size": 2098,
-      "normalized_sha256": "e203d939ca23fedba7364ef80dad3c28f188a24209917785b54b2051a1652c04"
+      "sha256": "f87e79520cd4277b03b7b7c625e26c99040070dbf7b92869c3eb8848fa447888",
+      "size": 2450,
+      "normalized_sha256": "11be9741acdc78941e8ac5d63854f5fcb1b8ab05fbf8fcffc6b4b74eb53639e4"
     },
     "tools/remote/asio_registration_probe.py": {
       "role": "index",
@@ -27331,15 +27361,15 @@
     },
     "tools/remote/sync_to_vm.py": {
       "role": "index",
-      "sha256": "d11162523768a8f12d51738fd3a91692fd835d9a072fc577887aae17d6a1f588",
-      "size": 4679,
-      "normalized_sha256": "d11162523768a8f12d51738fd3a91692fd835d9a072fc577887aae17d6a1f588"
+      "sha256": "7cba789178740255318d37f455be973e43080aa6cc9e40f545a95187d92de4f7",
+      "size": 5158,
+      "normalized_sha256": "44255bfd22e5f0ea9ee26d0d8da75693e7cdc9d72f3b93c2c9f1f7852f110343"
     },
     "tools/remote/vm_exec.py": {
       "role": "index",
-      "sha256": "14e889dc3d0b64f7bc4519dd004bd30fe3418b28270314b30ac97f9f8b3d9f5e",
-      "size": 1564,
-      "normalized_sha256": "14e889dc3d0b64f7bc4519dd004bd30fe3418b28270314b30ac97f9f8b3d9f5e"
+      "sha256": "faad3977be7e44c4ef1aa21ba6aa806b40bc31c88ca13fe542fb0b5b4f00d37d",
+      "size": 1987,
+      "normalized_sha256": "3ef4fb4842451e7411990faf3d376a8a6c270ac34b6970898ef20c878dd1d0b2"
     },
     "tools/remote_win10.ps1": {
       "role": "index",
