@@ -53,6 +53,8 @@ check("params version 2 (parity seqlock)",
 check("params bytes 8192", "ASIO_DRIVER_PARAMS_BYTES 8192u" in shared)
 check("payload offset 64", "ASIO_DRIVER_PARAMS_PAYLOAD_OFFSET 64u" in shared)
 check("header writeSeq field", "volatile long writeSeq;" in shared)
+check("header channel request token slot",
+      "reserved1[1]" in shared and "offset 28" in shared)
 
 # ---- 驱动消费侧 ----
 check("driver opens params read-only",
@@ -70,15 +72,45 @@ check("driver bypass from block",
       "m_bypass.store(bypass != 0" in driver)
 check("driver absent-block retry", "m_paramsRetry" in driver)
 check("pump pulls params per block", "PullParamsFromBlock();" in driver)
+i_init = driver.find("ASIOBool AuraAsioDriver::init")
+i_load_channels = driver.find("LoadConfiguredChannels();", i_init)
+i_capture_request = driver.find("CaptureChannelRequestSeq();", i_init)
+i_load_engine = driver.find("m_engineLoader.Load();", i_init)
+check("driver captures request token in init beside registry width",
+      0 <= i_capture_request < i_load_channels < i_load_engine,
+      f"capture@{i_capture_request} load@{i_load_channels} engine@{i_load_engine}")
+i_start = driver.find("ASIOError AuraAsioDriver::start()")
+i_stop = driver.find("ASIOError AuraAsioDriver::stop()", i_start)
+start_body = driver[i_start:i_stop] if 0 <= i_start < i_stop else ""
+check("same-instance start never recaptures request token",
+      bool(start_body) and "CaptureChannelRequestSeq" not in start_body)
+i_capture_def = driver.find("void AuraAsioDriver::CaptureChannelRequestSeq()")
+i_open_params_def = driver.find("void AuraAsioDriver::OpenParams()", i_capture_def)
+capture_body = driver[i_capture_def:i_open_params_def] if 0 <= i_capture_def < i_open_params_def else ""
+check("init token capture reads reserved1[1]",
+      "reserved1[1]" in capture_body)
+check("init token capture requires stable even seqlock",
+      "(s1 & 1) == 0" in capture_body and
+      "writeSeq != s1" in capture_body)
+i_pull = driver.find("void AuraAsioDriver::PullParamsFromBlock()")
+i_publish_sink = driver.find("void AuraAsioDriver::PublishTelemetrySinkState()", i_pull)
+pull_body = driver[i_pull:i_publish_sink] if 0 <= i_pull < i_publish_sink else ""
+check("pump never recaptures request token",
+      bool(pull_body) and "reserved1[1]" not in pull_body and
+      "m_channelRequestSeq =" not in pull_body)
 
 # ---- Dart 发布者 ----
 check("publisher creates mapping", "createFileMappingW" in dart_asio)
 i_odd = dart_asio.find("_seq = (_seq + 1) | 1;")
 i_payload = dart_asio.find("view[_asioParamsPayloadOffset + i]")
+i_token = dart_asio.find("_u32![7] = _requestSeq;")
 i_even = dart_asio.find("_seq += 1;")
 check("publisher brackets payload with odd/even seq",
       0 <= i_odd < i_payload < i_even,
       f"odd@{i_odd} payload@{i_payload} even@{i_even}")
+check("publisher writes request token inside odd/even seq",
+      0 <= i_odd < i_token < i_even,
+      f"odd@{i_odd} token@{i_token} even@{i_even}")
 check("publisher carries channels.count (W6 width authority)",
       "if (id == 'channels.count') continue;" not in dart_asio)
 check("publisher carries graph.order only",
@@ -99,6 +131,9 @@ check("header endpoint seq slot documented", "reserved1[0]" in shared)
 check("publisher bumps endpoint seq", "bumpEndpointSeq" in dart_asio)
 check("isolate routes endpoint seq command",
       "case 'asioendpointseq'" in dart_iso)
+check("isolate routes channel request token command",
+      "case 'asioRequestSeq'" in dart_iso and
+      "asioPublisher.setRequestSeq" in dart_iso)
 
 # ---- 总闸静音（r61 验收修复） ----
 check("header mute field", "volatile long mute;" in shared)

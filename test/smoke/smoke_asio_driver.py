@@ -590,7 +590,7 @@ if daw_ch is None and not _block_ok:
 else:
     check('telemetry dawCh == 6 (driver tier authoritative)', daw_ch == 6, f'dawCh={daw_ch}')
 
-# r65 v3 逐声道遥测判别（主页恒 2 格同亮的回归钉）：只给输出
+# r65 v3 逐声道遥测判别（v4 保留同布局；主页恒 2 格同亮的回归钉）：只给输出
 # 声道索引 4 送信号——peakInCh 必须只有 [4] 非零（处理前取数，
 # 与引擎无关）；peakOutCh[4] 须显著压过其余声道（折叠前逐声道）。
 tele_ver = telemetry_u32(4)
@@ -598,7 +598,7 @@ if tele_ver is None and not _block_ok:
     print('NOTE telemetry v3 per-channel check skipped: Global '
           'namespace inaccessible in this environment')
 else:
-    check('telemetry version == 3', tele_ver == 3, f'ver={tele_ver}')
+    check('telemetry version == 4', tele_ver == 4, f'ver={tele_ver}')
     mch_mode[0] = 'ch4'
     time.sleep(0.15)
     pin = [telemetry_f32(520 + 4 * c) for c in range(8)]

@@ -52,6 +52,7 @@ class AsioParamPublisher {
   Pointer<Int32>? _i32;
   bool _permFail = false;
   int _seq = 0;
+  int _requestSeq = 0;
   Timer? _debounce;
 
   void bind({
@@ -205,6 +206,9 @@ class AsioParamPublisher {
     _u32![4] = bytes.length;
     _i32![3] = (_bypassOf?.call() ?? false) ? 1 : 0;
     _i32![5] = (_muteOf?.call() ?? false) ? 1 : 0;
+    // reserved1[1]（u32[7]，offset 28）：声道档位请求代号。驱动只在
+    // init() 捕获，必须与 payload 同处奇偶 seqlock 写入窗口。
+    _u32![7] = _requestSeq;
     // 3) 离开写入态：seq 变偶（稳定发布）。
     _seq += 1;
     _i32![2] = _seq;
@@ -219,6 +223,14 @@ class AsioParamPublisher {
     final next = ((_i32![6] & 0x7FFFFFFF) + 1) & 0x7FFFFFFF;
     _i32![6] = next;
     dbgLog('asio publisher: endpoint seq -> $next');
+  }
+
+  /// 声道档位请求代号：先保存（未激活时也保留），激活后经 flushAll
+  /// 与 payload 一起在奇偶 seqlock 内发布。Client 形态不激活发布者。
+  void setRequestSeq(int requestSeq) {
+    _requestSeq = requestSeq & 0xFFFFFFFF;
+    if (!active) return;
+    flushAll();
   }
 
   /// 参数镜像变更通知（setParam/setParamStr/bypass 派发点调用）：
@@ -370,7 +382,7 @@ class AsioTelemetryReader {
     final version = u32[1];
     // 与桥侧读口径对齐（AsioBridge 拒绝 version <1 || >宏）：未知
     // 版本按块缺席处理，避免未来块升版改布局时静默误读频谱偏移。
-    if (version < 1 || version > 3) {
+    if (version < 1 || version > 4) {
       _sendAbsent();
       return;
     }
@@ -390,6 +402,7 @@ class AsioTelemetryReader {
     final peakOut = _f32![11];
     send({
       'evt': 'asiostatus',
+      'version': version,
       'running': live,
       'driver': 'AuraDSP Driver',
       'dawSeen': 1,
@@ -399,6 +412,8 @@ class AsioTelemetryReader {
       'dawPeakOut': peakOut,
       'dawSr': u32[5],
       'dawCh': u32[6],
+      // v4 尾段 u32[146]（offset 584）。旧版本不得解析/转发 token。
+      if (version == 4) 'requestSeq': _u32![146],
       'dawSinkBits': u32[16],
       'dawSinkRate': u32[14],
       'dawSinkConfigured': u32[17],

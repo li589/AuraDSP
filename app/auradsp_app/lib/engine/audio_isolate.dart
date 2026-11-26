@@ -1886,6 +1886,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           // 端点由桥 start 参数决定，bump 自动空操作。
           asioPublisher.bumpEndpointSeq();
           break;
+        case 'asioRequestSeq':
+          // 虚拟档位请求代号 → reserved1[1]，驱动 init 时捕获。
+          asioPublisher.setRequestSeq((m['requestSeq'] as num).toInt());
+          break;
         case 'asiodetect':
           detectAsioDrivers();
           break;

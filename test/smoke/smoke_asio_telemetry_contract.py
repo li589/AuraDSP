@@ -51,14 +51,19 @@ dart_asio = read(DART_ASIO)
 # ---- 契约头 ----
 check("telemetry name", "AuraDSP_AsioDriverTelemetry" in shared)
 check("telemetry magic AADT", "0x54444141" in shared)
-check("telemetry version 3", "ASIO_DRIVER_TELEMETRY_VERSION 3u" in shared)
+check("telemetry version 4", "ASIO_DRIVER_TELEMETRY_VERSION 4u" in shared)
 check("spectrum fields v2",
       "spectrum[32]" in shared and "eqInSpectrum[32]" in shared)
 check("per-channel peak fields v3",
       "peakInCh[8]" in shared and "peakOutCh[8]" in shared)
-check("v3 tail offsets pinned (static_assert)",
+check("v2/v3 offsets remain pinned (static_assert)",
+      "offsetof(AsioDriverTelemetryBlock, spectrum) == 264u" in shared and
+      "offsetof(AsioDriverTelemetryBlock, eqInSpectrum) == 392u" in shared and
       "offsetof(AsioDriverTelemetryBlock, peakInCh) == 520u" in shared and
-      "sizeof(AsioDriverTelemetryBlock) == 584u" in shared)
+      "offsetof(AsioDriverTelemetryBlock, peakOutCh) == 552u" in shared)
+check("v4 request token tail pinned (static_assert)",
+      "offsetof(AsioDriverTelemetryBlock, requestSeq) == 584u" in shared and
+      "sizeof(AsioDriverTelemetryBlock) == 592u" in shared)
 check("block fits one page (static_assert)",
       "sizeof(AsioDriverTelemetryBlock) <= ASIO_DRIVER_TELEMETRY_BYTES" in shared)
 
@@ -79,6 +84,8 @@ check("driver publishes per-channel peaks v3",
       "telePeakOutCh[c]" in driver)
 check("driver writes telemetry version unconditionally (r65)",
       "m_telemetry->version = ASIO_DRIVER_TELEMETRY_VERSION;" in driver)
+check("driver echoes init-captured channel request token",
+      "m_telemetry->requestSeq = m_channelRequestSeq;" in driver)
 
 # ---- 桥中转侧 ----
 check("bridge accepts telemetry versions 1..current",
@@ -97,8 +104,11 @@ check("reader frames u64 pair", "u32[8] + u32[9] * 4294967296.0" in dart_asio)
 check("reader synthesizes asio viz",
       "'backend': 'asio'" in dart_asio and "'evt': 'viz'" in dart_asio)
 check("reader stale-heartbeat liveness gate", "_staleTicks <= 15" in dart_asio)
-check("reader accepts versions 1..3",
-      "version < 1 || version > 3" in dart_asio)
+check("reader accepts versions 1..4",
+      "version < 1 || version > 4" in dart_asio)
+check("reader parses request token only for v4",
+      "version == 4" in dart_asio and
+      "'requestSeq': _u32![146]" in dart_asio)
 check("reader per-channel levels from f32[138] (peakOutCh)",
       "_f32![138 + c]" in dart_asio and "dawCh >= 2 && dawCh <= 8" in dart_asio)
 

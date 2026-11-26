@@ -89,6 +89,9 @@ ULONG STDMETHODCALLTYPE AuraAsioDriver::Release() {
 ASIOBool AuraAsioDriver::init(void* /*sysHandle*/) {
     m_active = true;
     m_errorMessage[0] = '\0';
+    // App 先写注册表再发布 token；init 先捕 token 再读档位，避免
+    // 「旧宽度 + 新 token」的跨面竞争被误认为请求已生效。
+    CaptureChannelRequestSeq();
     LoadConfiguredChannels();
     m_engineLoader.Load();
     return ASIOTrue;
@@ -111,6 +114,25 @@ void AuraAsioDriver::LoadConfiguredChannels() {
         }
     }
     m_channels = 2;
+}
+
+// 请求代号与注册表 Channels 必须在同一 init 时点快照：DAW 只有重新
+// 创建实例才会重新读取档位。若在 start()/pump 重捕，同实例 stop/start
+// 会把后来发布的新 token 误当成自身身份，App 因而误确认档位请求。
+void AuraAsioDriver::CaptureChannelRequestSeq() {
+    m_channelRequestSeq = 0;
+    OpenParams();
+    if (!m_params) return;  // App 未运行：token 0，v4 遥测仍可安全返回
+    const long s1 = m_params->writeSeq;
+    if ((s1 & 1) == 0) {
+        const uint32_t requestSeq = m_params->reserved1[1];
+        if (m_params->writeSeq != s1) {
+            CloseParams();
+            return;  // 写入窗口交叉：本次实例保持 token 0，不猜读半写值
+        }
+        m_channelRequestSeq = requestSeq;
+    }
+    CloseParams();
 }
 
 void AuraAsioDriver::getDriverName(char* name) {
@@ -527,11 +549,15 @@ void AuraAsioDriver::OpenTelemetry() {
         memset(m_telemetry, 0, sizeof(AsioDriverTelemetryBlock));
         m_telemetry->magic = ASIO_DRIVER_TELEMETRY_MAGIC;
     }
-    // version 无条件写（r65）：存活块可能由旧版驱动写成 v2 布局，
-    // 若只在新建时写版本号，新驱动会带着旧版本号发布 v3 尾部
-    // 字段，读者按 v2 回落、逐声道电平永不生效。
+    // version 无条件写（r65）：存活块可能由旧版驱动写成旧布局，
+    // 若只在新建时写版本号，新驱动会带着旧版本号发布新尾部字段，
+    // 读者按旧版回落、逐声道电平/请求代号永不生效。
     m_telemetry->version = ASIO_DRIVER_TELEMETRY_VERSION;
     m_telemetry->writerPid = GetCurrentProcessId();
+    // token 是 init 生命周期快照；start 只回显。running 先归零，避免
+    // 上一实例异常退出留下的 running=1 在新泵发布几何前误判为活跃。
+    m_telemetry->requestSeq = m_channelRequestSeq;
+    m_telemetry->running = 0;
 }
 
 void AuraAsioDriver::CloseTelemetry() {

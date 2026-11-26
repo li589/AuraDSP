@@ -20,16 +20,23 @@ bool idsConflictResolved(String capId, String outId, String defaultRenderId) {
   return capId.isEmpty && outId.isEmpty;
 }
 
-/// 虚拟 ASIO 档位请求的 App 侧代际。原生遥测 ABI 不含请求代号，
-/// 因此只有「停止后重启 + processedFrames 回退」才作为新实例证据；
-/// asiostatus 的 Map 身份每次都会变化，不能用于确认请求。
+/// 虚拟 ASIO 档位请求身份。requestSeq 在每个 AppModel 内单调递增，
+/// 仅由 telemetry v4 回显的完全相同 token 确认；帧数/重启不再参与判断。
+/// 每进程随机起点避免 App 重启后与仍存活的旧驱动实例发生 token 碰撞。
+final math.Random _asioVirtualRequestRandom = math.Random.secure();
+
 class _AsioVirtualChannelRequest {
-  int generation = 0;
-  int acknowledgedGeneration = 0;
+  _AsioVirtualChannelRequest()
+      : requestSeq = _asioVirtualRequestRandom.nextInt(0x7FFFFFFF) + 1;
+
+  int requestSeq;
+  int? acknowledgedRequestSeq;
   int? requestedCh;
-  bool stoppedSinceRequest = false;
-  int? framesBeforeRestart;
-  bool newInstanceObserved = false;
+
+  void advance() {
+    requestSeq = (requestSeq + 1) & 0xFFFFFFFF;
+    if (requestSeq == 0) requestSeq = 1;
+  }
 }
 
 final _asioVirtualChannelRequests = Expando<_AsioVirtualChannelRequest>();
@@ -1550,7 +1557,7 @@ extension AudioModesState on AppModel {
     return null;
   }
 
-  /// 当前尚未被新实例证据确认的虚拟 ASIO 请求宽度。
+  /// 当前尚未被驱动实例精确 token 确认的虚拟 ASIO 请求宽度。
   int? get _pendingAsioVirtualRequestCh {
     if (audioMode != 'asio') return null;
     if (config.asioFlavor != AudioModes.asioVirtual) return null;
@@ -1558,7 +1565,7 @@ extension AudioModesState on AppModel {
     final requested = request?.requestedCh;
     if (request == null ||
         requested == null ||
-        request.acknowledgedGeneration == request.generation) {
+        request.acknowledgedRequestSeq == request.requestSeq) {
       return null;
     }
     return requested;
@@ -1567,56 +1574,41 @@ extension AudioModesState on AppModel {
   void _invalidateAsioVirtualChannelRequest() {
     final request = _asioVirtualChannelRequests[this];
     if (request == null) return;
-    request.acknowledgedGeneration = request.generation;
+    request.acknowledgedRequestSeq = request.requestSeq;
     request.requestedCh = null;
-    request.stoppedSinceRequest = false;
-    request.framesBeforeRestart = null;
-    request.newInstanceObserved = false;
   }
 
-  /// 用原生遥测里真实存在的实例证据确认请求：running false→true，
-  /// 且 dawFrames（驱动 processedFrames 的转发）相对旧实例回退。
-  /// Map 身份、同宽迟到事件或帧数正常增长都不是确认。
+  /// 只认 telemetry v4 的精确请求代号 + 活跃泵 + 合法协商宽度。
+  /// processedFrames 回退、running 上升沿、Map 身份和宽度相等均不是
+  /// 实例证据：它们无法区分新实例与同实例 stop/start 或迟到旧事件。
   void _observeAsioVirtualTelemetry({
     required bool running,
-    required int? frames,
+    required int telemetryVersion,
+    required int? requestSeq,
     required int dawCh,
   }) {
     if (_pendingAsioVirtualRequestCh == null) return;
     final request = _asioVirtualChannelRequests[this]!;
-    final previousFrames = request.framesBeforeRestart;
-    if (frames != null &&
-        (previousFrames == null || frames > previousFrames)) {
-      request.framesBeforeRestart = frames;
-    }
-    if (!running) {
-      request.stoppedSinceRequest = true;
+    if (!running ||
+        telemetryVersion != 4 ||
+        requestSeq == null ||
+        requestSeq != request.requestSeq ||
+        (dawCh != 2 && dawCh != 4 && dawCh != 6 && dawCh != 8)) {
       return;
     }
-    if (request.stoppedSinceRequest) {
-      request.stoppedSinceRequest = false;
-      final beforeRestart = request.framesBeforeRestart;
-      if (frames != null && beforeRestart != null && frames < beforeRestart) {
-        request.newInstanceObserved = true;
-        // 旧实例的预确认流宽不再属于新实例，确认后必须让 dawCh 接管。
-        _lastVizChAt = null;
-        _streamCh = 0;
-      }
-    }
-    if (request.newInstanceObserved &&
-        (dawCh == 2 || dawCh == 4 || dawCh == 6 || dawCh == 8)) {
-      request.acknowledgedGeneration = request.generation;
-      request.requestedCh = null;
-      request.newInstanceObserved = false;
-    }
+    request.acknowledgedRequestSeq = request.requestSeq;
+    request.requestedCh = null;
+    // 旧实例的预确认流宽不再属于新实例，确认后必须让 dawCh 接管。
+    _lastVizChAt = null;
+    _streamCh = 0;
   }
 
   /// 虚拟 ASIO 形态的工作声道数（状态侧唯一口径）。
   ///
   /// 虚拟形态下 App 自身不跑处理引擎——DAW 进程内的引擎实例才是真
   /// 处理者，其宽度由驱动档位（HKCU Channels）与 DAW 协商值共同决定。
-  /// 新档位请求在收到真实新实例证据前保持权威，避免活跃旧实例的
-  /// dawCh 把显示/能力钉回旧宽度；确认后重新以实际协商值为准。
+  /// 新档位请求在收到驱动实例回显的精确 token 前保持权威，避免活跃
+  /// 旧实例的 dawCh 把显示/能力钉回旧宽度；确认后重新以实际协商值为准。
   /// 无请求时仅采信活跃 DAW 的合法 dawCh，否则回落档位镜像。
   ///
   /// 注意必须要求「活跃」：驱动遥测块会跨 DAW 会话驻留，块里留着
@@ -1646,11 +1638,11 @@ extension AudioModesState on AppModel {
   void _requestAsioVirtualChannels(int count) {
     final request = _asioVirtualChannelRequests[this] ??=
         _AsioVirtualChannelRequest();
-    request.generation++;
+    request.advance();
     request.requestedCh = count;
-    request.stoppedSinceRequest = !asioActive;
-    request.framesBeforeRestart = (asioInfo['dawFrames'] as num?)?.toInt();
-    request.newInstanceObserved = false;
+    // 先发 token，再走统一 channels.count 派发；SendPort 保序，驱动
+    // 新实例 init 时优先捕获到本次请求身份。
+    _toIso?.send({'cmd': 'asioRequestSeq', 'requestSeq': request.requestSeq});
   }
 
   /// 把分模式能力发给 isolate 钳制器（第四十二轮 S1 立 chcap，

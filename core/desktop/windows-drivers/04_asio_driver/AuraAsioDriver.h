@@ -74,6 +74,7 @@ private:
     static DWORD WINAPI AudioPumpThreadProc(LPVOID param);
     DWORD PumpLoop();
     void LoadConfiguredChannels();  // 启动前从注册表读取档位（默认 2）
+    void CaptureChannelRequestSeq(); // init 时捕获参数块请求代号（start 不重捕）
 
     // S3 最小遥测（AsioDriverShared.h）：泵运行期发布 DAW 在场/
     // 已处理帧/峰值/汇生效端点至 Global 共享块，桥转读给 App。
@@ -116,6 +117,8 @@ private:
 
     // 通道映射（B2c：2/4/6/8 档，默认 2；双缓冲 [channel][half 0/1]）
     long m_channels = 2;
+    // 与 m_channels 同一 init 生命周期快照；同实例 stop/start 保持不变。
+    uint32_t m_channelRequestSeq = 0;
     float* m_inBuffers[kMaxChannels][2] = {};
     float* m_outBuffers[kMaxChannels][2] = {};
     bool m_inputActive[kMaxChannels] = {};

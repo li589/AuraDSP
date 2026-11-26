@@ -8,7 +8,7 @@
 //                                 （S3 新增：App 写、驱动汇 Open 读；
 //                                 空/缺失/失效 → 回落系统默认端点）
 //   遥测面：Global\AuraDSP_AsioDriverTelemetry（S3 新增，
-//     v2 于 S4 扩频谱；v3 于 r65 尾加逐声道峰值）
+//     v2 于 S4 扩频谱；v3 于 r65 尾加逐声道峰值；v4 尾加请求代号）
 //     驱动泵写 → ASIO 桥在 asiostatus 中转读 → App 展示。解决
 //     「DAW 侧真实例与 App 侧实例互不可见」：DAW 在场、已处理帧、
 //     峰值与汇实际生效端点/格式自此有真数据源。
@@ -28,7 +28,7 @@
 
 #define ASIO_DRIVER_TELEMETRY_NAME L"Global\\AuraDSP_AsioDriverTelemetry"
 #define ASIO_DRIVER_TELEMETRY_MAGIC 0x54444141u  // 'AADT'
-#define ASIO_DRIVER_TELEMETRY_VERSION 3u
+#define ASIO_DRIVER_TELEMETRY_VERSION 4u
 #define ASIO_DRIVER_TELEMETRY_BYTES 4096u
 
 // ---- 参数块（S4；v2 起改奇偶 seqlock）：App 写、驱动读 ----
@@ -65,6 +65,9 @@ struct AsioDriverParamsBlock {
     // reserved1[0]（offset 24，Dart i32[6]）自 W7 起为输出端点序号：
     // App 每次切换 RenderEndpoint 递增；驱动泵看到变化即 Close/Open
     // WASAPI 汇（Open 内重读注册表），免重开 DAW。旧 App 恒 0 不触发。
+    // reserved1[1]（offset 28，Dart u32[7]）为声道档位请求代号：
+    // App 每次请求递增；驱动只在 init() 与注册表档位同一时点捕获，
+    // 同实例 stop/start 不重捕，并经 telemetry v4 回显供 App 精确确认。
     uint32_t reserved1[10];  // 凑 payload 偏移至 64
     // char payload[PAYLOAD_CAP + 1]：NUL 结尾的 UTF-8 参数串，
     // 位于偏移 ASIO_DRIVER_PARAMS_PAYLOAD_OFFSET。
@@ -72,6 +75,10 @@ struct AsioDriverParamsBlock {
 
 static_assert(ASIO_DRIVER_PARAMS_PAYLOAD_OFFSET == 64u,
               "params payload offset contract");
+static_assert(offsetof(AsioDriverParamsBlock, reserved1) == 24u,
+              "params endpoint/request token slot offset");
+static_assert(offsetof(AsioDriverParamsBlock, reserved1) + sizeof(uint32_t) == 28u,
+              "params channel request token offset");
 
 struct AsioDriverTelemetryBlock {
     uint32_t magic;              // ASIO_DRIVER_TELEMETRY_MAGIC
@@ -106,6 +113,10 @@ struct AsioDriverTelemetryBlock {
     // 者按 version 分支：v2 走立体声合成回落。
     float peakInCh[8];           // 处理前逐声道峰值
     float peakOutCh[8];          // 处理后（折叠前）逐声道峰值
+    // ---- v4：声道档位请求代号 ----
+    // 驱动实例在 init() 捕获参数块 reserved1[1]，与注册表 Channels
+    // 同一生命周期快照；此后只回显，不随 pump/start 重捕。旧版本无此字段。
+    uint32_t requestSeq;
 };
 
 static_assert(sizeof(AsioDriverTelemetryBlock) <= ASIO_DRIVER_TELEMETRY_BYTES,
@@ -116,5 +127,11 @@ static_assert(offsetof(AsioDriverTelemetryBlock, eqInSpectrum) == 392u,
               "v2 eqInSpectrum offset must not move");
 static_assert(offsetof(AsioDriverTelemetryBlock, peakInCh) == 520u,
               "v3 peakInCh tail offset");
-static_assert(sizeof(AsioDriverTelemetryBlock) == 584u,
-              "v3 telemetry block size");
+static_assert(offsetof(AsioDriverTelemetryBlock, peakOutCh) == 552u,
+              "v3 peakOutCh tail offset");
+static_assert(offsetof(AsioDriverTelemetryBlock, requestSeq) == 584u,
+              "v4 requestSeq tail offset");
+// uint64_t 成员使结构按 8 字节对齐；v4 有效尾字段止于 588，
+// sizeof 包含到 592 的尾部填充，映射/清零都必须使用真实结构大小。
+static_assert(sizeof(AsioDriverTelemetryBlock) == 592u,
+              "v4 telemetry block size including tail padding");

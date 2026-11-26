@@ -85,6 +85,12 @@ class _IsoCommands {
         for (final command in sent)
           if (command['cmd'] == 'chcap') (command['ch'] as num).toInt(),
       ];
+
+  List<int> get requestSeqs => [
+        for (final command in sent)
+          if (command['cmd'] == 'asioRequestSeq')
+            (command['requestSeq'] as num).toInt(),
+      ];
 }
 
 Map<String, dynamic> _paramsEvt({
@@ -130,6 +136,24 @@ Map<String, dynamic> _vizEvt(int channelCount) => {
       'chCount': channelCount,
       'chLevels': List<double>.filled(channelCount, -120.0),
       'stageCh': List<double>.filled(kVizStageTelemetry * channelCount, -120.0),
+    };
+
+Map<String, dynamic> _asioStatusEvt({
+  required int dawCh,
+  int? requestSeq,
+  int version = 4,
+  bool running = true,
+  int frames = 100,
+}) =>
+    {
+      'evt': 'asiostatus',
+      'version': version,
+      'requestSeq': ?requestSeq,
+      'running': running,
+      'dawSeen': 1,
+      'dawActive': running ? 1 : 0,
+      'dawFrames': frames,
+      'dawCh': dawCh,
     };
 
 /// 虚拟 ASIO 形态的模型：ASIO 范式 + 虚拟子形态 + asio 链。
@@ -319,7 +343,58 @@ void main() {
       );
     });
 
-    test('旧 2ch 请求 8 后，新实例确认并同步 8→6 能力', () async {
+    test('每次虚拟档位请求都发布单调递增的 requestSeq', () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      final commands = _IsoCommands(m);
+      addTearDown(commands.close);
+      addTearDown(m.dispose);
+
+      expect(m.setAsioDriverChannels(8), isTrue);
+      expect(m.setAsioDriverChannels(4), isTrue);
+      expect(m.setAsioDriverChannels(8), isTrue);
+      await commands.flush();
+
+      final seqs = commands.requestSeqs;
+      expect(seqs, hasLength(3));
+      expect(seqs.first, greaterThan(0));
+      expect(seqs[1], seqs[0] + 1);
+      expect(seqs[2], seqs[1] + 1);
+      expect(registry.dwordWrites.map((write) => write.value), [8, 4, 8]);
+      expect(
+        m.sentParamsForTesting
+            .where((m) => m['id'] == 'channels.count')
+            .map((m) => m['value']),
+        [8, 4, 8],
+      );
+    });
+
+    test('迟到同宽旧 token 不确认，后续旧 2ch 也不覆盖请求 8', () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      final commands = _IsoCommands(m);
+      addTearDown(commands.close);
+      addTearDown(m.dispose);
+      m.asioActive = true;
+      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 200, 'dawCh': 2};
+
+      expect(m.setAsioDriverChannels(4), isTrue);
+      expect(m.setAsioDriverChannels(8), isTrue);
+      await commands.flush();
+      final oldToken = commands.requestSeqs[0];
+      final newToken = commands.requestSeqs[1];
+
+      m.handleMessageForTesting(
+          _asioStatusEvt(dawCh: 8, requestSeq: oldToken, frames: 201));
+      expect(m.displayChannelCount, 8);
+      m.handleMessageForTesting(
+          _asioStatusEvt(dawCh: 2, requestSeq: oldToken, frames: 202));
+      expect(m.displayChannelCount, 8);
+      expect(m.vizChannelCount.value, 8);
+      expect(newToken, greaterThan(oldToken));
+    });
+
+    test('旧宽度 + 旧 token 的重启回退仍不能确认请求 8', () async {
       final registry = _FakeRegistry();
       final m = _virtualAsio(registry: registry);
       final commands = _IsoCommands(m);
@@ -327,109 +402,86 @@ void main() {
       addTearDown(m.dispose);
       m.asioActive = true;
       m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 100, 'dawCh': 2};
-      expect(m.displayChannelCount, 2);
 
-      expect(m.setAsioDriverChannels(8), isTrue);
-      expect(m.displayChannelCount, 8);
-      expect(m.vizChannelCount.value, 8);
-
-      // 请求后到达的旧实例回声仍然不能覆盖新档位。
-      m.handleMessageForTesting({
-        'evt': 'asiostatus',
-        'running': true,
-        'dawSeen': 1,
-        'dawActive': 1,
-        'dawFrames': 101,
-        'dawCh': 2,
-      });
-      expect(m.displayChannelCount, 8);
-      expect(m.vizChannelCount.value, 8);
-
-      // 只有停止后重启且帧计数回退，才是新实例证据。
-      m.handleMessageForTesting({
-        'evt': 'asiostatus',
-        'running': false,
-        'dawSeen': 1,
-        'dawActive': 0,
-        'dawFrames': 101,
-        'dawCh': 2,
-      });
-      m.handleMessageForTesting({
-        'evt': 'asiostatus',
-        'running': true,
-        'dawSeen': 1,
-        'dawActive': 1,
-        'dawFrames': 1,
-        'dawCh': 8,
-      });
-      expect(m.displayChannelCount, 8);
-
-      // 确认后的实际协商值重新成为真源，能力命令必须同步。
-      m.handleMessageForTesting({
-        'evt': 'asiostatus',
-        'running': true,
-        'dawSeen': 1,
-        'dawActive': 1,
-        'dawFrames': 2,
-        'dawCh': 6,
-      });
-      await commands.flush();
-      expect(m.displayChannelCount, 6);
-      expect(
-        commands.channelCapabilities,
-        PlatformProfile.isWindows ? [8, 6] : isEmpty,
-      );
-      expect(
-        m.sentParamsForTesting
-            .where((m) => m['id'] == 'channels.count')
-            .map((m) => m['value']),
-        [8],
-      );
-    });
-
-    test('8→4→8 的迟到同宽遥测不确认请求，旧 2ch 不覆盖', () {
-      final registry = _FakeRegistry();
-      final m = _virtualAsio(registry: registry);
-      addTearDown(m.dispose);
-      m.asioActive = true;
-      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 200, 'dawCh': 2};
-
-      expect(m.setAsioDriverChannels(8), isTrue);
       expect(m.setAsioDriverChannels(4), isTrue);
       expect(m.setAsioDriverChannels(8), isTrue);
+      await commands.flush();
+      final oldToken = commands.requestSeqs.first;
+
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: oldToken,
+        running: false,
+        frames: 101,
+      ));
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: oldToken,
+        frames: 1,
+      ));
       expect(m.displayChannelCount, 8);
+      expect(m.vizChannelCount.value, 8);
+    });
+
+    test('匹配的新 token 无需重启/回退证据即可确认请求', () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      final commands = _IsoCommands(m);
+      addTearDown(commands.close);
+      addTearDown(m.dispose);
+      m.asioActive = true;
+      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 100, 'dawCh': 2};
+
+      expect(m.setAsioDriverChannels(4), isTrue);
+      expect(m.setAsioDriverChannels(8), isTrue);
+      await commands.flush();
+      final newToken = commands.requestSeqs.last;
+
+      // 没有 stop，也没有 processedFrames 回退；精确 token 才是确认依据。
+      m.handleMessageForTesting(
+          _asioStatusEvt(dawCh: 8, requestSeq: newToken, frames: 101));
+      // 确认后，后续真实协商宽度重新成为真源。
+      m.handleMessageForTesting(
+          _asioStatusEvt(dawCh: 2, requestSeq: newToken, frames: 102));
+      expect(m.displayChannelCount, 2);
       expect(
         m.sentParamsForTesting
             .where((m) => m['id'] == 'channels.count')
             .map((m) => m['value']),
-        [8, 4, 8],
+        [4, 8],
       );
-
-      // 宽度恰好等于当前请求，但仍是同一存活实例的迟到事件。
-      m.handleMessageForTesting({
-        'evt': 'asiostatus',
-        'running': true,
-        'dawSeen': 1,
-        'dawActive': 1,
-        'dawFrames': 201,
-        'dawCh': 8,
-      });
-      expect(m.displayChannelCount, 8);
-
-      m.handleMessageForTesting({
-        'evt': 'asiostatus',
-        'running': true,
-        'dawSeen': 1,
-        'dawActive': 1,
-        'dawFrames': 202,
-        'dawCh': 2,
-      });
-      expect(m.displayChannelCount, 8);
-      expect(m.vizChannelCount.value, 8);
-      expect(registry.dwordWrites.map((write) => write.value), [8, 4, 8]);
     });
 
-    test('真实新实例协商 6ch 可确认请求 8', () async {
+    test('同实例 stop/start 保留旧 token，帧回退不再误确认', () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      final commands = _IsoCommands(m);
+      addTearDown(commands.close);
+      addTearDown(m.dispose);
+      m.asioActive = true;
+      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 300, 'dawCh': 2};
+
+      expect(m.setAsioDriverChannels(4), isTrue);
+      expect(m.setAsioDriverChannels(8), isTrue);
+      await commands.flush();
+      final oldToken = commands.requestSeqs.first;
+
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: oldToken,
+        running: false,
+        frames: 301,
+      ));
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: oldToken,
+        frames: 1,
+      ));
+      expect(m.displayChannelCount, 8);
+      expect(m.vizChannelCount.value, 8);
+    });
+
+    test('新实例匹配 token 且协商 6ch 时确认并同步 8→6 能力', () async {
       final registry = _FakeRegistry();
       final m = _virtualAsio(registry: registry);
       final commands = _IsoCommands(m);
@@ -441,25 +493,25 @@ void main() {
       m.vizChannelCount.value = 2;
 
       expect(m.setAsioDriverChannels(8), isTrue);
+      await commands.flush();
+      final newToken = commands.requestSeqs.single;
       m.handleMessageForTesting(_vizEvt(2));
       expect(m.displayChannelCount, 8);
       expect(m.vizChannelCount.value, 8);
-      m.handleMessageForTesting({
-        'evt': 'asiostatus',
-        'running': false,
-        'dawSeen': 1,
-        'dawActive': 0,
-        'dawFrames': 301,
-        'dawCh': 2,
-      });
-      m.handleMessageForTesting({
-        'evt': 'asiostatus',
-        'running': true,
-        'dawSeen': 1,
-        'dawActive': 1,
-        'dawFrames': 1,
-        'dawCh': 6,
-      });
+
+      // token 虽已匹配，泵尚未 running 时不得采信块里残留的旧 dawCh。
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: newToken,
+        running: false,
+        frames: 301,
+      ));
+      expect(m.displayChannelCount, 8);
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 6,
+        requestSeq: newToken,
+        frames: 1,
+      ));
       await commands.flush();
 
       expect(m.displayChannelCount, 6);
@@ -474,6 +526,57 @@ void main() {
             .map((m) => m['value']),
         [8],
       );
+    });
+
+    test('旧 telemetry v3 无 token，重启回退不能确认请求', () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      addTearDown(m.dispose);
+      m.asioActive = true;
+      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 400, 'dawCh': 2};
+
+      expect(m.setAsioDriverChannels(8), isTrue);
+      m.handleMessageForTesting(_asioStatusEvt(
+        version: 3,
+        dawCh: 2,
+        running: false,
+        frames: 401,
+      ));
+      m.handleMessageForTesting(_asioStatusEvt(
+        version: 3,
+        dawCh: 2,
+        frames: 1,
+      ));
+      expect(m.displayChannelCount, 8);
+    });
+
+    test('旧 telemetry v3 即使夹带匹配 token 也必须忽略', () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      final commands = _IsoCommands(m);
+      addTearDown(commands.close);
+      addTearDown(m.dispose);
+      m.asioActive = true;
+      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 500, 'dawCh': 2};
+
+      expect(m.setAsioDriverChannels(8), isTrue);
+      await commands.flush();
+      final newToken = commands.requestSeqs.single;
+      m.handleMessageForTesting(_asioStatusEvt(
+        version: 3,
+        dawCh: 2,
+        requestSeq: newToken,
+        running: false,
+        frames: 501,
+      ));
+      m.handleMessageForTesting(_asioStatusEvt(
+        version: 3,
+        dawCh: 2,
+        requestSeq: newToken,
+        frames: 1,
+      ));
+      expect(m.displayChannelCount, 8);
+      expect(m.vizChannelCount.value, 8);
     });
 
     test('virtual→Client→driver4→virtual 不复活旧请求', () {

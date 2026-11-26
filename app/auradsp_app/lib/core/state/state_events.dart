@@ -1230,9 +1230,14 @@ extension StateEvents on AppModel {
         asioActive = (raw['running'] as bool?) ?? false;
         asioInfo = Map<String, dynamic>.from(raw);
         final dawCh = (raw['dawCh'] as num?)?.toInt() ?? 0;
+        final telemetryVersion = (raw['version'] as num?)?.toInt() ?? 0;
+        final requestSeq = telemetryVersion == 4
+            ? (raw['requestSeq'] as num?)?.toInt()
+            : null;
         _observeAsioVirtualTelemetry(
           running: asioActive,
-          frames: (raw['dawFrames'] as num?)?.toInt(),
+          telemetryVersion: telemetryVersion,
+          requestSeq: requestSeq,
           dawCh: dawCh,
         );
         final asioWorkCh = _asioVirtualWorkCh();
