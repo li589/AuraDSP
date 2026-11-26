@@ -222,12 +222,12 @@ extension VbAsioState on AppModel {
     _sendChCap(); // S2：VAIO 链能力上限 = 输出端点扫描声道
     persistRoutingChange();
     if (vaioActive) {
-      _toIso?.send({
+      _sendVizProducerCommand({
         'cmd': 'vaiorestart',
         'outputEndpoint': config.vaioOutputEndpoint,
         'monitorMirror': config.monitorMirroring,
         'outputVaio': vaioBridgeOutputVaio,
-      });
+      }, advance: true);
     } else if (pipelineChain == PipelineChain.capture &&
         captureActive &&
         config.pipelineOutput == AudioModes.outputVaio) {
@@ -288,11 +288,11 @@ extension VbAsioState on AppModel {
   }
 
   void _sendAsioRestart() {
-    _toIso?.send({
+    _sendVizProducerCommand({
       'cmd': 'asiorestart',
       'driver': config.asioDriver,
       'bufSize': config.asioBufSize,
       'outPair': config.asioOutPair,
-    });
+    }, advance: true);
   }
 }

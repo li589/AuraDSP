@@ -20,7 +20,6 @@ extension StateEvents on AppModel {
   /// 一并补齐。电平地板与旧上升沿一致（-90），逐声道回「无帧」
   /// 态（count=0，UI 回退 L/R 两柱）。
   void _clearVizState() {
-    _vizClearTimeMs = DateTime.now().millisecondsSinceEpoch;
     spectrum.value = List<double>.filled(32, 0.0);
     projectmPcmSnapshot.value = <double>[];
     eqInSpectrum.value = List<double>.filled(32, 0.0);
@@ -49,16 +48,23 @@ extension StateEvents on AppModel {
     refreshDisplayChannelCount();
   }
 
-  /// 推进 active pipeline 代际并立即清理所有 viz 消费面。控制命令与
-  /// 后续模式/音源命令经同一 SendPort 保序，isolate 的 send 出口会
-  /// 给本地、桥和 APO/ASIO telemetry 的既有 viz 事件统一补上代际。
+  /// 推进 active pipeline 代际并立即清理所有 viz 消费面。新代际由实际
+  /// source/mode/restart 命令携带，isolate 在处理该命令、拆装生产者时同步
+  /// 更新；不得提前独立同步而给旧生产者帧盖新代际。
   void _advanceVizGeneration() {
     _vizGeneration++;
     vizSource = null;
     _vizLastFrameAt = null;
     _vizSilentSince = null;
     _clearVizState();
-    send({'cmd': 'setVizGeneration', 'value': _vizGeneration});
+  }
+
+  void _sendVizProducerCommand(
+    Map<String, dynamic> command, {
+    bool advance = true,
+  }) {
+    if (advance) _advanceVizGeneration();
+    send({...command, 'generation': _vizGeneration});
   }
 
   /// 可视化清屏看门狗（第四十九轮 S4，user 定案的统一机制）：
@@ -96,7 +102,7 @@ extension StateEvents on AppModel {
         if (PlatformProfile.isLinux) {
           // Linux：isolate 就绪即按当前模式组建管线（virtual/driver 的
           // 采集侧在 isolate 启动时不存在，必须由模式面补建）。
-          send({'cmd': 'linuxmode', 'mode': audioMode});
+          _sendVizProducerCommand({'cmd': 'linuxmode', 'mode': audioMode});
         }
         break;
       case 'linuxstatus':
@@ -143,7 +149,7 @@ extension StateEvents on AppModel {
         }
         // 持久化的是 VB 模式：就绪后自动进桥（与用户上次状态一致）。
         if (audioMode == 'vbcallback') {
-          _toIso?.send({'cmd': 'vbmode', 'on': true});
+          _sendVizProducerCommand({'cmd': 'vbmode', 'on': true});
         }
         // 插件级预设数据：厂商表 + 编辑器隔离名单（引擎跳过 removed()），
         // 就绪后加载并下发 close 名单；同时检查上一进程崩溃日志做自动登记。
@@ -151,7 +157,7 @@ extension StateEvents on AppModel {
         // 持久化的是 ASIO 模式：就绪后自动进桥（isolate 内部自带 detect）。
         // 第七轮 S2：开关总闸同样压过就绪恢复（见 _pipelineIoSuppressed）。
         if (audioMode == 'asio' && !_pipelineIoSuppressed) {
-          _toIso?.send({
+          _sendVizProducerCommand({
             'cmd': 'asiomode',
             'on': true,
             'driver': config.asioDriver,
@@ -182,7 +188,7 @@ extension StateEvents on AppModel {
                   level: NoticeLevel.warning);
             }
           } else {
-            _toIso?.send({
+            _sendVizProducerCommand({
               'cmd': 'vaiomode',
               'on': true,
               'outputEndpoint': config.vaioOutputEndpoint,
@@ -196,7 +202,7 @@ extension StateEvents on AppModel {
         // 并全量重发参数块（立项 P1/P3；非 Windows 侧静默）。
         if (audioMode == 'sysapo') {
           applyApoFileEffectPolicy();
-          _toIso?.send({
+          _sendVizProducerCommand({
             'cmd': 'apotelemetry',
             'on': true,
             'endpointId': selectedApoEndpointId,
@@ -247,7 +253,7 @@ extension StateEvents on AppModel {
           if (bypass) send({'cmd': 'bypass', 'value': true});
           send({'cmd': 'source51', 'value': source51Mode});
           if (sourceKind.isNotEmpty) {
-            send({
+            _sendVizProducerCommand({
               'cmd': 'source',
               'kind': sourceKind,
               'path': sourcePath.isEmpty ? null : sourcePath,
@@ -1039,11 +1045,6 @@ extension StateEvents on AppModel {
           if (frameGeneration < _vizGeneration) _clearVizState();
           dbgLog('viz: dropped generation $frameGeneration '
               '(active $_vizGeneration)');
-          break;
-        }
-        // 丢弃模式切换或清屏前在途产生或过时的迟到帧
-        final frameTs = (raw['ts'] as num?)?.toInt() ?? 0;
-        if (frameTs > 0 && frameTs < _vizClearTimeMs) {
           break;
         }
         // 第二十三轮（按数据来源治理）：只收当前模式预期来源的

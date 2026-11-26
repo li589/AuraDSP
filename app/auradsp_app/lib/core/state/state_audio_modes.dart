@@ -216,7 +216,7 @@ extension AudioModesState on AppModel {
         _toIso?.send({'cmd': 'setPluginGroupMask', 'mask': vbPluginGroupMask});
         _toIso?.send({'cmd': 'setPluginAutoProtect', 'on': config.vbAutoProtect});
       }
-      _toIso?.send({'cmd': 'vbmode', 'on': isVb});
+      _sendVizProducerCommand({'cmd': 'vbmode', 'on': isVb});
       if (!isVb) {
         vbActive = false;
         vbInfo = {};
@@ -229,7 +229,7 @@ extension AudioModesState on AppModel {
       // asiomode 内部自带 detect（无论能否启动都回 asiodrivers 事件给设置页）。
       // 第七轮 S2：开关总闸压过模式直发起桥（见 _pipelineIoSuppressed）。
       if (!(isAsio && _pipelineIoSuppressed)) {
-        _toIso?.send({
+        _sendVizProducerCommand({
           'cmd': 'asiomode',
           'on': isAsio,
           'driver': config.asioDriver,
@@ -254,7 +254,7 @@ extension AudioModesState on AppModel {
           config.modeCategory == AudioModes.categoryPipeline &&
           (pipelineChain != PipelineChain.vaio || _pipelineIoSuppressed);
       if (!chainBlocksVaio) {
-        _toIso?.send({
+        _sendVizProducerCommand({
           'cmd': 'vaiomode',
           'on': isVaio,
           'outputEndpoint': config.vaioOutputEndpoint,
@@ -278,12 +278,12 @@ extension AudioModesState on AppModel {
     if (PlatformProfile.isLinux && linuxModeBefore != valid) {
       // ADR-012 D-5：Linux 模式变化时让 isolate 重组管线（virtual 建
       // 虚拟 sink + monitor 采集；driver 接 snd-aloop 源；system 拆除）。
-      _toIso?.send({'cmd': 'linuxmode', 'mode': valid});
+      _sendVizProducerCommand({'cmd': 'linuxmode', 'mode': valid});
     }
     // APO 真处理通道（P1）：sysapo 生效期间让 isolate 轮询 APO
     // 回传块（电平/频谱合成 viz），并在进入时全量重发参数块；
     // 离开 sysapo 即停读。isolate 侧非 Windows 永久静默，无副作用。
-    _toIso?.send({
+    _sendVizProducerCommand({
       'cmd': 'apotelemetry',
       'on': valid == 'sysapo',
       'endpointId': selectedApoEndpointId,
@@ -505,7 +505,7 @@ extension AudioModesState on AppModel {
       // Client=桥会话）：已在 asio 模式时对账分发只在链未活时
       // 重发，活会话下形态切换必须显式直达 isolate。
       if (!_pipelineIoSuppressed) {
-        _toIso?.send({
+        _sendVizProducerCommand({
           'cmd': 'asiomode',
           'on': true,
           'driver': config.asioDriver,
@@ -595,22 +595,15 @@ extension AudioModesState on AppModel {
     return 'local';
   }
 
-  /// 数据源切换即清零（第二十三轮）：新源尚未产帧、或切到的
-  /// 选项根本无声（无帧的驱动选项/断路器拦下桥未起）时，旧源的
-  /// 最后一帧不得残留。基线与当前预期一致则不动——重复调用
-  /// 幂等；由 applyPipelineChain 入口与 setAudioMode 各调用点
-  /// 汇合触发（setAudioMode 末尾必经 applyPipelineChain）。
+  /// 对账入口保留即时清屏；实际 source/mode/restart 命令在各自下发点推进
+  /// 代际。空对账只清屏、不推进，避免 UI 与 isolate 代际分裂。
   void _syncVizSourceOnSwitch() {
     final expected = expectedVizBackend;
-    if (_vizSourceBaseline != expected) {
-      _vizSourceBaseline = expected;
-      vizSource = null;
-    }
-    // 切换即清屏（第四十九轮 S4，user 定案）：凡链路重组
-    // （模式/设备/路由切换都汇合于此）一律推进代际并立刻清屏，
-    // 不再只限预期后端变化——同后端换设备时旧帧残留正是宾机所报
-    // 「切换驱动后频谱有时不归零」的一条路径。看门狗记账一并复位。
-    _advanceVizGeneration();
+    if (_vizSourceBaseline != expected) _vizSourceBaseline = expected;
+    vizSource = null;
+    _vizLastFrameAt = null;
+    _vizSilentSince = null;
+    _clearVizState();
   }
 
   /// 在枚举结果里按 id 或名称找端点（config 里存的设备值是
@@ -749,7 +742,7 @@ extension AudioModesState on AppModel {
         !_pipelineIoSuppressed &&
         pipelineChain != PipelineChain.capture &&
         pipelineChain != PipelineChain.asio) {
-      _toIso?.send({
+      _sendVizProducerCommand({
         'cmd': 'vaiomode',
         'on': true,
         'outputEndpoint': config.vaioOutputEndpoint,
@@ -775,12 +768,12 @@ extension AudioModesState on AppModel {
     // 链路照跑；面板文案却早已承诺「采集暂停/输出静音」）。
     if (_pipelineIoSuppressed) {
       if (captureActive) {
-        _toIso?.send({'cmd': 'capturemode', 'on': false});
+        _sendVizProducerCommand({'cmd': 'capturemode', 'on': false});
         captureActive = false;
         dbgLog('pipeline.chain: capturemode off (io switch)');
       }
       if (vaioActive) {
-        _toIso?.send({
+        _sendVizProducerCommand({
           'cmd': 'vaiomode',
           'on': false,
           'outputEndpoint': config.vaioOutputEndpoint,
@@ -795,7 +788,7 @@ extension AudioModesState on AppModel {
         // r61 验收修复：虚拟形态总闸不拆控制模式——拆会话拆不
         // 掉 DAW 进程内的驱动（声音与遥测照旧，宾机实报缺陷），
         // 改经参数块 mute 字段令驱动泵整体静音。
-        _toIso?.send({
+        _sendVizProducerCommand({
           'cmd': 'asiomode',
           'on': true,
           'driver': config.asioDriver,
@@ -806,7 +799,7 @@ extension AudioModesState on AppModel {
         });
         dbgLog('pipeline.chain: asiomode virtual muted (io switch)');
       } else if (asioActive) {
-        _toIso?.send({
+        _sendVizProducerCommand({
           'cmd': 'asiomode',
           'on': false,
           'driver': config.asioDriver,
@@ -831,7 +824,7 @@ extension AudioModesState on AppModel {
       final payload = _captureCommand('capturemode');
       if (payload == null) {
         if (captureActive) {
-          _toIso?.send({'cmd': 'capturemode', 'on': false});
+          _sendVizProducerCommand({'cmd': 'capturemode', 'on': false});
           captureActive = false; // 与非捕获分支同口径本地清位（细审 R-A L3）
         }
         postNotice(
@@ -843,14 +836,14 @@ extension AudioModesState on AppModel {
       }
       if (!captureActive) {
         payload['on'] = true;
-        _toIso?.send(payload);
+        _sendVizProducerCommand(payload);
         dbgLog('pipeline.chain: capturemode on');
       }
       return;
     }
     // 非捕获链：捕获链若在跑必须停（离开管线类别同理）。
     if (captureActive) {
-      _toIso?.send({'cmd': 'capturemode', 'on': false});
+      _sendVizProducerCommand({'cmd': 'capturemode', 'on': false});
       captureActive = false;
       dbgLog('pipeline.chain: capturemode off');
     }
@@ -864,7 +857,7 @@ extension AudioModesState on AppModel {
         }
         dbgLog('pipeline.reconcile: resend vaiomode (vaioActive=false)');
         _lastVaioBridgeOutputVaio = vaioBridgeOutputVaio;
-        _toIso?.send({
+        _sendVizProducerCommand({
           'cmd': 'vaiomode',
           'on': true,
           'outputEndpoint': config.vaioOutputEndpoint,
@@ -875,7 +868,7 @@ extension AudioModesState on AppModel {
       } else if (_lastVaioBridgeOutputVaio != vaioBridgeOutputVaio) {
         _lastVaioBridgeOutputVaio = vaioBridgeOutputVaio;
         dbgLog('pipeline.reconcile: outputVaio changed to $vaioBridgeOutputVaio, restarting vaio bridge');
-        _toIso?.send({
+        _sendVizProducerCommand({
           'cmd': 'vaiorestart',
           'outputEndpoint': config.vaioOutputEndpoint,
           'monitorMirror': config.monitorMirroring,
@@ -887,7 +880,7 @@ extension AudioModesState on AppModel {
       // 虚拟形态恒重发：控制模式无会话活标志，总闸的静音/解静
       // 音状态只能靠重发 asiomode 携带（isolate 侧幂等）。
       dbgLog('pipeline.reconcile: resend asiomode');
-      _toIso?.send({
+      _sendVizProducerCommand({
         'cmd': 'asiomode',
         'on': true,
         'driver': config.asioDriver,
@@ -912,7 +905,7 @@ extension AudioModesState on AppModel {
     }
     final payload = _captureCommand('capturerestart');
     if (payload == null) {
-      _toIso?.send({'cmd': 'capturemode', 'on': false});
+      _sendVizProducerCommand({'cmd': 'capturemode', 'on': false});
       postNotice(
           captureBlockReason == 'vaio-missing'
               ? '未检测到 AuraVAIO 虚拟声卡端点，无法以 VAIO 输出，请确认驱动已安装'
@@ -920,7 +913,7 @@ extension AudioModesState on AppModel {
           level: NoticeLevel.warning);
       return;
     }
-    _toIso?.send(payload);
+    _sendVizProducerCommand(payload);
     dbgLog('pipeline.chain: capturerestart');
   }
 
@@ -1118,7 +1111,7 @@ extension AudioModesState on AppModel {
     if (captureActive &&
         _isFeedbackPair(config.pipelineInputDevice,
             config.pipelineOutputDevice)) {
-      _toIso?.send({'cmd': 'capturemode', 'on': false});
+      _sendVizProducerCommand({'cmd': 'capturemode', 'on': false});
       captureActive = false;
       postNotice('系统默认设备已变更，输入与输出变为同一端点，已停止捕获链以防自激',
           level: NoticeLevel.warning);
@@ -1185,7 +1178,7 @@ extension AudioModesState on AppModel {
       _reconcileAbsentSince.remove('in');
       repaired.add('输入设备');
       if (captureActive) {
-        _toIso?.send({'cmd': 'capturemode', 'on': false});
+        _sendVizProducerCommand({'cmd': 'capturemode', 'on': false});
         captureActive = false;
         dbgLog('pipeline.capture: stopped after reconcile (input gone)');
       }
@@ -1541,7 +1534,7 @@ extension AudioModesState on AppModel {
     persistRoutingChange();
     // 跟随端点切换（第四十一轮）：telemetry 读者切到新端点的
     // 分块；解析不到全 id 时回落全局块（读者侧空目标口径）。
-    _toIso?.send({'cmd': 'apotarget', 'endpointId': selectedApoEndpointId});
+    _sendVizProducerCommand({'cmd': 'apotarget', 'endpointId': selectedApoEndpointId});
     _sendChCap();
     _notifyUi();
   }
@@ -1942,7 +1935,7 @@ extension AudioModesState on AppModel {
     config.monitorMirroring = enabled;
     persistRoutingChange();
     if (vaioActive) {
-      _toIso?.send({
+      _sendVizProducerCommand({
         'cmd': 'vaiorestart',
         'outputEndpoint': config.vaioOutputEndpoint,
         'monitorMirror': enabled,
@@ -2315,7 +2308,7 @@ extension AudioModesState on AppModel {
                 config.apoTargetEndpoint = fbId;
                 apoAttached = true;
                 persistRoutingChange();
-                _toIso?.send({'cmd': 'apotarget', 'endpointId': fbId});
+                _sendVizProducerCommand({'cmd': 'apotarget', 'endpointId': fbId});
                 _sendChCap();
                 postNotice(
                     '所选 APO 端点已消失，已回落到已附加端点'
@@ -2326,8 +2319,9 @@ extension AudioModesState on AppModel {
             // telemetry 跟随对账：枚举到达后选中端点可能首次可
             // 解析（启动时序），把跟随目标补发读者（幂等）。
             if (audioMode == 'sysapo') {
-              _toIso?.send(
-                  {'cmd': 'apotarget', 'endpointId': selectedApoEndpointId});
+              _sendVizProducerCommand(
+                  {'cmd': 'apotarget', 'endpointId': selectedApoEndpointId},
+                  advance: false);
               // 声道能力对账（第四十二轮 S1）：端点改格式/回落
               // 后把最新 mix 声道数补发钳制器（幂等）。
               _sendChCap();

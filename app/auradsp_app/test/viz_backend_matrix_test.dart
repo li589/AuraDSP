@@ -5,6 +5,9 @@
 @TestOn('windows')
 library;
 
+import 'dart:async';
+import 'dart:isolate';
+
 import 'package:auradsp_app/core/audio_modes.dart';
 import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/state.dart';
@@ -19,6 +22,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 typedef _BackendCase = ({String name, String source, String? asioFlavor});
+
+class _IsoCommands {
+  final ReceivePort _port = ReceivePort();
+  final List<Map<String, dynamic>> sent = [];
+  late final StreamSubscription<dynamic> _subscription;
+
+  _IsoCommands(AppModel model) {
+    _subscription = _port.listen((raw) {
+      if (raw is Map) sent.add(Map<String, dynamic>.from(raw));
+    });
+    model.handleMessageForTesting({'evt': 'isoReady', 'port': _port.sendPort});
+  }
+
+  Future<void> flush() => Future<void>.delayed(Duration.zero);
+
+  Future<void> close() async {
+    await _subscription.cancel();
+    _port.close();
+  }
+}
 
 const _cases = <_BackendCase>[
   (name: 'local/WASAPI', source: 'local', asioFlavor: null),
@@ -74,6 +97,7 @@ Map<String, dynamic> _frame(
   required int generation,
   double fill = 0.45,
   double eqFill = 0.65,
+  int? ts,
 }) {
   final pcm = c.source == 'local' || c.source == 'asio'
       ? <double>[0.1, -0.1, 0.2, -0.2]
@@ -82,6 +106,7 @@ Map<String, dynamic> _frame(
     'evt': 'viz',
     'backend': c.source,
     'generation': generation,
+    'ts': ?ts,
     if (c.source == 'sysapo') 'endpointId': '',
     'spectrum': List<double>.filled(32, fill),
     'eqIn': List<double>.filled(32, eqFill),
@@ -131,6 +156,37 @@ void _expectCleared(AppModel m) {
   expect(m.vizStageChLevels.value.every((v) => v == -120.0), isTrue);
 }
 
+Future<void> _expectDirectMutation(
+  _BackendCase c, {
+  required String command,
+  required void Function(AppModel m) arrange,
+  required void Function(AppModel m) mutate,
+}) async {
+  final m = _model(c);
+  final iso = _IsoCommands(m);
+  addTearDown(iso.close);
+  addTearDown(m.dispose);
+  await iso.flush();
+  iso.sent.clear();
+  arrange(m);
+  m.handleMessageForTesting(_frame(c, generation: 0));
+  _expectHot(m, c);
+
+  mutate(m);
+  _expectCleared(m);
+  m.handleMessageForTesting(_frame(c, generation: 0, fill: 0.9));
+  _expectCleared(m);
+
+  await iso.flush();
+  final mutations = iso.sent.where((m) => m['cmd'] == command).toList();
+  expect(mutations, hasLength(1));
+  expect(mutations.single['generation'], 1);
+  expect(iso.sent.where((m) => m['cmd'] == 'setVizGeneration'), isEmpty);
+
+  m.handleMessageForTesting(_frame(c, generation: 1, fill: 0.55));
+  _expectHot(m, c, fill: 0.55);
+}
+
 void main() {
   group('VM-05～VM-09 backend matrix', () {
     for (final c in _cases) {
@@ -143,9 +199,9 @@ void main() {
           m.handleMessageForTesting(_frame(c, generation: 0));
           _expectHot(m, c);
 
-          // applyPipelineChain 是所有来源/路由重组的既有汇合点；初始代际 0，
-          // 重组后必须是 1。旧代际迟到帧不得把清屏后的显示面涂回。
-          m.applyPipelineChain();
+          // 实际源命令与代际更新必须同点生效；初始代际 0，停源后必须是 1。
+          // 旧代际迟到帧不得把清屏后的显示面涂回。
+          m.setSource('stop');
           _expectCleared(m);
           m.handleMessageForTesting(_frame(c, generation: 0, fill: 0.9));
           _expectCleared(m);
@@ -207,7 +263,7 @@ void main() {
         final m = _model(c);
         m.handleMessageForTesting(_frame(c, generation: 0));
         m.window.setVisible(false);
-        m.applyPipelineChain();
+        m.setSource('stop');
         m.handleMessageForTesting(_frame(c, generation: 1, fill: 0.9));
         _expectCleared(m);
         m.window.setVisible(true);
@@ -255,12 +311,142 @@ void main() {
       // 来源切换本身不会被 state 的 hidden-window 丢帧门掩盖。
       m.window.setVisible(true);
       await tester.pump();
-      m.config.modeCategory = AudioModes.categoryAttachment;
-      m.config.audioMode = 'vbcallback';
-      m.audioMode = 'vbcallback';
-      m.applyPipelineChain();
+      m.setAudioMode('vbcallback');
       await tester.pump();
       expect(gatedNotifier.value.every((v) => v == 0.0), isTrue);
     });
+  });
+
+  group('Task 17 fix round 1', () {
+    test('current local and bridge generations accept native monotonic ts', () {
+      for (final c in <_BackendCase>[_cases[0], _cases[1]]) {
+        final m = _model(c);
+        m.handleMessageForTesting(_frame(c, generation: 0));
+        m.setSource('stop');
+        _expectCleared(m);
+
+        // Native viz timestamps are engine-relative, not Unix epoch time.
+        m.handleMessageForTesting(_frame(c, generation: 1, ts: 17, fill: 0.55));
+        _expectHot(m, c, fill: 0.55);
+        m.dispose();
+      }
+    });
+
+    test(
+      'direct capture input restart invalidates the old generation',
+      () async {
+        await _expectDirectMutation(
+          _cases[0],
+          command: 'capturerestart',
+          arrange: (m) {
+            m.captureActive = true;
+            m.config.pipelineInputDevice = 'capture-A';
+            m.config.pipelineOutputDevice = 'render-A';
+          },
+          mutate: (m) => m.setPipelineInputDevice('capture-B'),
+        );
+      },
+    );
+
+    test(
+      'direct capture output restart invalidates the old generation',
+      () async {
+        await _expectDirectMutation(
+          _cases[0],
+          command: 'capturerestart',
+          arrange: (m) {
+            m.captureActive = true;
+            m.config.pipelineInputDevice = 'capture-A';
+            m.config.pipelineOutputDevice = 'render-A';
+          },
+          mutate: (m) => m.setPipelineOutputDevice('render-B'),
+        );
+      },
+    );
+
+    test('direct APO target change invalidates the old generation', () async {
+      await _expectDirectMutation(
+        _cases[3],
+        command: 'apotarget',
+        arrange: (_) {},
+        mutate: (m) => m.setApoTargetEndpoint('endpoint-B'),
+      );
+    });
+
+    test(
+      'direct VAIO endpoint restart invalidates the old generation',
+      () async {
+        await _expectDirectMutation(
+          _cases[1],
+          command: 'vaiorestart',
+          arrange: (m) => m.vaioActive = true,
+          mutate: (m) => m.setVaioOutputEndpoint('endpoint-B'),
+        );
+      },
+    );
+
+    for (final entry in <(String, void Function(AppModel))>[
+      ('driver', (m) => m.setAsioDriver('driver-B')),
+      ('buffer', (m) => m.setAsioBufSize(512)),
+      ('output pair', (m) => m.setAsioOutPair(2)),
+    ]) {
+      test(
+        'direct ASIO ${entry.$1} restart invalidates the old generation',
+        () async {
+          await _expectDirectMutation(
+            _cases[5],
+            command: 'asiorestart',
+            arrange: (m) => m.asioActive = true,
+            mutate: entry.$2,
+          );
+        },
+      );
+    }
+
+    test(
+      'producer timer cannot use a generation sent before source teardown',
+      () async {
+        final c = _cases[0];
+        final m = _model(c);
+        final port = ReceivePort();
+        var isolateGeneration = 0;
+        var oldProducerAlive = true;
+        var armed = false;
+        Map<String, dynamic>? sourceCommand;
+        final subscription = port.listen((raw) {
+          if (raw is! Map) return;
+          final command = Map<String, dynamic>.from(raw);
+          if (command['cmd'] == 'setVizGeneration') {
+            isolateGeneration = (command['value'] as num).toInt();
+            if (armed && oldProducerAlive) {
+              // This is the old source's timer running before the next command.
+              m.handleMessageForTesting(
+                _frame(c, generation: isolateGeneration, fill: 0.9),
+              );
+            }
+          } else if (command['cmd'] == 'source') {
+            sourceCommand = command;
+            isolateGeneration =
+                (command['generation'] as num?)?.toInt() ?? isolateGeneration;
+            oldProducerAlive = false;
+          }
+        });
+        addTearDown(() async {
+          await subscription.cancel();
+          port.close();
+          m.dispose();
+        });
+        m.handleMessageForTesting({'evt': 'isoReady', 'port': port.sendPort});
+        await Future<void>.delayed(Duration.zero);
+        armed = true;
+        m.handleMessageForTesting(_frame(c, generation: 0));
+
+        m.setSource('stop');
+        await Future<void>.delayed(Duration.zero);
+
+        _expectCleared(m);
+        expect(sourceCommand?['generation'], 1);
+      },
+    );
   });
 }

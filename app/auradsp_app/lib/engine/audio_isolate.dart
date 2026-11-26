@@ -1079,9 +1079,27 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   final logSetParam = ThrottledLog('setParam');
   final logSetParamStr = ThrottledLog('setParamStr');
   final logCmd = ThrottledLog('cmd', head: 40, every: 200);
+  const vizProducerCommands = <String>{
+    'source',
+    'linuxmode',
+    'capturemode',
+    'capturerestart',
+    'vbmode',
+    'asiomode',
+    'asiorestart',
+    'vaiomode',
+    'vaiorestart',
+    'apotelemetry',
+    'apotarget',
+  };
 
   fromMain.listen((raw) {
     final m = raw as Map;
+    if (vizProducerCommands.contains(m['cmd'])) {
+      // 与下方生产者拆装同一次 isolate 回调原子生效；Timer 只能在命令
+      // 之间运行，旧泵不可能在代际提前更新后盖出新代际帧。
+      vizGeneration = (m['generation'] as num?)?.toInt() ?? vizGeneration;
+    }
     // 命令轨迹（采样）：完整命令流对排障有用，但每帧一条会淹没日志
     if (logCmd.shouldLog) {
       dbgLog('cmd: ${m['cmd']} ${m['kind'] ?? m['id'] ?? ''} ${m['value'] ?? ''}');

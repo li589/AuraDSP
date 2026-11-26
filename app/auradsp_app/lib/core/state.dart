@@ -1335,7 +1335,6 @@ class AppModel extends ChangeNotifier {
   DateTime? _vizLastFrameAt;
   DateTime? _vizSilentSince;
   bool _vizDisplayCleared = true;
-  int _vizClearTimeMs = 0;
   // 看门狗句柄由模型持有，dispose 时取消，避免退出后继续写可视化状态。
   Timer? _vizWatchdogTimer;
 

@@ -925,9 +925,8 @@ extension StateCore on AppModel {
           level: NoticeLevel.warning);
       return;
     }
-    // 停止/换源与后端切换同口径：先作废旧代际并清屏，再发 source
-    // 命令；旧泵已经入队的迟到帧不得恢复频谱、PCM 或电平。
-    _advanceVizGeneration();
+    // 停止/换源与后端切换同口径：source 命令携带新代际，isolate 在
+    // 拆装源时同步更新；旧泵已经入队的迟到帧不得恢复频谱、PCM 或电平。
     sourceKind = kind == 'stop' ? '' : kind;
     // 文件源记住扩展名（isolate 侧按扩展名选解码器）。
     // 第四十四轮 S4：路径跨源保留——切到波形源/停止不卸载
@@ -944,14 +943,14 @@ extension StateCore on AppModel {
     sourcePaused = false;
     if (kind != 'file') sourcePosRatio = 0;
     _notifyUi();
-    send({
+    _sendVizProducerCommand({
       'cmd': 'source',
       'kind': kind,
       'path': path,
       if (kind == 'tone') 'wave': waveShape,
       if (kind == 'tone') 'freq': waveFreq,
       if (kind == 'tone') 'sweep': waveSweep,
-    });
+    }, advance: true);
   }
 
   /// 波形源是否在播（波形卡播放/停止键口径）。
