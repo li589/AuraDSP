@@ -18,6 +18,7 @@ import 'package:auradsp_app/core/config.dart';
 import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
+import 'package:auradsp_app/engine/audio_isolate.dart';
 import 'package:auradsp_app/engine/auradsp_ffi.dart';
 import 'package:auradsp_app/features/settings_page.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
@@ -143,18 +144,57 @@ Map<String, dynamic> _asioStatusEvt({
   int? requestSeq,
   int version = 4,
   bool running = true,
+  bool? driverRunning,
+  int writerPid = 100,
   int frames = 100,
 }) =>
     {
       'evt': 'asiostatus',
       'version': version,
+      'writerPid': writerPid,
       'requestSeq': ?requestSeq,
       'running': running,
+      'driverRunning': driverRunning ?? running,
       'dawSeen': 1,
       'dawActive': running ? 1 : 0,
       'dawFrames': frames,
       'dawCh': dawCh,
     };
+
+Map<String, dynamic> _readyEvt() => {
+      'evt': 'ready',
+      'abi': 1,
+      'version': 'test',
+      'deviceRate': 48000,
+      'deviceCh': 2,
+      'bufferFrames': 512,
+      'latencyMs': 0.0,
+    };
+
+class _ScriptedTelemetryWords {
+  _ScriptedTelemetryWords(this.words);
+
+  final Map<int, List<int>> words;
+  final Map<int, int> _reads = {};
+
+  int read(int index) {
+    final values = words[index];
+    if (values == null || values.isEmpty) {
+      throw StateError('unexpected telemetry word read at $index');
+    }
+    final readIndex = _reads[index] ?? 0;
+    _reads[index] = readIndex + 1;
+    return values[readIndex];
+  }
+}
+
+AsioTelemetrySnapshot? _readScriptedSnapshot(_ScriptedTelemetryWords words) =>
+    AsioTelemetrySnapshot.tryRead(
+      readU32: words.read,
+      readI32: words.read,
+      readF32: (_) => 0,
+      readEndpointId: () => '',
+    );
 
 /// 虚拟 ASIO 形态的模型：ASIO 范式 + 虚拟子形态 + asio 链。
 AppModel _virtualAsio({RegistryPort? registry}) {
@@ -263,6 +303,80 @@ void main() {
       m.asioActive = false;
       m.asioInfo = {'dawSeen': 1, 'dawActive': 0, 'dawCh': 2};
       expect(m.displayChannelCount, 8);
+    });
+  });
+
+  group('ASIO telemetry coherent snapshot', () {
+    test('旧 running=1 + 新 token 的跨代读取被拒绝', () {
+      final words = _ScriptedTelemetryWords({
+        0: [0x54444141, 0x54444141],
+        1: [4, 4],
+        2: [100, 100],
+        3: [1, 1],
+        4: [10, 10],
+        5: [48000, 48000],
+        6: [2, 2],
+        7: [512, 512],
+        8: [100, 100],
+        9: [0, 0],
+        12: [7, 7],
+        14: [48000, 48000],
+        16: [0, 0],
+        17: [0, 0],
+        146: [41, 42],
+      });
+
+      expect(_readScriptedSnapshot(words), isNull);
+    });
+
+    test('writerPid 交叉的遥测快照被拒绝', () {
+      final words = _ScriptedTelemetryWords({
+        0: [0x54444141, 0x54444141],
+        1: [4, 4],
+        2: [100, 200],
+        3: [1, 1],
+        4: [10, 10],
+        5: [48000, 48000],
+        6: [2, 2],
+        7: [512, 512],
+        8: [100, 100],
+        9: [0, 0],
+        12: [7, 7],
+        14: [48000, 48000],
+        16: [0, 0],
+        17: [0, 0],
+        146: [42, 42],
+      });
+
+      expect(_readScriptedSnapshot(words), isNull);
+    });
+
+    test('稳定 v4 快照保留 token、writerPid 与 stopped 状态', () {
+      final words = _ScriptedTelemetryWords({
+        0: [0x54444141, 0x54444141],
+        1: [4, 4],
+        2: [100, 100],
+        3: [0, 0],
+        4: [10, 10],
+        5: [48000, 48000],
+        6: [2, 2],
+        7: [512, 512],
+        8: [100, 100],
+        9: [0, 0],
+        12: [7, 7],
+        14: [48000, 48000],
+        16: [0, 0],
+        17: [0, 0],
+        146: [42, 42],
+      });
+
+      final snapshot = _readScriptedSnapshot(words);
+      expect(snapshot, isNotNull);
+      expect(snapshot!.version, 4);
+      expect(snapshot.writerPid, 100);
+      expect(snapshot.requestSeq, 42);
+      expect(snapshot.running, isFalse);
+      expect(snapshot.dawCh, 2);
     });
   });
 
@@ -449,6 +563,164 @@ void main() {
             .where((m) => m['id'] == 'channels.count')
             .map((m) => m['value']),
         [4, 8],
+      );
+    });
+
+    test('旧 running=1 + 新 token 不确认，停启 epoch 后才接受 dawCh', () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      final commands = _IsoCommands(m);
+      addTearDown(commands.close);
+      addTearDown(m.dispose);
+      m.asioActive = true;
+      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 100, 'dawCh': 2};
+
+      expect(m.setAsioDriverChannels(4), isTrue);
+      await commands.flush();
+      final oldToken = commands.requestSeqs.last;
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: oldToken,
+        writerPid: 100,
+        frames: 100,
+      ));
+      expect(m.setAsioDriverChannels(8), isTrue);
+      await commands.flush();
+      final newToken = commands.requestSeqs.last;
+
+      // 同一 writer 在旧泵仍 running 时暴露新 token：几何可能仍属旧实例。
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: newToken,
+        writerPid: 100,
+        frames: 101,
+      ));
+      expect(m.displayChannelCount, 8);
+      expect(m.vizChannelCount.value, 8);
+
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: newToken,
+        writerPid: 100,
+        running: false,
+        frames: 102,
+      ));
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 6,
+        requestSeq: newToken,
+        writerPid: 100,
+        frames: 1,
+      ));
+      expect(m.displayChannelCount, 6);
+      expect(m.vizChannelCount.value, 6);
+    });
+
+    test('新 writerPid 可确认 token，重叠旧 writer 不污染已确认几何', () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      final commands = _IsoCommands(m);
+      addTearDown(commands.close);
+      addTearDown(m.dispose);
+      m.asioActive = true;
+      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 100, 'dawCh': 2};
+
+      expect(m.setAsioDriverChannels(4), isTrue);
+      await commands.flush();
+      final oldToken = commands.requestSeqs.last;
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: oldToken,
+        writerPid: 100,
+        frames: 100,
+      ));
+      expect(m.setAsioDriverChannels(8), isTrue);
+      await commands.flush();
+      final token = commands.requestSeqs.last;
+
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: token,
+        writerPid: 100,
+        frames: 101,
+      ));
+      expect(m.displayChannelCount, 8);
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 6,
+        requestSeq: token,
+        writerPid: 200,
+        frames: 1,
+      ));
+      expect(m.displayChannelCount, 6);
+
+      // 旧 writer 再次出现在共享块里也不能把已确认的新几何拖回 2ch。
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: token,
+        writerPid: 100,
+        frames: 102,
+      ));
+      expect(m.displayChannelCount, 6);
+      expect(m.vizChannelCount.value, 6);
+    });
+
+    test('断线时请求在 isoReady 重放，且先于 asiomode', () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      addTearDown(m.dispose);
+
+      expect(m.setAsioDriverChannels(8), isTrue);
+      final commands = _IsoCommands(m);
+      addTearDown(commands.close);
+      await commands.flush();
+
+      expect(commands.requestSeqs, hasLength(1));
+      final token = commands.requestSeqs.single;
+      expect(token, greaterThan(0));
+      expect(registry.dwordWrites.map((write) => write.value), [8]);
+      expect(
+        m.sentParamsForTesting
+            .where((m) => m['id'] == 'channels.count')
+            .map((m) => m['value']),
+        [8],
+      );
+
+      m.handleMessageForTesting(_readyEvt());
+      await commands.flush();
+      final tokenIndex = commands.sent.indexOf(
+          commands.sent.firstWhere((m) => m['cmd'] == 'asioRequestSeq'));
+      final modeIndex = commands.sent
+          .indexOf(commands.sent.firstWhere((m) => m['cmd'] == 'asiomode'));
+      expect(tokenIndex, lessThan(modeIndex));
+    });
+
+    test('手动 isolate 重启重放同一未确认 token，不重复档位派发', () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      addTearDown(m.dispose);
+      final first = _IsoCommands(m);
+      addTearDown(first.close);
+
+      expect(m.setAsioDriverChannels(8), isTrue);
+      await first.flush();
+      final token = first.requestSeqs.single;
+      expect(token, greaterThan(0));
+
+      final restarted = _IsoCommands(m);
+      addTearDown(restarted.close);
+      await restarted.flush();
+      expect(restarted.requestSeqs, [token]);
+
+      m.handleMessageForTesting(_readyEvt());
+      await restarted.flush();
+      final commands = restarted.sent.map((m) => m['cmd']).toList();
+      expect(commands.indexOf('asioRequestSeq'),
+          lessThan(commands.indexOf('asiomode')));
+      expect(registry.dwordWrites.map((write) => write.value), [8]);
+      expect(
+        m.sentParamsForTesting
+            .where((m) => m['id'] == 'channels.count')
+            .map((m) => m['value']),
+        [8],
       );
     });
 

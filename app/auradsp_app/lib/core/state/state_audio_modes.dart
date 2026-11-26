@@ -26,17 +26,69 @@ bool idsConflictResolved(String capId, String outId, String defaultRenderId) {
 final math.Random _asioVirtualRequestRandom = math.Random.secure();
 
 class _AsioVirtualChannelRequest {
-  _AsioVirtualChannelRequest()
-      : requestSeq = _asioVirtualRequestRandom.nextInt(0x7FFFFFFF) + 1;
+  _AsioVirtualChannelRequest({int? initialWriterPid})
+      : requestSeq = _asioVirtualRequestRandom.nextInt(0x7FFFFFFF) + 1,
+        _lastWriterPid = initialWriterPid;
 
   int requestSeq;
   int? acknowledgedRequestSeq;
   int? requestedCh;
+  int? _lastWriterPid;
+  final Map<int, bool> _writerEpochs = {};
+  int? _acceptedWriterPid;
+  int? _acceptedDawCh;
+  bool _invalidated = false;
 
-  void advance() {
+  void advance({int? previousWriterPid}) {
     requestSeq = (requestSeq + 1) & 0xFFFFFFFF;
     if (requestSeq == 0) requestSeq = 1;
+    acknowledgedRequestSeq = null;
+    _lastWriterPid = previousWriterPid ?? _lastWriterPid;
+    _writerEpochs.clear();
+    final previousWriter = _lastWriterPid;
+    if (previousWriter != null) _writerEpochs[previousWriter] = false;
+    _acceptedWriterPid = null;
+    _acceptedDawCh = null;
+    _invalidated = false;
   }
+
+  void invalidate() {
+    acknowledgedRequestSeq = requestSeq;
+    requestedCh = null;
+    _writerEpochs.clear();
+    _acceptedWriterPid = null;
+    _acceptedDawCh = null;
+    _invalidated = true;
+  }
+
+  bool observeEpoch({
+    required int token,
+    required int writerPid,
+    required bool driverRunning,
+  }) {
+    if (_invalidated || token != requestSeq || writerPid <= 0) return false;
+    _lastWriterPid = writerPid;
+    final firstForToken = !_writerEpochs.containsKey(writerPid);
+    final stoppedForToken = _writerEpochs[writerPid] ?? false;
+    _writerEpochs[writerPid] = !driverRunning;
+    if (!driverRunning) return false;
+    if (firstForToken || stoppedForToken) {
+      _acceptedWriterPid = writerPid;
+      return true;
+    }
+    return _acceptedWriterPid == writerPid;
+  }
+
+  bool acceptLiveDawCh(int dawCh) {
+    if (_acceptedWriterPid == null ||
+        (dawCh != 2 && dawCh != 4 && dawCh != 6 && dawCh != 8)) {
+      return false;
+    }
+    _acceptedDawCh = dawCh;
+    return true;
+  }
+
+  int? get acceptedDawCh => _acceptedDawCh;
 }
 
 final _asioVirtualChannelRequests = Expando<_AsioVirtualChannelRequest>();
@@ -1572,30 +1624,32 @@ extension AudioModesState on AppModel {
   }
 
   void _invalidateAsioVirtualChannelRequest() {
-    final request = _asioVirtualChannelRequests[this];
-    if (request == null) return;
-    request.acknowledgedRequestSeq = request.requestSeq;
-    request.requestedCh = null;
+    _asioVirtualChannelRequests[this]?.invalidate();
   }
 
   /// 只认 telemetry v4 的精确请求代号 + 活跃泵 + 合法协商宽度。
-  /// processedFrames 回退、running 上升沿、Map 身份和宽度相等均不是
-  /// 实例证据：它们无法区分新实例与同实例 stop/start 或迟到旧事件。
+  /// 同一 writer 换 token 时还必须观察该 token 的 stopped→started；
+  /// 新 writerPid 可作为新实例证据。重叠 writer 不能借彼此的 epoch。
   void _observeAsioVirtualTelemetry({
     required bool running,
+    required bool driverRunning,
     required int telemetryVersion,
     required int? requestSeq,
+    required int? writerPid,
     required int dawCh,
   }) {
+    final request = _asioVirtualChannelRequests[this];
+    if (request == null) return;
+    final epochReady = telemetryVersion == 4 &&
+        requestSeq != null &&
+        writerPid != null &&
+        request.observeEpoch(
+          token: requestSeq,
+          writerPid: writerPid,
+          driverRunning: driverRunning,
+        );
+    if (!running || !epochReady || !request.acceptLiveDawCh(dawCh)) return;
     if (_pendingAsioVirtualRequestCh == null) return;
-    final request = _asioVirtualChannelRequests[this]!;
-    if (!running ||
-        telemetryVersion != 4 ||
-        requestSeq == null ||
-        requestSeq != request.requestSeq ||
-        (dawCh != 2 && dawCh != 4 && dawCh != 6 && dawCh != 8)) {
-      return;
-    }
     request.acknowledgedRequestSeq = request.requestSeq;
     request.requestedCh = null;
     // 旧实例的预确认流宽不再属于新实例，确认后必须让 dawCh 接管。
@@ -1629,19 +1683,30 @@ extension AudioModesState on AppModel {
     if (pending != null) return pending;
     final dawLive =
         asioActive || ((asioInfo['dawActive'] as num?)?.toInt() ?? 0) == 1;
-    final daw = (asioInfo['dawCh'] as num?)?.toInt() ?? 0;
-    if (dawLive && (daw == 2 || daw == 4 || daw == 6 || daw == 8)) return daw;
+    if (dawLive) {
+      final accepted = _asioVirtualChannelRequests[this]?.acceptedDawCh;
+      if (accepted != null) return accepted;
+      final daw = (asioInfo['dawCh'] as num?)?.toInt() ?? 0;
+      if (daw == 2 || daw == 4 || daw == 6 || daw == 8) return daw;
+    }
     final d = asioDriverChannels;
     return (d == 4 || d == 6 || d == 8) ? d : 2;
   }
 
   void _requestAsioVirtualChannels(int count) {
+    final initialWriter = (asioInfo['writerPid'] as num?)?.toInt();
     final request = _asioVirtualChannelRequests[this] ??=
-        _AsioVirtualChannelRequest();
-    request.advance();
+        _AsioVirtualChannelRequest(initialWriterPid: initialWriter);
+    request.advance(previousWriterPid: initialWriter);
     request.requestedCh = count;
     // 先发 token，再走统一 channels.count 派发；SendPort 保序，驱动
     // 新实例 init 时优先捕获到本次请求身份。
+    _toIso?.send({'cmd': 'asioRequestSeq', 'requestSeq': request.requestSeq});
+  }
+
+  void _replayAsioVirtualChannelRequest() {
+    if (_pendingAsioVirtualRequestCh == null) return;
+    final request = _asioVirtualChannelRequests[this]!;
     _toIso?.send({'cmd': 'asioRequestSeq', 'requestSeq': request.requestSeq});
   }
 

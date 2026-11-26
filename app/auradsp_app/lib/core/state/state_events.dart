@@ -72,6 +72,9 @@ extension StateEvents on AppModel {
     switch (raw['evt'] as String) {
       case 'isoReady':
         _toIso = raw['port'] as SendPort;
+        // 新 isolate 的 AsioParamPublisher._requestSeq 从 0 重置；先重放
+        // AppModel 当前未确认 token，后续 ready/asiomode 才能激活并落块。
+        _replayAsioVirtualChannelRequest();
         if (!window.isVisible) {
           send({'cmd': 'setVizSuspended', 'value': true});
         }
@@ -1234,10 +1237,15 @@ extension StateEvents on AppModel {
         final requestSeq = telemetryVersion == 4
             ? (raw['requestSeq'] as num?)?.toInt()
             : null;
+        final writerPid = telemetryVersion == 4
+            ? (raw['writerPid'] as num?)?.toInt()
+            : null;
         _observeAsioVirtualTelemetry(
           running: asioActive,
+          driverRunning: (raw['driverRunning'] as bool?) ?? asioActive,
           telemetryVersion: telemetryVersion,
           requestSeq: requestSeq,
+          writerPid: writerPid,
           dawCh: dawCh,
         );
         final asioWorkCh = _asioVirtualWorkCh();

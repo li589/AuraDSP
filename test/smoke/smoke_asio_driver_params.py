@@ -29,6 +29,8 @@ SHARED = "core/desktop/windows-drivers/04_asio_driver/AsioDriverShared.h"
 DRIVER = "core/desktop/windows-drivers/04_asio_driver/AuraAsioDriver.cpp"
 DART_ASIO = "app/auradsp_app/lib/engine/audio_isolate_asio.dart"
 DART_ISO = "app/auradsp_app/lib/engine/audio_isolate.dart"
+DART_MODES = "app/auradsp_app/lib/core/state/state_audio_modes.dart"
+DART_EVENTS = "app/auradsp_app/lib/core/state/state_events.dart"
 
 fails = []
 
@@ -44,6 +46,8 @@ shared = read(SHARED)
 driver = read(DRIVER)
 dart_asio = read(DART_ASIO)
 dart_iso = read(DART_ISO)
+dart_modes = read(DART_MODES)
+dart_events = read(DART_EVENTS)
 
 # ---- 契约头 ----
 check("params block name", "AuraDSP_AsioDriverParams" in shared)
@@ -134,6 +138,17 @@ check("isolate routes endpoint seq command",
 check("isolate routes channel request token command",
       "case 'asioRequestSeq'" in dart_iso and
       "asioPublisher.setRequestSeq" in dart_iso)
+check("AppModel exposes pending-token replay for a fresh isolate",
+      "void _replayAsioVirtualChannelRequest()" in dart_modes and
+      "_pendingAsioVirtualRequestCh" in dart_modes)
+i_iso_ready = dart_events.find("case 'isoReady':")
+i_ready = dart_events.find("case 'ready':", i_iso_ready)
+iso_ready_body = dart_events[i_iso_ready:i_ready]
+i_replay = iso_ready_body.find("_replayAsioVirtualChannelRequest();")
+i_port = iso_ready_body.find("_toIso = raw['port'] as SendPort;")
+check("isoReady replays pending token after binding the new port",
+      0 <= i_port < i_replay,
+      f"port@{i_port} replay@{i_replay}")
 
 # ---- 总闸静音（r61 验收修复） ----
 check("header mute field", "volatile long mute;" in shared)

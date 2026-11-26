@@ -86,6 +86,14 @@ check("driver writes telemetry version unconditionally (r65)",
       "m_telemetry->version = ASIO_DRIVER_TELEMETRY_VERSION;" in driver)
 check("driver echoes init-captured channel request token",
       "m_telemetry->requestSeq = m_channelRequestSeq;" in driver)
+i_open_telemetry = driver.find("void AuraAsioDriver::OpenTelemetry()")
+i_close_telemetry = driver.find("void AuraAsioDriver::CloseTelemetry()", i_open_telemetry)
+open_telemetry_body = driver[i_open_telemetry:i_close_telemetry]
+i_running_clear = open_telemetry_body.find("m_telemetry->running = 0;")
+i_token_publish = open_telemetry_body.find("m_telemetry->requestSeq = m_channelRequestSeq;")
+check("driver clears old running before exposing a new request token",
+      0 <= i_running_clear < i_token_publish,
+      f"running@{i_running_clear} token@{i_token_publish}")
 
 # ---- 桥中转侧 ----
 check("bridge accepts telemetry versions 1..current",
@@ -100,15 +108,27 @@ check("reader checks magic", "_asioTelemetryMagic" in dart_asio)
 check("reader spectrum offset f32[66]", "_f32![66 + i]" in dart_asio)
 check("reader eqIn offset f32[98]", "_f32![98 + i]" in dart_asio)
 check("reader endpoint id offset u16[36]", "u16[36 + i]" in dart_asio)
-check("reader frames u64 pair", "u32[8] + u32[9] * 4294967296.0" in dart_asio)
+check("reader frames u64 pair",
+      "readU32(8) + readU32(9) * 4294967296.0" in dart_asio)
 check("reader synthesizes asio viz",
       "'backend': 'asio'" in dart_asio and "'evt': 'viz'" in dart_asio)
 check("reader stale-heartbeat liveness gate", "_staleTicks <= 15" in dart_asio)
 check("reader accepts versions 1..4",
       "version < 1 || version > 4" in dart_asio)
 check("reader parses request token only for v4",
+      "AsioTelemetrySnapshot.tryRead(" in dart_asio and
       "version == 4" in dart_asio and
-      "'requestSeq': _u32![146]" in dart_asio)
+      "readU32(146)" in dart_asio)
+check("reader validates a coherent identity/liveness snapshot",
+      "writerPidAfter" in dart_asio and
+      "requestSeqAfter" in dart_asio and
+      "runningAfter" in dart_asio and
+      "updateSeqAfter" in dart_asio)
+check("reader forwards writer identity and raw driver running",
+      "'writerPid': snapshot.writerPid" in dart_asio and
+      "'driverRunning': snapshot.running" in dart_asio)
+check("reader consumes the coherent snapshot for dawCh",
+      "'dawCh': snapshot.dawCh" in dart_asio)
 check("reader per-channel levels from f32[138] (peakOutCh)",
       "_f32![138 + c]" in dart_asio and "dawCh >= 2 && dawCh <= 8" in dart_asio)
 

@@ -242,6 +242,108 @@ class AsioParamPublisher {
   }
 }
 
+/// v1..v4 遥测的一次一致性快照。身份、token、running 与 dawCh 在拷贝
+/// 前后必须完全一致；版本或 updateSeq 变化时整轮放弃，绝不拼半新半旧。
+class AsioTelemetrySnapshot {
+  const AsioTelemetrySnapshot({
+    required this.version,
+    required this.writerPid,
+    required this.requestSeq,
+    required this.running,
+    required this.heartbeat,
+    required this.sampleRate,
+    required this.dawCh,
+    required this.bufferSize,
+    required this.frames,
+    required this.peakIn,
+    required this.peakOut,
+    required this.sinkBits,
+    required this.sinkRate,
+    required this.sinkConfigured,
+    required this.sinkEndpoint,
+  });
+
+  final int version;
+  final int writerPid;
+  final int? requestSeq;
+  final bool running;
+  final int heartbeat;
+  final int sampleRate;
+  final int dawCh;
+  final int bufferSize;
+  final int frames;
+  final double peakIn;
+  final double peakOut;
+  final int sinkBits;
+  final int sinkRate;
+  final bool sinkConfigured;
+  final String sinkEndpoint;
+
+  static AsioTelemetrySnapshot? tryRead({
+    required int Function(int index) readU32,
+    required int Function(int index) readI32,
+    required double Function(int index) readF32,
+    required String Function() readEndpointId,
+  }) {
+    final magic = readU32(0);
+    final version = readU32(1);
+    if (magic != _asioTelemetryMagic || version < 1 || version > 4) {
+      return null;
+    }
+    final writerPid = readU32(2);
+    final requestSeq = version == 4 ? readU32(146) : null;
+    final running = readI32(3) == 1;
+    final heartbeat = readI32(4);
+    final sampleRate = readU32(5);
+    final dawCh = readU32(6);
+    final bufferSize = readU32(7);
+    final frames = (readU32(8) + readU32(9) * 4294967296.0).round();
+    final peakIn = readF32(10);
+    final peakOut = readF32(11);
+    final updateSeq = readU32(12);
+    final sinkBits = readU32(16);
+    final sinkRate = readU32(14);
+    final sinkConfigured = readU32(17) != 0;
+    final sinkEndpoint = readEndpointId();
+
+    final magicAfter = readU32(0);
+    final versionAfter = readU32(1);
+    final writerPidAfter = readU32(2);
+    final requestSeqAfter = versionAfter == 4 ? readU32(146) : null;
+    final runningAfter = readI32(3) == 1;
+    final heartbeatAfter = readI32(4);
+    final dawChAfter = readU32(6);
+    final updateSeqAfter = readU32(12);
+    if (magicAfter != magic ||
+        versionAfter != version ||
+        writerPidAfter != writerPid ||
+        requestSeqAfter != requestSeq ||
+        runningAfter != running ||
+        heartbeatAfter != heartbeat ||
+        dawChAfter != dawCh ||
+        updateSeqAfter != updateSeq) {
+      return null;
+    }
+    return AsioTelemetrySnapshot(
+      version: version,
+      writerPid: writerPid,
+      requestSeq: requestSeq,
+      running: running,
+      heartbeat: heartbeat,
+      sampleRate: sampleRate,
+      dawCh: dawCh,
+      bufferSize: bufferSize,
+      frames: frames,
+      peakIn: peakIn,
+      peakOut: peakOut,
+      sinkBits: sinkBits,
+      sinkRate: sinkRate,
+      sinkConfigured: sinkConfigured,
+      sinkEndpoint: sinkEndpoint,
+    );
+  }
+}
+
 /// 遥测块读者（虚拟形态激活）：asiostatus + viz 合成。
 class AsioTelemetryReader {
   Pointer<Void>? _mapping;
@@ -375,60 +477,62 @@ class AsioTelemetryReader {
       return;
     }
     final u32 = _u32!;
-    if (u32[0] != _asioTelemetryMagic) {
-      _sendAbsent();
-      return;
-    }
-    final version = u32[1];
-    // 与桥侧读口径对齐（AsioBridge 拒绝 version <1 || >宏）：未知
-    // 版本按块缺席处理，避免未来块升版改布局时静默误读频谱偏移。
-    if (version < 1 || version > 4) {
+    final snapshot = AsioTelemetrySnapshot.tryRead(
+      readU32: (index) => u32[index],
+      readI32: (index) => _i32![index],
+      readF32: (index) => _f32![index],
+      readEndpointId: _readEndpointId,
+    );
+    if (snapshot == null) {
+      // 未知版本、无效块或读取期间身份/几何变化：整轮放弃，绝不发布
+      // 旧 running/dawCh 与新 token 的混合快照。
       _sendAbsent();
       return;
     }
     _absentSent = false;
-    final running = _i32![3];
-    final heartbeat = _i32![4];
-    if (running == 1 && heartbeat != _lastHeartbeat) {
+    final running = snapshot.running;
+    final heartbeat = snapshot.heartbeat;
+    if (running && heartbeat != _lastHeartbeat) {
       _lastHeartbeat = heartbeat;
       _staleTicks = 0;
     } else {
       _staleTicks++;
     }
     // 心跳停滞 1.5s（15 tick）判 DAW 已离场（块在但泵已停）。
-    final live = running == 1 && _staleTicks <= 15;
-    final frames = u32[8] + u32[9] * 4294967296.0;
-    final peakIn = _f32![10];
-    final peakOut = _f32![11];
+    final live = running && _staleTicks <= 15;
     send({
       'evt': 'asiostatus',
-      'version': version,
+      'version': snapshot.version,
+      'writerPid': snapshot.writerPid,
       'running': live,
+      // 原始 running 用于 token 的 stopped→started epoch；心跳过期只
+      // 表示读者判活失败，不能伪造一次驱动停止。
+      'driverRunning': snapshot.running,
       'driver': 'AuraDSP Driver',
       'dawSeen': 1,
       'dawActive': live ? 1 : 0,
-      'dawFrames': frames.round(),
-      'dawPeakIn': peakIn,
-      'dawPeakOut': peakOut,
-      'dawSr': u32[5],
-      'dawCh': u32[6],
+      'dawFrames': snapshot.frames,
+      'dawPeakIn': snapshot.peakIn,
+      'dawPeakOut': snapshot.peakOut,
+      'dawSr': snapshot.sampleRate,
+      'dawCh': snapshot.dawCh,
       // v4 尾段 u32[146]（offset 584）。旧版本不得解析/转发 token。
-      if (version == 4) 'requestSeq': _u32![146],
-      'dawSinkBits': u32[16],
-      'dawSinkRate': u32[14],
-      'dawSinkConfigured': u32[17],
-      'dawSinkEndpoint': _readEndpointId(),
+      if (snapshot.version == 4) 'requestSeq': snapshot.requestSeq,
+      'dawSinkBits': snapshot.sinkBits,
+      'dawSinkRate': snapshot.sinkRate,
+      'dawSinkConfigured': snapshot.sinkConfigured,
+      'dawSinkEndpoint': snapshot.sinkEndpoint,
     });
     if (live) {
       _wasLive = true;
-      final outDb = _peakDb(peakOut);
+      final outDb = _peakDb(snapshot.peakOut);
       // v3（r65）：逐声道峰值在块尾（f32 索引 130 起为入、138 起
       // 为出）。声道数取 DAW 协商值；v2 及以下回落立体声合成
       // （peakOut 折叠单值左右同格，与旧版行为一致）。
-      final dawCh = u32[6];
+      final dawCh = snapshot.dawCh;
       var chCount = 2;
       var chLevels = <double>[outDb, outDb];
-      if (version >= 3 && dawCh >= 2 && dawCh <= 8) {
+      if (snapshot.version >= 3 && dawCh >= 2 && dawCh <= 8) {
         chCount = dawCh;
         chLevels = List<double>.generate(
             dawCh, (c) => _peakDb(_f32![138 + c]));
@@ -444,10 +548,10 @@ class AsioTelemetryReader {
       send({
         'evt': 'viz',
         'backend': 'asio',
-        'spectrum': version >= 2
+        'spectrum': snapshot.version >= 2
             ? List<double>.generate(32, (i) => _f32![66 + i])
             : List<double>.filled(32, 0.0),
-        'eqIn': version >= 2
+        'eqIn': snapshot.version >= 2
             ? List<double>.generate(32, (i) => _f32![98 + i])
             : List<double>.filled(32, 0.0),
         'l': levelL,

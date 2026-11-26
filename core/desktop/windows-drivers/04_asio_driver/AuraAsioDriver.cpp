@@ -549,15 +549,16 @@ void AuraAsioDriver::OpenTelemetry() {
         memset(m_telemetry, 0, sizeof(AsioDriverTelemetryBlock));
         m_telemetry->magic = ASIO_DRIVER_TELEMETRY_MAGIC;
     }
+    // running 必须先归零，再暴露新实例 token。否则读者可能把上一实例
+    // 残留的 running=1/旧 dawCh 与本次 init 捕获的新 token 拼成假确认。
+    m_telemetry->running = 0;
     // version 无条件写（r65）：存活块可能由旧版驱动写成旧布局，
     // 若只在新建时写版本号，新驱动会带着旧版本号发布新尾部字段，
     // 读者按旧版回落、逐声道电平/请求代号永不生效。
     m_telemetry->version = ASIO_DRIVER_TELEMETRY_VERSION;
     m_telemetry->writerPid = GetCurrentProcessId();
-    // token 是 init 生命周期快照；start 只回显。running 先归零，避免
-    // 上一实例异常退出留下的 running=1 在新泵发布几何前误判为活跃。
+    // token 是 init 生命周期快照；start 只回显。
     m_telemetry->requestSeq = m_channelRequestSeq;
-    m_telemetry->running = 0;
 }
 
 void AuraAsioDriver::CloseTelemetry() {
