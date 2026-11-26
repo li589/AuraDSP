@@ -26,6 +26,9 @@ class ApoEngineHost {
  public:
     ApoEngineHost() = default;
     ~ApoEngineHost();
+    // CAuraApo owns this object on the heap. Returns true only when the caller
+    // may delete it; false transfers a live-worker context to WorkerMain.
+    bool OwnerDestroy();
     ApoEngineHost(const ApoEngineHost&) = delete;
     ApoEngineHost& operator=(const ApoEngineHost&) = delete;
 
@@ -90,6 +93,7 @@ class ApoEngineHost {
     void ReleaseSeat();
     bool OpenTelemetry();
     static DWORD WINAPI WorkerMain(LPVOID ctx);
+    DWORD WaitForWorker(DWORD timeoutMs);
     void WorkerLoop();
     void ApplySnapshot(const uint8_t* snap, const uint32_t* hdr);
     void RecordFileError(uint32_t slot, auradsp_status status,
@@ -208,6 +212,13 @@ class ApoEngineHost {
     // worker
     HANDLE hThread_ = nullptr;
     HANDLE hStop_ = nullptr;
+    // Separate reference keeps WorkerMain/ReleaseResources code loaded during
+    // detached self-destruction after the last COM object has gone away.
+    HMODULE hApoModule_ = nullptr;
+    static constexpr uint32_t kWorkerRunning = 0;
+    static constexpr uint32_t kOwnerDetached = 1;
+    static constexpr uint32_t kWorkerExited = 2;
+    std::atomic<uint32_t> workerHandoff_{kWorkerRunning};
 
     // 已应用快照（worker 独占）：数值槽原样 + 字符串槽字节
     uint32_t appliedNum_[APO_NUM_PARAM_COUNT];
@@ -215,6 +226,10 @@ class ApoEngineHost {
     // 失败账本与 appliedStr_ 分离：相同失败值不每 50ms 反复做文件 IO，
     // 但从失败值切回此前成功的同一路径时仍必须真实重试。
     std::string failedStr_[APO_STR_SLOT_COUNT];
+    // Per-file-slot sequence of the last failed attempt. It comes from the
+    // publisher's reserved header words, not the 50ms snapshot poll/global
+    // writeSeq, so numeric or unrelated string changes cannot cause IO storms.
+    uint32_t failedPublicationSeq_[APO_STR_SLOT_COUNT] = {};
     std::string fileErrors_[APO_STR_SLOT_COUNT];
     bool fileFailed_[APO_STR_SLOT_COUNT] = {};
     bool snapshotValid_ = false;

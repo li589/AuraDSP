@@ -211,7 +211,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     ..bind(
         mirror: paramMirror,
         strMirror: paramStrMirror,
-        bypassOf: () => bypass);
+        bypassOf: () => bypass,
+        send: send);
   // Part I Q2：插件块发布者（sysapo 激活时把 pluginMirror 同步进
   // AuraDSP_ApoPlugins；未激活时全部方法为空操作）。中转落定
   // 回调在 syncApoPlugins 声明后以语句接上（2026-11-23 异步
@@ -1971,8 +1972,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           // endpointId（第四十一轮）：跟随的选中端点（全 id）；
           // 缺席/空 = 旧全局块。切换目标不重启读者定时器。
           if (m['on'] == true) {
-            apoTelemetry.setTarget(m['endpointId']?.toString() ?? '');
-            apoTelemetry.start(send);
+            final target = m['endpointId']?.toString() ?? '';
+            apoPublisher.endpointId = target;
+            apoTelemetry.setTarget(target);
+            apoTelemetry.start(
+              send,
+              transitFileErrorOf: () => apoPublisher.transitFileError,
+              transitFileFailedOf: apoPublisher.hasTransitError,
+            );
             apoPluginPublisher.active = true;
             syncApoPlugins();
           } else {
@@ -1982,7 +1989,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           break;
         case 'apotarget':
           // 仅切换 telemetry 跟随端点（读者已在运行）。
-          apoTelemetry.setTarget(m['endpointId']?.toString() ?? '');
+          apoPublisher.endpointId = m['endpointId']?.toString() ?? '';
+          apoTelemetry.setTarget(apoPublisher.endpointId);
           break;
         case 'chcap':
           // 第四十二轮 S1：状态层告知当前输出路径声道能力

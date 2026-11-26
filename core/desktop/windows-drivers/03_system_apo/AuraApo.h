@@ -81,7 +81,9 @@ class CAuraApo : public IAudioProcessingObject,
     void* hbView_ = nullptr;
     // 真处理宿主（设计 P2）：抢不到座位/引擎不可用时恒惰性，
     // APOProcess 自动回落 v1 透传，行为不劣于现状。
-    ApoEngineHost engine_;
+    // Heap storage is load-bearing: after a final-wait failure the worker can
+    // retain this context after CAuraApo itself has been destroyed.
+    ApoEngineHost* engine_ = nullptr;
     // 端点级属性（第四十一轮多端点 v2）：Initialize 时自本端点 FX
     // 属性存储读取——身份令牌 + 声道族覆写。读不到时全空/无效，
     // 行为与 v1 一致（全局参数块口径）。

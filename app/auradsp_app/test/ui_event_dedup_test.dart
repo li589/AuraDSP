@@ -112,6 +112,51 @@ void main() {
     });
   });
 
+  group('APO 文件中转失败可见性', () {
+    test('复用 apotelemetry 错误补丁且不覆盖引擎运行状态，显式空输入可清除', () {
+      final m = AppModel(testing: true);
+      m.apoEngineActive = true;
+      m.apoEngineRate = 48000;
+      m.convReady = true;
+      const error = 'convolver.ir.path: source file is missing';
+      m.handleMessageForTesting({
+        'evt': 'apotelemetry',
+        'endpointId': '',
+        'transitFileError': true,
+        'previousTransitFileError': '',
+        'lastFileError': error,
+        'fileStatusValid': true,
+        'convReady': false,
+        'ddcReady': true,
+      });
+      expect(m.apoLastFileError, error);
+      expect(m.lastApoError, error);
+      expect(m.convReady, isFalse);
+      expect(m.ddcReady, isTrue);
+      expect(m.apoEngineActive, isTrue);
+      expect(m.apoEngineRate, 48000);
+      expect(m.hasPendingNotice, isTrue);
+
+      // An intentional empty user path is a successful unload, not another
+      // conversion failure. It clears only the transit error it previously set.
+      m.handleMessageForTesting({
+        'evt': 'apotelemetry',
+        'endpointId': '',
+        'transitFileError': true,
+        'previousTransitFileError': error,
+        'lastFileError': '',
+        'fileStatusValid': true,
+        'convReady': false,
+        'ddcReady': true,
+      });
+      expect(m.apoLastFileError, isEmpty);
+      expect(m.lastApoError, isNull);
+      expect(m.apoEngineActive, isTrue);
+      expect(m.apoEngineRate, 48000);
+      m.dispose();
+    });
+  });
+
   group('APO 插件不支持状态', () {
     test('经 pluginSlotLoaded 现有路由到达插件状态消费方', () async {
       final m = AppModel(testing: true);

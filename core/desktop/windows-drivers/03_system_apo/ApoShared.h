@@ -70,7 +70,10 @@ struct ApoParamBlockHeader {
     uint32_t bypass;       // 0/1
     uint32_t numCount;     // 数值槽总数（== APO_NUM_PARAM_COUNT）
     uint32_t strUsed[6];   // 各字符串槽已用字节（不含 NUL）
-    uint32_t reserved[5];  // 凑满 64B 头
+    // reserved[0]/[1]: convolver.ir.path / ddc.load 各自的发布序号。
+    // 只在 App 真实写对应字符串时递增；host 据此区分「同一路径新发布」
+    // 与 50ms 轮询到同一失败快照。其余 reserved 仍保持零/预留。
+    uint32_t reserved[5];
 };
 // 头之后：valid 位图区（64B，bit i ↔ 数值槽 i、bit numCount+s ↔
 // 字符串槽 s；只有置位槽会被 worker 应用——未被 App 写过的

@@ -25,6 +25,13 @@ import '../platform/platform_profile.dart';
 import '../platform/port/windows_system.dart';
 import 'debug_log.dart';
 
+final class ApoFileTransitResult {
+  const ApoFileTransitResult({this.path, this.errorMessage});
+
+  final String? path;
+  final String? errorMessage;
+}
+
 final class ApoPluginTransitResult {
   const ApoPluginTransitResult({this.path, this.errorMessage});
 
@@ -490,19 +497,33 @@ abstract final class ApoTransit {
     }
   }
 
-  /// 返回 source 的中转副本路径：已在中转根下 → 原样；副本已
-  /// 存在（同哈希）→ 直接返回；否则复制。失败返回 null。
-  static String? transitPathFor(String source, {String? rootOverride}) {
+  /// Compatibility wrapper for isolated transit tests and callers that only
+  /// need the path. The APO publisher uses [transitFileEffect] so a nullable
+  /// path never erases the user-visible ACL/source/copy failure reason.
+  static String? transitPathFor(String source, {String? rootOverride}) =>
+      transitFileEffect(source, rootOverride: rootOverride).path;
+
+  /// Returns either the staged path or a structured failure. An intentional
+  /// empty source is a successful explicit unload and has no error message.
+  static ApoFileTransitResult transitFileEffect(
+    String source, {
+    String? rootOverride,
+  }) {
     try {
-      if (source.isEmpty) return source;
-      if (!_ensureRoot(rootOverride)) return null;
-      if (isTransitPath(source)) return source;
+      if (source.isEmpty) return ApoFileTransitResult(path: source);
+      if (!_ensureRoot(rootOverride)) {
+        return const ApoFileTransitResult(
+          errorMessage: 'transit root creation/LocalService ACL grant failed',
+        );
+      }
+      if (isTransitPath(source)) return ApoFileTransitResult(path: source);
       final f = File(source);
       if (!f.existsSync()) {
         dbgLog('apo transit: source missing: $source');
-        return null;
+        return const ApoFileTransitResult(
+          errorMessage: 'source file is missing',
+        );
       }
-      _ensureRoot(rootOverride);
       final bytes = f.readAsBytesSync();
       final hash = sha256.convert(bytes).toString();
       final dot = source.lastIndexOf('.');
@@ -510,7 +531,7 @@ abstract final class ApoTransit {
       final dest =
           '${rootOverride ?? root}'
           '${Platform.pathSeparator}$hash$ext';
-      if (_copied.contains(dest)) return dest;
+      if (_copied.contains(dest)) return ApoFileTransitResult(path: dest);
       final df = File(dest);
       final temp = File(_uniqueSiblingPath(dest));
       try {
@@ -522,10 +543,12 @@ abstract final class ApoTransit {
       }
       _copied.add(dest);
       dbgLog('apo transit: copied $source -> $dest (${bytes.length} B)');
-      return dest;
+      return ApoFileTransitResult(path: dest);
     } catch (e) {
       dbgLog('apo transit: copy failed for $source: $e');
-      return null;
+      return ApoFileTransitResult(
+        errorMessage: 'source read/transit copy failed: $e',
+      );
     }
   }
 

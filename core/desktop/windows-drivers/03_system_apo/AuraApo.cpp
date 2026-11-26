@@ -5,6 +5,7 @@
 #include <sddl.h>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "AuraApoGuid.h"
 #include "AuraHeartbeat.h"
@@ -48,13 +49,18 @@ STDMETHODIMP_(ULONG) CAuraApo::Inner::Release() {
 // ---------------------------------------------------------------------------
 // CAuraApo 构造与析构
 // ---------------------------------------------------------------------------
-CAuraApo::CAuraApo(IUnknown* outer) {
+CAuraApo::CAuraApo(IUnknown* outer)
+    : engine_(new (std::nothrow) ApoEngineHost()) {
     inner_.self = this;
     outer_ = outer ? outer : static_cast<IUnknown*>(&inner_);
     InterlockedIncrement(&instCount);
 }
 
 CAuraApo::~CAuraApo() {
+    if (engine_) {
+        if (engine_->OwnerDestroy()) delete engine_;
+        engine_ = nullptr;
+    }
     CloseHeartbeat();
     InterlockedDecrement(&instCount);
 }
@@ -86,7 +92,7 @@ STDMETHODIMP CAuraApo::GetLatency(HNSTIME* pTime) {
     if (!pTime) return E_POINTER;
     // 引擎在位时如实报告其测量延迟（HNSTIME = 100ns 单位）；
     // 透传（含抢不到座位/引擎不可用）仍为 0（设计 D9）。
-    *pTime = (HNSTIME)(engine_.LatencyMs() * 10000.0);
+    *pTime = (HNSTIME)((engine_ ? engine_->LatencyMs() : 0.0) * 10000.0);
     return S_OK;
 }
 
@@ -241,12 +247,12 @@ STDMETHODIMP CAuraApo::LockForProcess(UINT32 numIn, APO_CONNECTION_DESCRIPTOR** 
     ep.mode = ep_mode_;
     ep.fillValid = ep_fill_valid_;
     ep.fill = ep_fill_;
-    engine_.TryStart(rate_, channels_, ep);
+    if (engine_) engine_->TryStart(rate_, channels_, ep);
     return S_OK;
 }
 
 STDMETHODIMP CAuraApo::UnlockForProcess() {
-    engine_.Stop();
+    if (engine_) engine_->Stop();
     CloseHeartbeat();
     locked_ = false;
     return S_OK;
@@ -268,7 +274,7 @@ STDMETHODIMP_(void) CAuraApo::APOProcess(UINT32 numIn, APO_CONNECTION_PROPERTY**
     if (cin->u32BufferFlags & BUFFER_SILENT) {
         if (dst) memset(dst, 0, bytes);
         cout->u32BufferFlags = BUFFER_SILENT;
-    } else if (engine_.Process((const float*)src, (float*)dst, frames)) {
+    } else if (engine_ && engine_->Process((const float*)src, (float*)dst, frames)) {
         // 真处理已写出 dst（INPLACE 同址亦可）；故障/旁路/未就绪
         // 时 Process 返回 false，落到下方透传拷贝。
         cout->u32BufferFlags = cin->u32BufferFlags;

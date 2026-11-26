@@ -128,21 +128,66 @@ class ApoParamPublisher {
   /// transitPathFor reads and SHA-256-hashes the whole file on every
   /// call; without this, every flushAll re-reads the IR/DDC files.
   final Map<String, (String, String)> _fileEffectConvertCache = {};
+  final Map<String, String> _fileEffectErrors = {};
+  void Function(Map<String, dynamic>)? _send;
+
+  /// Current telemetry endpoint, shared with ApoTelemetryReader's target.
+  String endpointId = '';
+
+  String get transitFileError {
+    for (final id in [ParamId.convIrPath, ParamId.ddcLoad]) {
+      final error = _fileEffectErrors[id];
+      if (error != null) return error;
+    }
+    return '';
+  }
+
+  bool hasTransitError(String id) => _fileEffectErrors.containsKey(id);
+
+  void _updateTransitError(String id, String? error) {
+    final previous = transitFileError;
+    if (error == null || error.isEmpty) {
+      _fileEffectErrors.remove(id);
+    } else {
+      _fileEffectErrors[id] = '$id: $error';
+    }
+    final current = transitFileError;
+    if (current == previous) return;
+    final event = <String, dynamic>{
+      'evt': 'apotelemetry',
+      'endpointId': endpointId,
+      'transitFileError': true,
+      'previousTransitFileError': previous,
+      'lastFileError': current,
+      'fileStatusValid': true,
+    };
+    // A newly published path is not ready until the host confirms it. Do not
+    // touch the other stage or any engine/seat fields in this partial patch.
+    if (id == ParamId.convIrPath) event['convReady'] = false;
+    if (id == ParamId.ddcLoad) event['ddcReady'] = false;
+    _send?.call(event);
+  }
 
   String? _convertFileEffect(String id, String text) {
     final hit = _fileEffectConvertCache[id];
     if (hit != null && hit.$1 == text) return hit.$2;
-    final effective = ApoTransit.transitPathFor(text);
+    final result = ApoTransit.transitFileEffect(text);
+    final effective = result.path;
     if (effective == null) {
       // A failed publication is neither a successful empty conversion nor a
-      // live transit reference. The caller still publishes an explicit empty
-      // path so the engine cannot keep presenting the previous file as ready.
+      // live transit reference. Publish an explicit empty path for fail-closed
+      // engine unload, but retain and report the structured failure separately.
       _fileEffectConvertCache.remove(id);
       _fileEffectTransit.remove(id);
+      _updateTransitError(
+        id,
+        result.errorMessage ?? 'unknown file-effect transit failure',
+      );
       return null;
     }
     _fileEffectConvertCache[id] = (text, effective);
     _fileEffectTransit[id] = effective;
+    _updateTransitError(id, null);
     return effective;
   }
 
@@ -172,10 +217,12 @@ class ApoParamPublisher {
     required Map<String, ({bool isFloat, double value})> mirror,
     required Map<String, String> strMirror,
     required bool Function() bypassOf,
+    required void Function(Map<String, dynamic>) send,
   }) {
     _mirror = mirror;
     _strMirror = strMirror;
     _bypassOf = bypassOf;
+    _send = send;
   }
 
   Pointer<Void> _createMapping(_ApoWin32 w, Pointer<Utf16> name) {
@@ -309,6 +356,13 @@ class ApoParamPublisher {
     _setMaskBit(kApoNumParamCount + slot);
     final cap = kApoStrSlotCaps[slot];
     final off = kApoStrSlotOffsets[slot];
+    if (id == ParamId.convIrPath || id == ParamId.ddcLoad) {
+      // reserved[0]/[1] are per-file-slot publication sequences. They change
+      // only on an actual string write, never on the host's 50ms poll or an
+      // unrelated numeric update, allowing identical failed-path retries.
+      final seqSlot = slot - (kApoStrSlotCaps.length - 2);
+      _u32![11 + seqSlot] = _u32![11 + seqSlot] + 1;
+    }
     var bytes = utf8.encode(text);
     if (bytes.length > cap - 1) {
       var end = cap - 1;
@@ -474,6 +528,8 @@ class ApoTelemetryReader {
   Pointer<Float>? _f32;
   Timer? _timer;
   void Function(Map<String, dynamic>)? _send;
+  String Function()? _transitFileErrorOf;
+  bool Function(String id)? _transitFileFailedOf;
   // 分端点目标（第四十一轮）：'' = 旧全局块（无令牌端点回落）；
   // 非空 = 只读该端点的 v7 分块（块名按 id 哈希派生，开块后以
   // 块内身份盖章复核，防哈希碰撞/陈旧块冒名）。
@@ -493,8 +549,14 @@ class ApoTelemetryReader {
   int _absentTicks = 0;
   bool _gaveUp = false;
 
-  void start(void Function(Map<String, dynamic>) send) {
+  void start(
+    void Function(Map<String, dynamic>) send, {
+    String Function()? transitFileErrorOf,
+    bool Function(String id)? transitFileFailedOf,
+  }) {
     _send = send;
+    _transitFileErrorOf = transitFileErrorOf;
+    _transitFileFailedOf = transitFileFailedOf;
     if (_gaveUp) return;
     _timer ??= Timer.periodic(const Duration(milliseconds: 100), _tick);
   }
@@ -646,7 +708,7 @@ class ApoTelemetryReader {
     final loadErr = u32[1] >= 4 ? u32[kApoTelemetryLoadDiagU32 + 1] : 0;
     // v8 is append-only. Never read or synthesize file status from a short
     // old-host block: false readiness/error is safer than fabricated state.
-    final fileStatusValid = u32[1] >= 8;
+    var fileStatusValid = u32[1] >= 8;
     final enginePathHash = fileStatusValid
         ? (u32[kApoTelemetryFileDiagU32] |
                 (u32[kApoTelemetryFileDiagU32 + 1] << 32))
@@ -654,9 +716,9 @@ class ApoTelemetryReader {
         : 0;
     final engineLoadGen =
         fileStatusValid ? u32[kApoTelemetryFileDiagU32 + 2] : 0;
-    final convReady =
+    var convReady =
         fileStatusValid && u32[kApoTelemetryFileDiagU32 + 3] != 0;
-    final ddcReady =
+    var ddcReady =
         fileStatusValid && u32[kApoTelemetryFileDiagU32 + 4] != 0;
     final stopStatus =
         fileStatusValid ? u32[kApoTelemetryFileDiagU32 + 5] : 0;
@@ -669,6 +731,20 @@ class ApoTelemetryReader {
         bytes.add(b);
       }
       lastFileError = utf8.decode(bytes, allowMalformed: true);
+    }
+    final transitError = _transitFileErrorOf?.call() ?? '';
+    if (transitError.isNotEmpty) {
+      // The host correctly sees an explicit empty unload and therefore has no
+      // engine error to publish. Overlay the publisher's persistent transit
+      // failure so the next host poll cannot silently erase it from the UI.
+      fileStatusValid = true;
+      if (_transitFileFailedOf?.call(ParamId.convIrPath) == true) {
+        convReady = false;
+      }
+      if (_transitFileFailedOf?.call(ParamId.ddcLoad) == true) ddcReady = false;
+      lastFileError = lastFileError.isEmpty
+          ? transitError
+          : '$transitError | $lastFileError';
     }
     final fileStatusSig = '$fileStatusValid|$enginePathHash|$engineLoadGen|'
         '$convReady|$ddcReady|$stopStatus|$lastFileError';

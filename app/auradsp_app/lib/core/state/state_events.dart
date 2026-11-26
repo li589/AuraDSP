@@ -943,6 +943,42 @@ extension StateEvents on AppModel {
         if ((raw['endpointId']?.toString() ?? '') != selectedApoEndpointId) {
           break;
         }
+        if (raw['transitFileError'] == true) {
+          // Partial publisher patch on the existing telemetry route. Transit
+          // failures happen before the host has an engine error (its explicit
+          // empty unload succeeds), so they must not be erased by that empty
+          // host error or overwrite unrelated seat/rate/geometry state.
+          final previous = raw['previousTransitFileError']?.toString() ?? '';
+          final error = raw['lastFileError']?.toString() ?? '';
+          var changed = false;
+          if (error.isNotEmpty && error != apoLastFileError) {
+            postNotice('System APO 文件效果中转失败：$error',
+                level: NoticeLevel.error);
+            apoLastFileError = error;
+            lastApoError = error;
+            changed = true;
+          } else if (error.isEmpty &&
+              previous.isNotEmpty &&
+              apoLastFileError == previous) {
+            apoLastFileError = '';
+            if (lastApoError == previous) lastApoError = null;
+            changed = true;
+          }
+          if (!apoFileStatusValid && raw['fileStatusValid'] == true) {
+            apoFileStatusValid = true;
+            changed = true;
+          }
+          if (raw['convReady'] is bool && convReady != raw['convReady']) {
+            convReady = raw['convReady'] as bool;
+            changed = true;
+          }
+          if (raw['ddcReady'] is bool && ddcReady != raw['ddcReady']) {
+            ddcReady = raw['ddcReady'] as bool;
+            changed = true;
+          }
+          if (changed) _notifyUi();
+          break;
+        }
         // 遥测缺席监督（第十二轮 B2）：读者侧块缺席满 30s 上报。
         // 已附加却无遥测 = audiodg 内 APO 未在运行（静默无处理），
         // 每缺席周期通知一次；措辞带条件（若未播放，块本就不会

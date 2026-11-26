@@ -117,20 +117,47 @@ bool OwnerAlive(DWORD pid) {
 }  // namespace
 
 ApoEngineHost::~ApoEngineHost() {
+    // OwnerDestroy (or detached WorkerMain) has already established that no
+    // live worker can retain this context.
+    ReleaseResources();
+}
+
+bool ApoEngineHost::OwnerDestroy() {
     Stop();
-    if (hThread_) {
-        // Unlock's bounded Stop may retain a live worker. Final destruction is
-        // different: this object owns the worker context, so it must not be
-        // freed until that context has actually finished. This wait is on the
-        // COM/destruction path, never on RT audio.
-        if (hStop_) SetEvent(hStop_);
-        const DWORD rc = WaitForSingleObject(hThread_, INFINITE);
-        if (rc == WAIT_OBJECT_0) {
-            ReleaseResources();
-        } else if (tele_) {
-            tele_->stopStatus = 2;
-        }
+    if (!hThread_) return true;
+    if (hStop_) SetEvent(hStop_);
+    const DWORD rc = WaitForWorker(INFINITE);
+    if (rc == WAIT_OBJECT_0) {
+        ReleaseResources();
+        return true;
     }
+    if (tele_) tele_->stopStatus = 2;
+
+    // Exactly one side owns cleanup after this exchange:
+    // - RUNNING -> DETACHED: the worker observes DETACHED and self-destructs.
+    // - EXITED -> DETACHED: the worker will not touch this again; this side
+    //   may delete only after the OS confirms thread exit. A second wait
+    //   failure intentionally leaks the retained context rather than risking
+    //   a live-worker UAF.
+    const uint32_t previous = workerHandoff_.exchange(
+        kOwnerDetached, std::memory_order_acq_rel);
+    if (previous == kWorkerExited &&
+        WaitForSingleObject(hThread_, INFINITE) == WAIT_OBJECT_0) {
+        ReleaseResources();
+        return true;
+    }
+    return false;
+}
+
+DWORD ApoEngineHost::WaitForWorker(DWORD timeoutMs) {
+#ifdef AURADSP_APO_PLUGIN_TRUSTED_TEST_ONLY
+    if (timeoutMs == INFINITE && tele_ &&
+        tele_->reserved[3] == 0x41313846u) {
+        SetLastError(ERROR_INVALID_FUNCTION);
+        return WAIT_FAILED;
+    }
+#endif
+    return WaitForSingleObject(hThread_, timeoutMs);
 }
 
 // ---------------------------------------------------------------------------
@@ -505,6 +532,7 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels,
     for (uint32_t s = 0; s < APO_STR_SLOT_COUNT; ++s) {
         appliedStr_[s].clear();
         failedStr_[s].clear();
+        failedPublicationSeq_[s] = 0;
         fileErrors_[s].clear();
         fileFailed_[s] = false;
     }
@@ -512,6 +540,15 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels,
     fault_.store(false);
     bypass_.store(false);
 
+    workerHandoff_.store(kWorkerRunning, std::memory_order_release);
+    // COM may drop its last AuraApo reference immediately after a failed final
+    // wait. Retain this DLL independently so detached worker code cannot be
+    // unloaded before FreeLibraryAndExitThread in WorkerMain.
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                            (LPCWSTR)&SelfModuleDir, &hApoModule_)) {
+        Stop();
+        return false;
+    }
     hStop_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     hThread_ = CreateThread(nullptr, 0, &ApoEngineHost::WorkerMain, this, 0, nullptr);
     if (!hThread_) {
@@ -588,6 +625,11 @@ void ApoEngineHost::ReleaseResources() {
     delete[] outBuf_;
     outBuf_ = nullptr;
     if (tele_) {
+#ifdef AURADSP_APO_PLUGIN_TRUSTED_TEST_ONLY
+        // Trusted regression evidence for the host's own cleanup path. This is
+        // deliberately absent from production AuraApo.
+        ++tele_->reserved[4];
+#endif
         tele_->convReady = 0;
         tele_->ddcReady = 0;
         tele_->enginePathHash = 0;
@@ -602,6 +644,10 @@ void ApoEngineHost::ReleaseResources() {
     if (hTeleMap_) {
         CloseHandle(hTeleMap_);
         hTeleMap_ = nullptr;
+    }
+    if (hApoModule_) {
+        FreeLibrary(hApoModule_);
+        hApoModule_ = nullptr;
     }
 }
 
@@ -759,7 +805,21 @@ double ApoEngineHost::LatencyMs() {
 // worker：参数应用（seqlock 快照 → diff → set_param）+ viz 泵
 // ---------------------------------------------------------------------------
 DWORD WINAPI ApoEngineHost::WorkerMain(LPVOID ctx) {
-    ((ApoEngineHost*)ctx)->WorkerLoop();
+    auto* self = (ApoEngineHost*)ctx;
+    self->WorkerLoop();
+    const uint32_t previous = self->workerHandoff_.exchange(
+        kWorkerExited, std::memory_order_acq_rel);
+    if (previous == kOwnerDetached) {
+        // The COM owner is gone. This worker now exclusively owns the heap host
+        // and the separate APO module reference. Do not return from code that
+        // FreeLibrary could unload: FreeLibraryAndExitThread performs the final
+        // module release and terminates this thread atomically from our side.
+        HMODULE apoModule = self->hApoModule_;
+        self->hApoModule_ = nullptr;
+        self->ReleaseResources();
+        delete self;
+        if (apoModule) FreeLibraryAndExitThread(apoModule, 0);
+    }
     return 0;
 }
 
@@ -910,15 +970,21 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
         if (used > kApoStrSlotCaps[s]) used = kApoStrSlotCaps[s];
         std::string cur;
         if (used > 0) cur.assign(base, strnlen(base, used));
-        const bool changedFailure = fileFailed_[s] && failedStr_[s] != cur;
-        if (snapshotValid_ && appliedStr_[s] == cur && !changedFailure) continue;
-        // Cache a failed *attempt* separately, never in appliedStr_. This
-        // avoids retrying an unchanged missing file every 50ms while still
-        // allowing a return to the previous good path after a failure.
-        if (snapshotValid_ && fileFailed_[s] && failedStr_[s] == cur) continue;
         const char* sid = kApoStrSlotIds[s];
         const bool isFile = strcmp(sid, "convolver.ir.path") == 0 ||
                             strcmp(sid, "ddc.load") == 0;
+        const uint32_t publicationSeq = isFile
+            ? hdr[11 + (s - (APO_STR_SLOT_COUNT - 2))]
+            : 0;
+        const bool changedFailure = fileFailed_[s] && failedStr_[s] != cur;
+        if (snapshotValid_ && appliedStr_[s] == cur && !changedFailure) continue;
+        // Suppress only an unchanged poll of the same failed publication. An
+        // explicit re-publication advances its per-file-slot reserved sequence
+        // and must retry even when the path bytes are identical (for example a
+        // fixed ACL/source file or the engine's retryable DDC slot-busy error).
+        if (snapshotValid_ && fileFailed_[s] && failedStr_[s] == cur &&
+            failedPublicationSeq_[s] == publicationSeq)
+            continue;
         if (isFile && !cur.empty() && !IsUnderTransitRoot(cur)) {
             // Fence rejection is also an explicit unload command. Otherwise
             // the previous IR/DDC would continue processing under a new UI
@@ -928,6 +994,7 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
             (void)clearStatus;
             fileFailed_[s] = true;
             failedStr_[s] = cur;
+            failedPublicationSeq_[s] = publicationSeq;
             RecordFileError(s, AURADSP_E_PARAM,
                             "host fence rejected path outside transit root");
             if (tele_ && strcmp(sid, "convolver.ir.path") == 0)
@@ -935,8 +1002,22 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
             if (tele_ && strcmp(sid, "ddc.load") == 0) tele_->ddcReady = 0;
             continue;
         }
-        const auradsp_status st = fnSetParam_(
-            engine_, sid, cur.c_str(), (uint32_t)cur.size() + 1);
+        auradsp_status st = AURADSP_OK;
+        bool injectedDdcBusy = false;
+#ifdef AURADSP_APO_PLUGIN_TRUSTED_TEST_ONLY
+        if (isFile && strcmp(sid, "ddc.load") == 0 && tele_ &&
+            tele_->reserved[2] == 0x41313842u) {
+            tele_->reserved[2] = 0;
+            injectedDdcBusy = true;
+            // Match set_ddc_load's -4 contract: the old DDC is already logically
+            // unloaded and the caller may retry the identical path.
+            (void)fnSetParam_(engine_, sid, "", 1);
+            st = AURADSP_E_PARAM;
+        } else
+#endif
+        {
+            st = fnSetParam_(engine_, sid, cur.c_str(), (uint32_t)cur.size() + 1);
+        }
         if (st == AURADSP_OK) {
             appliedStr_[s] = cur;
             failedStr_[s].clear();
@@ -946,8 +1027,11 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
         } else {
             fileFailed_[s] = true;
             failedStr_[s] = cur;
+            failedPublicationSeq_[s] = publicationSeq;
             if (isFile) {
-                RecordFileError(s, st);
+                RecordFileError(s, st, injectedDdcBusy
+                    ? "ddc.load: engine busy (no free ddc slot, retryable)"
+                    : nullptr);
                 if (tele_ && strcmp(sid, "convolver.ir.path") == 0)
                     tele_->convReady = 0;
                 if (tele_ && strcmp(sid, "ddc.load") == 0) tele_->ddcReady = 0;

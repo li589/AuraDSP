@@ -168,6 +168,10 @@ bool PublishStringParam(const char* id, const wchar_t* path) {
     memset(dst, 0, kApoStrSlotCaps[slot]);
     memcpy(dst, utf8, (size_t)bytes - 1);
     hdr->strUsed[slot] = (uint32_t)bytes - 1;
+    // Task 18 fix round 1: file slots carry a per-slot publication intent in
+    // previously reserved header words. Re-publishing identical bytes must be
+    // distinguishable from the worker merely polling the same snapshot.
+    if (slot >= 4 && slot < 6) ++hdr->reserved[slot - 4];
     MemoryBarrier();
     hdr->writeSeq = seq + 2;
     UnmapViewOfFile(pb);
@@ -187,6 +191,8 @@ struct Task18TelemetryTail {
 };
 constexpr uint32_t kTask18TelemetryOffset = 1632;
 constexpr uint32_t kTask18StopFixture = 0x41313853u;  // 'A18S'
+constexpr uint32_t kTask18DdcBusyFixture = 0x41313842u;  // 'A18B'
+constexpr uint32_t kTask18WaitFailureFixture = 0x41313846u;  // 'A18F'
 static_assert(sizeof(Task18TelemetryTail) == 280, "test telemetry projection");
 
 const Task18TelemetryTail* Task18Tail(const ApoTelemetryBlock* tele) {
@@ -462,12 +468,12 @@ int RunApoEngineSuite(bool trustedFixture) {
     Sleep(700);
 
     // telemetry：座位应已被本进程（宿主进程）的 APO 实例抢到。
-    HANDLE hTele = OpenFileMappingW(FILE_MAP_READ, FALSE, AuraApoTelemetryName());
+    HANDLE hTele = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, AuraApoTelemetryName());
     check("telemetry mapping exists", hTele != nullptr);
     const ApoTelemetryBlock* tele = nullptr;
     if (hTele) {
         tele = (const ApoTelemetryBlock*)MapViewOfFile(
-            hTele, FILE_MAP_READ, 0, 0, APO_TELEMETRY_BYTES);
+            hTele, FILE_MAP_ALL_ACCESS, 0, 0, APO_TELEMETRY_BYTES);
     }
     check("telemetry view", tele != nullptr);
     wchar_t engineOriginal[MAX_PATH] = {0};
@@ -602,6 +608,31 @@ int RunApoEngineSuite(bool trustedFixture) {
                   ProcessedRatioNear(failedFileRms / rmsIn, 1.0, 0.18),
               d);
     }
+    // Fixing the underlying files is not enough: the user must be able to
+    // re-select the byte-identical failed paths and get a real retry.
+    check("file effects: formerly missing IR fixture created",
+          WriteIrFixture(irMissing, 0.5f));
+    check("file effects: formerly missing DDC fixture created",
+          WriteDdcFixture(ddcMissing, 0.5));
+    check("file effects: identical failed IR path re-published",
+          PublishStringParam("convolver.ir.path", irMissing));
+    check("file effects: identical failed DDC path re-published",
+          PublishStringParam("ddc.load", ddcMissing));
+    Sleep(700);
+    double identicalRetryRms = 0.0;
+    runBlocks(3 * kBlocks, identicalRetryRms);
+    if (tele) {
+        const auto* t18 = Task18Tail(tele);
+        char d[256];
+        snprintf(d, sizeof(d), "conv=%lu ddc=%lu err=%s ratio=%.4f",
+                 (unsigned long)t18->convReady, (unsigned long)t18->ddcReady,
+                 t18->lastFileError, identicalRetryRms / rmsIn);
+        check("file effects: identical failed paths retry after files are fixed",
+              t18->convReady == 1 && t18->ddcReady == 1 &&
+                  t18->lastFileError[0] == 0 &&
+                  ProcessedRatioNear(identicalRetryRms / rmsIn, 0.25, 0.06),
+              d);
+    }
     check("file effects: identical good IR retry published",
           PublishStringParam("convolver.ir.path", irQuarter));
     check("file effects: identical good DDC retry published",
@@ -615,6 +646,36 @@ int RunApoEngineSuite(bool trustedFixture) {
               t18->convReady == 1 && t18->ddcReady == 1 &&
                   t18->lastFileError[0] == 0 &&
                   ProcessedRatioNear(retryFileRms / rmsIn, 0.0625, 0.025));
+    }
+
+    if (trustedFixture) {
+        // Deterministically fail one real host application with the engine's
+        // documented retryable DDC slot-busy outcome, then re-publish the same
+        // path. Only the trusted DLL contains this engine-boundary fault hook.
+        auto* fixtureTele = const_cast<ApoTelemetryBlock*>(tele);
+        fixtureTele->reserved[2] = kTask18DdcBusyFixture;
+        check("file effects: retryable DDC busy path published",
+              PublishStringParam("ddc.load", ddcHalf));
+        Sleep(500);
+        double ddcBusyRms = 0.0;
+        runBlocks(4 * kBlocks, ddcBusyRms);
+        check("file effects: retryable DDC busy is visible and unloads old DDC",
+              Task18Tail(tele)->ddcReady == 0 &&
+                  strstr(Task18Tail(tele)->lastFileError, "retryable") != nullptr &&
+                  ProcessedRatioNear(ddcBusyRms / rmsIn, 0.25, 0.06),
+              Task18Tail(tele)->lastFileError);
+        check("file effects: identical retryable DDC path re-published",
+              PublishStringParam("ddc.load", ddcHalf));
+        Sleep(700);
+        double ddcBusyRetryRms = 0.0;
+        runBlocks(5 * kBlocks, ddcBusyRetryRms);
+        check("file effects: identical DDC path retries after slot-busy failure",
+              Task18Tail(tele)->ddcReady == 1 &&
+                  Task18Tail(tele)->lastFileError[0] == 0 &&
+                  ProcessedRatioNear(ddcBusyRetryRms / rmsIn, 0.125, 0.04));
+        check("file effects: DDC quarter restored after busy regression",
+              PublishStringParam("ddc.load", ddcQuarter));
+        Sleep(600);
     }
 
     check("file effects: outside-fence IR replacement published",
@@ -1711,14 +1772,12 @@ int RunApoEngineSuite(bool trustedFixture) {
     }
 
     // H10 fail-safe Stop: the trusted fixture blocks one worker iteration for
-    // 4.5s. The 3s Stop wait must time out without releasing any worker-owned
-    // resource. A later Lock retries Stop after confirmed exit and then starts
-    // a fresh generation. Production AuraApo never contains this fixture hook.
+    // 4.5s. The host's own trusted cleanup marker proves that its ReleaseResources
+    // path (unmap/destroy/FreeLibrary), not merely an independent telemetry view,
+    // stayed untouched. A second timeout goes straight through final COM/DLL
+    // destruction with an injected final-wait failure and verifies worker-owned
+    // context/module retention followed by self-cleanup.
     if (trustedFixture && tele) {
-        // Keep a test-owned mapping view alive across Stop. The defective host
-        // used to unmap its own view immediately; reading through that pointer
-        // would turn this regression into a use-after-unmap instead of a clean
-        // RED assertion.
         HANDLE stopMap = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE,
                                           AuraApoTelemetryName());
         const ApoTelemetryBlock* stopTele = stopMap
@@ -1733,8 +1792,15 @@ int RunApoEngineSuite(bool trustedFixture) {
         } else if (stopMap) {
             CloseHandle(stopMap);
         }
-        const uint32_t genBeforeStop = Task18Tail(tele)->engineLoadGen;
+        // The pre-lock fixture would otherwise keep the parameter mapping alive
+        // even if the host wrongly closed its own handle.
+        if (paramFixture) {
+            CloseHandle(paramFixture);
+            paramFixture = nullptr;
+        }
         auto* fixtureTele = const_cast<ApoTelemetryBlock*>(tele);
+        const uint32_t genBeforeStop = Task18Tail(tele)->engineLoadGen;
+        const uint32_t cleanupBeforeStop = fixtureTele->reserved[4];
         fixtureTele->reserved[0] = kTask18StopFixture;
         bool workerEntered = false;
         for (int i = 0; i < 50; ++i) {
@@ -1748,40 +1814,103 @@ int RunApoEngineSuite(bool trustedFixture) {
         check("Stop timeout: UnlockForProcess returns after bounded wait",
               cfg->UnlockForProcess() == S_OK);
         const auto* stopped = Task18Tail(tele);
-        char stopDetail[192];
+        HANDLE retainedParam = OpenFileMappingW(FILE_MAP_READ, FALSE,
+                                                AuraApoParamsName());
+        char stopDetail[224];
         snprintf(stopDetail, sizeof(stopDetail),
-                 "seat=%ld gen=%lu->%lu stop=%lu module=%p",
+                 "seat=%ld gen=%lu->%lu stop=%lu cleanup=%lu->%lu module=%p param=%p",
                  (long)tele->seatState, (unsigned long)genBeforeStop,
                  (unsigned long)stopped->engineLoadGen,
                  (unsigned long)stopped->stopStatus,
-                 (void*)GetModuleHandleW(L"auradsp_engine_apo.dll"));
-        check("Stop timeout retains seat, mappings, engine and DLL",
-              workerEntered && tele->seatState == 1 &&
+                 (unsigned long)cleanupBeforeStop,
+                 (unsigned long)fixtureTele->reserved[4],
+                 (void*)GetModuleHandleW(L"auradsp_engine_apo.dll"),
+                 (void*)retainedParam);
+        check("Stop timeout retains host mappings, engine and DLL",
+              workerEntered && tele->seatState == 1 && retainedParam != nullptr &&
                   stopped->engineLoadGen == genBeforeStop &&
                   stopped->stopStatus == 1 &&
+                  fixtureTele->reserved[4] == cleanupBeforeStop &&
                   GetModuleHandleW(L"auradsp_engine_apo.dll") != nullptr,
               stopDetail);
+        if (retainedParam) CloseHandle(retainedParam);
         Sleep(5000);  // blocker has now certainly returned; worker can exit
         check("Stop timeout: later Lock retries confirmed cleanup",
               cfg->LockForProcess(1, pins, 1, pouts) == S_OK);
         Sleep(400);
-        check("Stop timeout: retry releases old generation and restarts cleanly",
+        check("Stop timeout: host cleanup ran and new generation starts cleanly",
               tele->seatState == 1 &&
                   Task18Tail(tele)->engineLoadGen > genBeforeStop &&
-                  Task18Tail(tele)->stopStatus == 0 && tele->fault == 0);
+                  Task18Tail(tele)->stopStatus == 0 && tele->fault == 0 &&
+                  fixtureTele->reserved[4] > cleanupBeforeStop &&
+                  GetModuleHandleW(L"auradsp_engine_apo.dll") != nullptr);
+
+        // Exercise destruction immediately after another timeout. The trusted
+        // final-wait hook returns WAIT_FAILED; owner destruction must transfer
+        // the heap host and a self-module reference to the still-live worker.
+        const uint32_t cleanupBeforeDestroy = fixtureTele->reserved[4];
+        fixtureTele->reserved[1] = 0;
+        fixtureTele->reserved[0] = kTask18StopFixture;
+        workerEntered = false;
+        for (int i = 0; i < 50; ++i) {
+            if (fixtureTele->reserved[1] == kTask18StopFixture) {
+                workerEntered = true;
+                break;
+            }
+            Sleep(20);
+        }
+        check("Destroy timeout: trusted worker blocker re-entered", workerEntered);
+        fixtureTele->reserved[3] = kTask18WaitFailureFixture;
+        // No preceding Unlock here: final owner destruction itself performs the
+        // bounded Stop (which times out) and then hits the injected final-wait
+        // failure while the worker is still inside its 4.5s blocker.
+        rt->Release();
+        cfg->Release();
+        apo->Release();
+        unk->Release();
+        rt = nullptr;
+        cfg = nullptr;
+        apo = nullptr;
+        unk = nullptr;
+        // Drop the test's own APO module reference immediately. A live detached
+        // worker must still keep its code and heap context valid.
+        FreeLibrary(dll);
+        dll = nullptr;
+        char destroyDetail[224];
+        snprintf(destroyDetail, sizeof(destroyDetail),
+                 "entered=%d seat=%ld cleanup=%lu->%lu stop=%lu engine=%p apo=%p",
+                 workerEntered ? 1 : 0, (long)tele->seatState,
+                 (unsigned long)cleanupBeforeDestroy,
+                 (unsigned long)fixtureTele->reserved[4],
+                 (unsigned long)Task18Tail(tele)->stopStatus,
+                 (void*)GetModuleHandleW(L"auradsp_engine_apo.dll"),
+                 (void*)GetModuleHandleW(L"AuraApoTrustedTest.dll"));
+        check("Destroy wait failure retains worker context, resources and modules",
+              workerEntered && tele->seatState == 1 &&
+                  fixtureTele->reserved[4] == cleanupBeforeDestroy &&
+                  Task18Tail(tele)->stopStatus == 2 &&
+                  GetModuleHandleW(L"auradsp_engine_apo.dll") != nullptr &&
+                  GetModuleHandleW(L"AuraApoTrustedTest.dll") != nullptr,
+              destroyDetail);
+        Sleep(5000);
+        check("Destroy wait failure: exited worker releases retained context safely",
+              tele->seatState == 0 &&
+                  fixtureTele->reserved[4] > cleanupBeforeDestroy &&
+                  GetModuleHandleW(L"auradsp_engine_apo.dll") == nullptr &&
+                  GetModuleHandleW(L"AuraApoTrustedTest.dll") == nullptr);
     }
 
-    check("UnlockForProcess", cfg->UnlockForProcess() == S_OK);
+    if (cfg) check("UnlockForProcess", cfg->UnlockForProcess() == S_OK);
     if (tele) {
         check("seat released after unlock", tele->seatState == 0);
         UnmapViewOfFile(tele);
     }
     if (hTele) CloseHandle(hTele);
-    rt->Release();
-    cfg->Release();
-    apo->Release();
-    unk->Release();
-    fmt->Release();
+    if (rt) rt->Release();
+    if (cfg) cfg->Release();
+    if (apo) apo->Release();
+    if (unk) unk->Release();
+    if (fmt) fmt->Release();
     CoUninitialize();
     CloseHandle(testPluginMap);
     if (paramFixture) CloseHandle(paramFixture);
@@ -1789,6 +1918,8 @@ int RunApoEngineSuite(bool trustedFixture) {
     DeleteFileW(irQuarter);
     DeleteFileW(ddcHalf);
     DeleteFileW(ddcQuarter);
+    DeleteFileW(irMissing);
+    DeleteFileW(ddcMissing);
     printf("apo_engine_test %s: %s (%d failures)\n",
            trustedFixture ? "trusted-fixture" : "production",
            g_fail ? "FAIL" : "PASS", g_fail);

@@ -79,7 +79,13 @@ def main():
     check("_convertFileEffect" in onstr,
           "onString converts through the transit helper")
     conv = func_span(apo, "String? _convertFileEffect(String id, String text)")
-    check("transitPathFor" in conv, "conversion helper calls transitPathFor")
+    check("transitFileEffect" in conv and "ApoFileTransitResult" in transit,
+          "file-effect conversion preserves a structured transit failure")
+    check("_updateTransitError" in conv and "'evt': 'apotelemetry'" in apo and
+          "'transitFileError': true" in apo,
+          "ACL/source/copy conversion failures reach the existing UI telemetry path")
+    check("transitFileErrorOf" in apo,
+          "telemetry polling retains transit errors instead of clearing them with an empty host error")
     check("if (effective == null)" in conv and
           "_fileEffectConvertCache.remove(id)" in conv,
           "failed file-effect transit is not cached as a successful empty value")
@@ -96,11 +102,12 @@ def main():
     check(ensure_root.index("_rootReady = true") >
           ensure_root.index("grantDirReadToLocalService"),
           "root readiness is set only after a successful ACL grant")
-    sync_transit = func_span(transit, "static String? transitPathFor(String source")
+    sync_transit = func_span(transit, "static ApoFileTransitResult transitFileEffect(")
     async_transit = func_span(transit, "static Future<String?> transitPathForAsync(")
-    check("if (!_ensureRoot(rootOverride)) return null;" in sync_transit and
+    check("if (!_ensureRoot(rootOverride))" in sync_transit and
+          "transit root creation/LocalService ACL grant failed" in sync_transit and
           "if (!_ensureRoot(rootOverride)) return null;" in async_transit,
-          "file-effect publication fails closed when root preparation fails")
+          "file-effect publication fails closed and reports root preparation failure")
 
     check("u32[1] >= 8" in apo and "lastFileError" in apo and
           "enginePathHash" in apo and "engineLoadGen" in apo and
