@@ -25,7 +25,18 @@ on:
       - 'installer/packkit/**'
       - 'installer/tests/**'
       - 'installer/release.py'
+      - 'tools/resource_pipeline/**'
       - '.github/workflows/linux-pack.yml'
+  pull_request:
+    paths:
+      - 'installer/linux/**'
+      - 'installer/shared/**'
+      - 'installer/packkit/**'
+      - 'installer/tests/**'
+      - 'installer/release.py'
+      - 'tools/resource_pipeline/**'
+      - '.github/workflows/linux-pack.yml'
+  merge_group:
   workflow_dispatch:
 
 concurrency:

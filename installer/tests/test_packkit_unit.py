@@ -24,7 +24,7 @@ _INSTALLER = Path(__file__).resolve().parents[1]
 if str(_INSTALLER) not in sys.path:
     sys.path.insert(0, str(_INSTALLER))
 
-from packkit import hashing, naming  # noqa: E402
+from packkit import hashing, naming, resources  # noqa: E402
 from packkit.archives import zip_dir  # noqa: E402
 from packkit.deliver import (  # noqa: E402
     DeliveryItem,
@@ -189,6 +189,34 @@ def test_resources_order() -> None:
         check("none 无包", resource_pack_paths("none", packs) == [])
 
 
+def _light_validation_result(pack_names: tuple[str, ...]) -> str:
+    with tempfile.TemporaryDirectory() as td:
+        packs = Path(td)
+        for name in pack_names:
+            (packs / name).write_bytes(b"z")
+        try:
+            resources.validate_resource_tier("light", packs)
+        except SystemExit:
+            return "rejected"
+        except AttributeError:
+            return "missing-validator"
+        return "accepted"
+
+
+def test_light_resource_completeness() -> None:
+    print("== light 资源完整性 ==")
+    core = "auradsp-resource-core.zip"
+    headphone_ddc = "auradsp-addon-headphone-ddc.zip"
+    check("light 缺 headphone-ddc 必须失败",
+          _light_validation_result((core,)) == "rejected")
+    check("light 缺 core 必须失败",
+          _light_validation_result((headphone_ddc,)) == "rejected")
+    check("light 两件都缺必须失败",
+          _light_validation_result(()) == "rejected")
+    check("light 两件齐全必须通过",
+          _light_validation_result((core, headphone_ddc)) == "accepted")
+
+
 # ---------------------------------------------------------------------------
 # Setup 尾块
 # ---------------------------------------------------------------------------
@@ -317,8 +345,8 @@ def test_driver_signature_gate() -> None:
 
 def main() -> int:
     for fn in (test_naming, test_round, test_hashing, test_delivery,
-               test_resources_order, test_setup_image, test_version,
-               test_driver_signature_gate):
+               test_resources_order, test_light_resource_completeness,
+               test_setup_image, test_version, test_driver_signature_gate):
         fn()
         print()
     print(f"{'ALL PASS' if not FAILURES else 'FAILURES: ' + ', '.join(FAILURES)}")

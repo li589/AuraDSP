@@ -47,6 +47,19 @@ PLUGIN_PLACEHOLDER_KEEP = (
 MAX_ENTRY_BYTES = 512 * 1024 * 1024
 
 
+def validate_resource_tier(kind: str, packs_dir: Path) -> None:
+    """校验档位必需包完整；light 缺 core 或 headphone-ddc 均失败。"""
+    if kind != "light":
+        return
+    required = ("auradsp-resource-core.zip",
+                "auradsp-addon-headphone-ddc.zip")
+    missing = [name for name in required if not (packs_dir / name).is_file()]
+    if missing:
+        raise die("--resources light 缺少必需资源包: " + ", ".join(missing)
+                  + f"（目录: {packs_dir}；先跑 build_packages.py 或加 "
+                    "--rebuild-resource-packs）")
+
+
 def resource_pack_paths(kind: str, packs_dir: Path) -> list[Path]:
     """按档位给出有序的资源包列表（顺序即覆盖顺序）。"""
     if kind in ("core", "none"):
@@ -126,6 +139,7 @@ def apply_resources(
     work_staging: Path, kind: str, packs_dir: Path, what_if: bool,
 ) -> list[dict[str, str]]:
     """在 staging 副本上应用资源策略，返回合并记录（写入 build-info）。"""
+    validate_resource_tier(kind, packs_dir)
     records: list[dict[str, str]] = []
     res_dir = work_staging / "resources"
 
