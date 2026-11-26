@@ -976,7 +976,8 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
         const uint32_t publicationSeq = isFile
             ? hdr[11 + (s - (APO_STR_SLOT_COUNT - 2))]
             : 0;
-        const bool changedFailure = fileFailed_[s] && failedStr_[s] != cur;
+        const bool changedFailure = fileFailed_[s] &&
+            (failedStr_[s] != cur || failedPublicationSeq_[s] != publicationSeq);
         if (snapshotValid_ && appliedStr_[s] == cur && !changedFailure) continue;
         // Suppress only an unchanged poll of the same failed publication. An
         // explicit re-publication advances its per-file-slot reserved sequence

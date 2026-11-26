@@ -633,6 +633,50 @@ int RunApoEngineSuite(bool trustedFixture) {
                   ProcessedRatioNear(identicalRetryRms / rmsIn, 0.25, 0.06),
               d);
     }
+
+    // Fix round 2 cache ordering: P (irMissing) is the last successful value.
+    // Q fails, then returning to P also fails. A new publication of that same
+    // P must not be hidden by the appliedStr_ == failedStr_ == P cache hit.
+    check("file effects: P/Q/P ordinary failure fixtures removed",
+          DeleteFileW(irQuarter) != 0 && DeleteFileW(irMissing) != 0);
+    check("file effects: P/Q/P ordinary Q failure published",
+          PublishStringParam("convolver.ir.path", irQuarter));
+    Sleep(500);
+    if (tele) {
+        check("file effects: P/Q/P ordinary Q failure clears IR",
+              Task18Tail(tele)->convReady == 0 &&
+                  Task18Tail(tele)->lastFileError[0] != 0);
+    }
+    check("file effects: P/Q/P ordinary failed P published",
+          PublishStringParam("convolver.ir.path", irMissing));
+    Sleep(500);
+    if (tele) {
+        check("file effects: P/Q/P ordinary P failure clears IR",
+              Task18Tail(tele)->convReady == 0 &&
+                  Task18Tail(tele)->lastFileError[0] != 0);
+    }
+    check("file effects: P/Q/P ordinary P fixture restored",
+          WriteIrFixture(irMissing, 0.5f));
+    check("file effects: P/Q/P ordinary identical P re-published",
+          PublishStringParam("convolver.ir.path", irMissing));
+    Sleep(700);
+    double ordinaryPqpRetryRms = 0.0;
+    runBlocks(3 * kBlocks, ordinaryPqpRetryRms);
+    if (tele) {
+        const auto* t18 = Task18Tail(tele);
+        char d[256];
+        snprintf(d, sizeof(d), "conv=%lu ddc=%lu err=%s ratio=%.4f",
+                 (unsigned long)t18->convReady, (unsigned long)t18->ddcReady,
+                 t18->lastFileError, ordinaryPqpRetryRms / rmsIn);
+        check("file effects: identical P retries after P/Q/P ordinary failures",
+              t18->convReady == 1 && t18->ddcReady == 1 &&
+                  t18->lastFileError[0] == 0 &&
+                  ProcessedRatioNear(ordinaryPqpRetryRms / rmsIn, 0.25, 0.06),
+              d);
+    }
+    check("file effects: P/Q/P ordinary Q fixture restored",
+          WriteIrFixture(irQuarter, 0.25f));
+
     check("file effects: identical good IR retry published",
           PublishStringParam("convolver.ir.path", irQuarter));
     check("file effects: identical good DDC retry published",
@@ -649,27 +693,44 @@ int RunApoEngineSuite(bool trustedFixture) {
     }
 
     if (trustedFixture) {
-        // Deterministically fail one real host application with the engine's
-        // documented retryable DDC slot-busy outcome, then re-publish the same
-        // path. Only the trusted DLL contains this engine-boundary fault hook.
+        // Exercise the same P/Q/P shape with a retryable engine failure: first
+        // P succeeds, Q fails, then P hits one injected DDC slot-busy result.
+        // Only the trusted DLL contains this engine-boundary fault hook.
         auto* fixtureTele = const_cast<ApoTelemetryBlock*>(tele);
+        check("file effects: P/Q/P DDC initial P published",
+              PublishStringParam("ddc.load", ddcHalf));
+        Sleep(600);
+        double ddcInitialPRms = 0.0;
+        runBlocks(4 * kBlocks, ddcInitialPRms);
+        check("file effects: P/Q/P DDC initial P succeeds",
+              Task18Tail(tele)->ddcReady == 1 &&
+                  Task18Tail(tele)->lastFileError[0] == 0 &&
+                  ProcessedRatioNear(ddcInitialPRms / rmsIn, 0.125, 0.04));
+        check("file effects: P/Q/P DDC Q fixture removed",
+              DeleteFileW(ddcMissing) != 0);
+        check("file effects: P/Q/P DDC Q failure published",
+              PublishStringParam("ddc.load", ddcMissing));
+        Sleep(500);
+        check("file effects: P/Q/P DDC Q failure clears DDC",
+              Task18Tail(tele)->ddcReady == 0 &&
+                  Task18Tail(tele)->lastFileError[0] != 0);
         fixtureTele->reserved[2] = kTask18DdcBusyFixture;
-        check("file effects: retryable DDC busy path published",
+        check("file effects: P/Q/P retryable DDC busy P published",
               PublishStringParam("ddc.load", ddcHalf));
         Sleep(500);
         double ddcBusyRms = 0.0;
         runBlocks(4 * kBlocks, ddcBusyRms);
-        check("file effects: retryable DDC busy is visible and unloads old DDC",
+        check("file effects: P/Q/P retryable DDC busy is visible and unloads P",
               Task18Tail(tele)->ddcReady == 0 &&
                   strstr(Task18Tail(tele)->lastFileError, "retryable") != nullptr &&
                   ProcessedRatioNear(ddcBusyRms / rmsIn, 0.25, 0.06),
               Task18Tail(tele)->lastFileError);
-        check("file effects: identical retryable DDC path re-published",
+        check("file effects: P/Q/P identical retryable DDC P re-published",
               PublishStringParam("ddc.load", ddcHalf));
         Sleep(700);
         double ddcBusyRetryRms = 0.0;
         runBlocks(5 * kBlocks, ddcBusyRetryRms);
-        check("file effects: identical DDC path retries after slot-busy failure",
+        check("file effects: identical P retries after P/Q/P DDC slot-busy",
               Task18Tail(tele)->ddcReady == 1 &&
                   Task18Tail(tele)->lastFileError[0] == 0 &&
                   ProcessedRatioNear(ddcBusyRetryRms / rmsIn, 0.125, 0.04));
