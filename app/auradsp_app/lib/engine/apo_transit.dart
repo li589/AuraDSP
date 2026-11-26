@@ -21,6 +21,7 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 
+import '../platform/platform_profile.dart';
 import '../platform/port/windows_system.dart';
 import 'debug_log.dart';
 
@@ -132,8 +133,9 @@ abstract final class ApoTransit {
     }
   }
 
-  static String _publicationKey(String path) =>
-      Platform.isWindows ? path.replaceAll('/', r'\').toLowerCase() : path;
+  static String _publicationKey(String path) => PlatformProfile.os == 'windows'
+      ? path.replaceAll('/', r'\').toLowerCase()
+      : path;
 
   /// Serializes the check-and-commit section for one destination in this
   /// isolate. Temp writes remain independent and use unique sibling paths.
@@ -302,13 +304,14 @@ abstract final class ApoTransit {
   static String? _findBundleModule(_BundleManifest manifest) {
     final String extension;
     final String preferredDirectory;
-    if (Platform.isWindows) {
+    final os = PlatformProfile.os;
+    if (os == 'windows') {
       extension = '.vst3';
       preferredDirectory = 'contents/x86_64-win/';
-    } else if (Platform.isLinux) {
+    } else if (os == 'linux') {
       extension = '.so';
       preferredDirectory = 'contents/x86_64-linux/';
-    } else if (Platform.isMacOS) {
+    } else if (os == 'macos') {
       extension = '.dylib';
       preferredDirectory = 'contents/macos/';
     } else {
@@ -415,9 +418,9 @@ abstract final class ApoTransit {
       try {
         await temp.writeAsBytes(bytes, flush: true);
         await _atomicWriteFile(temp, df);
-      } catch (_) {
+      } catch (e, st) {
         await _deleteTempFile(temp);
-        rethrow;
+        Error.throwWithStackTrace(e, st);
       }
       _copied.add(dest);
       dbgLog('apo transit: copied $source -> $dest (${bytes.length} B)');
@@ -467,9 +470,9 @@ abstract final class ApoTransit {
           );
         }
         await _atomicPublishBundle(temp, destination);
-      } catch (_) {
+      } catch (e, st) {
         await _deleteTempBundle(temp);
-        rethrow;
+        Error.throwWithStackTrace(e, st);
       }
       dbgLog('apo transit: bundle copied $source -> $dest');
       return dest;
@@ -504,9 +507,9 @@ abstract final class ApoTransit {
       try {
         temp.writeAsBytesSync(bytes, flush: true);
         _atomicWriteFileSync(temp, df);
-      } catch (_) {
+      } catch (e, st) {
         _deleteTempFileSync(temp);
-        rethrow;
+        Error.throwWithStackTrace(e, st);
       }
       _copied.add(dest);
       dbgLog('apo transit: copied $source -> $dest (${bytes.length} B)');
