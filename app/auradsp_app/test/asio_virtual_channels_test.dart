@@ -1171,11 +1171,29 @@ void main() {
       }
 
       expectUnifiedWidth();
+      final fillRow = find
+          .ancestor(
+            of: find.text('声道填充'),
+            matching: find.byType(Row),
+          )
+          .first;
+      final fillSwitch =
+          find.descendant(of: fillRow, matching: find.byType(AuraSwitch));
+      expect(fillSwitch, findsOneWidget);
+      expect(tester.widget<AuraSwitch>(fillSwitch).value, isFalse);
+      await tester.ensureVisible(fillSwitch);
+      await tester.tap(fillSwitch);
+      await tester.pumpAndSettle();
+      expect(m.channelsUpmixFill, 1);
+      expectUnifiedWidth();
+
       final discrete = find.text('离散逐声道');
       await tester.ensureVisible(discrete);
       await tester.tap(discrete);
       await tester.pumpAndSettle();
       expect(m.channelsMode, 1);
+      expect(m.channelsUpmixFill, 1);
+      expect(find.text('声道填充'), findsNothing);
       expectUnifiedWidth();
 
       final matrix = find.text('矩阵下混');
@@ -1183,6 +1201,12 @@ void main() {
       await tester.tap(matrix);
       await tester.pumpAndSettle();
       expect(m.channelsMode, 0);
+      expect(m.channelsUpmixFill, 1);
+      expect(tester.widget<AuraSwitch>(fillSwitch).value, isTrue);
+      await tester.ensureVisible(fillSwitch);
+      await tester.tap(fillSwitch);
+      await tester.pumpAndSettle();
+      expect(m.channelsUpmixFill, 0);
       expectUnifiedWidth();
       expect(registry.dwordWrites.map((write) => write.value), [8]);
     });

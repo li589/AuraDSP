@@ -3091,26 +3091,48 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 }
               }
             } else {
-              // 手动模式：保持引擎 channels.count 不变（用户/配置锁定，不调用 applyEngineChannels 覆盖）
-              if (engineChCount > 2 && rawMulti != null && rawMulti.hasRaw && rawMulti.rawCh == engineChCount) {
-                if (srcPaused) {
-                  inBufEng.fillRange(0, frames * rawMulti.rawCh, 0);
+              // 手动模式：保持 channels.count 不变；原始宽与工作宽不同也必须
+              // 先经 engine/channel_map.h 重映射，禁止只铺 FL/FR 后清零。
+              if (rawMulti != null &&
+                  rawMulti.hasRaw &&
+                  rawMulti.rawCh > 0 &&
+                  rawMulti.rawCh <= 8) {
+                final rawCh = rawMulti.rawCh;
+                if (rawCh == engineChCount) {
+                  if (srcPaused) {
+                    inBufEng.fillRange(0, frames * rawCh, 0);
+                  } else {
+                    rawMulti.fillRaw(inBufEng, frames, w.sampleRate);
+                  }
                 } else {
-                  rawMulti.fillRaw(inBufEng, frames, w.sampleRate);
-                }
-                lib!.process(handle!, inPtrEng, outPtrEng8, frames);
-                engineMulti = true;
-              } else if (engineChCount > 2) {
-                // 输入非同声道数：将立体声 srcBuf 铺入 inBufEng 前两声道，其余声道补 0
-                for (var i = 0; i < frames; i++) {
-                  final base = i * engineChCount;
-                  inBufEng[base] = srcBuf[i * 2];
-                  inBufEng[base + 1] = srcBuf[i * 2 + 1];
-                  for (var c = 2; c < engineChCount; c++) {
-                    inBufEng[base + c] = 0.0;
+                  // outPtrEng8 先作 raw scratch；重映射完成后才由 process 覆写。
+                  final rawBuf = outPtrEng8.asTypedList(frames * rawCh);
+                  if (srcPaused) {
+                    rawBuf.fillRange(0, frames * rawCh, 0);
+                  } else {
+                    rawMulti.fillRaw(rawBuf, frames, w.sampleRate);
+                  }
+                  final rc = lib!.remapChannels(
+                      outPtrEng8, rawCh, inPtrEng, engineChCount, frames, cm);
+                  if (rc != 0) {
+                    throw StateError('channel remap failed: rawCh=$rawCh '
+                        'engineCh=$engineChCount mode=$cm rc=$rc');
                   }
                 }
-                lib!.process(handle!, inPtrEng, outPtrEng8, frames);
+                if (engineChCount > 2) {
+                  lib!.process(handle!, inPtrEng, outPtrEng8, frames);
+                  engineMulti = true;
+                } else {
+                  lib!.process(handle!, inPtrEng, outPtrEng, frames);
+                }
+              } else if (engineChCount > 2) {
+                final rc = lib!.remapChannels(
+                    srcPtr, 2, inPtrEng, engineChCount, frames, cm);
+                if (rc != 0) {
+                  throw StateError('stereo channel expansion failed: '
+                      'engineCh=$engineChCount mode=$cm rc=$rc');
+                }
+                lib.process(handle!, inPtrEng, outPtrEng8, frames);
                 engineMulti = true;
               } else {
                 lib!.process(handle!, srcPtr, outPtrEng, frames);

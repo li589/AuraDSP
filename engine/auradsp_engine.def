@@ -3,6 +3,7 @@ EXPORTS
     auradsp_create
     auradsp_destroy
     auradsp_process
+    auradsp_remap_channels
     auradsp_process_geometry
     auradsp_request_geometry
     auradsp_get_active_geometry

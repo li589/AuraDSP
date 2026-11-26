@@ -201,6 +201,15 @@ void           auradsp_destroy(auradsp_handle h);
 /* ---- RT 音频（仅音频线程；stereo 或多声道交织，按 channels.count 解释） ---- */
 void auradsp_process(auradsp_handle h, const float* in, float* out, int frames);
 
+/* 流宽 ↔ 引擎宽交织重映射，统一委托 engine/chain/channel_map.h。
+ * mode=0：收窄用 chmap_fold，扩展按 chmap_stream_pos 目标槽散布；
+ * mode=1：chmap_gather_discrete 保持离散声道身份。
+ * src/dst 不得重叠；frames 可为 0，声道宽须为 1..8。RT 定常时间、零分配/
+ * 锁/IO。供本地 WASAPI 等 Dart 宿主复用同一映射表，禁止另抄 Dart 表。 */
+auradsp_status auradsp_remap_channels(
+    const float* src, int32_t src_channels, float* dst, int32_t dst_channels,
+    int32_t frames, int32_t mode);
+
 /* 带期望几何的块入口：调用方必须按 expected->channels 准备精确交织缓冲。
  * 引擎只处理 expected：它等于 active 时保留该代（即使期间到达新 pending），
  * 或等于 pending 时先激活该代。两者皆不符返回 AURADSP_E_STATE，且不触碰

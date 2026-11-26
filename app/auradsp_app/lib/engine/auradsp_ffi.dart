@@ -489,6 +489,15 @@ final class AuraDspLib {
                       Int32)>>('auradsp_process')
           .asFunction();
 
+  /// 共享 channel_map.h 的宿主重映射；禁止在 Dart 另抄声道布局表。
+  late final int Function(
+      Pointer<Float>, int, Pointer<Float>, int, int, int) remapChannels = dylib
+      .lookup<
+          NativeFunction<
+              Int32 Function(Pointer<Float>, Int32, Pointer<Float>, Int32,
+                  Int32, Int32)>>('auradsp_remap_channels')
+      .asFunction();
+
   late final int Function(Pointer<Void>, Pointer<Float>, Pointer<Float>, int,
           Pointer<AuraDspGeometry>) processGeometry =
       dylib

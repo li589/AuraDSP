@@ -17,6 +17,7 @@
  * 结果写 SPSC 环（引擎只写，UI 只读）。
  */
 #include "auradsp_engine.h"
+#include "chain/channel_map.h"
 #include "engine_internal.h"
 #include "geometry_snapshot.h"
 #include "platform/port/env.h"
@@ -680,6 +681,28 @@ static auradsp_status process_impl(auradsp_handle h, const float* in, float* out
 
 void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) {
     (void)process_impl(h, in, out, frames, nullptr);
+}
+
+auradsp_status auradsp_remap_channels(
+    const float* src, int32_t src_channels, float* dst, int32_t dst_channels,
+    int32_t frames, int32_t mode) {
+    if (!src || !dst || src == dst || src_channels < 1 || src_channels > 8 ||
+        dst_channels < 1 || dst_channels > 8 || frames < 0 ||
+        (mode != 0 && mode != 1)) {
+        return AURADSP_E_PARAM;
+    }
+    if (frames == 0) return AURADSP_OK;
+    if (src_channels == dst_channels) {
+        std::memcpy(dst, src,
+                    (size_t)frames * (size_t)src_channels * sizeof(float));
+    } else if (mode != 0) {
+        chmap_gather_discrete(src, src_channels, dst, dst_channels, frames);
+    } else if (dst_channels < src_channels) {
+        chmap_fold(src, src_channels, dst, dst_channels, frames);
+    } else {
+        chmap_scatter_discrete(src, src_channels, dst, dst_channels, frames);
+    }
+    return AURADSP_OK;
 }
 
 auradsp_status auradsp_process_geometry(auradsp_handle h, const float* in,
