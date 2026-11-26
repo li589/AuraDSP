@@ -15,6 +15,7 @@ Abstract:
 --*/
 
 #include "ControlDevice.h"
+#include "RingCursor.h"
 #include <wdmsec.h>
 
 //=============================================================================
@@ -518,7 +519,7 @@ AuraControlDevice_DispatchDeviceControl(
             // 语义是「驱动源码版本日期」，随驱动源码变更手工同步；
             // BuildTime 在可复现构建下不跟踪钟点，恒 00:00:00。
             // 精确构建时刻看 INF 的 DriverVer（打包时由 MSBuild 盖戳）。
-            RtlStringCchCopyA(pVer->BuildDate, sizeof(pVer->BuildDate), "2026-11-25");
+            RtlStringCchCopyA(pVer->BuildDate, sizeof(pVer->BuildDate), "2026-11-26");
             RtlStringCchCopyA(pVer->BuildTime, sizeof(pVer->BuildTime), "00:00:00");
 
             bytesReturned = sizeof(AURA_VAIO_VERSION_INFO);
@@ -751,15 +752,20 @@ AuraControlDevice_DispatchDeviceControl(
                     g_pProcMappedUserAddress = userVa;
                     g_pProcMappedProcess     = currentProc;
                     g_pProcMappedFileObject  = stack->FileObject;
-                    /* [审查 L3 2026-11-25] 新会话锚定：处理后环读游标
-                     * 快进到写游标，上一会话残留音频（最大约 340ms）
-                     * 不会在本会话开场被当新数据读走。仅新鲜映射时
-                     * 执行；同进程复用既有映射不得跳过在途数据。 */
+                    /* [审查 H4 2026-11-26] 新会话锚定：处理后环的
+                     * ReadOffset 与 TotalBytesRead 必须一起对齐当前写侧，
+                     * 上一会话残留音频（最大约 340ms）才不会在本会话
+                     * 开场被当新数据读走。仅新鲜映射时执行；同进程复用
+                     * 既有映射不得跳过在途数据。g_MappingMutex 仍由外层
+                     * 持有，自旋锁只保护这两个游标的更新。 */
                     if (g_pProcRingBuffer != NULL)
                     {
                         PAURA_VAIO_SHARED_HEADER pProcHdr =
                             reinterpret_cast<PAURA_VAIO_SHARED_HEADER>(g_pProcRingBuffer);
-                        pProcHdr->TotalBytesRead = pProcHdr->TotalBytesWritten;
+                        KIRQL anchorOldIrql;
+                        KeAcquireSpinLock(&g_RingLock, &anchorOldIrql);
+                        AuraRingAnchorReadCursor(pProcHdr);
+                        KeReleaseSpinLock(&g_RingLock, anchorOldIrql);
                     }
                 }
             }

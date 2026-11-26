@@ -204,6 +204,8 @@ jobs:
         run: cmake --build build/windows/bridge-check --config Release
       - name: VAIO pump wait test
         run: build/windows/bridge-check/Release/vaio_pump_wait_test.exe
+      - name: VAIO ring cursor test
+        run: build/windows/bridge-check/Release/ring_cursor_test.exe
 
   # J6 Dart 测试 --------------------------------------------------------
   dart-tests:

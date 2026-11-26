@@ -23,3 +23,10 @@ add_executable(vaio_pump_wait_test "${ROOT}/bridge/vaio_bridge/vaio_pump_wait_te
 target_include_directories(vaio_pump_wait_test PRIVATE "${ROOT}/bridge/vaio_bridge")
 target_compile_options(vaio_pump_wait_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET vaio_pump_wait_test PROPERTY CXX_STANDARD 20)
+
+add_executable(ring_cursor_test "ring_cursor_test.cpp")
+target_include_directories(ring_cursor_test PRIVATE
+    "${ROOT}/01_vaio_driver/src"
+    "${ROOT}/common")
+target_compile_options(ring_cursor_test PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET ring_cursor_test PROPERTY CXX_STANDARD 20)
