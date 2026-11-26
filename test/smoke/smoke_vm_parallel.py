@@ -77,7 +77,17 @@ if d is not None:
                   and par < ser,
                   'ser=%s par=%s' % (ser, par))
 
-        # ---- B2：straggler 场景（worker 卡死 → fan-in 截止 → 冻结 → 恢复）----
+        # ---- 几何 ABI 与 B2 straggler ----
+        check('geometry ABI transitions/rollback/lifecycle ok',
+              d.get('geoCoreOk') is True,
+              'note=%s' % (d.get('geoCoreNote', ''),))
+        if d.get('geoRan'):
+            check('geometry snapshot retention ok',
+                  d.get('geoOk') is True,
+                  'note=%s' % (d.get('geoNote', ''),))
+        else:
+            print('NOTE geometry snapshot skipped: %s' % d.get('geoNote', '?'))
+
         if d.get('stRan'):
             check('straggler all ok', d.get('stOk') is True,
                   'note=%s' % (d.get('stNote', ''),))

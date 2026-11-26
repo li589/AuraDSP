@@ -18,9 +18,12 @@
 //               卡死组不被重认领（无引擎重入）且输出保持不动、其余组照常
 //               处理与串行参照逐位一致、worker 返回后该组恢复且逐位一致。
 //               单核（workers==0）自动跳过（只报 note）。
+//   geometry    per-handle pending/active ABI：2→4→6→8、部分组错宽、
+//               失败回滚、重建/懒建代号保留，以及 straggler 几何快照保留。
 //
 // 输出：末行单行 JSON（smoke_vm_parallel.py 消费）。退出码 0 = 全过。
 #include <windows.h>
+#include <intrin.h>
 
 #include <atomic>
 #include <cmath>
@@ -30,11 +33,54 @@
 #include <cstring>
 #include <vector>
 
+namespace vmcore { struct PumpCtx; }
+
+namespace {
+
+// Test-only interleaving seam: pause a worker immediately after it successfully
+// claims a group, before it reads expected geometry. This makes the former
+// post-claim read of mutable curExpectedGeometry deterministic without adding a
+// hook to the production pump.
+struct ClaimHook {
+    vmcore::PumpCtx* ctx = nullptr;
+    LONG bit = 0;
+    HANDLE claimed = nullptr;
+    HANDLE release = nullptr;
+    std::atomic<bool> used{false};
+};
+
+std::atomic<ClaimHook*> g_claimHook{nullptr};
+std::atomic<DWORD> g_callbackThreadId{0};
+
+inline LONGLONG HookedCompareExchange64(volatile LONGLONG* dst, LONGLONG value,
+                                        LONGLONG comparand);
+
+}  // namespace
+
+#undef InterlockedCompareExchange64
+#define InterlockedCompareExchange64 HookedCompareExchange64
+
 #include "../../02_voicemeeter_client/VmPumpCore.h"
 
 using namespace vmcore;
 
 namespace {
+
+inline LONGLONG HookedCompareExchange64(volatile LONGLONG* dst, LONGLONG value,
+                                        LONGLONG comparand) {
+    const LONGLONG result = _InterlockedCompareExchange64(dst, value, comparand);
+    ClaimHook* hook = g_claimHook.load(std::memory_order_acquire);
+    if (hook && !hook->used.load(std::memory_order_acquire) && result == comparand
+        && dst == &hook->ctx->workClaimPacked
+        && GetCurrentThreadId() != g_callbackThreadId.load(std::memory_order_acquire)
+        && (value >> 32) == (comparand >> 32) && (comparand >> 32) != 0
+        && (comparand & ~value & hook->bit) != 0) {
+        hook->used.store(true, std::memory_order_release);
+        SetEvent(hook->claimed);
+        WaitForSingleObject(hook->release, 5000);
+    }
+    return result;
+}
 
 constexpr int kCh = 64;                 // 8 组 × 8ch（VbAudioBuffer 上限 128）
 constexpr double kFakeCostUs = 250.0;   // 假插件人工成本（QPC 自旋校准）
@@ -56,18 +102,69 @@ struct FakeEng {
     HANDLE hangGate = nullptr;          // 非空 = 进入引擎先等事件（模拟插件卡死）
     std::atomic<long>* inEngine = nullptr;
     std::atomic<long>* reentered = nullptr;
-    // 引擎工作声道数：真实引擎按 channels.count 解释交织缓冲，假插件同样
-    // 按 frames*procCh 读写，才能抓到"泵步进与引擎档位不一致"的回归。
-    int procCh = 2;
+    // 每个 handle 独立 pending/active 代际；字段先写、generation release 发布，
+    // 与真实引擎的完整快照契约一致。
+    std::atomic<uint64_t> nextGeneration{2};
+    std::atomic<uint64_t> pendingGeneration{1};
+    std::atomic<uint64_t> activeGeneration{1};
+    std::atomic<int32_t> pendingChannels{2};
+    std::atomic<int32_t> activeChannels{2};
+    std::atomic<int32_t> pendingMode{0};
+    std::atomic<int32_t> activeMode{0};
+    std::atomic<bool> failNextRequest{false};
+    std::atomic<int> requestCalls{0};
+    std::atomic<int> processCalls{0};
+    std::atomic<uint64_t> lastExpectedGeneration{0};
+    std::atomic<int32_t> lastExpectedChannels{0};
+    std::atomic<int32_t> lastExpectedMode{-1};
 };
+
+auradsp_geometry FakeLoadGeometry(const std::atomic<uint64_t>& generation,
+                                  const std::atomic<int32_t>& channels,
+                                  const std::atomic<int32_t>& mode) {
+    auradsp_geometry result{};
+    result.generation = generation.load(std::memory_order_acquire);
+    result.channels = channels.load(std::memory_order_relaxed);
+    result.mode = mode.load(std::memory_order_relaxed);
+    return result;
+}
+
+int FakeRequestGeometry(void* eng, int32_t channels, int32_t mode,
+                        uint64_t* generation) {
+    if (!eng || !generation || (channels != 2 && channels != 4 && channels != 6
+                               && channels != 8) || (mode != 0 && mode != 1))
+        return AURADSP_E_PARAM;
+    auto* fe = static_cast<FakeEng*>(eng);
+    if (fe->failNextRequest.exchange(false, std::memory_order_acq_rel))
+        return AURADSP_E_STATE;
+    const uint64_t next = fe->nextGeneration.fetch_add(1, std::memory_order_relaxed);
+    fe->pendingChannels.store(channels, std::memory_order_relaxed);
+    fe->pendingMode.store(mode, std::memory_order_relaxed);
+    fe->pendingGeneration.store(next, std::memory_order_release);
+    *generation = next;
+    fe->requestCalls.fetch_add(1, std::memory_order_relaxed);
+    return AURADSP_OK;
+}
+
+int FakeGetActiveGeometry(void* eng, auradsp_geometry* out) {
+    if (!eng || !out) return AURADSP_E_PARAM;
+    auto* fe = static_cast<FakeEng*>(eng);
+    *out = FakeLoadGeometry(fe->activeGeneration, fe->activeChannels, fe->activeMode);
+    return AURADSP_OK;
+}
+
+bool FakeGeometryMatches(const auradsp_geometry& a, const auradsp_geometry& b) {
+    return a.generation == b.generation && a.channels == b.channels
+           && a.mode == b.mode;
+}
 
 // 假插件 process：确定性变换（与线程/时序无关）+ QPC 校准人工成本。
 // B2：hangGate 非空时，在写输出前先等事件——卡死的插件来不及写输出，
 // 该组输出保持调用方预置的脏哨兵（冻结的可观测判据）。
-void FakeProcess(void* eng, const float* in, float* out, int frames) {
-    auto* fe = static_cast<FakeEng*>(eng);
+void FakeProcessImpl(FakeEng* fe, const float* in, float* out, int frames,
+                     int channels) {
     const float k = fe->gain;
-    const int n2 = frames * fe->procCh;
+    const int n2 = frames * channels;
     if (fe->hangGate) {
         // 重入检测：进入即计数；已有他者在引擎内 = 重入被占引擎（B2 须杜绝）
         if (fe->inEngine->fetch_add(1) != 0) fe->reentered->store(1);
@@ -83,6 +180,35 @@ void FakeProcess(void* eng, const float* in, float* out, int frames) {
             break;
     }
     if (fe->hangGate) fe->inEngine->fetch_sub(1);
+}
+
+void FakeProcess(void* eng, const float* in, float* out, int frames) {
+    auto* fe = static_cast<FakeEng*>(eng);
+    FakeProcessImpl(fe, in, out, frames,
+                    fe->activeChannels.load(std::memory_order_acquire));
+}
+
+int FakeProcessGeometry(void* eng, const float* in, float* out, int frames,
+                        const auradsp_geometry* expected) {
+    if (!eng || !expected) return AURADSP_E_PARAM;
+    auto* fe = static_cast<FakeEng*>(eng);
+    const auradsp_geometry active = FakeLoadGeometry(
+        fe->activeGeneration, fe->activeChannels, fe->activeMode);
+    const auradsp_geometry pending = FakeLoadGeometry(
+        fe->pendingGeneration, fe->pendingChannels, fe->pendingMode);
+    const bool activeMatch = FakeGeometryMatches(*expected, active);
+    if (!activeMatch && !FakeGeometryMatches(*expected, pending))
+        return AURADSP_E_STATE;
+    const auradsp_geometry& target = activeMatch ? active : pending;
+    fe->lastExpectedGeneration.store(expected->generation, std::memory_order_release);
+    fe->lastExpectedChannels.store(expected->channels, std::memory_order_relaxed);
+    fe->lastExpectedMode.store(expected->mode, std::memory_order_relaxed);
+    fe->processCalls.fetch_add(1, std::memory_order_acq_rel);
+    fe->activeChannels.store(target.channels, std::memory_order_relaxed);
+    fe->activeMode.store(target.mode, std::memory_order_relaxed);
+    fe->activeGeneration.store(target.generation, std::memory_order_release);
+    FakeProcessImpl(fe, in, out, frames, expected->channels);
+    return AURADSP_OK;
 }
 
 // 确定性输入（块间变化防冻结检测干扰；串/并行两块序列逐位相同）。
@@ -103,13 +229,19 @@ struct Rig {
         QueryPerformanceFrequency(&qpf);
         g_qpfInvUs = 1e6 / (double)qpf.QuadPart;
         memset(&ctx, 0, sizeof(ctx));
-        ctx.process = FakeProcess;
+        ctx.process = FakeProcess;  // haveEng/readiness marker; geometry path is authoritative.
+        ctx.processGeometry = FakeProcessGeometry;
+        ctx.requestGeometry = FakeRequestGeometry;
+        ctx.getActiveGeometry = FakeGetActiveGeometry;
         ctx.idleSeconds = 3;
         ctx.qpfInvUs = g_qpfInvUs;
         ctx.busMask = 0xFF;
         for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
             eng[g] = new FakeEng{1.0f + 0.01f * static_cast<float>(g)};
             ctx.eng[g] = eng[g];
+            ctx.requestedGeneration[g] = 1;
+            ctx.requestedChannels[g] = 2;
+            ctx.requestedMode[g] = 0;
         }
         ctx.nEng = PumpCtx::kMaxGroups;
         rStore.assign(static_cast<size_t>(kCh) * 128, 0.0f);
@@ -129,6 +261,42 @@ struct Rig {
 
     void Destroy() {
         for (int g = 0; g < PumpCtx::kMaxGroups; ++g) delete eng[g];
+    }
+
+    bool RequestGroup(int g, int32_t channels, int32_t mode) {
+        if (g < 0 || g >= PumpCtx::kMaxGroups || !eng[g]) return false;
+        return VmRequestGroupGeometry(&ctx, g, eng[g], channels, mode);
+    }
+
+    bool RequestAll(int32_t channels, int32_t mode) {
+        return VmApplyWorkGeometry(&ctx, channels, mode) == VmLiveEngineCount(&ctx);
+    }
+
+    // 模拟生产“先请求几何、后发布句柄”的重建/懒建顺序。新 handle 的
+    // active 从 generation 1 开始，requested 必须保留 ABI 返回的真实代号。
+    bool ReplaceGroup(int g, int32_t channels, int32_t mode) {
+        if (g < 0 || g >= PumpCtx::kMaxGroups) return false;
+        auto* replacement = new FakeEng{1.0f + 0.01f * static_cast<float>(g)};
+        if (!VmRequestGroupGeometry(&ctx, g, replacement, channels, mode)) {
+            delete replacement;
+            return false;
+        }
+        FakeEng* old = eng[g];
+        ctx.eng[g] = replacement;
+        eng[g] = replacement;
+        delete old;
+        return true;
+    }
+
+    // 请求后的首个块只激活 pending 并静音；第二个块才发布宿主步进。
+    bool PrimeGeometry(int32_t channels, int32_t mode) {
+        if (!RequestAll(channels, mode)) return false;
+        FillInputs(0, PumpCtx::kMaxGroups, -1);
+        OnVbCallback(&ctx, kCbBufferOut, &ab, 0);
+        FillInputs(1, PumpCtx::kMaxGroups, -1);
+        OnVbCallback(&ctx, kCbBufferOut, &ab, 0);
+        return InterlockedCompareExchange(&ctx.workCh, 0, 0) == channels
+               && InterlockedCompareExchange(&ctx.chanMode, 0, 0) == mode;
     }
 
     // 填第 b 块输入：输出预置脏哨兵（捕捉"没被写"）；nullGroup 的组不给 buffer。
@@ -202,8 +370,16 @@ ScenResult RunScenario(const char* name, int blocks, int ng, int nullGroup,
     // 掩码、空组与测试信号语义，FL/FR 期望是纯进纯出；矩阵折叠
     // gather 会把高声道折入主对，不属本族口径（折叠系数由
     // smoke_r47_vb_channel_discipline 源码门 + 引擎侧用例覆盖）。
-    InterlockedExchange(&ser.ctx.chanMode, 1);
-    InterlockedExchange(&par.ctx.chanMode, 1);
+    // 与生产一致：先请求 pending，静音激活一块，再让后续块发布 workCh/chanMode。
+    if (!ser.PrimeGeometry(2, 1) || !par.PrimeGeometry(2, 1)) {
+        r.ok = false;
+        r.why = "initial geometry request/activation failed";
+        VmParallelShutdown(&par.ctx);
+        VmParallelShutdown(&ser.ctx);
+        ser.Destroy();
+        par.Destroy();
+        return r;
+    }
     InterlockedExchange(&ser.ctx.testKind, testKind);
     InterlockedExchange(&par.ctx.testKind, testKind);
     ser.ab.nbi = ng * 8;
@@ -391,6 +567,17 @@ StragglerResult RunStragglerScenario() {
         return r;
     }
     r.ran = true;
+    if (!ser.PrimeGeometry(2, 1) || !par.PrimeGeometry(2, 1)) {
+        r.ok = false;
+        r.why = "initial geometry request/activation failed";
+        CloseHandle(g_hangGate);
+        g_hangGate = nullptr;
+        VmParallelShutdown(&par.ctx);
+        VmParallelShutdown(&ser.ctx);
+        ser.Destroy();
+        par.Destroy();
+        return r;
+    }
     // 卡死引擎注入（仅并行侧 g7）。全部引擎成本 500µs：RT 认领最低位后忙
     // 500µs，worker 们在 ~µs 级把剩余位（含 g7）认领完——g7 必落 worker。
     for (int g = 0; g < PumpCtx::kMaxGroups; ++g) par.eng[g]->costUs = 500.0;
@@ -490,20 +677,20 @@ bool RunChannelScenario(int procCh, std::string& why) {
     Rig ser, par;
     ser.Init();
     par.Init();
-    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
-        ser.eng[g]->procCh = procCh;
-        par.eng[g]->procCh = procCh;
-    }
-    InterlockedExchange(&ser.ctx.workCh, procCh);
-    InterlockedExchange(&par.ctx.workCh, procCh);
     // 同 RunScenario：声道档位回归的期望是离散口径（引擎收纯
     // 总线声道、非引擎槽清零），钉离散（第四十七轮 S2）。
-    InterlockedExchange(&ser.ctx.chanMode, 1);
-    InterlockedExchange(&par.ctx.chanMode, 1);
     VmParallelInit(&par.ctx);
     VmParallelInit(&ser.ctx);
     InterlockedExchange(&ser.ctx.parallelOn, 0);
     InterlockedExchange(&par.ctx.parallelOn, 1);
+    if (!ser.PrimeGeometry(procCh, 1) || !par.PrimeGeometry(procCh, 1)) {
+        why = "geometry request/activation failed";
+        VmParallelShutdown(&par.ctx);
+        VmParallelShutdown(&ser.ctx);
+        ser.Destroy();
+        par.Destroy();
+        return false;
+    }
 
     std::vector<float> snap(static_cast<size_t>(kCh) * 128);
     bool ok = true;
@@ -574,6 +761,344 @@ bool RunChannelScenario(int procCh, std::string& why) {
     return ok;
 }
 
+bool OutputsZero(const Rig& rig, int groups) {
+    for (int ch = 0; ch < groups * 8; ++ch)
+        for (int i = 0; i < 128; ++i)
+            if (rig.wStore[static_cast<size_t>(ch) * 128 + i] != 0.0f)
+                return false;
+    return true;
+}
+
+// 2→4→6→8 must cross a silent activation block before the pump publishes the
+// new width. A group that requests a different width keeps the whole pump on
+// its last complete geometry; no subset is allowed to publish.
+bool RunGeometryTransitionScenario(std::string& why) {
+    Rig ser, par;
+    ser.Init();
+    par.Init();
+    VmParallelInit(&ser.ctx);
+    VmParallelInit(&par.ctx);
+    InterlockedExchange(&ser.ctx.parallelOn, 0);
+    InterlockedExchange(&par.ctx.parallelOn, 1);
+    auto cleanup = [&] {
+        VmParallelShutdown(&par.ctx);
+        VmParallelShutdown(&ser.ctx);
+        ser.Destroy();
+        par.Destroy();
+    };
+    auto fail = [&](const std::string& message) {
+        cleanup();
+        why = message;
+        return false;
+    };
+    if (!ser.PrimeGeometry(2, 0) || !par.PrimeGeometry(2, 0))
+        return fail("initial geometry request/activation failed");
+
+    int published = 2;
+    int block = 0;
+    std::vector<float> snap(static_cast<size_t>(kCh) * 128);
+    for (int target : {2, 4, 6, 8}) {
+        const uint64_t generation = par.eng[0]->nextGeneration.load(
+            std::memory_order_relaxed);
+        if (!ser.RequestAll(target, 0) || !par.RequestAll(target, 0))
+            return fail("geometry request failed");
+        for (Rig* rig : {&ser, &par}) {
+            rig->FillInputs(block, 8, -1);
+            OnVbCallback(&rig->ctx, kCbBufferOut, &rig->ab, 0);
+            if (InterlockedCompareExchange(&rig->ctx.workCh, 0, 0) != published
+                || !OutputsZero(*rig, 8)) {
+                char message[160];
+                snprintf(message, sizeof(message),
+                         "pending geometry target=%d published=%d host=%ld zero=%d",
+                         target, published,
+                         InterlockedCompareExchange(&rig->ctx.workCh, 0, 0),
+                         OutputsZero(*rig, 8) ? 1 : 0);
+                return fail(message);
+            }
+            for (int g = 0; g < 8; ++g) {
+                if (rig->eng[g]->activeGeneration.load(std::memory_order_acquire)
+                        != generation
+                    || rig->eng[g]->lastExpectedGeneration.load(
+                           std::memory_order_acquire) != generation)
+                    return fail("activation block did not consume complete geometry");
+            }
+            rig->FillInputs(block + 1, 8, -1);
+            OnVbCallback(&rig->ctx, kCbBufferOut, &rig->ab, 0);
+            if (InterlockedCompareExchange(&rig->ctx.workCh, 0, 0) != target)
+                return fail("matching active geometry did not publish width");
+        }
+        memcpy(snap.data(), ser.wStore.data(), snap.size() * sizeof(float));
+        if (memcmp(snap.data(), par.wStore.data(), snap.size() * sizeof(float)) != 0)
+            return fail("serial/parallel geometry transition mismatch");
+        published = target;
+        block += 2;
+    }
+
+    // Three groups ask for 6ch while g3 asks for 4ch. Each handle can activate,
+    // but the common host geometry is not complete and must remain at 8ch.
+    for (int g = 0; g < 8; ++g) {
+        const int target = g == 3 ? 4 : 6;
+        if (!ser.RequestGroup(g, target, 0) || !par.RequestGroup(g, target, 0))
+            return fail("partial geometry request failed");
+    }
+    for (Rig* rig : {&ser, &par}) {
+        rig->FillInputs(block, 8, -1);
+        OnVbCallback(&rig->ctx, kCbBufferOut, &rig->ab, 0);
+    }
+    int callsAfterActivation[8] = {};
+    for (int g = 0; g < 8; ++g)
+        callsAfterActivation[g] = par.eng[g]->processCalls.load(
+            std::memory_order_acquire);
+    for (Rig* rig : {&ser, &par}) {
+        rig->FillInputs(block + 1, 8, -1);
+        OnVbCallback(&rig->ctx, kCbBufferOut, &rig->ab, 0);
+        if (InterlockedCompareExchange(&rig->ctx.workCh, 0, 0) != 8
+            || !OutputsZero(*rig, 8))
+            return fail("partial-group geometry published or produced audio");
+    }
+    for (int g = 0; g < 8; ++g)
+        if (par.eng[g]->processCalls.load(std::memory_order_acquire)
+            != callsAfterActivation[g])
+            return fail("mismatched common geometry advanced a group");
+
+    if (!ser.RequestAll(6, 0) || !par.RequestAll(6, 0))
+        return fail("geometry recovery request failed");
+    for (Rig* rig : {&ser, &par}) {
+        rig->FillInputs(block + 2, 8, -1);
+        OnVbCallback(&rig->ctx, kCbBufferOut, &rig->ab, 0);
+        rig->FillInputs(block + 3, 8, -1);
+        OnVbCallback(&rig->ctx, kCbBufferOut, &rig->ab, 0);
+        if (InterlockedCompareExchange(&rig->ctx.workCh, 0, 0) != 6)
+            return fail("complete geometry did not recover after mismatch");
+    }
+    cleanup();
+    return true;
+}
+
+// 生产多组事务 helper 的失败回滚：g3 拒绝 6ch/1 后，g0..g2 已接受的
+// 6ch/1 必须全部回滚到旧 pending；任何 6ch/1 残留都不得发布到泵。
+bool RunGeometryRollbackScenario(std::string& why) {
+    Rig rig;
+    rig.Init();
+    VmParallelInit(&rig.ctx);
+    InterlockedExchange(&rig.ctx.parallelOn, 1);
+    auto cleanup = [&] {
+        VmParallelShutdown(&rig.ctx);
+        rig.Destroy();
+    };
+    auto fail = [&](const std::string& message) {
+        cleanup();
+        why = message;
+        return false;
+    };
+    if (!rig.PrimeGeometry(2, 0)) return fail("initial geometry activation failed");
+
+    const int failGroup = 3;
+    rig.eng[failGroup]->failNextRequest.store(true, std::memory_order_release);
+    if (VmApplyWorkGeometry(&rig.ctx, 6, 1) != 0)
+        return fail("partial geometry transaction unexpectedly succeeded");
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        const auradsp_geometry pending = FakeLoadGeometry(
+            rig.eng[g]->pendingGeneration, rig.eng[g]->pendingChannels,
+            rig.eng[g]->pendingMode);
+        const uint64_t requested = (uint64_t)InterlockedCompareExchange64(
+            &rig.ctx.requestedGeneration[g], 0, 0);
+        if (pending.generation != requested || pending.channels != 2 ||
+            pending.mode != 0)
+            return fail("failed transaction left a different group pending");
+    }
+
+    rig.FillInputs(0, 8, -1);
+    OnVbCallback(&rig.ctx, kCbBufferOut, &rig.ab, 0);
+    if (InterlockedCompareExchange(&rig.ctx.workCh, 0, 0) != 2 ||
+        InterlockedCompareExchange(&rig.ctx.chanMode, 0, 0) != 0 ||
+        !OutputsZero(rig, 8))
+        return fail("rollback published partial geometry or audio");
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        if (rig.eng[g]->activeGeneration.load(std::memory_order_acquire) !=
+            (uint64_t)InterlockedCompareExchange64(
+                &rig.ctx.requestedGeneration[g], 0, 0))
+            return fail("rollback generation was not retained through activation");
+    }
+
+    rig.FillInputs(1, 8, -1);
+    OnVbCallback(&rig.ctx, kCbBufferOut, &rig.ab, 0);
+    if (InterlockedCompareExchange(&rig.ctx.workCh, 0, 0) != 2 ||
+        InterlockedCompareExchange(&rig.ctx.chanMode, 0, 0) != 0)
+        return fail("complete rollback geometry did not publish");
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g)
+        if (rig.eng[g]->lastExpectedChannels.load(std::memory_order_acquire) != 2 ||
+            rig.eng[g]->lastExpectedMode.load(std::memory_order_acquire) != 0)
+            return fail("rollback activation used rejected geometry");
+    cleanup();
+    return true;
+}
+
+// 重建与懒建都先请求几何、后发布 handle。新 active 从 generation 1 起，
+// requested 必须保留 ABI 返回代号并跨静默激活块继续匹配。
+bool RunGeometryLifecycleScenario(std::string& why) {
+    Rig rig;
+    rig.Init();
+    VmParallelInit(&rig.ctx);
+    InterlockedExchange(&rig.ctx.parallelOn, 1);
+    auto cleanup = [&] {
+        VmParallelShutdown(&rig.ctx);
+        rig.Destroy();
+    };
+    auto fail = [&](const std::string& message) {
+        cleanup();
+        why = message;
+        return false;
+    };
+    if (!rig.PrimeGeometry(2, 0)) return fail("initial geometry activation failed");
+
+    InterlockedExchange(&rig.ctx.parallelOn, 0);
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g)
+        if (!rig.ReplaceGroup(g, 4, 0)) return fail("rebuild handle creation failed");
+    InterlockedExchange(&rig.ctx.parallelOn, 1);
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        const uint64_t requested = (uint64_t)InterlockedCompareExchange64(
+            &rig.ctx.requestedGeneration[g], 0, 0);
+        if (requested != rig.eng[g]->pendingGeneration.load(std::memory_order_acquire) ||
+            requested == 1)
+            return fail("rebuild did not retain per-handle request generation");
+    }
+    rig.FillInputs(0, 8, -1);
+    OnVbCallback(&rig.ctx, kCbBufferOut, &rig.ab, 0);
+    if (InterlockedCompareExchange(&rig.ctx.workCh, 0, 0) != 2 ||
+        !OutputsZero(rig, 8))
+        return fail("rebuild published geometry before active match");
+    rig.FillInputs(1, 8, -1);
+    OnVbCallback(&rig.ctx, kCbBufferOut, &rig.ab, 0);
+    if (InterlockedCompareExchange(&rig.ctx.workCh, 0, 0) != 4)
+        return fail("rebuilt geometry did not publish after activation");
+
+    if (!rig.RequestAll(6, 0)) return fail("geometry recovery request failed");
+    rig.FillInputs(2, 8, -1);
+    OnVbCallback(&rig.ctx, kCbBufferOut, &rig.ab, 0);
+    rig.FillInputs(3, 8, -1);
+    OnVbCallback(&rig.ctx, kCbBufferOut, &rig.ab, 0);
+    if (InterlockedCompareExchange(&rig.ctx.workCh, 0, 0) != 6)
+        return fail("pre-lazy geometry baseline did not publish");
+
+    const int lazyGroup = 3;
+    InterlockedExchange(&rig.ctx.parallelOn, 0);
+    delete rig.eng[lazyGroup];
+    rig.eng[lazyGroup] = nullptr;
+    rig.ctx.eng[lazyGroup] = nullptr;
+    if (!rig.ReplaceGroup(lazyGroup, 6, 0))
+        return fail("lazy-create handle creation failed");
+    InterlockedExchange(&rig.ctx.parallelOn, 1);
+    const uint64_t lazyRequested = (uint64_t)InterlockedCompareExchange64(
+        &rig.ctx.requestedGeneration[lazyGroup], 0, 0);
+    if (lazyRequested !=
+            rig.eng[lazyGroup]->pendingGeneration.load(std::memory_order_acquire) ||
+        lazyRequested == 1)
+        return fail("lazy-create did not retain per-handle request generation");
+
+    rig.FillInputs(4, 8, -1);
+    OnVbCallback(&rig.ctx, kCbBufferOut, &rig.ab, 0);
+    if (InterlockedCompareExchange(&rig.ctx.workCh, 0, 0) != 6 ||
+        !OutputsZero(rig, 8))
+        return fail("lazy-create published partial geometry or audio");
+    rig.FillInputs(5, 8, -1);
+    OnVbCallback(&rig.ctx, kCbBufferOut, &rig.ab, 0);
+    if (InterlockedCompareExchange(&rig.ctx.workCh, 0, 0) != 6 ||
+        rig.eng[lazyGroup]->lastExpectedGeneration.load(std::memory_order_acquire) !=
+            lazyRequested ||
+        rig.eng[lazyGroup]->lastExpectedChannels.load(std::memory_order_acquire) != 6 ||
+        rig.eng[lazyGroup]->lastExpectedMode.load(std::memory_order_acquire) != 0)
+        return fail("lazy-create generation was lost after activation");
+    cleanup();
+    return true;
+}
+
+struct GeometrySnapshotResult {
+    bool ran = false;
+    bool ok = true;
+    std::string why;
+};
+
+// Deterministic former race: g7 is claimed by a worker, then fan-in times out.
+// While that claimant is paused, the next block requests 8ch. The claimant must
+// retain generation 1 / 2ch for its old buffers, not read the new block's 8ch.
+GeometrySnapshotResult RunGeometrySnapshotScenario() {
+    GeometrySnapshotResult r;
+    Rig par;
+    par.Init();
+    if (!VmParallelInit(&par.ctx) || par.ctx.nWorkers < 1) {
+        r.ran = false;
+        r.why = "no workers (single-core?)";
+        VmParallelShutdown(&par.ctx);
+        par.Destroy();
+        return r;
+    }
+    r.ran = true;
+    InterlockedExchange(&par.ctx.parallelOn, 1);
+    for (int g = 0; g < 7; ++g) par.eng[g]->costUs = 500.0;
+    par.eng[7]->costUs = 0.0;
+
+    HANDLE claimed = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    HANDLE release = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!claimed || !release) {
+        r.ok = false;
+        r.why = "CreateEventW failed";
+        if (claimed) CloseHandle(claimed);
+        if (release) CloseHandle(release);
+        VmParallelShutdown(&par.ctx);
+        par.Destroy();
+        return r;
+    }
+    ClaimHook hook;
+    hook.ctx = &par.ctx;
+    hook.bit = 1L << 7;
+    hook.claimed = claimed;
+    hook.release = release;
+    g_callbackThreadId.store(GetCurrentThreadId(), std::memory_order_release);
+    g_claimHook.store(&hook, std::memory_order_release);
+    auto cleanup = [&] {
+        g_claimHook.store(nullptr, std::memory_order_release);
+        g_callbackThreadId.store(0, std::memory_order_release);
+        SetEvent(release);
+        VmParallelShutdown(&par.ctx);
+        CloseHandle(claimed);
+        CloseHandle(release);
+        par.Destroy();
+    };
+    auto fail = [&](const std::string& message) {
+        cleanup();
+        r.ok = false;
+        r.why = message;
+        return r;
+    };
+
+    par.FillInputs(0, 8, -1);
+    OnVbCallback(&par.ctx, kCbBufferOut, &par.ab, 0);
+    g_claimHook.store(nullptr, std::memory_order_release);
+    if (WaitForSingleObject(claimed, 0) != WAIT_OBJECT_0)
+        return fail("worker did not claim g7 before fan-in timeout");
+
+    // Publish the next generation while g7 is frozen. Its old claimant still
+    // owns the old block buffers and must still use the old expected geometry.
+    if (!par.RequestAll(8, 0)) return fail("next geometry request failed");
+    par.FillInputs(1, 8, -1);
+    OnVbCallback(&par.ctx, kCbBufferOut, &par.ab, 0);
+    SetEvent(release);
+    for (int i = 0; i < 5000; ++i) {
+        if (par.eng[7]->processCalls.load(std::memory_order_acquire) == 1
+            && (InterlockedCompareExchange(&par.ctx.workStuck, 0, 0)
+                & (1L << 7)) == 0)
+            break;
+        Sleep(1);
+    }
+    if (par.eng[7]->lastExpectedGeneration.load(std::memory_order_acquire) != 1
+        || par.eng[7]->lastExpectedChannels.load(std::memory_order_acquire) != 2
+        || par.eng[7]->lastExpectedMode.load(std::memory_order_acquire) != 0)
+        return fail("straggler combined old buffers with next-block geometry");
+    cleanup();
+    return r;
+}
+
 }  // namespace
 
 int main() {
@@ -630,6 +1155,33 @@ int main() {
             detail += buf;
         }
     }
+    // Geometry ABI: sequential width changes, partial-group mismatch,
+    // transactional rollback, rebuild/lazy-create retention, and a deterministic
+    // post-claim/pre-geometry-read straggler interleaving.
+    std::string geometryWhy;
+    bool geometryCoreOk = true;
+    if (!RunGeometryTransitionScenario(geometryWhy)) {
+        geometryCoreOk = false;
+        detail += "geometry(" + geometryWhy + "); ";
+    }
+    std::string rollbackWhy;
+    if (!RunGeometryRollbackScenario(rollbackWhy)) {
+        geometryCoreOk = false;
+        geometryWhy += "rollback: " + rollbackWhy + "; ";
+        detail += "geometry-rollback(" + rollbackWhy + "); ";
+    }
+    std::string lifecycleWhy;
+    if (!RunGeometryLifecycleScenario(lifecycleWhy)) {
+        geometryCoreOk = false;
+        geometryWhy += "lifecycle: " + lifecycleWhy + "; ";
+        detail += "geometry-lifecycle(" + lifecycleWhy + "); ";
+    }
+    if (!geometryCoreOk) allOk = false;
+    GeometrySnapshotResult geo = RunGeometrySnapshotScenario();
+    if (geo.ran && !geo.ok) {
+        allOk = false;
+        detail += "geo-snapshot(" + geo.why + "); ";
+    }
     // B2 straggler 场景（卡死 worker → fan-in 截止 → 冻结 → 恢复）
     StragglerResult st = RunStragglerScenario();
     if (st.ran && !st.ok) {
@@ -662,10 +1214,14 @@ int main() {
     printf("{\"ran\":true,\"cores\":%d,\"workers\":%d,\"allOk\":%s,"
            "\"serUs\":%.0f,\"parUs\":%.0f,\"perfOk\":%s,\"note\":\"%s\","
            "\"detail\":\"%s\","
+           "\"geoCoreOk\":%s,\"geoCoreNote\":\"%s\","
+           "\"geoRan\":%s,\"geoOk\":%s,\"geoNote\":\"%s\","
            "\"stRan\":%s,\"stOk\":%s,\"stMaxCbMs\":%.1f,\"stReentered\":%s,"
            "\"stParOn\":%ld,\"stResume\":%s,\"stNote\":\"%s\"}\n",
            cores, workers, allOk ? "true" : "false", fullSerUs, fullParUs,
            perfOk ? "true" : "false", perfNote.c_str(), detail.c_str(),
+           geometryCoreOk ? "true" : "false", geometryWhy.c_str(),
+           geo.ran ? "true" : "false", geo.ok ? "true" : "false", geo.why.c_str(),
            st.ran ? "true" : "false", st.ok ? "true" : "false", st.maxCbMs,
            st.reentered ? "true" : "false", st.parallelOnAfter,
            st.resumeOk ? "true" : "false",

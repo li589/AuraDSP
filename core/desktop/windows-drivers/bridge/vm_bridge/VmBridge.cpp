@@ -108,11 +108,7 @@ static int PluginEngineCount() {
 }
 
 static int LiveEngineCount() {
-    int n = 0;
-    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
-        if (g_b.ctx.eng[g]) ++n;
-    }
-    return n;
+    return vmcore::VmLiveEngineCount(&g_b.ctx);
 }
 
 static int FirstLiveGroup() {
@@ -706,50 +702,33 @@ int32_t RequestedWorkMode() {
 }
 
 bool RequestGroupGeometry(int g, void* engine, int32_t channels, int32_t mode) {
-    if (!engine || !g_b.ctx.requestGeometry ||
-        (channels != 2 && channels != 4 && channels != 6 && channels != 8) ||
-        (mode != 0 && mode != 1)) return false;
-    uint64_t generation = 0;
-    if (g_b.ctx.requestGeometry(engine, channels, mode, &generation) != AURADSP_OK)
-        return false;
-    InterlockedExchange(&g_b.ctx.requestedChannels[g], channels);
-    InterlockedExchange(&g_b.ctx.requestedMode[g], mode);
-    InterlockedExchange64(&g_b.ctx.requestedGeneration[g], (LONGLONG)generation);
-    return true;
+    return vmcore::VmRequestGroupGeometry(&g_b.ctx, g, engine, channels, mode);
+}
+
+// 启动与 CHANGE 重建必须执行同一套完整处理 ABI 校验。legacy process 仍是
+// haveEng/兼容标记，不能只凭 processGeometry 就创建并发布活句柄。
+static bool ProcessingAbiReady() {
+    return g_b.create && g_b.ctx.process && g_b.ctx.processGeometry &&
+           g_b.ctx.requestGeometry && g_b.ctx.getActiveGeometry &&
+           g_b.ctx.destroy;
+}
+
+static void ClearProcessingAbi() {
+    g_b.create = nullptr;
+    g_b.getParam = nullptr;
+    g_b.vizRead = nullptr;
+    g_b.ctx.process = nullptr;
+    g_b.ctx.processGeometry = nullptr;
+    g_b.ctx.requestGeometry = nullptr;
+    g_b.ctx.getActiveGeometry = nullptr;
+    g_b.ctx.destroy = nullptr;
 }
 
 // 控制线程只发布每组 pending 与请求代号，绝不直接切换 RT 的 workCh。
 // 任一组失败时把已请求组回滚到旧 pending；泵在块首仍只认全组同代同宽。
 int ApplyWorkGeometry(int32_t requestedChannels, int32_t requestedMode) {
-    const int32_t channels = (requestedChannels == 4 || requestedChannels == 6 ||
-                              requestedChannels == 8) ? requestedChannels : 2;
-    if (requestedMode != 0 && requestedMode != 1) return 0;
-    const int live = LiveEngineCount();
-    if (live <= 0 || !g_b.ctx.requestGeometry) return 0;
-    int32_t oldChannels[PumpCtx::kMaxGroups] = {};
-    int32_t oldMode[PumpCtx::kMaxGroups] = {};
-    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
-        oldChannels[g] = InterlockedCompareExchange(
-            &g_b.ctx.requestedChannels[g], 0, 0);
-        oldMode[g] = InterlockedCompareExchange(&g_b.ctx.requestedMode[g], 0, 0);
-    }
-    int ok = 0;
-    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
-        if (!g_b.ctx.eng[g]) continue;
-        if (!RequestGroupGeometry(g, g_b.ctx.eng[g], channels, requestedMode))
-            break;
-        ++ok;
-    }
-    if (ok != live) {
-        int rolledBack = 0;
-        for (int g = 0; g < PumpCtx::kMaxGroups && rolledBack < ok; ++g) {
-            if (!g_b.ctx.eng[g]) continue;
-            (void)RequestGroupGeometry(g, g_b.ctx.eng[g], oldChannels[g], oldMode[g]);
-            ++rolledBack;
-        }
-        return 0;
-    }
-    return ok;
+    if (!ProcessingAbiReady()) return 0;
+    return vmcore::VmApplyWorkGeometry(&g_b.ctx, requestedChannels, requestedMode);
 }
 
 int ApplyWorkChannels(FnEngSetParam, int32_t requested) {
@@ -1015,7 +994,7 @@ static bool CreateGroupEngineLocked(int g, float sr) {
         EnqueueGroupLoads(g);
         return true;
     }
-    if (!g_b.create) {
+    if (!ProcessingAbiReady()) {
         g_grpCreateFail[g].store(true, std::memory_order_release);
         return false;
     }
@@ -1149,6 +1128,7 @@ void RebuildEngines(int groups, float sr) {
     // 缓存的函数指针：任何一处被置空都会让泵退化成"无引擎直通"，表现正是
     // "声音在但没处理"。
     DestroyEngines();
+    bool abiOk = false;
     if (g_b.eng) {
         g_b.create =
             (FnEngCreate)GetProcAddress(g_b.eng, "auradsp_create");
@@ -1164,11 +1144,11 @@ void RebuildEngines(int groups, float sr) {
             g_b.eng, "auradsp_get_active_geometry");
         g_b.ctx.destroy =
             (FnEngDestroy)GetProcAddress(g_b.eng, "auradsp_destroy");
+        auto engAbiFn = (FnEngAbi)GetProcAddress(g_b.eng, "auradsp_abi");
+        abiOk = engAbiFn && engAbiFn() == vmcore::kEngineAbiExpected;
         g_pluginFns.Resolve(g_b.eng);
     }
-    if (g_b.create && g_b.ctx.processGeometry && g_b.ctx.requestGeometry &&
-        g_b.ctx.getActiveGeometry && g_b.ctx.destroy && g_b.ctx.scratchIn &&
-        g_b.ctx.scratchOut) {
+    if (abiOk && ProcessingAbiReady() && g_b.ctx.scratchIn && g_b.ctx.scratchOut) {
         // 懒建句柄：只为路开关打开的组建 DSP 链路（出厂 A1/A2）。
         // 关掉的路不建句柄 = 不占 DSP/效果器/脚本/插件内存；按需开路再建。
         std::lock_guard<std::mutex> eng(g_engineMut);
@@ -1177,24 +1157,29 @@ void RebuildEngines(int groups, float sr) {
                                                      : PumpCtx::kMaxGroups;
         for (int g = 0; g < want; ++g) {
             if (((bm >> g) & 1) == 0) continue;
-            g_b.ctx.eng[g] = g_b.create(sr, 2048);
-            // 新句柄的装载等待窗口从此开始：超时（kRouteSettleMs）未集齐即
-            // 判失败，routeState 不会永远停在"加载中"。
-            if (g_b.ctx.eng[g]) {
-                // CreateGroupEngineLocked/MirrorReplayOne 已登记本次完整
-                // 几何请求；此处不得再覆盖成初始代，否则 active 切换后永久错代。
-                ClearGroupLoadFlags(g);
-                g_grpWaitAt[g].store(GetTickCount64(), std::memory_order_release);
-            } else {
+            void* e = g_b.create(sr, 2048);
+            if (!e) {
                 g_grpCreateFail[g].store(true, std::memory_order_release);
+                continue;
             }
+            // 与启动/懒建路径一致：先登记本 handle 的完整 pending 几何，
+            // 成功后才发布句柄；失败则销毁未发布句柄，绝不伪造 generation 1。
+            if (!RequestGroupGeometry(g, e, 2, 0)) {
+                if (g_b.ctx.destroy) g_b.ctx.destroy(e);
+                g_grpCreateFail[g].store(true, std::memory_order_release);
+                continue;
+            }
+            g_b.ctx.eng[g] = e;
+            ClearGroupLoadFlags(g);
+            g_grpWaitAt[g].store(GetTickCount64(), std::memory_order_release);
         }
         // nEng 保留为"版型槽数"（0..want），稀疏句柄由各调用点跳过 nullptr。
         g_b.ctx.nEng = want;
     }
-    if (LiveEngineCount() == 0 || !g_b.ctx.scratchIn || !g_b.ctx.scratchOut) {
+    if (!abiOk || !ProcessingAbiReady() || LiveEngineCount() == 0 ||
+        !g_b.ctx.scratchIn || !g_b.ctx.scratchOut) {
         DestroyEngines();
-        g_b.ctx.process = nullptr;
+        ClearProcessingAbi();
     }
     // 新句柄是空状态：idle 计数清零（否则可能直接判闲跳过 process），
     // 组内峰值清零（viz 别跟着旧句柄的账本走）。
@@ -1567,8 +1552,8 @@ int vb_start(const char* engine_dll, const char* params_json) {
         g_pluginFns.Resolve(g_b.eng);
         const bool abiOk =
             engAbiFn && engAbi == vmcore::kEngineAbiExpected;
-        if (abiOk && create && g_b.ctx.processGeometry && g_b.ctx.requestGeometry &&
-            g_b.ctx.getActiveGeometry && g_b.ctx.destroy) {
+        bool engineReady = abiOk && ProcessingAbiReady();
+        if (engineReady) {
             g_b.ctx.scratchIn =
                 (float*)malloc(sizeof(float) * 8 * vmcore::kMaxNbs);
             g_b.ctx.scratchOut =
@@ -1587,33 +1572,40 @@ int vb_start(const char* engine_dll, const char* params_json) {
                 InterlockedCompareExchange(&g_b.ctx.busMask, 0, 0) & 0xFF;
             for (int g = 0; g < want; ++g) {
                 if (((bm0 >> g) & 1) == 0) continue;
-                g_b.ctx.eng[g] = create(sr0, 2048);
-                if (g_b.ctx.eng[g]) {
-                    InterlockedExchange(&g_b.ctx.requestedChannels[g], 2);
-                    InterlockedExchange(&g_b.ctx.requestedMode[g], 0);
-                    InterlockedExchange64(&g_b.ctx.requestedGeneration[g], 1);
-                    ClearGroupLoadFlags(g);
-                    g_grpWaitAt[g].store(GetTickCount64(),
-                                         std::memory_order_release);
-                } else {
+                void* e = create(sr0, 2048);
+                if (!e) {
                     g_grpCreateFail[g].store(true, std::memory_order_release);
+                    continue;
                 }
+                // 句柄发布前先登记本 handle 的完整 pending 几何；失败则销毁
+                // 未发布句柄，绝不留 requestedGeneration=1 的伪造基线。
+                if (!RequestGroupGeometry(g, e, 2, 0)) {
+                    if (g_b.ctx.destroy) g_b.ctx.destroy(e);
+                    g_grpCreateFail[g].store(true, std::memory_order_release);
+                    continue;
+                }
+                g_b.ctx.eng[g] = e;
+                ClearGroupLoadFlags(g);
+                g_grpWaitAt[g].store(GetTickCount64(),
+                                     std::memory_order_release);
             }
             // nEng = 版型槽数（稀疏句柄由调用点跳过 nullptr）。
             g_b.ctx.nEng = want;
-            if (!g_b.ctx.scratchIn || !g_b.ctx.scratchOut ||
-                LiveEngineCount() == 0) {
-                DestroyEngines();
-                g_b.ctx.process = nullptr;
-            }
+            engineReady = g_b.ctx.scratchIn && g_b.ctx.scratchOut &&
+                          LiveEngineCount() > 0;
         }
-        if (!g_b.ctx.process) {
+        if (!engineReady) {
             if (engAbiFn && engAbi != vmcore::kEngineAbiExpected)
                 snprintf(g_b.note, sizeof(g_b.note),
                          "engine-abi-mismatch: bridge=%u engine=%u",
                          vmcore::kEngineAbiExpected, engAbi);
+            // 任何 ABI/scratch/句柄校验失败都先销毁已创建句柄，再卸载模块；
+            // 不能留下指向已卸载模块的函数指针或半发布句柄。
+            DestroyEngines();
             FreeLibrary(g_b.eng);
             g_b.eng = nullptr;
+            ClearProcessingAbi();
+            g_pluginFns.Resolve(nullptr);
         }
     }
     // Z17：组间并行 worker 池（引擎就绪即建；回调尚未 start，worker 静默）。
@@ -2050,7 +2042,7 @@ int vb_set_bus_mask(int mask) {
     // 先切掩码：RT 新块立刻不再进即将被拆的组（关路语义的第一道闸）。
     g_b.busMask = mask;  // session 级保管（ctx 会被 memset，CHANGE 重建不丢）
     InterlockedExchange(&g_b.ctx.busMask, (LONG)mask);
-    if (!g_b.create || !g_b.ctx.destroy) return mask;
+    if (!ProcessingAbiReady()) return mask;
     // 路开关 = 绝对生命周期：关 → 拆该组句柄（连带效果器/脚本/插件内存）；
     // 开 → 重建句柄并回放效果器/脚本，插件后台装载（期间该路直通）。
     const bool suspend = LoadSuspensionUseful() && AnyPluginLoaded();

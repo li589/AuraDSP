@@ -106,17 +106,15 @@ struct PumpCtx {
     int nEng = 0;
     float* scratchIn = nullptr;   // 主线程预分配 8*kMaxNbs（双耳 8ch / 普通 2ch 共用）
     float* scratchOut = nullptr;
-    // 引擎工作声道数（2/4/6/8）：由 vb_set_param("channels.count") 更新，
-    // 必须与各引擎 handle 的 channels.count 逐块一致——否则 auradsp_process
-    // 按错误步长解释交织缓冲（8ch 喂 2/4/6 会分别变成 4×/2×/1.33× 速的断续）。
+    // 引擎工作声道数（2/4/6/8）：控制侧只写 per-handle pending 请求；
+    // 本影子仅由泵在所有处理组 active 与请求完整同代同宽后发布。
+    // 步进必须与各引擎 handle 的 channels.count 逐块一致——否则
+    // auradsp_process 会按错误步长解释交织缓冲。
     volatile LONG workCh = 2;
-    // 声道模式影子（0=矩阵 1=离散）：由 vb_set_param
-    // ("channels.mode") 更新（第四十七轮 S2）。矩阵时 gather
-    // 把总线高声道折进工作声道（否则引擎只见截断信号、与
-    // 离散无异）；两模式共同纪律：引擎生效时工作声道之外
-    // 的总线槽清零，禁止原始透传（透传只属无引擎/掩码关/
-    // 用户旁路三条非处理路径）——r46 宾机实证设 5.1 时
-    // BL/BR 原样直通、输出恒 7.1，定罪于此。
+    // 声道模式影子（0=矩阵 1=离散）：同样只由泵在完整 active geometry
+    // 匹配后发布。矩阵时 gather 把总线高声道折进工作声道；两模式
+    // 共同纪律：引擎生效时工作声道之外的总线槽清零，禁止原始透传
+    // （透传只属无引擎/掩码关/用户旁路三条非处理路径）。
     volatile LONG chanMode = 0;
     volatile LONG requestedChannels[kMaxGroups] = {2, 2, 2, 2, 2, 2, 2, 2};
     volatile LONG requestedMode[kMaxGroups] = {};
@@ -238,7 +236,18 @@ struct PumpCtx {
     long curChanMode = 0;      // 块快照：声道模式（第四十七轮 S2，与 procCh 同批发布）
     long curGeometryReady = 0; // 全组 active 与各自请求同代且同宽才为 1
     LONG curGeometryAdvance = 0; // 错代组位图：本块只用零输入推进 active
-    auradsp_geometry curExpectedGeometry[kMaxGroups] = {}; // worker 块快照
+    // 每块几何快照固定预分配。发布时 pendingMask 先保住所有可能 claimant；
+    // 超时关闭认领后清除未认领位，只留下已认领未完成的 straggler。完成方
+    // 离开 ProcessGroupVm 后清位，此前 RT 不得复用该 slot。最多 8 个
+    // straggler 各占一代，加当前代故开 kMaxGroups+1 个槽，RT 无分配/锁/IO。
+    struct GeometrySnapshot {
+        volatile LONGLONG generation = 0;
+        volatile LONG pendingMask = 0;
+        auradsp_geometry expected[kMaxGroups] = {};
+    };
+    static constexpr int kGeometrySnapshotSlots = kMaxGroups + 1;
+    GeometrySnapshot geometrySnapshots[kGeometrySnapshotSlots] = {};
+    volatile LONG curGeometrySnapshot = -1; // 当前并行代slot；随 workGen 发布
     long curTestKind = 0;      // 块快照：testKind 翻转只影响下一块
     volatile LONG testReady = 0;      // bitmap：bit g = scratchInG[g] 已由 RT 预填测试信号
     // 共享量 per-group 中间槽：worker 写、RT fan-in 后归约。max/OR 与顺序
@@ -247,6 +256,95 @@ struct PumpCtx {
     double maxDiffGrp[kMaxGroups] = {};
     bool grpBypass[kMaxGroups] = {};
 };
+
+// 控制线程几何请求 helper（RT 不调用）：引擎接受后才发布该 handle 的
+// requested generation/channels/mode，且 generation 必须非 0。启动、重建与
+// 原生回归共用同一路径，避免各处手写“先发布句柄/代号，再请求”的漂移。
+inline bool VmRequestGroupGeometry(PumpCtx* c, int g, void* engine,
+                                   int32_t channels, int32_t mode) {
+    if (!c || g < 0 || g >= PumpCtx::kMaxGroups || !engine ||
+        !c->requestGeometry ||
+        (channels != 2 && channels != 4 && channels != 6 && channels != 8) ||
+        (mode != 0 && mode != 1))
+        return false;
+    uint64_t generation = 0;
+    if (c->requestGeometry(engine, channels, mode, &generation) != AURADSP_OK ||
+        generation == 0)
+        return false;
+    InterlockedExchange(&c->requestedChannels[g], channels);
+    InterlockedExchange(&c->requestedMode[g], mode);
+    InterlockedExchange64(&c->requestedGeneration[g], (LONGLONG)generation);
+    return true;
+}
+
+inline int VmLiveEngineCount(const PumpCtx* c) {
+    if (!c) return 0;
+    int live = 0;
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g)
+        if (c->eng[g]) ++live;
+    return live;
+}
+
+// 多组组合请求为单一控制事务：任一 handle 失败时，已成功组全部回滚到
+// 请求前 pending。回滚请求同样经过 ABI 并发布真实新代号，不伪造旧代号。
+inline int VmApplyWorkGeometry(PumpCtx* c, int32_t requestedChannels,
+                               int32_t requestedMode) {
+    if (!c || (requestedMode != 0 && requestedMode != 1) || !c->requestGeometry)
+        return 0;
+    const int32_t channels =
+        (requestedChannels == 4 || requestedChannels == 6 || requestedChannels == 8)
+            ? requestedChannels
+            : 2;
+    const int live = VmLiveEngineCount(c);
+    if (live <= 0) return 0;
+    int32_t oldChannels[PumpCtx::kMaxGroups] = {};
+    int32_t oldMode[PumpCtx::kMaxGroups] = {};
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        oldChannels[g] = InterlockedCompareExchange(
+            &c->requestedChannels[g], 0, 0);
+        oldMode[g] = InterlockedCompareExchange(&c->requestedMode[g], 0, 0);
+    }
+    int ok = 0;
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        if (!c->eng[g]) continue;
+        if (!VmRequestGroupGeometry(c, g, c->eng[g], channels, requestedMode))
+            break;
+        ++ok;
+    }
+    if (ok != live) {
+        int rolledBack = 0;
+        for (int g = 0; g < PumpCtx::kMaxGroups && rolledBack < ok; ++g) {
+            if (!c->eng[g]) continue;
+            (void)VmRequestGroupGeometry(c, g, c->eng[g], oldChannels[g],
+                                         oldMode[g]);
+            ++rolledBack;
+        }
+        return 0;
+    }
+    return ok;
+}
+
+// 选取一个没有未完成 claimant 的固定快照槽。单 RT 写；pendingMask=0 表示
+// 该代所有已认领组都已离开 ProcessGroupVm，可安全覆盖。扫描上限恒为 9。
+inline int VmAcquireGeometrySnapshot(PumpCtx* c) {
+    if (!c) return -1;
+    for (int i = 0; i < PumpCtx::kGeometrySnapshotSlots; ++i) {
+        if (InterlockedCompareExchange(&c->geometrySnapshots[i].pendingMask, 0, 0)
+            == 0)
+            return i;
+    }
+    return -1;
+}
+
+// fan-in 超时后原子关闭旧代剩余认领，返回尚未认领的位图。claimant 与
+// close 竞争同一原子操作：先成功者决定该位是否仍有 claimant；关闭后迟到
+// claimant 的 CAS 必失败，因此这些位可从 snapshot.pendingMask 安全释放。
+inline LONG VmCloseGeometryClaims(PumpCtx* c, LONG gen) {
+    const LONGLONG closed = InterlockedExchange64(
+        &c->workClaimPacked, (LONGLONG)gen << 32);
+    if ((LONG)(closed >> 32) != gen) return 0;
+    return (LONG)(closed & 0xFFFFFFFFLL);
+}
 
 // D2（2026-10-24）：RT 在途守卫 + 确定性排空等待（三桥共用）。
 //
@@ -452,7 +550,8 @@ inline bool BusSlotsSilent(VbAudioBuffer* ab, long base, const int* slots,
 // 块首统一读取每组完整 active 几何。只有所有处理组都与各自请求同代、
 // 且 channels/mode 完全一致时才发布全局 workCh/chanMode；否则保留上一
 // 份完整几何，本块静音并仅推进错代组，禁止跨组/跨代部分切换。
-inline LONG SyncGeometryAtBlockStart(PumpCtx* c, int groups, long mask) {
+inline LONG SyncGeometryAtBlockStart(PumpCtx* c, int groups, long mask,
+                                     auradsp_geometry* expectedGeometry) {
     // 02 冻结参照与不带几何 ABI 的驱动无关泵测试沿用旧工作宽；生产 VM
     // 加载器强制 request/active/processGeometry 齐全，不会进入兼容路径。
     if (!c->getActiveGeometry) {
@@ -484,7 +583,7 @@ inline LONG SyncGeometryAtBlockStart(PumpCtx* c, int groups, long mask) {
             ready = false;
             advance |= 1L << g;
         }
-        c->curExpectedGeometry[g] = expected;
+        expectedGeometry[g] = expected;
         if (!matches) continue;
         if (!haveGeometry) {
             common = active;
@@ -824,7 +923,13 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
 // 两条路径都无条件清冻结位：同代内一个组只有一个 claimer，完成时引擎内
 // 必无他者，清位安全；而不清会留下"完成方先清、RT 后置位"的永久误冻
 // 窗口（见 VmMarkStuck 的 mark-then-recheck 说明）。
-inline void VmWorkComplete(PumpCtx* c, LONG gen, LONG bit) {
+inline void VmWorkComplete(PumpCtx* c, LONG gen, LONG bit, int snapshotIndex) {
+    if (snapshotIndex >= 0 && snapshotIndex < PumpCtx::kGeometrySnapshotSlots) {
+        auto& snapshot = c->geometrySnapshots[snapshotIndex];
+        if ((LONGLONG)InterlockedCompareExchange64(&snapshot.generation, 0, 0) ==
+            (LONGLONG)gen)
+            InterlockedAnd(&snapshot.pendingMask, ~bit);
+    }
     for (;;) {
         const LONGLONG cur = InterlockedCompareExchange64(&c->workDonePacked, 0, 0);
         if ((LONG)(cur >> 32) == gen) {
@@ -909,7 +1014,8 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
     // 也按块快照（原 per-group 活读，翻转时组间可撕裂；并行预填更必须同口径，
     // 否则 FillTestSignal 的共享相位/RNG 状态会数据竞争）。
     const long mask = InterlockedCompareExchange(&c->busMask, 0, 0);
-    SyncGeometryAtBlockStart(c, ng, mask);
+    auradsp_geometry expectedGeometry[PumpCtx::kMaxGroups] = {};
+    SyncGeometryAtBlockStart(c, ng, mask, expectedGeometry);
     const bool geometryReady = c->curGeometryReady != 0;
     const LONG geometryAdvance = c->curGeometryAdvance;
     // procCh 必须与引擎 channels.count 一致；binaural 只在真正生效时静音
@@ -938,6 +1044,11 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
                 break;
             }
         }
+    }
+    int snapshotIndex = -1;
+    if (par) {
+        snapshotIndex = VmAcquireGeometrySnapshot(c);
+        if (snapshotIndex < 0) par = false;  // 槽全被 straggler 占用：本块退串行
     }
     if (par) {
         // ---- Z17 并行路径：发布 → 认领（RT 也是 claimer）→ fan-in ----
@@ -975,6 +1086,14 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
             }
         }
         const LONG newGen = InterlockedCompareExchange(&c->workGen, 0, 0) + 1;
+        // 几何期望写入本代独占 slot；pendingMask 先保住全部 todo，防 RT 在
+        // claimant 已 CAS、尚未置完成位时复用本 slot。worker 见 workGen 后
+        // 才可读取，故 expected 的普通写在 Interlocked 发布屏障之后可见。
+        auto& snapshot = c->geometrySnapshots[snapshotIndex];
+        memcpy(snapshot.expected, expectedGeometry, sizeof(snapshot.expected));
+        InterlockedExchange64(&snapshot.generation, (LONGLONG)newGen);
+        InterlockedExchange(&snapshot.pendingMask, todo);
+        InterlockedExchange(&c->curGeometrySnapshot, snapshotIndex);
         // 完成位图切到新代际（旧代际位图作废；其未完成组已在上方结清为
         // straggler）。必须早于 gen bump——worker 见新 gen 时位图必已就绪。
         InterlockedExchange64(&c->workDonePacked, (LONGLONG)newGen << 32);
@@ -1016,15 +1135,15 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
             ProcessGroupVm(c, ab, g, n, mask, haveEng, procCh, binaural,
                            testKind, (testRdy & bit) != 0, chanMode,
                            geometryReady, (geometryAdvance & bit) != 0,
-                           c->curExpectedGeometry[g]);
-            VmWorkComplete(c, newGen, bit);
+                           snapshot.expected[g]);
+            VmWorkComplete(c, newGen, bit, snapshotIndex);
         }
         // fan-in：音频线程禁阻塞 API，纯自旋（YieldProcessor 降耗降温）。
         // B2：QPC 墙钟为主判据、自旋计数仅作 qpf 不可用时的兜底（2×10^5，
         // 与旧固定 2ms 同量级）。超时 = 放弃本块：未完成组记账为 straggler
         // （后续块冻结该组直至 worker 真正离开引擎），绝不动 parallelOn
-        // （主线程所有权，RT 侧改配置状态本身也是隐患），绝不清
-        // workClaimPacked（代际字天然防跨块认领）。原 4×10^8 ≈ 4-12s 会把
+        // （主线程所有权，RT 侧改配置状态本身也是隐患）；超时只原子关闭尚未认领的位
+        // 已认领 straggler 仍由原代快照持有。原 4×10^8 ≈ 4-12s 会把
         // 音频线程钉死数秒。
         //
         // 截止 = 预算感知（2026-10-27）：**从回调起点**钳总时长 ≤ budget −
@@ -1074,13 +1193,19 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
         }
         if (timedOut) {
             InterlockedIncrement(&c->fanTimeouts);  // 诊断：冻结事件累计
-            // 记账：未完成组 → 冻结。VmMarkStuck 内部 recheck 消除"完成方
-            // 先清位、RT 后置位"的永久误冻窗口；此后才完成的 straggler 走
-            // 代际不匹配路径自行解冻。
+            // 先关闭旧代认领，区分"已认领 straggler"与"尚未认领"。后者不能
+            // 冻结：没有 claimant 会在未来完成并解冻；其 pending 位也可释放。
+            const LONG unclaimed = VmCloseGeometryClaims(c, newGen);
+            const LONG claimed = todo & ~unclaimed;
             const LONG done =
                 (LONG)(InterlockedCompareExchange64(&c->workDonePacked, 0, 0) &
                        0xFFFFFFFFLL);
-            VmMarkStuck(c, todo & ~done);
+            InterlockedAnd(&snapshot.pendingMask, ~unclaimed);
+            // 只冻结已认领未完成组。VmMarkStuck 内部 recheck 消除"完成方
+            // 先清位、RT 后置位"的永久误冻窗口；此后才完成的 straggler 走
+            // 代际不匹配路径自行解冻。
+            c->curTodo = claimed & ~done;
+            VmMarkStuck(c, c->curTodo);
         }
         ResetEvent(c->workerWake);
     } else {
@@ -1094,7 +1219,7 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
             ProcessGroupVm(c, ab, g, n, mask, haveEng, procCh, binaural,
                            testKind, false, chanMode, geometryReady,
                            (geometryAdvance & (1L << g)) != 0,
-                           c->curExpectedGeometry[g]);
+                           expectedGeometry[g]);
         }
         c->curTodo = 0;  // 本块无并行发布：清账，防下一块误判 straggler
     }
@@ -1164,6 +1289,8 @@ static DWORD WINAPI VmWorkerMain(LPVOID param) {
         const long testKind = c->curTestKind;
         const bool geometryReady = c->curGeometryReady != 0;
         const LONG geometryAdvance = c->curGeometryAdvance;
+        const LONG snapshotIndex = InterlockedCompareExchange(
+            &c->curGeometrySnapshot, -1, -1);
         const LONG testRdy = InterlockedCompareExchange(&c->testReady, 0, 0);
         for (;;) {
             const LONGLONG cur =
@@ -1179,11 +1306,22 @@ static DWORD WINAPI VmWorkerMain(LPVOID param) {
                 continue;
             int g = 0;
             for (LONG b = bit; !(b & 1); b >>= 1) ++g;
+            if (snapshotIndex < 0
+                || snapshotIndex >= PumpCtx::kGeometrySnapshotSlots) {
+                VmWorkComplete(c, gen, bit, -1);
+                continue;
+            }
+            auto& snapshot = c->geometrySnapshots[snapshotIndex];
+            if ((LONGLONG)InterlockedCompareExchange64(&snapshot.generation, 0, 0)
+                != (LONGLONG)gen) {
+                VmWorkComplete(c, gen, bit, -1);
+                continue;
+            }
             ProcessGroupVm(c, ab, g, n, mask, haveEng, procCh, binaural,
                            testKind, (testRdy & bit) != 0, chanMode,
                            geometryReady, (geometryAdvance & bit) != 0,
-                           c->curExpectedGeometry[g]);
-            VmWorkComplete(c, gen, bit);
+                           snapshot.expected[g]);
+            VmWorkComplete(c, gen, bit, snapshotIndex);
         }
     }
     return 0;
