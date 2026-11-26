@@ -7,6 +7,7 @@
 #   J4 abi-linux          ABI 一致性（含 S4 新增的 version script 校验）
 #   J5 build-engine-windows Windows 引擎构建（与 Linux 同等对待）
 #   J6 dart-tests         Dart 测试门禁（run_dart_tests.py 串行+重试）
+#   J6 dart-tests-windows Windows Dart 测试与静态分析（复用 J5 引擎产物）
 #   J7 asset-guard        资源守卫（.irs/.vdc 等不得入库）
 #   J8 build-app-linux    App 本体构建（Linux bundle + 无头启动冒烟；
 #                         补 J1–J7 从不编译 runner/CMake 打包面的盲区）
@@ -133,6 +134,15 @@ jobs:
           path: core/desktop/windows/out/Release/auradsp_engine_apo.dll
           if-no-files-found: error
           retention-days: 7
+      # 主 App 的 Windows Dart 门禁复用默认 Release 引擎；必须在
+      # DBG-ON 变体覆盖 out/Release 之前上传。
+      - name: Upload App engine artifact (for J6 Windows)
+        uses: actions/upload-artifact@v4
+        with:
+          name: libauradsp_engine-windows
+          path: core/desktop/windows/out/Release/auradsp_engine.dll
+          if-no-files-found: error
+          retention-days: 7
       # B-1 门禁进 CI（2026-11-08 审计·调试中3）：smoke_release_strings
       # 此前只登记在 runner.py 的 PLATFORM_WINDOWS 集，CI 从未执行，
       # 「防宏没接线」的反向断言长期空转。先对默认（OFF）产物跑正向
@@ -248,6 +258,32 @@ jobs:
       # 与 Python 侧 runner.py 的 PLATFORM_WINDOWS 同口径（S4）。
       - name: Dart tests (serial + retry gate)
         run: python3 tools/bin/run_dart_tests.py
+
+  # J6 Windows Dart 测试与静态分析 --------------------------------------
+  dart-tests-windows:
+    name: J6 dart-tests-windows
+    runs-on: windows-latest
+    timeout-minutes: 90
+    needs: build-engine-windows
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download engine artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: libauradsp_engine-windows
+          path: core/desktop/windows/out/Release
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.9'
+      - name: Pub get
+        working-directory: app/auradsp_app
+        run: flutter pub get
+      - name: Analyze
+        working-directory: app/auradsp_app
+        run: flutter analyze
+      - name: Dart tests
+        run: python tools/bin/run_dart_tests.py
 
   # J7 资源守卫 ---------------------------------------------------------
   asset-guard:

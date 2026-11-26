@@ -97,6 +97,8 @@ def main():
         for f in skipped_platform:
             print(f"[SKIP-PLATFORM] {f}（Windows 范式专属，非 Windows 主机跳过）")
 
+    windows_only_executed = sum(f in WINDOWS_ONLY for f in files)
+
     t_start = time.perf_counter()
     for i, rel in enumerate(files, 1):
         print(f"\n---> [{i}/{len(files)}] {rel}")
@@ -121,8 +123,8 @@ def main():
     total = time.perf_counter() - t_start
     print("\n" + "=" * 56)
     print(f"  PASS {len(passed)} | RETRY-PASS {len(retried)} | "
-          f"FAIL {len(failed)} | SKIP-PLATFORM {len(skipped_platform)} | "
-          f"{total:.0f}s")
+          f"FAIL {len(failed)} | WINDOWS-ONLY {windows_only_executed} | "
+          f"SKIP-PLATFORM {len(skipped_platform)} | {total:.0f}s")
     if retried:
         print("  首跑失败但单文件复跑通过（并发串扰，非回归）:")
         for f in retried:
