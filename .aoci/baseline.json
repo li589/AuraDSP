@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-21T02:23:05Z",
-  "updated_at": "2026-11-26T13:46:54Z",
+  "updated_at": "2026-11-26T18:24:33Z",
   "files": {
     ".ai/README.md": {
       "role": "index",
@@ -257,9 +257,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "257d41844305042a45e5212ff0a1b2573094faf218d44519578d2be8a93c29c8",
-      "size": 1195782,
-      "normalized_sha256": "257d41844305042a45e5212ff0a1b2573094faf218d44519578d2be8a93c29c8"
+      "sha256": "26bb4f28aefec10dbc2a81f7e2d8d58d2f9591fab55c4c5d8bb2cdced55cabd8",
+      "size": 1197548,
+      "normalized_sha256": "26bb4f28aefec10dbc2a81f7e2d8d58d2f9591fab55c4c5d8bb2cdced55cabd8"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -1036,15 +1036,15 @@
     },
     "app/auradsp_app/lib/core/state.dart": {
       "role": "index",
-      "sha256": "31e303b01f08ad93d09094bd3c6b01989905fa0df13b44a9aeb645ada82863f5",
-      "size": 91523,
-      "normalized_sha256": "8ea2b2557a802945ad02f2b2e368bf3e8573299fd6bc07b1a0f967b5a03a3531"
+      "sha256": "4b6ffd89a466dd9a3c7007d5879a50ebfbf84ef7c5d10d61922dc3d59a2beed2",
+      "size": 89851,
+      "normalized_sha256": "4b6ffd89a466dd9a3c7007d5879a50ebfbf84ef7c5d10d61922dc3d59a2beed2"
     },
     "app/auradsp_app/lib/core/state/state_audio_modes.dart": {
       "role": "index",
-      "sha256": "c5aea27516d5b49349772a885dbab2cf7cf4d85a48f65a1da7a2c5fb650829ee",
-      "size": 114956,
-      "normalized_sha256": "a62df37e9faa367c6c66ae95fe05684ef44fec5ab503c56aed953d6d19e3b7af"
+      "sha256": "84cb36ccb064dbd70fd69a4452463ab1a8805ff2a6f6e858861a48f53a713bfc",
+      "size": 111989,
+      "normalized_sha256": "84cb36ccb064dbd70fd69a4452463ab1a8805ff2a6f6e858861a48f53a713bfc"
     },
     "app/auradsp_app/lib/core/state/state_chain.dart": {
       "role": "index",
@@ -1054,9 +1054,9 @@
     },
     "app/auradsp_app/lib/core/state/state_core.dart": {
       "role": "index",
-      "sha256": "d75b2b595c37c0140fe202161f5aba011bfb6ed8e010495d58fbe3d626eb3cac",
-      "size": 34160,
-      "normalized_sha256": "d75b2b595c37c0140fe202161f5aba011bfb6ed8e010495d58fbe3d626eb3cac"
+      "sha256": "62051becb4a19765b69b3d1372444b26db1cb55d3760ffabb39e475aac7e2699",
+      "size": 34772,
+      "normalized_sha256": "62051becb4a19765b69b3d1372444b26db1cb55d3760ffabb39e475aac7e2699"
     },
     "app/auradsp_app/lib/core/state/state_effects.dart": {
       "role": "index",
@@ -1072,9 +1072,9 @@
     },
     "app/auradsp_app/lib/core/state/state_events.dart": {
       "role": "index",
-      "sha256": "57befbaae96274db35b21923a9288cf039a741c03492a0c06db769c8a2940725",
-      "size": 82156,
-      "normalized_sha256": "e63c284637d21bf9c98b646e535ca5f1c7998bc2fecc951c64b3ed67dc45a7fa"
+      "sha256": "7ae27691dd598d9e0eb25715ecb72ae77877e70207e0f9b271066e7b61c6433b",
+      "size": 81510,
+      "normalized_sha256": "7ae27691dd598d9e0eb25715ecb72ae77877e70207e0f9b271066e7b61c6433b"
     },
     "app/auradsp_app/lib/core/state/state_models.dart": {
       "role": "index",
@@ -1090,9 +1090,9 @@
     },
     "app/auradsp_app/lib/core/state/state_vb_asio.dart": {
       "role": "index",
-      "sha256": "93c3cc79b9cb1c3f11c0290f5c00ac2479cf5711a1f92460dee08672f6cbde33",
-      "size": 11840,
-      "normalized_sha256": "93c3cc79b9cb1c3f11c0290f5c00ac2479cf5711a1f92460dee08672f6cbde33"
+      "sha256": "086d412e133c555737f9db25433c165252d84a5a13eaed93aba9c609a5e52918",
+      "size": 11892,
+      "normalized_sha256": "086d412e133c555737f9db25433c165252d84a5a13eaed93aba9c609a5e52918"
     },
     "app/auradsp_app/lib/core/theme.dart": {
       "role": "index",
@@ -1156,9 +1156,9 @@
     },
     "app/auradsp_app/lib/engine/audio_isolate.dart": {
       "role": "index",
-      "sha256": "bc63227b39ca5d003e9debccc97578e6f0540a570ab3dca2c5f04829de854232",
-      "size": 150102,
-      "normalized_sha256": "bc63227b39ca5d003e9debccc97578e6f0540a570ab3dca2c5f04829de854232"
+      "sha256": "9ca728e4456d4ea472f1f0dc93958e37dc7c1df9046ceaeefecc32b53aa7f53f",
+      "size": 152071,
+      "normalized_sha256": "9ca728e4456d4ea472f1f0dc93958e37dc7c1df9046ceaeefecc32b53aa7f53f"
     },
     "app/auradsp_app/lib/engine/audio_isolate_apo.dart": {
       "role": "index",
@@ -1282,9 +1282,9 @@
     },
     "app/auradsp_app/lib/engine/auradsp_ffi.dart": {
       "role": "index",
-      "sha256": "764ca87f808d1ce28e3f9523d8c2555a019a7637f3f29e0a06c8bba1b982a157",
-      "size": 56958,
-      "normalized_sha256": "2327d8bcd0f5532837668189bd21c51f8af01a51bb053c4ea3ac4dbd822dc1a9"
+      "sha256": "1996872cebfbae9efb65f83dbc9d60e3cd863861c001a2c9da14c0b33993d06a",
+      "size": 55993,
+      "normalized_sha256": "1996872cebfbae9efb65f83dbc9d60e3cd863861c001a2c9da14c0b33993d06a"
     },
     "app/auradsp_app/lib/engine/backend_switch.dart": {
       "role": "index",
@@ -1540,9 +1540,9 @@
     },
     "app/auradsp_app/lib/features/home_page.dart": {
       "role": "index",
-      "sha256": "5de3af8e64483d505105f3f2eac2c1c14728bac5cb3bd4e6abe6a1fe4bc271a0",
-      "size": 25160,
-      "normalized_sha256": "30d6bb3175afe6814567eddfdd80d50fbf7aeee4fb9800d66641b3c6b7c5fbca"
+      "sha256": "91569252a3465ab33935d160b23cdcb5b03dd48193dfda6eb529a358b883454b",
+      "size": 25387,
+      "normalized_sha256": "44a1acfab6ca3841c274e5ade68b933ca9b9c852f83f9fc750cc132162650c03"
     },
     "app/auradsp_app/lib/features/interactive_eq.dart": {
       "role": "index",
@@ -2392,9 +2392,9 @@
     },
     "app/auradsp_app/test/asio_virtual_channels_test.dart": {
       "role": "index",
-      "sha256": "8561dc9ae4677eae61f7e0e901b453d5e27e4b34e19161450500ee60cdee0756",
-      "size": 40076,
-      "normalized_sha256": "e7f8629acb6846401d53669ef72dd6c50f1e1facd4e7bda0bbedc39d686cd7a4"
+      "sha256": "31758332554368c0fdf38338a4348799df2227057ccfd525319a94feede2ded3",
+      "size": 39774,
+      "normalized_sha256": "31758332554368c0fdf38338a4348799df2227057ccfd525319a94feede2ded3"
     },
     "app/auradsp_app/test/atlas_release_test.dart": {
       "role": "index",
@@ -3007,6 +3007,12 @@
       "sha256": "4991d308ce9e4991386197309550d5e79c53afbbca6e3d00ae2fa76a5020ff8f",
       "size": 17773,
       "normalized_sha256": "4991d308ce9e4991386197309550d5e79c53afbbca6e3d00ae2fa76a5020ff8f"
+    },
+    "app/auradsp_app/test/viz_backend_matrix_test.dart": {
+      "role": "index",
+      "sha256": "7a79ce1d44d2c222f0a7087372d710f0b3ac27f169ed9e9e3562574963dbf2db",
+      "size": 15199,
+      "normalized_sha256": "7a79ce1d44d2c222f0a7087372d710f0b3ac27f169ed9e9e3562574963dbf2db"
     },
     "app/auradsp_app/test/viz_bands_test.dart": {
       "role": "index",
@@ -18778,9 +18784,9 @@
     },
     "core/desktop/windows-drivers/04_asio_driver/AuraAsioDriver.cpp": {
       "role": "index",
-      "sha256": "24010bf2d92c82dc599fac627ca5e9f9ee489d8e9374b0960ce76611a5b6554b",
-      "size": 48175,
-      "normalized_sha256": "771315223963909269e85b6af5b3939d34ef445e88dfbf4bf3c491b4f5baadd6"
+      "sha256": "c5e8143bf905110173e3d1b25a3861a13be771215f6c789db48505583ecb18fb",
+      "size": 48538,
+      "normalized_sha256": "d6a34728a21ff0bf1b907ba0a3925f9dbdb3230cd052227c674f13f8410dbf5e"
     },
     "core/desktop/windows-drivers/04_asio_driver/AuraAsioDriver.def": {
       "role": "index",
@@ -19408,9 +19414,9 @@
     },
     "docs/20-执行/全量代码审查修复计划-2026-11-25.md": {
       "role": "index",
-      "sha256": "7680e0cafdeb2d28c2e5f3f30ded8f3d99ebbd5270c8eb527993c0f0470a3cd9",
-      "size": 85640,
-      "normalized_sha256": "7680e0cafdeb2d28c2e5f3f30ded8f3d99ebbd5270c8eb527993c0f0470a3cd9"
+      "sha256": "6890cdbea26c2f5a4494a887739becbb063d17272b35cf16b6dabf3e7322515e",
+      "size": 85564,
+      "normalized_sha256": "6890cdbea26c2f5a4494a887739becbb063d17272b35cf16b6dabf3e7322515e"
     },
     "docs/20-执行/卷积双槽影子立项-2026-11-25.md": {
       "role": "index",
@@ -20926,27 +20932,27 @@
     },
     "engine/auradsp_engine.cpp": {
       "role": "index",
-      "sha256": "1943380dc12f93b000e502640160bd88c7bf99f417c84a7c7896f5de17bafb77",
-      "size": 39265,
-      "normalized_sha256": "6956539f2addf541044259c9f892eea9fe0c1febdd2bbae41d0abfbc57936724"
+      "sha256": "7f8b3dc950e47a0618d5a31a006fd1d654a8d10d050c978e353ad21478386b1d",
+      "size": 40372,
+      "normalized_sha256": "b1470ca74fb6ddf1842b8a47aeac5ddef02b0f8ef013981b6b32882a3cbeed3e"
     },
     "engine/auradsp_engine.def": {
       "role": "index",
-      "sha256": "5f952d4274252d855d0535f72cdcade8ee16de14418151cd4935ab2540a7f733",
-      "size": 1923,
-      "normalized_sha256": "828df187b8983c0d96de4b15500963b1c1ade99fc810157f0007f187382ec711"
+      "sha256": "0a16cda4cd1bcd7fcae40826fb142e096141a036e2724768b6dca1772341c86f",
+      "size": 1951,
+      "normalized_sha256": "d799682873fecaf4d19774566e82e52437a15fa143a65ec5051f041e77f98d9d"
     },
     "engine/auradsp_engine.h": {
       "role": "index",
-      "sha256": "f961166bc29bbe3e27dc23cf2d0513964e50471a179251c19632288e27e69645",
-      "size": 26240,
-      "normalized_sha256": "c60af09b471b7b11f7c23b889f377f630f539405c4c05a168e1ff6a2325ae981"
+      "sha256": "4106b95083c6111c25b3979c9c7b4d1aa3ac32f330ac7e808e141fedeb451a2c",
+      "size": 26821,
+      "normalized_sha256": "51b35fa0ad9f8ed6ccbad412cd5dd99da6bc6ab2bbe7f71ca1dc1708b7249c43"
     },
     "engine/auradsp_engine.map": {
       "role": "observe",
-      "sha256": "54960b3a4592b21d6fb2bbdf19b5aedad11b2d4e588a577afefdf03964dee47e",
-      "size": 2338,
-      "normalized_sha256": "54960b3a4592b21d6fb2bbdf19b5aedad11b2d4e588a577afefdf03964dee47e"
+      "sha256": "52c0785a670a91750841766856374d708bffc883259775936480774f7c0c68c2",
+      "size": 2366,
+      "normalized_sha256": "52c0785a670a91750841766856374d708bffc883259775936480774f7c0c68c2"
     },
     "engine/auradsp_gcc_shim.h": {
       "role": "index",
@@ -25597,9 +25603,9 @@
     },
     "test/runner.py": {
       "role": "index",
-      "sha256": "877a328234197c33b76f252b04c9c13067ab4a3fcc49e88480d93adc1e8bd4d5",
-      "size": 47304,
-      "normalized_sha256": "b6d35bdb39022ae25a0e64d05f730991a0051587333b88159416fe9415594a10"
+      "sha256": "9c20254c324868aaf9feda4a1e75b775dbb15d855cd99bea0088a76f60029cc0",
+      "size": 47491,
+      "normalized_sha256": "ab3724faa3b1dba5b9df2b02d65ecb1b5bc8b5fe197fc6130c287d80cdf3b575"
     },
     "test/smoke/_tmpcleanup.py": {
       "role": "index",
@@ -25774,6 +25780,12 @@
       "sha256": "967f2311fb6547e51cf7e7e9f4b75b9aec3d38105d1559249ca19e5e83d57389",
       "size": 34714,
       "normalized_sha256": "8ec1c93b7420760f0b7c11554d0f06e175c7e76bb3cd716803f39b24d5109b64"
+    },
+    "test/smoke/smoke_asio_driver_channel_map.py": {
+      "role": "index",
+      "sha256": "9a7802afbe5c1a311a080c558c3b711f5d0ebd55951bc46946bb23dd76c1dcc2",
+      "size": 12558,
+      "normalized_sha256": "9a7802afbe5c1a311a080c558c3b711f5d0ebd55951bc46946bb23dd76c1dcc2"
     },
     "test/smoke/smoke_asio_driver_params.py": {
       "role": "index",
