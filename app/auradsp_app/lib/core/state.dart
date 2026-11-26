@@ -767,6 +767,13 @@ class AppModel extends ChangeNotifier {
   // 3 ABI 不符 / 4 create 失败 / 5 就绪；loadErr 为 Win32 错误码。
   int apoLoadStage = 0;
   int apoLoadErr = 0;
+  // telemetry v8 文件效果闭环诊断。旧宿主不伪造 ready/error：
+  // fileStatusValid=false 时保留 App 影子状态并忽略整个新尾段。
+  bool apoFileStatusValid = false;
+  int apoEnginePathHash = 0;
+  int apoEngineLoadGen = 0;
+  int apoStopStatus = 0;
+  String apoLastFileError = '';
   // APO 引擎生效值回读（telemetry v6，第三十五轮）：座位引擎经
   // auradsp_get_param 回读的真实值；-1 = 未知（旧版 APO 或引擎
   // 未就绪），面板据此显「未运行」语义文案而非误报 0（S8）。

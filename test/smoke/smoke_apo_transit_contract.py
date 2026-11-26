@@ -38,9 +38,21 @@ def read(name):
 
 
 def func_span(src, signature):
-    """从函数签名起按大括号配平截取函数体。"""
+    """从函数签名起按大括号配平截取函数体（跳过命名参数括号）。"""
     i = src.index(signature)
-    j = src.index("{", i)
+    paren = src.index("(", i)
+    paren_depth = 0
+    j = None
+    for k in range(paren, len(src)):
+        if src[k] == "(":
+            paren_depth += 1
+        elif src[k] == ")":
+            paren_depth -= 1
+            if paren_depth == 0:
+                j = src.index("{", k)
+                break
+    if j is None:
+        raise AssertionError("unbalanced parameters: " + signature)
     depth = 0
     for k in range(j, len(src)):
         if src[k] == "{":
@@ -66,8 +78,36 @@ def main():
     onstr = func_span(apo, "void onString(String id, String text)")
     check("_convertFileEffect" in onstr,
           "onString converts through the transit helper")
-    conv = func_span(apo, "String _convertFileEffect(String id, String text)")
+    conv = func_span(apo, "String? _convertFileEffect(String id, String text)")
     check("transitPathFor" in conv, "conversion helper calls transitPathFor")
+    check("if (effective == null)" in conv and
+          "_fileEffectConvertCache.remove(id)" in conv,
+          "failed file-effect transit is not cached as a successful empty value")
+    check("if (effective == null)" in conv and
+          "_fileEffectTransit.remove(id)" in conv,
+          "failed file-effect transit drops the stale publication reference")
+
+    check("static bool _ensureRoot(String? rootOverride)" in transit,
+          "root preparation reports failure to every publication path")
+    ensure_root = func_span(transit, "_ensureRoot(String? rootOverride)")
+    check("grantDirReadToLocalService" in ensure_root and
+          "if (!createWindowsSystemPort()" in ensure_root,
+          "ACL grant failure prevents transit-root readiness")
+    check(ensure_root.index("_rootReady = true") >
+          ensure_root.index("grantDirReadToLocalService"),
+          "root readiness is set only after a successful ACL grant")
+    sync_transit = func_span(transit, "static String? transitPathFor(String source")
+    async_transit = func_span(transit, "static Future<String?> transitPathForAsync(")
+    check("if (!_ensureRoot(rootOverride)) return null;" in sync_transit and
+          "if (!_ensureRoot(rootOverride)) return null;" in async_transit,
+          "file-effect publication fails closed when root preparation fails")
+
+    check("u32[1] >= 8" in apo and "lastFileError" in apo and
+          "enginePathHash" in apo and "engineLoadGen" in apo and
+          "convReady" in apo and "ddcReady" in apo,
+          "telemetry reader exposes the v8 engine/file-effect diagnostics")
+    check("fileStatusValid" in apo,
+          "telemetry reader explicitly gates v8 file status for old hosts")
     check("referencedTransitPaths" in apo,
           "param publisher exposes its referenced transit set")
     check("currentTransitPaths" in apo,

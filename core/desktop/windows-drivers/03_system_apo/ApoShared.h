@@ -61,7 +61,7 @@
 // ddc.load 追加在字符串区末尾（存量槽偏移不变），头部 strUsed
 // 扩为 [6]、reserved 相应缩为 [5]（头仍 64B）；分端点覆写表偏移
 // 随字符串区扩大后移（见 ApoParamIndex.h 生成值）。
-#define APO_PARAMS_VERSION 5u
+#define APO_PARAMS_VERSION 6u
 
 struct ApoParamBlockHeader {
     uint32_t magic;        // APO_PARAMS_MAGIC
@@ -154,7 +154,10 @@ inline const wchar_t* AuraApoPluginsName() {
 // （endpointHash/endpointId）——分块后块内自证身份，读者据此防
 // 哈希碰撞串扰；读者按 version>=7 取。全局块（无令牌回落）同样
 // 升 v7，身份段恒空。
-#define APO_TELEMETRY_VERSION 7u
+// v8（2026-11-27，Task 18 / H10）：尾部追加实际引擎路径哈希/加载代际、
+// IR/DDC 引擎 ready、Stop 等待结局与最近文件错误。既有偏移不变；
+// Dart 仅在 version>=8 时读取，旧宿主不会被解释为假 ready。
+#define APO_TELEMETRY_VERSION 8u
 #define APO_TELEMETRY_BYTES 4096u
 
 struct ApoTelemetryBlock {
@@ -235,6 +238,13 @@ struct ApoTelemetryBlock {
     // 致」才消费本块（防 FNV 碰撞串扰）；全局回落块恒为 0/空。
     uint64_t endpointHash;     // 端点 id 的 FNV-1a 64
     wchar_t endpointId[80];    // 端点 id 全串（超长截断至 79 + NUL）
+    // ---- v8 追加（offset 1632 起；v7 读者止步于此）----
+    uint64_t enginePathHash;   // GetModuleFileNameW 实际路径的 FNV-1a 64
+    uint32_t engineLoadGen;    // 本宿主成功 LoadLibrary 的单调代际，从 1 起
+    uint32_t convReady;        // 引擎 convolver.ready 回读，非 App 镜像
+    uint32_t ddcReady;         // 引擎 ddc.ready 回读，非 App 镜像
+    uint32_t stopStatus;       // 0=正常/运行 1=Stop 超时保活 2=等待失败保活
+    char lastFileError[256];   // 最近 IR/DDC 围栏或引擎错误，UTF-8/NUL
 };
 
 // loadStage 取值（ApoTelemetryBlock.loadStage）。
@@ -250,9 +260,16 @@ struct ApoTelemetryBlock {
 // v5：逐声道段自 744 起，块总 1452B。
 // v6：生效值回读段自 1452 起，块总 1464B。
 // v7：端点身份段自 1464 起，块总 1632B（映射仍 4096B）。
-static_assert(sizeof(ApoTelemetryBlock) == 1632, "telemetry block layout");
+// v8：引擎/文件效果诊断自 1632 起，块总 1912B。
+static_assert(sizeof(ApoTelemetryBlock) == 1912, "telemetry block layout");
 static_assert(offsetof(ApoTelemetryBlock, endpointHash) == 1464, "telemetry v7 offsets");
 static_assert(offsetof(ApoTelemetryBlock, endpointId) == 1472, "telemetry v7 offsets");
+static_assert(offsetof(ApoTelemetryBlock, enginePathHash) == 1632, "telemetry v8 offsets");
+static_assert(offsetof(ApoTelemetryBlock, engineLoadGen) == 1640, "telemetry v8 offsets");
+static_assert(offsetof(ApoTelemetryBlock, convReady) == 1644, "telemetry v8 offsets");
+static_assert(offsetof(ApoTelemetryBlock, ddcReady) == 1648, "telemetry v8 offsets");
+static_assert(offsetof(ApoTelemetryBlock, stopStatus) == 1652, "telemetry v8 offsets");
+static_assert(offsetof(ApoTelemetryBlock, lastFileError) == 1656, "telemetry v8 offsets");
 static_assert(offsetof(ApoTelemetryBlock, spectrum) == 64, "telemetry v1 offsets");
 static_assert(offsetof(ApoTelemetryBlock, eqInSpectrum) == 192, "telemetry v2 offsets");
 static_assert(offsetof(ApoTelemetryBlock, stageLevelsL) == 320, "telemetry v2 offsets");

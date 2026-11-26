@@ -967,6 +967,16 @@ extension StateEvents on AppModel {
         final appliedN = (raw['applied'] as num?)?.toInt() ?? 0;
         final loadStageN = (raw['loadStage'] as num?)?.toInt() ?? 0;
         final loadErrN = (raw['loadErr'] as num?)?.toInt() ?? 0;
+        final fileStatusValidN = raw['fileStatusValid'] == true;
+        final enginePathHashN =
+            (raw['enginePathHash'] as num?)?.toInt() ?? 0;
+        final engineLoadGenN = (raw['engineLoadGen'] as num?)?.toInt() ?? 0;
+        final stopStatusN = (raw['stopStatus'] as num?)?.toInt() ?? 0;
+        final fileErrorN = raw['lastFileError']?.toString() ?? '';
+        final convReadyN =
+            fileStatusValidN ? raw['convReady'] == true : convReady;
+        final ddcReadyN =
+            fileStatusValidN ? raw['ddcReady'] == true : ddcReady;
         final effModeN = (raw['effMode'] as num?)?.toInt() ?? -1;
         final effFillN = (raw['effFill'] as num?)?.toInt() ?? -1;
         // 声道决议回显（第四十七轮 S3）：引擎回读优先、宿主
@@ -983,7 +993,14 @@ extension StateEvents on AppModel {
             apoEffFill != effFillN ||
             apoEffCount != effCountN ||
             apoUserChSeen != userChSeenN ||
-            apoLoadErr != loadErrN) {
+            apoLoadErr != loadErrN ||
+            apoFileStatusValid != fileStatusValidN ||
+            apoEnginePathHash != enginePathHashN ||
+            apoEngineLoadGen != engineLoadGenN ||
+            apoStopStatus != stopStatusN ||
+            apoLastFileError != fileErrorN ||
+            convReady != convReadyN ||
+            ddcReady != ddcReadyN) {
           // 全面复审 S1（APO-4）：引擎故障闩锁/加载失败此前只有设
           // 置面板一行小字，不在设置页完全无感——边沿各通知一次
           // （与 APO 插件故障通知同口径）。
@@ -999,6 +1016,26 @@ extension StateEvents on AppModel {
                 '当前无音频处理',
                 level: NoticeLevel.error);
           }
+          if (fileStatusValidN &&
+              fileErrorN.isNotEmpty &&
+              fileErrorN != apoLastFileError) {
+            postNotice('System APO 文件效果加载失败：$fileErrorN',
+                level: NoticeLevel.error);
+          }
+          if (fileStatusValidN && stopStatusN != 0 && apoStopStatus == 0) {
+            postNotice('System APO worker 未及时退出，资源已保留等待安全清理',
+                level: NoticeLevel.warning);
+          }
+          // The existing inline APO error row is shared with attach/detach
+          // failures. Clear only the exact file error this telemetry wrote;
+          // never erase an unrelated operation failure.
+          if (fileStatusValidN && fileErrorN.isNotEmpty) {
+            lastApoError = fileErrorN;
+          } else if (fileStatusValidN &&
+              fileErrorN.isEmpty &&
+              lastApoError == apoLastFileError) {
+            lastApoError = null;
+          }
           apoEngineActive = seatOn;
           apoEngineFault = faultOn;
           apoEngineRate = (raw['rate'] as num?)?.toInt() ?? 0;
@@ -1006,6 +1043,13 @@ extension StateEvents on AppModel {
           apoParamsApplied = appliedN;
           apoLoadStage = loadStageN;
           apoLoadErr = loadErrN;
+          apoFileStatusValid = fileStatusValidN;
+          apoEnginePathHash = enginePathHashN;
+          apoEngineLoadGen = engineLoadGenN;
+          apoStopStatus = stopStatusN;
+          apoLastFileError = fileErrorN;
+          convReady = convReadyN;
+          ddcReady = ddcReadyN;
           apoEffMode = effModeN;
           apoEffFill = effFillN;
           apoEffCount = effCountN;

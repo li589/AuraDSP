@@ -475,6 +475,33 @@ void DDCDisable(JamesDSPLib *jdsp)
 {
 	jdsp->ddcEnabled = 0;
 }
+void DDCClear(JamesDSPLib *jdsp)
+{
+	/* Logical unload is immediate even when every shadow slot is temporarily
+	 * in flight: disabling first guarantees that no old SOS keeps processing.
+	 * When a guarded slot is available, publish an empty view so a later
+	 * enable cannot resurrect the previous file. No RT-side work is added. */
+	jdsp->ddcEnabled = 0;
+	DDCView *target = DDCPickSlot(jdsp);
+	if (target)
+	{
+		if (target->sosPointer)
+			free(target->sosPointer);
+		target->sosPointer = 0;
+		target->usedSOSCount = 0;
+		target->retiredAt = 0;
+		DDCView *prev = jdsp->ddcActive;
+		jdsp->ddcActive = target;
+		if (prev && prev != target)
+			prev->retiredAt = jdsp->ddcProcCount + 1;
+	}
+	if (jdsp->vdcFl.oldFile)
+	{
+		free(jdsp->vdcFl.oldFile);
+		jdsp->vdcFl.oldFile = 0;
+	}
+	jdsp->ddcForceRefresh = 0;
+}
 int DDCStringParser(JamesDSPLib *jdsp, char *newStr)
 {
 	/* B1-b：不再持 jdsp_lock——RT 改为块首读一次 ddcActive 快照
@@ -487,8 +514,8 @@ int DDCStringParser(JamesDSPLib *jdsp, char *newStr)
 	int success = DDCRefresh(jdsp, newStr);
 	if (success != 1)
 	{
-		/* 失败保留旧视图（活动 DDC 继续生效——与 B1-a liveprog 一致：
-		 * 加载失败不影响正在跑的校正）；忙（-4）原样透传区别文案。 */
+		/* 返回失败给引擎参数层；Task 18 的调用方随后 DDCClear，禁止旧
+		 * 校正在失败后被当成仍生效。忙（-4）原样透传区别文案。 */
 		if (jdsp->vdcFl.oldFile)
 		{
 			free(jdsp->vdcFl.oldFile);

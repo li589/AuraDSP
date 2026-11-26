@@ -39,6 +39,7 @@ DEFINE_GUID(IID_IAudioSystemEffects,
 #include <string>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
 #include "ApoEndpointProps.h"
 #include "ApoParamIndex.h"
@@ -128,6 +129,152 @@ bool PublishNumericParam(const char* id, uint32_t value) {
     UnmapViewOfFile(pb);
     CloseHandle(h);
     return true;
+}
+
+bool PublishStringParam(const char* id, const wchar_t* path) {
+    uint32_t slot = UINT32_MAX;
+    for (uint32_t i = 0; i < APO_STR_SLOT_COUNT; ++i) {
+        if (strcmp(kApoStrSlotIds[i], id) == 0) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot == UINT32_MAX) return false;
+    char utf8[MAX_PATH * 3] = {0};
+    const int bytes = WideCharToMultiByte(CP_UTF8, 0, path, -1, utf8,
+                                          sizeof(utf8), nullptr, nullptr);
+    if (bytes <= 0 || (uint32_t)bytes > kApoStrSlotCaps[slot]) return false;
+    HANDLE h = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, AuraApoParamsName());
+    if (!h) return false;
+    auto* pb = (uint8_t*)MapViewOfFile(h, FILE_MAP_ALL_ACCESS, 0, 0,
+                                       APO_BLOCK_MAPPING_BYTES);
+    if (!pb) {
+        CloseHandle(h);
+        return false;
+    }
+    auto* hdr = (ApoParamBlockHeader*)pb;
+    if (hdr->magic != APO_PARAMS_MAGIC || hdr->version != APO_PARAMS_VERSION) {
+        memset(pb, 0, APO_BLOCK_USED_BYTES);
+        hdr->magic = APO_PARAMS_MAGIC;
+        hdr->version = APO_PARAMS_VERSION;
+        hdr->numCount = APO_NUM_PARAM_COUNT;
+        hdr->writeSeq = 0;
+    }
+    const uint32_t seq = hdr->writeSeq;
+    hdr->writeSeq = seq + 1;
+    const uint32_t bit = APO_NUM_PARAM_COUNT + slot;
+    pb[APO_BLOCK_MASK_OFFSET + bit / 8] |= (uint8_t)(1u << (bit % 8));
+    uint8_t* dst = pb + kApoStrSlotOffsets[slot];
+    memset(dst, 0, kApoStrSlotCaps[slot]);
+    memcpy(dst, utf8, (size_t)bytes - 1);
+    hdr->strUsed[slot] = (uint32_t)bytes - 1;
+    MemoryBarrier();
+    hdr->writeSeq = seq + 2;
+    UnmapViewOfFile(pb);
+    CloseHandle(h);
+    return true;
+}
+
+// Task 18 is deliberately read through a local projection so these regression
+// tests compile and run against the v7 host for genuine RED evidence.
+struct Task18TelemetryTail {
+    uint64_t enginePathHash;
+    uint32_t engineLoadGen;
+    uint32_t convReady;
+    uint32_t ddcReady;
+    uint32_t stopStatus;
+    char lastFileError[256];
+};
+constexpr uint32_t kTask18TelemetryOffset = 1632;
+constexpr uint32_t kTask18StopFixture = 0x41313853u;  // 'A18S'
+static_assert(sizeof(Task18TelemetryTail) == 280, "test telemetry projection");
+
+const Task18TelemetryTail* Task18Tail(const ApoTelemetryBlock* tele) {
+    return tele ? reinterpret_cast<const Task18TelemetryTail*>(
+                      reinterpret_cast<const uint8_t*>(tele) +
+                      kTask18TelemetryOffset)
+                : nullptr;
+}
+
+bool TransitFixturePath(const wchar_t* fixtureName, wchar_t* outPath, size_t cap) {
+    wchar_t pd[MAX_PATH] = {};
+    DWORD n = GetEnvironmentVariableW(L"ProgramData", pd, MAX_PATH);
+    std::wstring root = (n > 0 && n < MAX_PATH) ? pd : L"C:\\ProgramData";
+    root += L"\\AuraDSP";
+    CreateDirectoryW(root.c_str(), nullptr);
+    root += L"\\apo-assets";
+    CreateDirectoryW(root.c_str(), nullptr);
+    root += L"\\apo_engine_test";
+    CreateDirectoryW(root.c_str(), nullptr);
+    root += L"\\";
+    root += fixtureName;
+    if (root.size() + 1 > cap) return false;
+    wcscpy(outPath, root.c_str());
+    return true;
+}
+
+void Put16(std::vector<uint8_t>& b, uint16_t v) {
+    b.push_back((uint8_t)(v & 0xFF));
+    b.push_back((uint8_t)(v >> 8));
+}
+void Put32(std::vector<uint8_t>& b, uint32_t v) {
+    Put16(b, (uint16_t)(v & 0xFFFF));
+    Put16(b, (uint16_t)(v >> 16));
+}
+
+bool WriteIrFixture(const wchar_t* path, float gain) {
+    constexpr uint16_t frames = 64;
+    std::vector<uint8_t> b;
+    const char riff[] = "RIFF";
+    const char wavefmt[] = "WAVEfmt ";
+    const char data[] = "data";
+    b.insert(b.end(), riff, riff + 4);
+    Put32(b, 36 + frames * 2);
+    b.insert(b.end(), wavefmt, wavefmt + 8);
+    Put32(b, 16);
+    Put16(b, 1);
+    Put16(b, 1);
+    Put32(b, 48000);
+    Put32(b, 96000);
+    Put16(b, 2);
+    Put16(b, 16);
+    b.insert(b.end(), data, data + 4);
+    Put32(b, frames * 2);
+    for (uint16_t i = 0; i < frames; ++i) {
+        const float sample = i == 0 ? gain : 0.0f;
+        int v = (int)(sample * 32767.0f);
+        if (v > 32767) v = 32767;
+        if (v < -32768) v = -32768;
+        Put16(b, (uint16_t)(int16_t)v);
+    }
+    HANDLE h = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                           FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const bool ok = WriteFile(h, b.data(), (DWORD)b.size(), &written, nullptr) &&
+                    written == b.size();
+    CloseHandle(h);
+    return ok;
+}
+
+bool WriteDdcFixture(const wchar_t* path, double gain) {
+    char text[512];
+    snprintf(text, sizeof(text),
+             "SR_44100: %.12f,0,0,0,0\nSR_48000: %.12f,0,0,0,0\n",
+             gain, gain);
+    HANDLE h = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                           FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const DWORD bytes = (DWORD)strlen(text);
+    const bool ok = WriteFile(h, text, bytes, &written, nullptr) &&
+                    written == bytes;
+    CloseHandle(h);
+    return ok;
+}
+
+bool ProcessedRatioNear(double value, double expected, double tolerance) {
+    return value > expected - tolerance && value < expected + tolerance;
 }
 
 void CheckProductionPluginAcl() {
@@ -277,7 +424,42 @@ int RunApoEngineSuite(bool trustedFixture) {
     outDesc = inDesc;
     APO_CONNECTION_DESCRIPTOR* pins[1] = {&inDesc};
     APO_CONNECTION_DESCRIPTOR* pouts[1] = {&outDesc};
+
+    // Task 18 cold start: the parameter block and file-effect selections exist
+    // before the first LockForProcess, exactly as in a restored session.
+    HANDLE paramFixture = CreateFileMappingW(
+        INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0,
+        APO_BLOCK_MAPPING_BYTES, AuraApoParamsName());
+    check("file effects: pre-lock parameter fixture", paramFixture != nullptr);
+    wchar_t irHalf[MAX_PATH] = {0}, irQuarter[MAX_PATH] = {0};
+    wchar_t ddcHalf[MAX_PATH] = {0}, ddcQuarter[MAX_PATH] = {0};
+    wchar_t irMissing[MAX_PATH] = {0}, ddcMissing[MAX_PATH] = {0};
+    wchar_t fixtureName[96];
+    auto fixtureNamed = [&](const wchar_t* stem, const wchar_t* ext,
+                            wchar_t* out) {
+        swprintf(fixtureName, 96, L"%s_%lu%s", stem,
+                 (unsigned long)GetCurrentProcessId(), ext);
+        return TransitFixturePath(fixtureName, out, MAX_PATH);
+    };
+    const bool fileFixtures =
+        fixtureNamed(L"task18_ir_half", L".wav", irHalf) &&
+        fixtureNamed(L"task18_ir_quarter", L".wav", irQuarter) &&
+        fixtureNamed(L"task18_ddc_half", L".vdc", ddcHalf) &&
+        fixtureNamed(L"task18_ddc_quarter", L".vdc", ddcQuarter) &&
+        fixtureNamed(L"task18_ir_missing", L".wav", irMissing) &&
+        fixtureNamed(L"task18_ddc_missing", L".vdc", ddcMissing) &&
+        WriteIrFixture(irHalf, 0.5f) && WriteIrFixture(irQuarter, 0.25f) &&
+        WriteDdcFixture(ddcHalf, 0.5) && WriteDdcFixture(ddcQuarter, 0.25);
+    check("file effects: deterministic IR/DDC fixtures", fileFixtures);
+    bool coldPublished = paramFixture && fileFixtures;
+    coldPublished = PublishStringParam("convolver.ir.path", irHalf) && coldPublished;
+    coldPublished = PublishStringParam("ddc.load", ddcHalf) && coldPublished;
+    coldPublished = PublishNumericParam("convolver.enable", 1) && coldPublished;
+    coldPublished = PublishNumericParam("ddc.enable", 1) && coldPublished;
+    check("file effects: cold-start selections published", coldPublished);
+
     check("LockForProcess", cfg->LockForProcess(1, pins, 1, pouts) == S_OK);
+    Sleep(700);
 
     // telemetry：座位应已被本进程（宿主进程）的 APO 实例抢到。
     HANDLE hTele = OpenFileMappingW(FILE_MAP_READ, FALSE, AuraApoTelemetryName());
@@ -288,6 +470,17 @@ int RunApoEngineSuite(bool trustedFixture) {
             hTele, FILE_MAP_READ, 0, 0, APO_TELEMETRY_BYTES);
     }
     check("telemetry view", tele != nullptr);
+    wchar_t engineOriginal[MAX_PATH] = {0};
+    wchar_t engineMoved[MAX_PATH] = {0};
+    HMODULE loadedEngine = GetModuleHandleW(L"auradsp_engine_apo.dll");
+    const DWORD enginePathLen = loadedEngine
+        ? GetModuleFileNameW(loadedEngine, engineOriginal, MAX_PATH)
+        : 0;
+    const uint64_t enginePathHash = enginePathLen > 0
+        ? AuraEndpointIdHash(engineOriginal)
+        : 0;
+    check("file effects: actual engine module path captured",
+          enginePathLen > 0 && enginePathLen < MAX_PATH);
     if (tele) {
         char d[128];
         snprintf(d, sizeof(d), "seat=%ld pid=%lu sr=%lu ch=%lu fault=%lu",
@@ -311,6 +504,20 @@ int RunApoEngineSuite(bool trustedFixture) {
                   tele->loadStage == APO_LOAD_STAGE_READY &&
                   tele->loadErr == 0,
               d4);
+        const auto* t18 = Task18Tail(tele);
+        char d8[160];
+        snprintf(d8, sizeof(d8),
+                 "version=%lu hash=%llx expected=%llx gen=%lu stop=%lu",
+                 (unsigned long)tele->version,
+                 (unsigned long long)t18->enginePathHash,
+                 (unsigned long long)enginePathHash,
+                 (unsigned long)t18->engineLoadGen,
+                 (unsigned long)t18->stopStatus);
+        check("telemetry v8 reports actual engine path hash and generation",
+              tele->version >= 8 && t18->enginePathHash == enginePathHash &&
+                  enginePathHash != 0 && t18->engineLoadGen > 0 &&
+                  t18->stopStatus == 0,
+              d8);
     }
 
     // 音频脚手架：16 块 × 512 帧正弦，RMS 取后 8 块（避链路瞬态）。
@@ -338,6 +545,172 @@ int RunApoEngineSuite(bool trustedFixture) {
         rmsOut = acc / cnt;
     };
     const double rmsIn = 0.2 / sqrt(2.0);
+
+    double fileColdRms = 0.0;
+    runBlocks(0, fileColdRms);
+    if (tele) {
+        const auto* t18 = Task18Tail(tele);
+        char d[192];
+        snprintf(d, sizeof(d),
+                 "conv=%lu ddc=%lu err=%s ratio=%.4f (expect 0.25)",
+                 (unsigned long)t18->convReady, (unsigned long)t18->ddcReady,
+                 t18->lastFileError, fileColdRms / rmsIn);
+        check("file effects: cold-start APO loads IR+DDC and changes audio",
+              tele->version >= 8 && t18->convReady == 1 && t18->ddcReady == 1 &&
+                  t18->lastFileError[0] == 0 &&
+                  ProcessedRatioNear(fileColdRms / rmsIn, 0.25, 0.06),
+              d);
+    }
+
+    check("file effects: in-APO IR reselection published",
+          PublishStringParam("convolver.ir.path", irQuarter));
+    check("file effects: in-APO DDC reselection published",
+          PublishStringParam("ddc.load", ddcQuarter));
+    Sleep(700);
+    double reselectRms = 0.0;
+    runBlocks(kBlocks, reselectRms);
+    if (tele) {
+        const auto* t18 = Task18Tail(tele);
+        char d[160];
+        snprintf(d, sizeof(d), "conv=%lu ddc=%lu ratio=%.4f (expect 0.0625)",
+                 (unsigned long)t18->convReady, (unsigned long)t18->ddcReady,
+                 reselectRms / rmsIn);
+        check("file effects: in-APO reselection is ready and audible",
+              t18->convReady == 1 && t18->ddcReady == 1 &&
+                  ProcessedRatioNear(reselectRms / rmsIn, 0.0625, 0.025),
+              d);
+    }
+
+    // A failed replacement must unload the old effect, report an error, and a
+    // later retry of the previously successful path must not be diff-suppressed.
+    check("file effects: missing IR replacement published",
+          PublishStringParam("convolver.ir.path", irMissing));
+    check("file effects: missing DDC replacement published",
+          PublishStringParam("ddc.load", ddcMissing));
+    Sleep(700);
+    double failedFileRms = 0.0;
+    runBlocks(2 * kBlocks, failedFileRms);
+    if (tele) {
+        const auto* t18 = Task18Tail(tele);
+        char d[256];
+        snprintf(d, sizeof(d), "conv=%lu ddc=%lu err=%s ratio=%.4f",
+                 (unsigned long)t18->convReady, (unsigned long)t18->ddcReady,
+                 t18->lastFileError, failedFileRms / rmsIn);
+        check("file effects: engine failure clears ready and old processing",
+              t18->convReady == 0 && t18->ddcReady == 0 &&
+                  t18->lastFileError[0] != 0 &&
+                  ProcessedRatioNear(failedFileRms / rmsIn, 1.0, 0.18),
+              d);
+    }
+    check("file effects: identical good IR retry published",
+          PublishStringParam("convolver.ir.path", irQuarter));
+    check("file effects: identical good DDC retry published",
+          PublishStringParam("ddc.load", ddcQuarter));
+    Sleep(700);
+    double retryFileRms = 0.0;
+    runBlocks(3 * kBlocks, retryFileRms);
+    if (tele) {
+        const auto* t18 = Task18Tail(tele);
+        check("file effects: identical good paths retry after engine failure",
+              t18->convReady == 1 && t18->ddcReady == 1 &&
+                  t18->lastFileError[0] == 0 &&
+                  ProcessedRatioNear(retryFileRms / rmsIn, 0.0625, 0.025));
+    }
+
+    check("file effects: outside-fence IR replacement published",
+          PublishStringParam("convolver.ir.path", self));
+    Sleep(500);
+    double fenceRms = 0.0;
+    runBlocks(4 * kBlocks, fenceRms);
+    if (tele) {
+        const auto* t18 = Task18Tail(tele);
+        check("file effects: host fence rejection is visible and unloads old IR",
+              t18->convReady == 0 && t18->lastFileError[0] != 0 &&
+                  ProcessedRatioNear(fenceRms / rmsIn, 0.25, 0.06));
+    }
+    check("file effects: good IR retry after fence rejection published",
+          PublishStringParam("convolver.ir.path", irQuarter));
+    Sleep(600);
+
+    // VM-10: Windows permits a same-volume rename of an already loaded DLL.
+    // No occupancy lock is added; generation/hash prove that processing stays
+    // on the original loaded module rather than silently loading the new path.
+    const uint32_t genBeforeRename = tele ? Task18Tail(tele)->engineLoadGen : 0;
+    if (enginePathLen > 0) {
+        wcscpy(engineMoved, engineOriginal);
+        wchar_t* name = wcsrchr(engineMoved, L'\\');
+        swprintf(name ? name + 1 : engineMoved,
+                 name ? (size_t)(engineMoved + MAX_PATH - name - 1)
+                      : (size_t)MAX_PATH,
+                 L"auradsp_engine_apo_task18_%lu.moved.dll",
+                 (unsigned long)GetCurrentProcessId());
+    }
+    const bool renamed = enginePathLen > 0 && MoveFileW(engineOriginal, engineMoved);
+    check("VM-10: loaded engine DLL same-volume rename succeeds", renamed);
+    double renamedRms = 0.0;
+    runBlocks(5 * kBlocks, renamedRms);
+    if (tele) {
+        const auto* t18 = Task18Tail(tele);
+        check("VM-10: rename keeps same loaded module and processing",
+              t18->engineLoadGen == genBeforeRename &&
+                  t18->enginePathHash == enginePathHash &&
+                  ProcessedRatioNear(renamedRms / rmsIn, 0.0625, 0.025));
+    }
+    if (renamed) {
+        check("VM-10: loaded engine DLL name restored",
+              MoveFileW(engineMoved, engineOriginal) != 0);
+    }
+
+    // Session restore: unlock destroys the engine, but the persisted parameter
+    // block still selects both files. The next cold engine must load them before
+    // enabling either stage and publish a new load generation.
+    check("file effects: unlock before restored session",
+          cfg->UnlockForProcess() == S_OK);
+    check("file effects: restored session lock",
+          cfg->LockForProcess(1, pins, 1, pouts) == S_OK);
+    Sleep(700);
+    double restoredRms = 0.0;
+    runBlocks(6 * kBlocks, restoredRms);
+    if (tele) {
+        const auto* t18 = Task18Tail(tele);
+        char d[160];
+        snprintf(d, sizeof(d), "gen=%lu->%lu conv=%lu ddc=%lu ratio=%.4f",
+                 (unsigned long)genBeforeRename,
+                 (unsigned long)t18->engineLoadGen,
+                 (unsigned long)t18->convReady, (unsigned long)t18->ddcReady,
+                 restoredRms / rmsIn);
+        check("file effects: session-restored APO reloads IR+DDC",
+              t18->engineLoadGen > genBeforeRename && t18->convReady == 1 &&
+                  t18->ddcReady == 1 && t18->lastFileError[0] == 0 &&
+                  ProcessedRatioNear(restoredRms / rmsIn, 0.0625, 0.025),
+              d);
+    }
+
+    check("file effects: explicit empty IR path published",
+          PublishStringParam("convolver.ir.path", L""));
+    check("file effects: explicit empty DDC path published",
+          PublishStringParam("ddc.load", L""));
+    Sleep(700);
+    double clearedRms = 0.0;
+    runBlocks(7 * kBlocks, clearedRms);
+    if (tele) {
+        const auto* t18 = Task18Tail(tele);
+        char d[192];
+        snprintf(d, sizeof(d), "conv=%lu ddc=%lu err=%s ratio=%.4f",
+                 (unsigned long)t18->convReady, (unsigned long)t18->ddcReady,
+                 t18->lastFileError, clearedRms / rmsIn);
+        check("file effects: empty paths explicitly unload IR+DDC",
+              t18->convReady == 0 && t18->ddcReady == 0 &&
+                  t18->lastFileError[0] == 0 &&
+                  ProcessedRatioNear(clearedRms / rmsIn, 1.0, 0.18),
+              d);
+    }
+    check("file effects: disable convolver after clear",
+          PublishNumericParam("convolver.enable", 0));
+    check("file effects: disable DDC after clear",
+          PublishNumericParam("ddc.enable", 0));
+    Sleep(300);
+
     double baseRms = 0;
     runBlocks(0, baseRms);
     {
@@ -1337,6 +1710,67 @@ int RunApoEngineSuite(bool trustedFixture) {
         if (fmt8) fmt8->Release();
     }
 
+    // H10 fail-safe Stop: the trusted fixture blocks one worker iteration for
+    // 4.5s. The 3s Stop wait must time out without releasing any worker-owned
+    // resource. A later Lock retries Stop after confirmed exit and then starts
+    // a fresh generation. Production AuraApo never contains this fixture hook.
+    if (trustedFixture && tele) {
+        // Keep a test-owned mapping view alive across Stop. The defective host
+        // used to unmap its own view immediately; reading through that pointer
+        // would turn this regression into a use-after-unmap instead of a clean
+        // RED assertion.
+        HANDLE stopMap = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE,
+                                          AuraApoTelemetryName());
+        const ApoTelemetryBlock* stopTele = stopMap
+            ? (const ApoTelemetryBlock*)MapViewOfFile(
+                  stopMap, FILE_MAP_ALL_ACCESS, 0, 0, APO_TELEMETRY_BYTES)
+            : nullptr;
+        check("Stop timeout: independent telemetry view", stopTele != nullptr);
+        if (stopTele) {
+            if (hTele) CloseHandle(hTele);
+            hTele = stopMap;
+            tele = stopTele;
+        } else if (stopMap) {
+            CloseHandle(stopMap);
+        }
+        const uint32_t genBeforeStop = Task18Tail(tele)->engineLoadGen;
+        auto* fixtureTele = const_cast<ApoTelemetryBlock*>(tele);
+        fixtureTele->reserved[0] = kTask18StopFixture;
+        bool workerEntered = false;
+        for (int i = 0; i < 50; ++i) {
+            if (fixtureTele->reserved[1] == kTask18StopFixture) {
+                workerEntered = true;
+                break;
+            }
+            Sleep(20);
+        }
+        check("Stop timeout: trusted worker blocker entered", workerEntered);
+        check("Stop timeout: UnlockForProcess returns after bounded wait",
+              cfg->UnlockForProcess() == S_OK);
+        const auto* stopped = Task18Tail(tele);
+        char stopDetail[192];
+        snprintf(stopDetail, sizeof(stopDetail),
+                 "seat=%ld gen=%lu->%lu stop=%lu module=%p",
+                 (long)tele->seatState, (unsigned long)genBeforeStop,
+                 (unsigned long)stopped->engineLoadGen,
+                 (unsigned long)stopped->stopStatus,
+                 (void*)GetModuleHandleW(L"auradsp_engine_apo.dll"));
+        check("Stop timeout retains seat, mappings, engine and DLL",
+              workerEntered && tele->seatState == 1 &&
+                  stopped->engineLoadGen == genBeforeStop &&
+                  stopped->stopStatus == 1 &&
+                  GetModuleHandleW(L"auradsp_engine_apo.dll") != nullptr,
+              stopDetail);
+        Sleep(5000);  // blocker has now certainly returned; worker can exit
+        check("Stop timeout: later Lock retries confirmed cleanup",
+              cfg->LockForProcess(1, pins, 1, pouts) == S_OK);
+        Sleep(400);
+        check("Stop timeout: retry releases old generation and restarts cleanly",
+              tele->seatState == 1 &&
+                  Task18Tail(tele)->engineLoadGen > genBeforeStop &&
+                  Task18Tail(tele)->stopStatus == 0 && tele->fault == 0);
+    }
+
     check("UnlockForProcess", cfg->UnlockForProcess() == S_OK);
     if (tele) {
         check("seat released after unlock", tele->seatState == 0);
@@ -1350,6 +1784,11 @@ int RunApoEngineSuite(bool trustedFixture) {
     fmt->Release();
     CoUninitialize();
     CloseHandle(testPluginMap);
+    if (paramFixture) CloseHandle(paramFixture);
+    DeleteFileW(irHalf);
+    DeleteFileW(irQuarter);
+    DeleteFileW(ddcHalf);
+    DeleteFileW(ddcQuarter);
     printf("apo_engine_test %s: %s (%d failures)\n",
            trustedFixture ? "trusted-fixture" : "production",
            g_fail ? "FAIL" : "PASS", g_fail);
@@ -1358,14 +1797,14 @@ int RunApoEngineSuite(bool trustedFixture) {
 
 int main() {
     const int production = RunApoEngineSuite(false);
-    if (production != 0) return production;
     wchar_t trustedPath[MAX_PATH] = {0};
     GetModuleFileNameW(nullptr, trustedPath, MAX_PATH);
     wchar_t* slash = wcsrchr(trustedPath, L'\\');
     wcscpy(slash ? slash + 1 : trustedPath, L"AuraApoTrustedTest.dll");
     if (GetFileAttributesW(trustedPath) == INVALID_FILE_ATTRIBUTES) {
         printf("[SKIP] trusted fixture suite (AuraApoTrustedTest.dll absent)\n");
-        return 0;
+        return production;
     }
-    return RunApoEngineSuite(true);
+    const int trusted = RunApoEngineSuite(true);
+    return production != 0 ? production : trusted;
 }

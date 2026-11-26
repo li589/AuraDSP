@@ -116,7 +116,22 @@ bool OwnerAlive(DWORD pid) {
 
 }  // namespace
 
-ApoEngineHost::~ApoEngineHost() { Stop(); }
+ApoEngineHost::~ApoEngineHost() {
+    Stop();
+    if (hThread_) {
+        // Unlock's bounded Stop may retain a live worker. Final destruction is
+        // different: this object owns the worker context, so it must not be
+        // freed until that context has actually finished. This wait is on the
+        // COM/destruction path, never on RT audio.
+        if (hStop_) SetEvent(hStop_);
+        const DWORD rc = WaitForSingleObject(hThread_, INFINITE);
+        if (rc == WAIT_OBJECT_0) {
+            ReleaseResources();
+        } else if (tele_) {
+            tele_->stopStatus = 2;
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // 座位（telemetry 块 CAS；设计 D3 + R4  stale 回收）
@@ -142,7 +157,10 @@ bool ApoEngineHost::OpenTelemetry() {
     tele_ = (ApoTelemetryBlock*)v;
     if (tele_->magic == APO_TELEMETRY_MAGIC &&
         tele_->version < APO_TELEMETRY_VERSION) {
-        // 旧版块复用：追加段在建块时整页零初始化，升版即可用。
+        // Append-only ABI upgrade: never expose bytes left by a previous
+        // mapping owner as a valid path hash/generation/ready/error tail.
+        memset(&tele_->enginePathHash, 0,
+               sizeof(*tele_) - offsetof(ApoTelemetryBlock, enginePathHash));
         tele_->version = APO_TELEMETRY_VERSION;
     }
     if (tele_->magic != APO_TELEMETRY_MAGIC) {
@@ -226,6 +244,16 @@ bool ApoEngineHost::LoadEngine() {
             loadErr_ = GetLastError();
             return false;
         }
+        wchar_t actualPath[MAX_PATH * 2] = {0};
+        const DWORD actualLen = GetModuleFileNameW(
+            h, actualPath, (DWORD)(sizeof(actualPath) / sizeof(actualPath[0])));
+        if (actualLen == 0 || actualLen >= MAX_PATH * 2) {
+            loadStage_ = APO_LOAD_STAGE_LOAD_FAILED;
+            loadErr_ = GetLastError();
+            FreeLibrary(h);
+            return false;
+        }
+        const uint64_t actualPathHash = AuraEndpointIdHash(actualPath);
         auto fnAbi = (FnAbi)GetProcAddress(h, "auradsp_abi");
         fnCreate_ = (FnCreate)GetProcAddress(h, "auradsp_create");
         fnDestroy_ = (FnDestroy)GetProcAddress(h, "auradsp_destroy");
@@ -239,6 +267,7 @@ bool ApoEngineHost::LoadEngine() {
         fnLatency_ = (FnGetLatencyMs)GetProcAddress(h, "auradsp_get_latency_ms");
         fnVizRead_ = (FnVizRead)GetProcAddress(h, "auradsp_viz_read");
         fnGetParam_ = (FnGetParam)GetProcAddress(h, "auradsp_get_param");
+        fnLastError_ = (FnLastError)GetProcAddress(h, "auradsp_last_error");
         auto pSlotLoad = (FnPluginSlotLoad)GetProcAddress(h, "auradsp_plugin_slot_load");
         auto pSlotUnload = (FnPluginSlot)GetProcAddress(h, "auradsp_plugin_slot_unload");
         auto pSlotBypass = (FnPluginSlotInt)GetProcAddress(h, "auradsp_plugin_slot_set_bypass");
@@ -253,6 +282,9 @@ bool ApoEngineHost::LoadEngine() {
             fnSetParam_ &&
             fnLatency_ && fnVizRead_) {
             hEngineDll_ = h;
+            enginePathHash_ = actualPathHash;
+            ++engineLoadGen_;
+            if (engineLoadGen_ == 0) ++engineLoadGen_;
             // 插件通道是可选能力：符号全齐才启用（纪律版风味
             // 恒齐；若某构建缺符号则整通道静默禁用）。
             fnSlotLoad_ = pSlotLoad;
@@ -302,6 +334,13 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels,
             return true;
         }
         Stop();
+    }
+    if (hThread_) {
+        // A previous bounded Stop timed out. Retry only against the confirmed
+        // thread handle; if it is still blocked, keep the entire old engine,
+        // mappings and DLL alive and decline this start.
+        Stop();
+        if (hThread_) return false;
     }
     // 端点上下文（第四十一轮）：身份决定座位/telemetry 分块，
     // 覆写决定本端点声道族的有效值来源（压过全局参数块）。
@@ -455,8 +494,20 @@ bool ApoEngineHost::TryStart(UINT32 rate, UINT32 streamChannels,
     tele_->fault = 0;
     tele_->loadStage = APO_LOAD_STAGE_READY;
     tele_->loadErr = 0;
+    tele_->enginePathHash = enginePathHash_;
+    tele_->engineLoadGen = engineLoadGen_;
+    tele_->convReady = 0;
+    tele_->ddcReady = 0;
+    tele_->stopStatus = 0;
+    tele_->lastFileError[0] = 0;
     for (auto& p : tele_->plugins) p = ApoTelemetryBlock::PluginSlot{};
     appliedTotal_ = 0;
+    for (uint32_t s = 0; s < APO_STR_SLOT_COUNT; ++s) {
+        appliedStr_[s].clear();
+        failedStr_[s].clear();
+        fileErrors_[s].clear();
+        fileFailed_[s] = false;
+    }
     snapshotValid_ = false;
     fault_.store(false);
     bypass_.store(false);
@@ -475,7 +526,27 @@ void ApoEngineHost::Stop() {
     active_.store(false);
     if (hThread_) {
         if (hStop_) SetEvent(hStop_);
-        WaitForSingleObject(hThread_, 3000);
+        const DWORD rc = WaitForSingleObject(hThread_, 3000);
+        if (rc != WAIT_OBJECT_0) {
+            // Fail-safe isolation: no handle close, unmap, engine destruction
+            // or FreeLibrary is legal until the worker has actually exited.
+            // Keep every resource and the seat for a later Stop/TryStart retry.
+            if (tele_) tele_->stopStatus = rc == WAIT_TIMEOUT ? 1u : 2u;
+            const DWORD err = rc == WAIT_TIMEOUT ? ERROR_TIMEOUT : GetLastError();
+            wchar_t diag[128];
+            swprintf(diag, 128,
+                     L"AuraDSP APO Stop retained live worker (rc=%lu err=%lu)\n",
+                     (unsigned long)rc, (unsigned long)err);
+            OutputDebugStringW(diag);
+            return;
+        }
+    }
+    ReleaseResources();
+}
+
+void ApoEngineHost::ReleaseResources() {
+    // Precondition: hThread_ is null or WaitForSingleObject confirmed exit.
+    if (hThread_) {
         CloseHandle(hThread_);
         hThread_ = nullptr;
     }
@@ -511,10 +582,18 @@ void ApoEngineHost::Stop() {
         FreeLibrary(hEngineDll_);
         hEngineDll_ = nullptr;
     }
+    fnLastError_ = nullptr;
     delete[] inBuf_;
     inBuf_ = nullptr;
     delete[] outBuf_;
     outBuf_ = nullptr;
+    if (tele_) {
+        tele_->convReady = 0;
+        tele_->ddcReady = 0;
+        tele_->enginePathHash = 0;
+        tele_->stopStatus = 0;
+    }
+    enginePathHash_ = 0;
     ReleaseSeat();
     if (tele_) {
         UnmapViewOfFile(tele_);
@@ -687,6 +766,18 @@ DWORD WINAPI ApoEngineHost::WorkerMain(LPVOID ctx) {
 void ApoEngineHost::WorkerLoop() {
     std::vector<uint8_t> snap(APO_BLOCK_MAPPING_BYTES);
     while (WaitForSingleObject(hStop_, 50) == WAIT_TIMEOUT) {
+#ifdef AURADSP_APO_PLUGIN_TRUSTED_TEST_ONLY
+        // Task 18 Stop regression fixture. Production AuraApo is compiled
+        // without this macro and has no delay/backdoor. Sleeping before any
+        // engine/mapping access also keeps the pre-fix RED run from turning
+        // its intentionally early resource release into a secondary crash.
+        if (tele_ && tele_->reserved[0] == 0x41313853u) {
+            tele_->reserved[0] = 0;
+            tele_->reserved[1] = 0x41313853u;
+            Sleep(4500);
+            continue;
+        }
+#endif
         // 参数块视图在 TryStart 已建（本进程创建并保活）；App 侧
         // 写入经 seqlock 校验后才采信，撕裂帧下轮重试。
         if (paramView_) {
@@ -745,6 +836,37 @@ void ApoEngineHost::WorkerLoop() {
     }
 }
 
+void ApoEngineHost::RecordFileError(uint32_t slot, auradsp_status status,
+                                    const char* explicitReason) {
+    if (slot >= APO_STR_SLOT_COUNT) return;
+    const char* detail = explicitReason;
+    if ((!detail || !detail[0]) && fnLastError_ && engine_) {
+        const char* engineError = fnLastError_(engine_);
+        if (engineError && engineError[0]) detail = engineError;
+    }
+    char statusText[64] = {0};
+    if (!detail || !detail[0]) {
+        snprintf(statusText, sizeof(statusText), "engine set_param failed (status=%d)",
+                 (int)status);
+        detail = statusText;
+    }
+    fileErrors_[slot] = kApoStrSlotIds[slot];
+    fileErrors_[slot] += ": ";
+    fileErrors_[slot] += detail;
+}
+
+void ApoEngineHost::PublishFileErrors() {
+    if (!tele_) return;
+    tele_->lastFileError[0] = 0;
+    for (uint32_t s = 0; s < APO_STR_SLOT_COUNT; ++s) {
+        if (!fileErrors_[s].empty()) {
+            strncpy_s(tele_->lastFileError, sizeof(tele_->lastFileError),
+                      fileErrors_[s].c_str(), _TRUNCATE);
+            break;
+        }
+    }
+}
+
 void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
     const uint32_t* values = (const uint32_t*)(snap + APO_BLOCK_VALUES_OFFSET);
     const uint8_t* mask = snap + APO_BLOCK_MASK_OFFSET;
@@ -778,6 +900,61 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
     auto bitSet = [&](uint32_t bit) { return (mask[bit / 8] >> (bit % 8)) & 1u; };
     bypass_.store(hdr[3] != 0);
     uint32_t applied = 0;
+    // H10 ordering contract: file paths must reach the engine before any
+    // enables/numeric values. Otherwise cold start and session restore enable
+    // an empty stage and the later numeric diff can suppress the real enable.
+    for (uint32_t s = 0; s < APO_STR_SLOT_COUNT; s++) {
+        if (!bitSet(APO_NUM_PARAM_COUNT + s)) continue;
+        uint32_t used = hdr[5 + s];
+        const char* base = (const char*)(snap + kApoStrSlotOffsets[s]);
+        if (used > kApoStrSlotCaps[s]) used = kApoStrSlotCaps[s];
+        std::string cur;
+        if (used > 0) cur.assign(base, strnlen(base, used));
+        const bool changedFailure = fileFailed_[s] && failedStr_[s] != cur;
+        if (snapshotValid_ && appliedStr_[s] == cur && !changedFailure) continue;
+        // Cache a failed *attempt* separately, never in appliedStr_. This
+        // avoids retrying an unchanged missing file every 50ms while still
+        // allowing a return to the previous good path after a failure.
+        if (snapshotValid_ && fileFailed_[s] && failedStr_[s] == cur) continue;
+        const char* sid = kApoStrSlotIds[s];
+        const bool isFile = strcmp(sid, "convolver.ir.path") == 0 ||
+                            strcmp(sid, "ddc.load") == 0;
+        if (isFile && !cur.empty() && !IsUnderTransitRoot(cur)) {
+            // Fence rejection is also an explicit unload command. Otherwise
+            // the previous IR/DDC would continue processing under a new UI
+            // selection while telemetry falsely kept its ready bit.
+            const auradsp_status clearStatus = fnSetParam_(
+                engine_, sid, "", 1);
+            (void)clearStatus;
+            fileFailed_[s] = true;
+            failedStr_[s] = cur;
+            RecordFileError(s, AURADSP_E_PARAM,
+                            "host fence rejected path outside transit root");
+            if (tele_ && strcmp(sid, "convolver.ir.path") == 0)
+                tele_->convReady = 0;
+            if (tele_ && strcmp(sid, "ddc.load") == 0) tele_->ddcReady = 0;
+            continue;
+        }
+        const auradsp_status st = fnSetParam_(
+            engine_, sid, cur.c_str(), (uint32_t)cur.size() + 1);
+        if (st == AURADSP_OK) {
+            appliedStr_[s] = cur;
+            failedStr_[s].clear();
+            fileFailed_[s] = false;
+            if (isFile) fileErrors_[s].clear();
+            applied++;
+        } else {
+            fileFailed_[s] = true;
+            failedStr_[s] = cur;
+            if (isFile) {
+                RecordFileError(s, st);
+                if (tele_ && strcmp(sid, "convolver.ir.path") == 0)
+                    tele_->convReady = 0;
+                if (tele_ && strcmp(sid, "ddc.load") == 0) tele_->ddcReady = 0;
+            }
+        }
+    }
+    PublishFileErrors();
     for (uint32_t i = 0; i < APO_NUM_PARAM_COUNT; i++) {
         // 有效位未置：App 从未写过此参数——保持引擎默认值，
         // 严禁用块内零值覆盖（位图语义见 ApoShared.h）。
@@ -827,29 +1004,6 @@ void ApoEngineHost::ApplySnapshot(const uint8_t* snap, const uint32_t* hdr) {
         applied++;
         if (modeOvr) appliedEpMode_ = modeOvrVal;
     }
-    for (uint32_t s = 0; s < APO_STR_SLOT_COUNT; s++) {
-        if (!bitSet(APO_NUM_PARAM_COUNT + s)) continue;  // 同上，有效位门
-        uint32_t used = hdr[5 + s];
-        const char* base = (const char*)(snap + kApoStrSlotOffsets[s]);
-        if (used > kApoStrSlotCaps[s]) used = kApoStrSlotCaps[s];
-        std::string cur;
-        if (used > 0) cur.assign(base, strnlen(base, used));
-        if (!snapshotValid_ || appliedStr_[s] != cur) {
-            // 中转围栏（P4）：文件型路径非空且不在中转根下 → 拒写
-            // 引擎（记已处理避免逐快照重试；不计 applied）。
-            const char* sid = kApoStrSlotIds[s];
-            if ((strcmp(sid, "convolver.ir.path") == 0 ||
-                 strcmp(sid, "ddc.load") == 0) &&
-                !cur.empty() && !IsUnderTransitRoot(cur)) {
-                appliedStr_[s] = cur;
-                continue;
-            }
-            if (fnSetParam_(engine_, kApoStrSlotIds[s], cur.c_str(),
-                            (uint32_t)cur.size() + 1) == 0)
-                applied++;
-            appliedStr_[s] = cur;
-        }
-    }
     snapshotValid_ = true;
     if (applied > 0) {
         appliedTotal_ += applied;
@@ -893,6 +1047,18 @@ void ApoEngineHost::ReadbackEffective() {
     } else {
         tele_->effValid = 0;
     }
+    int32_t convReady = 0;
+    int32_t ddcReady = 0;
+    tele_->convReady = fnGetParam_(engine_, "convolver.ready", &convReady,
+                                   sizeof(convReady)) == AURADSP_OK &&
+                               convReady != 0
+                           ? 1u
+                           : 0u;
+    tele_->ddcReady = fnGetParam_(engine_, "ddc.ready", &ddcReady,
+                                  sizeof(ddcReady)) == AURADSP_OK &&
+                              ddcReady != 0
+                          ? 1u
+                          : 0u;
 }
 
 // ---------------------------------------------------------------------------

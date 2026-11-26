@@ -44,8 +44,14 @@ def main():
     shared = read('core/desktop/windows-drivers/03_system_apo/ApoShared.h')
 
     # ③ 产物哨兵
-    check('#define APO_NUM_PARAM_COUNT 340' in c_h, 'C 表数值参数计数 340')
-    check('const int kApoNumParamCount = 340;' in dart, 'Dart 表数值参数计数 340')
+    # Task 18：文件路径与文件效果开关必须走同一 APO 闭环。两个 enable
+    # 只许追加在既有 340 槽之后，旧索引及全部字符串绝对偏移规则由
+    # 生成器统一维护；v5/v6 版本全等门继续让异版宿主安全拒绝。
+    check('#define APO_NUM_PARAM_COUNT 342' in c_h, 'C 表数值参数计数 342')
+    check('const int kApoNumParamCount = 342;' in dart, 'Dart 表数值参数计数 342')
+    check("'convolver.enable': 340" in dart and "'ddc.enable': 341" in dart
+          and '"convolver.enable"' in c_h and '"ddc.enable"' in c_h,
+          'Task18 文件效果 enable 追加槽（convolver@340 / ddc@341）')
     # 全面复审 S3（APO-1）：追加段哨兵——自定义 setter 家族入块、
     # 存量首槽不移位、块版本三方全等（ApoShared 手写 vs 两生成产物）。
     # 第四十七轮 S3：channels.count 自豁免移入白名单 @335，
@@ -54,17 +60,16 @@ def main():
           and "'channels.mode': 336" in dart
           and "'viz.fftSize': 339" in dart,
           'S3 追加段入块（channels.count@335 … viz.fftSize@339）')
-    check('APO_PARAM_BLOCK_VERSION 5' in c_h
-          and 'const int kApoParamBlockVersion = 5;' in dart
-          and '#define APO_PARAMS_VERSION 5u' in shared,
-          '参数块版本 v5 三方全等')
-    # 第四十一轮：尾段分端点覆写表常量双侧一致。v5（2026-11-24
-    # 审查 Dart-F1）字符串区扩 2048B（两新槽各 1K）后：offset =
-    # 29136；8 条 × 24B；used 扩至 29328。
-    check('APO_EP_OVERRIDE_OFFSET 29136' in c_h
-          and 'const int kApoEpOverrideOffset = 29136;' in dart
-          and 'APO_BLOCK_USED_BYTES 29328' in c_h
-          and 'const int kApoBlockUsedBytes = 29328;' in dart,
+    check('APO_PARAM_BLOCK_VERSION 6' in c_h
+          and 'const int kApoParamBlockVersion = 6;' in dart
+          and '#define APO_PARAMS_VERSION 6u' in shared,
+          '参数块版本 v6 三方全等')
+    # 第四十一轮：尾段分端点覆写表常量双侧一致。Task 18 v6 在数值
+    # 尾段追加两个 enable 槽，字符串区与覆写表各后移 8B；旧槽序号不变。
+    check('APO_EP_OVERRIDE_OFFSET 29144' in c_h
+          and 'const int kApoEpOverrideOffset = 29144;' in dart
+          and 'APO_BLOCK_USED_BYTES 29336' in c_h
+          and 'const int kApoBlockUsedBytes = 29336;' in dart,
           '覆写表尾段常量双侧一致')
     sha_c = re.search(r'sha256\[:16\]=(\w+)', c_h)
     sha_d = re.search(r'sha256\[:16\]=(\w+)', dart)

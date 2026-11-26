@@ -890,6 +890,7 @@ extern void DDCConstructor(JamesDSPLib *jdsp);
 extern void DDCDestructor(JamesDSPLib *jdsp);
 extern int DDCEnable(JamesDSPLib *jdsp, char enable);
 extern void DDCDisable(JamesDSPLib *jdsp);
+extern void DDCClear(JamesDSPLib *jdsp);
 extern int DDCStringParser(JamesDSPLib *jdsp, char *newStr);
 extern void DDCProcess(JamesDSPLib *jdsp, size_t n);
 // Crossfeed

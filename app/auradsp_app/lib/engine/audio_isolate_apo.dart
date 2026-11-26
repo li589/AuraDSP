@@ -129,10 +129,18 @@ class ApoParamPublisher {
   /// call; without this, every flushAll re-reads the IR/DDC files.
   final Map<String, (String, String)> _fileEffectConvertCache = {};
 
-  String _convertFileEffect(String id, String text) {
+  String? _convertFileEffect(String id, String text) {
     final hit = _fileEffectConvertCache[id];
     if (hit != null && hit.$1 == text) return hit.$2;
-    final effective = ApoTransit.transitPathFor(text) ?? '';
+    final effective = ApoTransit.transitPathFor(text);
+    if (effective == null) {
+      // A failed publication is neither a successful empty conversion nor a
+      // live transit reference. The caller still publishes an explicit empty
+      // path so the engine cannot keep presenting the previous file as ready.
+      _fileEffectConvertCache.remove(id);
+      _fileEffectTransit.remove(id);
+      return null;
+    }
     _fileEffectConvertCache[id] = (text, effective);
     _fileEffectTransit[id] = effective;
     return effective;
@@ -354,7 +362,7 @@ class ApoParamPublisher {
     // 引擎侧还有第二道围栏（ApoEngineHost 只认中转根下路径）。
     var effective = text;
     if (id == ParamId.convIrPath || id == ParamId.ddcLoad) {
-      effective = _convertFileEffect(id, text);
+      effective = _convertFileEffect(id, text) ?? '';
     }
     if (!_ensure()) return;
     _beginWrite();
@@ -396,7 +404,7 @@ class ApoParamPublisher {
     for (final e in strMirror.entries) {
       var text = e.value;
       if (e.key == ParamId.convIrPath || e.key == ParamId.ddcLoad) {
-        text = _convertFileEffect(e.key, text);
+        text = _convertFileEffect(e.key, text) ?? '';
       }
       effectiveStrings[e.key] = text;
     }
@@ -479,6 +487,7 @@ class ApoTelemetryReader {
   int _lastSeat = -1;
   int _lastFault = -1;
   int _lastLoadStage = -1;
+  String _lastFileStatusSig = '';
   String _lastPluginSig = '';
   int _tickCount = 0;
   int _absentTicks = 0;
@@ -529,6 +538,7 @@ class ApoTelemetryReader {
     _lastFault = -1;
     _lastLoadStage = -1;
     _absentTicks = 0;
+    _lastFileStatusSig = '';
     _lastPluginSig = '';
     _tickCount = 0;
   }
@@ -634,12 +644,41 @@ class ApoTelemetryReader {
     // telemetry v4 加载诊断（第五轮 S3）：v4 前恒 0（未试）。
     final loadStage = u32[1] >= 4 ? u32[kApoTelemetryLoadDiagU32] : 0;
     final loadErr = u32[1] >= 4 ? u32[kApoTelemetryLoadDiagU32 + 1] : 0;
+    // v8 is append-only. Never read or synthesize file status from a short
+    // old-host block: false readiness/error is safer than fabricated state.
+    final fileStatusValid = u32[1] >= 8;
+    final enginePathHash = fileStatusValid
+        ? (u32[kApoTelemetryFileDiagU32] |
+                (u32[kApoTelemetryFileDiagU32 + 1] << 32))
+            .toUnsigned(64)
+        : 0;
+    final engineLoadGen =
+        fileStatusValid ? u32[kApoTelemetryFileDiagU32 + 2] : 0;
+    final convReady =
+        fileStatusValid && u32[kApoTelemetryFileDiagU32 + 3] != 0;
+    final ddcReady =
+        fileStatusValid && u32[kApoTelemetryFileDiagU32 + 4] != 0;
+    final stopStatus =
+        fileStatusValid ? u32[kApoTelemetryFileDiagU32 + 5] : 0;
+    var lastFileError = '';
+    if (fileStatusValid) {
+      final bytes = <int>[];
+      for (var i = 0; i < kApoTelemetryFileErrorBytes; i++) {
+        final b = _view![kApoTelemetryFileErrorOffset + i];
+        if (b == 0) break;
+        bytes.add(b);
+      }
+      lastFileError = utf8.decode(bytes, allowMalformed: true);
+    }
+    final fileStatusSig = '$fileStatusValid|$enginePathHash|$engineLoadGen|'
+        '$convReady|$ddcReady|$stopStatus|$lastFileError';
     _tickCount++;
     // 状态事件（P3）：座位/故障跳变即发，另每 2s 心跳刷新一次
     // 已应用数等缓变字段；状态层据此驱动 APO 面板的引擎状态行。
     if (seat != _lastSeat ||
         faultNow != _lastFault ||
         loadStage != _lastLoadStage ||
+        fileStatusSig != _lastFileStatusSig ||
         _tickCount % 20 == 0) {
       if (seat != _lastSeat) {
         dbgLog('apo telemetry: seat=${seat == 1 ? 'claimed' : 'free'} '
@@ -669,6 +708,13 @@ class ApoTelemetryReader {
         'taken': u32[8],
         'loadStage': loadStage,
         'loadErr': loadErr,
+        'fileStatusValid': fileStatusValid,
+        'enginePathHash': enginePathHash,
+        'engineLoadGen': engineLoadGen,
+        'convReady': convReady,
+        'ddcReady': ddcReady,
+        'stopStatus': stopStatus,
+        'lastFileError': lastFileError,
         'effMode': effMode,
         'effFill': effFill,
         'engChHost': engChHost,
@@ -678,6 +724,7 @@ class ApoTelemetryReader {
       _lastSeat = seat;
       _lastFault = faultNow;
       _lastLoadStage = loadStage;
+      _lastFileStatusSig = fileStatusSig;
     }
     if (seat != 1) return;
     // telemetry v3 插件段（Part I Q2/D5）：合成 apoPluginStatus

@@ -389,26 +389,7 @@ static auradsp_status set_convolver_mix(auradsp_handle h, const void* value, uin
     return AURADSP_OK;
 }
 
-static auradsp_status set_convolver_ir_path(auradsp_handle h, const void* value, uint32_t bytes) {
-    if (!h->open.load()) { set_error(h, "convolver.ir.path: engine closed"); return AURADSP_E_STATE; }
-    if (bytes == 0 || bytes > 4096) {
-        set_error(h, "convolver.ir.path: invalid length");
-        return AURADSP_E_PARAM;
-    }
-    char* pbuf = (char*)malloc((size_t)bytes + 1);
-    if (!pbuf) { set_error(h, "convolver.ir.path: out of memory"); return AURADSP_E_IO; }
-    memcpy(pbuf, value, bytes);
-    pbuf[bytes] = 0;
-    const auradsp_status st = load_ir_file(h, pbuf);
-    free(pbuf);
-    if (st != AURADSP_OK) return st;
-    if (h->p.conv_enable.load(std::memory_order_relaxed) && h->open.load())
-        apply_convolver(h);
-    return AURADSP_OK;
-}
-
-static auradsp_status set_convolver_clear(auradsp_handle h, const void* /*value*/, uint32_t bytes) {
-    if (bytes < 4) return AURADSP_E_PARAM;
+static void clear_convolver_loaded(auradsp_handle h) {
     /* [PATCHED-AuraDSP P-032] 清除 IR **不再强制关闭 conv_enable**：
      * 用户要求"无文件就回到未加载态、效果内部直通"，开关由用户自己管。
      * apply_convolver 在 conv_enable=1 且 ir_ready=false 时走
@@ -420,6 +401,50 @@ static auradsp_status set_convolver_clear(auradsp_handle h, const void* /*value*
     h->ir_peak.store(0.0f);
     memset(h->ir_spectrum, 0, sizeof(h->ir_spectrum));
     if (h->open.load()) apply_convolver(h);
+}
+
+static auradsp_status set_convolver_ir_path(auradsp_handle h, const void* value, uint32_t bytes) {
+    if (!h->open.load()) { set_error(h, "convolver.ir.path: engine closed"); return AURADSP_E_STATE; }
+    // APO empty-string publication is an explicit unload, not a malformed file.
+    if (bytes == 0 || (value && bytes == 1 && *(const char*)value == '\0')) {
+        clear_convolver_loaded(h);
+        compute_latency(h, &h->latency_ms);
+        return AURADSP_OK;
+    }
+    if (!value || bytes > 4096) {
+        clear_convolver_loaded(h);
+        compute_latency(h, &h->latency_ms);
+        set_error(h, "convolver.ir.path: invalid length");
+        return AURADSP_E_PARAM;
+    }
+    char* pbuf = (char*)malloc((size_t)bytes + 1);
+    if (!pbuf) {
+        clear_convolver_loaded(h);
+        compute_latency(h, &h->latency_ms);
+        set_error(h, "convolver.ir.path: out of memory");
+        return AURADSP_E_IO;
+    }
+    memcpy(pbuf, value, bytes);
+    pbuf[bytes] = 0;
+    const auradsp_status st = load_ir_file(h, pbuf);
+    free(pbuf);
+    if (st != AURADSP_OK) {
+        // Early open/parse failures used to leave the previous IR active and
+        // ready. Unload it before returning the original load error.
+        clear_convolver_loaded(h);
+        compute_latency(h, &h->latency_ms);
+        return st;
+    }
+    if (h->p.conv_enable.load(std::memory_order_relaxed) && h->open.load())
+        apply_convolver(h);
+    compute_latency(h, &h->latency_ms);
+    return AURADSP_OK;
+}
+
+static auradsp_status set_convolver_clear(auradsp_handle h, const void* /*value*/, uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    clear_convolver_loaded(h);
+    compute_latency(h, &h->latency_ms);
     return AURADSP_OK;
 }
 
@@ -610,12 +635,27 @@ static auradsp_status get_arbmag_node_count(auradsp_handle h, void* out_value, u
 
 static auradsp_status set_ddc_load(auradsp_handle h, const void* value, uint32_t bytes) {
     if (!h->open.load()) { set_error(h, "ddc.load: engine closed"); return AURADSP_E_STATE; }
-    if (bytes == 0 || bytes > 4096) {
+    if (bytes == 0 || (value && bytes == 1 && *(const char*)value == '\0')) {
+        DDCClear(&h->jdsp);
+        h->p.ddc_ready.store(0);
+        compute_latency(h, &h->latency_ms);
+        return AURADSP_OK;
+    }
+    if (!value || bytes > 4096) {
+        DDCClear(&h->jdsp);
+        h->p.ddc_ready.store(0);
+        compute_latency(h, &h->latency_ms);
         set_error(h, "ddc.load: invalid path (length)");
         return AURADSP_E_PARAM;
     }
     char* pbuf = (char*)malloc((size_t)bytes + 1);
-    if (!pbuf) { set_error(h, "ddc.load: out of memory"); return AURADSP_E_IO; }
+    if (!pbuf) {
+        DDCClear(&h->jdsp);
+        h->p.ddc_ready.store(0);
+        compute_latency(h, &h->latency_ms);
+        set_error(h, "ddc.load: out of memory");
+        return AURADSP_E_IO;
+    }
     memcpy(pbuf, value, bytes);
     pbuf[bytes] = 0;
     auradsp_status st = AURADSP_OK;
@@ -626,11 +666,20 @@ static auradsp_status set_ddc_load(auradsp_handle h, const void* value, uint32_t
     const long maxBytes = gateBytes > 2147483647LL ? 2147483647L : (long)gateBytes;
     char* content = read_text_file(h, pbuf, maxBytes, &st);
     free(pbuf);
-    if (!content) return st;
+    if (!content) {
+        DDCClear(&h->jdsp);
+        h->p.ddc_ready.store(0);
+        compute_latency(h, &h->latency_ms);
+        return st;
+    }
     const int rc = DDCStringParser(&h->jdsp, content);
     free(content);
     if (rc < 0) {
+        // DDCStringParser historically retained the old active view on parse
+        // failure. H10 requires failure to unload, not merely clear a flag.
+        DDCClear(&h->jdsp);
         h->p.ddc_ready.store(0);
+        compute_latency(h, &h->latency_ms);
         if (rc == -4)
             set_error(h, "ddc.load: engine busy (no free ddc slot, retryable)");
         else
@@ -644,6 +693,7 @@ static auradsp_status set_ddc_load(auradsp_handle h, const void* value, uint32_t
          * 解析与换指针全程在控制线程（ctrl_mutex 串行化并发控制调用）。 */
         DDCEnable(&h->jdsp, 1);
     }
+    compute_latency(h, &h->latency_ms);
     return AURADSP_OK;
 }
 

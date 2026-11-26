@@ -72,6 +72,7 @@ class ApoEngineHost {
     using FnSetParam = auradsp_status (*)(auradsp_handle, const char*, const void*, uint32_t);
     // 生效值回读（第三十五轮）：可选符号，缺失则 v6 段不写。
     using FnGetParam = auradsp_status (*)(auradsp_handle, const char*, void*, uint32_t);
+    using FnLastError = const char* (*)(auradsp_handle);
     using FnGetLatencyMs = double (*)(auradsp_handle);
     using FnVizRead = uint32_t (*)(auradsp_handle, auradsp_viz_frame*, uint32_t);
     // Part I Q2 插件通道（可选解析：旧/stub 引擎缺符号时整通道
@@ -84,12 +85,16 @@ class ApoEngineHost {
     using FnPluginFlag = int (*)(auradsp_handle, int);
 
     bool LoadEngine();
+    void ReleaseResources();  // 仅 worker 已确认退出（或从未创建）后调用
     bool ClaimSeat();
     void ReleaseSeat();
     bool OpenTelemetry();
     static DWORD WINAPI WorkerMain(LPVOID ctx);
     void WorkerLoop();
     void ApplySnapshot(const uint8_t* snap, const uint32_t* hdr);
+    void RecordFileError(uint32_t slot, auradsp_status status,
+                         const char* explicitReason = nullptr);
+    void PublishFileErrors();
     void ReadbackEffective();
     // Part I Q2：插件块 diff 应用 + telemetry v3 插件段回填
     // （worker 线程内调用；通道不可用时自跳过）。
@@ -113,6 +118,7 @@ class ApoEngineHost {
     FnGetActiveGeometry fnGetActiveGeometry_ = nullptr;
     FnSetParam fnSetParam_ = nullptr;
     FnGetParam fnGetParam_ = nullptr;
+    FnLastError fnLastError_ = nullptr;
     FnGetLatencyMs fnLatency_ = nullptr;
     FnVizRead fnVizRead_ = nullptr;
     FnPluginSlotLoad fnSlotLoad_ = nullptr;
@@ -132,6 +138,8 @@ class ApoEngineHost {
     // 未就绪（加载失败）」，不再单凭心跳报处理中。
     uint32_t loadStage_ = APO_LOAD_STAGE_NONE;
     uint32_t loadErr_ = 0;
+    uint64_t enginePathHash_ = 0;
+    uint32_t engineLoadGen_ = 0;
     void PublishLoadDiag();
 
     UINT32 rate_ = 48000;
@@ -204,6 +212,11 @@ class ApoEngineHost {
     // 已应用快照（worker 独占）：数值槽原样 + 字符串槽字节
     uint32_t appliedNum_[APO_NUM_PARAM_COUNT];
     std::string appliedStr_[APO_STR_SLOT_COUNT];
+    // 失败账本与 appliedStr_ 分离：相同失败值不每 50ms 反复做文件 IO，
+    // 但从失败值切回此前成功的同一路径时仍必须真实重试。
+    std::string failedStr_[APO_STR_SLOT_COUNT];
+    std::string fileErrors_[APO_STR_SLOT_COUNT];
+    bool fileFailed_[APO_STR_SLOT_COUNT] = {};
     bool snapshotValid_ = false;
     // 生效值回读节流（worker 独占）：应用计数变化即读、另每
     // 20 轮（约 1s）兜底读一次。

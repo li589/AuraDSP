@@ -79,18 +79,35 @@ def main():
           f"块已用字节 Dart == {used}")
     check(used <= 2105344, "used <= mapping")
 
-    # telemetry v7（v6 段不变 + v7 端点身份尾段）：版本与
-    # 插件段偏移/槽尺寸在 C 侧以 static_assert 钉死
-    check((c_define(h, "APO_TELEMETRY_VERSION") or "").rstrip("uU") == "7",
-          "APO_TELEMETRY_VERSION == 7")
+    # telemetry v8（v7 及以前偏移不变 + v8 引擎/文件效果诊断尾段）
+    check((c_define(h, "APO_TELEMETRY_VERSION") or "").rstrip("uU") == "8",
+          "APO_TELEMETRY_VERSION == 8")
     check("offsetof(ApoTelemetryBlock, plugins) == 608" in h,
           "C 侧钉死 plugins offset 608")
-    check("sizeof(ApoTelemetryBlock) == 1632" in h,
-          "C 侧钉死 telemetry 总长 1632（v7 端点身份尾段 +168）")
+    check("sizeof(ApoTelemetryBlock) == 1912" in h,
+          "C 侧钉死 telemetry 总长 1912（v8 文件诊断尾段 +280）")
     check("offsetof(ApoTelemetryBlock, endpointHash) == 1464" in h,
           "C 侧钉死 endpointHash offset 1464")
     check("offsetof(ApoTelemetryBlock, endpointId) == 1472" in h,
           "C 侧钉死 endpointId offset 1472")
+    check("offsetof(ApoTelemetryBlock, enginePathHash) == 1632" in h,
+          "C 侧钉死 enginePathHash offset 1632")
+    check("offsetof(ApoTelemetryBlock, engineLoadGen) == 1640" in h,
+          "C 侧钉死 engineLoadGen offset 1640")
+    check("offsetof(ApoTelemetryBlock, convReady) == 1644" in h,
+          "C 侧钉死 convReady offset 1644")
+    check("offsetof(ApoTelemetryBlock, ddcReady) == 1648" in h,
+          "C 侧钉死 ddcReady offset 1648")
+    check("offsetof(ApoTelemetryBlock, stopStatus) == 1652" in h,
+          "C 侧钉死 stopStatus offset 1652")
+    check("offsetof(ApoTelemetryBlock, lastFileError) == 1656" in h,
+          "C 侧钉死 lastFileError offset 1656")
+    check(dart_const(d, "kApoTelemetryFileDiagU32") == "408",
+          "Dart 文件诊断段位于 u32[408]（1632/4）")
+    check(dart_const(d, "kApoTelemetryFileErrorOffset") == "1656",
+          "Dart lastFileError offset == 1656")
+    check(dart_const(d, "kApoTelemetryFileErrorBytes") == "256",
+          "Dart lastFileError == 256B")
     check("offsetof(ApoTelemetryBlock, effChannelsMode) == 1452" in h,
           "C 侧钉死 effChannelsMode offset 1452")
     check("offsetof(ApoTelemetryBlock, channelCount) == 744" in h,

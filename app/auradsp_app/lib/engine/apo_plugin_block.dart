@@ -66,3 +66,10 @@ const int kApoTelemetryLoadDiagU32 = 184;
 /// u32[363] = effChannelsMode、u32[364] = effUpmixFill、
 /// u32[365] = effValid（1 后前两值可信）。v6 以前整段不存在。
 const int kApoTelemetryEffU32 = 363;
+
+/// telemetry v8 引擎/文件效果诊断（byte offset 1632 起）：
+/// pathHash u64、loadGen/convReady/ddcReady/stopStatus u32，
+/// lastFileError[256] 位于 byte offset 1656。v8 以前整段不可读。
+const int kApoTelemetryFileDiagU32 = 408;
+const int kApoTelemetryFileErrorOffset = 1656;
+const int kApoTelemetryFileErrorBytes = 256;

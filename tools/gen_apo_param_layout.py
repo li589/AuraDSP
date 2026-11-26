@@ -42,7 +42,8 @@ smoke_apo_param_layout 交叉断言）：
     位 = 该参数从未被 App 写过，引擎保持其默认值，严禁以块内
     零值覆盖——首帧全量应用若不设此门会把未触碰参数清零）
   values 区：数值槽总数 * 4B（v1=325 槽，v2=339 槽，
-    v4=340 槽：channels.count 入块，追加末尾不移位）
+    v4=340 槽：channels.count 入块，追加末尾不移位；
+    v6=342 槽：convolver.enable / ddc.enable 追加末尾不移位）
   strings 区：各槽按上表顺序紧密排列
   映射大小：32768B（向上取整）。
 
@@ -113,7 +114,10 @@ def sha16(path):
 # 后移（偏移由本生成器统一计算）；头部 strUsed[4]→[6]（reserved
 # 相应 7→5，头仍 64B）。数值槽不变（340）。消费端版本全等校验使
 # 旧 DLL 对 v5 块整体拒绝（安全降级）。
-PARAMS_VERSION = 5
+# v6（Task 18 / H10）：convolver.enable 与 ddc.enable 追加为数值槽
+# 340/341。sysapo 的 ModeCaps.fileEffects 已开放，但旧豁免使开关永远无法
+# 到达真实 APO；字符串先应用、enable 后应用才能保证冷启动与恢复可听。
+PARAMS_VERSION = 6
 
 CSSG_TYPE = {'kFloat': 0, 'kInt32': 1, 'kBool': 2}
 
@@ -134,12 +138,14 @@ CUSTOM_NUMERIC = {
     'channels.mode': 1,
 }
 
+# Task 18 v6 新增开关必须在既有 340 槽之后追加，不能按参数表中的
+# 声明位置插入而移动 convolver.mix 等既有槽。此处登记顺序即槽序。
+FILE_EFFECT_ENABLE_IDS = ('convolver.enable', 'ddc.enable')
+
 # 明确豁免（不入块）及理由——分类完备性断言要求表中每个 id 必须
 # 恰好落入「入块 / 豁免 / 只读 / 字符串槽」之一，新增参数不分类即
 # 生成失败，杜绝下一批静默缺席。
 EXEMPT = {
-    'convolver.enable': '模式策略：文件型效果开关，由 ModeCaps.fileEffects 门控',
-    'ddc.enable': '模式策略：同 convolver.enable',
     'reverb.engine': '只读派生（getter 由 reverb.preset 计算，setter 占位）',
     'mode.latency': 'ADR-006 墓碑：setter 恒返回 E_PARAM',
     'liveprogmc.code': '字符串通道；多声道脚本由 ModeCaps.mcScript 门控，不入块',
@@ -171,6 +177,8 @@ def parse_numeric_params():
             'ParamType::(kFloat|kInt32|kBool)|PARAM_CUSTOM\\(\\s*"([^"]+)"',
             body):
         pid = m.group(1) or m.group(3)
+        if pid in FILE_EFFECT_ENABLE_IDS:
+            continue
         if pid in EXEMPT or pid in have:
             continue
         if m.group(2):
@@ -179,6 +187,7 @@ def parse_numeric_params():
             extra.append((pid, CUSTOM_NUMERIC[pid]))
         have.add(pid)
     out.extend(extra)
+    out.extend((pid, TYPE_CODE['BOOL']) for pid in FILE_EFFECT_ENABLE_IDS)
     # —— 分类完备性断言 ——
     all_ids = {m.group(1) for m in
                re.finditer(r'PARAM_\w+\(\s*"([^"]+)"', body)}

@@ -41,10 +41,15 @@ void main() {
     });
   });
 
-  group('第四十一轮立项、第四十七轮升 v4、2026-11-24 升 v5：参数块布局常量', () {
-    test('覆写表紧贴主体尾部，块版本为 5', () {
-      expect(kApoParamBlockVersion, 5);
-      expect(kApoEpOverrideOffset, 29136);
+  group('第四十一轮立项、第四十七轮升 v4、Task 18 升 v6：参数块布局常量', () {
+    test('文件效果开关追加尾部，覆写表随 v6 主体后移', () {
+      expect(kApoParamBlockVersion, 6);
+      expect(kApoNumParamCount, 342);
+      expect(kApoNumParamIndex['convolver.enable'], 340);
+      expect(kApoNumParamIndex['ddc.enable'], 341);
+      expect(kApoNumParamIndex['channels.count'], 335);
+      expect(kApoNumParamIndex['viz.fftSize'], 339);
+      expect(kApoEpOverrideOffset, 29144);
       expect(kApoEpOverrideCount, 8);
       expect(kApoEpOverrideEntryBytes, 24);
       expect(kApoBlockUsedBytes,

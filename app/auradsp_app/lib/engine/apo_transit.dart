@@ -83,18 +83,25 @@ abstract final class ApoTransit {
   /// 调用触 F9/F10 平台隔离门，收回平台层。本类运行于音频隔
   /// 离体、无 AppModel 装配，经端口工厂 createWindowsSystemPort
   /// 取实现，与隔离体直调 createAudioOut 工厂同例。）每进程只做一次。
-  static void _ensureRoot(String? rootOverride) {
-    if (rootOverride == null && _rootReady) return;
-    if (rootOverride == null) _rootReady = true;
+  static bool _ensureRoot(String? rootOverride) {
+    if (rootOverride == null && _rootReady) return true;
     try {
       final target = rootOverride ?? root;
       final d = Directory(target);
       if (!d.existsSync()) d.createSync(recursive: true);
       if (rootOverride == null) {
-        createWindowsSystemPort().grantDirReadToLocalService(target);
+        if (!createWindowsSystemPort().grantDirReadToLocalService(target)) {
+          dbgLog('apo transit: LocalService read grant failed: $target');
+          return false;
+        }
+        _rootReady = true;
       }
+      // Isolated tests use rootOverride and must never grant a real ACL.
+      return true;
     } catch (e) {
+      if (rootOverride == null) _rootReady = false;
       dbgLog('apo transit: root prepare failed: $e');
+      return false;
     }
   }
 
@@ -398,6 +405,7 @@ abstract final class ApoTransit {
   }) async {
     try {
       if (source.isEmpty) return source;
+      if (!_ensureRoot(rootOverride)) return null;
       if (isTransitPath(source)) return source;
       final f = File(source);
       if (!await f.exists()) {
@@ -487,6 +495,7 @@ abstract final class ApoTransit {
   static String? transitPathFor(String source, {String? rootOverride}) {
     try {
       if (source.isEmpty) return source;
+      if (!_ensureRoot(rootOverride)) return null;
       if (isTransitPath(source)) return source;
       final f = File(source);
       if (!f.existsSync()) {
