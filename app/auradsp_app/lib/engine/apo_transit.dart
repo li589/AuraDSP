@@ -217,6 +217,13 @@ abstract final class ApoTransit {
 
   static void _atomicWriteFileSync(File temp, File destination) {
     try {
+      final key = _publicationKey(destination.path);
+      if (_publicationTails.containsKey(key)) {
+        throw StateError(
+          'APO transit async publication pending for destination: '
+          '${destination.path}',
+        );
+      }
       final expectedHash = _hashFromDestination(destination);
       final actualHash = sha256.convert(temp.readAsBytesSync()).toString();
       if (actualHash != expectedHash) {
@@ -293,22 +300,36 @@ abstract final class ApoTransit {
   }
 
   static String? _findBundleModule(_BundleManifest manifest) {
+    final String extension;
+    final String preferredDirectory;
+    if (Platform.isWindows) {
+      extension = '.vst3';
+      preferredDirectory = 'contents/x86_64-win/';
+    } else if (Platform.isLinux) {
+      extension = '.so';
+      preferredDirectory = 'contents/x86_64-linux/';
+    } else if (Platform.isMacOS) {
+      extension = '.dylib';
+      preferredDirectory = 'contents/macos/';
+    } else {
+      return null;
+    }
+
     final paths = manifest.files.keys.toList()..sort();
     String? preferred;
-    String? anyVst3;
-    String? firstFile;
+    String? platformModule;
     for (final path in paths) {
       final lower = path.toLowerCase();
-      firstFile ??= path;
-      if (!lower.endsWith('.vst3')) continue;
-      anyVst3 ??= path;
-      const archPrefix = 'contents/x86_64-win/';
-      if (lower.startsWith(archPrefix) &&
-          !lower.substring(archPrefix.length).contains('/')) {
+      if (!lower.endsWith(extension)) continue;
+      platformModule ??= path;
+      if (lower.startsWith(preferredDirectory) &&
+          !lower.substring(preferredDirectory.length).contains('/')) {
         preferred ??= path;
       }
     }
-    return preferred ?? anyVst3 ?? firstFile;
+    // Sorted fallback is deterministic, but an unrelated resource file is
+    // never a substitute for a recognized platform module.
+    return preferred ?? platformModule;
   }
 
   static Future<void> _copyBundleTree(

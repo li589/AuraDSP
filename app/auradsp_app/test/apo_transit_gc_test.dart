@@ -3,6 +3,7 @@
 // bundle 目录被删；无引用但年轻的条目保留（安全垫）；根不存
 // 在返回 0。全部在临时目录内完成，不触真实中转根。
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -23,6 +24,7 @@ typedef _SyncWriteHandler = void Function(
   bool flush,
 );
 typedef _AsyncRenameHandler = Future<File> Function(File file, String newPath);
+typedef _SyncRenameHandler = File Function(File file, String newPath);
 typedef _DirectoryRenameHandler = Future<Directory> Function(
   Directory directory,
   String newPath,
@@ -35,12 +37,14 @@ final class _FileOverrides extends IOOverrides {
     this.onWrite,
     this.onWriteSync,
     this.onRename,
+    this.onRenameSync,
     this.onDirectoryRename,
   });
 
   final _AsyncWriteHandler? onWrite;
   final _SyncWriteHandler? onWriteSync;
   final _AsyncRenameHandler? onRename;
+  final _SyncRenameHandler? onRenameSync;
   final _DirectoryRenameHandler? onDirectoryRename;
 
   @override
@@ -49,6 +53,7 @@ final class _FileOverrides extends IOOverrides {
     onWrite: onWrite,
     onWriteSync: onWriteSync,
     onRename: onRename,
+    onRenameSync: onRenameSync,
   );
 
   @override
@@ -64,12 +69,14 @@ class _DelegatingFile implements File {
     this.onWrite,
     this.onWriteSync,
     this.onRename,
+    this.onRenameSync,
   });
 
   final File _delegate;
   final _AsyncWriteHandler? onWrite;
   final _SyncWriteHandler? onWriteSync;
   final _AsyncRenameHandler? onRename;
+  final _SyncRenameHandler? onRenameSync;
 
   @override
   String get path => _delegate.path;
@@ -98,6 +105,7 @@ class _DelegatingFile implements File {
     bool flush = false,
   }) async {
     if (onWrite != null) {
+      expect(flush, isTrue, reason: 'async staging writes must be flushed');
       await onWrite!(_delegate, bytes, mode, flush);
     } else {
       await _delegate.writeAsBytes(bytes, mode: mode, flush: flush);
@@ -112,6 +120,7 @@ class _DelegatingFile implements File {
     bool flush = false,
   }) {
     if (onWriteSync != null) {
+      expect(flush, isTrue, reason: 'sync staging writes must be flushed');
       onWriteSync!(_delegate, bytes, mode, flush);
     } else {
       _delegate.writeAsBytesSync(bytes, mode: mode, flush: flush);
@@ -123,7 +132,9 @@ class _DelegatingFile implements File {
       ? onRename!(_delegate, newPath)
       : _delegate.rename(newPath);
   @override
-  File renameSync(String newPath) => _delegate.renameSync(newPath);
+  File renameSync(String newPath) => onRenameSync != null
+      ? onRenameSync!(_delegate, newPath)
+      : _delegate.renameSync(newPath);
   @override
   Future<File> delete({bool recursive = false}) async {
     await _delegate.delete(recursive: recursive);
@@ -281,6 +292,7 @@ void main() {
     late File destination;
     late Directory bundle;
     late List<int> moduleBytes;
+    late String moduleRelativePath;
     late Directory bundleDestination;
 
     setUp(() {
@@ -294,13 +306,18 @@ void main() {
         '${root.path}${Platform.pathSeparator}${_sha256(bytes)}.wav',
       );
       moduleBytes = _patternBytes(4096);
+      moduleRelativePath = Platform.isWindows
+          ? 'Contents/x86_64-win/module.vst3'
+          : Platform.isLinux
+          ? 'Contents/x86_64-linux/module.so'
+          : 'Contents/MacOS/module.dylib';
       bundle = Directory('${tmp.path}${Platform.pathSeparator}source.vst3');
-      final moduleDir = Directory(
-        '${bundle.path}${Platform.pathSeparator}Contents'
-        '${Platform.pathSeparator}x86_64-win',
-      )..createSync(recursive: true);
-      File('${moduleDir.path}${Platform.pathSeparator}module.vst3')
-          .writeAsBytesSync(moduleBytes);
+      final module = File(
+        '${bundle.path}${Platform.pathSeparator}'
+        '${moduleRelativePath.replaceAll('/', Platform.pathSeparator)}',
+      );
+      module.parent.createSync(recursive: true);
+      module.writeAsBytesSync(moduleBytes);
       File('${bundle.path}${Platform.pathSeparator}resource.bin')
           .writeAsBytesSync(_patternBytes(8192));
       bundleDestination = Directory(
@@ -338,17 +355,34 @@ void main() {
     test(
       'identical existing destination is preserved without replacement',
       () async {
+        final fixedMtime = DateTime(2001, 2, 3, 4, 5, 6);
         destination.writeAsBytesSync(bytes);
-        final before = destination.statSync();
+        destination.setLastModifiedSync(fixedMtime);
+        var destinationWrites = 0;
+        var destinationRenames = 0;
 
-        final result = await ApoTransit.transitPathForAsync(
-          source.path,
-          rootOverride: root.path,
+        final result = await IOOverrides.runWithIOOverrides(
+          () => ApoTransit.transitPathForAsync(
+            source.path,
+            rootOverride: root.path,
+          ),
+          _FileOverrides(
+            onWrite: (file, pending, mode, flush) async {
+              if (file.path == destination.path) destinationWrites++;
+              await file.writeAsBytes(pending, mode: mode, flush: flush);
+            },
+            onRename: (file, newPath) async {
+              if (newPath == destination.path) destinationRenames++;
+              return file.rename(newPath);
+            },
+          ),
         );
 
         expect(result, destination.path);
         expect(destination.readAsBytesSync(), bytes);
-        expect(destination.statSync().modified, before.modified);
+        expect(destination.statSync().modified, fixedMtime);
+        expect(destinationWrites, 0);
+        expect(destinationRenames, 0);
         expect(root.listSync().map((entity) => entity.path), [
           destination.path,
         ]);
@@ -441,6 +475,50 @@ void main() {
       expect(root.listSync().map((entity) => entity.path), [destination.path]);
     });
 
+    test('sync publication rejects a pending async publication', () async {
+      final renameStarted = Completer<void>();
+      final releaseRename = Completer<void>();
+      var commits = 0;
+      final asyncPublication = IOOverrides.runWithIOOverrides(
+        () => ApoTransit.transitPathForAsync(
+          source.path,
+          rootOverride: root.path,
+        ),
+        _FileOverrides(
+          onRename: (file, newPath) async {
+            if (newPath == destination.path) {
+              commits++;
+              if (!renameStarted.isCompleted) renameStarted.complete();
+              await releaseRename.future;
+            }
+            return file.rename(newPath);
+          },
+        ),
+      );
+
+      await renameStarted.future.timeout(const Duration(seconds: 5));
+      final syncResult = IOOverrides.runWithIOOverrides(
+        () => ApoTransit.transitPathFor(source.path, rootOverride: root.path),
+        _FileOverrides(
+          onWriteSync: (file, pending, mode, flush) {
+            file.writeAsBytesSync(pending, mode: mode, flush: flush);
+          },
+          onRenameSync: (file, newPath) {
+            if (newPath == destination.path) commits++;
+            return file.renameSync(newPath);
+          },
+        ),
+      );
+      releaseRename.complete();
+      final asyncResult = await asyncPublication;
+
+      expect(syncResult, isNull, reason: 'sync must not block on async work');
+      expect(asyncResult, destination.path);
+      expect(commits, 1, reason: 'mixed paths have at most one committer');
+      expect(destination.readAsBytesSync(), bytes);
+      expect(root.listSync().map((entity) => entity.path), [destination.path]);
+    });
+
     test('interrupted bundle copy leaves no final directory', () async {
       final result = await IOOverrides.runWithIOOverrides(
         () => ApoTransit.transitBundlePathForAsync(
@@ -506,6 +584,22 @@ void main() {
       expect(root.listSync(), isEmpty);
     });
 
+    test('resource-only bundle is rejected without a main module', () async {
+      File(
+        '${bundle.path}${Platform.pathSeparator}'
+        '${moduleRelativePath.replaceAll('/', Platform.pathSeparator)}',
+      ).deleteSync();
+
+      final result = await ApoTransit.transitBundlePathForAsync(
+        bundle.path,
+        rootOverride: root.path,
+      );
+
+      expect(result, isNull);
+      expect(bundleDestination.existsSync(), isFalse);
+      expect(root.listSync(), isEmpty);
+    });
+
     test(
       'bundle publishes only after full-tree hash and count verification',
       () async {
@@ -517,9 +611,8 @@ void main() {
         expect(result, bundleDestination.path);
         expect(
           File(
-            '${bundleDestination.path}${Platform.pathSeparator}Contents'
-            '${Platform.pathSeparator}x86_64-win'
-            '${Platform.pathSeparator}module.vst3',
+            '${bundleDestination.path}${Platform.pathSeparator}'
+            '${moduleRelativePath.replaceAll('/', Platform.pathSeparator)}',
           ).readAsBytesSync(),
           moduleBytes,
         );
@@ -594,9 +687,8 @@ void main() {
           bundleDestination.path,
         );
         final module = File(
-          '${bundleDestination.path}${Platform.pathSeparator}Contents'
-          '${Platform.pathSeparator}x86_64-win'
-          '${Platform.pathSeparator}module.vst3',
+          '${bundleDestination.path}${Platform.pathSeparator}'
+          '${moduleRelativePath.replaceAll('/', Platform.pathSeparator)}',
         );
         final before = module.statSync();
         var renames = 0;
@@ -707,9 +799,8 @@ void main() {
       expect(commits, 1);
       expect(
         File(
-          '${bundleDestination.path}${Platform.pathSeparator}Contents'
-          '${Platform.pathSeparator}x86_64-win'
-          '${Platform.pathSeparator}module.vst3',
+          '${bundleDestination.path}${Platform.pathSeparator}'
+          '${moduleRelativePath.replaceAll('/', Platform.pathSeparator)}',
         ).readAsBytesSync(),
         moduleBytes,
       );
