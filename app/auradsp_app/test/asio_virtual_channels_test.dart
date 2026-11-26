@@ -710,6 +710,78 @@ void main() {
       expect(m.vizChannelCount.value, 6);
     });
 
+    test('重叠 writer 跨请求保留身份，迟到旧 token 不改写当前历史', () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      final commands = _IsoCommands(m);
+      addTearDown(commands.close);
+      addTearDown(m.dispose);
+      m.asioActive = true;
+      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 100, 'dawCh': 2};
+
+      expect(m.setAsioDriverChannels(4), isTrue);
+      await commands.flush();
+      final firstToken = commands.requestSeqs.last;
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: firstToken,
+        writerPid: 100,
+        frames: 100,
+      ));
+      expect(m.displayChannelCount, 2);
+
+      expect(m.setAsioDriverChannels(8), isTrue);
+      await commands.flush();
+      final secondToken = commands.requestSeqs.last;
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 6,
+        requestSeq: secondToken,
+        writerPid: 200,
+        frames: 1,
+      ));
+      expect(m.displayChannelCount, 6);
+
+      // T1 的迟到事件只能登记 writer 身份，不能替换 T2 的当前历史。
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: firstToken,
+        writerPid: 100,
+        frames: 101,
+      ));
+      expect(m.displayChannelCount, 6);
+
+      expect(m.setAsioDriverChannels(4), isTrue);
+      await commands.flush();
+      final thirdToken = commands.requestSeqs.last;
+
+      // writer200 在 T3 前已存在；仅有 running 上升不足以构成新 epoch。
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: thirdToken,
+        writerPid: 200,
+        frames: 102,
+      ));
+      expect(m.displayChannelCount, 4);
+      expect(m.vizChannelCount.value, 4);
+
+      // 精确 token 配合当前请求内观察到的 stopped→started 仍可确认。
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 2,
+        requestSeq: thirdToken,
+        writerPid: 200,
+        running: false,
+        frames: 103,
+      ));
+      m.handleMessageForTesting(_asioStatusEvt(
+        dawCh: 6,
+        requestSeq: thirdToken,
+        writerPid: 200,
+        frames: 1,
+      ));
+      expect(m.displayChannelCount, 6);
+      expect(m.vizChannelCount.value, 6);
+    });
+
     test('断线时请求在 isoReady 重放，且先于 asiomode', () async {
       final registry = _FakeRegistry();
       final m = _virtualAsio(registry: registry);

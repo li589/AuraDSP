@@ -44,9 +44,12 @@ class _AsioVirtualChannelRequest {
     if (requestSeq == 0) requestSeq = 1;
     acknowledgedRequestSeq = null;
     _lastWriterPid = previousWriterPid ?? _lastWriterPid;
-    _writerEpochs.clear();
+    // writer 身份跨请求保留，但每个新 token 的 epoch 证据必须重新观察。
+    _writerEpochs.updateAll((_, _) => false);
     final previousWriter = _lastWriterPid;
-    if (previousWriter != null) _writerEpochs[previousWriter] = false;
+    if (previousWriter != null) {
+      _writerEpochs.putIfAbsent(previousWriter, () => false);
+    }
     _acceptedWriterPid = null;
     _acceptedDawCh = null;
     _invalidated = false;
@@ -68,9 +71,8 @@ class _AsioVirtualChannelRequest {
   }) {
     if (_invalidated || writerPid <= 0) return false;
     if (token != requestSeq) {
-      // 迟到旧 token 仍证明该 writer 已存在，但不能把旧 running/stopped
-      // 状态冒充当前 token 的 epoch 证据。
-      _lastWriterPid = writerPid;
+      // 迟到旧 token 仍证明该 writer 已存在，但不能替换当前请求历史，
+      // 也不能把旧 running/stopped 状态冒充当前 token 的 epoch 证据。
       _writerEpochs.putIfAbsent(writerPid, () => false);
       return false;
     }
