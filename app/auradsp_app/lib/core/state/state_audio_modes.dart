@@ -21,13 +21,15 @@ bool idsConflictResolved(String capId, String outId, String defaultRenderId) {
 }
 
 /// 虚拟 ASIO 档位请求的 App 侧代际。原生遥测 ABI 不含请求代号，
-/// 因此用请求序号 + 请求时的 asioInfo 对象身份区分「新请求尚未确认」
-/// 与「旧实例回声」；asiostatus 每次到达都会替换 asioInfo。
+/// 因此只有「停止后重启 + processedFrames 回退」才作为新实例证据；
+/// asiostatus 的 Map 身份每次都会变化，不能用于确认请求。
 class _AsioVirtualChannelRequest {
   int generation = 0;
   int acknowledgedGeneration = 0;
   int? requestedCh;
-  Object? telemetryAtRequest;
+  bool stoppedSinceRequest = false;
+  int? framesBeforeRestart;
+  bool newInstanceObserved = false;
 }
 
 final _asioVirtualChannelRequests = Expando<_AsioVirtualChannelRequest>();
@@ -81,6 +83,9 @@ extension AudioModesState on AppModel {
         _runApoDetachThenMode();
         return;
       }
+    }
+    if (audioMode == 'asio' && valid != 'asio') {
+      _invalidateAsioVirtualChannelRequest();
     }
     config.modeCategory = AudioModes.categoryForMode(valid);
     if (config.modeCategory == AudioModes.categoryAttachment) {
@@ -405,6 +410,11 @@ extension AudioModesState on AppModel {
   /// 漂移（非 asio）时经 setAudioMode 收口。
   void setAsioFlavor(String flavor) {
     if (!AudioModes.isValidAsioFlavor(flavor)) return;
+    if (config.asioFlavor != flavor &&
+        (config.asioFlavor == AudioModes.asioVirtual ||
+            flavor != AudioModes.asioVirtual)) {
+      _invalidateAsioVirtualChannelRequest();
+    }
     config.asioFlavor = flavor;
     if (config.modeCategory == AudioModes.categoryAsio) {
       _applyAsioFlavorToPair();
@@ -1540,12 +1550,73 @@ extension AudioModesState on AppModel {
     return null;
   }
 
+  /// 当前尚未被新实例证据确认的虚拟 ASIO 请求宽度。
+  int? get _pendingAsioVirtualRequestCh {
+    if (audioMode != 'asio') return null;
+    if (config.asioFlavor != AudioModes.asioVirtual) return null;
+    final request = _asioVirtualChannelRequests[this];
+    final requested = request?.requestedCh;
+    if (request == null ||
+        requested == null ||
+        request.acknowledgedGeneration == request.generation) {
+      return null;
+    }
+    return requested;
+  }
+
+  void _invalidateAsioVirtualChannelRequest() {
+    final request = _asioVirtualChannelRequests[this];
+    if (request == null) return;
+    request.acknowledgedGeneration = request.generation;
+    request.requestedCh = null;
+    request.stoppedSinceRequest = false;
+    request.framesBeforeRestart = null;
+    request.newInstanceObserved = false;
+  }
+
+  /// 用原生遥测里真实存在的实例证据确认请求：running false→true，
+  /// 且 dawFrames（驱动 processedFrames 的转发）相对旧实例回退。
+  /// Map 身份、同宽迟到事件或帧数正常增长都不是确认。
+  void _observeAsioVirtualTelemetry({
+    required bool running,
+    required int? frames,
+    required int dawCh,
+  }) {
+    if (_pendingAsioVirtualRequestCh == null) return;
+    final request = _asioVirtualChannelRequests[this]!;
+    final previousFrames = request.framesBeforeRestart;
+    if (frames != null &&
+        (previousFrames == null || frames > previousFrames)) {
+      request.framesBeforeRestart = frames;
+    }
+    if (!running) {
+      request.stoppedSinceRequest = true;
+      return;
+    }
+    if (request.stoppedSinceRequest) {
+      request.stoppedSinceRequest = false;
+      final beforeRestart = request.framesBeforeRestart;
+      if (frames != null && beforeRestart != null && frames < beforeRestart) {
+        request.newInstanceObserved = true;
+        // 旧实例的预确认流宽不再属于新实例，确认后必须让 dawCh 接管。
+        _lastVizChAt = null;
+        _streamCh = 0;
+      }
+    }
+    if (request.newInstanceObserved &&
+        (dawCh == 2 || dawCh == 4 || dawCh == 6 || dawCh == 8)) {
+      request.acknowledgedGeneration = request.generation;
+      request.requestedCh = null;
+      request.newInstanceObserved = false;
+    }
+  }
+
   /// 虚拟 ASIO 形态的工作声道数（状态侧唯一口径）。
   ///
   /// 虚拟形态下 App 自身不跑处理引擎——DAW 进程内的引擎实例才是真
   /// 处理者，其宽度由驱动档位（HKCU Channels）与 DAW 协商值共同决定。
-  /// 新档位请求在收到请求之后到达的匹配遥测前保持权威，避免活跃旧
-  /// 实例的 dawCh 把显示/能力钉回旧宽度；确认后重新以实际协商值为准。
+  /// 新档位请求在收到真实新实例证据前保持权威，避免活跃旧实例的
+  /// dawCh 把显示/能力钉回旧宽度；确认后重新以实际协商值为准。
   /// 无请求时仅采信活跃 DAW 的合法 dawCh，否则回落档位镜像。
   ///
   /// 注意必须要求「活跃」：驱动遥测块会跨 DAW 会话驻留，块里留着
@@ -1562,25 +1633,11 @@ extension AudioModesState on AppModel {
   int? _asioVirtualWorkCh() {
     if (audioMode != 'asio') return null;
     if (config.asioFlavor != AudioModes.asioVirtual) return null;
+    final pending = _pendingAsioVirtualRequestCh;
+    if (pending != null) return pending;
     final dawLive =
         asioActive || ((asioInfo['dawActive'] as num?)?.toInt() ?? 0) == 1;
     final daw = (asioInfo['dawCh'] as num?)?.toInt() ?? 0;
-    final request = _asioVirtualChannelRequests[this];
-    final requested = request?.requestedCh;
-    if (request != null &&
-        requested != null &&
-        request.acknowledgedGeneration != request.generation) {
-      if (dawLive &&
-          (daw == 2 || daw == 4 || daw == 6 || daw == 8) &&
-          daw == requested &&
-          !identical(asioInfo, request.telemetryAtRequest)) {
-        request.acknowledgedGeneration = request.generation;
-        request.requestedCh = null;
-        request.telemetryAtRequest = asioInfo;
-        return daw;
-      }
-      return requested;
-    }
     if (dawLive && (daw == 2 || daw == 4 || daw == 6 || daw == 8)) return daw;
     final d = asioDriverChannels;
     return (d == 4 || d == 6 || d == 8) ? d : 2;
@@ -1591,7 +1648,9 @@ extension AudioModesState on AppModel {
         _AsioVirtualChannelRequest();
     request.generation++;
     request.requestedCh = count;
-    request.telemetryAtRequest = asioInfo;
+    request.stoppedSinceRequest = !asioActive;
+    request.framesBeforeRestart = (asioInfo['dawFrames'] as num?)?.toInt();
+    request.newInstanceObserved = false;
   }
 
   /// 把分模式能力发给 isolate 钳制器（第四十二轮 S1 立 chcap，
@@ -1627,6 +1686,8 @@ extension AudioModesState on AppModel {
   /// 侧用于 stageCh 切片等来源真相用途，不经此处。
   int clampStreamChForDisplay(int cc) {
     if (cc <= 0) return cc;
+    final pending = _pendingAsioVirtualRequestCh;
+    if (pending != null) return _normCh(pending);
     var eff = cc;
     final cap = _displayCapCh();
     if (channelsCountMode == 1) {
@@ -1650,12 +1711,14 @@ extension AudioModesState on AppModel {
   /// 显示侧钳制能力：与 isolate 生效口径同源——直接取 S2 的
   /// 分模式能力计算（第四十五轮起单一真相；r44 版只覆盖
   /// sysapo 与管线输出侧，现含管线入侧 min 与 VAIO/VB）。
-  /// 流活跃时 _streamCh 真值优先于一切合成（见
-  /// displayChannelCount 首行）。
+  /// 流活跃时 _streamCh 真值优先于合成；唯一例外是尚未确认的虚拟
+  /// ASIO 档位请求，它必须压过旧实例的预确认流宽。
   int? _displayCapCh() => _capabilityChForMode();
 
   /// 显示用工作声道数（合成口径见上）。
   int get displayChannelCount {
+    final pending = _pendingAsioVirtualRequestCh;
+    if (pending != null) return _normCh(pending);
     if (_streamChLive) return _streamCh;
     if (channelsCountMode == 1) {
       var want = channelsCount;
@@ -1676,7 +1739,8 @@ extension AudioModesState on AppModel {
     return effectiveChannelCount;
   }
 
-  /// 把合成值推入 vizChannelCount（流活跃时不推，免与真值打架）。
+  /// 把合成值推入 vizChannelCount（流活跃时不推，免与真值打架；
+  /// 未确认的虚拟 ASIO 请求例外，必须覆盖旧实例流宽）。
   ///
   /// 覆盖门（收口复验修正）：vizChannelCount 的现值若非零、且
   /// 从未有过流事件、且自上次合成以来无显示相关变更，则它
@@ -1684,8 +1748,10 @@ extension AudioModesState on AppModel {
   /// 不得覆盖——合成只接管三类情形：从未写入（0）、流已停
   /// （有过流事件）、显示相关状态变更之后（代际递增）。
   void refreshDisplayChannelCount() {
-    if (_streamChLive) return;
-    if (vizChannelCount.value != 0 &&
+    final pending = _pendingAsioVirtualRequestCh;
+    if (pending == null && _streamChLive) return;
+    if (pending == null &&
+        vizChannelCount.value != 0 &&
         _lastVizChAt == null &&
         _displayGen == _displayGenConsumed) {
       return;
@@ -1851,6 +1917,10 @@ extension AudioModesState on AppModel {
   bool setAsioDriverChannels(int ch) {
     if (!const {2, 4, 6, 8}.contains(ch)) return false;
     if (!_writeAsioDriverChannels(ch)) return false;
+    if (audioMode != 'asio' ||
+        config.asioFlavor != AudioModes.asioVirtual) {
+      _invalidateAsioVirtualChannelRequest();
+    }
     asioDriverChannels = ch;
     _applyChannelsCount(ch, syncAsioRegistry: false);
     return true;

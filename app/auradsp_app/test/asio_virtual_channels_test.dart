@@ -9,16 +9,20 @@
 //   2) 驱动遥测块跨 DAW 会话驻留，块里留着上次会话的 dawCh。只要块在
 //      就采信会把档位改动钉死在残留值上，因此只有 DAW 活跃时才认
 //      dawCh，其余用档位镜像。
+import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:auradsp_app/core/audio_modes.dart';
 import 'package:auradsp_app/core/config.dart';
 import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
+import 'package:auradsp_app/engine/auradsp_ffi.dart';
 import 'package:auradsp_app/features/settings_page.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 import 'package:auradsp_app/platform/port/registry.dart';
+import 'package:auradsp_app/platform/platform_profile.dart';
 import 'package:auradsp_app/ui/chrome.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -57,6 +61,76 @@ class _FakeRegistry implements RegistryPort {
   @override
   bool deleteValue(String keyPath, String valueName) => true;
 }
+
+class _IsoCommands {
+  final ReceivePort _port = ReceivePort();
+  final List<Map<String, dynamic>> sent = [];
+  late final StreamSubscription<dynamic> _subscription;
+
+  _IsoCommands(AppModel model) {
+    _subscription = _port.listen((raw) {
+      if (raw is Map) sent.add(Map<String, dynamic>.from(raw));
+    });
+    model.handleMessageForTesting({'evt': 'isoReady', 'port': _port.sendPort});
+  }
+
+  Future<void> flush() => Future<void>.delayed(Duration.zero);
+
+  Future<void> close() async {
+    await _subscription.cancel();
+    _port.close();
+  }
+
+  List<int> get channelCapabilities => [
+        for (final command in sent)
+          if (command['cmd'] == 'chcap') (command['ch'] as num).toInt(),
+      ];
+}
+
+Map<String, dynamic> _paramsEvt({
+  required int channelsCount,
+  int channelsCountMode = 1,
+}) =>
+    {
+      'evt': 'params',
+      'bassEnable': 0,
+      'bassGain': 0.0,
+      'reverbPreset': -1,
+      'stereoMix': 0.0,
+      'eqEnable': 0,
+      'postGain': 0.0,
+      'limiterEnable': 1,
+      'lpEnable': 0,
+      'lpStatus': 0,
+      'convEnable': 0,
+      'convReady': 0,
+      'convFrames': 0,
+      'convChannels': 2,
+      'convSrcRate': 48000,
+      'convPeak': 0.0,
+      'tubeEnable': 0,
+      'xfeedEnable': 0,
+      'stereoBandUsed': 0,
+      'convMix': 1.0,
+      'shelfEnable': 0,
+      'shelfFreq': 0.0,
+      'shelfGain': 0.0,
+      'channelsCount': channelsCount,
+      'channelsCountMode': channelsCountMode,
+    };
+
+Map<String, dynamic> _vizEvt(int channelCount) => {
+      'evt': 'viz',
+      'backend': 'asio',
+      'ts': DateTime.now().millisecondsSinceEpoch,
+      'spectrum': List<double>.filled(32, 0.0),
+      'eqIn': List<double>.filled(32, 0.0),
+      'l': -90.0,
+      'r': -90.0,
+      'chCount': channelCount,
+      'chLevels': List<double>.filled(channelCount, -120.0),
+      'stageCh': List<double>.filled(kVizStageTelemetry * channelCount, -120.0),
+    };
 
 /// 虚拟 ASIO 形态的模型：ASIO 范式 + 虚拟子形态 + asio 链。
 AppModel _virtualAsio({RegistryPort? registry}) {
@@ -219,12 +293,40 @@ void main() {
       expect(m.displayChannelCount, 8);
     });
 
-    test('活跃旧 dawCh=2 不钉死请求 8，匹配新遥测后才接受后续协商', () {
+    test('未确认请求 8 压过活跃旧 2ch 流与迟到 viz', () {
       final registry = _FakeRegistry();
       final m = _virtualAsio(registry: registry);
       addTearDown(m.dispose);
       m.asioActive = true;
-      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawCh': 2};
+      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 100, 'dawCh': 2};
+      m.noteStreamChannelCount(2);
+      m.vizChannelCount.value = 2;
+      expect(m.displayChannelCount, 2);
+
+      expect(m.setAsioDriverChannels(8), isTrue);
+      expect(m.displayChannelCount, 8);
+      expect(m.vizChannelCount.value, 8);
+
+      // 旧实例仍在持续供帧时，迟到 2ch viz 不得把显示钉回 2。
+      m.handleMessageForTesting(_vizEvt(2));
+      expect(m.displayChannelCount, 8);
+      expect(m.vizChannelCount.value, 8);
+      expect(
+        m.sentParamsForTesting
+            .where((m) => m['id'] == 'channels.count')
+            .map((m) => m['value']),
+        [8],
+      );
+    });
+
+    test('旧 2ch 请求 8 后，新实例确认并同步 8→6 能力', () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      final commands = _IsoCommands(m);
+      addTearDown(commands.close);
+      addTearDown(m.dispose);
+      m.asioActive = true;
+      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 100, 'dawCh': 2};
       expect(m.displayChannelCount, 2);
 
       expect(m.setAsioDriverChannels(8), isTrue);
@@ -237,33 +339,46 @@ void main() {
         'running': true,
         'dawSeen': 1,
         'dawActive': 1,
-        'dawFrames': 10,
+        'dawFrames': 101,
         'dawCh': 2,
       });
       expect(m.displayChannelCount, 8);
       expect(m.vizChannelCount.value, 8);
 
-      // 新档位的首次匹配遥测确认请求已生效。
+      // 只有停止后重启且帧计数回退，才是新实例证据。
+      m.handleMessageForTesting({
+        'evt': 'asiostatus',
+        'running': false,
+        'dawSeen': 1,
+        'dawActive': 0,
+        'dawFrames': 101,
+        'dawCh': 2,
+      });
       m.handleMessageForTesting({
         'evt': 'asiostatus',
         'running': true,
         'dawSeen': 1,
         'dawActive': 1,
-        'dawFrames': 11,
+        'dawFrames': 1,
         'dawCh': 8,
       });
       expect(m.displayChannelCount, 8);
 
-      // 确认后的实际协商值重新成为真源。
+      // 确认后的实际协商值重新成为真源，能力命令必须同步。
       m.handleMessageForTesting({
         'evt': 'asiostatus',
         'running': true,
         'dawSeen': 1,
         'dawActive': 1,
-        'dawFrames': 12,
+        'dawFrames': 2,
         'dawCh': 6,
       });
+      await commands.flush();
       expect(m.displayChannelCount, 6);
+      expect(
+        commands.channelCapabilities,
+        PlatformProfile.isWindows ? [8, 6] : isEmpty,
+      );
       expect(
         m.sentParamsForTesting
             .where((m) => m['id'] == 'channels.count')
@@ -272,52 +387,118 @@ void main() {
       );
     });
 
-    test('新请求代际不被上一请求的迟到匹配遥测确认', () {
+    test('8→4→8 的迟到同宽遥测不确认请求，旧 2ch 不覆盖', () {
       final registry = _FakeRegistry();
       final m = _virtualAsio(registry: registry);
       addTearDown(m.dispose);
       m.asioActive = true;
-      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawCh': 2};
+      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 200, 'dawCh': 2};
 
       expect(m.setAsioDriverChannels(8), isTrue);
       expect(m.setAsioDriverChannels(4), isTrue);
-      expect(m.displayChannelCount, 4);
+      expect(m.setAsioDriverChannels(8), isTrue);
+      expect(m.displayChannelCount, 8);
       expect(
         m.sentParamsForTesting
             .where((m) => m['id'] == 'channels.count')
             .map((m) => m['value']),
-        [8, 4],
+        [8, 4, 8],
       );
 
+      // 宽度恰好等于当前请求，但仍是同一存活实例的迟到事件。
       m.handleMessageForTesting({
         'evt': 'asiostatus',
         'running': true,
         'dawSeen': 1,
         'dawActive': 1,
-        'dawFrames': 20,
+        'dawFrames': 201,
         'dawCh': 8,
       });
-      expect(m.displayChannelCount, 4);
+      expect(m.displayChannelCount, 8);
 
       m.handleMessageForTesting({
         'evt': 'asiostatus',
         'running': true,
         'dawSeen': 1,
         'dawActive': 1,
-        'dawFrames': 21,
-        'dawCh': 4,
+        'dawFrames': 202,
+        'dawCh': 2,
       });
-      expect(m.displayChannelCount, 4);
+      expect(m.displayChannelCount, 8);
+      expect(m.vizChannelCount.value, 8);
+      expect(registry.dwordWrites.map((write) => write.value), [8, 4, 8]);
+    });
 
+    test('真实新实例协商 6ch 可确认请求 8', () async {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      final commands = _IsoCommands(m);
+      addTearDown(commands.close);
+      addTearDown(m.dispose);
+      m.asioActive = true;
+      m.asioInfo = {'dawSeen': 1, 'dawActive': 1, 'dawFrames': 300, 'dawCh': 2};
+      m.noteStreamChannelCount(2);
+      m.vizChannelCount.value = 2;
+
+      expect(m.setAsioDriverChannels(8), isTrue);
+      m.handleMessageForTesting(_vizEvt(2));
+      expect(m.displayChannelCount, 8);
+      expect(m.vizChannelCount.value, 8);
+      m.handleMessageForTesting({
+        'evt': 'asiostatus',
+        'running': false,
+        'dawSeen': 1,
+        'dawActive': 0,
+        'dawFrames': 301,
+        'dawCh': 2,
+      });
       m.handleMessageForTesting({
         'evt': 'asiostatus',
         'running': true,
         'dawSeen': 1,
         'dawActive': 1,
-        'dawFrames': 22,
+        'dawFrames': 1,
         'dawCh': 6,
       });
+      await commands.flush();
+
       expect(m.displayChannelCount, 6);
+      expect(m.vizChannelCount.value, 6);
+      expect(
+        commands.channelCapabilities,
+        PlatformProfile.isWindows ? [8, 6] : isEmpty,
+      );
+      expect(
+        m.sentParamsForTesting
+            .where((m) => m['id'] == 'channels.count')
+            .map((m) => m['value']),
+        [8],
+      );
+    });
+
+    test('virtual→Client→driver4→virtual 不复活旧请求', () {
+      final registry = _FakeRegistry();
+      final m = _virtualAsio(registry: registry);
+      addTearDown(m.dispose);
+      m.asioActive = false;
+      m.asioInfo = {'dawSeen': 1, 'dawActive': 0, 'dawCh': 2};
+
+      expect(m.setAsioDriverChannels(8), isTrue);
+      expect(m.displayChannelCount, 8);
+
+      m.setAsioFlavor(AudioModes.asioClient);
+      expect(m.setAsioDriverChannels(4), isTrue);
+      m.setAsioFlavor(AudioModes.asioVirtual);
+
+      expect(m.asioDriverChannels, 4);
+      expect(m.displayChannelCount, 4);
+      expect(m.vizChannelCount.value, 4);
+      expect(
+        m.sentParamsForTesting
+            .where((m) => m['id'] == 'channels.count')
+            .map((m) => m['value']),
+        [8],
+      );
       expect(registry.dwordWrites.map((write) => write.value), [8, 4]);
     });
 
@@ -332,6 +513,11 @@ void main() {
       addTearDown(m.dispose);
       m.setChannelsCountMode(1);
       expect(m.setAsioDriverChannels(8), isTrue);
+
+      // 引擎基线仍是 2ch/fixed；未确认的驱动档位 8 必须压过旧回读。
+      m.handleMessageForTesting(_paramsEvt(channelsCount: 2));
+      expect(m.channelsCount, 8);
+      expect(m.config.channelsCount, 8);
 
       await tester.pumpWidget(_app(m));
       await tester.pumpAndSettle();

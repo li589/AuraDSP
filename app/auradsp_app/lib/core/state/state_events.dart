@@ -300,7 +300,9 @@ extension StateEvents on AppModel {
         if (raw['channelsCount'] != null) {
           final c = raw['channelsCount'] as int;
           if (c == 2 || c == 4 || c == 6 || c == 8) {
-            channelsCount = c;
+            // 虚拟 ASIO 的新档位请求确认前，旧引擎的 2ch 基线回读
+            // 不得把两个 UI 控件拉回旧宽度。
+            if (_pendingAsioVirtualRequestCh == null) channelsCount = c;
           }
         }
         // X-6 修复配套：dyneq/exciter 的 no-LFE 默认掩码随 channels.count
@@ -1224,8 +1226,16 @@ extension StateEvents on AppModel {
         final wasA = asioActive;
         final prevSink = (asioInfo['dawSinkEndpoint'] as String?) ?? '';
         final prevDawCh = (asioInfo['dawCh'] as num?)?.toInt() ?? 0;
+        final prevAsioWorkCh = _asioVirtualWorkCh();
         asioActive = (raw['running'] as bool?) ?? false;
         asioInfo = Map<String, dynamic>.from(raw);
+        final dawCh = (raw['dawCh'] as num?)?.toInt() ?? 0;
+        _observeAsioVirtualTelemetry(
+          running: asioActive,
+          frames: (raw['dawFrames'] as num?)?.toInt(),
+          dawCh: dawCh,
+        );
+        final asioWorkCh = _asioVirtualWorkCh();
         // 全面复审 S1（ASIO-3）：起桥失败 note 此前无任何用户可见
         // 面——同 VAIO-5 口径按 note 去重通知一次。
         final asioNote = (raw['note'] as String?) ?? '';
@@ -1257,11 +1267,11 @@ extension StateEvents on AppModel {
           asioResetRestartInFlight = false;
         }
         // 声道面（真机 2026-11-21）：虚拟形态的引擎宽度由 DAW 协商
-        // 值决定，App 自身镜像不作数——协商宽度变化即重算显示面，
-        // 否则设了 7.1 仍按 2.0 显示电平/可视化。
-        final dawCh = (raw['dawCh'] as num?)?.toInt() ?? 0;
-        if (dawCh != prevDawCh) {
+        // 值决定，App 自身镜像不作数。只有有效宽度真变时才刷显示；
+        // 新实例确认或后续协商变化还必须同步能力钳制器。
+        if (dawCh != prevDawCh || asioWorkCh != prevAsioWorkCh) {
           _displayGen++;
+          if (asioWorkCh != prevAsioWorkCh) _sendChCap();
           refreshDisplayChannelCount();
         }
         // 端点面：汇实际端点 id 变化而本地设备表认不出它 → 主动重扫
