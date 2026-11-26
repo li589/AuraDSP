@@ -90,7 +90,9 @@ def check_driver_payload_signed(dest: Path, *, warn_only: bool) -> None:
     if not cats:
         problems.append("随包 driver/ 缺 .cat 目录文件")
     elif sys.platform != "win32":
-        log(f"警告: 非 Windows 平台无法验证 .cat 签名，跳过签名门: {cats[0]}")
+        if not warn_only:
+            raise SystemExit("正式 Windows 驱动包必须在 Windows 上验证 .cat 签名")
+        log(f"警告: 非 Windows 平台跳过 fixture 签名验证: {cats[0]}")
         return
     else:
         # 载荷里每一只 .cat 都验（审查 F-9）：只验一只时，载荷构成

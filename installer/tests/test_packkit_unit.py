@@ -18,6 +18,7 @@ import sys
 import tempfile
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 _INSTALLER = Path(__file__).resolve().parents[1]
 if str(_INSTALLER) not in sys.path:
@@ -34,7 +35,7 @@ from packkit.deliver import (  # noqa: E402
 )
 from packkit.resources import resource_pack_paths  # noqa: E402
 from packkit.version import resolve_version  # noqa: E402
-from packkit.windows import setup_image  # noqa: E402
+from packkit.windows import setup_image, signing  # noqa: E402
 
 FAILURES: list[str] = []
 
@@ -264,9 +265,60 @@ def test_version() -> None:
           ver["AURADSP_FULL_VERSION"] == f"{ver['AURADSP_VERSION']}.{ver['AURADSP_BUILD']}")
 
 
+def test_driver_signature_gate() -> None:
+    print("== Windows 驱动载荷签名门 ==")
+    with tempfile.TemporaryDirectory() as td:
+        dest = Path(td)
+        cat = dest / "auravaiodriver.cat"
+        cat.write_bytes(b"fixture")
+
+        with mock.patch.object(signing.sys, "platform", "linux"), \
+                mock.patch.object(signing, "authenticode_info",
+                                  side_effect=AssertionError("不得执行真实签名验证")):
+            try:
+                signing.check_driver_payload_signed(dest, warn_only=False)
+            except SystemExit:
+                check("非 Windows 正式签名门失败关闭", True)
+            else:
+                check("非 Windows 正式签名门失败关闭", False)
+
+            try:
+                signing.check_driver_payload_signed(dest, warn_only=True)
+            except (SystemExit, AssertionError) as e:
+                check("非 Windows fixture 仅 warn-only 可绕过", False, f"→ {e}")
+            else:
+                check("非 Windows fixture 仅 warn-only 可绕过", True)
+
+        cat.unlink()
+        try:
+            signing.check_driver_payload_signed(dest, warn_only=False)
+        except SystemExit:
+            check("缺 .cat 正式签名门仍拒绝", True)
+        else:
+            check("缺 .cat 正式签名门仍拒绝", False)
+        try:
+            signing.check_driver_payload_signed(dest, warn_only=True)
+        except SystemExit as e:
+            check("缺 .cat staging 仍只警告", False, f"→ {e}")
+        else:
+            check("缺 .cat staging 仍只警告", True)
+
+        cat.write_bytes(b"fixture")
+        with mock.patch.object(signing.sys, "platform", "win32"), \
+                mock.patch.object(signing, "authenticode_info",
+                                  return_value=("Valid", "A" * 40)):
+            try:
+                signing.check_driver_payload_signed(dest, warn_only=False)
+            except SystemExit as e:
+                check("Windows 有效签名行为保持", False, f"→ {e}")
+            else:
+                check("Windows 有效签名行为保持", True)
+
+
 def main() -> int:
     for fn in (test_naming, test_round, test_hashing, test_delivery,
-               test_resources_order, test_setup_image, test_version):
+               test_resources_order, test_setup_image, test_version,
+               test_driver_signature_gate):
         fn()
         print()
     print(f"{'ALL PASS' if not FAILURES else 'FAILURES: ' + ', '.join(FAILURES)}")
