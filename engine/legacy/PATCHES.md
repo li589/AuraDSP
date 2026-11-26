@@ -1359,7 +1359,8 @@ yquist * 0.999，
 
 ## P-059 jdsp/Effects/eel2 — 矩阵原生函数 RT 入口守卫（2026-11-25，Task 5 / H3）
 
-- **位置**：`nseel-compiler.c` 的线程局部 guard 与矩阵类内建入口；
+- **位置**：`engine/legacy/jdsp/Effects/eel2/ns-eel.h` 的 RT guard API 与 C++ RAII 边界；
+  `nseel-compiler.c` 的线程局部 guard 与矩阵类内建入口；
   `eel_matrix.h` 全部 19 个包装器；`liveprogWrapper.c` 立体声 RT 块边界；
   `dsp_mc_liveprog.cpp` 多声道 RT 块边界；两处编译路径的初跑 `@slider`；
   `auradsp_engine.cpp` 公共 RT 处理入口。
