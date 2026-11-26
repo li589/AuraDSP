@@ -2,6 +2,7 @@
 """早期 vm-linux 远程执行工具（paramiko）。
 
 凭据：优先 ~/.ssh/id_ed25519 密钥；密码走 VM_PASS 环境变量。
+主机密钥：VM_KNOWN_HOSTS 必须指定受控 known_hosts，未知或变更即拒绝。
 2026-11-24（审查 F-2）：删除曾硬编码在源码里的 VM_PASS 默认值
 ——该口令已随仓库与 git 历史分发，按已泄露对待，VM 侧应轮换。
 """
@@ -10,8 +11,14 @@ import sys
 import paramiko
 
 def run_vm(cmd):
+    known_hosts = os.environ.get("VM_KNOWN_HOSTS")
+    if not known_hosts:
+        raise SystemExit("VM_KNOWN_HOSTS 环境变量未设置")
+    if not os.path.isfile(known_hosts):
+        raise SystemExit(f"known_hosts 不存在：{known_hosts}")
     ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.load_host_keys(known_hosts)
+    ssh.set_missing_host_key_policy(paramiko.RejectPolicy())
     host = os.environ.get("VM_HOST", "192.168.204.130")
     user = os.environ.get("VM_USER", "li")
     password = os.environ.get("VM_PASS")

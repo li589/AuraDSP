@@ -12,16 +12,22 @@
 # certs already and has testsigning on; this is a build-machine fix.
 #
 # Usage:
-#   .\Restore-DriverCertTrust.ps1 -CatPath D:\path\to\auravaiodriver.cat
+#   .\Restore-DriverCertTrust.ps1 -CatPath D:\path\to\auravaiodriver.cat `
+#       -ExpectedThumbprint '<signer thumbprint>' -ExpectedSubject '<signer subject>'
 param(
     [Parameter(Mandatory = $true)][string]$CatPath,
+    [Parameter(Mandatory = $true)][string]$ExpectedThumbprint,
+    [Parameter(Mandatory = $true)][string]$ExpectedSubject,
     [string]$Log = 'C:\Users\likr\restore_cert_trust.log'
 )
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $CatPath)) { throw "cat not found: $CatPath" }
 $sig = Get-AuthenticodeSignature $CatPath
+if ($sig.Status -ne 'Valid') { throw "catalog signature is not valid: $($sig.Status)" }
 $cert = $sig.SignerCertificate
 if (-not $cert) { "no signer cert embedded in $CatPath" | Out-File $Log; exit 1 }
+if ($cert.Thumbprint -ne $ExpectedThumbprint) { throw "unexpected signer thumbprint" }
+if ($cert.Subject -ne $ExpectedSubject) { throw "unexpected signer subject" }
 "embedded signer: $($cert.Thumbprint) $($cert.Subject)" | Out-File $Log
 $tmp = Join-Path $env:TEMP 'signer_from_cat.cer'
 Export-Certificate -Cert $cert -FilePath $tmp -Force | Out-Null

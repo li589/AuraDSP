@@ -537,6 +537,8 @@ def run_smoke_tests():
         # PLATFORM_ANY 分类里、从未进执行清单（静默假绿），本轮补入；
         # 防复发自检见 smoke_runner_registry.py。
         "smoke_runner_registry.py",
+        # Task 12：证书身份与 SSH 主机密钥必须失败关闭；无网络/信任库副作用。
+        "smoke_remote_security.py",
         "smoke_dart_chcap_authority.py",
         "smoke_apo_engch_truncate.py",
         "smoke_dart_r46_display_list.py",

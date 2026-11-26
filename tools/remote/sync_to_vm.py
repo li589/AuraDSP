@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """早期 vm-linux 文件同步工具（paramiko，文件清单为旧布局快照）。
 
-凭据：密码走 VM_PASS 环境变量。2026-11-24（审查 F-2）：删除曾
+凭据：密码走 VM_PASS 环境变量。主机密钥由 VM_KNOWN_HOSTS 指定受控
+known_hosts，未知或变更即拒绝。2026-11-24（审查 F-2）：删除曾
 硬编码在源码里的 VM_PASS 默认值——该口令已随仓库与 git 历史
 分发，按已泄露对待，VM 侧应轮换。
 """
@@ -66,11 +67,17 @@ def main():
     password = os.environ.get("VM_PASS")
     if not password:
         raise SystemExit("VM_PASS 环境变量未设置（源码不再内置默认口令）")
+    known_hosts = os.environ.get("VM_KNOWN_HOSTS")
+    if not known_hosts:
+        raise SystemExit("VM_KNOWN_HOSTS 环境变量未设置")
+    if not os.path.isfile(known_hosts):
+        raise SystemExit(f"known_hosts 不存在：{known_hosts}")
     remote_base = "/home/li/Workspace/AuraDSP"
     local_base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.load_host_keys(known_hosts)
+    ssh.set_missing_host_key_policy(paramiko.RejectPolicy())
     ssh.connect(hostname=host, username=user, password=password, timeout=10)
     sftp = ssh.open_sftp()
 
