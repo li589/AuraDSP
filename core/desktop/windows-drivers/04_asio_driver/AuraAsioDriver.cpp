@@ -939,9 +939,15 @@ DWORD AuraAsioDriver::PumpLoop() {
                     float* engOut = m_interleavedOut;
                     if (widthAdapt) {
                         if (m_channelMode != 0) {
-                            chmap_gather_discrete(m_interleavedIn, (int)ch,
-                                                  m_engIn, engCh,
-                                                  (int)m_bufferSize);
+                            if (engCh < (int)ch) {
+                                chmap_gather_discrete(m_interleavedIn, (int)ch,
+                                                      m_engIn, engCh,
+                                                      (int)m_bufferSize);
+                            } else {
+                                chmap_scatter_discrete(m_interleavedIn, (int)ch,
+                                                       m_engIn, engCh,
+                                                       (int)m_bufferSize);
+                            }
                         } else if (engCh < (int)ch) {
                             chmap_fold(m_interleavedIn, (int)ch, m_engIn, engCh,
                                        (int)m_bufferSize);

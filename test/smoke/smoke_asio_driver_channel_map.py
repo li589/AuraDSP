@@ -85,6 +85,18 @@ int main() {
     chmap_scatter_discrete(e4, 4, d, 8, 1);
     const float x4[8] = {1, 2, 0, 0, 0, 0, 7, 8};
     check("discrete scatter 4->8 targets BL/BR slots", frame_near(d, x4, 8));
+
+    const float e4m[12] = {1, 2, 7, 8, 11, 12, 17, 18, 21, 22, 27, 28};
+    float d6m[18] = {};
+    chmap_scatter_discrete(e4m, 4, d6m, 6, 3);
+    const float x46m[18] = {
+        1, 2, 0, 0, 7, 8,
+        11, 12, 0, 0, 17, 18,
+        21, 22, 0, 0, 27, 28,
+    };
+    check("discrete scatter 4->6 preserves every frame",
+          frame_near(d6m, x46m, 18));
+
     const float e2[2] = {1, 2};
     chmap_scatter_discrete(e2, 2, d, 6, 1);
     const float x2[6] = {1, 2, 0, 0, 0, 0};
@@ -166,10 +178,12 @@ def engine_fixtures():
 
     matrix_off = process(0, 0)
     matrix_on = process(0, 1)
-    check("matrix upmix_fill=0 leaves unused targets silent",
-          all(abs(matrix_off[c]) < 1e-6 for c in (2, 4, 5, 6, 7)))
-    check("matrix upmix_fill=1 expands to mapped targets",
-          all(abs(matrix_on[c]) > 1e-4 for c in (2, 4, 5, 6, 7)))
+    check("matrix upmix_fill=0 leaves unused targets silent in every frame",
+          all(abs(matrix_off[i * 8 + c]) < 1e-6
+              for i in range(64) for c in (2, 4, 5, 6, 7)))
+    check("matrix upmix_fill=1 expands mapped targets in every frame",
+          all(abs(matrix_on[i * 8 + c]) > 1e-4
+              for i in range(64) for c in (2, 4, 5, 6, 7)))
     for fill in (0, 1):
         discrete = process(1, fill)
         expected = [0.125, 0.125, 0, 0, 0, 0, 0, 0] * 64
@@ -188,12 +202,15 @@ def engine_fixtures():
         ctypes.POINTER(ctypes.c_float), ctypes.c_int,
         ctypes.c_int, ctypes.c_int]
     remap.restype = ctypes.c_int
-    src = (ctypes.c_float * 8)(1, 2, 3, 4, 5, 6, 7, 8)
+    def remap_samples(values, src_ch, dst_ch, frames, mode):
+        src = (ctypes.c_float * len(values))(*values)
+        dst = (ctypes.c_float * (frames * dst_ch))()
+        rc = remap(src, src_ch, dst, dst_ch, frames, mode)
+        return rc, [float(dst[i]) for i in range(frames * dst_ch)]
 
     def remap_frame(dst_ch, mode):
-        dst = (ctypes.c_float * 8)()
-        rc = remap(src, 8, dst, dst_ch, 1, mode)
-        return rc, [dst[i] for i in range(dst_ch)]
+        return remap_samples([1, 2, 3, 4, 5, 6, 7, 8],
+                             8, dst_ch, 1, mode)
 
     k = 0.70710678
     cases = [
@@ -213,23 +230,51 @@ def engine_fixtures():
               all(abs(a - b) < 1e-6 for a, b in zip(got, expected)),
               f"rc={rc} got={got} want={expected}")
 
+    # Drive the same remap ABI called by the mismatched manual WASAPI pump with
+    # three frames of distinct channel identities.  In particular, Quad BL/BR
+    # must land at stream slots 6/7 for 7.1 and engine slots 4/5 for 5.1.
+    src4 = [100 * f + c for f in range(3) for c in (1, 2, 7, 8)]
+    expected46 = [v for f in range(3)
+                  for v in (100 * f + 1, 100 * f + 2, 0, 0,
+                            100 * f + 7, 100 * f + 8)]
+    expected48 = [v for f in range(3)
+                  for v in (100 * f + 1, 100 * f + 2, 0, 0, 0, 0,
+                            100 * f + 7, 100 * f + 8)]
+    expansion_cases = [
+        ("WASAPI manual pump ABI discrete 4ch -> 6ch, all frames",
+         6, 1, expected46),
+        ("WASAPI manual pump ABI discrete 4ch -> 8ch, all frames",
+         8, 1, expected48),
+        ("WASAPI manual pump ABI matrix 4ch -> 6ch, all frames",
+         6, 0, expected46),
+        ("WASAPI manual pump ABI matrix 4ch -> 8ch, all frames",
+         8, 0, expected48),
+    ]
+    for name, dst_ch, mode, expected in expansion_cases:
+        rc, got = remap_samples(src4, 4, dst_ch, 3, mode)
+        check(name, rc == 0 and
+              all(abs(a - b) < 1e-6 for a, b in zip(got, expected)),
+              f"rc={rc} got={got} want={expected}")
+
 
 def main():
     print("== smoke_asio_driver_channel_map ==")
     with open(DRIVER, encoding="utf-8") as f:
         driver = f.read()
+    driver_flat = " ".join(driver.split())
     check("ASIO pump snapshots requested and active geometry together",
           "m_requestedGeometry.Load(&requested)" in driver and
           "GetActiveGeometry(m_engine, &activeAbi)" in driver and
           "const bool geometryReady" in driver)
     check("ASIO matrix narrowing delegates chmap_fold",
           "chmap_fold(m_interleavedIn, (int)ch, m_engIn, engCh" in driver)
-    check("ASIO discrete gather uses streamCh then engineCh",
-          "chmap_gather_discrete(m_interleavedIn, (int)ch,\n"
-          "                                                  m_engIn, engCh" in driver)
-    check("ASIO expansion and output scatter preserve slot sources",
-          "chmap_scatter_discrete(m_interleavedIn, (int)ch,\n"
-          "                                                   m_engIn, engCh" in driver and
+    check("ASIO discrete narrowing gathers and expansion scatters",
+          "if (m_channelMode != 0) { if (engCh < (int)ch) { "
+          "chmap_gather_discrete(m_interleavedIn, (int)ch, m_engIn, engCh, "
+          "(int)m_bufferSize); } else { "
+          "chmap_scatter_discrete(m_interleavedIn, (int)ch, m_engIn, engCh, "
+          "(int)m_bufferSize); }" in driver_flat)
+    check("ASIO output scatter preserves slot sources",
           "chmap_scatter_discrete(engOut, engCh, m_proc, (int)ch" in driver)
     check("ASIO process expected geometry comes from active snapshot",
           "const auradsp_geometry expected{\n"
@@ -244,6 +289,11 @@ def main():
           "lib!.remapChannels(" in isolate and
           "final rawCh = rawMulti.rawCh;" in isolate and
           "if (rawCh == engineChCount)" in isolate)
+    check("manual WASAPI pump reuses one full-capacity output/raw buffer",
+          "final outBufEng = outPtrEng8.asTypedList(maxBlock * 8);" in isolate and
+          isolate.count("outPtrEng8.asTypedList(") == 1 and
+          "rawMulti.fillRaw(outBufEng, frames, w.sampleRate);" in isolate and
+          "w.write(outBufEng, frames: frames, srcCh: engineChCount)" in isolate)
 
     print("RESULT:", "FAIL " + ",".join(FAIL) if FAIL else "PASS")
     return 1 if FAIL else 0

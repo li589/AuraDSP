@@ -2780,6 +2780,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   final inPtrEng = malloc<Float>(maxBlock * 8);
   final inBufEng = inPtrEng.asTypedList(maxBlock * 8);
   final outPtrEng8 = malloc<Float>(maxBlock * 8);
+  final outBufEng = outPtrEng8.asTypedList(maxBlock * 8);
   final vizBuf = malloc<VizFrame>(8); // 持久化复用，零运行时堆分配
   final pcmBufEng = malloc<Float>(512 * 2); // [W2] PCM tap 拉取缓冲
   var pcmReadUsable = true; // 旧引擎无 auradsp_pcm_read 时首访抛错后关停
@@ -3105,12 +3106,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                     rawMulti.fillRaw(inBufEng, frames, w.sampleRate);
                   }
                 } else {
-                  // outPtrEng8 先作 raw scratch；重映射完成后才由 process 覆写。
-                  final rawBuf = outPtrEng8.asTypedList(frames * rawCh);
+                  // outBufEng 先作 raw scratch；重映射完成后才由 process 覆写。
+                  // 全容量视图在初始化时创建，泵内不新建 sublist/view。
                   if (srcPaused) {
-                    rawBuf.fillRange(0, frames * rawCh, 0);
+                    outBufEng.fillRange(0, frames * rawCh, 0);
                   } else {
-                    rawMulti.fillRaw(rawBuf, frames, w.sampleRate);
+                    rawMulti.fillRaw(outBufEng, frames, w.sampleRate);
                   }
                   final rc = lib!.remapChannels(
                       outPtrEng8, rawCh, inPtrEng, engineChCount, frames, cm);
@@ -3148,8 +3149,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             w.write(inBufEng, frames: frames, srcCh: rawSrc.rawCh);
           } else if (engineMulti) {
             // 引擎输出 Nch：devCh==2 写 L/R；devCh>=N 写全部（环绕监听）。
-            w.write(outPtrEng8.asTypedList(frames * engineChCount),
-                frames: frames, srcCh: engineChCount);
+            w.write(outBufEng, frames: frames, srcCh: engineChCount);
           } else {
             w.write(bypass ? srcBuf : engOut, frames: frames);
           }

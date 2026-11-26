@@ -696,7 +696,11 @@ auradsp_status auradsp_remap_channels(
         std::memcpy(dst, src,
                     (size_t)frames * (size_t)src_channels * sizeof(float));
     } else if (mode != 0) {
-        chmap_gather_discrete(src, src_channels, dst, dst_channels, frames);
+        if (dst_channels < src_channels) {
+            chmap_gather_discrete(src, src_channels, dst, dst_channels, frames);
+        } else {
+            chmap_scatter_discrete(src, src_channels, dst, dst_channels, frames);
+        }
     } else if (dst_channels < src_channels) {
         chmap_fold(src, src_channels, dst, dst_channels, frames);
     } else {
