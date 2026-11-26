@@ -370,6 +370,10 @@ static auradsp_status process_impl(auradsp_handle h, const float* in, float* out
     if (!h->open.load(std::memory_order_acquire)) return AURADSP_E_STATE;
     if (expected && !geometry_valid(*expected)) return AURADSP_E_PARAM;
 
+    /* [PATCHED-AuraDSP P-059] 两个公共 RT 入口共用此嵌套 guard；编译/
+     * 初始化路径不经过 process_impl，因此合法 @init 矩阵预计算不受影响。 */
+    aura_eel_rt_guard rt_guard;
+
     /* expected 入口只允许处理 expected 自身：它必须等于当前 active（宿主
      * 已按该宽度备缓冲），或等于完整 pending（宿主用足够 scratch 推进）。
      * 两者皆不符时在触碰任何样本前返回 E_STATE，从协议上消除查询/process

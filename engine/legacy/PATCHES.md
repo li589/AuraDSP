@@ -1356,3 +1356,22 @@ yquist * 0.999，
 - **验收**：`test/smoke/smoke_eel_matrix_safety.py` 以独立子进程覆盖负转置、
   负求逆、维度不匹配、零 rank 与失败尺寸回读；修复前负转置读访问违例、
   负求逆 `0xC0000374`，修复后全部存活且输出有限。
+
+## P-059 jdsp/Effects/eel2 — 矩阵原生函数 RT 入口守卫（2026-11-25，Task 5 / H3）
+
+- **位置**：`nseel-compiler.c` 的线程局部 guard 与矩阵类内建入口；
+  `eel_matrix.h` 全部 19 个包装器；`liveprogWrapper.c` 立体声 RT 块边界；
+  `dsp_mc_liveprog.cpp` 多声道 RT 块边界；两处编译路径的初跑 `@slider`；
+  `auradsp_engine.cpp` 公共 RT 处理入口。
+- **问题**：矩阵求解/滤波器设计内建会在音频线程分配堆内存并执行无界数值
+  循环；`linspace` / `peakFinder` 也分别包含长循环与堆分配。此前仅靠脚本
+  迭代预算无法约束单个 native 调用，违反 RT 零分配与有界计算纪律。
+- **修法**：新增单一 C 链接的 `aura_eel_rt_guard` 线程局部深度及饱和一次的
+  矩阵拒绝诊断；公共 process、立体声 LiveProg 块与 MC LiveProg 块均进入
+  可嵌套 guard，退出时恢复先前深度。所有矩阵类包装器在读取参数、分配或
+  进入数值层之前检查 guard，命中即返回 `EEL_MATRIX_RT_FORBIDDEN`，不写日志、
+  不做 IO。`@init` 编译/执行路径不进入 guard，合法预计算保持不变；编译路径
+  额外初跑的 `@slider` 也进入 guard，避免绕过严格的 `@init`-only 契约。
+- **验收**：矩阵安全 smoke 增加 stereo/MC 的 `@sample` / `@block` 拒绝、
+  编译初跑 `@slider` 拒绝、固定墙钟上限、几何入口、guard 退出恢复与合法
+  `@init` 预计算；原有 P-057/P-058 失败契约用例移到合法 `@init` 后继续执行。

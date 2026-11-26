@@ -291,7 +291,11 @@ static int LiveProgCompileInto(LiveProg *pg, JamesDSPLib *jdsp, char *codeTextIn
 			}
 			return -5;
 		}
+		/* [PATCHED-AuraDSP P-059] 编译路径会额外初跑一次 @slider；
+		 * 该次也遵守 @init-only 契约，@init 本身仍在 guard 外。 */
+		aura_eel_rt_guard_enter();
 		NSEEL_code_execute(pg->codehandleSlider);
+		aura_eel_rt_guard_leave();
 	}
 
 	pg->codehandleProcess = NSEEL_code_compile(pg->vm, codeTextProcess, 0);
@@ -547,6 +551,8 @@ const char* checkErrorCode(int errCode)
 }
 void LiveProgProcess(JamesDSPLib *jdsp, size_t n)
 {
+	/* [PATCHED-AuraDSP P-059] slider/block/sample 均在 RT guard 内执行。 */
+	aura_eel_rt_guard_enter();
 	/* B1：在途守卫双计数——RT 单写者，每块必过（stage_liveprog 恒在链中），
 	 * 与 liveprogEnabled 无关：停用期间块边界也要放行影子槽复用。
 	 * eelProcCount 供 retiredAt 边界判定；eelInFlight 证明无调用持有快照
@@ -579,4 +585,5 @@ void LiveProgProcess(JamesDSPLib *jdsp, size_t n)
 		}
 	}
 	lp_inflight_dec(&jdsp->eelInFlight);
+	aura_eel_rt_guard_leave();
 }

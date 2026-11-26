@@ -55,6 +55,26 @@ void main() {
       expect(spl.descEn.toLowerCase(), contains('pass through'));
     });
 
+    test('矩阵与滤波器设计函数仅允许在 @init 段调用', () {
+      final matrixEntries = EelManualRegistry.entries
+          .where((e) => e.category == EelManualCategory.matrix)
+          .toList();
+      expect(matrixEntries, isNotEmpty);
+
+      for (final e in matrixEntries) {
+        expect(e.descZh, contains('@init'),
+            reason: '${e.name} 必须注明中文 @init 限制');
+        expect(e.descEn, contains('@init'),
+            reason: '${e.name} must document the @init restriction');
+        expect(e.descZh, contains('EEL_MATRIX_RT_FORBIDDEN'),
+            reason: '${e.name} 必须注明 RT 拒绝返回码');
+        expect(e.descEn, contains('EEL_MATRIX_RT_FORBIDDEN'),
+            reason: '${e.name} must document the RT rejection value');
+        expect(e.snippet.trim().startsWith('@init'), isTrue,
+            reason: '${e.name} snippet must demonstrate legal @init usage');
+      }
+    });
+
     test('模糊搜索与分类筛选功能', () {
       // 搜索 sin
       final sinResults = EelManualRegistry.search(query: 'sin');

@@ -173,6 +173,9 @@ int mc_compile_into(McLiveProgHost* host, McSlot* s, char* codeInit,
             return -5;
         }
         NSEEL_aura_budget_arm(s->codehandleSlider, 4000000); /* P-053 */
+        /* [PATCHED-AuraDSP P-059] 编译路径会额外初跑一次 @slider；
+         * 该次也遵守 @init-only 契约，@init 本身仍在 guard 外。 */
+        aura_eel_rt_guard compile_slider_guard;
         NSEEL_code_execute(s->codehandleSlider);
     }
     s->codehandleProcess = NSEEL_code_compile(s->vm, codeProcess, 0);
@@ -400,6 +403,8 @@ float* mc_liveprog_slider_var(McLiveProgHost* host, int index1Based) {
 void mc_liveprog_process(McLiveProgHost* host, float* buf, int frames,
                          int channels) {
     if (!host || !buf) return;
+    /* [PATCHED-AuraDSP P-059] slider/block/sample 均在 RT guard 内执行。 */
+    aura_eel_rt_guard rt_guard;
     /* 在途守卫双计数（平移 LiveProgProcess）：与 enable 无关，
      * 停用期间块边界也要放行影子槽复用。 */
     host->procCount++;

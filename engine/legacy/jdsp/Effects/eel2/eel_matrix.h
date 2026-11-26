@@ -27,6 +27,9 @@ static int _eel_span_fits(int32_t offs, int64_t span)
 
 static float NSEEL_CGEN_CALL _eel_matDeterminant(float *blocks, float *start, float *m, float *n)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	int32_t rows1 = (int32_t)*m;
 	int32_t cols1 = (int32_t)*n;
 	int64_t span;
@@ -48,6 +51,9 @@ static float NSEEL_CGEN_CALL _eel_matDeterminant(float *blocks, float *start, fl
 }
 static float NSEEL_CGEN_CALL _eel_matRank(float *blocks, float *start, float *m, float *n)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	int32_t rows1 = (int32_t)*m;
 	int32_t cols1 = (int32_t)*n;
 	int64_t span;
@@ -74,6 +80,9 @@ void transposeFlt(float *src, float *dst, int32_t n, int32_t m)
 }
 static float NSEEL_CGEN_CALL _eel_matTranspose(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
@@ -93,6 +102,9 @@ static float NSEEL_CGEN_CALL _eel_matTranspose(void *opaque, INT_PTR num_param, 
 }
 static float NSEEL_CGEN_CALL _eel_matPinv(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
@@ -138,6 +150,9 @@ static float NSEEL_CGEN_CALL _eel_matPinv(void *opaque, INT_PTR num_param, float
 }
 static float NSEEL_CGEN_CALL _eel_matPinvFast(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
@@ -184,6 +199,9 @@ static float NSEEL_CGEN_CALL _eel_matPinvFast(void *opaque, INT_PTR num_param, f
 }
 static float NSEEL_CGEN_CALL _eel_cholesky(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
@@ -217,6 +235,9 @@ static float NSEEL_CGEN_CALL _eel_cholesky(void *opaque, INT_PTR num_param, floa
 }
 static float NSEEL_CGEN_CALL _eel_inv_chol(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
@@ -250,6 +271,9 @@ static float NSEEL_CGEN_CALL _eel_inv_chol(void *opaque, INT_PTR num_param, floa
 }
 static float NSEEL_CGEN_CALL _eel_matInv(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
@@ -283,6 +307,9 @@ static float NSEEL_CGEN_CALL _eel_matInv(void *opaque, INT_PTR num_param, float 
 }
 static float NSEEL_CGEN_CALL _eel_mldivide(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
@@ -340,6 +367,9 @@ static float NSEEL_CGEN_CALL _eel_mldivide(void *opaque, INT_PTR num_param, floa
 }
 static float NSEEL_CGEN_CALL _eel_mrdivide(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
@@ -397,6 +427,9 @@ static float NSEEL_CGEN_CALL _eel_mrdivide(void *opaque, INT_PTR num_param, floa
 }
 static float NSEEL_CGEN_CALL _eel_quadprog(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t problemLength = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
@@ -514,6 +547,9 @@ void transpose_matrix_vector_mult_float(const float *mat, const float *vec, doub
 }
 static float NSEEL_CGEN_CALL _eel_lsqlin(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t equationsLength = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
@@ -611,6 +647,9 @@ static float NSEEL_CGEN_CALL _eel_lsqlin(void *opaque, INT_PTR num_param, float 
 }
 static float NSEEL_CGEN_CALL _eel_roots(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t N = (int32_t)(*parms[2] + NSEEL_CLOSEFACTOR);
@@ -657,6 +696,9 @@ static float NSEEL_CGEN_CALL _eel_roots(void *opaque, INT_PTR num_param, float *
 #include "numericSys/FilterDesign/fdesign.h"
 static float NSEEL_CGEN_CALL _eel_cplxpair(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t N = (int32_t)(*parms[2] + NSEEL_CLOSEFACTOR);
@@ -702,6 +744,9 @@ static float NSEEL_CGEN_CALL _eel_cplxpair(void *opaque, INT_PTR num_param, floa
 }
 static float NSEEL_CGEN_CALL _eel_firls(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t N = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
@@ -762,6 +807,9 @@ static float NSEEL_CGEN_CALL _eel_firls(void *opaque, INT_PTR num_param, float *
 }
 static float NSEEL_CGEN_CALL _eel_eqnerror(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t M = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
@@ -821,6 +869,9 @@ static float NSEEL_CGEN_CALL _eel_eqnerror(void *opaque, INT_PTR num_param, floa
 }
 static float NSEEL_CGEN_CALL _eel_unwrap(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t N = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -835,6 +886,9 @@ static float NSEEL_CGEN_CALL _eel_unwrap(void *opaque, INT_PTR num_param, float 
 }
 static float NSEEL_CGEN_CALL _eel_zp2sos(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
@@ -898,6 +952,9 @@ static float NSEEL_CGEN_CALL _eel_zp2sos(void *opaque, INT_PTR num_param, float 
 }
 static float NSEEL_CGEN_CALL _eel_tf2sos(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] RT 拒绝必须先于参数读取、分配与数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);

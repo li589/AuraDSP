@@ -30,6 +30,41 @@
 #include "eel_matrix.h"
 #include "numericSys/FFTConvolver.h"
 #include "numericSys/HPFloat/xpre.h"
+/* [PATCHED-AuraDSP P-059] 单一 C 链接的线程局部 RT guard。深度可嵌套，
+ * 诊断每线程只饱和一次；所有操作均为常量时间且无分配、锁或 IO。 */
+#if defined(_MSC_VER)
+static __declspec(thread) uint32_t aura_eel_rt_guard_depth = 0;
+static __declspec(thread) uint32_t aura_eel_matrix_rt_diag = 0;
+#else
+static _Thread_local uint32_t aura_eel_rt_guard_depth = 0;
+static _Thread_local uint32_t aura_eel_matrix_rt_diag = 0;
+#endif
+void aura_eel_rt_guard_enter(void)
+{
+    if (aura_eel_rt_guard_depth != UINT32_MAX)
+        aura_eel_rt_guard_depth++;
+}
+void aura_eel_rt_guard_leave(void)
+{
+    if (aura_eel_rt_guard_depth != 0)
+        aura_eel_rt_guard_depth--;
+}
+int32_t aura_eel_rt_guard_is_active(void)
+{
+    return aura_eel_rt_guard_depth != 0;
+}
+int32_t aura_eel_matrix_rt_guard_reject(void)
+{
+    if (!aura_eel_rt_guard_is_active())
+        return 0;
+    if (aura_eel_matrix_rt_diag == 0)
+        aura_eel_matrix_rt_diag = 1;
+    return 1;
+}
+uint32_t aura_eel_matrix_rt_diagnostic(void)
+{
+    return aura_eel_matrix_rt_diag;
+}
 static void lstrcpyn_safe(char *o, const char *in, int32_t count)
 {
 	if (count > 0)
@@ -4292,6 +4327,9 @@ unsigned int peakfinder(unsigned int elements, const float *input, float sel, un
 }
 static float NSEEL_CGEN_CALL _eel_peakFinder(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] 峰值查找会分配并执行无界数值循环。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *blocks = EEL_RAM(c);
 	float *input = __NSEEL_RAMAlloc(EEL_RAM(c), (uint32_t)(*parms[0] + NSEEL_CLOSEFACTOR));
@@ -4398,6 +4436,9 @@ static float NSEEL_CGEN_CALL _eel_listSystemVariable(void *opaque, INT_PTR num_p
 }
 static float NSEEL_CGEN_CALL _eel_linspace(void *opaque, INT_PTR num_param, float **parms)
 {
+	/* [PATCHED-AuraDSP P-059] 向量生成循环只允许在 @init 预计算。 */
+	if (aura_eel_matrix_rt_guard_reject())
+		return EEL_MATRIX_RT_FORBIDDEN;
 	compileContext *c = (compileContext*)opaque;
 	float *vec = __NSEEL_RAMAlloc(EEL_RAM(c), (uint32_t)(*parms[3] + NSEEL_CLOSEFACTOR));
 	int32_t n = (int32_t)(*parms[2] + NSEEL_CLOSEFACTOR);

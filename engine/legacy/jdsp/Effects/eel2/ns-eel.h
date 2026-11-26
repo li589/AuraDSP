@@ -104,6 +104,14 @@ NSEEL_CODEHANDLE NSEEL_code_compile_ex(NSEEL_VMCTX ctx, const char *code, int32_
 char *NSEEL_code_getcodeerror(NSEEL_VMCTX ctx);
 int32_t NSEEL_code_geterror_flag(NSEEL_VMCTX ctx);
 void NSEEL_code_execute(NSEEL_CODEHANDLE code);
+/* [PATCHED-AuraDSP P-059] RT 线程局部矩阵守卫。@init 不进入 guard；
+ * 嵌套 enter/leave 保持深度，拒绝诊断每线程饱和一次且不做 IO。 */
+#define EEL_MATRIX_RT_FORBIDDEN (-10.0f)
+void aura_eel_rt_guard_enter(void);
+void aura_eel_rt_guard_leave(void);
+int32_t aura_eel_rt_guard_is_active(void);
+int32_t aura_eel_matrix_rt_guard_reject(void);
+uint32_t aura_eel_matrix_rt_diagnostic(void);
 /* [PATCHED-AuraDSP P-053] 托管迭代预算布防/补给：托管模式下该句柄的
  * 全部 execute 共享同一预算、由宿主按块补给，防 @sample 逐帧执行时
  * 每帧重置预算令 loop(2e9) 事实挂死；未布防句柄维持单次 execute
@@ -133,5 +141,13 @@ extern void writeCircularStringBuf(char *cmdCur);
 #endif
 #ifdef __cplusplus
 }
+/* [PATCHED-AuraDSP P-059] C++ RT 边界使用 RAII，确保早退也恢复嵌套深度。 */
+class aura_eel_rt_guard {
+public:
+    aura_eel_rt_guard() { aura_eel_rt_guard_enter(); }
+    ~aura_eel_rt_guard() { aura_eel_rt_guard_leave(); }
+    aura_eel_rt_guard(const aura_eel_rt_guard&) = delete;
+    aura_eel_rt_guard& operator=(const aura_eel_rt_guard&) = delete;
+};
 #endif
 #endif//__NS_EEL_H__
