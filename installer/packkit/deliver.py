@@ -8,7 +8,9 @@
 
 from __future__ import annotations
 
+import os
 import shutil
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -48,6 +50,25 @@ def make_dir(base: Path, round_no: int, what_if: bool = False) -> Path:
         return dest
     dest.mkdir(parents=True, exist_ok=True)
     return dest
+
+
+def make_staging_dir(base: Path, round_no: int) -> Path:
+    """在同文件系统创建唯一 staging；已有正式目录一律拒绝覆盖。"""
+    final = base / delivery_dirname(round_no)
+    if os.path.lexists(final):
+        raise die(f"交付目录已存在，拒绝覆盖: {final}；复用轮次前请先显式处理旧目录")
+    staging = base / f".{delivery_dirname(round_no)}.staging-{uuid.uuid4().hex}"
+    staging.mkdir(parents=True, exist_ok=False)
+    return staging
+
+
+def commit_staging_dir(staging: Path, base: Path, round_no: int) -> Path:
+    """自检通过后以一次 rename 提交；提交前再次拒绝已有正式目录。"""
+    final = base / delivery_dirname(round_no)
+    if os.path.lexists(final):
+        raise die(f"交付目录已存在，拒绝覆盖: {final}；staging 保留在 {staging}")
+    os.replace(staging, final)
+    return final
 
 
 def materialize(dest: Path, items: list[DeliveryItem],

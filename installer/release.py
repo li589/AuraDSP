@@ -44,8 +44,10 @@ from packkit.common import (  # noqa: E402
     ui_step,
 )
 from packkit.deliver import (  # noqa: E402
+    DeliveryItem,
     DeliveryResult,
-    make_dir,
+    commit_staging_dir,
+    make_staging_dir,
     materialize,
     write_note,
     write_sums,
@@ -169,6 +171,38 @@ def _split_tiers(raw: str | None) -> list[str] | None:
     return [t.strip() for t in raw.split(",") if t.strip()]
 
 
+def stage_delivery(out_root: Path, round_no: int,
+                   items: list[DeliveryItem]) -> DeliveryResult:
+    """只在唯一 staging 中归集产物与哈希清单，不创建正式交付目录。"""
+    staging = make_staging_dir(out_root, round_no)
+    result = DeliveryResult(dir=staging)
+    result.files = materialize(staging, items)
+    result.sums = write_sums(staging, round_no, result.files)
+    return result
+
+
+def publish_delivery(out_root: Path, round_no: int, items: list[DeliveryItem],
+                     plan: PlatformPlan, *, note_payload: dict | None = None,
+                     ver: dict[str, str] | None = None) -> DeliveryResult:
+    """staging 内完成全部交付工作和自检，再以一次 rename 原子发布。
+
+    任一步失败都保留 staging 供诊断，并原样传播异常；正式目录已存在时
+    拒绝覆盖。调用方在真实发布中传入说明卡元数据和平台自检所需版本。
+    """
+    result = stage_delivery(out_root, round_no, items)
+    result.note = write_note(result.dir, round_no, note_payload or {})
+    ui_step("封装自检")
+    plan.post_check(result.files, ver if ver is not None else {})
+
+    final = commit_staging_dir(result.dir, out_root, round_no)
+    staging = result.dir
+    result.dir = final
+    result.files = [final / p.relative_to(staging) for p in result.files]
+    result.sums = final / result.sums.relative_to(staging)
+    result.note = final / result.note.relative_to(staging)
+    return result
+
+
 def main(argv: list[str]) -> int:
     # 进度小窗（2026-11-24）：编排层开窗，[pack] 日志自动镜像；子进程
     # （pack/build）置 AURADSP_UI_NESTED 抑制另开窗。UI 故障不影响编排。
@@ -279,24 +313,21 @@ def _main_impl(argv: list[str]) -> int:
 
     ui_step("归集与清单")
     items = plan.collect(tier_outputs, ver)
-    dest = make_dir(args.out_root, round_no)
-    result = DeliveryResult(dir=dest)
-    result.files = materialize(dest, items)
-    result.sums = write_sums(dest, round_no, result.files)
-
     head, dirty = _head()
-    result.note = write_note(dest, round_no, {
-        "platform": plan.name,
-        "version": ver["AURADSP_TAG"],
-        "build": ver["AURADSP_BUILD"],
-        "commit": head,
-        "worktree_dirty": "yes" if dirty else "no",
-        "resources_tiers": ",".join(tiers),
-        "generated_by": "installer/release.py",
-    })
-
-    ui_step("封装自检")
-    plan.post_check(result.files, ver)
+    result = publish_delivery(
+        args.out_root, round_no, items, plan,
+        note_payload={
+            "platform": plan.name,
+            "version": ver["AURADSP_TAG"],
+            "build": ver["AURADSP_BUILD"],
+            "commit": head,
+            "worktree_dirty": "yes" if dirty else "no",
+            "resources_tiers": ",".join(tiers),
+            "generated_by": "installer/release.py",
+        },
+        ver=ver,
+    )
+    dest = result.dir
 
     if args.clean_work:
         clean_work_dir(work_dir, args.out_root)
