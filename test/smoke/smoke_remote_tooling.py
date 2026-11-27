@@ -67,11 +67,13 @@ def test_parse_check():
         (Path(td) / "good.ps1").write_text("Write-Output 'ok'\n", encoding="ascii")
         command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
                    "-File", str(target)]
-        good = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        good = subprocess.run(command, capture_output=True, text=True, timeout=30,
+                              encoding='mbcs', errors='replace')
         check(good.returncode == 0,
               f"parse_check accepts valid local scripts (rc={good.returncode})")
         (Path(td) / "bad.ps1").write_text("function {\n", encoding="ascii")
-        bad = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        bad = subprocess.run(command, capture_output=True, text=True, timeout=30,
+                             encoding='mbcs', errors='replace')
         check(bad.returncode != 0,
               f"parse_check rejects invalid scripts (rc={bad.returncode})")
         check("bad.ps1" in (bad.stdout + bad.stderr),
