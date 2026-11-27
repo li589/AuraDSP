@@ -1,7 +1,7 @@
 name: auradsp_setup
 description: "AuraDSP Setup — 自研安装/卸载向导（极光主题，实施设计见 docs/20-执行/Windows安装程序与打包脚本实施设计-2026-11-06.md）。"
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.1.0
 
 environment:
   sdk: ^3.13.7

@@ -62,11 +62,11 @@ flowchart TD
 ### 2.1 统一版本真相源 (Single Source of Truth)
 AuraDSP 的版本号统一定义在 `app/auradsp_app/pubspec.yaml`：
 ```yaml
-version: 0.1.0+1
+version: 0.1.0
 ```
 其中：
 - `0.1.0` 为版本号 `Major.Minor.Patch`，格式受发布总则约束：对外标签写作 `v0.1.0`（`vXX.XX.X`——主、次版本各最多两位数，修订号一位起；修订号超过 9 时进位次版本）。首个正式版本即 `v0.1.0`。
-- `+1` 为构建序号 `BUILD_NUMBER`。
+- 未显式书写 `+构建号` 时，`version_resolver` 默认 `BUILD_NUMBER=1`；对外版本与构建清单版本均保持 `0.1.0`，内部完整版本仍为 `0.1.0.1`。
 
 在跨平台打包工具启动时，由 `installer/shared/version_resolver.py` 直接解析 `pubspec.yaml`，向各平台打包工具导出统一的环境变量：
 - `AURADSP_VERSION="0.1.0"`
