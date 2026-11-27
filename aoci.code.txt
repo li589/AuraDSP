@@ -768,18 +768,15 @@ AidlEffectBase.cpp[DE8L]: F:实现效果骨架全流程，含打开建队列、�
 Exports.cpp[EE6T]: F:实现标识解析、描述符构造与创建销毁查询三个注册项动作 | R:code:core/android/registrar/include/registrar/Exports.h | A:标识按分组十六进制解析成四段加六字节节点，未知标识一律返回参数非法 | S:描述符固定为插入型、置首、音量受控，改动会改变系统效果链位置
 
 ===D:/temp_desktop/Proj/JamesDSP/core/android/spike-global-effect/===
-README.md[SE5T]: F:记录自研效果库注册进系统效果工厂并挂上全局会话的验证结论与已知风险 | R:code:core/android/registrar/README.md | A:说明配置加载顺序、库检索顺序、接口形态兼容性与部署验证清单 | S:设备实际生效的是odm配置，vendor与system两处均不存在或被跳过
 build_aidl.sh[XV4T]: F:NDK 构建脚本：三阶段编译 AIDL 生成 stub（8 并行+串行重试）、libfmq 与 SpikeEffect 源，链接 libspikeeq.so（aarch64 API34、16KB 页对齐、version script） | R:code:core/android/spike-global-effect/deploy/deploy.sh | A:aidl | S:链接强制 16KB 页对齐，仅导出 createEffect/queryEffect/destroyEffect；stub 对象数 <130 触发串行重试
 fd_test.c[XG4T]: F:memfd_create/ftruncate/mmap MAP_SHARED 最小验证程序，打印 fd 与映射结果 | R:- | A:aidl | S:-
 version_script.txt[FV3T]: F:链接器 version script：global 仅导出 createEffect/queryEffect/destroyEffect，其余全部 local | R:code:core/android/spike-global-effect/src/aidl/SpikeExports.cpp | A:F | S:-
 
 ===D:/temp_desktop/Proj/JamesDSP/core/android/spike-global-effect/aidl-src/android_hardware_interfaces/===
-.clang-format[FV3T]: F:以符号链接指向构建系统的统一格式配置 | R:code:core/android/spike-global-effect/aidl-src/android_hardware_interfaces/PREUPLOAD.cfg | A:仓库不持有格式规则本体，由构建系统脚本提供 | S:该文件是链接而非副本，脱离上游构树后链接失效
 .gitignore[FV3T]: F:忽略编辑器工作区目录与Vim交换文件 | R:code:core/android/spike-global-effect/aidl-src/android_hardware_interfaces/Android.bp | A:只排除本地产物，源码与构建描述全部保留 | S:交换文件用递归通配匹配，任意子目录的临时文件都会被忽略
 Android.bp[FV5T]: F:声明接口包根、通用编译默认项与许可归属，供整个硬件接口树复用 | R:code:core/android/spike-global-effect/aidl-src/android_hardware_interfaces/NOTICE | A:许可覆盖Apache与NCSA两种，通用默认项开启全部警告并视为错误 | S:通用默认项把警告当错误，任何新增告警都会直接中断构建
 CleanSpec.mk[FV3T]: F:提供增量清理钩子，供构建系统在特定变更后清除陈旧中间产物 | R:code:core/android/spike-global-effect/aidl-src/android_hardware_interfaces/Android.bp | A:清理步骤仅在对应变更首次出现时执行一次 | S:清理步骤必须幂等可重复，非幂等删除会破坏后续增量构建
 NOTICE[SV5M]: F:收录Apache 2.0许可全文与上游附加条款，声明该接口树的再分发条件 | R:code:core/android/spike-global-effect/aidl-src/android_hardware_interfaces/Android.bp | A:由根构建描述按包默认许可引用，覆盖整棵子树 | S:许可覆盖整棵子树，修改或再分发须保留本文件原文
-OWNERS[FV3T]: F:指定接口树根级代码审核人，含历史备份与文件级覆盖规则 | R:code:core/android/spike-global-effect/aidl-src/android_hardware_interfaces/audio/OWNERS | A:接口与头文件及本文件本身改为指定审核人，不再向父级回退 | S:文件级规则取消了父级继承，删掉这些行会让审核权回落到上级目录
 PREUPLOAD.cfg[FQ4T]: F:配置提交前钩子，启用构建描述、C与接口定义及Go的格式化检查 | R:code:core/android/spike-global-effect/aidl-src/android_hardware_interfaces/Android.bp | A:忽略合并提交，另挂一个车载属性枚举生成校验脚本 | S:校验脚本按文件清单增量执行，未在清单内的变更不会触发检查
 TEST_MAPPING[FQ4T]: F:声明根级预提交测试集合，覆盖接口稳定性、实现合规与严格包检查 | R:code:core/android/spike-global-effect/aidl-src/android_hardware_interfaces/audio/aidl/TEST_MAPPING | A:预提交列出五项测试，另把实现合规测试加入自动预提交 | S:改动本树会连带触发整套接口与实现测试，耗时远大于单模块
 current.txt[FC9L]: F:记录各 HIDL HAL 接口版本的最新哈希基线 | R:code:core/android/spike-global-effect/aidl-src/android_hardware_interfaces/update-base-files.sh | A:按接口全名与版本号列出 SHA256 哈希，覆盖测试 HAL、Android O 起各版本音频图形传感器等 HAL | S:文件只允许新增接口，修改已有接口会使 VTS 失败并破坏仅框架 OTA；哈希由基线更新脚本生成不可手改
@@ -5084,7 +5081,4 @@ remote_win10.ps1[XQ4S]: F:Win10虚拟机远程脚本（windows目录副本） | 
 run_smoke_process.bat[XQ4T]: F:烟测进程批处理（windows目录副本） | R:- | A:测试辅助 | S:-
 run_smoke_relevant.bat[XQ4T]: F:相关烟测批处理（windows目录副本） | R:- | A:测试辅助 | S:-
 sync_artifacts.ps1[XQ5S]: F:产物同步脚本（windows目录副本） | R:- | A:构建基础设施 | S:-
-
-===D:/temp_desktop/Proj/JamesDSP/.superpowers/sdd/全量代码审查修复计划-2026-11-25/===
-task-19-report.md[SQ5S]: F:Task 19实现、审查修复、验证与限制报告 | R:code:docs/20-执行/全量代码审查修复计划-2026-11-25.md | A:记录shader诊断、受控频谱、注册/重绘/端点/生命周期修复与RED/GREEN | S:本地golden/runtime-effect不是Win10/30秒验收；未证DSP缺陷故不改DSP/AGC
 
