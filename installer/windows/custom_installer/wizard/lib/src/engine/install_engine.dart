@@ -3,6 +3,7 @@
 /// 驱动改调随包自包含脚本、测试签名风险告知。
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -21,6 +22,97 @@ String defaultInstallDir(bool allUsers) => normalizeInstallDir(
       allUsers ? r'C:\Program Files' : p.join(env('LOCALAPPDATA'), 'Programs'),
       r'C:\AuraDSP',
     );
+
+bool installNeedsElevation(InstallOptions options) => options.allUsers;
+
+String vaioDriverFailureWarning(Object error) {
+  final detail = error is TimeoutException ? '超时' : '异常：$error';
+  return 'VAIO 驱动安装失败（$detail），应用本体不受影响；'
+      r'可查看 %TEMP%\auradsp-vaio-install.log 后手动重试';
+}
+
+typedef ProcessStarter = Future<Process> Function(
+  String executable,
+  List<String> arguments, {
+  String? workingDirectory,
+});
+typedef ProcessTreeKiller = Future<void> Function(int pid);
+
+Future<void> _killProcessTree(int pid) async {
+  final killer = await Process.start('taskkill.exe', [
+    '/PID',
+    '$pid',
+    '/T',
+    '/F',
+  ]);
+  final stdout = killer.stdout
+      .transform(const Utf8Decoder(allowMalformed: true))
+      .join();
+  final stderr = killer.stderr
+      .transform(const Utf8Decoder(allowMalformed: true))
+      .join();
+  try {
+    final result = await Future.wait<Object>([
+      killer.exitCode,
+      stdout,
+      stderr,
+    ]).timeout(const Duration(seconds: 5));
+    if (result[0] != 0) {
+      throw StateError('taskkill exit ${result[0]}');
+    }
+  } on TimeoutException {
+    killer.kill();
+    throw StateError('taskkill timeout');
+  }
+}
+
+Future<ProcessResult> runProcessWithTimeout(
+  String executable,
+  List<String> arguments, {
+  String? workingDirectory,
+  Duration timeout = const Duration(minutes: 5),
+  Duration terminationGrace = const Duration(seconds: 5),
+  ProcessStarter? start,
+  ProcessTreeKiller? killTree,
+}) async {
+  final process = await (start ?? Process.start)(
+    executable,
+    arguments,
+    workingDirectory: workingDirectory,
+  );
+  final stdout = process.stdout
+      .transform(const Utf8Decoder(allowMalformed: true))
+      .join();
+  final stderr = process.stderr
+      .transform(const Utf8Decoder(allowMalformed: true))
+      .join();
+  try {
+    final result = await Future.wait<Object>([
+      process.exitCode,
+      stdout,
+      stderr,
+    ]).timeout(timeout);
+    return ProcessResult(
+      process.pid,
+      result[0] as int,
+      result[1] as String,
+      result[2] as String,
+    );
+  } on TimeoutException {
+    var detail = 'timeout';
+    try {
+      await (killTree ?? _killProcessTree)(process.pid);
+    } catch (e) {
+      detail += '; termination failed: $e';
+    }
+    try {
+      await process.exitCode.timeout(terminationGrace);
+    } on TimeoutException {
+      detail += '; process still running';
+    }
+    return ProcessResult(process.pid, -1, '', detail);
+  }
+}
 
 /// ASIO 驱动 DLL 在安装目录中的路径。规范名 auraasio_driver.dll
 /// （ADR-008：CMake 目标名即文件名，pack.py 按此名投放）；
@@ -273,36 +365,37 @@ class InstallEngine {
           warnings.add('载荷缺少 $kDriverManualDirRel\\install_vaio.ps1，驱动安装跳过');
           warnings.add(kDriverSigningNotice);
         } else {
-          final r = await Process.run(
-                  'powershell.exe',
-                  [
-                    '-NoProfile',
-                    '-ExecutionPolicy',
-                    'Bypass',
-                    '-File',
-                    script,
-                    '-Action',
-                    'install',
-                  ],
-                  workingDirectory: p.dirname(script))
-              .timeout(
-            const Duration(minutes: 5),
-            onTimeout: () {
-              throw StateError('驱动安装超时');
-            },
-          );
-          if (r.exitCode == kDriverSigningRequired) {
-            warnings.add(kDriverSigningNotice);
-          } else {
-            if (r.exitCode == kDriverRebootRequired) {
-              warnings.add('VAIO 驱动已安装；旧驱动尚在内存中，重启电脑后新驱动完全生效');
-            } else if (r.exitCode != 0) {
-              warnings.add(
-                'VAIO 驱动安装失败（退出码 ${r.exitCode}），应用本体不受影响；'
-                '可查看 %TEMP%\\auradsp-vaio-install.log 后手动重试',
-              );
+          try {
+            final r = await runProcessWithTimeout(
+              'powershell.exe',
+              [
+                '-NoProfile',
+                '-ExecutionPolicy',
+                'Bypass',
+                '-File',
+                script,
+                '-Action',
+                'install',
+              ],
+              workingDirectory: p.dirname(script),
+            );
+            if (r.exitCode == kDriverSigningRequired) {
+              warnings.add(kDriverSigningNotice);
+            } else {
+              if (r.exitCode == kDriverRebootRequired) {
+                warnings.add('VAIO 驱动已安装；旧驱动尚在内存中，重启电脑后新驱动完全生效');
+              } else if (r.exitCode != 0) {
+                final detail =
+                    r.exitCode == -1 && r.stderr.isNotEmpty ? '；${r.stderr}' : '';
+                warnings.add(
+                  'VAIO 驱动安装失败（退出码 ${r.exitCode}$detail），应用本体不受影响；'
+                  '可查看 %TEMP%\\auradsp-vaio-install.log 后手动重试',
+                );
+              }
+              warnings.add(kDriverSigningShort);
             }
-            warnings.add(kDriverSigningShort);
+          } catch (e) {
+            warnings.add(vaioDriverFailureWarning(e));
           }
         }
       }

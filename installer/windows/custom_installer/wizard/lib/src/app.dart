@@ -90,7 +90,9 @@ class _SetupShellState extends State<SetupShell> {
       _loadUninstallManifest();
       if (widget.args.autoUninstall || widget.args.silent) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _uninstallManifest != null) _maybeElevateThenUninstall();
+          if (mounted && _uninstallManifest != null) {
+            _maybeElevateThenUninstall();
+          }
         });
       }
     } else {
@@ -317,7 +319,7 @@ class _SetupShellState extends State<SetupShell> {
 
   Future<void> _maybeElevateThenInstall() async {
     _commitDir();
-    final needsAdmin = _options.allUsers || _options.vaio;
+    final needsAdmin = installNeedsElevation(_options);
     // autoStart 进程仍未提权说明提权失败，直接降级安装，避免 UAC 循环弹窗。
     if (!needsAdmin || isElevated() || widget.args.autoStart) {
       _runInstall();
@@ -791,7 +793,7 @@ class _SetupShellState extends State<SetupShell> {
 
   Widget _optionsPage(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final needsAdmin = _options.allUsers || _options.vaio;
+    final needsAdmin = installNeedsElevation(_options);
     final locked = (_plan?.isOverwrite ?? false) || (_plan?.isBlocked ?? false);
     final blocked = _plan?.isBlocked ?? false;
     return Column(

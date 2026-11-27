@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
@@ -278,6 +280,28 @@ void main() {
   });
 
   group('InstallOptions', () {
+    test('VAIO 勾选不再强制普通安装提权', () {
+      final o = InstallOptions(installDir: defaultInstallDir(false));
+      expect(o.vaio, isTrue);
+      expect(installNeedsElevation(o), isFalse);
+    });
+
+    test('全用户安装仍需要提权', () {
+      final o = InstallOptions(
+        installDir: defaultInstallDir(true),
+        allUsers: true,
+      );
+      expect(installNeedsElevation(o), isTrue);
+    });
+
+    test('驱动超时/异常只产生警告，不否定应用本体', () {
+      final warning = vaioDriverFailureWarning(
+        TimeoutException('driver install timed out'),
+      );
+      expect(warning, contains('超时'));
+      expect(warning, contains('应用本体不受影响'));
+    });
+
     test('JSON 往返（提权重启动协议）', () {
       final o = InstallOptions(
         installDir: r'D:\Apps\AuraDSP',
@@ -841,4 +865,144 @@ void main() {
       }
     });
   });
+
+  group('驱动进程超时', () {
+    test('超时终止进程树并返回非零结果', () async {
+      final process = _FakeProcess();
+      int? killedPid;
+      final result = await runProcessWithTimeout(
+        'powershell.exe',
+        const ['-File', 'install_vaio.ps1'],
+        timeout: const Duration(milliseconds: 10),
+        terminationGrace: const Duration(milliseconds: 10),
+        start: (_, _, {workingDirectory}) async => process,
+        killTree: (pid) async {
+          killedPid = pid;
+          process.finish(1);
+        },
+      );
+
+      expect(killedPid, process.pid);
+      expect(result.exitCode, -1);
+      expect(result.stderr, contains('timeout'));
+    });
+
+    test('终止失败也不抛出，明确报告进程可能仍在运行', () async {
+      final process = _FakeProcess();
+      final result = await runProcessWithTimeout(
+        'powershell.exe',
+        const ['-File', 'install_vaio.ps1'],
+        timeout: const Duration(milliseconds: 10),
+        terminationGrace: const Duration(milliseconds: 10),
+        start: (_, _, {workingDirectory}) async => process,
+        killTree: (_) async => throw StateError('taskkill failed'),
+      );
+
+      expect(result.exitCode, -1);
+      expect(result.stderr, contains('termination failed'));
+      expect(result.stderr, contains('still running'));
+    });
+
+    test('父进程退出但子进程占住管道也会超时返回', () async {
+      final process = _FakeProcess(immediateExit: 0, holdStreams: true);
+      final future = runProcessWithTimeout(
+        'powershell.exe',
+        const ['-File', 'install_vaio.ps1'],
+        timeout: const Duration(milliseconds: 10),
+        terminationGrace: const Duration(milliseconds: 10),
+        start: (_, _, {workingDirectory}) async => process,
+        killTree: (_) async {},
+      );
+
+      final result = await future.timeout(const Duration(seconds: 1));
+      expect(result.exitCode, -1);
+      expect(result.stderr, contains('timeout'));
+    });
+
+    test(
+      '真实 PowerShell 子进程树被超时终止',
+      () async {
+        final tmp = await Directory.systemTemp.createTemp('auradsp-tree-');
+        final child = File('${tmp.path}/child.ps1');
+        final parent = File('${tmp.path}/parent.ps1');
+        final marker = File('${tmp.path}/child-survived.txt');
+        final pidFile = File('${tmp.path}/child.pid');
+        String quote(String value) => value.replaceAll("'", "''");
+        await child.writeAsString(
+          "Start-Sleep -Seconds 5\n"
+          "Set-Content -LiteralPath '${quote(marker.path)}' 'alive'\n",
+        );
+        await parent.writeAsString(
+          "\$child = '${quote(child.path)}'\n"
+          r"$p = Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile', '-File', $child) -PassThru" '\n'
+          "Set-Content -LiteralPath '${quote(pidFile.path)}' \$p.Id\n"
+          'Start-Sleep -Seconds 30\n',
+        );
+        try {
+          final result = await runProcessWithTimeout(
+            'powershell.exe',
+            ['-NoProfile', '-File', parent.path],
+            timeout: const Duration(seconds: 3),
+            terminationGrace: const Duration(seconds: 3),
+          );
+          expect(result.exitCode, -1);
+          expect(pidFile.existsSync(), isTrue,
+              reason: 'fixture must spawn a real descendant before timeout; '
+                  'result=${result.stderr}');
+          await Future<void>.delayed(const Duration(seconds: 5));
+          expect(marker.existsSync(), isFalse,
+              reason: 'descendant must not survive taskkill /T /F');
+        } finally {
+          if (pidFile.existsSync()) {
+            final pid = (await pidFile.readAsString()).trim();
+            await Process.run('taskkill.exe', ['/PID', pid, '/T', '/F']);
+          }
+          await tmp.delete(recursive: true);
+        }
+      },
+      skip: !Platform.isWindows,
+    );
+  });
+}
+
+final class _FakeProcess implements Process {
+  _FakeProcess({this.immediateExit, this.holdStreams = false});
+
+  final int? immediateExit;
+  final bool holdStreams;
+  final String stdoutText = 'driver-out';
+  final String stderrText = 'driver-err';
+  final Completer<int> _exit = Completer<int>();
+  final StreamController<List<int>> _heldStdout = StreamController<List<int>>();
+  final StreamController<List<int>> _heldStderr = StreamController<List<int>>();
+
+  @override
+  final int pid = 4321;
+
+  @override
+  IOSink get stdin => throw UnimplementedError();
+
+  @override
+  Stream<List<int>> get stdout => holdStreams
+      ? _heldStdout.stream
+      : Stream.value(utf8.encode(stdoutText));
+
+  @override
+  Stream<List<int>> get stderr => holdStreams
+      ? _heldStderr.stream
+      : Stream.value(utf8.encode(stderrText));
+
+  @override
+  Future<int> get exitCode =>
+      immediateExit != null ? Future<int>.value(immediateExit!) : _exit.future;
+
+  void finish(int code) {
+    if (!_exit.isCompleted) _exit.complete(code);
+  }
+
+  @override
+  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
+    finish(-9);
+    return true;
+  }
 }

@@ -2,8 +2,8 @@
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <assemblyIdentity version="0.1.0.1" name="AuraDSP.Setup.Bootstrapper" type="win32"/>
   <description>AuraDSP Setup</description>
-  <!-- asInvoker by design (design doc §3): the wizard elevates itself
-       only when the user picks an all-users install or driver steps. -->
+  <!-- asInvoker by design (design doc §3): only all-users installation
+       requests elevation; driver failures remain non-fatal warnings. -->
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
       <requestedPrivileges>

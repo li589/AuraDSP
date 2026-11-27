@@ -25,6 +25,24 @@ from ..paths import (
 )
 
 
+def installer_configure_args(args) -> list[str]:
+    configure = ["cmake", "-S", str(BOOTSTRAPPER_SRC),
+                 "-B", str(BUILD_DIR / "installer" / "bootstrapper"),
+                 "-A", "x64"]
+    publisher_thumb = resolve_signer_thumbprint(args)
+    unsigned_test = os.environ.get("AURADSP_SETUP_UNSIGNED_TEST_ONLY") == "1"
+    if unsigned_test and publisher_thumb:
+        raise die("AURADSP_SETUP_UNSIGNED_TEST_ONLY 不得与发布者指纹同时启用")
+    if publisher_thumb:
+        configure.append(f"-DAURADSP_PUBLISHER_THUMBPRINT={publisher_thumb}")
+    configure.append(
+        "-DAURADSP_SETUP_UNSIGNED_TEST_ONLY=" + ("ON" if unsigned_test else "OFF")
+    )
+    if unsigned_test:
+        log("警告: 显式构建未签名测试 Setup；仅限本地测试，生产默认仍失败关闭")
+    return configure
+
+
 def build_installer_artifacts(args) -> Path:
     """--build-installer：构建引导壳与向导，汇集到 build/installer/dist。"""
     if os.name != "nt":
@@ -34,11 +52,7 @@ def build_installer_artifacts(args) -> Path:
     boot_build = BUILD_DIR / "installer" / "bootstrapper"
 
     log("构建引导壳（cmake）…")
-    configure = ["cmake", "-S", str(BOOTSTRAPPER_SRC), "-B", str(boot_build),
-                 "-A", "x64"]
-    publisher_thumb = resolve_signer_thumbprint(args)
-    if publisher_thumb:
-        configure.append(f"-DAURADSP_PUBLISHER_THUMBPRINT={publisher_thumb}")
+    configure = installer_configure_args(args)
     subprocess.run(configure, check=True)
     subprocess.run(["cmake", "--build", str(boot_build), "--config", "Release"],
                    check=True)

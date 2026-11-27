@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import struct
 import sys
 import tempfile
@@ -35,7 +36,7 @@ from packkit.deliver import (  # noqa: E402
 )
 from packkit.resources import resource_pack_paths  # noqa: E402
 from packkit.version import resolve_version  # noqa: E402
-from packkit.windows import setup_image, signing  # noqa: E402
+from packkit.windows import installer_build, setup_image, signing  # noqa: E402
 
 FAILURES: list[str] = []
 
@@ -293,6 +294,36 @@ def test_version() -> None:
           ver["AURADSP_FULL_VERSION"] == f"{ver['AURADSP_VERSION']}.{ver['AURADSP_BUILD']}")
 
 
+def test_installer_unsigned_test_mode() -> None:
+    print("== 安装器未签名测试模式 ==")
+    args = mock.Mock(cert_thumbprint="")
+    with mock.patch.object(installer_build, "resolve_signer_thumbprint",
+                           return_value=""), \
+            mock.patch.dict(os.environ, {}, clear=True):
+        configure = installer_build.installer_configure_args(args)
+        check("生产默认显式关闭未签名放行（清除测试缓存）",
+              "-DAURADSP_SETUP_UNSIGNED_TEST_ONLY=OFF" in configure)
+    with mock.patch.object(installer_build, "resolve_signer_thumbprint",
+                           return_value=""), \
+            mock.patch.dict(os.environ,
+                            {"AURADSP_SETUP_UNSIGNED_TEST_ONLY": "1"},
+                            clear=True):
+        configure = installer_build.installer_configure_args(args)
+        check("显式测试环境启用未签名放行",
+              "-DAURADSP_SETUP_UNSIGNED_TEST_ONLY=ON" in configure)
+    with mock.patch.object(installer_build, "resolve_signer_thumbprint",
+                           return_value="00112233445566778899AABBCCDDEEFF00112233"), \
+            mock.patch.dict(os.environ,
+                            {"AURADSP_SETUP_UNSIGNED_TEST_ONLY": "1"},
+                            clear=True):
+        try:
+            installer_build.installer_configure_args(args)
+        except SystemExit:
+            check("测试放行不得与发布者指纹同时启用", True)
+        else:
+            check("测试放行不得与发布者指纹同时启用", False)
+
+
 def test_driver_signature_gate() -> None:
     print("== Windows 驱动载荷签名门 ==")
     with tempfile.TemporaryDirectory() as td:
@@ -346,7 +377,8 @@ def test_driver_signature_gate() -> None:
 def main() -> int:
     for fn in (test_naming, test_round, test_hashing, test_delivery,
                test_resources_order, test_light_resource_completeness,
-               test_setup_image, test_version, test_driver_signature_gate):
+               test_setup_image, test_version, test_installer_unsigned_test_mode,
+               test_driver_signature_gate):
         fn()
         print()
     print(f"{'ALL PASS' if not FAILURES else 'FAILURES: ' + ', '.join(FAILURES)}")

@@ -15,6 +15,10 @@ set(AURADSP_PUBLISHER_THUMBPRINT "" CACHE STRING
     "Authenticode signer SHA-1 thumbprint pinned into elevated setup")
 option(AURADSP_SETUP_UNSIGNED_TEST_ONLY
     "Allow unsigned elevated setup in a local test harness" OFF)
+if(AURADSP_PUBLISHER_THUMBPRINT AND AURADSP_SETUP_UNSIGNED_TEST_ONLY)
+  message(FATAL_ERROR
+      "AURADSP_SETUP_UNSIGNED_TEST_ONLY cannot be combined with a publisher pin")
+endif()
 if(AURADSP_PUBLISHER_THUMBPRINT)
   string(LENGTH "${AURADSP_PUBLISHER_THUMBPRINT}" publisher_thumb_len)
   if(NOT publisher_thumb_len EQUAL 40 OR
