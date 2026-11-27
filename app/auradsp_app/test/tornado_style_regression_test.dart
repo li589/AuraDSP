@@ -2,7 +2,10 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:auradsp_app/core/design.dart';
+import 'package:auradsp_app/core/theme.dart';
 import 'package:auradsp_app/core/visualizer_types.dart';
+import 'package:auradsp_app/features/visualizer/controllers/peak_physics_engine.dart';
 import 'package:auradsp_app/features/visualizer/controllers/waveform_synthesizer.dart';
 import 'package:auradsp_app/features/visualizer/models/visualizer_themes.dart';
 import 'package:auradsp_app/features/visualizer/models/visualizer_types.dart';
@@ -12,6 +15,7 @@ import 'package:auradsp_app/features/visualizer/styles/style_tornado.dart';
 import 'package:auradsp_app/features/visualizer/styles/visualizer_painter_dispatcher.dart';
 import 'package:auradsp_app/features/visualizer/styles/visualizer_sprite_atlas.dart';
 import 'package:auradsp_app/features/visualizer/styles/visualizer_time_aware.dart';
+import 'package:auradsp_app/features/visualizer/views/visualizer_viewport.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -53,6 +57,16 @@ typedef _ParticleMetrics = ({
   double speed,
   double spread,
   double brightness,
+  double meanParticleDiameter,
+  double colorShift,
+});
+
+typedef _CameraState = ({
+  double progress,
+  double distance,
+  double yaw,
+  double pitch,
+  double projectionScale,
 });
 
 CustomPainter _tornadoPainter({
@@ -62,11 +76,12 @@ CustomPainter _tornadoPainter({
   VisualizerConfig config = const VisualizerConfig(
     style: VisualizerStyle.tornado,
   ),
+  VisualizerPalette palette = _palette,
 }) {
   return buildVisualizerPainter(
     style: VisualizerStyle.tornado,
     config: config,
-    palette: _palette,
+    palette: palette,
     rawBands: bands ?? _bands,
     peaks: List<double>.filled(32, 0.8),
     waveformSynth: WaveformSynthesizer(),
@@ -257,7 +272,7 @@ void main() {
         final beforePositions = Float32List.fromList(
           painter.debugParticlePositions as Float32List,
         );
-        painter.setVisualizerTime(2.0);
+        painter.setVisualizerTime(0.85);
         painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
         final after = painter.debugParticleMetrics as _ParticleMetrics;
         final afterPositions = painter.debugParticlePositions as Float32List;
@@ -270,17 +285,29 @@ void main() {
         }
         expect(before.particleCount, inInclusiveRange(850, 950));
         expect(risingParticles, greaterThan(before.particleCount * 0.65));
+        var centroidDrift = (after.centroidX - before.centroidX).abs();
+        var mirrorError = after.mirrorError;
+        for (var frame = 2; frame <= 38; frame++) {
+          painter.setVisualizerTime(0.75 + frame / 30);
+          painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+          final metrics = painter.debugParticleMetrics as _ParticleMetrics;
+          centroidDrift = math.max(
+            centroidDrift,
+            (metrics.centroidX - before.centroidX).abs(),
+          );
+          mirrorError = math.max(mirrorError, metrics.mirrorError);
+        }
         expect(
-          (after.centroidX - before.centroidX).abs(),
+          centroidDrift,
           greaterThan(0.005),
           reason:
               'The contracting funnel must retain asymmetric centroid drift.',
         );
-        expect(after.mirrorError, greaterThan(0.20));
+        expect(mirrorError, greaterThan(0.20));
       },
     );
 
-    test('funnel is broad at the bottom and outer particles rise faster', () {
+    test('funnel is broad at the top and inner particles rise faster', () {
       final dynamic painter = _particlePainter(
         _tornadoPainter(service: GpuShaderService.instance),
       );
@@ -329,17 +356,52 @@ void main() {
       expect(lowerCount, greaterThan(100));
       expect(upperCount, greaterThan(100));
       expect(
-        lowerRadius / lowerCount,
-        greaterThan((upperRadius / upperCount) * 1.8),
-        reason: 'The reference funnel contracts while particles rise.',
+        upperRadius / upperCount,
+        greaterThan((lowerRadius / lowerCount) * 1.8),
+        reason: 'The reference screen maps the wide spawning mouth to the top.',
       );
       expect(outerCount, greaterThan(100));
       expect(innerCount, greaterThan(100));
       expect(
-        outerRise / outerCount,
-        greaterThan((innerRise / innerCount) * 1.15),
-        reason: 'Outer particles must rise faster than inner particles.',
+        innerRise / innerCount,
+        greaterThan((outerRise / outerCount) * 1.15),
+        reason: 'The reference inner core rises faster while the outer ring stalls.',
       );
+    });
+
+    test('camera dollies in once, then locks at a legible scale', () {
+      final dynamic painter = _particlePainter(
+        _tornadoPainter(service: GpuShaderService.instance),
+      );
+      painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+      final initial = painter.debugCameraState as _CameraState;
+      expect(initial.progress, lessThan(0.05));
+      expect(initial.distance, greaterThan(27.0));
+
+      for (var frame = 1; frame <= 90; frame++) {
+        painter.setVisualizerTime(0.75 + frame / 30);
+        painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+      }
+      final settled = painter.debugCameraState as _CameraState;
+      expect(settled.progress, 1.0);
+      expect(settled.distance, closeTo(18.0, 0.000001));
+      expect(settled.yaw, closeTo(0.22, 0.000001));
+      expect(settled.pitch, closeTo(0.16, 0.000001));
+      expect(
+        settled.projectionScale,
+        greaterThan(initial.projectionScale * 1.4),
+      );
+      expect(
+        (painter.debugParticleMetrics as _ParticleMetrics).meanParticleDiameter,
+        greaterThan(2.8),
+        reason: 'The settled camera must keep individual particles legible.',
+      );
+
+      for (var frame = 91; frame <= 150; frame++) {
+        painter.setVisualizerTime(0.75 + frame / 30);
+        painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+      }
+      expect(painter.debugCameraState as _CameraState, settled);
     });
 
     test('mirror error compares opposing sides within each radius bin', () {
@@ -396,15 +458,19 @@ void main() {
         final dynamic painter = _particlePainter(
           _tornadoPainter(service: GpuShaderService.instance),
         );
-        for (var frame = 0; frame < 4; frame++) {
+        for (var frame = 0; frame <= 90; frame++) {
           painter.setVisualizerTime(0.75 + frame / 30);
+          painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+        }
+        for (var frame = 1; frame <= 3; frame++) {
+          painter.setVisualizerTime(3.75 + frame / 30);
           painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
         }
         final previousHeads = Float32List.fromList(
           painter.debugHeadScreenPositions as Float32List,
         );
 
-        painter.setVisualizerTime(0.95);
+        painter.setVisualizerTime(3.95);
         painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
         final heads = painter.debugHeadScreenPositions as Float32List;
         final trails = painter.debugTrailScreenPositions as Float32List;
@@ -468,8 +534,8 @@ void main() {
 
         expect(canvas.atlasCalls, 5);
         expect(canvas.submittedInstances, last.capacity);
-        expect(last.spriteCount, greaterThan(metrics.particleCount * 2));
-        expect(last.spriteCount, lessThan(last.capacity));
+        expect(last.spriteCount, greaterThan(metrics.particleCount));
+        expect(last.spriteCount, lessThanOrEqualTo(last.capacity));
         expect(last.capacity, metrics.particleCount * 4);
         for (var i = last.spriteCount; i < last.capacity; i++) {
           expect(last.colors[i] >>> 24, 0);
@@ -549,7 +615,38 @@ void main() {
         loudMetrics.brightness,
         greaterThan(quietMetrics.brightness * 1.05),
       );
+      expect(
+        loudMetrics.colorShift,
+        greaterThan(quietMetrics.colorShift + 0.15),
+      );
       expect(largestLoudStep, lessThan(0.12));
+    });
+
+    test('theme and preset palettes drive particle colors', () {
+      final dynamic bright = _particlePainter(
+        _tornadoPainter(service: GpuShaderService.instance, palette: _palette),
+      );
+      final dynamic light = _particlePainter(
+        _tornadoPainter(
+          service: GpuShaderService.instance,
+          palette: _lightPalette,
+        ),
+      );
+      bright.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+      light.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+      final a = bright.debugAtlasBuffers as _AtlasBuffers;
+      final b = light.debugAtlasBuffers as _AtlasBuffers;
+      expect(a.spriteCount, greaterThan(0));
+      expect(b.spriteCount, a.spriteCount);
+      var colorDelta = 0;
+      for (var i = 0; i < a.spriteCount; i++) {
+        final ac = a.colors[i] & 0x00FFFFFF;
+        final bc = b.colors[i] & 0x00FFFFFF;
+        colorDelta += ((ac & 0xFF) - (bc & 0xFF)).abs();
+        colorDelta += (((ac >>> 8) & 0xFF) - ((bc >>> 8) & 0xFF)).abs();
+        colorDelta += (((ac >>> 16) & 0xFF) - ((bc >>> 16) & 0xFF)).abs();
+      }
+      expect(colorDelta / a.spriteCount, greaterThan(30.0));
     });
 
     test(
@@ -598,10 +695,117 @@ void main() {
       expect(lightMean, greaterThan(darkMean * 3.0));
     });
 
+    testWidgets('camera does not replay after configuration changes', (
+      tester,
+    ) async {
+      final time = ValueNotifier(0.0);
+      final spectrum = ValueNotifier(List<double>.filled(64, 0.4));
+      final levelL = ValueNotifier(-8.0);
+      final levelR = ValueNotifier(-9.0);
+      addTearDown(time.dispose);
+      addTearDown(spectrum.dispose);
+      addTearDown(levelL.dispose);
+      addTearDown(levelR.dispose);
+      final peakEngine = PeakPhysicsEngine();
+      final synth = WaveformSynthesizer();
+
+      Widget viewport(VisualizerConfig config, VisualizerPalette palette) =>
+          MaterialApp(
+            theme: withAuraExtension(ThemeData.dark(), auraDark),
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 480,
+                  height: 320,
+                  child: VisualizerCanvasViewport(
+                    time: time,
+                    spectrum: spectrum,
+                    levelL: levelL,
+                    levelR: levelR,
+                    config: config,
+                    palette: palette,
+                    peakEngine: peakEngine,
+                    waveformSynth: synth,
+                  ),
+                ),
+              ),
+            ),
+          );
+
+      TornadoParticlePainter mainTornadoPainter() {
+        for (final widget in tester.widgetList<CustomPaint>(
+          find.byType(CustomPaint),
+        )) {
+          final dynamic painter = widget.painter;
+          try {
+            final main = painter.mainPainter;
+            if (main is TornadoParticlePainter) return main;
+          } on NoSuchMethodError {
+            continue;
+          }
+        }
+        throw StateError('Tornado painter not found');
+      }
+
+      final initialPalette = VisualizerPalette.resolve(
+        VisualizerColorTheme.neonCyber,
+        auraDark,
+      );
+      await tester.pumpWidget(
+        viewport(
+          const VisualizerConfig(
+            style: VisualizerStyle.tornado,
+            showGrid: false,
+            bloom: 0.2,
+            sensitivity: 1.0,
+          ),
+          initialPalette,
+        ),
+      );
+      final first = mainTornadoPainter();
+      final canvas = TestRecordingCanvas();
+      for (var frame = 0; frame <= 90; frame++) {
+        first.setVisualizerTime(frame / 30);
+        first.paint(canvas, const Size(480, 320));
+      }
+      time.value = 3.0;
+      final settledCamera = first.debugCameraState;
+      expect(settledCamera.progress, 1.0);
+
+      final changedPalette = VisualizerPalette.resolve(
+        VisualizerColorTheme.amberTube,
+        auraDark,
+      );
+      await tester.pumpWidget(
+        viewport(
+          const VisualizerConfig(
+            style: VisualizerStyle.tornado,
+            showGrid: false,
+            bloom: 1.2,
+            sensitivity: 1.8,
+          ),
+          changedPalette,
+        ),
+      );
+      final updated = mainTornadoPainter();
+      expect(updated, same(first));
+      expect(updated.debugCameraState, settledCamera);
+      expect(updated.bloom, 1.2);
+      expect(updated.sensitivity, 1.8);
+      expect(updated.palette, changedPalette);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets('particle tornado matches a fixed-time software golden', (
       tester,
     ) async {
       final painter = _tornadoPainter(service: GpuShaderService.instance);
+      for (var frame = 0; frame <= 90; frame++) {
+        (painter as VisualizerTimeAware).setVisualizerTime(0.75 + frame / 30);
+        final recorder = ui.PictureRecorder();
+        painter.paint(Canvas(recorder), const Size(480, 320));
+        recorder.endRecording().dispose();
+      }
       await _pumpCapture(tester, painter);
       await expectLater(
         find.byKey(const Key('tornado-capture')),

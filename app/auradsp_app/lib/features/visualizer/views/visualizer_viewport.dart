@@ -120,6 +120,7 @@ class VisualizerCanvasViewport extends StatefulWidget {
   final ProjectMBridge? projectMBridge;
   final VisualizerConfig config;
   final VisualizerPalette palette;
+  final Color? backgroundColor;
   final PeakPhysicsEngine peakEngine;
   final WaveformSynthesizer waveformSynth;
 
@@ -133,6 +134,7 @@ class VisualizerCanvasViewport extends StatefulWidget {
     this.projectMBridge,
     required this.config,
     required this.palette,
+    this.backgroundColor,
     required this.peakEngine,
     required this.waveformSynth,
   });
@@ -294,26 +296,31 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         return;
       }
       _pmInitInFlight = true;
-      bridge.initialize(width: 640, height: 360, fps: 30).then((ok) {
-        if (!mounted || !identical(widget.projectMBridge, bridge)) return;
-        _pmInitInFlight = false;
-        if (!_projectmShouldRun) return;
-        if (!ok) {
-          _pmInitFailedAt = DateTime.now();
-          return;
-        }
-        // A fresh native instance holds its default preset; any
-        // previously recorded load belongs to the old instance.
-        _pmLoadedPath = null;
-        _pmPresetSelection?.reset();
-        _setProjectmActive(true, bridge: bridge);
-        _pmLoadCurrentPreset();
-      }, onError: (Object error, StackTrace stack) {
-        _pmInitInFlight = false;
-        if (mounted && identical(widget.projectMBridge, bridge)) {
-          _pmInitFailedAt = DateTime.now();
-        }
-      });
+      bridge
+          .initialize(width: 640, height: 360, fps: 30)
+          .then(
+            (ok) {
+              if (!mounted || !identical(widget.projectMBridge, bridge)) return;
+              _pmInitInFlight = false;
+              if (!_projectmShouldRun) return;
+              if (!ok) {
+                _pmInitFailedAt = DateTime.now();
+                return;
+              }
+              // A fresh native instance holds its default preset; any
+              // previously recorded load belongs to the old instance.
+              _pmLoadedPath = null;
+              _pmPresetSelection?.reset();
+              _setProjectmActive(true, bridge: bridge);
+              _pmLoadCurrentPreset();
+            },
+            onError: (Object error, StackTrace stack) {
+              _pmInitInFlight = false;
+              if (mounted && identical(widget.projectMBridge, bridge)) {
+                _pmInitFailedAt = DateTime.now();
+              }
+            },
+          );
       return;
     }
     _pmLoadCurrentPreset();
@@ -462,6 +469,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
     final key = (
       widget.config,
       widget.palette,
+      widget.backgroundColor,
       renderedBands,
       peaks,
       separateGrid,
@@ -469,11 +477,24 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
       widget.projectMBridge?.currentPreset,
     );
     if (_delegate == null || _delegateKey != key) {
+      final existing = _delegate;
+      if (existing is TornadoParticlePainter &&
+          widget.config.style == VisualizerStyle.tornado) {
+        existing.updateConfiguration(
+          bands: renderedBands,
+          palette: widget.palette,
+          bloom: widget.config.bloom,
+          sensitivity: widget.config.sensitivity,
+        );
+        _delegateKey = key;
+        return existing;
+      }
       _delegateKey = key;
       _delegate = buildVisualizerPainter(
         style: widget.config.style,
         config: widget.config,
         palette: widget.palette,
+        backgroundColor: widget.backgroundColor,
         rawBands: renderedBands,
         peaks: peaks,
         waveformSynth: widget.waveformSynth,

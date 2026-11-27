@@ -34,6 +34,7 @@ CustomPainter buildVisualizerPainter({
   bool? showGrid,
   ProjectMBridge? projectMBridge,
   GpuShaderService? service,
+  Color? backgroundColor,
 }) {
   final grid = showGrid ?? config.showGrid;
   final shaderService = service ?? GpuShaderService.instance;
@@ -128,6 +129,7 @@ CustomPainter buildVisualizerPainter({
         palette: palette,
         bloom: config.bloom,
         animationTime: time,
+        backgroundColor: backgroundColor,
       );
 
     case VisualizerStyle.tornado:

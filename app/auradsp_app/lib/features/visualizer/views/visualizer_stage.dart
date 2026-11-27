@@ -544,6 +544,7 @@ class _VisualizerStageState extends State<VisualizerStage> {
                   projectMBridge: widget.projectMBridge,
                   config: widget.config,
                   palette: palette,
+                  backgroundColor: p.bg,
                   peakEngine: _peakEngine,
                   waveformSynth: _waveformSynth,
                 )

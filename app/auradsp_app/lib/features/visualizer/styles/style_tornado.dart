@@ -17,6 +17,16 @@ typedef TornadoParticleMetrics = ({
   double speed,
   double spread,
   double brightness,
+  double meanParticleDiameter,
+  double colorShift,
+});
+
+typedef TornadoCameraState = ({
+  double progress,
+  double distance,
+  double yaw,
+  double pitch,
+  double projectionScale,
 });
 
 typedef TornadoAtlasBuffers = ({
@@ -33,10 +43,10 @@ typedef TornadoAtlasBuffers = ({
 /// Frames do not allocate particle objects, projection lists, paths, or shaders.
 class TornadoParticlePainter extends CustomPainter
     implements VisualizerTimeAware {
-  final List<double> bands;
-  final VisualizerPalette palette;
-  final double bloom;
-  final double sensitivity;
+  List<double> bands;
+  VisualizerPalette palette;
+  double bloom;
+  double sensitivity;
   double time;
 
   final _TornadoParticleField _field = _TornadoParticleField();
@@ -48,6 +58,18 @@ class TornadoParticlePainter extends CustomPainter
     required this.time,
     this.sensitivity = 1.0,
   });
+
+  void updateConfiguration({
+    required List<double> bands,
+    required VisualizerPalette palette,
+    required double bloom,
+    required double sensitivity,
+  }) {
+    this.bands = bands;
+    this.palette = palette;
+    this.bloom = bloom;
+    this.sensitivity = sensitivity;
+  }
 
   @override
   void setVisualizerTime(double time) => this.time = time;
@@ -81,6 +103,9 @@ class TornadoParticlePainter extends CustomPainter
 
   @visibleForTesting
   TornadoParticleMetrics get debugParticleMetrics => _field.debugMetrics;
+
+  @visibleForTesting
+  TornadoCameraState get debugCameraState => _field.debugCameraState;
 }
 
 /// Reusable CPU simulation, projection, and atlas submission seam.
@@ -91,7 +116,9 @@ class _TornadoParticleField {
   static const double _tau = math.pi * 2;
   static const double _floor = -6.0;
   static const double _height = 12.0;
-  static const double _cameraDistance = 18.0;
+  static const double _cameraFar = 30.0;
+  static const double _cameraNear = 18.0;
+  static const double _introDuration = 2.4;
 
   static final Float32List _radiusProfile = _buildRadiusProfile();
 
@@ -140,6 +167,13 @@ class _TornadoParticleField {
   double _speedFactor = 1.0;
   double _spreadFactor = 1.0;
   double _brightness = 0.62;
+  double _colorShift = 0.0;
+  double _introElapsed = 0.0;
+  double _cameraDistance = _cameraFar;
+  double _cameraYaw = 0.48;
+  double _cameraPitch = 0.28;
+  double _diameterSum = 0.0;
+  int _diameterSamples = 0;
   double _meanHeight = 0.0;
   double _centroidX = 0.0;
   double _mirrorError = 0.0;
@@ -184,8 +218,8 @@ class _TornadoParticleField {
   static Float32List _buildRadiusProfile() {
     final profile = Float32List(256);
     for (var i = 0; i < profile.length; i++) {
-      // Match the reference's broad floor and contracting rising column.
-      profile[i] = 0.20 + 3.85 * math.pow(1.0 - i / 255.0, 0.82);
+      // The reference projects its wide spawning mouth to the top of the screen.
+      profile[i] = 0.20 + 3.85 * math.pow(i / 255.0, 0.82);
     }
     return profile;
   }
@@ -203,6 +237,11 @@ class _TornadoParticleField {
     _speedFactor = 1.0;
     _spreadFactor = 1.0;
     _brightness = 0.62;
+    _colorShift = 0.0;
+    _introElapsed = 0.0;
+    _cameraDistance = _cameraFar;
+    _cameraYaw = 0.48;
+    _cameraPitch = 0.28;
     trailHistory.fillRange(0, trailHistory.length, 0.0);
     trailHistoryCount = 0;
   }
@@ -280,6 +319,8 @@ class _TornadoParticleField {
       _brightness += (targetBrightness - _brightness) * motionEase;
     }
     _flow += dt * 0.50 * _speedFactor;
+    _introElapsed = math.min(_introDuration, _introElapsed + dt);
+    _colorShift = _smoothedMid * 0.16 + _smoothedTreble * 0.10;
 
     for (var i = 0; i < particleCount; i++) {
       final currentU = _heightU[i];
@@ -289,10 +330,11 @@ class _TornadoParticleField {
             0.0,
             1.0,
           );
+      // The reference core rises faster while the outer ring nearly stalls.
+      // Keep a small floor so particles at maximum radius cannot deadlock.
+      final riseWeight = 0.08 + 1.92 * (1.0 - radiusFraction);
       final verticalVelocity =
-          (0.058 + 0.022 * _riseSpeed[i]) *
-          _speedFactor *
-          (0.55 + 0.90 * radiusFraction);
+          (0.058 + 0.022 * _riseSpeed[i]) * _speedFactor * riseWeight;
       var u = currentU + dt * verticalVelocity;
       if (u >= 1.0) u -= 1.0;
       _heightU[i] = u;
@@ -366,20 +408,23 @@ class _TornadoParticleField {
     double bloom,
     double sensitivity,
   ) {
-    _step(time, bands, sensitivity);
     _atlas.ensureImage();
     final image = _atlas.imageOrNull;
     if (image == null) return;
+    _step(time, bands, sensitivity);
 
     _resolveColorLut(palette, bloom);
     final minDimension = math.min(size.width, size.height);
-    final yaw = 0.22 + math.sin(_flow * 0.47) * 0.16;
-    final pitch = 0.16 + math.sin(_flow * 0.19) * 0.025;
-    _cosYaw = math.cos(yaw);
-    _sinYaw = math.sin(yaw);
-    _cosPitch = math.cos(pitch);
-    _sinPitch = math.sin(pitch);
-    _projectionScale = minDimension * 1.38;
+    final introT = _introElapsed / _introDuration;
+    final introEase = 1.0 - math.pow(1.0 - introT, 3.0);
+    _cameraYaw = 0.48 + (0.22 - 0.48) * introEase;
+    _cameraPitch = 0.28 + (0.16 - 0.28) * introEase;
+    _cameraDistance = _cameraFar + (_cameraNear - _cameraFar) * introEase;
+    _cosYaw = math.cos(_cameraYaw);
+    _sinYaw = math.sin(_cameraYaw);
+    _cosPitch = math.cos(_cameraPitch);
+    _sinPitch = math.sin(_cameraPitch);
+    _projectionScale = minDimension * (0.82 + 0.56 * introEase);
     _pixelScale = math.sqrt(minDimension / 320.0).clamp(0.65, 1.8);
     _centerX = size.width * 0.5;
     _centerY = size.height * 0.50;
@@ -403,6 +448,8 @@ class _TornadoParticleField {
     _sortByDepth();
 
     _spriteCount = 0;
+    _diameterSum = 0.0;
+    _diameterSamples = 0;
     // drawRawAtlas consumes the full typed buffers. Clear unused color slots so
     // a smaller visible count cannot reuse stale sprites from the prior frame.
     _colors.fillRange(0, _spriteCapacity, 0);
@@ -477,11 +524,11 @@ class _TornadoParticleField {
     final y = _projectedY;
     final depth = _projectedDepth;
     final diameter =
-        ((1.35 + _particleSize[i] * 2.25) *
-                (18.0 / depth) *
+        ((1.80 + _particleSize[i] * 2.80) *
+                (_cameraNear / depth) *
                 _pixelScale *
-                (1.0 + _smoothedTreble * 0.06))
-            .clamp(1.1, 9.0);
+                (1.0 + _smoothedTreble * 0.08))
+            .clamp(1.4, 10.0);
     final margin = diameter * 2.0 + 8.0;
     if (x < -margin ||
         x > size.width + margin ||
@@ -490,15 +537,31 @@ class _TornadoParticleField {
       return;
     }
 
+    _diameterSum += diameter;
+    _diameterSamples++;
     final u = _heightU[i];
     final slice = _atlas.starTiers[_tier[i]];
-    final hue = ((_colorPhase[i] + u * 0.32 + _flow * 0.025) * 255.0)
-        .toInt()
-        .clamp(0, 255);
+    final colorPulse =
+        _smoothedTreble * 0.04 * math.sin(_flow * 2.7 + _colorPhase[i] * _tau);
+    final hue =
+        (((_colorPhase[i] +
+                        u * 0.32 +
+                        _flow * 0.025 +
+                        _colorShift +
+                        colorPulse) *
+                    255.0)
+                .round())
+            .clamp(0, 255);
     final rgb = _colorLut[hue] & 0x00FFFFFF;
     final edgeFade =
         _smoothstep(0.0, 0.07, u) * (1.0 - _smoothstep(0.90, 1.0, u));
-    final headAlpha = _baseBrightness[i] * _brightness * edgeFade;
+    final audioShimmer =
+        1.0 -
+        _smoothedTreble *
+            0.18 *
+            (0.5 + 0.5 * math.sin(_flow * 3.1 + _colorPhase[i] * _tau));
+    final headAlpha =
+        _baseBrightness[i] * _brightness * edgeFade * audioShimmer;
 
     for (var trail = trailSamples; trail >= 1; trail--) {
       if (trail > trailHistoryCount) continue;
@@ -571,10 +634,14 @@ class _TornadoParticleField {
       palette.secondary,
       palette.peak,
     ];
+    final lightBackground = palette.peak.computeLuminance() < 0.45;
     for (var i = 0; i < _colorLut.length; i++) {
       final scaled = (i / 255.0) * (stops.length - 1);
       final low = scaled.floor().clamp(0, stops.length - 2);
-      final color = Color.lerp(stops[low], stops[low + 1], scaled - low)!;
+      var color = Color.lerp(stops[low], stops[low + 1], scaled - low)!;
+      if (lightBackground) {
+        color = Color.lerp(color, const Color(0xFF000000), 0.22)!;
+      }
       _colorLut[i] = color.toARGB32() & 0x00FFFFFF;
     }
   }
@@ -599,10 +666,22 @@ class _TornadoParticleField {
     speed: _speedFactor,
     spread: _spreadFactor,
     brightness: _brightness,
+    meanParticleDiameter: _diameterSamples == 0
+        ? 0.0
+        : _diameterSum / _diameterSamples,
+    colorShift: _colorShift,
+  );
+
+  TornadoCameraState get debugCameraState => (
+    progress: _introElapsed / _introDuration,
+    distance: _cameraDistance,
+    yaw: _cameraYaw,
+    pitch: _cameraPitch,
+    projectionScale: _projectionScale,
   );
 }
 
-/// 龙卷风的静态基底：暗场渐变 + 轻微渐晕（纯净深邃底色，不含多余假球）。
+/// 龙卷风的主题自适应基底：明暗渐变 + 轻微渐晕（不含多余假球）。
 class TornadoBackdropPainter extends CustomPainter {
   final VisualizerPalette palette;
   final double bloom;

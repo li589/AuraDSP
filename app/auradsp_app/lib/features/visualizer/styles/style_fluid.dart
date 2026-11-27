@@ -22,20 +22,23 @@ import 'visualizer_time_aware.dart';
 class FluidDynamicsPainter extends CustomPainter
     implements VisualizerTimeAware {
   final List<double> bands;
-  VisualizerPalette palette;
-  double bloom;
+  final VisualizerPalette palette;
+  final double bloom;
+  final Color? backgroundColor;
   double animationTime;
 
   /// 流场状态跨帧保留，但属于当前画笔；不同视口与测试互不污染。
   /// 视口会缓存画笔实例，因此每帧仍只有这一份场状态。
-  final _FluidField _field = _FluidField();
+  final _FluidField _field;
 
   FluidDynamicsPainter({
     required this.bands,
     required this.palette,
     required this.bloom,
     required this.animationTime,
-  });
+    this.backgroundColor,
+    @visibleForTesting int? pressureIterations,
+  }) : _field = _FluidField(pressureIterations: pressureIterations);
 
   @override
   void setVisualizerTime(double time) => animationTime = time;
@@ -48,11 +51,23 @@ class FluidDynamicsPainter extends CustomPainter
   @visibleForTesting
   Float32List get debugSmoothedBands => _field.smoothedBands;
 
+  @visibleForTesting
+  Float32List get debugDyeField => _field.debugDyeField;
+
+  @visibleForTesting
+  int get debugPressureIterations => _field.pressureIterations;
+
+  @visibleForTesting
+  Int32List get debugAtlasColors => _field.atlasColors;
+
+  @visibleForTesting
+  void debugClearDye() => _field.debugClearDye();
+
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
     _field.step(animationTime, bands);
-    _field.paint(canvas, size, palette, bloom);
+    _field.paint(canvas, size, palette, bloom, backgroundColor);
   }
 
   @override
@@ -70,7 +85,8 @@ class _FluidField {
   static const double _releaseSeconds = 0.24;
 
   /// 当前压力投影迭代数：自适应调节（见 step），初值即上限（质量优先）。
-  int _pressureIters = _pressureIterationsMax;
+  int _pressureIters;
+  final int? _fixedPressureIterations;
   final Stopwatch _stepWatch = Stopwatch();
   double _stepEmaMs = 0;
   static const int _lutSize = 128;
@@ -133,6 +149,7 @@ class _FluidField {
   List<Color>? _tableColors;
   double? _tableBloom;
   Color? _tablePeak;
+  Color? _tableBackground;
 
   double _lastTime = double.nan;
   double _simTime = 0.0;
@@ -140,10 +157,24 @@ class _FluidField {
   Float32List _smoothedBands = Float32List(0);
   final math.Random _rng = math.Random(0x5F3A21);
 
-  _FluidField();
+  _FluidField({int? pressureIterations})
+    : _pressureIters = pressureIterations ?? _pressureIterationsMax,
+      _fixedPressureIterations = pressureIterations;
 
   @visibleForTesting
   double debugDyeAt(int x, int y) => _dye[y * _nx + x];
+
+  @visibleForTesting
+  Float32List get debugDyeField => _dye;
+
+  @visibleForTesting
+  int get pressureIterations => _pressureIters;
+
+  @visibleForTesting
+  Int32List get atlasColors => _spriteColors;
+
+  @visibleForTesting
+  void debugClearDye() => _dye.fillRange(0, _dye.length, 0.0);
 
   @visibleForTesting
   Float32List get smoothedBands => _smoothedBands;
@@ -157,8 +188,11 @@ class _FluidField {
     // 统计步进耗时 EMA：持续 >9ms 时逐帧降迭代（下限 _pressureIterationsMin，
     // 不可压性略降但视觉无感），持续 <3.5ms 时逐帧回升至上限——快机器永远
     // 满质量，慢机器自动保帧率。每帧至多调整 1 次，避免档位震荡。
-    _stepWatch.reset();
-    _stepWatch.start();
+    final adaptivePressure = _fixedPressureIterations == null;
+    if (adaptivePressure) {
+      _stepWatch.reset();
+      _stepWatch.start();
+    }
     _simTime += dt;
     if (!_primed) {
       _seedDye();
@@ -175,13 +209,15 @@ class _FluidField {
     _advectDye(dt);
     _coverBottomEdge();
     _relaxVelocity(dt);
-    _stepWatch.stop();
-    final ms = _stepWatch.elapsedMicroseconds / 1000.0;
-    _stepEmaMs = _stepEmaMs == 0 ? ms : _stepEmaMs * 0.9 + ms * 0.1;
-    if (_stepEmaMs > 9.0 && _pressureIters > _pressureIterationsMin) {
-      _pressureIters--;
-    } else if (_stepEmaMs < 3.5 && _pressureIters < _pressureIterationsMax) {
-      _pressureIters++;
+    if (adaptivePressure) {
+      _stepWatch.stop();
+      final ms = _stepWatch.elapsedMicroseconds / 1000.0;
+      _stepEmaMs = _stepEmaMs == 0 ? ms : _stepEmaMs * 0.9 + ms * 0.1;
+      if (_stepEmaMs > 9.0 && _pressureIters > _pressureIterationsMin) {
+        _pressureIters--;
+      } else if (_stepEmaMs < 3.5 && _pressureIters < _pressureIterationsMax) {
+        _pressureIters++;
+      }
     }
   }
 
@@ -841,12 +877,13 @@ class _FluidField {
     Size size,
     VisualizerPalette palette,
     double bloom,
+    Color? backgroundColor,
   ) {
     _atlas.ensureImage();
     final atlas = _atlas.imageOrNull;
     if (atlas == null) return;
 
-    final table = _resolveColorTable(palette, bloom);
+    final table = _resolveColorTable(palette, bloom, backgroundColor);
 
     var total = 0.0;
     const double stepX = (_nx - 1.0) / (_rnx - 1);
@@ -918,20 +955,27 @@ class _FluidField {
   }
 
   /// 染料浓度 → ARGB 查找表（含透明度渐变），仅在配色或辉光参数变化时重建。
-  Int32List _resolveColorTable(VisualizerPalette palette, double bloom) {
+  Int32List _resolveColorTable(
+    VisualizerPalette palette,
+    double bloom,
+    Color? backgroundColor,
+  ) {
     final colors = palette.gradient;
     final cached = _colorTable;
     if (cached != null &&
         _tableBloom == bloom &&
         _tablePeak == palette.peak &&
+        _tableBackground == backgroundColor &&
         _sameColors(_tableColors, colors)) {
       return cached;
     }
 
     final table = cached ?? Int32List(_lutSize);
-    // 浅色主题的 peak 取正文深灰，深色主题取近白色；据此判断底色明暗。
-    // 浅色底上中低透明度只是淡淡一层灰绿，必须更快逼近不透明才看得出结构。
-    final lightBackground = palette.peak.computeLuminance() < 0.5;
+    _tableBackground = backgroundColor;
+    // 固定预设的 peak 可能仍是白色；舞台实际底色才是浅色对比度的真相源。
+    final lightBackground = backgroundColor != null
+        ? backgroundColor.computeLuminance() > 0.5
+        : palette.peak.computeLuminance() < 0.5;
     // 只用前两段配色，末尾收到峰值色：多数主题的第三色是品红/紫，
     // 整段走完会把染料核心染成粉色花斑，反而看不出流体结构。
     final stops = <Color>[

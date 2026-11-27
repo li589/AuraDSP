@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
+
 import '../../../core/theme.dart';
 import 'visualizer_types.dart';
 
@@ -20,11 +22,28 @@ class VisualizerPalette {
     required this.gradient,
   });
 
+  @override
+  bool operator ==(Object other) =>
+      other is VisualizerPalette &&
+      primary == other.primary &&
+      secondary == other.secondary &&
+      peak == other.peak &&
+      grid == other.grid &&
+      glow == other.glow &&
+      listEquals(gradient, other.gradient);
+
+  @override
+  int get hashCode => Object.hash(
+    primary,
+    secondary,
+    peak,
+    grid,
+    glow,
+    Object.hashAll(gradient),
+  );
+
   /// 根据全局主题与可视化专有配色生成调色板
-  factory VisualizerPalette.resolve(
-    VisualizerColorTheme theme,
-    AuraPalette p,
-  ) {
+  factory VisualizerPalette.resolve(VisualizerColorTheme theme, AuraPalette p) {
     switch (theme) {
       case VisualizerColorTheme.neonCyber:
         return const VisualizerPalette(
@@ -33,11 +52,7 @@ class VisualizerPalette {
           peak: Color(0xFFFFFFFF),
           grid: Color(0x1A00E5FF),
           glow: Color(0x8000E5FF),
-          gradient: [
-            Color(0xFF0055FF),
-            Color(0xFF00E5FF),
-            Color(0xFFFF00A0),
-          ],
+          gradient: [Color(0xFF0055FF), Color(0xFF00E5FF), Color(0xFFFF00A0)],
         );
 
       case VisualizerColorTheme.amberTube:
@@ -47,11 +62,7 @@ class VisualizerPalette {
           peak: Color(0xFFFFE57F),
           grid: Color(0x1AFF9500),
           glow: Color(0x66FF9500),
-          gradient: [
-            Color(0xFF8B2500),
-            Color(0xFFFF7A00),
-            Color(0xFFFFC043),
-          ],
+          gradient: [Color(0xFF8B2500), Color(0xFFFF7A00), Color(0xFFFFC043)],
         );
 
       case VisualizerColorTheme.matrixGreen:
@@ -61,11 +72,7 @@ class VisualizerPalette {
           peak: Color(0xFFD4FF00),
           grid: Color(0x1A00FF66),
           glow: Color(0x7300FF66),
-          gradient: [
-            Color(0xFF005522),
-            Color(0xFF00CC44),
-            Color(0xFF00FF88),
-          ],
+          gradient: [Color(0xFF005522), Color(0xFF00CC44), Color(0xFF00FF88)],
         );
 
       case VisualizerColorTheme.emeraldMist:
@@ -77,11 +84,7 @@ class VisualizerPalette {
           peak: Color(0xFFF4FFF9),
           grid: Color(0x1A9BFFC9),
           glow: Color(0x809BFFC9),
-          gradient: [
-            Color(0xFF116B47),
-            Color(0xFF54DE9C),
-            Color(0xFFD8FFE9),
-          ],
+          gradient: [Color(0xFF116B47), Color(0xFF54DE9C), Color(0xFFD8FFE9)],
         );
 
       case VisualizerColorTheme.aurora:
@@ -91,11 +94,7 @@ class VisualizerPalette {
           peak: Color(0xFFF0F6FC),
           grid: Color(0x1A7000FF),
           glow: Color(0x6600FFD1),
-          gradient: [
-            Color(0xFF4A00E0),
-            Color(0xFF8E2DE2),
-            Color(0xFF00FFD1),
-          ],
+          gradient: [Color(0xFF4A00E0), Color(0xFF8E2DE2), Color(0xFF00FFD1)],
         );
 
       case VisualizerColorTheme.system:
@@ -114,4 +113,3 @@ class VisualizerPalette {
     }
   }
 }
-

@@ -18,6 +18,7 @@ import 'package:auradsp_app/features/visualizer/styles/visualizer_painter_dispat
 import 'package:auradsp_app/features/visualizer/views/visualizer_drawer.dart';
 import 'package:auradsp_app/features/visualizer/views/visualizer_hud.dart';
 import 'package:auradsp_app/features/visualizer/views/visualizer_hud_buttons.dart';
+import 'package:auradsp_app/features/visualizer/views/visualizer_viewport.dart';
 import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/theme.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
@@ -74,6 +75,24 @@ void main() {
         expect(palette.grid.a, greaterThan(0));
         expect(palette.glow.a, greaterThan(0));
       }
+    });
+
+    test('System palettes compare by value across rebuilds', () {
+      final first = VisualizerPalette.resolve(VisualizerColorTheme.system, auraDark);
+      final second = VisualizerPalette.resolve(VisualizerColorTheme.system, auraDark);
+      expect(identical(first, second), isFalse);
+      expect(first, second);
+      expect(first.hashCode, second.hashCode);
+
+      final changedGradient = VisualizerPalette(
+        primary: first.primary,
+        secondary: first.secondary,
+        peak: first.peak,
+        grid: first.grid,
+        glow: first.glow,
+        gradient: [first.gradient.first, const Color(0xFFFF0000)],
+      );
+      expect(first, isNot(changedGradient));
     });
   });
 
@@ -223,6 +242,76 @@ void main() {
         recorder.endRecording();
       }
     });
+  });
+
+  testWidgets('fluid delegate survives equal palette rebuilds and resize', (
+    tester,
+  ) async {
+    final time = ValueNotifier(0.0);
+    final spectrum = ValueNotifier(List<double>.filled(64, 0.4));
+    final levelL = ValueNotifier(-8.0);
+    final levelR = ValueNotifier(-9.0);
+    addTearDown(time.dispose);
+    addTearDown(spectrum.dispose);
+    addTearDown(levelL.dispose);
+    addTearDown(levelR.dispose);
+    final peakEngine = PeakPhysicsEngine();
+    final synth = WaveformSynthesizer();
+    const config = VisualizerConfig(
+      style: VisualizerStyle.fluidDynamics,
+      showGrid: false,
+    );
+
+    Widget viewport(double width, VisualizerPalette palette) => MaterialApp(
+      theme: withAuraExtension(ThemeData.dark(), auraDark),
+      home: Scaffold(
+        body: Center(
+          child: SizedBox(
+            width: width,
+            height: 300,
+            child: VisualizerCanvasViewport(
+              time: time,
+              spectrum: spectrum,
+              levelL: levelL,
+              levelR: levelR,
+              config: config,
+              palette: palette,
+              peakEngine: peakEngine,
+              waveformSynth: synth,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    FluidDynamicsPainter mainFluidPainter() {
+      for (final widget in tester.widgetList<CustomPaint>(find.byType(CustomPaint))) {
+        final dynamic painter = widget.painter;
+        try {
+          final main = painter.mainPainter;
+          if (main is FluidDynamicsPainter) return main;
+        } on NoSuchMethodError {
+          continue;
+        }
+      }
+      throw StateError('Fluid painter not found');
+    }
+
+    final firstPalette = VisualizerPalette.resolve(
+      VisualizerColorTheme.system,
+      auraDark,
+    );
+    await tester.pumpWidget(viewport(360, firstPalette));
+    final first = mainFluidPainter();
+
+    final rebuiltPalette = VisualizerPalette.resolve(
+      VisualizerColorTheme.system,
+      auraDark,
+    );
+    expect(identical(firstPalette, rebuiltPalette), isFalse);
+    await tester.pumpWidget(viewport(520, rebuiltPalette));
+    expect(mainFluidPainter(), same(first));
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   group('VisualizerConfigDrawer', () {

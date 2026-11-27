@@ -18,6 +18,7 @@ const _palette = VisualizerPalette(
 );
 
 const _size = Size(960, 540);
+const _lightStageBackground = Color(0xFFF4F7FB);
 
 class _FrameClock {
   double _time = 0;
@@ -41,11 +42,15 @@ FluidDynamicsPainter _painter(
   List<double> bands,
   _FrameClock clock, {
   VisualizerPalette palette = _palette,
+  int? pressureIterations,
+  Color? backgroundColor,
 }) => FluidDynamicsPainter(
   bands: bands,
   palette: palette,
   bloom: 0.5,
   animationTime: clock.current,
+  pressureIterations: pressureIterations,
+  backgroundColor: backgroundColor,
 );
 
 void _paintAt(FluidDynamicsPainter painter, double time, {Size size = _size}) {
@@ -287,50 +292,29 @@ void main() {
     timeout: const Timeout(Duration(minutes: 2)),
   );
 
-  test('dense-to-sparse frames clear the stale atlas color tail', () {
+  test('each frame clears unused atlas color slots', () {
     final bands = _activeBands();
     final clock = _FrameClock();
     final painter = _painter(bands, clock);
     for (var frame = 0; frame < 30; frame++) {
       _paintStep(painter, clock);
     }
-    final dense = _paintRecorded(painter, clock);
-    expect(dense.sprites.length, greaterThan(128));
+    expect(_paintRecorded(painter, clock).sprites.length, greaterThan(128));
 
-    bands.fillRange(0, bands.length, 0.03);
-    for (var frame = 0; frame < 180; frame++) {
-      _paintStep(painter, clock);
-    }
-    // Keep the same field while forcing most color-table entries transparent.
-    // This makes the active atlas span deterministically smaller than capacity.
-    painter.bloom = -9.46;
-    final sparse = _paintRecorded(painter, clock);
-    expect(sparse.atlasCalls, 1);
-    final colors = sparse.colors!;
-    final firstTransparent = colors.indexWhere(
-      (color) => ((color >>> 24) & 0xFF) == 0,
-    );
-
-    expect(
-      firstTransparent,
-      greaterThanOrEqualTo(0),
-      reason:
-          'The fixed-capacity color buffer must expose a cleared tail after '
-          'the active sprites; dense=${dense.sprites.length} '
-          'sparse=${sparse.sprites.length}.',
-    );
-    expect(
-      sparse.sprites.length,
-      lessThan(dense.sprites.length - 32),
-      reason:
-          'A sparse frame must not retain dense-frame sprites: '
-          'dense=${dense.sprites.length} sparse=${sparse.sprites.length}.',
-    );
+    bands.fillRange(0, bands.length, 0);
+    painter.debugClearDye();
+    final colors = painter.debugAtlasColors;
+    colors.fillRange(0, colors.length, 0xFFFFFFFF);
+    final frame = _paintRecorded(painter, clock);
+    expect(frame.atlasCalls, 1);
+    expect(frame.sprites.length, greaterThan(0));
+    expect(frame.sprites.length, lessThan(frame.submittedCapacity));
     expect(
       colors
-          .skip(firstTransparent)
+          .skip(frame.sprites.length)
           .every((color) => ((color >>> 24) & 0xFF) == 0),
       isTrue,
+      reason: 'Stale dense-frame colors must not survive in the atlas tail.',
     );
   });
 
@@ -356,14 +340,28 @@ void main() {
   test(
     'explicit clocks isolate frame order, resize, and fresh-state reset',
     () {
-      final loud = _painter(_activeBands(), _FrameClock());
-      final quiet = _painter(List<double>.filled(64, 0), _FrameClock());
-      final referenceLoud = _painter(_activeBands(), _FrameClock());
+      final loud = _painter(
+        _activeBands(),
+        _FrameClock(),
+        pressureIterations: 12,
+      );
+      final quiet = _painter(
+        List<double>.filled(64, 0),
+        _FrameClock(),
+        pressureIterations: 12,
+      );
+      final referenceLoud = _painter(
+        _activeBands(),
+        _FrameClock(),
+        pressureIterations: 12,
+      );
       final referenceQuiet = _painter(
         List<double>.filled(64, 0),
         _FrameClock(),
+        pressureIterations: 12,
       );
       List<double>? firstLoudEnvelope;
+      Float32List? firstLoudDye;
 
       for (var frame = 0; frame < 6; frame++) {
         final time = (frame + 1) / 30;
@@ -387,10 +385,22 @@ void main() {
             closeTo(referenceQuiet.debugSmoothedBands[band], 1e-6),
           );
         }
+        expect(loud.debugPressureIterations, 12);
+        expect(quiet.debugPressureIterations, 12);
+        expect(loud.debugDyeField, orderedEquals(referenceLoud.debugDyeField));
+        expect(
+          quiet.debugDyeField,
+          orderedEquals(referenceQuiet.debugDyeField),
+        );
         firstLoudEnvelope ??= List<double>.of(referenceLoud.debugSmoothedBands);
+        firstLoudDye ??= Float32List.fromList(referenceLoud.debugDyeField);
       }
 
-      final fresh = _painter(_activeBands(), _FrameClock());
+      final fresh = _painter(
+        _activeBands(),
+        _FrameClock(),
+        pressureIterations: 12,
+      );
       expect(fresh.debugSmoothedBands, isEmpty);
       _paintAt(fresh, 0);
       for (var band = 0; band < 64; band++) {
@@ -399,6 +409,7 @@ void main() {
           closeTo(firstLoudEnvelope![band], 1e-6),
         );
       }
+      expect(fresh.debugDyeField, orderedEquals(firstLoudDye!));
     },
   );
 
@@ -513,5 +524,42 @@ void main() {
       expect(identical(next.colors, firstColors), isTrue);
       expect(next.submittedCapacity, first.submittedCapacity);
     }
+  });
+
+  test('stage background controls fluid contrast for fixed presets', () {
+    final lightClock = _FrameClock();
+    final darkClock = _FrameClock();
+    final light = _painter(
+      _activeBands(),
+      lightClock,
+      backgroundColor: _lightStageBackground,
+    );
+    final dark = _painter(_activeBands(), darkClock);
+    for (var frame = 0; frame < 30; frame++) {
+      _paintStep(light, lightClock);
+      _paintStep(dark, darkClock);
+    }
+    final lightFrame = _paintRecorded(light, lightClock);
+    final darkFrame = _paintRecorded(dark, darkClock);
+    expect(lightFrame.sprites.length, greaterThan(0));
+    expect(lightFrame.sprites.length, darkFrame.sprites.length);
+
+    double meanRgb(Iterable<_SpriteSample> sprites) {
+      var sum = 0.0;
+      for (final sprite in sprites) {
+        sum +=
+            (sprite.color & 0xFF) +
+            ((sprite.color >>> 8) & 0xFF) +
+            ((sprite.color >>> 16) & 0xFF);
+      }
+      return sum / (sprites.length * 3);
+    }
+
+    expect(
+      meanRgb(lightFrame.sprites),
+      lessThan(meanRgb(darkFrame.sprites) * 0.85),
+      reason:
+          'A light stage needs darker ink even when a preset peak is light.',
+    );
   });
 }
