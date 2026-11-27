@@ -145,11 +145,18 @@ class _VisualizerHudState extends State<VisualizerHud> {
                               children: [
                                 // 分类选择器选项卡 (Native vs MilkDrop)
                                 Container(
-                                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    8,
+                                    8,
+                                    8,
+                                    6,
+                                  ),
                                   decoration: BoxDecoration(
                                     border: Border(
                                       bottom: BorderSide(
-                                        color: p.hairline.withValues(alpha: 0.6),
+                                        color: p.hairline.withValues(
+                                          alpha: 0.6,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -161,7 +168,8 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                           count: VisualizerStyle.values
                                               .where(
                                                 (s) =>
-                                                    s != VisualizerStyle.projectM,
+                                                    s !=
+                                                    VisualizerStyle.projectM,
                                               )
                                               .length,
                                           selected: _categoryTab == 0,
@@ -174,7 +182,8 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                         child: CategoryTabButton(
                                           title: l.visualizerCategoryMilkdrop,
                                           count:
-                                              widget.milkdropPresets?.length ?? 3,
+                                              widget.milkdropPresets?.length ??
+                                              3,
                                           selected: _categoryTab == 1,
                                           onTap: () =>
                                               setState(() => _categoryTab = 1),
@@ -188,7 +197,8 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                 ConstrainedBox(
                                   constraints: BoxConstraints(
                                     maxHeight:
-                                        MediaQuery.sizeOf(context).height * 0.44,
+                                        MediaQuery.sizeOf(context).height *
+                                        0.44,
                                   ),
                                   child: _categoryTab == 0
                                       // Tab 0: 原生视效
@@ -196,14 +206,19 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                           child: Column(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              for (final style in VisualizerStyle.values)
-                                                if (style != VisualizerStyle.projectM)
+                                              for (final style
+                                                  in VisualizerStyle.values)
+                                                if (style !=
+                                                    VisualizerStyle.projectM)
                                                   VisualizerMenuItem(
                                                     style: style,
                                                     isSelected:
-                                                        widget.config.style == style,
+                                                        widget.config.style ==
+                                                        style,
                                                     onTap: () {
-                                                      widget.onStyleChanged(style);
+                                                      widget.onStyleChanged(
+                                                        style,
+                                                      );
                                                       _closeMenu();
                                                     },
                                                   ),
@@ -224,23 +239,29 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                               ),
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 4,
-                                              ),
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
                                               decoration: BoxDecoration(
-                                                color: (widget.isProjectMNativeActive
-                                                        ? p.accent
-                                                        : p.textDim)
-                                                    .withValues(alpha: 0.12),
+                                                color:
+                                                    (widget.isProjectMNativeActive
+                                                            ? p.accent
+                                                            : p.textDim)
+                                                        .withValues(
+                                                          alpha: 0.12,
+                                                        ),
                                                 borderRadius:
                                                     BorderRadius.circular(
-                                                  AuraRadius.xs,
-                                                ),
+                                                      AuraRadius.xs,
+                                                    ),
                                                 border: Border.all(
-                                                  color: (widget.isProjectMNativeActive
-                                                          ? p.accent
-                                                          : p.hairline)
-                                                      .withValues(alpha: 0.4),
+                                                  color:
+                                                      (widget.isProjectMNativeActive
+                                                              ? p.accent
+                                                              : p.hairline)
+                                                          .withValues(
+                                                            alpha: 0.4,
+                                                          ),
                                                   width: 0.8,
                                                 ),
                                               ),
@@ -250,9 +271,11 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                                     widget.isProjectMNativeActive
                                                         ? Icons.bolt_rounded
                                                         : Icons
-                                                            .info_outline_rounded,
+                                                              .info_outline_rounded,
                                                     size: 13,
-                                                    color: widget.isProjectMNativeActive
+                                                    color:
+                                                        widget
+                                                            .isProjectMNativeActive
                                                         ? p.accent
                                                         : p.textDim,
                                                   ),
@@ -260,17 +283,17 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                                   Expanded(
                                                     child: Text(
                                                       widget.isProjectMNativeActive
-                                                          ? l
-                                                              .visualizerEngineNativeActive
-                                                          : l
-                                                              .visualizerEngineFallbackActive,
+                                                          ? l.visualizerEngineNativeActive
+                                                          : l.visualizerEngineFallbackActive,
                                                       style: TextStyle(
                                                         fontSize: 10.5,
-                                                        color: widget
+                                                        color:
+                                                            widget
                                                                 .isProjectMNativeActive
                                                             ? p.accent
                                                             : p.textDim,
-                                                        fontWeight: FontWeight.w500,
+                                                        fontWeight:
+                                                            FontWeight.w500,
                                                       ),
                                                       maxLines: 1,
                                                       overflow:
@@ -285,27 +308,31 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                             Flexible(
                                               child: SingleChildScrollView(
                                                 child: Column(
-                                                  mainAxisSize: MainAxisSize.min,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
                                                   children: [
                                                     if (widget.milkdropPresets !=
                                                             null &&
-                                                        widget.milkdropPresets!
+                                                        widget
+                                                            .milkdropPresets!
                                                             .isNotEmpty)
                                                       for (final preset
-                                                          in widget.milkdropPresets!)
+                                                          in widget
+                                                              .milkdropPresets!)
                                                         MilkdropPresetMenuItem(
                                                           preset: preset,
-                                                          isSelected: widget
+                                                          isSelected:
+                                                              widget
                                                                       .config
                                                                       .style ==
                                                                   VisualizerStyle
                                                                       .projectM &&
-                                                              ((widget.config
+                                                              ((widget
+                                                                          .config
                                                                           .milkdropPresetPath ==
                                                                       preset
                                                                           .filePath) ||
-                                                                  (widget.config
-                                                                              .milkdropPresetPath ==
+                                                                  (widget.config.milkdropPresetPath ==
                                                                           null &&
                                                                       preset ==
                                                                           widget
@@ -315,10 +342,6 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                                             widget
                                                                 .onSelectMilkdropPreset
                                                                 ?.call(preset);
-                                                            widget.onStyleChanged(
-                                                              VisualizerStyle
-                                                                  .projectM,
-                                                            );
                                                             _closeMenu();
                                                           },
                                                         )
@@ -326,11 +349,10 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                                       Padding(
                                                         padding:
                                                             const EdgeInsets.all(
-                                                          12,
-                                                        ),
+                                                              12,
+                                                            ),
                                                         child: Text(
-                                                          l
-                                                              .visualizerMilkdropPresetEmpty,
+                                                          l.visualizerMilkdropPresetEmpty,
                                                           textAlign:
                                                               TextAlign.center,
                                                           style: TextStyle(
@@ -348,9 +370,9 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                             Container(
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 6,
-                                              ),
+                                                    horizontal: 8,
+                                                    vertical: 6,
+                                                  ),
                                               decoration: BoxDecoration(
                                                 border: Border(
                                                   top: BorderSide(
@@ -368,25 +390,23 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                                         size: 13,
                                                       ),
                                                       label: Text(
-                                                        l
-                                                            .visualizerPickMilkdropFile,
+                                                        l.visualizerPickMilkdropFile,
                                                         style: const TextStyle(
                                                           fontSize: 10.5,
                                                         ),
                                                         maxLines: 1,
-                                                        overflow:
-                                                            TextOverflow.ellipsis,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
                                                       ),
-                                                      style:
-                                                          OutlinedButton.styleFrom(
+                                                      style: OutlinedButton.styleFrom(
                                                         visualDensity:
-                                                            VisualDensity.compact,
+                                                            VisualDensity
+                                                                .compact,
                                                         padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                          horizontal: 4,
-                                                          vertical: 6,
-                                                        ),
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 4,
+                                                              vertical: 6,
+                                                            ),
                                                         foregroundColor: p.text,
                                                         side: BorderSide(
                                                           color: p.hairline,
@@ -394,7 +414,8 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                                       ),
                                                       onPressed: () {
                                                         _closeMenu();
-                                                        widget.onPickMilkdropFile
+                                                        widget
+                                                            .onPickMilkdropFile
                                                             ?.call();
                                                       },
                                                     ),
@@ -403,29 +424,28 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                                   Expanded(
                                                     child: OutlinedButton.icon(
                                                       icon: const Icon(
-                                                        Icons.folder_open_rounded,
+                                                        Icons
+                                                            .folder_open_rounded,
                                                         size: 13,
                                                       ),
                                                       label: Text(
-                                                        l
-                                                            .visualizerPickMilkdropFolder,
+                                                        l.visualizerPickMilkdropFolder,
                                                         style: const TextStyle(
                                                           fontSize: 10.5,
                                                         ),
                                                         maxLines: 1,
-                                                        overflow:
-                                                            TextOverflow.ellipsis,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
                                                       ),
-                                                      style:
-                                                          OutlinedButton.styleFrom(
+                                                      style: OutlinedButton.styleFrom(
                                                         visualDensity:
-                                                            VisualDensity.compact,
+                                                            VisualDensity
+                                                                .compact,
                                                         padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                          horizontal: 4,
-                                                          vertical: 6,
-                                                        ),
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 4,
+                                                              vertical: 6,
+                                                            ),
                                                         foregroundColor: p.text,
                                                         side: BorderSide(
                                                           color: p.hairline,
@@ -433,7 +453,8 @@ class _VisualizerHudState extends State<VisualizerHud> {
                                                       ),
                                                       onPressed: () {
                                                         _closeMenu();
-                                                        widget.onPickMilkdropFolder
+                                                        widget
+                                                            .onPickMilkdropFolder
                                                             ?.call();
                                                       },
                                                     ),

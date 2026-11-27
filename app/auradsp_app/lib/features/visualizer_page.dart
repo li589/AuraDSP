@@ -210,10 +210,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
       }
     });
     widget.model.applyVisualizerEdit(
-      cfg.copyWith(
-        style: VisualizerStyle.projectM,
-        milkdropPresetPath: path,
-      ),
+      cfg.copyWith(style: VisualizerStyle.projectM, milkdropPresetPath: path),
     );
   }
 
@@ -338,6 +335,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
     final p = paletteOf(context);
     final l = l10nOf(context);
     final expanded = _displayMode.isExpanded;
+    final projectMBridge = ProjectMBridgeFactory.instance;
 
     return HelpVisibilityScope(
       controller: _helpController,
@@ -352,191 +350,197 @@ class _VisualizerPageState extends State<VisualizerPage> {
           autofocus: true,
           onKeyEvent: _handleKeyEvent,
           child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // 背景微动微晕
-          AmbientSpectrum(spectrum: widget.model.spectrum, palette: p),
-          if (p.isDark) const GrainOverlay(),
+            fit: StackFit.expand,
+            children: [
+              // 背景微动微晕
+              AmbientSpectrum(spectrum: widget.model.spectrum, palette: p),
+              if (p.isDark) const GrainOverlay(),
 
-          // 主内容层：标准工作区 ↔ 铺满；页头与电平表随档位平滑折叠
-          Positioned.fill(
-            child: AnimatedPadding(
-              duration: AuraDur.base,
-              curve: AuraCurve.emphasized,
-              padding: expanded
-                  ? EdgeInsets.zero
-                  : EdgeInsets.fromLTRB(
-                      context.responsivePageX,
-                      AuraSpace.pageTop,
-                      context.responsivePageX,
-                      AuraSpace.pageBottom,
-                    ),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: expanded
-                        ? double.infinity
-                        : context.responsiveMaxW,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 顶栏标头（非还原档折叠为 0 高）
-                      AnimatedSwitcher(
-                        duration: AuraDur.base,
-                        switchInCurve: AuraCurve.emphasized,
-                        switchOutCurve: AuraCurve.emphasized,
-                        transitionBuilder: (child, animation) => SizeTransition(
-                          sizeFactor: animation,
-                          alignment: Alignment.topCenter,
-                          child: FadeTransition(
-                            opacity: animation,
-                            child: child,
-                          ),
+              // 主内容层：标准工作区 ↔ 铺满；页头与电平表随档位平滑折叠
+              Positioned.fill(
+                child: AnimatedPadding(
+                  duration: AuraDur.base,
+                  curve: AuraCurve.emphasized,
+                  padding: expanded
+                      ? EdgeInsets.zero
+                      : EdgeInsets.fromLTRB(
+                          context.responsivePageX,
+                          AuraSpace.pageTop,
+                          context.responsivePageX,
+                          AuraSpace.pageBottom,
                         ),
-                        child: expanded
-                            ? const SizedBox(
-                                key: ValueKey('visualizer-header-hidden'),
-                                width: double.infinity,
-                              )
-                            : Column(
-                                key: const ValueKey('visualizer-header'),
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  PageHeader(
-                                    eyebrow: l.pageVisualizerEyebrow,
-                                    title: l.pageVisualizerTitle,
-                                    trailing: VisualizerPeakReadout(
-                                      spectrum: widget.model.spectrum,
-                                      label: l.peakLabel,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: expanded
+                            ? double.infinity
+                            : context.responsiveMaxW,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 顶栏标头（非还原档折叠为 0 高）
+                          AnimatedSwitcher(
+                            duration: AuraDur.base,
+                            switchInCurve: AuraCurve.emphasized,
+                            switchOutCurve: AuraCurve.emphasized,
+                            transitionBuilder: (child, animation) =>
+                                SizeTransition(
+                                  sizeFactor: animation,
+                                  alignment: Alignment.topCenter,
+                                  child: FadeTransition(
+                                    opacity: animation,
+                                    child: child,
+                                  ),
+                                ),
+                            child: expanded
+                                ? const SizedBox(
+                                    key: ValueKey('visualizer-header-hidden'),
+                                    width: double.infinity,
+                                  )
+                                : Column(
+                                    key: const ValueKey('visualizer-header'),
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      PageHeader(
+                                        eyebrow: l.pageVisualizerEyebrow,
+                                        title: l.pageVisualizerTitle,
+                                        trailing: VisualizerPeakReadout(
+                                          spectrum: widget.model.spectrum,
+                                          label: l.peakLabel,
+                                          active: active,
+                                        ),
+                                      ),
+                                      const SizedBox(height: AuraSpace.xl),
+                                    ],
+                                  ),
+                          ),
+
+                          // 核心视效舞台（三档共用同一实例，状态与动画不重建）
+                          Expanded(
+                            child: ValueListenableBuilder<bool>(
+                              valueListenable: _playing,
+                              builder: (_, playing, _) => VisualizerStage(
+                                playing: playing,
+                                spectrum: widget.model.spectrum,
+                                levelL: widget.model.levelL,
+                                levelR: widget.model.levelR,
+                                projectmPcm: widget.model.projectmPcmSnapshot,
+                                projectMBridge: projectMBridge,
+                                config: config,
+                                displayMode: _displayMode,
+                                onStyleChanged: (st) =>
+                                    widget.model.applyVisualizerEdit(
+                                      config.copyWith(style: st),
+                                    ),
+                                onToggleStageMode: _toggleStageMode,
+                                onDisplayModeChanged: _applyDisplayMode,
+                                onToggleLyrics: _toggleLyrics,
+                                onOpenDrawer: _openDrawer,
+                                onOpenLocalLrc: _pickLocalLrc,
+                                onPickMilkdropFile: _pickMilkdropPreset,
+                                onPickMilkdropFolder: _pickMilkdropDirectory,
+                                milkdropPresets: _milkdropPresets,
+                                onSelectMilkdropPreset: (preset) {
+                                  final cfg =
+                                      widget.model.visualizerConfig.value;
+                                  widget.model.applyVisualizerEdit(
+                                    cfg.copyWith(
+                                      style: VisualizerStyle.projectM,
+                                      milkdropPresetPath: preset.filePath,
+                                    ),
+                                  );
+                                },
+                                isProjectMNativeActive:
+                                    projectMBridge.isAvailable,
+                                mediaSync: _mediaSync,
+                                emptyText: l.noAudio,
+                                active: active,
+                              ),
+                            ),
+                          ),
+
+                          // 底部声学测量电平（非还原档折叠为 0 高）
+                          AnimatedSwitcher(
+                            duration: AuraDur.base,
+                            switchInCurve: AuraCurve.emphasized,
+                            switchOutCurve: AuraCurve.emphasized,
+                            transitionBuilder: (child, animation) =>
+                                SizeTransition(
+                                  sizeFactor: animation,
+                                  alignment: Alignment.bottomCenter,
+                                  child: FadeTransition(
+                                    opacity: animation,
+                                    child: child,
+                                  ),
+                                ),
+                            child: expanded
+                                ? const SizedBox(
+                                    key: ValueKey('visualizer-meters-hidden'),
+                                    width: double.infinity,
+                                  )
+                                : Padding(
+                                    key: const ValueKey('visualizer-meters'),
+                                    padding: const EdgeInsets.only(
+                                      top: AuraSpace.xl,
+                                    ),
+                                    child: VisualizerMeters(
+                                      model: widget.model,
                                       active: active,
                                     ),
                                   ),
-                                  const SizedBox(height: AuraSpace.xl),
-                                ],
-                              ),
-                      ),
-
-                      // 核心视效舞台（三档共用同一实例，状态与动画不重建）
-                      Expanded(
-                        child: ValueListenableBuilder<bool>(
-                          valueListenable: _playing,
-                          builder: (_, playing, _) => VisualizerStage(
-                            playing: playing,
-                            spectrum: widget.model.spectrum,
-                            levelL: widget.model.levelL,
-                            levelR: widget.model.levelR,
-                            projectmPcm: widget.model.projectmPcmSnapshot,
-                            projectMBridge: ProjectMBridgeFactory.instance,
-                            config: config,
-                            displayMode: _displayMode,
-                            onStyleChanged: (st) => widget.model
-                                .applyVisualizerEdit(config.copyWith(style: st)),
-                            onToggleStageMode: _toggleStageMode,
-                            onDisplayModeChanged: _applyDisplayMode,
-                            onToggleLyrics: _toggleLyrics,
-                            onOpenDrawer: _openDrawer,
-                            onOpenLocalLrc: _pickLocalLrc,
-                            onPickMilkdropFile: _pickMilkdropPreset,
-                            onPickMilkdropFolder: _pickMilkdropDirectory,
-                            milkdropPresets: _milkdropPresets,
-                            onSelectMilkdropPreset: (preset) {
-                              final cfg = widget.model.visualizerConfig.value;
-                              widget.model.applyVisualizerEdit(
-                                cfg.copyWith(
-                                  style: VisualizerStyle.projectM,
-                                  milkdropPresetPath: preset.filePath,
-                                ),
-                              );
-                            },
-                            isProjectMNativeActive:
-                                ProjectMBridgeFactory.instance.isAvailable,
-                            mediaSync: _mediaSync,
-                            emptyText: l.noAudio,
-                            active: active,
                           ),
-                        ),
+                        ],
                       ),
-
-                      // 底部声学测量电平（非还原档折叠为 0 高）
-                      AnimatedSwitcher(
-                        duration: AuraDur.base,
-                        switchInCurve: AuraCurve.emphasized,
-                        switchOutCurve: AuraCurve.emphasized,
-                        transitionBuilder: (child, animation) => SizeTransition(
-                          sizeFactor: animation,
-                          alignment: Alignment.bottomCenter,
-                          child: FadeTransition(
-                            opacity: animation,
-                            child: child,
-                          ),
-                        ),
-                        child: expanded
-                            ? const SizedBox(
-                                key: ValueKey('visualizer-meters-hidden'),
-                                width: double.infinity,
-                              )
-                            : Padding(
-                                key: const ValueKey('visualizer-meters'),
-                                padding: const EdgeInsets.only(
-                                  top: AuraSpace.xl,
-                                ),
-                                child: VisualizerMeters(
-                                  model: widget.model,
-                                  active: active,
-                                ),
-                              ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
 
-          // 浮动参数抽屉：淡入 + 右侧滑入，关闭时反向过渡
-          VisualizerDrawerOverlay(
-            open: _drawerOpen,
-            config: config,
-            onConfigChanged: (newCfg) {
-              // 范围分流（2026-11-23）：预设档写当前风格覆盖表，
-              // 全局档写全局配置；显示值恒为生效配置。
-              if (_vizScopePreset) {
-                widget.model.setVisualizerStyleOverride(newCfg);
-              } else {
-                // [审查 Dart-F2] 全局档以原始全局为基底施加
-                // 改动字段，避免当前风格覆盖值被烤进全局。
-                widget.model.applyVisualizerEdit(newCfg);
-              }
-            },
-            onClose: _closeDrawer,
-            onResetToDefaults: () {
-              // 复位按档：预设档 = 当前风格恢复跟随全局；
-              // 全局档 = 只复位调谐参数（审查 F5，user 裁定
-              // 2026-11-25：风格/歌词/MilkDrop 选择保留）。
-              if (_vizScopePreset) {
-                widget.model.clearVisualizerStyleOverride();
-              } else {
-                widget.model.resetVisualizerTuningToDefaults();
-              }
-            },
-            scopePreset: _vizScopePreset,
-            onScopeChanged: (v) => setState(() => _vizScopePreset = v),
-            hasStyleOverride: widget.model.visualizerHasStyleOverride,
-            onPickMilkdropFile: _pickMilkdropPreset,
-            onPickMilkdropFolder: _pickMilkdropDirectory,
-            milkdropPresets: _milkdropPresets,
-            onSelectMilkdropPreset: (preset) {
-              final cfg = widget.model.visualizerConfig.value;
-              widget.model.applyVisualizerEdit(
-                cfg.copyWith(
-                  style: VisualizerStyle.projectM,
-                  milkdropPresetPath: preset.filePath,
-                ),
-              );
-            },
-            isProjectMNativeActive: ProjectMBridgeFactory.instance.isAvailable,
-          ),
+              // 浮动参数抽屉：淡入 + 右侧滑入，关闭时反向过渡
+              VisualizerDrawerOverlay(
+                open: _drawerOpen,
+                config: config,
+                onConfigChanged: (newCfg) {
+                  // 范围分流（2026-11-23）：预设档写当前风格覆盖表，
+                  // 全局档写全局配置；显示值恒为生效配置。
+                  if (_vizScopePreset) {
+                    widget.model.setVisualizerStyleOverride(newCfg);
+                  } else {
+                    // [审查 Dart-F2] 全局档以原始全局为基底施加
+                    // 改动字段，避免当前风格覆盖值被烤进全局。
+                    widget.model.applyVisualizerEdit(newCfg);
+                  }
+                },
+                onClose: _closeDrawer,
+                onResetToDefaults: () {
+                  // 复位按档：预设档 = 当前风格恢复跟随全局；
+                  // 全局档 = 只复位调谐参数（审查 F5，user 裁定
+                  // 2026-11-25：风格/歌词/MilkDrop 选择保留）。
+                  if (_vizScopePreset) {
+                    widget.model.clearVisualizerStyleOverride();
+                  } else {
+                    widget.model.resetVisualizerTuningToDefaults();
+                  }
+                },
+                scopePreset: _vizScopePreset,
+                onScopeChanged: (v) => setState(() => _vizScopePreset = v),
+                hasStyleOverride: widget.model.visualizerHasStyleOverride,
+                onPickMilkdropFile: _pickMilkdropPreset,
+                onPickMilkdropFolder: _pickMilkdropDirectory,
+                milkdropPresets: _milkdropPresets,
+                onSelectMilkdropPreset: (preset) {
+                  final cfg = widget.model.visualizerConfig.value;
+                  widget.model.applyVisualizerEdit(
+                    cfg.copyWith(
+                      style: VisualizerStyle.projectM,
+                      milkdropPresetPath: preset.filePath,
+                    ),
+                  );
+                },
+                isProjectMNativeActive: projectMBridge.isAvailable,
+              ),
             ],
           ),
         ),

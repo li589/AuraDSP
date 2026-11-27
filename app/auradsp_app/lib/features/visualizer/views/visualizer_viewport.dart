@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../core/design.dart';
 import '../../../core/nav.dart';
 import '../../../core/state.dart';
+import '../../../core/theme.dart';
 import '../../../ui/widgets.dart' show FreqAxis;
 import '../../visualizer_page.dart';
 import '../controllers/cava_feature_engine.dart';
@@ -191,6 +192,12 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
       oldWidget.time.removeListener(_onTime);
       widget.time.addListener(_onTime);
     }
+    if (!identical(oldWidget.projectMBridge, widget.projectMBridge)) {
+      _disposePresetSelection();
+      _pmLoadedPath = null;
+      _pmInitInFlight = false;
+      _pmInitFailedAt = null;
+    }
     _syncProjectmSession();
   }
 
@@ -209,11 +216,14 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   bool _pmInitInFlight = false;
   DateTime? _pmInitFailedAt;
   String? _pmLoadedPath;
-  String? _pmPresetFailedPath;
-  DateTime? _pmPresetFailedAt;
+  ProjectMPresetSelectionController? _pmPresetSelection;
+  final ValueNotifier<PresetSelection> _pmSelectionState =
+      ValueNotifier<PresetSelection>(const PresetSelection());
   List<double>? _pmLastFed;
-  final List<double> _synthPcmBuffer =
-      List<double>.filled(WaveformSynthesizer.pointCount * 2, 0.0);
+  final List<double> _synthPcmBuffer = List<double>.filled(
+    WaveformSynthesizer.pointCount * 2,
+    0.0,
+  );
 
   List<double> _synthesizePcmFromWaveform() {
     final wl = widget.waveformSynth.waveL;
@@ -255,6 +265,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
     if (!_projectmShouldRun) {
       _pmTimer?.cancel();
       _pmTimer = null;
+      _disposePresetSelection();
       return;
     }
     _pmTimer ??= Timer.periodic(
@@ -279,14 +290,18 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
       }
       _pmInitInFlight = true;
       bridge.initialize(width: 640, height: 360, fps: 30).then((ok) {
+        if (!mounted || !identical(widget.projectMBridge, bridge)) return;
         _pmInitInFlight = false;
-        if (!ok) _pmInitFailedAt = DateTime.now();
-        if (ok) {
-          // A fresh native instance holds its default preset; any
-          // previously recorded load belongs to the old instance.
-          _pmLoadedPath = null;
-          if (mounted) _pmLoadCurrentPreset();
+        if (!_projectmShouldRun) return;
+        if (!ok) {
+          _pmInitFailedAt = DateTime.now();
+          return;
         }
+        // A fresh native instance holds its default preset; any
+        // previously recorded load belongs to the old instance.
+        _pmLoadedPath = null;
+        _pmPresetSelection?.reset();
+        _pmLoadCurrentPreset();
       });
       return;
     }
@@ -304,7 +319,8 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         bridge.feedPcm(effectivePcm);
       }
     } else {
-      final hasAudio = (widget.levelL.value > -89.0 || widget.levelR.value > -89.0) ||
+      final hasAudio =
+          (widget.levelL.value > -89.0 || widget.levelR.value > -89.0) ||
           (widget.spectrum.value.isNotEmpty &&
               widget.spectrum.value.any((b) => b > 0.001));
       if (hasAudio) {
@@ -325,30 +341,56 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
     final bridge = widget.projectMBridge;
     if (bridge == null || !bridge.isAvailable) return;
     final path = widget.config.milkdropPresetPath;
-    if (path == null || path.isEmpty || path == _pmLoadedPath) return;
+    if (path == null || path.isEmpty) {
+      _pmPresetSelection?.clear();
+      _pmLoadedPath = null;
+      return;
+    }
+    if (path == _pmLoadedPath) return;
     // 内置预设先解析落盘路径（桥只接真实文件）；尚未落盘时本
     // tick 跳过且不记失败（落盘在页面 init 时已触发，稍后自愈）。
     final resolved = MilkdropPreset.resolveFilePath(path);
     if (resolved == path && MilkdropPreset.isBuiltinPath(path)) {
+      _pmPresetSelection?.clear();
       unawaited(MilkdropBuiltinStaging.ensureStaged());
       return;
     }
-    // A persistently failing preset (corrupt .milk, unreadable file)
-    // must not retry file IO + a native load on every 33 ms tick.
-    final failedAt = _pmPresetFailedAt;
-    if (path == _pmPresetFailedPath &&
-        failedAt != null &&
-        DateTime.now().difference(failedAt) < const Duration(seconds: 5)) {
-      return;
+    var controller = _pmPresetSelection;
+    if (controller == null || !identical(controller.bridge, bridge)) {
+      _disposePresetSelection();
+      controller = ProjectMPresetSelectionController(bridge);
+      controller.selection.addListener(_onPmPresetSelection);
+      _pmPresetSelection = controller;
+      _pmSelectionState.value = const PresetSelection();
+      _pmLoadedPath = null;
     }
-    if (bridge.loadPreset(MilkdropPreset.parseFile(resolved))) {
-      _pmLoadedPath = path;
-      _pmPresetFailedPath = null;
-      _pmPresetFailedAt = null;
-    } else {
-      _pmPresetFailedPath = path;
-      _pmPresetFailedAt = DateTime.now();
+    // The native parser owns preset file IO and metadata parsing. Passing a
+    // lightweight path reference keeps the 33 ms tick nonblocking; the
+    // procedural fallback painter still parses metadata separately if needed.
+    controller.select(MilkdropPreset(name: resolved, filePath: resolved));
+  }
+
+  void _onPmPresetSelection() {
+    final state = _pmPresetSelection?.selection.value;
+    if (state == null) return;
+    _pmSelectionState.value = state;
+    if (state.status != PresetSelectionStatus.ready) return;
+    final requested = widget.config.milkdropPresetPath;
+    if (requested == null || requested.isEmpty) return;
+    if (MilkdropPreset.resolveFilePath(requested) == state.requestedPath) {
+      // This is the only write point: request acceptance alone never marks a
+      // preset loaded; native current-path readback must confirm it first.
+      _pmLoadedPath = requested;
     }
+  }
+
+  void _disposePresetSelection() {
+    final controller = _pmPresetSelection;
+    if (controller == null) return;
+    controller.selection.removeListener(_onPmPresetSelection);
+    controller.dispose();
+    _pmPresetSelection = null;
+    _pmSelectionState.value = const PresetSelection();
   }
 
   @override
@@ -357,6 +399,8 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
     _bindProjectmModel(null);
     _pmTimer?.cancel();
     _pmTimer = null;
+    _disposePresetSelection();
+    _pmSelectionState.dispose();
     widget.time.removeListener(_onTime);
     _ambienceTime.dispose();
     super.dispose();
@@ -422,6 +466,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
       peaks,
       separateGrid,
       widget.projectMBridge,
+      widget.projectMBridge?.currentPreset,
     );
     if (_delegate == null || _delegateKey != key) {
       final previous = _delegate;
@@ -498,9 +543,10 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<List<double>>(
-      valueListenable: widget.spectrum,
-      builder: (_, rawBands, _) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([widget.spectrum, _pmSelectionState]),
+      builder: (context, _) {
+        final rawBands = widget.spectrum.value;
         _cavaEngine.configure(barCount: widget.config.barCount);
         final cavaBands = _cavaEngine.process(
           rawBands,
@@ -616,6 +662,61 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
           body = paintLayer;
         }
 
+        final selection = _pmSelectionState.value;
+        final requested = widget.config.milkdropPresetPath;
+        final matchesRequest =
+            requested != null &&
+            requested.isNotEmpty &&
+            MilkdropPreset.resolveFilePath(requested) ==
+                selection.requestedPath;
+        final failed =
+            matchesRequest &&
+            (selection.status == PresetSelectionStatus.failed ||
+                selection.status == PresetSelectionStatus.timedOut);
+        final error = selection.error;
+        Widget content = body;
+        if (failed && error != null) {
+          final scheme = Theme.of(context).colorScheme;
+          content = Stack(
+            fit: StackFit.expand,
+            children: [
+              body,
+              Positioned(
+                top: AuraSpace.md,
+                left: AuraSpace.md,
+                right: AuraSpace.md,
+                child: IgnorePointer(
+                  child: Semantics(
+                    liveRegion: true,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AuraSpace.md,
+                        vertical: AuraSpace.sm,
+                      ),
+                      decoration: BoxDecoration(
+                        color: scheme.errorContainer,
+                        borderRadius: BorderRadius.circular(AuraRadius.sm),
+                        border: Border.all(color: scheme.error),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.error_outline, color: scheme.error),
+                          const SizedBox(width: AuraSpace.sm),
+                          Expanded(
+                            child: Text(
+                              error,
+                              style: TextStyle(color: scheme.onErrorContainer),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
         // 视效风格切换过渡动效：280ms 交叉平滑淡入淡出，彻底消除突变跳跃感
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 280),
@@ -625,7 +726,10 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
             fit: StackFit.expand,
             children: [...previousChildren, ?currentChild],
           ),
-          child: KeyedSubtree(key: ValueKey(widget.config.style), child: body),
+          child: KeyedSubtree(
+            key: ValueKey(widget.config.style),
+            child: content,
+          ),
         );
       },
     );

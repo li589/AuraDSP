@@ -140,18 +140,24 @@ CustomPainter buildVisualizerPainter({
       );
 
     case VisualizerStyle.projectM:
-      final preset =
-          (config.milkdropPresetPath != null &&
-              config.milkdropPresetPath!.isNotEmpty)
-          ? MilkdropPreset.parseFile(config.milkdropPresetPath!)
-          : MilkdropPreset.builtInPresets.first;
       final bridge = projectMBridge;
+      final nativePreset = bridge?.currentPreset;
+      final requestedPath = config.milkdropPresetPath;
+      final preset = requestedPath == null || requestedPath.isEmpty
+          ? MilkdropPreset.builtInPresets.first
+          : nativePreset ??
+                (bridge?.isNative == true
+                    ? MilkdropPreset(
+                        name: requestedPath,
+                        filePath: MilkdropPreset.resolveFilePath(requestedPath),
+                      )
+                    : MilkdropPreset.parseFile(requestedPath));
       if (bridge != null &&
           bridge.isAvailable &&
           bridge.isLoaded &&
+          nativePreset != null &&
           config.milkdropPresetPath != null &&
-          bridge.currentPreset?.filePath ==
-              MilkdropPreset.resolveFilePath(config.milkdropPresetPath!)) {
+          config.milkdropPresetPath!.isNotEmpty) {
         return ProjectMPainter(
           bridge: bridge,
           fallbackPainter: MilkdropPainter(

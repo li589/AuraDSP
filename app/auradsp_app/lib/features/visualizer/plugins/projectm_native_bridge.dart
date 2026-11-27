@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:ui' as ui;
 
@@ -24,6 +25,15 @@ typedef _FeedC = Int32 Function(Pointer<Void>, Pointer<Float>, Int32, Int32);
 typedef _FeedDart = int Function(Pointer<Void>, Pointer<Float>, int, int);
 typedef _LoadC = Int32 Function(Pointer<Void>, Pointer<Utf8>);
 typedef _LoadDart = int Function(Pointer<Void>, Pointer<Utf8>);
+typedef _RequestLoadC = Uint64 Function(Pointer<Void>, Pointer<Utf8>);
+typedef _RequestLoadDart = int Function(Pointer<Void>, Pointer<Utf8>);
+typedef _ReadLoadC = Int32 Function(
+  Pointer<Void>,
+  Uint64,
+  Pointer<Utf8>,
+  IntPtr,
+);
+typedef _ReadLoadDart = int Function(Pointer<Void>, int, Pointer<Utf8>, int);
 typedef _RenderC = Int32 Function(Pointer<Void>, Pointer<Uint8>);
 typedef _RenderDart = int Function(Pointer<Void>, Pointer<Uint8>);
 
@@ -34,7 +44,8 @@ typedef _RenderDart = int Function(Pointer<Void>, Pointer<Uint8>);
 /// the host no longer proves or provides any context — the previous
 /// verifier gate could never pass from a Flutter host and kept the
 /// whole chain permanently unavailable.
-class ProjectMNativeBridge implements ProjectMBridge {
+class ProjectMNativeBridge
+    implements ProjectMBridge, ProjectMAsyncPresetBridge {
   final ValueNotifier<ui.Image?> _frame = ValueNotifier<ui.Image?>(null);
   DynamicLibrary? _library;
   Pointer<Void> _handle = nullptr;
@@ -49,6 +60,8 @@ class ProjectMNativeBridge implements ProjectMBridge {
   late _GetSizeDart _getHeight;
   late _FeedDart _feed;
   late _LoadDart _load;
+  late _RequestLoadDart _requestLoad;
+  late _ReadLoadDart _readLoad;
   late _RenderDart _render;
   late _HasContextDart _hasCurrentGlContext;
 
@@ -94,35 +107,41 @@ class ProjectMNativeBridge implements ProjectMBridge {
       );
       _library = library;
       if (!_ffiBound) {
-      _create = library.lookupFunction<_CreateC, _CreateDart>(
-        'auradsp_projectm_create',
-      );
-      _destroy = library.lookupFunction<_DestroyC, _DestroyDart>(
-        'auradsp_projectm_destroy',
-      );
-      _resize = library.lookupFunction<_ResizeC, _ResizeDart>(
-        'auradsp_projectm_resize',
-      );
-      _hasCurrentGlContext = library
-          .lookupFunction<_HasContextC, _HasContextDart>(
-            'auradsp_projectm_has_current_gl_context',
-          );
-      _getWidth = library.lookupFunction<_GetSizeC, _GetSizeDart>(
-        'auradsp_projectm_get_width',
-      );
-      _getHeight = library.lookupFunction<_GetSizeC, _GetSizeDart>(
-        'auradsp_projectm_get_height',
-      );
-      _feed = library.lookupFunction<_FeedC, _FeedDart>(
-        'auradsp_projectm_feed_pcm',
-      );
-      _load = library.lookupFunction<_LoadC, _LoadDart>(
-        'auradsp_projectm_load_preset',
-      );
-      _render = library.lookupFunction<_RenderC, _RenderDart>(
-        'auradsp_projectm_render_pixels',
-      );
-      _ffiBound = true;
+        _create = library.lookupFunction<_CreateC, _CreateDart>(
+          'auradsp_projectm_create',
+        );
+        _destroy = library.lookupFunction<_DestroyC, _DestroyDart>(
+          'auradsp_projectm_destroy',
+        );
+        _resize = library.lookupFunction<_ResizeC, _ResizeDart>(
+          'auradsp_projectm_resize',
+        );
+        _hasCurrentGlContext = library
+            .lookupFunction<_HasContextC, _HasContextDart>(
+              'auradsp_projectm_has_current_gl_context',
+            );
+        _getWidth = library.lookupFunction<_GetSizeC, _GetSizeDart>(
+          'auradsp_projectm_get_width',
+        );
+        _getHeight = library.lookupFunction<_GetSizeC, _GetSizeDart>(
+          'auradsp_projectm_get_height',
+        );
+        _feed = library.lookupFunction<_FeedC, _FeedDart>(
+          'auradsp_projectm_feed_pcm',
+        );
+        _load = library.lookupFunction<_LoadC, _LoadDart>(
+          'auradsp_projectm_load_preset',
+        );
+        _requestLoad = library.lookupFunction<_RequestLoadC, _RequestLoadDart>(
+          'auradsp_projectm_request_preset_load',
+        );
+        _readLoad = library.lookupFunction<_ReadLoadC, _ReadLoadDart>(
+          'auradsp_projectm_read_preset_load',
+        );
+        _render = library.lookupFunction<_RenderC, _RenderDart>(
+          'auradsp_projectm_render_pixels',
+        );
+        _ffiBound = true;
       }
       // The probe reports the bridge's own GL platform layer is
       // compiled in (W3 amended semantics); per-instance readiness
@@ -178,6 +197,107 @@ class ProjectMNativeBridge implements ProjectMBridge {
       return result == 0;
     } finally {
       malloc.free(path);
+    }
+  }
+
+  @override
+  Future<PresetSelection> requestPresetLoad(
+    MilkdropPreset preset, {
+    required int generation,
+  }) async {
+    PresetSelection finish(
+      PresetSelectionStatus status,
+      String? currentPath,
+      String? error,
+    ) {
+      return PresetSelection(
+        requestedPath: preset.filePath,
+        generation: generation,
+        status: status,
+        currentPath: currentPath,
+        error: error,
+      );
+    }
+
+    if (!isAvailable ||
+        preset.filePath.isEmpty ||
+        preset.filePath.startsWith('builtin:')) {
+      return finish(
+        PresetSelectionStatus.failed,
+        _preset?.filePath,
+        'Native preset path is unavailable',
+      );
+    }
+    final path = preset.filePath.toNativeUtf8();
+    final int requestId;
+    try {
+      requestId = _requestLoad(_handle, path);
+    } finally {
+      malloc.free(path);
+    }
+    if (requestId == 0) {
+      return finish(
+        PresetSelectionStatus.failed,
+        _preset?.filePath,
+        'Native preset request was rejected',
+      );
+    }
+
+    const bufferSize = 32768;
+    final current = calloc<Uint8>(bufferSize);
+    final stopwatch = Stopwatch()..start();
+    try {
+      while (isAvailable && !_disposed) {
+        current[0] = 0;
+        final result = _readLoad(
+          _handle,
+          requestId,
+          current.cast<Utf8>(),
+          bufferSize,
+        );
+        final currentPath = current[0] == 0
+            ? null
+            : current.cast<Utf8>().toDartString();
+        if (result == 0) {
+          if (currentPath != preset.filePath) {
+            return finish(
+              PresetSelectionStatus.failed,
+              currentPath,
+              'Native current preset did not match the request',
+            );
+          }
+          _preset = preset;
+          return finish(PresetSelectionStatus.ready, currentPath, null);
+        }
+        if (result != 1) {
+          final message = result == -4
+              ? 'Native preset request was superseded'
+              : 'Native preset load failed ($result)';
+          return finish(
+            PresetSelectionStatus.failed,
+            currentPath ?? _preset?.filePath,
+            message,
+          );
+        }
+        if (stopwatch.elapsed >= const Duration(seconds: 5)) {
+          return finish(
+            PresetSelectionStatus.timedOut,
+            _preset?.filePath,
+            'Preset load timed out',
+          );
+        }
+        // Only this cheap readback runs on the Flutter UI thread. Parse/load
+        // executes on the native render queue after request_preset_load.
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+      }
+      return finish(
+        PresetSelectionStatus.failed,
+        _preset?.filePath,
+        'Native bridge was disposed during preset load',
+      );
+    } finally {
+      calloc.free(current);
+      stopwatch.stop();
     }
   }
 
@@ -260,7 +380,17 @@ class ProjectMNativeBridge implements ProjectMBridge {
 abstract final class ProjectMBridgeFactory {
   static ProjectMBridge? _instance;
 
-  static ProjectMBridge get instance => _instance ??= create();
+  static ProjectMBridge get instance {
+    final current = _instance;
+    if (current == null ||
+        (current is MockProjectMBridge && current.reprobeOnAccess)) {
+      // A missing DLL may appear after application update or first-run asset
+      // installation. Never make the first failed probe a permanent fallback.
+      // Explicitly injected mocks remain stable for tests and host wiring.
+      _instance = create();
+    }
+    return _instance!;
+  }
 
   @visibleForTesting
   static set instance(ProjectMBridge bridge) => _instance = bridge;
@@ -282,6 +412,7 @@ abstract final class ProjectMBridgeFactory {
       swallow(e, st);
       return MockProjectMBridge(
         statusDescription: 'Native library not found (procedural simulation)',
+        reprobeOnAccess: true,
       );
     }
   }
