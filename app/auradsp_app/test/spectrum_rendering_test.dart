@@ -5,6 +5,9 @@ import 'dart:math' as math;
 
 import 'package:auradsp_app/engine/auradsp_ffi.dart';
 import 'package:auradsp_app/features/chrome.dart';
+import 'package:auradsp_app/features/visualizer/controllers/cava_feature_engine.dart';
+import 'package:auradsp_app/features/visualizer/controllers/peak_physics_engine.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// 与 _SpectrumPainter 中一致的柱宽算法（最小柱宽 + 带内居中）。
@@ -14,7 +17,170 @@ const gap = 3.0;
 double barWidth(double span, double gap, double minBarW) =>
     math.max(minBarW, span - gap);
 
+typedef SpectrumStages = ({
+  List<double> raw,
+  List<double> agc,
+  List<double> post,
+});
+
+SpectrumStages runSpectrumStages(List<double> raw, {int frames = 12}) {
+  final cava = CavaFeatureEngine(barCount: 32, autosens: true);
+  final peaks = PeakPhysicsEngine();
+  late List<double> agc;
+  for (var frame = 0; frame < frames; frame++) {
+    // The production buffers are reused; copy each stage before the next frame.
+    agc = List<double>.of(cava.process(raw));
+    peaks.update(agc, targetBands: 32);
+  }
+  return (
+    raw: List<double>.of(raw),
+    agc: agc,
+    post: List<double>.of(peaks.renderedBands),
+  );
+}
+
+List<int> unsupportedIsolatedSpikes(List<double> bands) {
+  return [
+    for (var i = 1; i < bands.length - 1; i++)
+      if (bands[i] > 0.75 &&
+          bands[i] - math.max(bands[i - 1], bands[i + 1]) > 0.35)
+        i,
+  ];
+}
+
+String formatBands(List<double> bands) =>
+    '[${bands.map((v) => v.toStringAsFixed(4)).join(', ')}]';
+
 void main() {
+  group('Task 19 受控频谱：raw / AGC / post', () {
+    test('静音在真实 UI 特征链的每一级都严格归零', () {
+      final stages = runSpectrumStages(List<double>.filled(32, 0.0));
+      expect(stages.raw.every((v) => v == 0.0), isTrue);
+      expect(stages.agc.every((v) => v == 0.0), isTrue);
+      expect(stages.post.every((v) => v == 0.0), isTrue);
+      debugPrint('silence raw=${formatBands(stages.raw)}');
+      debugPrint('silence agc=${formatBands(stages.agc)}');
+      debugPrint('silence post=${formatBands(stages.post)}');
+    });
+
+    test('10kHz 对应带之外的 AGC/post 序列保持为零', () {
+      final expected = List<int>.generate(VizBands.count, (i) => i).firstWhere(
+        (i) => VizBands.edges[i] <= 10000 && VizBands.edges[i + 1] > 10000,
+      );
+      final raw = List<double>.filled(32, 0.0);
+      raw[expected] = 0.65;
+
+      final stages = runSpectrumStages(raw);
+      expect(stages.agc[expected], greaterThan(0.0));
+      expect(stages.post[expected], greaterThan(0.0));
+      for (var i = 0; i < 32; i++) {
+        if (i == expected) continue;
+        expect(stages.agc[i], 0.0, reason: 'AGC 在带 $i 制造了无来源尖峰');
+        expect(stages.post[i], 0.0, reason: 'post 在带 $i 制造了无来源尖峰');
+      }
+      debugPrint('tone10k band=$expected raw=${formatBands(stages.raw)}');
+      debugPrint('tone10k agc=${formatBands(stages.agc)}');
+      debugPrint('tone10k post=${formatBands(stages.post)}');
+    });
+
+    test('白噪声与粉红噪声不会在 AGC/post 新增孤立尖峰', () {
+      // Literal mean30 raw captures from smoke_viz_controlled_signals.py.
+      // Keeping the fixture here makes the Dart AGC/post test portable while
+      // the native smoke independently regenerates it from deterministic PCM.
+      final inputs = <String, List<double>>{
+        'white': const [
+          0.3870,
+          0.3870,
+          0.4124,
+          0.4309,
+          0.4669,
+          0.4759,
+          0.4766,
+          0.4595,
+          0.4633,
+          0.4872,
+          0.4856,
+          0.4720,
+          0.4931,
+          0.4828,
+          0.4895,
+          0.4949,
+          0.4905,
+          0.4912,
+          0.4865,
+          0.4933,
+          0.4912,
+          0.4876,
+          0.4912,
+          0.4957,
+          0.4964,
+          0.4909,
+          0.4946,
+          0.4974,
+          0.4937,
+          0.4960,
+          0.4979,
+          0.4970,
+        ],
+        'pink': const [
+          0.6903,
+          0.6903,
+          0.6744,
+          0.6730,
+          0.6987,
+          0.6983,
+          0.6862,
+          0.6546,
+          0.6449,
+          0.6539,
+          0.6393,
+          0.6142,
+          0.6206,
+          0.5968,
+          0.5908,
+          0.5832,
+          0.5646,
+          0.5517,
+          0.5339,
+          0.5270,
+          0.5123,
+          0.4961,
+          0.4861,
+          0.4762,
+          0.4653,
+          0.4506,
+          0.4437,
+          0.4365,
+          0.4239,
+          0.4157,
+          0.4075,
+          0.3960,
+        ],
+      };
+      for (final entry in inputs.entries) {
+        final stages = runSpectrumStages(entry.value);
+        expect(unsupportedIsolatedSpikes(stages.raw), isEmpty);
+        expect(
+          unsupportedIsolatedSpikes(stages.agc),
+          isEmpty,
+          reason: '${entry.key} AGC 产生了孤立尖峰',
+        );
+        expect(
+          unsupportedIsolatedSpikes(stages.post),
+          isEmpty,
+          reason: '${entry.key} post 产生了孤立尖峰',
+        );
+        for (final value in [...stages.agc, ...stages.post]) {
+          expect(value.isFinite, isTrue);
+          expect(value, inInclusiveRange(0.0, 1.0));
+        }
+        debugPrint('${entry.key} raw=${formatBands(stages.raw)}');
+        debugPrint('${entry.key} agc=${formatBands(stages.agc)}');
+        debugPrint('${entry.key} post=${formatBands(stages.post)}');
+      }
+    });
+  });
+
   group('频带宽度：不得出现发丝带', () {
     /// 各带的对数跨度占比（%）。末端窄带曾是 0.74%（中频带的 1/4），画成发丝。
     List<double> widths() {

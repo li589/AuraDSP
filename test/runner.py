@@ -37,6 +37,9 @@ PLATFORM_ANY = {
     "smoke_platform_isolation.py",
     # Task 13：Windows 监听与可视化释放契约，纯源码扫描。
     "smoke_viz_lifecycle.py",
+    # Task 19：受控 PCM 经真实原生 FFT/频带路径；engine_artifact 解析产物，
+    # 不访问音频设备或驱动，产物缺失时自 SKIP。
+    "smoke_viz_controlled_signals.py",
     # 进度小窗隔离纪律（2026-11-24）：纯源码 + 本地行为，无显示依赖。
     "smoke_progress_ui.py",
     "smoke_dart_platform_quarantine.py",
@@ -350,6 +353,8 @@ def run_smoke_tests():
         "smoke_eel_matrix_safety.py",
         "smoke_viz_lowfreq.py",
         "smoke_viz_multichannel.py",
+        # Task 19：静音 / 10kHz / 白噪声 / 粉红噪声的原生频谱受控回归。
+        "smoke_viz_controlled_signals.py",
         "smoke_latency_probe.py",
         "smoke_block1056.py",
         "smoke_plugin_host.py",

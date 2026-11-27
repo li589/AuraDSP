@@ -30,6 +30,7 @@ CustomPainter buildVisualizerPainter({
   required double time,
   bool? showGrid,
   ProjectMBridge? projectMBridge,
+  GpuShaderService? service,
 }) {
   final grid = showGrid ?? config.showGrid;
   switch (style) {
@@ -77,6 +78,7 @@ CustomPainter buildVisualizerPainter({
         palette: palette,
         time: time,
         sensitivity: config.sensitivity,
+        service: service,
       );
 
     case VisualizerStyle.tunnelShader:
@@ -86,6 +88,7 @@ CustomPainter buildVisualizerPainter({
         palette: palette,
         time: time,
         sensitivity: config.sensitivity,
+        service: service,
       );
 
     case VisualizerStyle.harmonicWarp:
@@ -95,6 +98,7 @@ CustomPainter buildVisualizerPainter({
         palette: palette,
         time: time,
         sensitivity: config.sensitivity,
+        service: service,
       );
 
     case VisualizerStyle.bars:
@@ -122,6 +126,7 @@ CustomPainter buildVisualizerPainter({
         palette: palette,
         time: time,
         sensitivity: config.sensitivity,
+        service: service,
       );
 
     case VisualizerStyle.nebulaFlow:
@@ -131,6 +136,7 @@ CustomPainter buildVisualizerPainter({
         palette: palette,
         time: time,
         sensitivity: config.sensitivity,
+        service: service,
       );
 
     case VisualizerStyle.projectM:

@@ -1,16 +1,27 @@
 import 'dart:math' as math;
 import 'dart:ui';
-import 'package:flutter/material.dart' show CustomPainter, Alignment, RadialGradient;
+
+import 'package:flutter/material.dart'
+    show
+        Alignment,
+        CustomPainter,
+        RadialGradient,
+        TextPainter,
+        TextSpan,
+        TextStyle;
 
 import '../models/visualizer_themes.dart';
 import '../shaders/gpu_shader_service.dart';
 import 'visualizer_time_aware.dart';
+
+enum VisualizerRendererKind { cpuPainter, gpuShader }
 
 /// Hardware-accelerated GPU Fragment Shader Visualizer Painter
 class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
   final GpuShaderType shaderType;
   final List<double> bands;
   final VisualizerPalette palette;
+  final GpuShaderService _service;
   double time;
   final double sensitivity;
 
@@ -22,6 +33,9 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
   Shader? _fallbackShader;
   Size _fallbackSize = Size.zero;
   int _fallbackBass = -1;
+  TextPainter? _statusTextPainter;
+  String? _statusText;
+  double _statusTextWidth = -1;
 
   GpuShaderPainter({
     required this.shaderType,
@@ -29,7 +43,33 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
     required this.palette,
     required this.time,
     required this.sensitivity,
-  }) : _fallbackRingColor = palette.primary.withValues(alpha: 0.7);
+    GpuShaderService? service,
+  }) : _service = service ?? GpuShaderService.instance,
+       _fallbackRingColor = palette.primary.withValues(alpha: 0.7);
+
+  GpuShaderCompileStatus get compileStatus =>
+      _service.compileStatusFor(shaderType);
+
+  VisualizerRendererKind get rendererKind =>
+      _service.shaderFor(shaderType) != null
+      ? VisualizerRendererKind.gpuShader
+      : VisualizerRendererKind.cpuPainter;
+
+  String get statusDescription {
+    final status = compileStatus;
+    final error = _service.errorFor(shaderType);
+    return switch (status) {
+      GpuShaderCompileStatus.failed =>
+        'Shader compilation failed for ${shaderType.assetPath}'
+            '${error == null ? '' : ': $error'}',
+      GpuShaderCompileStatus.compiled =>
+        'GPU shader active: ${shaderType.assetPath}',
+      GpuShaderCompileStatus.compiling =>
+        'Compiling shader: ${shaderType.assetPath}',
+      GpuShaderCompileStatus.idle =>
+        'Shader not initialized: ${shaderType.assetPath}',
+    };
+  }
 
   @override
   void setVisualizerTime(double t) => time = t;
@@ -46,7 +86,7 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
       treble = ((bands[20] + bands[24] + bands[28]) / 3.0 * sensitivity).clamp(0.0, 2.0);
     }
 
-    final shader = GpuShaderService.instance.shaderFor(shaderType);
+    final shader = _service.shaderFor(shaderType);
     if (shader != null) {
       // Uniform indices mapping:
       // vec2 uResolution (floats 0, 1)
@@ -77,10 +117,71 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
 
       _shaderPaint.shader = shader;
       canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), _shaderPaint);
+    } else if (shaderType == GpuShaderType.tornado) {
+      // A generic ring is another visualizer, not a tornado fallback. Keep the
+      // selected style honest and expose the real loading/compile state.
+      _drawTornadoStatus(canvas, size);
     } else {
       // Graceful fallback gradient if shader is compiling or unsupported
       _drawFallback(canvas, size, bass, mid);
     }
+  }
+
+  void _drawTornadoStatus(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    _fallbackBgPaint
+      ..shader = null
+      ..color = const Color(0xFF080D14);
+    canvas.drawRect(rect, _fallbackBgPaint);
+
+    final failed = compileStatus == GpuShaderCompileStatus.failed;
+    final title = failed
+        ? 'PARTICLE TORNADO UNAVAILABLE'
+        : 'PARTICLE TORNADO LOADING';
+    final text = '$title\n$statusDescription';
+    final maxWidth = math.max(0.0, size.width - 48.0);
+    if (maxWidth <= 0.0) return;
+    if (_statusTextPainter == null ||
+        _statusText != text ||
+        _statusTextWidth != maxWidth) {
+      _statusTextPainter?.dispose();
+      _statusText = text;
+      _statusTextWidth = maxWidth;
+      _statusTextPainter = TextPainter(
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: '$title\n',
+              style: TextStyle(
+                color: failed ? const Color(0xFFFFB4AB) : palette.primary,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                height: 1.4,
+              ),
+            ),
+            TextSpan(
+              text: statusDescription,
+              style: const TextStyle(
+                color: Color(0xFFD5DDE5),
+                fontSize: 13,
+                height: 1.45,
+              ),
+            ),
+          ],
+        ),
+        maxLines: 7,
+        ellipsis: '…',
+        textAlign: TextAlign.left,
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: maxWidth);
+    }
+
+    final textPainter = _statusTextPainter!;
+    final offset = Offset(
+      24,
+      math.max(16.0, (size.height - textPainter.height) / 2),
+    );
+    textPainter.paint(canvas, offset);
   }
 
   void _drawFallback(Canvas canvas, Size size, double bass, double mid) {

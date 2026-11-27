@@ -8,8 +8,10 @@ import 'package:auradsp_app/features/visualizer/models/visualizer_themes.dart';
 import 'package:auradsp_app/features/visualizer/controllers/peak_physics_engine.dart';
 import 'package:auradsp_app/features/visualizer/controllers/waveform_synthesizer.dart';
 import 'package:auradsp_app/features/visualizer/plugins/milkdrop_preset.dart';
+import 'package:auradsp_app/features/visualizer/shaders/gpu_shader_service.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_atmosphere.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_fluid.dart';
+import 'package:auradsp_app/features/visualizer/styles/style_gpu_shader.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_milkdrop.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_nebula_flow.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_tornado.dart';
@@ -197,7 +199,7 @@ void main() {
       ]) {
         final recorder = ui.PictureRecorder();
         final canvas = Canvas(recorder);
-        buildVisualizerPainter(
+        final painter = buildVisualizerPainter(
           style: style,
           config: VisualizerConfig(style: style),
           palette: palette,
@@ -205,7 +207,19 @@ void main() {
           peaks: peaks,
           waveformSynth: synth,
           time: 12.5,
-        ).paint(canvas, const Size(800, 480));
+        );
+        if (style == VisualizerStyle.tornado) {
+          expect(painter, isA<GpuShaderPainter>());
+          final gpu = painter as GpuShaderPainter;
+          expect(gpu.shaderType, GpuShaderType.tornado);
+          expect(
+            gpu.rendererKind,
+            gpu.compileStatus == GpuShaderCompileStatus.compiled
+                ? VisualizerRendererKind.gpuShader
+                : VisualizerRendererKind.cpuPainter,
+          );
+        }
+        painter.paint(canvas, const Size(800, 480));
         AtmospherePainter(
           bands: bands,
           palette: palette,
