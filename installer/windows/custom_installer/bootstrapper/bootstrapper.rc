@@ -6,8 +6,8 @@ IDI_ICON1 ICON "resources/app_icon.ico"
 1 RT_MANIFEST "bootstrapper.manifest"
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,1,0,1
- PRODUCTVERSION 0,1,0,1
+ FILEVERSION 0,1,0,0
+ PRODUCTVERSION 0,1,0,0
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS 0x40004L
@@ -20,11 +20,11 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "AuraDSP Project"
             VALUE "FileDescription", "AuraDSP Setup"
-            VALUE "FileVersion", "0.1.0.1"
+            VALUE "FileVersion", "0.1.0"
             VALUE "InternalName", "auradsp_bootstrapper"
             VALUE "OriginalFilename", "AuraDSP-Setup.exe"
             VALUE "ProductName", "AuraDSP"
-            VALUE "ProductVersion", "0.1.0.1"
+            VALUE "ProductVersion", "0.1.0"
         END
     END
     BLOCK "VarFileInfo"
