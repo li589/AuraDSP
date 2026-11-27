@@ -105,8 +105,9 @@ extension ProjectMBridgePresetRequest on ProjectMBridge {
   }
 }
 
-/// Serializes native loads and keeps only the newest requested generation.
-/// A request is ready only when native readback confirms the same path.
+/// Forwards the newest requested generation immediately; the native render
+/// queue serializes/coalesces loads. A request is ready only when native
+/// readback confirms the same path.
 class ProjectMPresetSelectionController {
   final ProjectMBridge bridge;
   final Duration timeout;
@@ -153,6 +154,7 @@ class ProjectMPresetSelectionController {
 
     _retryTimer?.cancel();
     _retryTimer = null;
+    _cancelAttempt();
     _requestedPreset = preset;
     final generation = ++_generation;
     selection.value = PresetSelection(

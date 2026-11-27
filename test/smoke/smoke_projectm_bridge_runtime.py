@@ -510,6 +510,17 @@ def main() -> int:
         check(b_rc == 0 and len(b_after_resize) == 320 * 180 * 4,
               "A 改尺寸后 B 帧仍正确（rc=%d bytes=%d expected=%d）" %
               (b_rc, len(b_after_resize), 320 * 180 * 4))
+        a_resized_red, a_resized_green, a_resized_blue = mean_rgb(a_resized)
+        b_resized_red, b_resized_green, b_resized_blue = mean_rgb(b_after_resize)
+        check(a_resized and b_after_resize and
+              a_resized_red > a_resized_green * 1.5 and
+              a_resized_red > a_resized_blue * 1.5 and
+              b_resized_green > b_resized_red * 1.5 and
+              b_resized_green > b_resized_blue * 1.5,
+              "A 改尺寸后 A/B 帧分别保持红色/绿色预设"
+              "（A=(%.3f,%.3f,%.3f) B=(%.3f,%.3f,%.3f)）" %
+              (a_resized_red, a_resized_green, a_resized_blue,
+               b_resized_red, b_resized_green, b_resized_blue))
 
         dual_a_changed = os.path.join(tmp, "dual_a_changed.milk")
         with open(dual_a_changed, "w", encoding="utf-8") as f:
@@ -532,6 +543,17 @@ def main() -> int:
         check(b_rc == 0 and len(b_after_change) == 320 * 180 * 4,
               "A 改预设后 B 帧仍正确（rc=%d bytes=%d expected=%d）" %
               (b_rc, len(b_after_change), 320 * 180 * 4))
+        a_changed_red, a_changed_green, a_changed_blue = mean_rgb(a_changed)
+        b_changed_red, b_changed_green, b_changed_blue = mean_rgb(b_after_change)
+        check(a_changed and b_after_change and
+              a_changed_red > a_changed_green * 1.5 and
+              a_changed_red > a_changed_blue * 1.5 and
+              b_changed_green > b_changed_red * 1.5 and
+              b_changed_green > b_changed_blue * 1.5,
+              "A 改预设后 A/B 帧分别保持红色/绿色预设"
+              "（A=(%.3f,%.3f,%.3f) B=(%.3f,%.3f,%.3f)）" %
+              (a_changed_red, a_changed_green, a_changed_blue,
+               b_changed_red, b_changed_green, b_changed_blue))
 
         # Per-render scope only: process exit reclaims these contexts. The
         # existing single-instance destroy checks above cover that lifecycle.

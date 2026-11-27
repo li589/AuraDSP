@@ -109,6 +109,7 @@ void main() {
         expect(controller.selection.value.status, PresetSelectionStatus.idle);
         expect(controller.selection.value.requestedPath, isNull);
         expect(controller.confirmedPath, isNull);
+        await tester.pump(const Duration(seconds: 10));
         expect(bridge.attemptsFor(_b), 1);
       },
     );
@@ -133,9 +134,31 @@ void main() {
         expect(controller.selection.value.status, PresetSelectionStatus.idle);
         expect(controller.selection.value.currentPath, isNull);
         expect(controller.confirmedPath, isNull);
+        await tester.pump(const Duration(seconds: 10));
         expect(bridge.attemptsFor(_b), 1);
       },
     );
+
+    testWidgets('a new generation immediately supersedes the Dart attempt', (
+      tester,
+    ) async {
+      final bridge = _FakeProjectMBridge(autoComplete: false);
+      final controller = ProjectMPresetSelectionController(bridge);
+      addTearDown(controller.dispose);
+      addTearDown(bridge.dispose);
+      controller.select(const MilkdropPreset(name: 'B', filePath: _b));
+      controller.select(const MilkdropPreset(name: 'C', filePath: _c));
+
+      expect(bridge.requestedPaths, [_b, _c]);
+      bridge.complete(_c);
+      await tester.pump();
+      expect(controller.confirmedPath, _c);
+
+      bridge.complete(_b);
+      await tester.pump();
+      expect(controller.confirmedPath, _c);
+      expect(bridge.currentPreset?.filePath, _c);
+    });
 
     testWidgets('a mismatched result generation cannot confirm or time out', (
       tester,
@@ -320,38 +343,69 @@ void main() {
       expect(fixture.bridge.attemptsFor(_b), 1);
     });
 
-    testWidgets('rapid B then C waits for B and confirms only latest C', (
+    testWidgets('returning to confirmed A supersedes pending B immediately', (
+      tester,
+    ) async {
+      final fixture = await _pumpPage(tester, autoComplete: false);
+      await fixture.select(_b, settle: false);
+      expect(fixture.bridge.currentPreset?.filePath, _a);
+
+      await fixture.select(_a, settle: false);
+
+      expect(fixture.bridge.requestedPaths, [_a, _b, _a]);
+      fixture.bridge.complete(_b);
+      await tester.pump();
+      expect(fixture.model.visualizerConfig.value.milkdropPresetPath, _a);
+      expect(fixture.bridge.currentPreset?.filePath, _a);
+      expect(_nativePainter(tester), isNotNull);
+      await tester.pump(const Duration(milliseconds: 33));
+      expect(fixture.bridge.attemptsFor(_a), 2);
+    });
+
+    testWidgets('returning to confirmed A cancels failed B retry cooldown', (
+      tester,
+    ) async {
+      final fixture = await _pumpPage(tester);
+      fixture.bridge.rejectPaths.add(_b);
+      await fixture.select(_b);
+      expect(fixture.bridge.currentPreset?.filePath, _a);
+      expect(fixture.bridge.attemptsFor(_b), 1);
+
+      await fixture.select(_a, settle: false);
+      expect(fixture.bridge.requestedPaths, [_a, _b, _a]);
+      await tester.pump(const Duration(seconds: 10));
+
+      expect(fixture.bridge.attemptsFor(_b), 1);
+      expect(fixture.bridge.currentPreset?.filePath, _a);
+    });
+
+    testWidgets('rapid B then C immediately supersedes B natively', (
       tester,
     ) async {
       final fixture = await _pumpPage(tester, autoComplete: false);
       await fixture.select(_b, settle: false);
       await fixture.select(_c, settle: false);
 
-      expect(fixture.bridge.requestedPaths, [_a, _b]);
-      fixture.bridge.complete(_b);
-      await tester.pump();
       expect(fixture.bridge.requestedPaths, [_a, _b, _c]);
+      expect(fixture.bridge.currentPreset?.filePath, _a);
       fixture.bridge.complete(_c);
       await tester.pump();
       expect(fixture.model.visualizerConfig.value.milkdropPresetPath, _c);
       expect(fixture.bridge.currentPreset?.filePath, _c);
+
+      fixture.bridge.complete(_b);
+      await tester.pump();
+      expect(fixture.bridge.currentPreset?.filePath, _c);
     });
 
-    testWidgets('stale completion cannot replace newer requested state', (
-      tester,
-    ) async {
+    testWidgets('stale B completion cannot replace current C', (tester) async {
       final fixture = await _pumpPage(tester, autoComplete: false);
       await fixture.select(_b, settle: false);
       await fixture.select(_c, settle: false);
+      expect(fixture.bridge.requestedPaths, [_a, _b, _c]);
 
-      if (fixture.bridge.hasPending(_c)) {
-        fixture.bridge.complete(_c);
-        fixture.bridge.complete(_b);
-      } else {
-        fixture.bridge.complete(_b);
-        await tester.pump();
-        fixture.bridge.complete(_c);
-      }
+      fixture.bridge.complete(_c);
+      fixture.bridge.complete(_b);
       await tester.pump();
 
       expect(fixture.model.visualizerConfig.value.milkdropPresetPath, _c);
@@ -419,6 +473,50 @@ void main() {
       fixture.bridge.complete(_b);
       await tester.pump();
       expect(fixture.bridge.currentPreset?.filePath, _b);
+    });
+
+    testWidgets('offscreen disposal invalidates the confirmed path', (
+      tester,
+    ) async {
+      final fixture = await _pumpPage(tester, autoComplete: false);
+      await fixture.select(_b, settle: false);
+
+      fixture.model.visiblePage.value = AppPage.home;
+      await tester.pump();
+      fixture.bridge.complete(_b);
+      fixture.model.visualizerConfig.value = const VisualizerConfig(
+        style: VisualizerStyle.projectM,
+        milkdropPresetPath: _a,
+      );
+      fixture.model.visiblePage.value = AppPage.visualizer;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 33));
+
+      expect(fixture.bridge.requestedPaths, [_a, _b, _a]);
+      expect(fixture.bridge.currentPreset?.filePath, _a);
+    });
+
+    testWidgets('style disposal invalidates the confirmed path', (
+      tester,
+    ) async {
+      final fixture = await _pumpPage(tester, autoComplete: false);
+      await fixture.select(_b, settle: false);
+
+      fixture.model.visualizerConfig.value = const VisualizerConfig(
+        style: VisualizerStyle.bars,
+        milkdropPresetPath: _a,
+      );
+      await tester.pump();
+      fixture.bridge.complete(_b);
+      fixture.model.visualizerConfig.value = const VisualizerConfig(
+        style: VisualizerStyle.projectM,
+        milkdropPresetPath: _a,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 33));
+
+      expect(fixture.bridge.requestedPaths, [_a, _b, _a]);
+      expect(fixture.bridge.currentPreset?.filePath, _a);
     });
 
     testWidgets('initialization finishing offscreen does not start a load', (
@@ -620,6 +718,7 @@ final class _FakeProjectMBridge
   final bool initiallyAvailable;
   final Completer<bool>? initializeCompleter;
   MilkdropPreset? _preset;
+  _Attempt? _latestAttempt;
   bool _available;
   bool _disposed = false;
   int initializeCalls = 0;
@@ -683,6 +782,7 @@ final class _FakeProjectMBridge
   }) {
     final attempt = _Attempt(preset)..generation = generation;
     attempts.add(attempt);
+    _latestAttempt = attempt;
     if (!isAvailable || rejectPaths.contains(preset.filePath)) {
       return Future<PresetSelection>.value(
         PresetSelection(
@@ -718,15 +818,19 @@ final class _FakeProjectMBridge
     final attempt = attempts.lastWhere(
       (a) => a.preset.filePath == path && a.completer != null,
     );
-    _preset = attempt.preset;
     final completer = attempt.completer;
     attempt.completer = null;
+    final isLatest = identical(_latestAttempt, attempt);
+    if (isLatest && status == PresetSelectionStatus.ready) {
+      _preset = attempt.preset;
+    }
     completer?.complete(
       PresetSelection(
         requestedPath: requestedPath ?? path,
         generation: generation ?? attempt.generation,
-        status: status,
-        currentPath: path,
+        status: isLatest ? status : PresetSelectionStatus.failed,
+        currentPath: _preset?.filePath,
+        error: isLatest ? null : 'fake native request was superseded',
       ),
     );
   }

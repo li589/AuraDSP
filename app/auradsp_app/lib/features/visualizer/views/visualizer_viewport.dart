@@ -346,7 +346,6 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
       _pmLoadedPath = null;
       return;
     }
-    if (path == _pmLoadedPath) return;
     // 内置预设先解析落盘路径（桥只接真实文件）；尚未落盘时本
     // tick 跳过且不记失败（落盘在页面 init 时已触发，稍后自愈）。
     final resolved = MilkdropPreset.resolveFilePath(path);
@@ -355,7 +354,16 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
       unawaited(MilkdropBuiltinStaging.ensureStaged());
       return;
     }
-    var controller = _pmPresetSelection;
+    final currentController = _pmPresetSelection;
+    final currentSelection = currentController?.selection.value;
+    if (path == _pmLoadedPath &&
+        currentController != null &&
+        currentSelection?.requestedPath == resolved &&
+        currentSelection?.status == PresetSelectionStatus.ready &&
+        currentController.confirmedPath == resolved) {
+      return;
+    }
+    var controller = currentController;
     if (controller == null || !identical(controller.bridge, bridge)) {
       _disposePresetSelection();
       controller = ProjectMPresetSelectionController(bridge);
@@ -385,6 +393,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   }
 
   void _disposePresetSelection() {
+    _pmLoadedPath = null;
     final controller = _pmPresetSelection;
     if (controller == null) return;
     controller.selection.removeListener(_onPmPresetSelection);
