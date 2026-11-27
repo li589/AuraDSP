@@ -129,6 +129,30 @@
         "created_by": "aoci-init",
         "order": 106,
         "enabled": true
+      },
+      {
+        "rule_id": "android-spike-research-snapshot",
+        "action": "exclude",
+        "pattern": "core/android/spike-global-effect/**",
+        "pattern_kind": "glob",
+        "reason": "Android 历史验证工程 spike-global-effect 为保留的只读研究快照，不在 v0.1.0 Windows+Linux 发行范围，不进入持续认知索引",
+        "decision_basis": "maintainer_direction",
+        "source": "user",
+        "created_by": "agent",
+        "order": 300,
+        "enabled": true
+      },
+      {
+        "rule_id": "android-vendor-src-snapshot",
+        "action": "exclude",
+        "pattern": "core/android/vendor-src/**",
+        "pattern_kind": "glob",
+        "reason": "core/android/vendor-src 为从 source/ 只读提取的第三方源码快照，以 source/ORIGIN.md 为真相源；Android 不在发行范围，不进入持续认知索引",
+        "decision_basis": "maintainer_direction",
+        "source": "user",
+        "created_by": "agent",
+        "order": 301,
+        "enabled": true
       }
     ]
   },
