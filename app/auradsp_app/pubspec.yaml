@@ -45,7 +45,6 @@ flutter:
   shaders:
     - shaders/aurora_wave.frag
     - shaders/neon_tunnel.frag
-    - shaders/particle_tornado.frag
     - shaders/nebula_flow.frag
     - shaders/harmonic_warp.frag
 

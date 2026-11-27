@@ -1,15 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart'
-    show
-        Alignment,
-        CustomPainter,
-        RadialGradient,
-        TextPainter,
-        TextSpan,
-        TextStyle;
+    show Alignment, CustomPainter, RadialGradient;
 
 import '../models/visualizer_themes.dart';
 import '../shaders/gpu_shader_service.dart';
@@ -34,9 +27,6 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
   Shader? _fallbackShader;
   Size _fallbackSize = Size.zero;
   int _fallbackBass = -1;
-  TextPainter? _statusTextPainter;
-  String? _statusText;
-  double _statusTextWidth = -1;
 
   GpuShaderPainter({
     required this.shaderType,
@@ -73,20 +63,6 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
     };
   }
 
-  @visibleForTesting
-  TextPainter? get debugStatusTextPainter => _statusTextPainter;
-
-  void _clearStatusTextPainter() {
-    _statusTextPainter?.dispose();
-    _statusTextPainter = null;
-    _statusText = null;
-    _statusTextWidth = -1;
-  }
-
-  /// Releases cached native text resources. The viewport owns this painter and
-  /// calls this on style retirement and teardown; RenderCustomPaint does not.
-  void dispose() => _clearStatusTextPainter();
-
   @override
   void setVisualizerTime(double t) => time = t;
 
@@ -104,8 +80,6 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
 
     final shader = _service.shaderFor(shaderType);
     if (shader != null) {
-      _clearStatusTextPainter();
-
       // Uniform indices mapping:
       // vec2 uResolution (floats 0, 1)
       shader.setFloat(0, size.width);
@@ -135,71 +109,10 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
 
       _shaderPaint.shader = shader;
       canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), _shaderPaint);
-    } else if (shaderType == GpuShaderType.tornado) {
-      // A generic ring is another visualizer, not a tornado fallback. Keep the
-      // selected style honest and expose the real loading/compile state.
-      _drawTornadoStatus(canvas, size);
     } else {
-      // Graceful fallback gradient if shader is compiling or unsupported
+      // Graceful fallback gradient if shader is compiling or unsupported.
       _drawFallback(canvas, size, bass, mid);
     }
-  }
-
-  void _drawTornadoStatus(Canvas canvas, Size size) {
-    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
-    _fallbackBgPaint
-      ..shader = null
-      ..color = const Color(0xFF080D14);
-    canvas.drawRect(rect, _fallbackBgPaint);
-
-    final failed = compileStatus == GpuShaderCompileStatus.failed;
-    final title = failed
-        ? 'PARTICLE TORNADO UNAVAILABLE'
-        : 'PARTICLE TORNADO LOADING';
-    final text = '$title\n$statusDescription';
-    final maxWidth = math.max(0.0, size.width - 48.0);
-    if (maxWidth <= 0.0) return;
-    if (_statusTextPainter == null ||
-        _statusText != text ||
-        _statusTextWidth != maxWidth) {
-      _statusTextPainter?.dispose();
-      _statusText = text;
-      _statusTextWidth = maxWidth;
-      _statusTextPainter = TextPainter(
-        text: TextSpan(
-          children: [
-            TextSpan(
-              text: '$title\n',
-              style: TextStyle(
-                color: failed ? const Color(0xFFFFB4AB) : palette.primary,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                height: 1.4,
-              ),
-            ),
-            TextSpan(
-              text: statusDescription,
-              style: const TextStyle(
-                color: Color(0xFFD5DDE5),
-                fontSize: 13,
-                height: 1.45,
-              ),
-            ),
-          ],
-        ),
-        maxLines: 7,
-        ellipsis: '…',
-        textAlign: TextAlign.left,
-        textDirection: TextDirection.ltr,
-      )..layout(maxWidth: maxWidth);
-    }
-
-    final textPainter = _statusTextPainter!;
-    final offset = Offset(
-      24,
-      math.max(16.0, (size.height - textPainter.height) / 2),
-    );
-    textPainter.paint(canvas, offset);
   }
 
   void _drawFallback(Canvas canvas, Size size, double bass, double mid) {

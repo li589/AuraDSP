@@ -36,11 +36,17 @@ void main() {
     test('GpuShaderType asset paths invariant', () {
       expect(GpuShaderType.aurora.assetPath, 'shaders/aurora_wave.frag');
       expect(GpuShaderType.tunnel.assetPath, 'shaders/neon_tunnel.frag');
-      expect(GpuShaderType.tornado.assetPath, 'shaders/particle_tornado.frag');
       expect(GpuShaderType.nebula.assetPath, 'shaders/nebula_flow.frag');
       expect(
         GpuShaderType.harmonicWarp.assetPath,
         'shaders/harmonic_warp.frag',
+      );
+    });
+
+    test('retired tornado shader is absent from the production catalog', () {
+      expect(
+        GpuShaderType.values.map((type) => type.assetPath),
+        isNot(contains('shaders/particle_tornado.frag')),
       );
     });
 
@@ -72,10 +78,14 @@ void main() {
       await tester.runAsync(() => service.ensureCompiled(GpuShaderType.aurora));
 
       expect(loaded, [GpuShaderType.aurora.assetPath]);
-      expect(service.compileStatusFor(GpuShaderType.aurora),
-          GpuShaderCompileStatus.compiled);
-      expect(service.compileStatusFor(GpuShaderType.tornado),
-          GpuShaderCompileStatus.idle);
+      expect(
+        service.compileStatusFor(GpuShaderType.aurora),
+        GpuShaderCompileStatus.compiled,
+      );
+      expect(
+        service.compileStatusFor(GpuShaderType.tunnel),
+        GpuShaderCompileStatus.idle,
+      );
     });
 
     test('duplicate shader requests share one in-flight compile', () async {

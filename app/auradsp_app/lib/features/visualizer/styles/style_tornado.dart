@@ -65,6 +65,18 @@ class TornadoParticlePainter extends CustomPainter
   Float32List get debugParticlePositions => _field.positions;
 
   @visibleForTesting
+  Float32List get debugTrailHistory => _field.trailHistory;
+
+  @visibleForTesting
+  int get debugTrailHistoryCount => _field.trailHistoryCount;
+
+  @visibleForTesting
+  Float32List get debugHeadScreenPositions => _field.headScreenPositions;
+
+  @visibleForTesting
+  Float32List get debugTrailScreenPositions => _field.trailScreenPositions;
+
+  @visibleForTesting
   TornadoAtlasBuffers get debugAtlasBuffers => _field.debugAtlasBuffers;
 
   @visibleForTesting
@@ -80,7 +92,6 @@ class _TornadoParticleField {
   static const double _floor = -6.0;
   static const double _height = 12.0;
   static const double _cameraDistance = 18.0;
-  static const double _trailStep = 0.035;
 
   static final Float32List _radiusProfile = _buildRadiusProfile();
 
@@ -95,17 +106,21 @@ class _TornadoParticleField {
   final Float32List _particleSize = Float32List(particleCount);
   final Float32List _baseBrightness = Float32List(particleCount);
   final Float32List _colorPhase = Float32List(particleCount);
-  final Float32List _verticalVelocity = Float32List(particleCount);
-  final Float32List _angularVelocity = Float32List(particleCount);
   final Int32List _tier = Int32List(particleCount);
 
   final Float32List positions = Float32List(particleCount * 3);
+  final Float32List trailHistory = Float32List(
+    particleCount * 3 * trailSamples,
+  );
+  final Float32List headScreenPositions = Float32List(particleCount * 2);
+  final Float32List trailScreenPositions = Float32List(
+    particleCount * trailSamples * 2,
+  );
   final Float32List _depth = Float32List(particleCount);
   final Int32List _order = Int32List(particleCount);
   final Float32List _transforms = Float32List(_spriteCapacity * 4);
   final Float32List _rects = Float32List(_spriteCapacity * 4);
   final Int32List _colors = Int32List(_spriteCapacity);
-  final Float32List _trailWorld = Float32List(3);
   final Float32List _mirrorBins = Float32List(32);
 
   final VisualizerSpriteAtlas _atlas = VisualizerSpriteAtlas.instance;
@@ -130,6 +145,7 @@ class _TornadoParticleField {
   double _mirrorError = 0.0;
   int _spriteCount = 0;
   int _batchCount = 0;
+  int trailHistoryCount = 0;
 
   double _cosYaw = 1.0;
   double _sinYaw = 0.0;
@@ -168,7 +184,8 @@ class _TornadoParticleField {
   static Float32List _buildRadiusProfile() {
     final profile = Float32List(256);
     for (var i = 0; i < profile.length; i++) {
-      profile[i] = 0.20 + 3.85 * math.pow(i / 255.0, 0.82);
+      // Match the reference's broad floor and contracting rising column.
+      profile[i] = 0.20 + 3.85 * math.pow(1.0 - i / 255.0, 0.82);
     }
     return profile;
   }
@@ -186,6 +203,8 @@ class _TornadoParticleField {
     _speedFactor = 1.0;
     _spreadFactor = 1.0;
     _brightness = 0.62;
+    trailHistory.fillRange(0, trailHistory.length, 0.0);
+    trailHistoryCount = 0;
   }
 
   void _step(double time, List<double> bands, double sensitivity) {
@@ -195,6 +214,21 @@ class _TornadoParticleField {
     final dt = firstFrame ? 1.0 / 30.0 : (time - _lastTime).clamp(0.0, 0.1);
     _lastTime = time;
     if (!firstFrame && dt == 0.0) return;
+
+    if (!firstFrame) {
+      final stride = positions.length;
+      for (var sample = trailSamples - 1; sample > 0; sample--) {
+        final target = sample * stride;
+        final source = (sample - 1) * stride;
+        for (var offset = 0; offset < stride; offset++) {
+          trailHistory[target + offset] = trailHistory[source + offset];
+        }
+      }
+      for (var offset = 0; offset < stride; offset++) {
+        trailHistory[offset] = positions[offset];
+      }
+      if (trailHistoryCount < trailSamples) trailHistoryCount++;
+    }
 
     var bass = 0.0;
     var mid = 0.0;
@@ -248,13 +282,22 @@ class _TornadoParticleField {
     _flow += dt * 0.50 * _speedFactor;
 
     for (var i = 0; i < particleCount; i++) {
-      var u = _heightU[i] + dt * (0.058 + 0.022 * _riseSpeed[i]) * _speedFactor;
+      final currentU = _heightU[i];
+      final profileIndex = (currentU * 255.0).round().clamp(0, 255);
+      final radiusFraction =
+          (_radiusProfile[profileIndex] * _radiusJitter[i] / 4.05).clamp(
+            0.0,
+            1.0,
+          );
+      final verticalVelocity =
+          (0.058 + 0.022 * _riseSpeed[i]) *
+          _speedFactor *
+          (0.55 + 0.90 * radiusFraction);
+      var u = currentU + dt * verticalVelocity;
       if (u >= 1.0) u -= 1.0;
       _heightU[i] = u;
-      _verticalVelocity[i] = (0.058 + 0.022 * _riseSpeed[i]) * _speedFactor;
       final omega =
           (1.15 / (0.38 + u * 1.25) + 0.35 * _spinBias[i]) * _speedFactor;
-      _angularVelocity[i] = omega;
       final angle = (_angle[i] + dt * omega) % _tau;
       _angle[i] = angle;
       _writePosition(i, u, angle, _spreadFactor, positions, i * 3);
@@ -305,15 +348,13 @@ class _TornadoParticleField {
       _mirrorBins[bin] += x < 0 ? -1.0 : 1.0;
     }
     var mismatch = 0.0;
-    var total = 0.0;
-    for (var i = 0; i < _mirrorBins.length; i += 2) {
-      final difference = (_mirrorBins[i] - _mirrorBins[i + 1]).abs();
-      mismatch += difference;
-      total += (_mirrorBins[i] + _mirrorBins[i + 1]).abs();
+    for (var i = 0; i < _mirrorBins.length; i++) {
+      // Each bin holds left (-1) and right (+1) particles at the same radius.
+      mismatch += _mirrorBins[i].abs();
     }
     _meanHeight = heightSum / particleCount;
     _centroidX = centroidSum / particleCount;
-    _mirrorError = total == 0 ? 0.0 : mismatch / total;
+    _mirrorError = mismatch / particleCount;
   }
 
   void render(
@@ -342,11 +383,22 @@ class _TornadoParticleField {
     _pixelScale = math.sqrt(minDimension / 320.0).clamp(0.65, 1.8);
     _centerX = size.width * 0.5;
     _centerY = size.height * 0.50;
+    headScreenPositions.fillRange(0, headScreenPositions.length, double.nan);
+    trailScreenPositions.fillRange(0, trailScreenPositions.length, double.nan);
 
     for (var i = 0; i < particleCount; i++) {
       final offset = i * 3;
-      _project(positions[offset], positions[offset + 1], positions[offset + 2]);
-      _depth[i] = _projectedDepth;
+      if (_project(
+        positions[offset],
+        positions[offset + 1],
+        positions[offset + 2],
+      )) {
+        _depth[i] = _projectedDepth;
+        headScreenPositions[i * 2] = _projectedX;
+        headScreenPositions[i * 2 + 1] = _projectedY;
+      } else {
+        _depth[i] = double.infinity;
+      }
     }
     _sortByDepth();
 
@@ -449,11 +501,18 @@ class _TornadoParticleField {
     final headAlpha = _baseBrightness[i] * _brightness * edgeFade;
 
     for (var trail = trailSamples; trail >= 1; trail--) {
-      final trailU = u - _verticalVelocity[i] * _trailStep * trail;
-      if (trailU < 0.0) continue;
-      final trailAngle = _angle[i] - _angularVelocity[i] * _trailStep * trail;
-      _writePosition(i, trailU, trailAngle, _spreadFactor, _trailWorld, 0);
-      if (!_project(_trailWorld[0], _trailWorld[1], _trailWorld[2])) continue;
+      if (trail > trailHistoryCount) continue;
+      final historyOffset = (trail - 1) * positions.length + offset;
+      if (!_project(
+        trailHistory[historyOffset],
+        trailHistory[historyOffset + 1],
+        trailHistory[historyOffset + 2],
+      )) {
+        continue;
+      }
+      final screenOffset = (i * trailSamples + trail - 1) * 2;
+      trailScreenPositions[screenOffset] = _projectedX;
+      trailScreenPositions[screenOffset + 1] = _projectedY;
       final trailAlpha = switch (trail) {
         1 => 0.22,
         2 => 0.11,
@@ -557,24 +616,22 @@ class TornadoBackdropPainter extends CustomPainter {
   void _ensureShaders(Size size) {
     if (_bgPaint != null && _shaderSize == size) return;
     _shaderSize = size;
+    final peakLuminance = palette.peak.computeLuminance().clamp(0.0, 1.0);
+    final base = Color.lerp(
+      const Color(0xFFF4F7FB),
+      const Color(0xFF05090E),
+      peakLuminance,
+    )!;
     _bgPaint = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        // Opaque dark stops avoid a hard transparent band at the midpoint
-        // while retaining the existing restrained teal/magenta dark field.
+        // Opaque stops avoid a hard transparent band at the midpoint. Peak
+        // luminance selects a light or dark base so light themes stay light.
         colors: [
-          Color.lerp(
-            const Color(0xFF05090E),
-            palette.primary,
-            0.035 + bloom * 0.035,
-          )!,
-          const Color(0xFF04080D),
-          Color.lerp(
-            const Color(0xFF05090E),
-            palette.secondary,
-            0.070 + bloom * 0.050,
-          )!,
+          Color.lerp(base, palette.primary, 0.035 + bloom * 0.035)!,
+          base,
+          Color.lerp(base, palette.secondary, 0.070 + bloom * 0.050)!,
         ],
         stops: const [0.0, 0.45, 1.0],
       ).createShader(Offset.zero & size);

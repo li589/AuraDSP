@@ -15,7 +15,6 @@ import '../controllers/waveform_synthesizer.dart';
 import '../models/visualizer_themes.dart';
 import '../models/visualizer_types.dart';
 import '../styles/style_atmosphere.dart';
-import '../styles/style_gpu_shader.dart';
 import '../styles/style_nebula_flow.dart';
 import '../styles/style_tornado.dart';
 import '../styles/visualizer_painter_dispatcher.dart';
@@ -146,10 +145,6 @@ class VisualizerCanvasViewport extends StatefulWidget {
 class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   CustomPainter? _delegate;
   Object? _delegateKey;
-
-  /// RenderCustomPaint does not dispose delegates. Keep outgoing GPU painters
-  /// alive for the 280 ms style crossfade, then release their native resources.
-  final Map<GpuShaderPainter, Timer> _retiredPainterDisposals = {};
 
   CustomPainter? _ambience;
   Object? _ambienceKey;
@@ -453,28 +448,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
     _ => true,
   };
 
-  void _retireDelegate(CustomPainter? painter) {
-    if (painter is! GpuShaderPainter) return;
-    _retiredPainterDisposals[painter]?.cancel();
-    _retiredPainterDisposals[painter] = Timer(
-      const Duration(milliseconds: 300),
-      () {
-        _retiredPainterDisposals.remove(painter);
-        painter.dispose();
-      },
-    );
-  }
-
   void _disposeDelegates() {
-    for (final timer in _retiredPainterDisposals.values) {
-      timer.cancel();
-    }
-    for (final painter in _retiredPainterDisposals.keys) {
-      painter.dispose();
-    }
-    _retiredPainterDisposals.clear();
-    final current = _delegate;
-    if (current is GpuShaderPainter) current.dispose();
     _delegate = null;
   }
 
@@ -495,7 +469,6 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
       widget.projectMBridge?.currentPreset,
     );
     if (_delegate == null || _delegateKey != key) {
-      final previous = _delegate;
       _delegateKey = key;
       _delegate = buildVisualizerPainter(
         style: widget.config.style,
@@ -508,7 +481,6 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         showGrid: separateGrid ? false : null,
         projectMBridge: widget.projectMBridge,
       );
-      _retireDelegate(previous);
     }
     return _delegate!;
   }

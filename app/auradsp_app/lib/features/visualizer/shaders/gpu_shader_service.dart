@@ -8,7 +8,6 @@ import '../../../core/error_sink.dart';
 enum GpuShaderType {
   aurora('shaders/aurora_wave.frag'),
   tunnel('shaders/neon_tunnel.frag'),
-  tornado('shaders/particle_tornado.frag'),
   nebula('shaders/nebula_flow.frag'),
   harmonicWarp('shaders/harmonic_warp.frag');
 

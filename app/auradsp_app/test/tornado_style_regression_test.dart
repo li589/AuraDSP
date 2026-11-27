@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -21,6 +22,15 @@ const _palette = VisualizerPalette(
   grid: Color(0x1A00E5FF),
   glow: Color(0x8000E5FF),
   gradient: [Color(0xFF0055FF), Color(0xFF00E5FF)],
+);
+
+const _lightPalette = VisualizerPalette(
+  primary: Color(0xFF1565C0),
+  secondary: Color(0xFF6A1B9A),
+  peak: Color(0xFF101318),
+  grid: Color(0x1A1565C0),
+  glow: Color(0x801565C0),
+  gradient: [Color(0xFF0D47A1), Color(0xFF1565C0)],
 );
 
 final _bands = List<double>.generate(32, (i) => 0.35 + 0.25 * ((i % 7) / 6));
@@ -185,13 +195,6 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 5));
     }
     expect(atlas.imageOrNull, isNotNull);
-    // Keeps the legacy asset independently testable without routing the
-    // selected style through it. This also makes the RED run exercise the
-    // real old shader rather than its unavailable/loading diagnostic.
-    expect(
-      await GpuShaderService.instance.ensureCompiled(GpuShaderType.tornado),
-      isTrue,
-    );
   });
 
   group('Particle tornado renderer', () {
@@ -267,8 +270,178 @@ void main() {
         }
         expect(before.particleCount, inInclusiveRange(850, 950));
         expect(risingParticles, greaterThan(before.particleCount * 0.65));
-        expect((after.centroidX - before.centroidX).abs(), greaterThan(0.01));
+        expect(
+          (after.centroidX - before.centroidX).abs(),
+          greaterThan(0.005),
+          reason:
+              'The contracting funnel must retain asymmetric centroid drift.',
+        );
         expect(after.mirrorError, greaterThan(0.20));
+      },
+    );
+
+    test('funnel is broad at the bottom and outer particles rise faster', () {
+      final dynamic painter = _particlePainter(
+        _tornadoPainter(service: GpuShaderService.instance),
+      );
+      painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+      final before = Float32List.fromList(
+        painter.debugParticlePositions as Float32List,
+      );
+      painter.setVisualizerTime(0.75 + 1 / 30);
+      painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+      final after = painter.debugParticlePositions as Float32List;
+
+      var lowerRadius = 0.0;
+      var lowerCount = 0;
+      var upperRadius = 0.0;
+      var upperCount = 0;
+      var outerRise = 0.0;
+      var outerCount = 0;
+      var innerRise = 0.0;
+      var innerCount = 0;
+      for (var i = 0; i < before.length ~/ 3; i++) {
+        final offset = i * 3;
+        final u = (before[offset + 1] + 6.0) / 12.0;
+        final radius = math.sqrt(
+          before[offset] * before[offset] +
+              before[offset + 2] * before[offset + 2],
+        );
+        if (u < 1 / 3) {
+          lowerRadius += radius;
+          lowerCount++;
+        } else if (u > 2 / 3) {
+          upperRadius += radius;
+          upperCount++;
+        }
+
+        final rise = after[offset + 1] - before[offset + 1];
+        if (rise <= 0.0) continue;
+        if (radius > 2.0) {
+          outerRise += rise;
+          outerCount++;
+        } else if (radius < 1.5) {
+          innerRise += rise;
+          innerCount++;
+        }
+      }
+
+      expect(lowerCount, greaterThan(100));
+      expect(upperCount, greaterThan(100));
+      expect(
+        lowerRadius / lowerCount,
+        greaterThan((upperRadius / upperCount) * 1.8),
+        reason: 'The reference funnel contracts while particles rise.',
+      );
+      expect(outerCount, greaterThan(100));
+      expect(innerCount, greaterThan(100));
+      expect(
+        outerRise / outerCount,
+        greaterThan((innerRise / innerCount) * 1.15),
+        reason: 'Outer particles must rise faster than inner particles.',
+      );
+    });
+
+    test('mirror error compares opposing sides within each radius bin', () {
+      final dynamic painter = _particlePainter(
+        _tornadoPainter(service: GpuShaderService.instance),
+      );
+      painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+      final positions = painter.debugParticlePositions as Float32List;
+      final metrics = painter.debugParticleMetrics as _ParticleMetrics;
+      final bins = Float32List(32);
+      for (var i = 0; i < positions.length ~/ 3; i++) {
+        final x = positions[i * 3];
+        final bin = ((x.abs() / 5.5) * 31).floor().clamp(0, 31);
+        bins[bin] += x < 0.0 ? -1.0 : 1.0;
+      }
+      var imbalance = 0.0;
+      for (final value in bins) {
+        imbalance += value.abs();
+      }
+      final expected = imbalance / (positions.length ~/ 3);
+
+      expect(metrics.mirrorError, closeTo(expected, 0.000001));
+      expect(metrics.mirrorError, inInclusiveRange(0.0, 1.0));
+    });
+
+    test('trail history stores actual prior particle positions', () {
+      final dynamic painter = _particlePainter(
+        _tornadoPainter(service: GpuShaderService.instance),
+      );
+      final snapshots = <Float32List>[];
+      for (var frame = 0; frame < 4; frame++) {
+        painter.setVisualizerTime(0.75 + frame / 30);
+        painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+        snapshots.add(
+          Float32List.fromList(painter.debugParticlePositions as Float32List),
+        );
+      }
+      final history = painter.debugTrailHistory as Float32List;
+      final historyCount = painter.debugTrailHistoryCount as int;
+      final stride = snapshots.first.length;
+
+      expect(historyCount, 3);
+      for (var sample = 0; sample < 3; sample++) {
+        expect(
+          history.sublist(sample * stride, (sample + 1) * stride),
+          orderedEquals(snapshots[2 - sample]),
+        );
+      }
+    });
+
+    test(
+      'screen-space trails stay registered after a long simulation step',
+      () {
+        final dynamic painter = _particlePainter(
+          _tornadoPainter(service: GpuShaderService.instance),
+        );
+        for (var frame = 0; frame < 4; frame++) {
+          painter.setVisualizerTime(0.75 + frame / 30);
+          painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+        }
+        final previousHeads = Float32List.fromList(
+          painter.debugHeadScreenPositions as Float32List,
+        );
+
+        painter.setVisualizerTime(0.95);
+        painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+        final heads = painter.debugHeadScreenPositions as Float32List;
+        final trails = painter.debugTrailScreenPositions as Float32List;
+        var compared = 0;
+        var registered = 0;
+        for (var i = 0; i < heads.length ~/ 2; i++) {
+          final headOffset = i * 2;
+          final trailOffset = i * 6;
+          final previousX = previousHeads[headOffset];
+          final previousY = previousHeads[headOffset + 1];
+          final x = heads[headOffset];
+          final y = heads[headOffset + 1];
+          final trailX = trails[trailOffset];
+          final trailY = trails[trailOffset + 1];
+          if (!previousX.isFinite ||
+              !previousY.isFinite ||
+              !x.isFinite ||
+              !y.isFinite ||
+              !trailX.isFinite ||
+              !trailY.isFinite) {
+            continue;
+          }
+          final movement = math.sqrt(
+            (x - previousX) * (x - previousX) +
+                (y - previousY) * (y - previousY),
+          );
+          if (movement < 0.75) continue;
+          final trailError = math.sqrt(
+            (trailX - previousX) * (trailX - previousX) +
+                (trailY - previousY) * (trailY - previousY),
+          );
+          compared++;
+          if (trailError < movement * 0.35) registered++;
+        }
+
+        expect(compared, greaterThan(100));
+        expect(registered / compared, greaterThan(0.80));
       },
     );
 
@@ -284,6 +457,7 @@ void main() {
         final firstTransforms = first.transforms;
         final firstRects = first.rects;
         final firstColors = first.colors;
+        final firstHistory = painter.debugTrailHistory as Float32List;
 
         for (var frame = 1; frame <= 4; frame++) {
           painter.setVisualizerTime(0.75 + frame / 30);
@@ -303,6 +477,7 @@ void main() {
         expect(identical(last.transforms, firstTransforms), isTrue);
         expect(identical(last.rects, firstRects), isTrue);
         expect(identical(last.colors, firstColors), isTrue);
+        expect(identical(painter.debugTrailHistory, firstHistory), isTrue);
         expect(metrics.batchCount, 5);
       },
     );
@@ -400,6 +575,28 @@ void main() {
         expect(rowMeans.reduce(mathMin), greaterThan(1.5));
       },
     );
+
+    test('backdrop follows peak luminance in light and dark themes', () async {
+      final darkPixels = await _rasterize(
+        TornadoBackdropPainter(palette: _palette, bloom: 0.5),
+      );
+      final lightPixels = await _rasterize(
+        TornadoBackdropPainter(palette: _lightPalette, bloom: 0.5),
+      );
+      double meanBrightness(Uint8List pixels) {
+        var sum = 0.0;
+        for (var i = 0; i < pixels.length; i += 4) {
+          sum += (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3.0;
+        }
+        return sum / (pixels.length ~/ 4);
+      }
+
+      final darkMean = meanBrightness(darkPixels);
+      final lightMean = meanBrightness(lightPixels);
+      expect(darkMean, lessThan(40.0));
+      expect(lightMean, greaterThan(180.0));
+      expect(lightMean, greaterThan(darkMean * 3.0));
+    });
 
     testWidgets('particle tornado matches a fixed-time software golden', (
       tester,
