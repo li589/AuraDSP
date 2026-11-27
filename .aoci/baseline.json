@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-21T02:23:05Z",
-  "updated_at": "2026-11-27T02:17:49Z",
+  "updated_at": "2026-11-27T03:03:23Z",
   "files": {
     ".ai/README.md": {
       "role": "index",
@@ -263,9 +263,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "a9693549eb1dbd38bc305e14195fd9229ea25eb850ee236449694e1fbe8f1fe6",
-      "size": 1197694,
-      "normalized_sha256": "a9693549eb1dbd38bc305e14195fd9229ea25eb850ee236449694e1fbe8f1fe6"
+      "sha256": "d3fc85b3d9f89f4dfff558295ddb48f1eb13307d224340ebe4d819c4c62b5a34",
+      "size": 1197252,
+      "normalized_sha256": "d3fc85b3d9f89f4dfff558295ddb48f1eb13307d224340ebe4d819c4c62b5a34"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -25615,9 +25615,9 @@
     },
     "test/runner.py": {
       "role": "index",
-      "sha256": "82ce3a5d00a41a78ed78ebcb521d7e3f319bab888266704fab7c40733f231d62",
-      "size": 47830,
-      "normalized_sha256": "43d9748a39224b7fea12f3838f3d744456265069e187f1e3cc3a5fc571d3e48f"
+      "sha256": "35ce06442c7b6b7f336497a254a8878abed333a1d8e1f47547b0b8597c97314c",
+      "size": 48107,
+      "normalized_sha256": "1988655dd38e0b477aea377d06e5d47388d1ec8707e48e3b630f37bf63bd9113"
     },
     "test/smoke/_tmpcleanup.py": {
       "role": "index",
@@ -26573,6 +26573,12 @@
       "size": 5588,
       "normalized_sha256": "935f7567c40b4d67f35c490d1216aaf07dc2ad380c0ce950e1051146a8595fec"
     },
+    "test/smoke/smoke_remote_tooling.py": {
+      "role": "index",
+      "sha256": "8b7365b6d3f0006d7aa587d6f799d68562261f31fa1166981d7b117457f85c8e",
+      "size": 3973,
+      "normalized_sha256": "8b7365b6d3f0006d7aa587d6f799d68562261f31fa1166981d7b117457f85c8e"
+    },
     "test/smoke/smoke_reverb.py": {
       "role": "index",
       "sha256": "5d02aae1d1f86721efca76ebf64179d5df0aea3b5168dd9ae7baece92385c0f9",
@@ -26947,9 +26953,9 @@
     },
     "tools/Emergency_Fix_Audio.cmd": {
       "role": "index",
-      "sha256": "86a87ba20029f4eba9bb6f23ddced8f5d1fb1f63cc83e18709b6a7a897cf4424",
-      "size": 364,
-      "normalized_sha256": "86a87ba20029f4eba9bb6f23ddced8f5d1fb1f63cc83e18709b6a7a897cf4424"
+      "sha256": "f7530115893f9ce7ce4136364122df6ccf2a67dd2541d047a5f965e351a88a57",
+      "size": 1223,
+      "normalized_sha256": "f7530115893f9ce7ce4136364122df6ccf2a67dd2541d047a5f965e351a88a57"
     },
     "tools/README.md": {
       "role": "index",
@@ -27349,9 +27355,9 @@
     },
     "tools/remote/README.md": {
       "role": "index",
-      "sha256": "04b817361c4031d9a721d78f0b203c730ac9a3f077ce0c876c36eba53e403f78",
-      "size": 3911,
-      "normalized_sha256": "04b817361c4031d9a721d78f0b203c730ac9a3f077ce0c876c36eba53e403f78"
+      "sha256": "87c1f0f9ebb7bc722f7541772de1b8d1956b55bfcd29438b338dc078dfec35ce",
+      "size": 4131,
+      "normalized_sha256": "0b787beae4182c0db4f3b6c4a86b01b9ea2e79223595b54bc2152bfc2370b8cc"
     },
     "tools/remote/Restore-DriverCertTrust.ps1": {
       "role": "index",
@@ -27373,9 +27379,9 @@
     },
     "tools/remote/guest_file_info.py": {
       "role": "index",
-      "sha256": "79250f29900752bdd0046ad347b3c68293f9229e120043df7d2d89cd9e3a08bc",
-      "size": 1019,
-      "normalized_sha256": "79250f29900752bdd0046ad347b3c68293f9229e120043df7d2d89cd9e3a08bc"
+      "sha256": "6ad4a015eeb1a6bf300e7d8a006dcd422506891329f70dfa409895f743c2ab59",
+      "size": 1388,
+      "normalized_sha256": "c5a72a064c7fc28f278b3ac79056bf6e397748120afb6053dac23fa86be91976"
     },
     "tools/remote/guest_reaper_state.py": {
       "role": "index",
@@ -27388,6 +27394,12 @@
       "sha256": "b5653c17ac372efa695997e2e6dde04e0f8b0685f7baa8c21f4df4ed62222009",
       "size": 3005,
       "normalized_sha256": "b5653c17ac372efa695997e2e6dde04e0f8b0685f7baa8c21f4df4ed62222009"
+    },
+    "tools/remote/parse_check.ps1": {
+      "role": "index",
+      "sha256": "9dccab415f1a6b8091c3fc6d06969081aa8e787ad2a495d1c09a85c65993c960",
+      "size": 1391,
+      "normalized_sha256": "9dccab415f1a6b8091c3fc6d06969081aa8e787ad2a495d1c09a85c65993c960"
     },
     "tools/remote/sync_to_vm.py": {
       "role": "index",

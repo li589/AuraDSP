@@ -4674,7 +4674,7 @@ ORIGIN.md[SG7S]: F:第三方源码登记册：source/下克隆项目的来源、
 ===D:/temp_desktop/Proj/JamesDSP/test/===
 README.md[TQ6S]: F:test目录规范：构建树位置与测试组织口径 | R:code:test/runner.py | A:编译验证树一律test/build/<name>，禁止仓库根随手建build_* | S:违反构建树规范的产物不得入库
 engine_artifact.py[TQ7T]: F:引擎构建产物路径的单一解析器：find_engine_lib按平台与配置定位引擎库 | R:code:test/runner.py | A:此前百余smoke各自拼路径且有硬编码作者机绝对路径，S1起只许在此定义一次 | S:smoke与工具禁止再自行拼引擎产物路径，一律经本解析器
-runner.py[TQ8L]: F:统一调度smoke/UI/性能测试与三向注册对账 | R:code:test/engine_artifact.py | A:受控信号测试归PLATFORM_ANY，ASIO映射归Windows；平台集与执行清单双登记；取消逐条检查，--no-progress-ui关窗 | S:新测试未登记即废测；平台归属不得假绿；VizFrame新导入方须进smoke_g7_1精确集合
+runner.py[TQ8L]: F:调度smoke/UI/性能测试与注册对账 | R:code:test/smoke/smoke_remote_tooling.py | A:本地工具门归ANY；平台集/执行清单双登记；逐条取消 | S:未登记即废测；平台归属不得假绿
 
 ===D:/temp_desktop/Proj/JamesDSP/test/data/===
 reverb_presets.json[TQ4S]: F:混响预设测试数据：供混响相关测试加载的预设样本 | R:code:test/runner.py | A:测试夹具数据 | S:-
@@ -4958,6 +4958,7 @@ smoke_remote_security.py[TS5S]: F:验证远程证书与SSH安全契约：Valid�
 smoke_viz_lifecycle.py[TQ4T]: F:验证监听停止代际与可视化生命周期源码契约：disposed后不再回调、watchdog取消且多声道notifier释放 | R:code:app/auradsp_app/lib/platform/system/windows_system_monitor.dart,code:app/auradsp_app/lib/core/state.dart | A:检查generation/stopped与await后验证、_disposed入口、_vizWatchdogTimer保留/取消，以及vizChannelCount/vizChannelLevels/vizStageChLevels的dispose调用 | S:旧实现无这些符号时必须FAIL；不得只验证函数名存在而忽略回调失效与释放语义；smoke须注册runner
 smoke_asio_driver_channel_map.py[TH6M]: F:验证虚拟ASIO与WASAPI声道布局：直接编译channel_map原生夹具、调用真实remap ABI并核对ASIO泵与Dart手动泵的映射和缓冲复用 | R:code:engine/chain/channel_map.h,code:core/desktop/windows-drivers/04_asio_driver/AuraAsioDriver.cpp,code:app/auradsp_app/lib/engine/audio_isolate.dart,code:test/runner.py | A:覆盖矩阵8→2/4/6/8、离散收窄与4→6/8扩宽、upmix_fill全帧行为、WASAPI三帧不同声道身份、active几何派发及outBufEng单次全容量视图；失败聚合并非零退出 | S:不使用DAW、设备、安装或注册表写入；真实引擎DLL依赖使其Windows专属且须登记runner两处；4→6/8多帧断言防止离散扩宽误用gather把BL/BR写进C/LFE；本地通过不等于DAW/真机验收
 smoke_viz_controlled_signals.py[TH5S]: F:原生频谱受控回归 | R:- | A:- | S:-
+smoke_remote_tooling.py[TQ5S]: F:远程/应急工具安全回归 | R:code:tools/remote/parse_check.ps1,code:tools/Emergency_Fix_Audio.cmd | A:验证分块哈希、PS1退出码、应急守卫与旧目录删除 | S:不执行应急或连接VM/音频/证书库
 
 ===D:/temp_desktop/Proj/JamesDSP/test/ui/===
 ui_assert.py[TQ5S]: F:UI断言库：UI自动化验证共用的断言原语 | R:- | A:UI验证基础设施 | S:-
@@ -4988,7 +4989,7 @@ run_smoke_process.bat[XQ4T]: F:烟测进程批处理：单进程跑烟测的便�
 run_smoke_relevant.bat[XQ4T]: F:相关烟测批处理：按改动面跑相关烟测的便利入口 | R:- | A:测试辅助 | S:-
 sync_artifacts.ps1[XQ5S]: F:产物同步脚本（PS版）：构建产物到暂存的同步 | R:- | A:构建基础设施 | S:根目录副本与windows目录副本口径一致
 sync_artifacts.py[XQ5S]: F:产物同步工具（Python版）：构建产物到暂存的同步 | R:- | A:构建基础设施 | S:-
-Emergency_Fix_Audio.cmd[OH4T]: F:提供手动紧急音频子系统重启脚本，停止audiosrv与相关音频进程后重新启动服务 | R:- | A:依次net stop audiosrv、强制结束audiodg/auravm_bridge/vaio_bridge_test，再net start audiosrv并暂停显示结果 | S:会强制终止音频进程并中断当前会话，只能由用户明确手动执行；不得作为自动测试、门禁、构建或修复步骤调用
+Emergency_Fix_Audio.cmd[OH4T]: F:手工重启音频服务 | R:- | A:检查管理员/确认；停止失败仍恢复；启动并验证RUNNING；失败非零；支持--no-pause | S:中断音频，仅手工；未验证服务正常不得提示成功
 
 ===D:/temp_desktop/Proj/JamesDSP/tools/bin/===
 abi_consistency.py[XQ7S]: F:ABI一致性检查工具：比对头、.def、.map与Dart FFI导出登记，覆盖几何导出与16字节AuraDspGeometry布局 | R:code:engine/auradsp_engine.h,code:app/auradsp_app/lib/engine/auradsp_ffi.dart | A:导出契约的工具面，smoke_abi_consistency调用；request_geometry/get_active_geometry/process_geometry须各镜像同名登记 | S:新增导出必须各镜像原子同步，几何声明和Dart布局不一致必须判红；旧导出数量不能替代逐名与布局核验
@@ -5059,13 +5060,14 @@ sync_to_vm.py[XQ5S]: F:远程同步工具：把文件同步到虚拟机的通道
 vm_exec.py[XQ5T]: F:远程执行工具：在虚拟机内执行命令的通道脚本（legacy）；凭据只从环境变量/参数取，并使用VM_KNOWN_HOSTS与RejectPolicy验证主机密钥 | R:- | A:连接前加载受控known_hosts并安装RejectPolicy，拒绝未知或变更主机密钥后执行远程命令 | S:缺凭据即报错退出，不得回落内置口令；UnknownHost或key变更必须失败，禁止AutoAddPolicy自动信任
 Invoke-DevTask.ps1[XR3T]: F:开发机长任务可靠通道：以一次性计划任务启动指定 PS 脚本，脱离 ssh 会话独立运行 | R:code:tools/remote/Invoke-GuestScript.ps1 | A:任务名与脚本路径为参数；被承载脚本自带进度/结果日志落盘，发起方事后轮询读文件判读 | S:-
 Invoke-GuestScript.ps1[XR4T]: F:从开发机把宾机Python脚本scp到宾机并经ssh执行，输出重定向落盘后回读，使用固定known_hosts验证主机身份 | R:code:tools/remote/guest_telemetry.py | A:scp与Start-Process ssh都传StrictHostKeyChecking=yes和UserKnownHostsFile=<调用方受控文件>，保留保活与输出落盘；PyArgs单字符串规避嵌套引号 | S:scp失败必须抛错中止，拿旧副本冒充本轮结果是假绿通道；UnknownHost或key变更必须失败关闭，不得再用StrictHostKeyChecking=no或真实用户默认信任旁路
-README.md[SG3T]: F:tools/remote 远程实测脚本登记：通道约定与每脚本用途、跑位、已知不可行项 | R:code:tools/remote/Invoke-GuestScript.ps1 | A:开发机/宾机分工、计划任务承载、交付回读哈希为准、PS 纯 ASCII 等约定集中于此，新脚本先在此登记 | S:-
+README.md[SG3T]: F:remote工具登记与通道约定 | R:code:tools/remote/parse_check.ps1 | A:登记脚本、PS编码与分块哈希；remote为唯一入口 | S:旧remote_tools已删除；远程须固定主机密钥与证书身份
 Restore-DriverCertTrust.ps1[XR3T]: F:从已签名.cat提取内嵌签名者证书，并在导入前验证Valid签名与ExpectedThumbprint/ExpectedSubject | R:- | A:无签名者、Status非Valid、指纹或Subject不符即throw，匹配后才导出并导入LocalMachine Root与TrustedPublisher；须提权运行；导入后回读.cat Status自证，临时.cer用后即删 | S:身份不符不得导入或改信任库；Expected由调用方显式传入
 Send-ToGuest.ps1[XV3T]: F:从开发机向宾机投递文件并回读宾机侧SHA-256与本地比对，SCP/SSH使用固定known_hosts验证主机身份 | R:code:tools/remote/guest_file_info.py | A:文件与信息脚本scp及远程python调用均传StrictHostKeyChecking=yes和UserKnownHostsFile=<受控文件>，哈希验证不过即抛错 | S:未知或变更主机密钥必须失败；回读哈希才准交付
 asio_registration_probe.py[XQ3T]: F:Windows 主机 ASIO 注册探针：枚举 HKLM/HKCU 名单并核 AuraDSP Driver 的 CLSID 与 InprocServer32 指向 | R:- | A:指向 DLL 存在时报 mtime/大小并粗查遥测字段标记，区分未注册、指向旧 DLL、注册正确三态 | S:-
-guest_file_info.py[XQ3T]: F:宾机侧文件核对：打印指定文件大小与 SHA-256，缺文件时列同目录 AuraDSP 条目 | R:code:tools/remote/Send-ToGuest.ps1 | A:交付回读核对的宾机侧一半，与投递端本地哈希比对一致才算落地 | S:-
+guest_file_info.py[XQ3T]: F:文件大小与SHA-256核对 | R:code:tools/remote/Send-ToGuest.ps1 | A:1MiB分块哈希；缺文件列同目录AuraDSP条目 | S:不得以scp退出码代替哈希核对
 guest_reaper_state.py[XQ3T]: F:宾机 REAPER 状态回读：按 %APPDATA% 定点路径定位 reaper.ini 并打印 [asiochan] 段的 ASIO 声道范围 | R:code:tools/remote/guest_telemetry.py | A:范围全开（0 7 0 7）只说明设备开路，轨道与主轨 Track channels 仍须各自设目标声道数 | S:-
 guest_telemetry.py[XO4T]: F:宾机 ASIO 遥测块采样器：读 Global\AuraDSP_AsioDriverTelemetry 打印 dawCh/running 与逐声道处理前/后峰值 | R:code:tools/remote/Invoke-GuestScript.ps1 | A:--samples/--interval 可调；判读口径：入零为 DAW 路由侧、入有出零为引擎侧、出有而 App 不显为消费侧 | S:ctypes 调 kernel32 必须声明 restype/argtypes，否则 64 位句柄被截断、MapViewOfFile 访问违例
+parse_check.ps1[XQ3T]: F:PS1语法与编码检查 | R:code:tools/remote/README.md | A:扫描同目录或指定路径；报告错误；通过0、失败1 | S:不硬编码路径；非ASCII须BOM；只解析不执行
 
 ===D:/temp_desktop/Proj/JamesDSP/tools/resource_pipeline/===
 build_packages.py[XV6S]: F:资源包构建：把资源内容打成core与full资源包 | R:- | A:资源发行基础设施，资源包走独立版本线resources-v | S:资源内容变更才出新资源版，软件发行不重挂资源资产
@@ -5086,11 +5088,3 @@ sync_artifacts.ps1[XQ5S]: F:产物同步脚本（windows目录副本） | R:- | 
 ===D:/temp_desktop/Proj/JamesDSP/.superpowers/sdd/全量代码审查修复计划-2026-11-25/===
 task-19-report.md[SQ5S]: F:Task 19实现、审查修复、验证与限制报告 | R:code:docs/20-执行/全量代码审查修复计划-2026-11-25.md | A:记录shader诊断、受控频谱、注册/重绘/端点/生命周期修复与RED/GREEN | S:本地golden/runtime-effect不是Win10/30秒验收；未证DSP缺陷故不改DSP/AGC
 
-===D:/temp_desktop/Proj/JamesDSP/tools/remote_tools/===
-Invoke-DevTask.ps1[XR1T]: F:旧脚本 | R:- | A:- | S:-
-Invoke-GuestScript.ps1[XR1T]: F:旧脚本 | R:- | A:- | S:-
-Restore-DriverCertTrust.ps1[XR1T]: F:旧脚本 | R:- | A:- | S:-
-Send-ToGuest.ps1[XR1T]: F:旧脚本 | R:- | A:- | S:-
-guest_file_info.py[XR1T]: F:旧脚本 | R:- | A:- | S:-
-guest_telemetry.py[XR1T]: F:旧脚本 | R:- | A:- | S:-
-parse_check.ps1[XR1T]: F:旧脚本 | R:- | A:- | S:-

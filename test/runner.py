@@ -40,6 +40,8 @@ PLATFORM_ANY = {
     # Task 19：受控 PCM 经真实原生 FFT/频带路径；engine_artifact 解析产物，
     # 不访问音频设备或驱动，产物缺失时自 SKIP。
     "smoke_viz_controlled_signals.py",
+    # 本地远程/应急工具安全门：分块哈希、PS1 解析退出码、应急脚本静态守卫。
+    "smoke_remote_tooling.py",
     # 进度小窗隔离纪律（2026-11-24）：纯源码 + 本地行为，无显示依赖。
     "smoke_progress_ui.py",
     "smoke_dart_platform_quarantine.py",
@@ -547,6 +549,8 @@ def run_smoke_tests():
         "smoke_runner_registry.py",
         # Task 12：证书身份与 SSH 主机密钥必须失败关闭；无网络/信任库副作用。
         "smoke_remote_security.py",
+        # 本地工具维护：旧快照清理、分块哈希、PS1 解析与应急脚本守卫。
+        "smoke_remote_tooling.py",
         # Task 13：停止监听后在途回调失效，退出释放可视化资源。
         "smoke_viz_lifecycle.py",
         "smoke_dart_chcap_authority.py",

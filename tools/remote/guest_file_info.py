@@ -12,16 +12,32 @@ import os
 import sys
 
 
+CHUNK_BYTES = 1024 * 1024
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    size = 0
+    with open(path, 'rb') as handle:
+        while True:
+            chunk = handle.read(CHUNK_BYTES)
+            if not chunk:
+                break
+            size += len(chunk)
+            digest.update(chunk)
+    return size, digest.hexdigest()
+
+
 def main():
     if len(sys.argv) < 2:
         print('usage: guest_file_info.py <path>')
         return 1
     p = sys.argv[1]
-    if os.path.exists(p):
-        data = open(p, 'rb').read()
+    if os.path.isfile(p):
+        size, digest = sha256_file(p)
         print('path', p)
-        print('size', len(data))
-        print('sha256', hashlib.sha256(data).hexdigest())
+        print('size', size)
+        print('sha256', digest)
     else:
         print('NOT FOUND:', p)
         d = os.path.dirname(p)

@@ -28,7 +28,8 @@
 | 脚本 | 跑在哪 | 用途 |
 |---|---|---|
 | `guest_telemetry.py` | 宾机 | 采样 ASIO 遥测块 `Global\AuraDSP_AsioDriverTelemetry`：dawCh/running + 逐声道 peakInCh/peakOutCh。判读口径见脚本头注。`--samples/--interval` 可调 |
-| `guest_file_info.py` | 宾机 | 打印指定文件大小 + SHA-256（交付回读核对的宾机侧一半） |
+| `guest_file_info.py` | 宾机 | 打印指定文件大小 + SHA-256（交付回读核对的宾机侧一半）；大文件按 1 MiB 分块哈希 |
+| `parse_check.ps1` | 开发机 | 解析当前目录或指定路径下的 `.ps1`，并检查 ASCII/UTF-8 BOM；任一失败返回非零 |
 | `guest_reaper_state.py` | 宾机 | 回读 reaper.ini 的 `[asiochan]` 声道范围。注意范围全开 ≠ 路由正确：轨道与主轨 Track channels 仍须各自设 8（2026-11-24 ASIO 三至八声道案的定罪点） |
 | `asio_registration_probe.py` | 任意 Windows 主机 | 枚举 HKLM/HKCU ASIO 注册名单、AuraDSP Driver 的 CLSID 与 InprocServer32 指向 DLL 的 mtime/大小。开发机当前无注册属正常（REAPER 实测在宾机） |
 | `Invoke-GuestScript.ps1` | 开发机 | 把同目录的宾机 Python 脚本 scp 过去并经 ssh 执行，输出落盘回读。长任务请再套 `Invoke-DevTask.ps1` |
