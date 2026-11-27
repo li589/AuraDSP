@@ -8,7 +8,6 @@ import 'package:auradsp_app/features/visualizer/models/visualizer_themes.dart';
 import 'package:auradsp_app/features/visualizer/controllers/peak_physics_engine.dart';
 import 'package:auradsp_app/features/visualizer/controllers/waveform_synthesizer.dart';
 import 'package:auradsp_app/features/visualizer/plugins/milkdrop_preset.dart';
-import 'package:auradsp_app/features/visualizer/shaders/gpu_shader_service.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_atmosphere.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_fluid.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_gpu_shader.dart';
@@ -209,14 +208,10 @@ void main() {
           time: 12.5,
         );
         if (style == VisualizerStyle.tornado) {
-          expect(painter, isA<GpuShaderPainter>());
-          final gpu = painter as GpuShaderPainter;
-          expect(gpu.shaderType, GpuShaderType.tornado);
           expect(
-            gpu.rendererKind,
-            gpu.compileStatus == GpuShaderCompileStatus.compiled
-                ? VisualizerRendererKind.gpuShader
-                : VisualizerRendererKind.cpuPainter,
+            painter,
+            isNot(isA<GpuShaderPainter>()),
+            reason: 'Tornado is a CPU particle flow, not the legacy raymarch.',
           );
         }
         painter.paint(canvas, const Size(800, 480));

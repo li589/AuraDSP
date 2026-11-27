@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -8,7 +7,10 @@ import 'package:auradsp_app/features/visualizer/models/visualizer_themes.dart';
 import 'package:auradsp_app/features/visualizer/models/visualizer_types.dart';
 import 'package:auradsp_app/features/visualizer/shaders/gpu_shader_service.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_gpu_shader.dart';
+import 'package:auradsp_app/features/visualizer/styles/style_tornado.dart';
 import 'package:auradsp_app/features/visualizer/styles/visualizer_painter_dispatcher.dart';
+import 'package:auradsp_app/features/visualizer/styles/visualizer_sprite_atlas.dart';
+import 'package:auradsp_app/features/visualizer/styles/visualizer_time_aware.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -23,46 +25,59 @@ const _palette = VisualizerPalette(
 
 final _bands = List<double>.generate(32, (i) => 0.35 + 0.25 * ((i % 7) / 6));
 
-class _CountingGpuShaderPainter extends GpuShaderPainter {
-  _CountingGpuShaderPainter({required GpuShaderService service})
-    : super(
-        shaderType: GpuShaderType.tornado,
-        bands: _bands,
-        palette: _palette,
-        time: 0.75,
-        sensitivity: 1.0,
-        service: service,
-      );
+typedef _AtlasBuffers = ({
+  Float32List transforms,
+  Float32List rects,
+  Int32List colors,
+  int spriteCount,
+  int capacity,
+});
 
-  int paintCount = 0;
+typedef _ParticleMetrics = ({
+  int particleCount,
+  int trailSamples,
+  int batchCount,
+  double meanHeight,
+  double centroidX,
+  double mirrorError,
+  double speed,
+  double spread,
+  double brightness,
+});
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    paintCount++;
-    super.paint(canvas, size);
-  }
-}
-
-GpuShaderPainter _tornadoPainter({
+CustomPainter _tornadoPainter({
   required GpuShaderService service,
   double time = 0.75,
-}) {
-  final synth = WaveformSynthesizer();
-  final painter = buildVisualizerPainter(
+  List<double>? bands,
+  VisualizerConfig config = const VisualizerConfig(
     style: VisualizerStyle.tornado,
-    config: const VisualizerConfig(style: VisualizerStyle.tornado),
+  ),
+}) {
+  return buildVisualizerPainter(
+    style: VisualizerStyle.tornado,
+    config: config,
     palette: _palette,
-    rawBands: _bands,
+    rawBands: bands ?? _bands,
     peaks: List<double>.filled(32, 0.8),
-    waveformSynth: synth,
+    waveformSynth: WaveformSynthesizer(),
     time: time,
     service: service,
   );
-  expect(painter, isA<GpuShaderPainter>());
-  return painter as GpuShaderPainter;
 }
 
-Future<Uint8List> _rasterize(GpuShaderPainter painter) async {
+// Keep the contract checks runtime-based so this suite compiles before the
+// particle painter exists. The old route fails these assertions, not the
+// compiler, which proves the regressions actually discriminate renderers.
+dynamic _particlePainter(CustomPainter painter) {
+  expect(
+    painter,
+    isNot(isA<GpuShaderPainter>()),
+    reason: 'The primary tornado route must not be the mirrored raymarch.',
+  );
+  return painter;
+}
+
+Future<Uint8List> _rasterize(CustomPainter painter) async {
   const size = Size(480, 320);
   final recorder = ui.PictureRecorder();
   painter.paint(Canvas(recorder), size);
@@ -87,7 +102,39 @@ int _changedPixels(Uint8List a, Uint8List b) {
   return changed;
 }
 
-Future<void> _pumpCapture(WidgetTester tester, GpuShaderPainter painter) async {
+// A bilateral renderer has (near) zero mismatch. Independent 3D particles
+// leave different energy on opposite sides even when their envelope is a
+// funnel. Compare only visible energy so transparent padding cannot dominate.
+({double mismatch, double imbalance}) _mirrorSignature(Uint8List pixels) {
+  const width = 480;
+  const height = 320;
+  var mismatch = 0.0;
+  var leftEnergy = 0.0;
+  var rightEnergy = 0.0;
+  for (var y = 0; y < height; y++) {
+    for (var x = 0; x < width; x++) {
+      final i = (y * width + x) * 4;
+      final j = (y * width + (width - 1 - x)) * 4;
+      final energy =
+          (pixels[i] + pixels[i + 1] + pixels[i + 2]) * pixels[i + 3] / 255.0;
+      final mirrored =
+          (pixels[j] + pixels[j + 1] + pixels[j + 2]) * pixels[j + 3] / 255.0;
+      mismatch += (energy - mirrored).abs();
+      if (x < width ~/ 2) {
+        leftEnergy += energy;
+      } else {
+        rightEnergy += energy;
+      }
+    }
+  }
+  final total = leftEnergy + rightEnergy;
+  return (
+    mismatch: total == 0 ? 0 : mismatch / total,
+    imbalance: total == 0 ? 0 : (leftEnergy - rightEnergy).abs() / total,
+  );
+}
+
+Future<void> _pumpCapture(WidgetTester tester, CustomPainter painter) async {
   await tester.pumpWidget(
     MaterialApp(
       home: Align(
@@ -97,7 +144,10 @@ Future<void> _pumpCapture(WidgetTester tester, GpuShaderPainter painter) async {
           child: SizedBox(
             width: 480,
             height: 320,
-            child: CustomPaint(painter: painter),
+            child: CustomPaint(
+              painter: TornadoBackdropPainter(palette: _palette, bloom: 0.5),
+              foregroundPainter: painter,
+            ),
           ),
         ),
       ),
@@ -106,261 +156,256 @@ Future<void> _pumpCapture(WidgetTester tester, GpuShaderPainter painter) async {
   await tester.pump();
 }
 
+class _AtlasCountingCanvas extends TestRecordingCanvas {
+  int atlasCalls = 0;
+  int submittedInstances = 0;
+
+  @override
+  void drawRawAtlas(
+    ui.Image atlas,
+    Float32List rstTransforms,
+    Float32List rects,
+    Int32List? colors,
+    BlendMode? blendMode,
+    Rect? cullRect,
+    Paint paint,
+  ) {
+    atlasCalls++;
+    submittedInstances = colors?.length ?? rstTransforms.length ~/ 4;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('Particle tornado renderer honesty', () {
-    test('dispatcher selects the tornado shader, not a generic painter', () {
-      final painter = _tornadoPainter(service: GpuShaderService.instance);
-      expect(painter.shaderType, GpuShaderType.tornado);
-      expect(painter.shaderType.assetPath, 'shaders/particle_tornado.frag');
-    });
-
-    test(
-      'failed compilation exposes CPU fallback and the real error',
-      () async {
-        final service = GpuShaderService.test(
-          loader: (assetPath) async =>
-              throw StateError('deterministic compile failure'),
-        );
-        expect(await service.initialize(), isFalse);
-
-        final painter = _tornadoPainter(service: service);
-        expect(painter.compileStatus, GpuShaderCompileStatus.failed);
-        expect(painter.rendererKind, VisualizerRendererKind.cpuPainter);
-        expect(
-          painter.statusDescription,
-          contains('shaders/particle_tornado.frag'),
-        );
-        expect(
-          painter.statusDescription,
-          contains('deterministic compile failure'),
-        );
-      },
-    );
-
-    for (final succeed in [true, false]) {
-      testWidgets(
-        'delayed shader ${succeed ? 'success' : 'failure'} repaints the first frame once',
-        (tester) async {
-          final gate = Completer<ui.FragmentProgram>();
-          ui.FragmentProgram? program;
-          if (succeed) {
-            program = await tester.runAsync(
-              () =>
-                  ui.FragmentProgram.fromAsset(GpuShaderType.tornado.assetPath),
-            );
-          }
-          final service = GpuShaderService.test(
-            loader: (assetPath) {
-              if (assetPath == GpuShaderType.tornado.assetPath) {
-                return gate.future;
-              }
-              throw StateError('unused shader: $assetPath');
-            },
-          );
-          final painter = _CountingGpuShaderPainter(service: service);
-          addTearDown(painter.dispose);
-          late StateSetter rebuildHost;
-          final initialization = service.initialize();
-          initialization.then((_) => rebuildHost(() {}));
-
-          await tester.pumpWidget(
-            MaterialApp(
-              home: StatefulBuilder(
-                builder: (context, setState) {
-                  rebuildHost = setState;
-                  return SizedBox(
-                    width: 480,
-                    height: 320,
-                    child: CustomPaint(painter: painter),
-                  );
-                },
-              ),
-            ),
-          );
-          await tester.pump();
-          final paintsBeforeCompletion = painter.paintCount;
-          expect(paintsBeforeCompletion, greaterThan(0));
-          expect(
-            painter.compileStatus,
-            GpuShaderCompileStatus.compiling,
-            reason:
-                'The first frame must be painted before the loader completes.',
-          );
-
-          if (succeed) {
-            gate.complete(program!);
-          } else {
-            gate.completeError(StateError('delayed compile failure'));
-          }
-          await tester.pump();
-          await tester.pump();
-          await initialization;
-
-          expect(
-            painter.compileStatus,
-            succeed
-                ? GpuShaderCompileStatus.compiled
-                : GpuShaderCompileStatus.failed,
-          );
-          expect(
-            painter.paintCount,
-            greaterThan(paintsBeforeCompletion),
-            reason:
-                'The cached widget painter must invalidate its loading frame '
-                'when asynchronous compilation completes.',
-          );
-
-          final settledPaintCount = painter.paintCount;
-          for (var i = 0; i < 4; i++) {
-            await tester.pump(const Duration(milliseconds: 50));
-          }
-          expect(
-            painter.paintCount,
-            settledPaintCount,
-            reason:
-                'Status completion must not start a continuous redraw loop.',
-          );
-        },
-      );
+  setUpAll(() async {
+    final atlas = VisualizerSpriteAtlas.instance;
+    atlas.ensureImage();
+    for (var i = 0; i < 200 && atlas.imageOrNull == null; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
     }
+    expect(atlas.imageOrNull, isNotNull);
+    // Keeps the legacy asset independently testable without routing the
+    // selected style through it. This also makes the RED run exercise the
+    // real old shader rather than its unavailable/loading diagnostic.
+    expect(
+      await GpuShaderService.instance.ensureCompiled(GpuShaderType.tornado),
+      isTrue,
+    );
+  });
 
-    test('diagnostic TextPainter has deterministic owner teardown', () async {
-      for (var cycle = 0; cycle < 3; cycle++) {
+  group('Particle tornado renderer', () {
+    test(
+      'dispatcher selects CPU particles without compiling tornado shader',
+      () {
+        final loaded = <String>[];
         final service = GpuShaderService.test(
-          loader: (assetPath) async =>
-              throw StateError('deterministic compile failure $cycle'),
+          loader: (assetPath) async {
+            loaded.add(assetPath);
+            return ui.FragmentProgram.fromAsset(assetPath);
+          },
         );
-        await service.initialize();
         final painter = _tornadoPainter(service: service);
-        await _rasterize(painter);
-        final cachedText = painter.debugStatusTextPainter;
-        expect(cachedText, isNotNull);
 
-        // CustomPainter/RenderCustomPaint has no dispose hook; the owning
-        // viewport releases these native text resources on style retirement
-        // and teardown. Disposal is deliberately idempotent for teardown races.
-        (painter as dynamic).dispose();
-        expect(cachedText!.debugDisposed, isTrue);
-        expect(painter.debugStatusTextPainter, isNull);
-        painter.dispose();
-      }
-    });
+        expect(painter, isNot(isA<GpuShaderPainter>()));
+        expect(painter, isA<VisualizerTimeAware>());
+        expect(loaded, isEmpty);
+      },
+    );
 
-    test('GPU resume disposes the cached diagnostic immediately', () async {
-      final program = await ui.FragmentProgram.fromAsset(
-        GpuShaderType.tornado.assetPath,
-      );
-      final gate = Completer<ui.FragmentProgram>();
-      final service = GpuShaderService.test(
-        loader: (assetPath) {
-          if (assetPath == GpuShaderType.tornado.assetPath) {
-            return gate.future;
-          }
-          throw StateError('unused shader: $assetPath');
-        },
-      );
-      final painter = _tornadoPainter(service: service);
-      final initialization = service.initialize();
-      await _rasterize(painter);
-      final cachedText = painter.debugStatusTextPainter;
-      expect(cachedText, isNotNull);
-      expect(painter.compileStatus, GpuShaderCompileStatus.compiling);
+    test('rasterized particle flow breaks bilateral mirror symmetry', () async {
+      final painter = _tornadoPainter(service: GpuShaderService.instance);
+      final signature = _mirrorSignature(await _rasterize(painter));
 
-      gate.complete(program);
-      await initialization;
-      await _rasterize(painter);
-
-      expect(painter.rendererKind, VisualizerRendererKind.gpuShader);
-      expect(cachedText!.debugDisposed, isTrue);
-      expect(painter.debugStatusTextPainter, isNull);
-      painter.dispose();
-    });
-
-    test('failed shader never paints the legacy circular fallback', () async {
-      final service = GpuShaderService.test(
-        loader: (assetPath) async =>
-            throw StateError('deterministic compile failure'),
-      );
-      await service.initialize();
-      final painter = _tornadoPainter(service: service);
-      addTearDown(painter.dispose);
-      final pixels = await _rasterize(painter);
-
-      // With the old implementation the bottom of its audio-reactive ring is
-      // centered at (240, 282) for this fixed 480x320 frame and band input.
-      var maxGreen = 0;
-      for (var y = 279; y <= 284; y++) {
-        for (var x = 237; x <= 242; x++) {
-          final green = pixels[(y * 480 + x) * 4 + 1];
-          if (green > maxGreen) maxGreen = green;
-        }
-      }
       expect(
-        maxGreen,
-        lessThan(100),
+        signature.mismatch,
+        greaterThan(0.75),
         reason:
-            'A bright ring at the legacy radius would falsely look like '
-            'the selected tornado instead of an honest failure notice.',
+            'A mirrored raymarch is not the approved particle distribution: '
+            '$signature',
+      );
+      expect(
+        signature.imbalance,
+        greaterThan(0.02),
+        reason:
+            'Independent particles must not balance like a mirrored ray field.',
       );
     });
 
-    testWidgets(
-      'failed shader paints a diagnostic golden, never a fallback ring',
-      (tester) async {
-        final service = GpuShaderService.test(
-          loader: (assetPath) async =>
-              throw StateError('deterministic compile failure'),
-        );
-        await service.initialize();
-        final painter = _tornadoPainter(service: service);
-        addTearDown(painter.dispose);
+    test('visible particles move between nearby frames', () async {
+      final painter = _particlePainter(
+        _tornadoPainter(service: GpuShaderService.instance),
+      ) as CustomPainter;
+      final first = await _rasterize(painter);
+      (painter as VisualizerTimeAware).setVisualizerTime(0.90);
+      final second = await _rasterize(painter);
 
-        await _pumpCapture(tester, painter);
-        await expectLater(
-          find.byKey(const Key('tornado-capture')),
-          matchesGoldenFile('goldens/tornado_shader_failure.png'),
+      expect(_changedPixels(first, second), greaterThan(500));
+    });
+
+    test(
+      '3D particles rise while the funnel centroid drifts asymmetrically',
+      () {
+        final dynamic painter = _particlePainter(
+          _tornadoPainter(service: GpuShaderService.instance),
         );
+        painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+        final before = painter.debugParticleMetrics as _ParticleMetrics;
+        final beforePositions = Float32List.fromList(
+          painter.debugParticlePositions as Float32List,
+        );
+        painter.setVisualizerTime(2.0);
+        painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+        final after = painter.debugParticleMetrics as _ParticleMetrics;
+        final afterPositions = painter.debugParticlePositions as Float32List;
+
+        var risingParticles = 0;
+        for (var i = 0; i < before.particleCount; i++) {
+          if (afterPositions[i * 3 + 1] > beforePositions[i * 3 + 1]) {
+            risingParticles++;
+          }
+        }
+        expect(before.particleCount, inInclusiveRange(850, 950));
+        expect(risingParticles, greaterThan(before.particleCount * 0.65));
+        expect((after.centroidX - before.centroidX).abs(), greaterThan(0.01));
+        expect(after.mirrorError, greaterThan(0.20));
       },
     );
 
     test(
-      'real tornado asset compiles and fixed-time frames show rotation',
-      () async {
-        final service = GpuShaderService.instance;
-        final initialized = await service.initialize();
-        expect(
-          initialized,
-          isTrue,
-          reason:
-              'This proves Flutter runtime-effect loading only; it is not a '
-              'Win10 GPU driver compilation claim.',
+      'painter reuses typed buffers and submits one atlas batch per frame',
+      () {
+        final dynamic painter = _particlePainter(
+          _tornadoPainter(service: GpuShaderService.instance),
         );
-        expect(
-          service.compileStatusFor(GpuShaderType.tornado),
-          GpuShaderCompileStatus.compiled,
-        );
+        final canvas = _AtlasCountingCanvas();
+        painter.paint(canvas, const Size(480, 320));
+        final first = painter.debugAtlasBuffers as _AtlasBuffers;
+        final firstTransforms = first.transforms;
+        final firstRects = first.rects;
+        final firstColors = first.colors;
 
-        final first = _tornadoPainter(service: service, time: 0.75);
-        final second = _tornadoPainter(service: service, time: 2.0);
-        expect(first.rendererKind, VisualizerRendererKind.gpuShader);
-        final a = await _rasterize(first);
-        final b = await _rasterize(second);
-        expect(
-          _changedPixels(a, b),
-          greaterThan(500),
-          reason: 'The rotating vortex must not render as a static image.',
-        );
+        for (var frame = 1; frame <= 4; frame++) {
+          painter.setVisualizerTime(0.75 + frame / 30);
+          painter.paint(canvas, const Size(480, 320));
+        }
+        final last = painter.debugAtlasBuffers as _AtlasBuffers;
+        final metrics = painter.debugParticleMetrics as _ParticleMetrics;
+
+        expect(canvas.atlasCalls, 5);
+        expect(canvas.submittedInstances, last.capacity);
+        expect(last.spriteCount, greaterThan(metrics.particleCount * 2));
+        expect(last.spriteCount, lessThan(last.capacity));
+        expect(last.capacity, metrics.particleCount * 4);
+        for (var i = last.spriteCount; i < last.capacity; i++) {
+          expect(last.colors[i] >>> 24, 0);
+        }
+        expect(identical(last.transforms, firstTransforms), isTrue);
+        expect(identical(last.rects, firstRects), isTrue);
+        expect(identical(last.colors, firstColors), isTrue);
+        expect(metrics.batchCount, 5);
       },
     );
 
-    testWidgets('real tornado asset matches a fixed-time software golden', (
+    test('identical time/audio sequences are deterministic', () {
+      final dynamic first = _particlePainter(
+        _tornadoPainter(service: GpuShaderService.instance),
+      );
+      final dynamic second = _particlePainter(
+        _tornadoPainter(service: GpuShaderService.instance),
+      );
+      for (var frame = 0; frame < 8; frame++) {
+        final time = 0.75 + frame / 30;
+        first.setVisualizerTime(time);
+        second.setVisualizerTime(time);
+        first.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+        second.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+      }
+      final a = first.debugParticlePositions as Float32List;
+      final b = second.debugParticlePositions as Float32List;
+      expect(a, orderedEquals(b));
+    });
+
+    test('repainting the same timestamp does not advance particles', () {
+      final dynamic painter = _particlePainter(
+        _tornadoPainter(service: GpuShaderService.instance),
+      );
+      painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+      final before = Float32List.fromList(
+        painter.debugParticlePositions as Float32List,
+      );
+      painter.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+      final after = painter.debugParticlePositions as Float32List;
+      expect(after, orderedEquals(before));
+    });
+
+    test('audio smoothly increases speed, spread, and brightness', () {
+      final quietBands = List<double>.filled(32, 0.0);
+      final loudBands = List<double>.filled(32, 1.0);
+      final dynamic quiet = _particlePainter(
+        _tornadoPainter(service: GpuShaderService.instance, bands: quietBands),
+      );
+      final dynamic loud = _particlePainter(
+        _tornadoPainter(service: GpuShaderService.instance, bands: loudBands),
+      );
+      _ParticleMetrics? previousLoud;
+      var largestLoudStep = 0.0;
+      for (var frame = 0; frame < 16; frame++) {
+        final time = 0.75 + frame / 30;
+        quiet.setVisualizerTime(time);
+        loud.setVisualizerTime(time);
+        quiet.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+        loud.paint(Canvas(ui.PictureRecorder()), const Size(480, 320));
+        final metrics = loud.debugParticleMetrics as _ParticleMetrics;
+        if (previousLoud != null) {
+          largestLoudStep = mathMax(
+            largestLoudStep,
+            (metrics.speed - previousLoud.speed).abs(),
+          );
+        }
+        previousLoud = metrics;
+      }
+      final quietMetrics = quiet.debugParticleMetrics as _ParticleMetrics;
+      final loudMetrics = loud.debugParticleMetrics as _ParticleMetrics;
+
+      expect(loudMetrics.speed, greaterThan(quietMetrics.speed * 1.15));
+      expect(loudMetrics.spread, greaterThan(quietMetrics.spread * 1.05));
+      expect(
+        loudMetrics.brightness,
+        greaterThan(quietMetrics.brightness * 1.05),
+      );
+      expect(largestLoudStep, lessThan(0.12));
+    });
+
+    test(
+      'dark backdrop stays smooth without a hard horizontal strip',
+      () async {
+        final pixels = await _rasterize(
+          TornadoBackdropPainter(palette: _palette, bloom: 0.5),
+        );
+        final rowMeans = List<double>.generate(320, (y) {
+          var sum = 0.0;
+          for (var x = 0; x < 480; x++) {
+            final i = (y * 480 + x) * 4;
+            sum += (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3.0;
+          }
+          return sum / 480.0;
+        });
+        var largestStep = 0.0;
+        for (var y = 1; y < rowMeans.length; y++) {
+          final step = (rowMeans[y] - rowMeans[y - 1]).abs();
+          if (step > largestStep) largestStep = step;
+        }
+        expect(largestStep, lessThan(2.0));
+        expect(rowMeans.reduce(mathMin), greaterThan(1.5));
+      },
+    );
+
+    testWidgets('particle tornado matches a fixed-time software golden', (
       tester,
     ) async {
-      final service = GpuShaderService.instance;
-      expect(await service.initialize(), isTrue);
-      await _pumpCapture(tester, _tornadoPainter(service: service));
+      final painter = _tornadoPainter(service: GpuShaderService.instance);
+      await _pumpCapture(tester, painter);
       await expectLater(
         find.byKey(const Key('tornado-capture')),
         matchesGoldenFile('goldens/tornado_fixed_time.png'),
@@ -368,3 +413,7 @@ void main() {
     });
   });
 }
+
+double mathMax(double a, double b) => a > b ? a : b;
+
+double mathMin(double a, double b) => a < b ? a : b;

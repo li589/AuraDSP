@@ -17,6 +17,7 @@ import 'style_milkdrop.dart';
 import 'style_oscilloscope.dart';
 import 'style_pulse_orb.dart';
 import 'style_spectrum_bars.dart';
+import 'style_tornado.dart';
 
 /// 可视化画笔分发器：按选中风格将音频特征状态路由至对应高性能 CustomPainter
 ///
@@ -130,14 +131,12 @@ CustomPainter buildVisualizerPainter({
       );
 
     case VisualizerStyle.tornado:
-      ensureShader(GpuShaderType.tornado);
-      return GpuShaderPainter(
-        shaderType: GpuShaderType.tornado,
+      return TornadoParticlePainter(
         bands: rawBands,
         palette: palette,
+        bloom: config.bloom,
         time: time,
         sensitivity: config.sensitivity,
-        service: shaderService,
       );
 
     case VisualizerStyle.nebulaFlow:
