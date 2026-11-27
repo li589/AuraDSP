@@ -11,7 +11,10 @@ W3 起桥自持 GL 上下文（隐藏 WGL 窗口 + 专用渲染线程），宿�
   4. 渲染线程持续产帧：render_pixels 在超时内返回 0 且帧尺寸对；
   5. load_preset 语义实证（审计遗留推论项）：合法 .milk 返回 0，
      损坏 .milk 返回 -3（projectM 失败回调口径）；
-  6. resize 后新尺寸帧可取；destroy 返回 0。
+  6. 异步 request/readback ABI：请求 ID、pending/ready/failure、当前路径回读、
+     快速请求合并/旧请求 superseded 均符合契约；
+  7. 无已提交预设的新实例在慢加载被腐蚀请求取代后，保留初始完成帧与空路径；
+  8. resize 后新尺寸帧可取；destroy 返回 0。
 
 产物经环境变量定位（AURADSP_PM_BRIDGE_DLL / AURADSP_PM_SDK_BIN），
 未设置时自 SKIP 退出 0（仓库惯例）；开发机门禁显式设置后实跑。
@@ -145,6 +148,13 @@ def main() -> int:
     dll.auradsp_projectm_load_preset.restype = ctypes.c_int
     dll.auradsp_projectm_load_preset.argtypes = [ctypes.c_void_p,
                                                  ctypes.c_char_p]
+    dll.auradsp_projectm_request_preset_load.restype = ctypes.c_uint64
+    dll.auradsp_projectm_request_preset_load.argtypes = [ctypes.c_void_p,
+                                                          ctypes.c_char_p]
+    dll.auradsp_projectm_read_preset_load.restype = ctypes.c_int
+    dll.auradsp_projectm_read_preset_load.argtypes = [
+        ctypes.c_void_p, ctypes.c_uint64, ctypes.POINTER(ctypes.c_char),
+        ctypes.c_size_t]
     dll.auradsp_projectm_render_pixels.restype = ctypes.c_int
     dll.auradsp_projectm_render_pixels.argtypes = [ctypes.c_void_p,
                                                    ctypes.POINTER(ctypes.c_ubyte)]
@@ -185,6 +195,63 @@ def main() -> int:
     check(rc == -3, "损坏 .milk 加载返回 -3（实得 %d）" % rc)
     rc = dll.auradsp_projectm_load_preset(h, good.encode("utf-8"))
     check(rc == 0, "损坏后重新加载合法预设返回 0（实得 %d）" % rc)
+
+    def request(path, handle=h):
+        return dll.auradsp_projectm_request_preset_load(
+            handle, path.encode("utf-8"))
+
+    def wait_read(request_id, timeout=5.0, handle=h):
+        current = ctypes.create_string_buffer(32768)
+        deadline = time.time() + timeout
+        while True:
+            status = dll.auradsp_projectm_read_preset_load(
+                handle, request_id, current, len(current))
+            value = current.value.decode("utf-8", "replace") or None
+            if status != 1 or time.time() >= deadline:
+                return status, value
+            time.sleep(0.01)
+
+    alt_path = os.path.join(tmp, "async_variant.milk")
+    with open(alt_path, "w", encoding="utf-8") as f:
+        f.write(_variant(MINIMAL_MILK, **{"fDecay": "0.910"}))
+    first = request(good)
+    second = request(alt_path)
+    check(first != 0 and second != 0 and first != second,
+          "异步请求返回递增非零 ID")
+    stale_status, _ = wait_read(first)
+    check(stale_status == -4,
+          "被后续请求取代的旧请求返回 -4（实得 %d）" % stale_status)
+    status, current = wait_read(second)
+    check(status == 0 and current == alt_path,
+          "最新异步请求 ready 且回读当前路径（status=%d path=%s）" %
+          (status, current))
+
+    bad_request = request(corrupt)
+    status, current = wait_read(bad_request)
+    check(status == -3 and current == alt_path,
+          "异步坏预设失败且保留上一当前路径（status=%d path=%s）" %
+          (status, current))
+
+    # Force a valid parse to remain in flight while a newer corrupt request
+    # arrives. A superseded successful parse must not replace the previously
+    # committed current path when the newer request fails.
+    slow_path = os.path.join(tmp, "slow_valid.milk")
+    with open(slow_path, "w", encoding="utf-8") as f:
+        f.write(MINIMAL_MILK)
+        for i in range(1, 20001):
+            f.write("per_frame_%d=zoom=zoom+0.000001;\n" % i)
+    stale_request = request(slow_path)
+    time.sleep(0.1)
+    race_started = time.time()
+    newer_bad_request = request(corrupt)
+    status, current = wait_read(newer_bad_request)
+    race_elapsed = time.time() - race_started
+    check(race_elapsed > 0.1,
+          "竞态夹具确实重叠（新请求等待 %.3fs）" % race_elapsed)
+    check(status == -3 and current == alt_path,
+          "飞行中被取代的成功加载不回写当前路径"
+          "（status=%d path=%s expected=%s）" %
+          (status, current, alt_path))
 
     buf = (ctypes.c_ubyte * (320 * 180 * 4))()
     got = -3
@@ -284,6 +351,70 @@ def main() -> int:
     check(got == 0, "resize 后新尺寸帧可取（实得 %d）" % got)
 
     check(dll.auradsp_projectm_destroy(h) == 0, "destroy 返回 0")
+
+    # Fresh-handle contamination regression: no preset has ever been committed.
+    # A slow valid load enters projectM, then a newer corrupt request supersedes
+    # it. The failed latest request must not publish the contaminating preset or
+    # replace the initial completed frame with an unrequested visualization.
+    fresh = dll.auradsp_projectm_create(320, 180, 30.0)
+    check(fresh is not None, "新实例 create 成功（无已提交预设）")
+    if not fresh:
+        print("smoke_projectm_bridge_runtime: %s" % ("FAIL" if FAILS else "PASS"))
+        return 1 if FAILS else 0
+    fresh = ctypes.c_void_p(fresh)
+    initial_buf = (ctypes.c_ubyte * (320 * 180 * 4))()
+    got = -3
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        dll.auradsp_projectm_feed_pcm(fresh, pcm, frames, 2)
+        got = dll.auradsp_projectm_render_pixels(fresh, initial_buf)
+        if got == 0:
+            break
+        time.sleep(0.02)
+    check(got == 0, "新实例初始完成帧可取（实得 %d）" % got)
+    initial_frame = bytes(initial_buf) if got == 0 else None
+    if initial_frame is not None:
+        stale_request = request(slow_path, fresh)
+        time.sleep(0.1)
+        pending_path = ctypes.create_string_buffer(32768)
+        pending_status = dll.auradsp_projectm_read_preset_load(
+            fresh, stale_request, pending_path, len(pending_path))
+        check(pending_status == 1 and
+              not pending_path.value.decode("utf-8", "replace"),
+              "慢合法请求已进入飞行且尚未提交路径")
+        race_started = time.time()
+        newer_bad_request = request(corrupt, fresh)
+        status, current = wait_read(newer_bad_request, handle=fresh)
+        race_elapsed = time.time() - race_started
+        check(race_elapsed > 0.1,
+              "新实例竞态夹具确实重叠（新请求等待 %.3fs）" % race_elapsed)
+        check(status == -3,
+              "新实例最新腐蚀请求失败（status=%d）" % status)
+        check(current is None,
+              "新实例无已提交预设时当前路径保持为空"
+              "（path=%s）" % current)
+
+        # Allow any erroneous resumed rendering to publish before inspecting.
+        # A correct transaction stays render-blocked, so every snapshot remains
+        # byte-identical to the initial completed frame.
+        published_buf = (ctypes.c_ubyte * (320 * 180 * 4))()
+        unchanged = True
+        snapshots = 0
+        deadline = time.time() + 0.3
+        while time.time() < deadline:
+            dll.auradsp_projectm_feed_pcm(fresh, pcm, frames, 2)
+            rc = dll.auradsp_projectm_render_pixels(fresh, published_buf)
+            if rc == 0:
+                snapshots += 1
+                if bytes(published_buf) != initial_frame:
+                    unchanged = False
+                    break
+            time.sleep(0.02)
+        check(unchanged and snapshots > 0,
+              "污染后未发布新帧，保留初始完成帧"
+              "（snapshots=%d unchanged=%s）" % (snapshots, unchanged))
+
+    check(dll.auradsp_projectm_destroy(fresh) == 0, "新实例 destroy 返回 0")
     print("smoke_projectm_bridge_runtime: %s" % ("FAIL" if FAILS else "PASS"))
     return 1 if FAILS else 0
 

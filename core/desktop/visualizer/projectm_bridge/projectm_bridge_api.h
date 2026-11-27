@@ -62,6 +62,28 @@ AURADSP_PROJECTM_EXPORT int auradsp_projectm_load_preset(
     auradsp_projectm_t handle, const char* preset_path);
 
 /**
+ * Queue a UTF-8 preset parse/load on the render thread and return its nonzero
+ * request ID immediately. The caller must confirm completion with
+ * auradsp_projectm_read_preset_load; request acceptance is not load success.
+ */
+AURADSP_PROJECTM_EXPORT uint64_t auradsp_projectm_request_preset_load(
+    auradsp_projectm_t handle, const char* preset_path);
+
+/**
+ * Read request status and the committed preset path without waiting for the
+ * render queue. Returns 1 while pending, 0 when this request completed and
+ * current_path names its successfully loaded preset, -3 on load failure, -4
+ * when superseded, -2 when unavailable, and -1 for invalid arguments/buffer.
+ * current_path is optional; when supplied it is always NUL-terminated on
+ * success and contains the last successfully committed preset, including on
+ * failure. Rendering is frozen while a request is pending and remains frozen
+ * after a superseded successful load until a later latest request succeeds.
+ */
+AURADSP_PROJECTM_EXPORT int auradsp_projectm_read_preset_load(
+    auradsp_projectm_t handle, uint64_t request_id, char* current_path,
+    size_t current_path_size);
+
+/**
  * Copy the newest completed RGBA8 frame into out_rgba_pixels (at
  * least width * height * 4 bytes). Frames are produced continuously
  * by the bridge's render thread. Returns -3 while no frame has been

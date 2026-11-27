@@ -303,6 +303,14 @@ struct auradsp_projectm_context {
     std::atomic<int> height{0};
     float fps = 60.0f;
     std::atomic<bool> preset_load_failed{false};
+    std::mutex preset_mtx;
+    uint64_t next_preset_request = 0;
+    uint64_t latest_preset_request = 0;
+    uint64_t completed_preset_request = 0;
+    int latest_preset_status = 1;
+    bool preset_render_blocked = false;
+    bool preset_restoration_required = false;
+    std::string current_preset_path;
 
     // Caller-thread side state.
     std::mutex pcm_mtx;
@@ -421,6 +429,10 @@ private:
     // Render-thread only.
     void render_one(auradsp_projectm_context* ctx) {
 #if defined(_WIN32)
+        {
+            std::lock_guard<std::mutex> lock(ctx->preset_mtx);
+            if (ctx->preset_render_blocked) return;
+        }
         try {
             // Drain queued PCM first so the frame reacts to fresh audio.
             for (;;) {
@@ -654,31 +666,111 @@ AURADSP_PROJECTM_EXPORT int auradsp_projectm_feed_pcm(
     return 0;
 }
 
+AURADSP_PROJECTM_EXPORT uint64_t auradsp_projectm_request_preset_load(
+    auradsp_projectm_t handle, const char* preset_path) {
+    if (handle == nullptr || preset_path == nullptr ||
+        preset_path[0] == '\0') {
+        return 0;
+    }
+    auto* ctx = static_cast<auradsp_projectm_context*>(handle);
+#if !defined(_WIN32)
+    (void)ctx;
+    return 0;
+#else
+    if (!ctx->gl_ready.load(std::memory_order_acquire)) return 0;
+    const std::string path(preset_path);
+    uint64_t request_id = 0;
+    {
+        std::lock_guard<std::mutex> lock(ctx->preset_mtx);
+        request_id = ++ctx->next_preset_request;
+        if (request_id == 0) request_id = ++ctx->next_preset_request;
+        ctx->latest_preset_request = request_id;
+        ctx->latest_preset_status = 1;
+        ctx->preset_render_blocked = true;
+    }
+    // Only request bookkeeping runs on the caller thread. The potentially
+    // expensive parse and projectM load execute on the existing render queue.
+    RenderThread::instance().post([ctx, path, request_id] {
+        {
+            std::lock_guard<std::mutex> lock(ctx->preset_mtx);
+            if (ctx->latest_preset_request != request_id) return;
+        }
+        bool ok = false;
+        try {
+            ctx->preset_load_failed.store(false, std::memory_order_release);
+            projectm_load_preset_file(ctx->pm, path.c_str(), true);
+            ok = !ctx->preset_load_failed.load(std::memory_order_acquire);
+        } catch (...) {
+            ok = false;
+        }
+        std::lock_guard<std::mutex> lock(ctx->preset_mtx);
+        if (ctx->latest_preset_request == request_id) {
+            ctx->completed_preset_request = request_id;
+            ctx->latest_preset_status = ok ? 0 : -3;
+            if (ok) {
+                ctx->current_preset_path = path;
+                ctx->preset_restoration_required = false;
+                ctx->preset_render_blocked = false;
+            } else {
+                // projectM leaves its current preset unchanged on an ordinary
+                // failure. Resume only if no superseded success contaminated it.
+                ctx->preset_render_blocked = ctx->preset_restoration_required;
+            }
+            return;
+        }
+        if (ok) {
+            // The uncancellable load succeeded after being superseded. Keep the
+            // committed path and last completed frame; only a later successful
+            // latest request may publish a path and resume rendering.
+            ctx->preset_restoration_required = true;
+            ctx->preset_render_blocked = true;
+        }
+    });
+    return request_id;
+#endif
+}
+
+AURADSP_PROJECTM_EXPORT int auradsp_projectm_read_preset_load(
+    auradsp_projectm_t handle, uint64_t request_id, char* current_path,
+    size_t current_path_size) {
+    if (handle == nullptr || request_id == 0 ||
+        (current_path == nullptr && current_path_size != 0)) {
+        return -1;
+    }
+    auto* ctx = static_cast<auradsp_projectm_context*>(handle);
+    if (!ctx->gl_ready.load(std::memory_order_acquire)) return -2;
+    std::lock_guard<std::mutex> lock(ctx->preset_mtx);
+    if (current_path != nullptr) {
+        const size_t needed = ctx->current_preset_path.size() + 1;
+        if (current_path_size < needed) return -1;
+        std::memcpy(current_path, ctx->current_preset_path.c_str(), needed);
+    }
+    if (request_id > ctx->latest_preset_request) return -1;
+    if (request_id != ctx->latest_preset_request) return -4;
+    if (ctx->completed_preset_request != request_id) return 1;
+    return ctx->latest_preset_status;
+}
+
 AURADSP_PROJECTM_EXPORT int auradsp_projectm_load_preset(
     auradsp_projectm_t handle, const char* preset_path) {
     if (handle == nullptr || preset_path == nullptr ||
         preset_path[0] == '\0') {
         return -1;
     }
-    auto* ctx = static_cast<auradsp_projectm_context*>(handle);
-#if !defined(_WIN32)
-    (void)ctx;
-    return -2;
-#else
-    if (!ctx->gl_ready.load(std::memory_order_acquire)) return -2;
-    const std::string path(preset_path);
-    return RenderThread::instance().run_sync<int>([ctx, path] {
-        try {
-            ctx->preset_load_failed.store(false, std::memory_order_release);
-            projectm_load_preset_file(ctx->pm, path.c_str(), true);
-            return ctx->preset_load_failed.load(std::memory_order_acquire)
-                       ? -3
-                       : 0;
-        } catch (...) {
-            return -3;
+    // Compatibility for existing native callers: retain synchronous semantics,
+    // but run the actual parse/load through the same queued transaction.
+    const uint64_t request_id =
+        auradsp_projectm_request_preset_load(handle, preset_path);
+    if (request_id == 0) return -2;
+    for (;;) {
+        const int status =
+            auradsp_projectm_read_preset_load(handle, request_id, nullptr, 0);
+        if (status == 1) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
         }
-    });
-#endif
+        return status == 0 ? 0 : -3;
+    }
 }
 
 AURADSP_PROJECTM_EXPORT int auradsp_projectm_has_current_gl_context(void) {
