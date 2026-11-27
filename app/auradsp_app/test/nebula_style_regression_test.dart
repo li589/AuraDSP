@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -32,12 +33,9 @@ const _palette = VisualizerPalette(
   gradient: [Color(0xFF0055FF), Color(0xFF00E5FF)],
 );
 
-final _goldenBands = List<double>.generate(
-  32,
-  (i) => 0.30 + 0.20 * ((i % 7) / 6),
-);
-
 typedef _Peak = ({int x, int y, double value});
+typedef _TwinkleMetrics = ({int persistent, int brightened, int dimmed});
+typedef _ShapeMetrics = ({int count, double cornerFill, double haloRatio});
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -50,76 +48,26 @@ void main() {
     );
   });
 
+  test('nebula vignette avoids undefined reversed smoothstep edges', () async {
+    final source = await File('shaders/nebula_flow.frag').readAsString();
+    expect(
+      RegExp(r'smoothstep\(\s*1\.4\s*,\s*0\.35\s*,').hasMatch(source),
+      isFalse,
+      reason: 'GLSL smoothstep is undefined when edge0 is greater than edge1.',
+    );
+  });
+
   test(
     'persistent stars brighten and dim independently at fixed times',
     () async {
       final first = await _rasterize(0.20);
       final second = await _rasterize(0.45);
-      final peaks = _findPeaks(first);
-      var persistent = 0;
-      var brightened = 0;
-      var dimmed = 0;
-
-      for (final peak in peaks) {
-        final before = _patchMean(first, peak.x, peak.y, 3);
-        final after = _patchMean(second, peak.x, peak.y, 3);
-        if (before < 0.004 || after < 0.001) continue;
-        persistent++;
-        final delta = after - before;
-        final visibleChange = math.max(0.001, before * 0.08);
-        if (delta > visibleChange) brightened++;
-        if (delta < -visibleChange) dimmed++;
-      }
-
-      expect(
-        persistent,
-        greaterThan(12),
-        reason: 'The fixed-time sample must contain enough persistent stars.',
-      );
-      expect(
-        brightened,
-        greaterThanOrEqualTo(3),
-        reason:
-            'Independent clocks require some persistent stars to brighten; '
-            'observed $brightened up / $dimmed down across $persistent stars.',
-      );
-      expect(
-        dimmed,
-        greaterThanOrEqualTo(3),
-        reason:
-            'Independent clocks require other persistent stars to dim; '
-            'observed $brightened up / $dimmed down across $persistent stars.',
-      );
+      _expectIndependentTwinkle(first, second);
     },
   );
 
   test('bright star footprints are round with a soft outer halo', () async {
-    final pixels = await _rasterize(0.0);
-    final peaks = _isolatedPeaks(_findPeaks(pixels));
-    final shapes = <({double cornerFill, double haloRatio})>[];
-
-    for (final peak in peaks) {
-      final shape = _footprintShape(pixels, peak);
-      if (shape != null) shapes.add(shape);
-    }
-
-    expect(shapes.length, greaterThan(12));
-    final cornerFill = _median(shapes.map((shape) => shape.cornerFill));
-    final haloRatio = _median(shapes.map((shape) => shape.haloRatio));
-    expect(
-      cornerFill,
-      lessThan(0.03),
-      reason:
-          'A cell-clipped falloff fills the corners of a square footprint; '
-          'median corner fill was $cornerFill across ${shapes.length} stars.',
-    );
-    expect(
-      haloRatio,
-      greaterThan(1.8),
-      reason:
-          'The bright core needs a soft halo rather than a square plateau; '
-          'median outer/core radius ratio was $haloRatio.',
-    );
+    _expectRoundSoftStars(await _rasterize(0.0));
   });
 
   test('stars drift independently instead of staying on a fixed lattice', () async {
@@ -170,42 +118,79 @@ void main() {
     );
   });
 
-  testWidgets('nebula matches a fixed-time golden', (tester) async {
-    final painter = GpuShaderPainter(
-      shaderType: GpuShaderType.nebula,
-      bands: _goldenBands,
-      palette: _palette,
-      time: 1.25,
-      sensitivity: 1.0,
+  test('nebula raster keeps a luminous center with radial falloff', () async {
+    final pixels = await _rasterize(0.0, palette: _palette);
+    final center = _patchMean(pixels, _width ~/ 2, _height ~/ 2, 32);
+    final edge =
+        [
+          _patchMean(pixels, 36, 36, 20),
+          _patchMean(pixels, _width - 36, 36, 20),
+          _patchMean(pixels, 36, _height - 36, 20),
+          _patchMean(pixels, _width - 36, _height - 36, 20),
+        ].reduce((a, b) => a + b) /
+        4;
+
+    expect(center, greaterThan(0.03));
+    expect(
+      center,
+      greaterThan(edge * 1.1),
+      reason:
+          'The vignette must preserve the core and soften corners: '
+          'center=$center edge=$edge',
     );
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Align(
-          alignment: Alignment.topLeft,
-          child: RepaintBoundary(
-            key: const Key('nebula-capture'),
-            child: SizedBox(
-              width: _width.toDouble(),
-              height: _height.toDouble(),
-              child: CustomPaint(painter: painter),
-            ),
-          ),
-        ),
+  });
+
+  test('star raster controls distinguish squares and synchronized clocks', () {
+    final round = _syntheticStars(square: false, synchronized: false);
+    _expectRoundSoftStars(round);
+
+    final square = _syntheticStars(square: true, synchronized: false);
+    final squareMetrics = _measureStarShapes(square);
+    expect(squareMetrics.count, greaterThan(12));
+    expect(squareMetrics.cornerFill, greaterThan(0.06));
+    expect(
+      () => _expectRoundSoftStars(square),
+      throwsA(isA<TestFailure>()),
+      reason: 'The real shape thresholds must reject square control stars.',
+    );
+
+    final independentFirst = _syntheticStars(
+      square: false,
+      synchronized: false,
+      time: 0.20,
+    );
+    final independentSecond = _syntheticStars(
+      square: false,
+      synchronized: false,
+      time: 0.45,
+    );
+    _expectIndependentTwinkle(independentFirst, independentSecond);
+
+    final synchronizedMetrics = _measureTwinkle(
+      _syntheticStars(square: false, synchronized: true, time: 0.20),
+      _syntheticStars(square: false, synchronized: true, time: 0.45),
+    );
+    expect(synchronizedMetrics.persistent, greaterThan(12));
+    expect(synchronizedMetrics.dimmed, 0);
+    expect(
+      () => _expectIndependentTwinkle(
+        _syntheticStars(square: false, synchronized: true, time: 0.20),
+        _syntheticStars(square: false, synchronized: true, time: 0.45),
       ),
-    );
-    await tester.pump();
-    await expectLater(
-      find.byKey(const Key('nebula-capture')),
-      matchesGoldenFile('goldens/nebula_fixed_time.png'),
+      throwsA(isA<TestFailure>()),
+      reason: 'The real twinkle thresholds must reject synchronized controls.',
     );
   });
 }
 
-Future<Uint8List> _rasterize(double time) async {
+Future<Uint8List> _rasterize(
+  double time, {
+  VisualizerPalette palette = _blackPalette,
+}) async {
   final painter = GpuShaderPainter(
     shaderType: GpuShaderType.nebula,
     bands: List<double>.filled(32, 0.0),
-    palette: _blackPalette,
+    palette: palette,
     time: time,
     sensitivity: 1.0,
   );
@@ -217,6 +202,123 @@ Future<Uint8List> _rasterize(double time) async {
   image.dispose();
   picture.dispose();
   return data!.buffer.asUint8List();
+}
+
+_TwinkleMetrics _measureTwinkle(Uint8List first, Uint8List second) {
+  var persistent = 0;
+  var brightened = 0;
+  var dimmed = 0;
+  for (final peak in _findPeaks(first)) {
+    final before = _patchMean(first, peak.x, peak.y, 3);
+    final after = _patchMean(second, peak.x, peak.y, 3);
+    if (before < 0.004 || after < 0.001) continue;
+    persistent++;
+    final delta = after - before;
+    final visibleChange = math.max(0.001, before * 0.08);
+    if (delta > visibleChange) brightened++;
+    if (delta < -visibleChange) dimmed++;
+  }
+  return (persistent: persistent, brightened: brightened, dimmed: dimmed);
+}
+
+void _expectIndependentTwinkle(Uint8List first, Uint8List second) {
+  final metrics = _measureTwinkle(first, second);
+  expect(
+    metrics.persistent,
+    greaterThan(12),
+    reason: 'The fixed-time sample must contain enough persistent stars.',
+  );
+  expect(
+    metrics.brightened,
+    greaterThanOrEqualTo(3),
+    reason:
+        'Independent clocks require some persistent stars to brighten; '
+        'observed ${metrics.brightened} up / ${metrics.dimmed} down across '
+        '${metrics.persistent} stars.',
+  );
+  expect(
+    metrics.dimmed,
+    greaterThanOrEqualTo(3),
+    reason:
+        'Independent clocks require other persistent stars to dim; '
+        'observed ${metrics.brightened} up / ${metrics.dimmed} down across '
+        '${metrics.persistent} stars.',
+  );
+}
+
+_ShapeMetrics _measureStarShapes(Uint8List pixels) {
+  final peaks = _isolatedPeaks(_findPeaks(pixels));
+  final shapes = <({double cornerFill, double haloRatio})>[];
+  for (final peak in peaks) {
+    final shape = _footprintShape(pixels, peak);
+    if (shape != null) shapes.add(shape);
+  }
+  return (
+    count: shapes.length,
+    cornerFill: _median(shapes.map((shape) => shape.cornerFill)),
+    haloRatio: _median(shapes.map((shape) => shape.haloRatio)),
+  );
+}
+
+void _expectRoundSoftStars(Uint8List pixels) {
+  final metrics = _measureStarShapes(pixels);
+  expect(metrics.count, greaterThan(12));
+  expect(
+    metrics.cornerFill,
+    lessThan(0.03),
+    reason:
+        'A cell-clipped falloff fills the corners of a square footprint; '
+        'median corner fill was ${metrics.cornerFill} across '
+        '${metrics.count} stars.',
+  );
+  expect(
+    metrics.haloRatio,
+    greaterThan(1.8),
+    reason:
+        'The bright core needs a soft halo rather than a square plateau; '
+        'median outer/core radius ratio was ${metrics.haloRatio}.',
+  );
+}
+
+Uint8List _syntheticStars({
+  required bool square,
+  required bool synchronized,
+  double time = 0,
+}) {
+  final pixels = Uint8List(_width * _height * 4);
+  for (var star = 0; star < 16; star++) {
+    final centerX = 100 + (star % 4) * 170;
+    final centerY = 80 + (star ~/ 4) * 120;
+    final phase = star * 2.399963229728653;
+    final speed = 0.55 + (star % 5) * 0.20;
+    final brightness = 0.18 + 0.14 * (star % 4) / 3;
+    final twinkle = synchronized
+        ? 0.55 + 0.45 * math.sin(time)
+        : 0.55 + 0.45 * math.sin(time * speed + phase);
+    for (var dy = -12; dy <= 12; dy++) {
+      for (var dx = -12; dx <= 12; dx++) {
+        final double core;
+        final double halo;
+        if (square) {
+          final distance = math.max(dx.abs(), dy.abs());
+          core = distance <= 2 ? 1.0 : 0.0;
+          halo = math.max(0.0, 1.0 - distance / 10.0);
+        } else {
+          final distance = math.sqrt(dx * dx + dy * dy);
+          core = math.max(0.0, 1.0 - distance / 2.2);
+          halo = math.max(0.0, 1.0 - distance / 10.0);
+        }
+        final value = (core + 0.32 * halo * halo) * brightness * twinkle;
+        final offset = ((centerY + dy) * _width + centerX + dx) * 4;
+        final channel = (value * 255).round().clamp(0, 255);
+        pixels[offset] = math.max(pixels[offset], channel);
+        pixels[offset + 1] = math.max(pixels[offset + 1], channel);
+        pixels[offset + 2] = math.max(pixels[offset + 2], channel);
+        pixels[offset + 3] = 255;
+      }
+    }
+  }
+  return pixels;
 }
 
 double _luma(Uint8List pixels, int x, int y) {

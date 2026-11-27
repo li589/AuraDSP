@@ -102,7 +102,7 @@ void main() {
     nebulaCol += vec3(0.95, 0.98, 1.0) * starGlow;
 
     // 柔和径向边缘衰减
-    float vignette = smoothstep(1.4, 0.35, centerDist);
+    float vignette = 1.0 - smoothstep(0.35, 1.4, centerDist);
     nebulaCol *= vignette;
 
     float alpha = clamp(cloudWeight + corePulse + starGlow, 0.0, 1.0);
