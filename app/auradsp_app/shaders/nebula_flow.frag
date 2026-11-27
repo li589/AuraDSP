@@ -49,13 +49,27 @@ void main() {
     // 1. 恒星背景层 (星星闪烁)
     vec2 starGrid = uv * 32.0;
     vec2 id = floor(starGrid);
-    float starRnd = hash21(id);
+    float starExists = hash21(id + vec2(17.13, 9.71));
     float starGlow = 0.0;
-    if (starRnd > 0.94) {
-        vec2 starPos = fract(starGrid) - 0.5;
-        float d = length(starPos);
-        float twinkle = 0.5 + 0.5 * sin(uTime * 3.5 + starRnd * 6.28);
-        starGlow = (0.015 / (d + 0.02)) * twinkle * (0.8 + uTreble * 1.5);
+    if (starExists > 0.94) {
+        // Independent hashes keep existence, timing, size and placement uncorrelated.
+        float starPhase = hash21(id + vec2(3.17, 11.43)) * 6.2831853;
+        float starSpeed = mix(0.55, 1.35, hash21(id + vec2(7.31, 2.17)));
+        float starSizeHash = hash21(id + vec2(13.27, 5.83));
+        float starSize = mix(0.20, 0.34, starSizeHash);
+        vec2 starJitter = vec2(hash21(id + vec2(19.37, 1.11)),
+                               hash21(id + vec2(4.73, 15.29))) - 0.5;
+        vec2 starDrift = vec2(sin(uTime * 0.17 + starPhase * 1.7),
+                              cos(uTime * 0.13 + starPhase * 2.3)) * 0.045;
+        vec2 starPos = id + 0.5 + starJitter * 0.18 + starDrift;
+
+        float d = length(starGrid - starPos);
+        float twinkle = 0.55 + 0.45 * sin(uTime * starSpeed + starPhase);
+        float core = 1.0 - smoothstep(starSize * 0.12, starSize * 0.42, d);
+        float halo = 1.0 - smoothstep(0.0, starSize, d);
+        float brightness = mix(0.18, 0.32, starSizeHash);
+        starGlow = (core + 0.32 * halo * halo) * brightness * twinkle
+                 * (0.78 + uTreble * 0.32);
     }
 
     // 2. 双重域扭曲 (Domain Warping) 星云流体漂移
