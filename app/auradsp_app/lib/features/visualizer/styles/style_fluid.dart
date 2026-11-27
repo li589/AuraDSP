@@ -38,6 +38,14 @@ class FluidDynamicsPainter extends CustomPainter implements VisualizerTimeAware 
   @override
   void setVisualizerTime(double time) => animationTime = time;
 
+  /// Dye concentration at a simulation cell, exposed only for regression tests.
+  @visibleForTesting
+  static double debugDyeAt(int x, int y) => _field.debugDyeAt(x, y);
+
+  /// Reusable attack/release buffer, exposed only for allocation regressions.
+  @visibleForTesting
+  static Float32List get debugSmoothedBands => _field.smoothedBands;
+
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
@@ -56,6 +64,8 @@ class _FluidField {
   static const int _cells = _nx * _ny;
   static const int _pressureIterationsMax = 12;
   static const int _pressureIterationsMin = 5;
+  static const double _attackSeconds = 0.035;
+  static const double _releaseSeconds = 0.24;
 
   /// 当前压力投影迭代数：自适应调节（见 step），初值即上限（质量优先）。
   int _pressureIters = _pressureIterationsMax;
@@ -63,10 +73,13 @@ class _FluidField {
   double _stepEmaMs = 0;
   static const int _lutSize = 128;
 
-  // 渲染网格规格（轻量化 48×28 采样，单批次 drawRawAtlas GPU 提交）
-  static const int _rnx = 48;
-  static const int _rny = 28;
-  static const int _maxSprites = (_rnx + 1) * (_rny + 1); // 1421
+  // 稀疏渲染网格：更大的柔边精灵重叠成连续流体，避免可见采样晶格。
+  static const int _rnx = 32;
+  static const int _rny = 18;
+  static const int _maxSprites = _rnx * _rny; // 576
+  static const double _spriteOverlap = 2.4;
+  // 大精灵覆盖面积高于旧网格，压低单次 alpha 防止流体糊成均匀浓雾。
+  static const double _spriteOpacity = 0.68;
 
   // 速度场与染料场的双缓冲
   final Float32List _u = Float32List(_cells);
@@ -109,7 +122,7 @@ class _FluidField {
   final Int32List _spriteColors = Int32List(_maxSprites);
   final VisualizerSpriteAtlas _atlas = VisualizerSpriteAtlas.instance;
   final Paint _batchPaint = Paint()
-    ..filterQuality = FilterQuality.low
+    ..filterQuality = FilterQuality.medium
     ..isAntiAlias = true
     ..color = const Color(0xFFFFFFFF);
 
@@ -121,9 +134,16 @@ class _FluidField {
   double _lastTime = double.nan;
   double _simTime = 0.0;
   bool _primed = false;
+  Float32List _smoothedBands = Float32List(0);
   final math.Random _rng = math.Random(0x5F3A21);
 
   _FluidField();
+
+  @visibleForTesting
+  double debugDyeAt(int x, int y) => _dye[y * _nx + x];
+
+  @visibleForTesting
+  Float32List get smoothedBands => _smoothedBands;
 
   /// 推进一步模拟。[time] 为外部动画时间轴（秒），[bands] 为低→高排列的能量。
   void step(double time, List<double> bands) {
@@ -141,14 +161,16 @@ class _FluidField {
       _seedDye();
       _primed = true;
     }
-    _applyFlow(dt, bands);
-    _applyTurbulence(dt, bands);
-    _inject(dt, bands);
+    _smoothBands(dt, bands);
+    _applyFlow(dt, _smoothedBands);
+    _applyTurbulence(dt, _smoothedBands);
+    _inject(dt, _smoothedBands);
     _injectHaze();
     _advectVelocity(dt);
     _confineVorticity(dt);
     _project();
     _advectDye(dt);
+    _coverBottomEdge();
     _relaxVelocity(dt);
     _stepWatch.stop();
     final ms = _stepWatch.elapsedMicroseconds / 1000.0;
@@ -280,6 +302,57 @@ class _FluidField {
     return raw.clamp(0.008, 0.05);
   }
 
+  /// 频段包络：快起慢落，且只在频段数量变化时重新分配 typed buffer。
+  void _smoothBands(double dt, List<double> bands) {
+    if (_smoothedBands.length != bands.length) {
+      final previous = _smoothedBands;
+      final next = Float32List(bands.length);
+      if (previous.isNotEmpty && next.isNotEmpty) {
+        for (var i = 0; i < next.length; i++) {
+          next[i] = _bandEnergy(
+            previous,
+            next.length == 1 ? 0.0 : i / (next.length - 1),
+          );
+        }
+      }
+      _smoothedBands = next;
+    }
+
+    final attack = 1.0 - math.exp(-dt / _attackSeconds);
+    final release = 1.0 - math.exp(-dt / _releaseSeconds);
+    for (var i = 0; i < bands.length; i++) {
+      final band = bands[i];
+      final target = band.isFinite ? band.clamp(0.0, 1.0).toDouble() : 0.0;
+      final current = _smoothedBands[i];
+      final blend = target > current ? attack : release;
+      _smoothedBands[i] = current + (target - current) * blend;
+    }
+  }
+
+  /// 底边柔和的连续性衬底：只补低浓度缝隙，不叠加饱和亮带。
+  void _coverBottomEdge() {
+    var active = 0.0;
+    for (var i = 0; i < _smoothedBands.length; i++) {
+      active = math.max(active, _smoothedBands[i]);
+    }
+    if (active < 0.01) return;
+
+    final floorRow = (_ny - 1) * _nx;
+    final phase = _simTime * 0.65;
+    for (var x = 0; x < _nx; x++) {
+      final local = _bandEnergy(_smoothedBands, x / (_nx - 1));
+      final ripple =
+          math.sin(x * 0.47 + phase) * 0.5 +
+          math.sin(x * 0.19 - phase * 0.73) * 0.5;
+      final floor = 0.172 + local * 0.035 + ripple * 0.008;
+      final cell = floorRow + x;
+      if (_dye[cell] < floor) _dye[cell] = floor;
+      final upper = cell - _nx;
+      final upperFloor = floor * 0.55;
+      if (_dye[upper] < upperFloor) _dye[upper] = upperFloor;
+    }
+  }
+
   /// 频段驱动的源项：底边若干“喷口”按频段能量注入染料与上升射流。
   ///
   /// 整排注入会让底边变成一条饱和亮带，且染料被均匀推开后只剩一团结实的
@@ -361,20 +434,43 @@ class _FluidField {
   /// 三个尺度分别负责大涡、中尺度卷曲与细丝褶皱。
   /// 三角函数按行/列预计算，逐格只做乘加。
   void _applyTurbulence(double dt, List<double> bands) {
-    var level = 0.0;
+    // 低频驱动大涡，中频驱动卷曲，高频驱动细丝；包络已在 step 中平滑。
+    final bassEnd = (bands.length * 0.25).round();
+    final midEnd = (bands.length * 0.70).round();
+    var bass = 0.0;
+    var mid = 0.0;
+    var treble = 0.0;
+    var bassCount = 0;
+    var midCount = 0;
+    var trebleCount = 0;
     for (var i = 0; i < bands.length; i++) {
       final band = bands[i];
-      if (band.isFinite) level += band.clamp(0.0, 1.0);
+      if (!band.isFinite) continue;
+      final energy = band.clamp(0.0, 1.0);
+      if (i < bassEnd) {
+        bass += energy;
+        bassCount++;
+      } else if (i < midEnd) {
+        mid += energy;
+        midCount++;
+      } else {
+        treble += energy;
+        trebleCount++;
+      }
     }
-    if (bands.isNotEmpty) level /= bands.length;
+    if (bassCount > 0) bass /= bassCount;
+    if (midCount > 0) mid /= midCount;
+    if (trebleCount > 0) treble /= trebleCount;
 
     // 力的大小必须让流速保持在 1~4 格/秒，否则半拉格朗日平流一步跨大半格，
     // 染料会被数值扩散抹成均匀雾。
-    final strength = (1.6 + level * 5.0) * dt;
+    final largeStrength = (0.90 + bass * 2.00) * dt;
+    final curlStrength = (0.45 + mid * 1.55) * dt;
+    final filamentStrength = (0.18 + treble * 0.95) * dt;
     final time = _simTime;
 
-    final kx1 = 0.07 + level * 0.03;
-    final ky1 = 0.09 + level * 0.035;
+    final kx1 = 0.07 + bass * 0.03;
+    final ky1 = 0.09 + bass * 0.035;
     const kx2 = 0.22;
     const ky2 = 0.26;
     const kx3 = 0.46;
@@ -420,14 +516,16 @@ class _FluidField {
       for (var x = 1; x < _nx - 1; x++) {
         final cell = rowBase + x;
         // u = ∂ψ/∂y，v = -∂ψ/∂x
-        final du = -ky1 * _waveXSin1[x] * sinY1 -
-            ky2 * _waveXSin2[x] * sinY2 -
-            ky3 * _waveXSin3[x] * sinY3;
-        final dv = -kx1 * _waveXCos1[x] * cosY1 -
-            kx2 * _waveXCos2[x] * cosY2 -
-            kx3 * _waveXCos3[x] * cosY3;
-        _u[cell] += du * strength;
-        _v[cell] += dv * strength;
+        final du =
+            -ky1 * _waveXSin1[x] * sinY1 * largeStrength -
+            ky2 * _waveXSin2[x] * sinY2 * curlStrength -
+            ky3 * _waveXSin3[x] * sinY3 * filamentStrength;
+        final dv =
+            -kx1 * _waveXCos1[x] * cosY1 * largeStrength -
+            kx2 * _waveXCos2[x] * cosY2 * curlStrength -
+            kx3 * _waveXCos3[x] * cosY3 * filamentStrength;
+        _u[cell] += du;
+        _v[cell] += dv;
       }
     }
   }
@@ -747,12 +845,12 @@ class _FluidField {
     final table = _resolveColorTable(palette, bloom);
 
     var total = 0.0;
-    const double stepX = (_nx - 1.0) / _rnx;
-    const double stepY = (_ny - 1.0) / _rny;
+    const double stepX = (_nx - 1.0) / (_rnx - 1);
+    const double stepY = (_ny - 1.0) / (_rny - 1);
     final cellW = size.width / _rnx;
     final cellH = size.height / _rny;
-    // blob 预烘焙为 192×192，按 1.85 倍采样网格铺盖，重叠产生连续柔和的流体云丝
-    final spriteScale = math.max(cellW, cellH) * 1.85 / 192.0;
+    // 采样点位于网格中心，柔边超出视口；底部不会因中心压在边缘而漏空。
+    final spriteScale = math.max(cellW, cellH) * _spriteOverlap / 192.0;
     final blob = _atlas.blob;
     final bx = blob.rect[0];
     final by = blob.rect[1];
@@ -761,10 +859,10 @@ class _FluidField {
     final halfBlobScaled = 96.0 * spriteScale;
 
     var spriteCount = 0;
-    for (var y = 0; y <= _rny; y++) {
+    for (var y = 0; y < _rny; y++) {
       final sampleY = (y * stepY).clamp(0.0, _ny - 1.0);
-      final py = y * cellH;
-      for (var x = 0; x <= _rnx; x++) {
+      final py = (y + 0.5) * cellH;
+      for (var x = 0; x < _rnx; x++) {
         final sampleX = (x * stepX).clamp(0.0, _nx - 1.0);
         final dye = _sample(_dye, sampleX, sampleY);
         total += dye;
@@ -773,7 +871,7 @@ class _FluidField {
         final color = table[level];
         if ((color & 0xFF000000) == 0) continue;
 
-        final px = x * cellW;
+        final px = (x + 0.5) * cellW;
         final o = spriteCount * 4;
         _rects[o] = bx;
         _rects[o + 1] = by;
@@ -785,12 +883,15 @@ class _FluidField {
         _rst[o + 2] = px - halfBlobScaled;
         _rst[o + 3] = py - halfBlobScaled;
 
-        _spriteColors[spriteCount] = color;
+        final alpha = (color >>> 24) & 0xFF;
+        final softenedAlpha = (alpha * _spriteOpacity).round();
+        _spriteColors[spriteCount] =
+            (color & 0x00FFFFFF) | (softenedAlpha << 24);
         spriteCount++;
       }
     }
 
-    if (total < 2.0) {
+    if (total < _maxSprites * 0.02) {
       _primed = false;
       return;
     }
