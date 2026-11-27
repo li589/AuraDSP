@@ -18,7 +18,16 @@ const _palette = VisualizerPalette(
 );
 
 const _size = Size(960, 540);
-double _clock = 0;
+
+class _FrameClock {
+  double _time = 0;
+
+  double get current => _time;
+
+  double next() => _time += 1 / 30;
+
+  void reset() => _time = 0;
+}
 
 List<double> _activeBands() => List<double>.generate(64, (i) {
   final x = i / 63;
@@ -28,37 +37,46 @@ List<double> _activeBands() => List<double>.generate(64, (i) {
   return (bass + mid + treble).clamp(0.0, 1.0);
 });
 
-FluidDynamicsPainter _painter(List<double> bands) => FluidDynamicsPainter(
+FluidDynamicsPainter _painter(
+  List<double> bands,
+  _FrameClock clock, {
+  VisualizerPalette palette = _palette,
+}) => FluidDynamicsPainter(
   bands: bands,
-  palette: _palette,
+  palette: palette,
   bloom: 0.5,
-  animationTime: _clock,
+  animationTime: clock.current,
 );
 
-double _nextTime() => _clock += 1 / 30;
-
-void _paintStep(FluidDynamicsPainter painter, List<double> bands) {
-  painter.setVisualizerTime(_nextTime());
+void _paintAt(FluidDynamicsPainter painter, double time, {Size size = _size}) {
+  painter.setVisualizerTime(time);
   final recorder = ui.PictureRecorder();
-  painter.paint(Canvas(recorder), _size);
+  painter.paint(Canvas(recorder), size);
   recorder.endRecording().dispose();
 }
 
+void _paintStep(
+  FluidDynamicsPainter painter,
+  _FrameClock clock, {
+  Size size = _size,
+}) => _paintAt(painter, clock.next(), size: size);
+
 _FluidRecordingCanvas _paintRecorded(
   FluidDynamicsPainter painter,
-  List<double> bands,
-) {
-  painter.setVisualizerTime(_nextTime());
+  _FrameClock clock, {
+  Size size = _size,
+}) {
+  painter.setVisualizerTime(clock.next());
   final canvas = _FluidRecordingCanvas();
-  painter.paint(canvas, _size);
+  painter.paint(canvas, size);
   return canvas;
 }
 
 Future<Uint8List> _rasterize(
   FluidDynamicsPainter painter,
-  List<double> bands,
+  _FrameClock clock,
 ) async {
-  painter.setVisualizerTime(_nextTime());
+  painter.setVisualizerTime(clock.next());
   final recorder = ui.PictureRecorder();
   painter.paint(Canvas(recorder), _size);
   final picture = recorder.endRecording();
@@ -174,19 +192,20 @@ void main() {
   });
 
   test(
-    'active audio keeps the bottom render row covered after warm-up',
+    'active audio keeps a smooth covered bottom row profile after warm-up',
     () async {
       final bands = List<double>.filled(64, 0.03);
-      final painter = _painter(bands);
+      final clock = _FrameClock();
+      final painter = _painter(bands, clock);
       for (var frame = 0; frame < 600; frame++) {
-        _paintStep(painter, bands);
+        _paintStep(painter, clock);
       }
 
       var minimumBottomDye = double.infinity;
       for (var x = 0; x < 128; x++) {
         minimumBottomDye = math.min(
           minimumBottomDye,
-          FluidDynamicsPainter.debugDyeAt(x, 71),
+          painter.debugDyeAt(x, 71),
         );
       }
       expect(
@@ -197,7 +216,35 @@ void main() {
             '$minimumBottomDye',
       );
 
-      final canvas = _paintRecorded(painter, bands);
+      final rowProfile = <double>[];
+      for (var y = 66; y < 72; y++) {
+        var rowMinimum = double.infinity;
+        for (var x = 0; x < 128; x++) {
+          rowMinimum = math.min(rowMinimum, painter.debugDyeAt(x, y));
+        }
+        rowProfile.add(rowMinimum);
+      }
+      expect(
+        rowProfile.where((value) => value >= rowProfile.last * 0.5).length,
+        greaterThanOrEqualTo(4),
+        reason:
+            'Bottom coverage must fall off across multiple rows: $rowProfile',
+      );
+      final nearBottom = rowProfile.sublist(rowProfile.length - 3);
+      expect(
+        nearBottom[1],
+        greaterThanOrEqualTo(nearBottom.last * 0.75),
+        reason:
+            'The row above the bottom must continue the smooth falloff: '
+            '$rowProfile',
+      );
+      expect(
+        nearBottom.first,
+        greaterThanOrEqualTo(nearBottom.last * 0.5),
+        reason: 'Bottom coverage must span more than two rows: $rowProfile',
+      );
+
+      final canvas = _paintRecorded(painter, clock);
       final bottom = _bottomRow(canvas);
       final rows = <double, List<_SpriteSample>>{};
       for (final sprite in canvas.sprites) {
@@ -217,7 +264,7 @@ void main() {
         reason: 'The bottom sample row must extend beyond the viewport edge.',
       );
 
-      final pixels = await _rasterize(painter, bands);
+      final pixels = await _rasterize(painter, clock);
       var longestUncoveredRun = 0;
       for (var x = 0; x < _size.width.toInt(); x++) {
         var covered = false;
@@ -240,22 +287,134 @@ void main() {
     timeout: const Timeout(Duration(minutes: 2)),
   );
 
-  test('a one-frame burst is smoothed and sustained audio ramps upward', () {
-    final quiet = List<double>.filled(64, 0.0);
-    final loud = _activeBands();
-    final quietPainter = _painter(quiet);
-    final loudPainter = _painter(loud);
-    for (var frame = 0; frame < 150; frame++) {
-      _paintStep(quietPainter, quiet);
+  test('dense-to-sparse frames clear the stale atlas color tail', () {
+    final bands = _activeBands();
+    final clock = _FrameClock();
+    final painter = _painter(bands, clock);
+    for (var frame = 0; frame < 30; frame++) {
+      _paintStep(painter, clock);
     }
-    final bandBuffer = FluidDynamicsPainter.debugSmoothedBands;
+    final dense = _paintRecorded(painter, clock);
+    expect(dense.sprites.length, greaterThan(128));
 
-    final burst = _paintRecorded(loudPainter, loud);
+    bands.fillRange(0, bands.length, 0.03);
+    for (var frame = 0; frame < 180; frame++) {
+      _paintStep(painter, clock);
+    }
+    // Keep the same field while forcing most color-table entries transparent.
+    // This makes the active atlas span deterministically smaller than capacity.
+    painter.bloom = -9.46;
+    final sparse = _paintRecorded(painter, clock);
+    expect(sparse.atlasCalls, 1);
+    final colors = sparse.colors!;
+    final firstTransparent = colors.indexWhere(
+      (color) => ((color >>> 24) & 0xFF) == 0,
+    );
+
+    expect(
+      firstTransparent,
+      greaterThanOrEqualTo(0),
+      reason:
+          'The fixed-capacity color buffer must expose a cleared tail after '
+          'the active sprites; dense=${dense.sprites.length} '
+          'sparse=${sparse.sprites.length}.',
+    );
+    expect(
+      sparse.sprites.length,
+      lessThan(dense.sprites.length - 32),
+      reason:
+          'A sparse frame must not retain dense-frame sprites: '
+          'dense=${dense.sprites.length} sparse=${sparse.sprites.length}.',
+    );
+    expect(
+      colors
+          .skip(firstTransparent)
+          .every((color) => ((color >>> 24) & 0xFF) == 0),
+      isTrue,
+    );
+  });
+
+  test('painters keep independent envelopes at identical explicit times', () {
+    final clock = _FrameClock();
+    final loudPainter = _painter(_activeBands(), clock);
+    final quietPainter = _painter(List<double>.filled(64, 0), clock);
+
+    _paintAt(loudPainter, 0);
+    final loudBuffer = loudPainter.debugSmoothedBands;
+    _paintAt(quietPainter, 0);
+    final quietBuffer = quietPainter.debugSmoothedBands;
+
+    expect(
+      identical(loudBuffer, quietBuffer),
+      isFalse,
+      reason: 'A painter must own its simulation and envelope buffers.',
+    );
+    expect(loudBuffer.first, greaterThan(0));
+    expect(quietBuffer.first, 0);
+  });
+
+  test(
+    'explicit clocks isolate frame order, resize, and fresh-state reset',
+    () {
+      final loud = _painter(_activeBands(), _FrameClock());
+      final quiet = _painter(List<double>.filled(64, 0), _FrameClock());
+      final referenceLoud = _painter(_activeBands(), _FrameClock());
+      final referenceQuiet = _painter(
+        List<double>.filled(64, 0),
+        _FrameClock(),
+      );
+      List<double>? firstLoudEnvelope;
+
+      for (var frame = 0; frame < 6; frame++) {
+        final time = (frame + 1) / 30;
+        if (frame.isEven) {
+          _paintAt(loud, time, size: frame == 2 ? const Size(480, 270) : _size);
+          _paintAt(quiet, time);
+        } else {
+          _paintAt(quiet, time);
+          _paintAt(loud, time);
+        }
+        _paintAt(referenceLoud, time);
+        _paintAt(referenceQuiet, time);
+
+        for (var band = 0; band < 64; band++) {
+          expect(
+            loud.debugSmoothedBands[band],
+            closeTo(referenceLoud.debugSmoothedBands[band], 1e-6),
+          );
+          expect(
+            quiet.debugSmoothedBands[band],
+            closeTo(referenceQuiet.debugSmoothedBands[band], 1e-6),
+          );
+        }
+        firstLoudEnvelope ??= List<double>.of(referenceLoud.debugSmoothedBands);
+      }
+
+      final fresh = _painter(_activeBands(), _FrameClock());
+      expect(fresh.debugSmoothedBands, isEmpty);
+      _paintAt(fresh, 0);
+      for (var band = 0; band < 64; band++) {
+        expect(
+          fresh.debugSmoothedBands[band],
+          closeTo(firstLoudEnvelope![band], 1e-6),
+        );
+      }
+    },
+  );
+
+  test('a one-frame burst is smoothed and sustained audio ramps upward', () {
+    final loud = _activeBands();
+    final clock = _FrameClock();
+    final loudPainter = _painter(loud, clock);
+    expect(loudPainter.debugSmoothedBands, isEmpty);
+
+    final burst = _paintRecorded(loudPainter, clock);
+    final bandBuffer = loudPainter.debugSmoothedBands;
     final burstBand = bandBuffer.isEmpty ? double.nan : bandBuffer.first;
     for (var frame = 0; frame < 90; frame++) {
-      _paintStep(loudPainter, loud);
+      _paintStep(loudPainter, clock);
     }
-    _paintStep(loudPainter, loud);
+    _paintStep(loudPainter, clock);
     final sustainedBand = bandBuffer.isEmpty ? double.nan : bandBuffer.first;
 
     final burstBottom = _meanAlpha(_bottomRow(burst));
@@ -274,40 +433,47 @@ void main() {
     expect(bandBuffer.length, 64);
     expect(burstBand, lessThan(0.75));
     expect(burstBand, greaterThan(0.0));
-    expect(
-      identical(FluidDynamicsPainter.debugSmoothedBands, bandBuffer),
-      isTrue,
-    );
+    expect(identical(loudPainter.debugSmoothedBands, bandBuffer), isTrue);
     expect(
       sustainedBand,
       greaterThan(0.90),
       reason: 'target=${loud.first} burst=$burstBand sustained=$sustainedBand',
     );
+    expect(identical(loudPainter.debugSmoothedBands, bandBuffer), isTrue);
+
+    final decayingBands = _activeBands();
+    final decayingPainter = _painter(decayingBands, clock);
+    for (var frame = 0; frame < 90; frame++) {
+      _paintStep(decayingPainter, clock);
+    }
+    final decayingBuffer = decayingPainter.debugSmoothedBands;
+    decayingBands.fillRange(0, decayingBands.length, 0);
+    _paintRecorded(decayingPainter, clock);
+    expect(decayingBuffer.first, greaterThan(0.70));
+    for (var frame = 0; frame < 120; frame++) {
+      _paintStep(decayingPainter, clock);
+    }
+    expect(decayingBuffer.first, lessThan(0.02));
     expect(
-      identical(FluidDynamicsPainter.debugSmoothedBands, bandBuffer),
+      identical(decayingPainter.debugSmoothedBands, decayingBuffer),
       isTrue,
     );
-
-    _paintRecorded(quietPainter, quiet);
-    expect(bandBuffer.first, greaterThan(0.70));
-    for (var frame = 0; frame < 120; frame++) {
-      _paintStep(quietPainter, quiet);
-    }
-    expect(bandBuffer.first, lessThan(0.02));
     expect(
-      identical(FluidDynamicsPainter.debugSmoothedBands, bandBuffer),
-      isTrue,
+      loudPainter.debugSmoothedBands.first,
+      greaterThan(0.90),
+      reason: 'Decay in another painter must not mutate the sustained field.',
     );
   });
 
   test('render samples are sparse, soft-overlapped, and buffer-reusing', () {
     final bands = _activeBands();
-    final painter = _painter(bands);
+    final clock = _FrameClock();
+    final painter = _painter(bands, clock);
     for (var frame = 0; frame < 30; frame++) {
-      _paintStep(painter, bands);
+      _paintStep(painter, clock);
     }
 
-    final first = _paintRecorded(painter, bands);
+    final first = _paintRecorded(painter, clock);
     final firstTransforms = first.transforms;
     final firstRects = first.rects;
     final firstColors = first.colors;
@@ -327,6 +493,11 @@ void main() {
     }
 
     expect(first.atlasCalls, 1);
+    expect(
+      first.filterQuality,
+      FilterQuality.low,
+      reason: 'The shared atlas budget must not allocate a mipmap chain.',
+    );
     expect(first.submittedCapacity, lessThanOrEqualTo(32 * 18));
     expect(first.sprites.length, lessThanOrEqualTo(32 * 18));
     expect(
@@ -336,7 +507,7 @@ void main() {
     );
 
     for (var frame = 0; frame < 4; frame++) {
-      final next = _paintRecorded(painter, bands);
+      final next = _paintRecorded(painter, clock);
       expect(identical(next.transforms, firstTransforms), isTrue);
       expect(identical(next.rects, firstRects), isTrue);
       expect(identical(next.colors, firstColors), isTrue);

@@ -19,14 +19,16 @@ import 'visualizer_time_aware.dart';
 /// 渲染采用 128×72 固定低分双缓冲像素解码方案，结合 GPU 硬件双线性插值铺满全屏；
 /// 彻底废除每帧新建 ui.Vertices.raw 导致的底层 SkVertices 显存雪崩（曾导致可视化页内存狂飙至 2GB+），
 /// 显存与原生内存恒定在 72KB 以内，零 GC 压力，渲染帧率更高。
-class FluidDynamicsPainter extends CustomPainter implements VisualizerTimeAware {
+class FluidDynamicsPainter extends CustomPainter
+    implements VisualizerTimeAware {
   final List<double> bands;
-  final VisualizerPalette palette;
-  final double bloom;
+  VisualizerPalette palette;
+  double bloom;
   double animationTime;
 
-  /// 流场状态需跨帧保留；画笔实例也由视口缓存，整场播放只有这一份。
-  static final _FluidField _field = _FluidField();
+  /// 流场状态跨帧保留，但属于当前画笔；不同视口与测试互不污染。
+  /// 视口会缓存画笔实例，因此每帧仍只有这一份场状态。
+  final _FluidField _field = _FluidField();
 
   FluidDynamicsPainter({
     required this.bands,
@@ -40,11 +42,11 @@ class FluidDynamicsPainter extends CustomPainter implements VisualizerTimeAware 
 
   /// Dye concentration at a simulation cell, exposed only for regression tests.
   @visibleForTesting
-  static double debugDyeAt(int x, int y) => _field.debugDyeAt(x, y);
+  double debugDyeAt(int x, int y) => _field.debugDyeAt(x, y);
 
   /// Reusable attack/release buffer, exposed only for allocation regressions.
   @visibleForTesting
-  static Float32List get debugSmoothedBands => _field.smoothedBands;
+  Float32List get debugSmoothedBands => _field.smoothedBands;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -80,6 +82,7 @@ class _FluidField {
   static const double _spriteOverlap = 2.4;
   // 大精灵覆盖面积高于旧网格，压低单次 alpha 防止流体糊成均匀浓雾。
   static const double _spriteOpacity = 0.68;
+  static const int _bottomCoverageRows = 8;
 
   // 速度场与染料场的双缓冲
   final Float32List _u = Float32List(_cells);
@@ -122,7 +125,7 @@ class _FluidField {
   final Int32List _spriteColors = Int32List(_maxSprites);
   final VisualizerSpriteAtlas _atlas = VisualizerSpriteAtlas.instance;
   final Paint _batchPaint = Paint()
-    ..filterQuality = FilterQuality.medium
+    ..filterQuality = FilterQuality.low
     ..isAntiAlias = true
     ..color = const Color(0xFFFFFFFF);
 
@@ -200,8 +203,10 @@ class _FluidField {
 
     for (var bi = 0; bi < blobs.length; bi++) {
       final b = blobs[bi];
-      final centerX = (_nx - 1) * (b[0] + b[1] * math.sin(_simTime * b[2] + bi * 1.3));
-      final centerY = (_ny - 1) * (b[3] + b[4] * math.sin(_simTime * b[5] + bi * 2.1));
+      final centerX =
+          (_nx - 1) * (b[0] + b[1] * math.sin(_simTime * b[2] + bi * 1.3));
+      final centerY =
+          (_ny - 1) * (b[3] + b[4] * math.sin(_simTime * b[5] + bi * 2.1));
       // 索引修正（2026-11-08）：半径/峰值应取 b[6]/b[7]。旧代码误取
       // b[4]（纵向游走幅度 ≈0.2）与 b[5]（角频率 ≈0.5），墨云实际缩成
       // 半径 ≤2 格的高浓度小点，设计中的大团漂移墨云从未真正出现过。
@@ -221,8 +226,7 @@ class _FluidField {
           final dx = x - centerX;
           final d2 = dx * dx + dy * dy;
           if (d2 > r2 * 2.6) continue;
-          final falloff =
-              math.exp(-d2 / (r2 * 1.6)) * (1.0 - d2 / (r2 * 3.4));
+          final falloff = math.exp(-d2 / (r2 * 1.6)) * (1.0 - d2 / (r2 * 3.4));
           if (falloff <= 0.02) continue;
           final target = peak * falloff;
           final cell = rowBase + x;
@@ -283,7 +287,7 @@ class _FluidField {
       for (var x = 0; x < _nx; x++) {
         field[rowBase + x] =
             (temp[upBase + x] + temp[rowBase + x] * 2.0 + temp[downBase + x]) *
-                0.25;
+            0.25;
       }
     }
   }
@@ -344,12 +348,15 @@ class _FluidField {
       final ripple =
           math.sin(x * 0.47 + phase) * 0.5 +
           math.sin(x * 0.19 - phase * 0.73) * 0.5;
-      final floor = 0.172 + local * 0.035 + ripple * 0.008;
-      final cell = floorRow + x;
-      if (_dye[cell] < floor) _dye[cell] = floor;
-      final upper = cell - _nx;
-      final upperFloor = floor * 0.55;
-      if (_dye[upper] < upperFloor) _dye[upper] = upperFloor;
+      final bottomFloor = 0.172 + local * 0.035 + ripple * 0.008;
+      for (var row = 0; row < _bottomCoverageRows; row++) {
+        final t = row / (_bottomCoverageRows - 1);
+        // smoothstep 让底边覆盖连续爬升，不再把最后两行硬钳成明亮色带。
+        final falloff = 1.0 - t * t * (3.0 - 2.0 * t);
+        final cell = floorRow - row * _nx + x;
+        final floor = bottomFloor * falloff;
+        if (_dye[cell] < floor) _dye[cell] = floor;
+      }
     }
   }
 
@@ -396,11 +403,8 @@ class _FluidField {
           if (jet < _v[cell]) _v[cell] = jet;
 
           // 交替横向剪切：让相邻射流互相卷绕
-          _u[cell] += math.sin(_simTime * 1.5 + i * 2.1) *
-              energy *
-              2.0 *
-              weight *
-              dt;
+          _u[cell] +=
+              math.sin(_simTime * 1.5 + i * 2.1) * energy * 2.0 * weight * dt;
         }
       }
     }
@@ -558,7 +562,8 @@ class _FluidField {
     for (var y = 0; y < _ny; y++) {
       final rowBase = y * _nx;
       final dy = y - centerY;
-      final shear = base *
+      final shear =
+          base *
           (0.35 + 0.65 * math.sin(y / _ny * math.pi * 1.7 + _simTime * 0.7));
       for (var x = 0; x < _nx; x++) {
         final cell = rowBase + x;
@@ -652,7 +657,8 @@ class _FluidField {
         final upV = _vPrev[(y > 0 ? y - 1 : 0) * _nx + x];
         final downV = _vPrev[(y < _ny - 1 ? y + 1 : _ny - 1) * _nx + x];
 
-        _u[cell] = _macCormack(
+        _u[cell] =
+            _macCormack(
               forward: _uForward[cell],
               backward: _uBackward[cell],
               previous: _uPrev[cell],
@@ -660,7 +666,8 @@ class _FluidField {
               high: math.max(math.max(leftU, rightU), math.max(upU, downU)),
             ) *
             damping;
-        _v[cell] = _macCormack(
+        _v[cell] =
+            _macCormack(
               forward: _vForward[cell],
               backward: _vBackward[cell],
               previous: _vPrev[cell],
@@ -710,8 +717,7 @@ class _FluidField {
           final left = x > 0 ? _pressure[cell - 1] : _pressure[cell];
           final right = x < _nx - 1 ? _pressure[cell + 1] : _pressure[cell];
           final up = y > 0 ? _pressure[cell - _nx] : _pressure[cell];
-          final down =
-              y < _ny - 1 ? _pressure[cell + _nx] : _pressure[cell];
+          final down = y < _ny - 1 ? _pressure[cell + _nx] : _pressure[cell];
           _pressure[cell] =
               (_divergence[cell] + left + right + up + down) * 0.25;
         }
@@ -725,8 +731,7 @@ class _FluidField {
         final left = x > 0 ? _pressure[cell - 1] : _pressure[cell];
         final right = x < _nx - 1 ? _pressure[cell + 1] : _pressure[cell];
         final up = y > 0 ? _pressure[cell - _nx] : _pressure[cell];
-        final down =
-            y < _ny - 1 ? _pressure[cell + _nx] : _pressure[cell];
+        final down = y < _ny - 1 ? _pressure[cell + _nx] : _pressure[cell];
         _u[cell] -= 0.5 * (right - left);
         _v[cell] -= 0.5 * (down - up);
       }
@@ -757,8 +762,11 @@ class _FluidField {
       final rowBase = y * _nx;
       for (var x = 0; x < _nx; x++) {
         final cell = rowBase + x;
-        _dyeForward[cell] =
-            _sample(_dyePrev, x - dt * _u[cell], y - dt * _v[cell]);
+        _dyeForward[cell] = _sample(
+          _dyePrev,
+          x - dt * _u[cell],
+          y - dt * _v[cell],
+        );
       }
     }
 
@@ -766,8 +774,11 @@ class _FluidField {
       final rowBase = y * _nx;
       for (var x = 0; x < _nx; x++) {
         final cell = rowBase + x;
-        _dyeBackward[cell] =
-            _sample(_dyeForward, x + dt * _u[cell], y + dt * _v[cell]);
+        _dyeBackward[cell] = _sample(
+          _dyeForward,
+          x + dt * _u[cell],
+          y + dt * _v[cell],
+        );
       }
     }
 
@@ -779,14 +790,8 @@ class _FluidField {
         final right = _dyePrev[rowBase + (x < _nx - 1 ? x + 1 : _nx - 1)];
         final up = _dyePrev[(y > 0 ? y - 1 : 0) * _nx + x];
         final down = _dyePrev[(y < _ny - 1 ? y + 1 : _ny - 1) * _nx + x];
-        final low = math.min(
-          math.min(left, right),
-          math.min(up, down),
-        );
-        final high = math.max(
-          math.max(left, right),
-          math.max(up, down),
-        );
+        final low = math.min(math.min(left, right), math.min(up, down));
+        final high = math.max(math.max(left, right), math.max(up, down));
         final corrected =
             _dyeForward[cell] + 0.5 * (_dyePrev[cell] - _dyeBackward[cell]);
         final clamped = corrected < low
@@ -824,10 +829,9 @@ class _FluidField {
     final fx = sx - x0;
     final fy = sy - y0;
 
-    final top = field[y0 * _nx + x0] * (1.0 - fx) +
-        field[y0 * _nx + x1] * fx;
-    final bottom = field[y1 * _nx + x0] * (1.0 - fx) +
-        field[y1 * _nx + x1] * fx;
+    final top = field[y0 * _nx + x0] * (1.0 - fx) + field[y0 * _nx + x1] * fx;
+    final bottom =
+        field[y1 * _nx + x0] * (1.0 - fx) + field[y1 * _nx + x1] * fx;
     return top * (1.0 - fy) + bottom * fy;
   }
 
@@ -891,6 +895,10 @@ class _FluidField {
       }
     }
 
+    // drawRawAtlas 仍接收固定容量缓冲；未使用槽位必须每帧清零，否则稀疏帧
+    // 会把上一帧的精灵继续提交给 GPU。
+    _spriteColors.fillRange(spriteCount, _maxSprites, 0);
+
     if (total < _maxSprites * 0.02) {
       _primed = false;
       return;
@@ -940,16 +948,18 @@ class _FluidField {
       final scaled = t * (stops.length - 1);
       final lowIndex = scaled.floor().clamp(0, stops.length - 1);
       final highIndex = math.min(lowIndex + 1, stops.length - 1);
-      var base =
-          Color.lerp(stops[lowIndex], stops[highIndex], scaled - lowIndex)!;
+      var base = Color.lerp(
+        stops[lowIndex],
+        stops[highIndex],
+        scaled - lowIndex,
+      )!;
       // 浅色底上，主题色本身偏亮，半透明只会把底色调成一片淡色；
       // 往黑里压一档当作“墨水”，与米色底拉开明度差。
       if (lightBackground) {
         base = Color.lerp(base, const Color(0xFF000000), 0.35)!;
       }
       // 只让高浓度区域显影：低浓度一律透明，画面才是一缕缕丝而不是一层雾
-      final rampSpanT =
-          ((t - rampStart) / rampSpan).clamp(0.0, 1.0).toDouble();
+      final rampSpanT = ((t - rampStart) / rampSpan).clamp(0.0, 1.0).toDouble();
       final alpha =
           math.pow(rampSpanT, rampExponent).toDouble() * (0.95 + bloom * 0.1);
       table[i] = base.withValues(alpha: alpha).toARGB32();

@@ -301,22 +301,21 @@ void main() {
       final palette = VisualizerPalette.resolve(VisualizerColorTheme.neonCyber, auraDark);
       var t = 1.0;
       final frames = <Uint8List>[];
+      final painter = FluidDynamicsPainter(
+        bands: bands(),
+        palette: palette,
+        bloom: 0.5,
+        animationTime: t,
+      );
       for (var round = 0; round < 2; round++) {
         for (var i = 0; i < 12; i++) {
           t += 0.016;
-          FluidDynamicsPainter(
-            bands: bands(),
-            palette: palette,
-            bloom: 0.5,
-            animationTime: t,
-          ).paint(Canvas(ui.PictureRecorder()), size);
+          painter.setVisualizerTime(t);
+          painter.paint(Canvas(ui.PictureRecorder()), size);
         }
-        frames.add(await rasterize(FluidDynamicsPainter(
-          bands: bands(),
-          palette: palette,
-          bloom: 0.5,
-          animationTime: t,
-        )));
+        t += 0.016;
+        painter.setVisualizerTime(t);
+        frames.add(await rasterize(painter));
       }
       final changed = changedPixels(frames[0], frames[1]);
       expect(changed, greaterThan(500),
