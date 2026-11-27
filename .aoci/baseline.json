@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-21T02:23:05Z",
-  "updated_at": "2026-11-26T23:08:36Z",
+  "updated_at": "2026-11-27T02:17:49Z",
   "files": {
     ".ai/README.md": {
       "role": "index",
@@ -213,6 +213,12 @@
       "size": 3866,
       "normalized_sha256": "a60d07fea2b44a8b5d7fef62351818a0dae674f82c62464b4a8aa896bb0c6dbc"
     },
+    ".superpowers/sdd/全量代码审查修复计划-2026-11-25/task-19-report.md": {
+      "role": "index",
+      "sha256": "1966954ac65817f483bc52fccb88202b523de1cdeed00b27d1d4c29071874f0f",
+      "size": 15265,
+      "normalized_sha256": "1966954ac65817f483bc52fccb88202b523de1cdeed00b27d1d4c29071874f0f"
+    },
     "AGENT.md": {
       "role": "index",
       "sha256": "bac2870d55d0c17a70dc4d733d2fa59349d384d9ac8cf4f988ba2a01d32797eb",
@@ -257,9 +263,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "29a87d9caf92ea37374e2945f73440f8dd62822c65291828b6a4c61cc74f48c8",
-      "size": 1197590,
-      "normalized_sha256": "29a87d9caf92ea37374e2945f73440f8dd62822c65291828b6a4c61cc74f48c8"
+      "sha256": "a9693549eb1dbd38bc305e14195fd9229ea25eb850ee236449694e1fbe8f1fe6",
+      "size": 1197694,
+      "normalized_sha256": "a9693549eb1dbd38bc305e14195fd9229ea25eb850ee236449694e1fbe8f1fe6"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -1828,9 +1834,9 @@
     },
     "app/auradsp_app/lib/features/visualizer/shaders/gpu_shader_service.dart": {
       "role": "index",
-      "sha256": "844bcab47d8b3edda3fb8dfb4f927e4d1abfa9eef49265c2472597db3e41f21e",
-      "size": 2123,
-      "normalized_sha256": "844bcab47d8b3edda3fb8dfb4f927e4d1abfa9eef49265c2472597db3e41f21e"
+      "sha256": "aa6834775acc9994d0d6a286dc0e5c495c293780fe66c9e21651b24ca7fbe075",
+      "size": 3668,
+      "normalized_sha256": "aa6834775acc9994d0d6a286dc0e5c495c293780fe66c9e21651b24ca7fbe075"
     },
     "app/auradsp_app/lib/features/visualizer/styles/style_atmosphere.dart": {
       "role": "index",
@@ -1858,9 +1864,9 @@
     },
     "app/auradsp_app/lib/features/visualizer/styles/style_gpu_shader.dart": {
       "role": "index",
-      "sha256": "0b1a001e880eb9b97d33143f3ce3591ca5167ba8e90fceda45f033388665d2fd",
-      "size": 4076,
-      "normalized_sha256": "75ae20ba043594662594027d8d1338f683485ba27c8a2fa99d77c4a52d489601"
+      "sha256": "c3fcca2371939ae45cdfed9d0177ae49bb535232619c90b59e79a27740b08d09",
+      "size": 8016,
+      "normalized_sha256": "de20f6f74c43227270f5bbc60cf42876e01e16e6c257e8743d741458aafe757a"
     },
     "app/auradsp_app/lib/features/visualizer/styles/style_milkdrop.dart": {
       "role": "index",
@@ -1912,9 +1918,9 @@
     },
     "app/auradsp_app/lib/features/visualizer/styles/visualizer_painter_dispatcher.dart": {
       "role": "index",
-      "sha256": "9875c86c4d4d15f04744600d24ec6c49687aeb5fefcb49d71c3e959cd7dfdf86",
-      "size": 4960,
-      "normalized_sha256": "9875c86c4d4d15f04744600d24ec6c49687aeb5fefcb49d71c3e959cd7dfdf86"
+      "sha256": "d76f59a87907dc387ab1715b1f3e360ff5dd0441454ad290e11bb734426502ab",
+      "size": 5295,
+      "normalized_sha256": "40051033b5b158de699cb2285842b3bdbdbe8ec14759022fe0597f350fba0286"
     },
     "app/auradsp_app/lib/features/visualizer/styles/visualizer_sprite_atlas.dart": {
       "role": "index",
@@ -1978,9 +1984,9 @@
     },
     "app/auradsp_app/lib/features/visualizer/views/visualizer_viewport.dart": {
       "role": "index",
-      "sha256": "d9be5ec74114caf7a3d331e27b8db4f6a7cee2d354aa78a6ce23b85ad7ab1afb",
-      "size": 22565,
-      "normalized_sha256": "b411ef42b14cc3a66d9620a35a1e892071fa35432c9caa8480a021db13237bd4"
+      "sha256": "bbfd63cee6115fd6b5e506d7b5c804fd5f74c99f8899d8a735408d3e12d61ef6",
+      "size": 23771,
+      "normalized_sha256": "e5bfd2fde2b7b82b345de95abf4bb2e1598550c7343092d09c815d6b2ae19fe3"
     },
     "app/auradsp_app/lib/features/visualizer_page.dart": {
       "role": "index",
@@ -2902,9 +2908,9 @@
     },
     "app/auradsp_app/test/spectrum_rendering_test.dart": {
       "role": "index",
-      "sha256": "472ee0c767d9eaff56c4b00d3e0372f507f32e53f915453eeded86ef9d72d9c8",
-      "size": 9111,
-      "normalized_sha256": "a8f586e6e763a7e4f01148c7362ddaa0c3f8157e7f27cd2d194070505145a36c"
+      "sha256": "4ab016ae2dc733aab55bcdfa7ef5514b49d78d476b1c4e051d33ace5776fd38c",
+      "size": 15524,
+      "normalized_sha256": "e53edba6ff329222e4398f1c555476507143d8d0e16b47d15e87777621c3e1a0"
     },
     "app/auradsp_app/test/system_monitor_lifecycle_test.dart": {
       "role": "index",
@@ -2935,6 +2941,12 @@
       "sha256": "2922f358b1b72d09ca9386c63359eeac8970230f9a11b6a988f017b51519faee",
       "size": 6282,
       "normalized_sha256": "cfb4533855b262e283e13594a827174e4db6e9c62f329fec79ab4b64bd7acdfa"
+    },
+    "app/auradsp_app/test/tornado_style_regression_test.dart": {
+      "role": "index",
+      "sha256": "fdef28b36bd20febfee9081213f91e7c972cbc9fe08d6004b6d7395ab2e75143",
+      "size": 12477,
+      "normalized_sha256": "fdef28b36bd20febfee9081213f91e7c972cbc9fe08d6004b6d7395ab2e75143"
     },
     "app/auradsp_app/test/touch_target_test.dart": {
       "role": "index",
@@ -3004,9 +3016,9 @@
     },
     "app/auradsp_app/test/visualizer_refactor_test.dart": {
       "role": "index",
-      "sha256": "4991d308ce9e4991386197309550d5e79c53afbbca6e3d00ae2fa76a5020ff8f",
-      "size": 17773,
-      "normalized_sha256": "4991d308ce9e4991386197309550d5e79c53afbbca6e3d00ae2fa76a5020ff8f"
+      "sha256": "78f23a3205e23cdcc7011d499027270a51bec7ccef549fb46e868e1ad77564de",
+      "size": 18888,
+      "normalized_sha256": "dd7176af130d8ae9d45426b717a2681f3a458f1e4018cd3831645f8e597bca66"
     },
     "app/auradsp_app/test/viz_backend_matrix_test.dart": {
       "role": "index",
@@ -19414,9 +19426,9 @@
     },
     "docs/20-执行/全量代码审查修复计划-2026-11-25.md": {
       "role": "index",
-      "sha256": "0e1eb121d5a7286603398cdd28496abe067753437beefce9c9f6532a24f0d397",
-      "size": 85710,
-      "normalized_sha256": "0e1eb121d5a7286603398cdd28496abe067753437beefce9c9f6532a24f0d397"
+      "sha256": "70eb3c1f4a8117b4148fbe5c3985b4a6e0d55ffde599772bcbcda6e5a5827870",
+      "size": 85885,
+      "normalized_sha256": "70eb3c1f4a8117b4148fbe5c3985b4a6e0d55ffde599772bcbcda6e5a5827870"
     },
     "docs/20-执行/卷积双槽影子立项-2026-11-25.md": {
       "role": "index",
@@ -25603,9 +25615,9 @@
     },
     "test/runner.py": {
       "role": "index",
-      "sha256": "9c20254c324868aaf9feda4a1e75b775dbb15d855cd99bea0088a76f60029cc0",
-      "size": 47491,
-      "normalized_sha256": "ab3724faa3b1dba5b9df2b02d65ecb1b5bc8b5fe197fc6130c287d80cdf3b575"
+      "sha256": "82ce3a5d00a41a78ed78ebcb521d7e3f319bab888266704fab7c40733f231d62",
+      "size": 47830,
+      "normalized_sha256": "43d9748a39224b7fea12f3838f3d744456265069e187f1e3cc3a5fc571d3e48f"
     },
     "test/smoke/_tmpcleanup.py": {
       "role": "index",
@@ -26131,9 +26143,9 @@
     },
     "test/smoke/smoke_g7_1_viz_mirror.py": {
       "role": "index",
-      "sha256": "9cc0a7a30dd204674a3f327b27070f3ffaa1b0ecdc204e311c0f5fc7c0bccc0e",
-      "size": 19091,
-      "normalized_sha256": "9cc0a7a30dd204674a3f327b27070f3ffaa1b0ecdc204e311c0f5fc7c0bccc0e"
+      "sha256": "0b1a140fb2271e0b4e62ac5843737809479cae9b23f117226119a8b86fab4533",
+      "size": 19564,
+      "normalized_sha256": "ea29d574096257ed5739ad9b63bdd1e416f4ca757ace644561cce9ebe215d064"
     },
     "test/smoke/smoke_g7_2_bridge_abi.py": {
       "role": "index",
@@ -26740,6 +26752,12 @@
       "sha256": "dad9c28f81815bad9b49b4f81fd0df026a70df0c8a20f8d4b538712877d84087",
       "size": 7737,
       "normalized_sha256": "b02d0e7386a6518b5fcd5ea79d874f78d0af7df11401fcc054d0d83bef66d283"
+    },
+    "test/smoke/smoke_viz_controlled_signals.py": {
+      "role": "index",
+      "sha256": "22a7b2c2a45de2453fbdad7d65d3d7812eb37c7a66661d9bc64dcab46e7c9507",
+      "size": 6296,
+      "normalized_sha256": "22a7b2c2a45de2453fbdad7d65d3d7812eb37c7a66661d9bc64dcab46e7c9507"
     },
     "test/smoke/smoke_viz_lifecycle.py": {
       "role": "index",
@@ -27382,6 +27400,48 @@
       "sha256": "faad3977be7e44c4ef1aa21ba6aa806b40bc31c88ca13fe542fb0b5b4f00d37d",
       "size": 1987,
       "normalized_sha256": "3ef4fb4842451e7411990faf3d376a8a6c270ac34b6970898ef20c878dd1d0b2"
+    },
+    "tools/remote_tools/Invoke-DevTask.ps1": {
+      "role": "index",
+      "sha256": "93d07fd9d8dee1991baaed38b826103fe04cdce09f96ec891c6d9c371ed61e64",
+      "size": 1247,
+      "normalized_sha256": "93d07fd9d8dee1991baaed38b826103fe04cdce09f96ec891c6d9c371ed61e64"
+    },
+    "tools/remote_tools/Invoke-GuestScript.ps1": {
+      "role": "index",
+      "sha256": "1d57bc3da6cc800c98e75d09137aaee8a0e58363ebb59f6aed85baa71810c443",
+      "size": 2462,
+      "normalized_sha256": "1d57bc3da6cc800c98e75d09137aaee8a0e58363ebb59f6aed85baa71810c443"
+    },
+    "tools/remote_tools/Restore-DriverCertTrust.ps1": {
+      "role": "index",
+      "sha256": "b28b65d16c7c257970eab9eb7b1f0d18b2672f578e439d03e65c5d68b4374f32",
+      "size": 1838,
+      "normalized_sha256": "b28b65d16c7c257970eab9eb7b1f0d18b2672f578e439d03e65c5d68b4374f32"
+    },
+    "tools/remote_tools/Send-ToGuest.ps1": {
+      "role": "index",
+      "sha256": "e203d939ca23fedba7364ef80dad3c28f188a24209917785b54b2051a1652c04",
+      "size": 2098,
+      "normalized_sha256": "e203d939ca23fedba7364ef80dad3c28f188a24209917785b54b2051a1652c04"
+    },
+    "tools/remote_tools/guest_file_info.py": {
+      "role": "index",
+      "sha256": "79250f29900752bdd0046ad347b3c68293f9229e120043df7d2d89cd9e3a08bc",
+      "size": 1019,
+      "normalized_sha256": "79250f29900752bdd0046ad347b3c68293f9229e120043df7d2d89cd9e3a08bc"
+    },
+    "tools/remote_tools/guest_telemetry.py": {
+      "role": "index",
+      "sha256": "1c298b98ca20d57cd58d8fda3f7b83187585da7a4ba34f9d5093f2df81672d4b",
+      "size": 3068,
+      "normalized_sha256": "1c298b98ca20d57cd58d8fda3f7b83187585da7a4ba34f9d5093f2df81672d4b"
+    },
+    "tools/remote_tools/parse_check.ps1": {
+      "role": "index",
+      "sha256": "36b55c9f50c24c18c23fe04a0693155cef4f181ec157e60c619d2ac43cff033e",
+      "size": 462,
+      "normalized_sha256": "36b55c9f50c24c18c23fe04a0693155cef4f181ec157e60c619d2ac43cff033e"
     },
     "tools/remote_win10.ps1": {
       "role": "index",
