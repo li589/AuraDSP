@@ -40,12 +40,19 @@ SpectrumStages runSpectrumStages(List<double> raw, {int frames = 12}) {
 }
 
 List<int> unsupportedIsolatedSpikes(List<double> bands) {
-  return [
-    for (var i = 1; i < bands.length - 1; i++)
-      if (bands[i] > 0.75 &&
-          bands[i] - math.max(bands[i - 1], bands[i + 1]) > 0.35)
-        i,
-  ];
+  if (bands.length < 2) return const [];
+  final found = <int>[];
+  for (var i = 0; i < bands.length; i++) {
+    final localSupport = switch (i) {
+      0 => bands[1],
+      _ when i == bands.length - 1 => bands[i - 1],
+      _ => math.max(bands[i - 1], bands[i + 1]),
+    };
+    if (bands[i] > 0.75 && bands[i] - localSupport > 0.35) {
+      found.add(i);
+    }
+  }
+  return found;
 }
 
 String formatBands(List<double> bands) =>
@@ -82,6 +89,28 @@ void main() {
       debugPrint('tone10k agc=${formatBands(stages.agc)}');
       debugPrint('tone10k post=${formatBands(stages.post)}');
     });
+
+    for (final endpoint in [0, 31]) {
+      test('孤立尖峰检测覆盖 band $endpoint 的 raw/AGC/post 单侧邻带', () {
+        final raw = List<double>.filled(32, 0.0);
+        raw[endpoint] = 0.99;
+        // Detector regressions use hand-derived snapshots at each pipeline
+        // stage; CAVA's intentional low-band weighting must not hide the spike
+        // below the detector threshold and invalidate the test premise.
+        final snapshots = <String, List<double>>{
+          'raw': raw,
+          'AGC': List<double>.of(raw),
+          'post': List<double>.of(raw),
+        };
+        for (final entry in snapshots.entries) {
+          expect(
+            unsupportedIsolatedSpikes(entry.value),
+            contains(endpoint),
+            reason: '${entry.key} 的端点尖峰必须只与存在的内侧邻带比较',
+          );
+        }
+      });
+    }
 
     test('白噪声与粉红噪声不会在 AGC/post 新增孤立尖峰', () {
       // Literal mean30 raw captures from smoke_viz_controlled_signals.py.

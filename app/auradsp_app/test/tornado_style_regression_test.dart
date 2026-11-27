@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -21,6 +22,26 @@ const _palette = VisualizerPalette(
 );
 
 final _bands = List<double>.generate(32, (i) => 0.35 + 0.25 * ((i % 7) / 6));
+
+class _CountingGpuShaderPainter extends GpuShaderPainter {
+  _CountingGpuShaderPainter({required GpuShaderService service})
+    : super(
+        shaderType: GpuShaderType.tornado,
+        bands: _bands,
+        palette: _palette,
+        time: 0.75,
+        sensitivity: 1.0,
+        service: service,
+      );
+
+  int paintCount = 0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    paintCount++;
+    super.paint(canvas, size);
+  }
+}
 
 GpuShaderPainter _tornadoPainter({
   required GpuShaderService service,
@@ -118,13 +139,154 @@ void main() {
       },
     );
 
+    for (final succeed in [true, false]) {
+      testWidgets(
+        'delayed shader ${succeed ? 'success' : 'failure'} repaints the first frame once',
+        (tester) async {
+          final gate = Completer<ui.FragmentProgram>();
+          ui.FragmentProgram? program;
+          if (succeed) {
+            program = await tester.runAsync(
+              () =>
+                  ui.FragmentProgram.fromAsset(GpuShaderType.tornado.assetPath),
+            );
+          }
+          final service = GpuShaderService.test(
+            loader: (assetPath) {
+              if (assetPath == GpuShaderType.tornado.assetPath) {
+                return gate.future;
+              }
+              throw StateError('unused shader: $assetPath');
+            },
+          );
+          final painter = _CountingGpuShaderPainter(service: service);
+          addTearDown(painter.dispose);
+          late StateSetter rebuildHost;
+          final initialization = service.initialize();
+          initialization.then((_) => rebuildHost(() {}));
+
+          await tester.pumpWidget(
+            MaterialApp(
+              home: StatefulBuilder(
+                builder: (context, setState) {
+                  rebuildHost = setState;
+                  return SizedBox(
+                    width: 480,
+                    height: 320,
+                    child: CustomPaint(painter: painter),
+                  );
+                },
+              ),
+            ),
+          );
+          await tester.pump();
+          final paintsBeforeCompletion = painter.paintCount;
+          expect(paintsBeforeCompletion, greaterThan(0));
+          expect(
+            painter.compileStatus,
+            GpuShaderCompileStatus.compiling,
+            reason:
+                'The first frame must be painted before the loader completes.',
+          );
+
+          if (succeed) {
+            gate.complete(program!);
+          } else {
+            gate.completeError(StateError('delayed compile failure'));
+          }
+          await tester.pump();
+          await tester.pump();
+          await initialization;
+
+          expect(
+            painter.compileStatus,
+            succeed
+                ? GpuShaderCompileStatus.compiled
+                : GpuShaderCompileStatus.failed,
+          );
+          expect(
+            painter.paintCount,
+            greaterThan(paintsBeforeCompletion),
+            reason:
+                'The cached widget painter must invalidate its loading frame '
+                'when asynchronous compilation completes.',
+          );
+
+          final settledPaintCount = painter.paintCount;
+          for (var i = 0; i < 4; i++) {
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+          expect(
+            painter.paintCount,
+            settledPaintCount,
+            reason:
+                'Status completion must not start a continuous redraw loop.',
+          );
+        },
+      );
+    }
+
+    test('diagnostic TextPainter has deterministic owner teardown', () async {
+      for (var cycle = 0; cycle < 3; cycle++) {
+        final service = GpuShaderService.test(
+          loader: (assetPath) async =>
+              throw StateError('deterministic compile failure $cycle'),
+        );
+        await service.initialize();
+        final painter = _tornadoPainter(service: service);
+        await _rasterize(painter);
+        final cachedText = painter.debugStatusTextPainter;
+        expect(cachedText, isNotNull);
+
+        // CustomPainter/RenderCustomPaint has no dispose hook; the owning
+        // viewport releases these native text resources on style retirement
+        // and teardown. Disposal is deliberately idempotent for teardown races.
+        (painter as dynamic).dispose();
+        expect(cachedText!.debugDisposed, isTrue);
+        expect(painter.debugStatusTextPainter, isNull);
+        painter.dispose();
+      }
+    });
+
+    test('GPU resume disposes the cached diagnostic immediately', () async {
+      final program = await ui.FragmentProgram.fromAsset(
+        GpuShaderType.tornado.assetPath,
+      );
+      final gate = Completer<ui.FragmentProgram>();
+      final service = GpuShaderService.test(
+        loader: (assetPath) {
+          if (assetPath == GpuShaderType.tornado.assetPath) {
+            return gate.future;
+          }
+          throw StateError('unused shader: $assetPath');
+        },
+      );
+      final painter = _tornadoPainter(service: service);
+      final initialization = service.initialize();
+      await _rasterize(painter);
+      final cachedText = painter.debugStatusTextPainter;
+      expect(cachedText, isNotNull);
+      expect(painter.compileStatus, GpuShaderCompileStatus.compiling);
+
+      gate.complete(program);
+      await initialization;
+      await _rasterize(painter);
+
+      expect(painter.rendererKind, VisualizerRendererKind.gpuShader);
+      expect(cachedText!.debugDisposed, isTrue);
+      expect(painter.debugStatusTextPainter, isNull);
+      painter.dispose();
+    });
+
     test('failed shader never paints the legacy circular fallback', () async {
       final service = GpuShaderService.test(
         loader: (assetPath) async =>
             throw StateError('deterministic compile failure'),
       );
       await service.initialize();
-      final pixels = await _rasterize(_tornadoPainter(service: service));
+      final painter = _tornadoPainter(service: service);
+      addTearDown(painter.dispose);
+      final pixels = await _rasterize(painter);
 
       // With the old implementation the bottom of its audio-reactive ring is
       // centered at (240, 282) for this fixed 480x320 frame and band input.
@@ -153,6 +315,7 @@ void main() {
         );
         await service.initialize();
         final painter = _tornadoPainter(service: service);
+        addTearDown(painter.dispose);
 
         await _pumpCapture(tester, painter);
         await expectLater(

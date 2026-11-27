@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
+
 import '../../../core/error_sink.dart';
 
 /// Available hardware-accelerated fragment shader types
@@ -21,7 +23,7 @@ typedef FragmentProgramLoader = Future<FragmentProgram> Function(
 );
 
 /// Service managing compilation and caching of Flutter GPU FragmentProgram shaders
-class GpuShaderService {
+class GpuShaderService extends ChangeNotifier {
   static final GpuShaderService instance = GpuShaderService._();
 
   final FragmentProgramLoader _loader;
@@ -91,12 +93,14 @@ class GpuShaderService {
         _programs[type] = await _loader(type.assetPath);
         _compileStatus[type] = GpuShaderCompileStatus.compiled;
         _errors.remove(type);
+        notifyListeners();
       } catch (e, st) {
         swallow(e, st);
         _programs.remove(type);
         _shaderCache.remove(type);
         _compileStatus[type] = GpuShaderCompileStatus.failed;
         _errors[type] = e.toString();
+        notifyListeners();
       }
     }
     _initialized = true;

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart'
     show
         Alignment,
@@ -45,7 +46,8 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
     required this.sensitivity,
     GpuShaderService? service,
   }) : _service = service ?? GpuShaderService.instance,
-       _fallbackRingColor = palette.primary.withValues(alpha: 0.7);
+       _fallbackRingColor = palette.primary.withValues(alpha: 0.7),
+       super(repaint: service ?? GpuShaderService.instance);
 
   GpuShaderCompileStatus get compileStatus =>
       _service.compileStatusFor(shaderType);
@@ -71,6 +73,20 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
     };
   }
 
+  @visibleForTesting
+  TextPainter? get debugStatusTextPainter => _statusTextPainter;
+
+  void _clearStatusTextPainter() {
+    _statusTextPainter?.dispose();
+    _statusTextPainter = null;
+    _statusText = null;
+    _statusTextWidth = -1;
+  }
+
+  /// Releases cached native text resources. The viewport owns this painter and
+  /// calls this on style retirement and teardown; RenderCustomPaint does not.
+  void dispose() => _clearStatusTextPainter();
+
   @override
   void setVisualizerTime(double t) => time = t;
 
@@ -88,6 +104,8 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
 
     final shader = _service.shaderFor(shaderType);
     if (shader != null) {
+      _clearStatusTextPainter();
+
       // Uniform indices mapping:
       // vec2 uResolution (floats 0, 1)
       shader.setFloat(0, size.width);

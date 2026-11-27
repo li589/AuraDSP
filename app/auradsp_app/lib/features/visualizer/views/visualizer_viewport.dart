@@ -14,6 +14,7 @@ import '../controllers/waveform_synthesizer.dart';
 import '../models/visualizer_themes.dart';
 import '../models/visualizer_types.dart';
 import '../styles/style_atmosphere.dart';
+import '../styles/style_gpu_shader.dart';
 import '../styles/style_nebula_flow.dart';
 import '../styles/style_tornado.dart';
 import '../styles/visualizer_painter_dispatcher.dart';
@@ -42,7 +43,11 @@ class _CompositeVisualizerPainter extends CustomPainter {
   final ValueListenable<double>? mainTime;
 
   _CompositeVisualizerPainter({required this.mainPainter, this.mainTime})
-    : super(repaint: mainTime);
+    : super(
+        repaint: mainTime == null
+            ? mainPainter
+            : Listenable.merge([mainTime, mainPainter]),
+      );
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -140,6 +145,10 @@ class VisualizerCanvasViewport extends StatefulWidget {
 class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   CustomPainter? _delegate;
   Object? _delegateKey;
+
+  /// RenderCustomPaint does not dispose delegates. Keep outgoing GPU painters
+  /// alive for the 280 ms style crossfade, then release their native resources.
+  final Map<GpuShaderPainter, Timer> _retiredPainterDisposals = {};
 
   CustomPainter? _ambience;
   Object? _ambienceKey;
@@ -344,6 +353,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
 
   @override
   void dispose() {
+    _disposeDelegates();
     _bindProjectmModel(null);
     _pmTimer?.cancel();
     _pmTimer = null;
@@ -373,6 +383,31 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
     _ => true,
   };
 
+  void _retireDelegate(CustomPainter? painter) {
+    if (painter is! GpuShaderPainter) return;
+    _retiredPainterDisposals[painter]?.cancel();
+    _retiredPainterDisposals[painter] = Timer(
+      const Duration(milliseconds: 300),
+      () {
+        _retiredPainterDisposals.remove(painter);
+        painter.dispose();
+      },
+    );
+  }
+
+  void _disposeDelegates() {
+    for (final timer in _retiredPainterDisposals.values) {
+      timer.cancel();
+    }
+    for (final painter in _retiredPainterDisposals.keys) {
+      painter.dispose();
+    }
+    _retiredPainterDisposals.clear();
+    final current = _delegate;
+    if (current is GpuShaderPainter) current.dispose();
+    _delegate = null;
+  }
+
   /// 仅在「风格/配置/调色板/数据缓冲身份」变化时重建画笔；常规频谱帧
   /// 只触发重绘（数据列表是原地复用的，画笔持有同一引用即可看到新值）。
   CustomPainter _delegateFor(
@@ -389,6 +424,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
       widget.projectMBridge,
     );
     if (_delegate == null || _delegateKey != key) {
+      final previous = _delegate;
       _delegateKey = key;
       _delegate = buildVisualizerPainter(
         style: widget.config.style,
@@ -401,6 +437,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         showGrid: separateGrid ? false : null,
         projectMBridge: widget.projectMBridge,
       );
+      _retireDelegate(previous);
     }
     return _delegate!;
   }

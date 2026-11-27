@@ -36,8 +36,13 @@ def extreme_isolated_spikes(frames):
     """A spike with no local spectral support is suspicious even for noise."""
     found = []
     for frame_no, frame in enumerate(frames):
-        for i in range(1, BANDS - 1):
-            local = max(frame[i - 1], frame[i + 1])
+        for i in range(BANDS):
+            if i == 0:
+                local = frame[1]
+            elif i == BANDS - 1:
+                local = frame[i - 1]
+            else:
+                local = max(frame[i - 1], frame[i + 1])
             if frame[i] > 0.90 and local < 0.20:
                 found.append((frame_no, i, frame[i], local))
     return found
@@ -91,7 +96,22 @@ def run_signal(dll, kind):
     return result
 
 
+def check_endpoint_spike_regressions():
+    """Synthetic raw-band guards for the two one-sided-neighbor endpoints."""
+    for endpoint in (0, BANDS - 1):
+        frame = [0.0] * BANDS
+        frame[endpoint] = 0.99
+        found = extreme_isolated_spikes([frame])
+        if not any(item[1] == endpoint for item in found):
+            raise AssertionError(
+                "band %d isolated spike was not detected with its one-sided neighbor"
+                % endpoint
+            )
+    print("PASS: synthetic raw isolated spikes detected at bands 0 and 31")
+
+
 def main():
+    check_endpoint_spike_regressions()
     lib_path = find_engine_lib()
     if not os.path.isfile(lib_path):
         print("SKIP: native engine artifact not found: %s" % lib_path)

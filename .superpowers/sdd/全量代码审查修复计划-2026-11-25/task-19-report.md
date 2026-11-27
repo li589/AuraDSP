@@ -118,3 +118,49 @@
 - 原生 smoke 是进程内受控 PCM 验证，不是声卡、APO、ASIO、VAIO 或真实播放链路验收；Dart AGC/post 用固定 raw 序列验证 UI 特征链，不重新执行原生 FFT。
 - 当前测试只排除所定义阈值和输入下的无来源尖峰，不排除所有音乐内容、突发包络或长时间播放中的视觉偏高；受控测试没有证明 DSP 缺陷，故本任务未改 DSP/AGC/attack/频带表。
 - `tools/Emergency_Fix_Audio.cmd` 是接手前已存在的 untracked 文件，本次未修改、未纳入提交。未执行 AOCI、subagent、远端/真实设备、驱动、push/merge 或 Git config 操作。
+
+---
+
+## 7. Fix Round 1：渲染器审查缺口闭合
+
+- FIX_BASE：`4e25fef4a464181229ec46c69377550048e1a8da`。
+- 范围仅限审查列出的注册、异步状态重绘、端点检测和诊断文本生命周期；未改 DSP/AGC/attack、频带表、shader 画面或 golden，未新增 RT 工作或依赖。
+
+### 7.1 Important：VizFrame 导入方精确集合漏登记
+
+- **RED：** 未改代码先运行 `python test/smoke/smoke_g7_1_viz_mirror.py`，`[B2]` 失败，明确报告 `extra=["test/smoke/smoke_viz_controlled_signals.py"]`。
+- **实现：** 将该既有导入方加入 `KNOWN_IMPORTERS`，不放宽精确集合判据。
+- **GREEN：** 最终同一门禁 38/38 通过，`[B2]` 确认已知导入方恰为 14 处，`missing=[]`、`extra=[]`。
+
+### 7.2 Important：异步 shader 状态未可靠触发重绘
+
+- **RED：** 先增加带首帧的延迟 loader widget 回归，再在未修复实现上分别运行成功和失败路径。两者均在首帧实际 paint 一次后完成编译，但 `paintCount` 仍为 1，断言 `Expected: a value greater than <1>, Actual: <1>`；这复现了宿主 `setState` 复用同一 painter 时 LOADING 画面不失效的问题。
+- **实现：** `GpuShaderService` 现在是 `ChangeNotifier`，每个 shader 编译成功/失败都发出一次状态通知；`GpuShaderPainter` 以该 service 为 repaint listenable，视口 composite 将时间轴与 mainPainter 的通知合并。既有 `VisualizerStage` 完成后的 `setState` 保留，但正确重绘不再依赖时间或频谱继续产帧。
+- **GREEN：** 延迟成功、延迟失败两条 widget 回归均通过；完成后额外 pump 4 次 paintCount 不再增长，证明没有引入连续重绘。既有两张 tornado golden 原样通过。
+
+### 7.3 Medium：band 0 / 31 未进入孤立尖峰检测
+
+- **RED：** Dart 端新增 raw/AGC/post 手工合成快照后，band 0 和 band 31 均得到 `Actual: []`；原生 smoke 的合成 raw 端点回归以 `AssertionError: band 0 isolated spike was not detected with its one-sided neighbor` 失败。
+- **实现：** 两个检测器都遍历全部 32 带；band 0 只与 band 1 比较，band 31 只与 band 30 比较，中间带维持原双侧邻带判据。Dart 端点测试使用独立的 raw/AGC/post 合成快照，避免 CAVA 既有低频权重把测试输入压到检测阈值以下而混淆测试前提；既有真实 raw→AGC→post 链路测试保持不动。
+- **GREEN：** Dart 两端点、三阶段全部通过；原生 smoke 先通过 band 0/31 合成 raw 回归，再通过既有静音、10kHz、白噪声和粉红噪声实测。
+
+### 7.4 Low：诊断 TextPainter 缺少完整确定性生命周期
+
+- **RED：** 未修复实现上绘制失败诊断后调用 owning painter 的 `dispose()`，得到 `NoSuchMethodError: Class 'GpuShaderPainter' has no instance method 'dispose'`。
+- **实现：** `GpuShaderPainter` 增加幂等清理，GPU 恢复绘制时立即 dispose 并清空诊断 TextPainter；视口在风格替换时让旧 painter 活过 280ms crossfade，300ms 后确定性清理，视口 teardown 则取消待处理清理并立即释放当前及退休 painter。`RenderCustomPaint` 本身不 dispose delegate，因此清理由实际缓存 delegate 的 viewport 承担。
+- **GREEN：** 连续 3 次失败诊断/teardown 均验证旧 TextPainter `debugDisposed=true` 且引用清空，重复 dispose 安全；延迟编译成功恢复 GPU 后也验证诊断对象立即释放、引用为空。
+
+### 7.5 最终验证
+
+| 命令 | 结果 |
+| --- | --- |
+| `flutter test test/tornado_style_regression_test.dart test/visualizer_refactor_test.dart test/spectrum_rendering_test.dart` | PASS，47/47 |
+| `flutter test test/lyrics_subsystem_test.dart test/visualizer_projectm_lifecycle_test.dart test/visualizer_per_style_test.dart` | PASS，36/36 |
+| `flutter test test/phase3_shaders_plugins_test.dart` | PASS，14/14 |
+| `python test/smoke/smoke_g7_1_viz_mirror.py` | PASS，38/38 |
+| `python test/smoke/smoke_runner_registry.py` | PASS，全部注册检查通过 |
+| `python test/smoke/smoke_viz_controlled_signals.py` | PASS，含 band 0/31 合成回归及既有真实原生信号检查 |
+| `flutter analyze` | PASS，No issues found |
+| `git diff --check` | PASS，无 whitespace error，仅有既有 LF→CRLF 工作副本提示 |
+
+一次把上述 Flutter 文件全部合并运行时，`phase3_shaders_plugins_test.dart` 有 3 项被并行测试进程标记为 `did not complete`，没有断言失败；该文件随后独立运行 14/14 通过，Task 19 三文件及 viewport/lifecycle 文件也分别以最终通过命令重跑确认。未修改 golden，未执行真实/远端设备或驱动操作；Win10 真机 GPU/30 秒播放验收限制仍沿用第 6 节。
