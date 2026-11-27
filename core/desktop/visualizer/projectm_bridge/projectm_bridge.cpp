@@ -158,6 +158,31 @@ struct WglContext {
     }
 };
 
+// One render thread alternates context-local GL state.
+class WglContextScope {
+public:
+    explicit WglContextScope(const WglContext& ctx)
+        : prev_dc_(wglGetCurrentDC()),
+          prev_rc_(wglGetCurrentContext()),
+          bound_(wglMakeCurrent(ctx.hdc, ctx.rc) != FALSE) {}
+
+    ~WglContextScope() {
+        if (bound_) wglMakeCurrent(prev_dc_, prev_rc_);
+    }
+
+    explicit operator bool() const { return bound_; }
+
+    WglContextScope(const WglContextScope&) = delete;
+    WglContextScope& operator=(const WglContextScope&) = delete;
+    WglContextScope(WglContextScope&&) = delete;
+    WglContextScope& operator=(WglContextScope&&) = delete;
+
+private:
+    HDC prev_dc_;
+    HGLRC prev_rc_;
+    bool bound_;
+};
+
 #endif  // _WIN32
 
 // ---------------------------------------------------------------------------
@@ -433,6 +458,8 @@ private:
             std::lock_guard<std::mutex> lock(ctx->preset_mtx);
             if (ctx->preset_render_blocked) return;
         }
+        WglContextScope gl_scope(ctx->gl);
+        if (!gl_scope) return;
         try {
             // Drain queued PCM first so the frame reacts to fresh audio.
             for (;;) {
@@ -691,6 +718,16 @@ AURADSP_PROJECTM_EXPORT uint64_t auradsp_projectm_request_preset_load(
     // Only request bookkeeping runs on the caller thread. The potentially
     // expensive parse and projectM load execute on the existing render queue.
     RenderThread::instance().post([ctx, path, request_id] {
+        WglContextScope gl_scope(ctx->gl);
+        if (!gl_scope) {
+            std::lock_guard<std::mutex> lock(ctx->preset_mtx);
+            if (ctx->latest_preset_request == request_id) {
+                ctx->completed_preset_request = request_id;
+                ctx->latest_preset_status = -2;
+                ctx->preset_render_blocked = ctx->preset_restoration_required;
+            }
+            return;
+        }
         {
             std::lock_guard<std::mutex> lock(ctx->preset_mtx);
             if (ctx->latest_preset_request != request_id) return;

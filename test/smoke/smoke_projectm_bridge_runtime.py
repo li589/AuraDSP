@@ -14,7 +14,9 @@ W3 起桥自持 GL 上下文（隐藏 WGL 窗口 + 专用渲染线程），宿�
   6. 异步 request/readback ABI：请求 ID、pending/ready/failure、当前路径回读、
      快速请求合并/旧请求 superseded 均符合契约；
   7. 无已提交预设的新实例在慢加载被腐蚀请求取代后，保留初始完成帧与空路径；
-  8. resize 后新尺寸帧可取；destroy 返回 0。
+  8. resize 后新尺寸帧可取；destroy 返回 0；
+  9. 双实例交错渲染各自使用正确尺寸的 WGL 上下文；第二实例存在后，
+     第一实例改尺寸/预设仍能发布新帧且不破坏第二实例。
 
 产物经环境变量定位（AURADSP_PM_BRIDGE_DLL / AURADSP_PM_SDK_BIN），
 未设置时自 SKIP 退出 0（仓库惯例）；开发机门禁显式设置后实跑。
@@ -292,6 +294,17 @@ def main() -> int:
             cnt += 1
         return tot / max(cnt, 1)
 
+    def mean_rgb(frame: bytes):
+        if not frame:
+            return -1.0, -1.0, -1.0
+        sums = [0, 0, 0]
+        count = len(frame) // 4
+        for i in range(0, len(frame), 4):
+            sums[0] += frame[i]
+            sums[1] += frame[i + 1]
+            sums[2] += frame[i + 2]
+        return tuple(value / count for value in sums)
+
     frame_a = grab(1.2)
     alt = os.path.join(tmp, "variant.milk")
     with open(alt, "w", encoding="utf-8") as f:
@@ -415,6 +428,113 @@ def main() -> int:
               "（snapshots=%d unchanged=%s）" % (snapshots, unchanged))
 
     check(dll.auradsp_projectm_destroy(fresh) == 0, "新实例 destroy 返回 0")
+
+    # Dual-instance WGL regression: one render thread loops both contexts.
+    # Each instance must render through its own HDC/HGLRC after interleaving;
+    # otherwise A's FBO/projectM work executes against B's current context.
+    dual_a = dll.auradsp_projectm_create(256, 144, 30.0)
+    dual_b = dll.auradsp_projectm_create(320, 180, 30.0)
+    check(dual_a is not None and dual_b is not None,
+          "双实例 create 成功（A=256x144 B=320x180）")
+    if dual_a and dual_b:
+        dual_a = ctypes.c_void_p(dual_a)
+        dual_b = ctypes.c_void_p(dual_b)
+        dual_a_preset = os.path.join(tmp, "dual_a.milk")
+        dual_b_preset = os.path.join(tmp, "dual_b.milk")
+        with open(dual_a_preset, "w", encoding="utf-8") as f:
+            f.write(_variant(MINIMAL_MILK,
+                             **{"fDecay": "0.970", "zoom": "1.050",
+                                "wave_r": "1.000", "wave_g": "0.000",
+                                "wave_b": "0.000",
+                                "per_frame_1": "zoom = 1.05;",
+                                "per_frame_2": "rot = 0.01;"}))
+        with open(dual_b_preset, "w", encoding="utf-8") as f:
+            f.write(_variant(MINIMAL_MILK,
+                             **{"fDecay": "0.930", "zoom": "1.000",
+                                "wave_r": "0.000", "wave_g": "1.000",
+                                "wave_b": "0.000",
+                                "per_frame_1": "zoom = 1.00;",
+                                "per_frame_2": "rot = 0.05;"}))
+        rc_a = dll.auradsp_projectm_load_preset(
+            dual_a, dual_a_preset.encode("utf-8"))
+        rc_b = dll.auradsp_projectm_load_preset(
+            dual_b, dual_b_preset.encode("utf-8"))
+        check(rc_a == 0 and rc_b == 0,
+              "双实例加载不同预设成功（A=%d B=%d）" % (rc_a, rc_b))
+
+        def grab_interleaved(a_size, b_size, seconds=2.5):
+            aw, ah = a_size
+            bw, bh = b_size
+            a_buf = (ctypes.c_ubyte * (aw * ah * 4))()
+            b_buf = (ctypes.c_ubyte * (bw * bh * 4))()
+            a_rc = b_rc = -3
+            end = time.time() + seconds
+            while time.time() < end:
+                dll.auradsp_projectm_feed_pcm(dual_a, pcm, frames, 2)
+                a_rc = dll.auradsp_projectm_render_pixels(dual_a, a_buf)
+                dll.auradsp_projectm_feed_pcm(dual_b, pcm, frames, 2)
+                b_rc = dll.auradsp_projectm_render_pixels(dual_b, b_buf)
+                time.sleep(0.02)
+            return (bytes(a_buf) if a_rc == 0 else b"",
+                    bytes(b_buf) if b_rc == 0 else b"", a_rc, b_rc)
+
+        a_frame, b_frame, a_rc, b_rc = grab_interleaved((256, 144),
+                                                        (320, 180))
+        check(a_rc == 0 and len(a_frame) == 256 * 144 * 4,
+              "双实例交错后 A 帧尺寸正确（rc=%d bytes=%d expected=%d）" %
+              (a_rc, len(a_frame), 256 * 144 * 4))
+        check(b_rc == 0 and len(b_frame) == 320 * 180 * 4,
+              "双实例交错后 B 帧尺寸正确（rc=%d bytes=%d expected=%d）" %
+              (b_rc, len(b_frame), 320 * 180 * 4))
+        a_red, a_green, a_blue = mean_rgb(a_frame)
+        b_red, b_green, b_blue = mean_rgb(b_frame)
+        print("  NOTE 双实例帧 RGB 均值 A=(%.3f,%.3f,%.3f) B=(%.3f,%.3f,%.3f)" %
+              (a_red, a_green, a_blue, b_red, b_green, b_blue))
+        check(a_frame and b_frame and a_red > a_green * 1.5 and
+              a_red > a_blue * 1.5 and b_green > b_red * 1.5 and
+              b_green > b_blue * 1.5,
+              "双实例交错帧分别保持 A 红色/B 绿色预设"
+              "（A=(%.3f,%.3f,%.3f) B=(%.3f,%.3f,%.3f)）" %
+              (a_red, a_green, a_blue, b_red, b_green, b_blue))
+
+        # Invalidate A's last completed frame after B exists. A must publish a
+        # fresh frame at the new size through its own context, not reuse stale
+        # pixels or render into B's framebuffer.
+        rc_resize = dll.auradsp_projectm_resize(dual_a, 288, 162)
+        a_resized, b_after_resize, a_rc, b_rc = grab_interleaved(
+            (288, 162), (320, 180))
+        check(rc_resize == 0 and a_rc == 0 and
+              len(a_resized) == 288 * 162 * 4,
+              "B 存在后 A 改尺寸发布新帧（resize=%d rc=%d bytes=%d expected=%d）" %
+              (rc_resize, a_rc, len(a_resized), 288 * 162 * 4))
+        check(b_rc == 0 and len(b_after_resize) == 320 * 180 * 4,
+              "A 改尺寸后 B 帧仍正确（rc=%d bytes=%d expected=%d）" %
+              (b_rc, len(b_after_resize), 320 * 180 * 4))
+
+        dual_a_changed = os.path.join(tmp, "dual_a_changed.milk")
+        with open(dual_a_changed, "w", encoding="utf-8") as f:
+            f.write(_variant(MINIMAL_MILK,
+                             **{"fDecay": "0.900", "zoom": "1.350",
+                                "wave_r": "1.000", "wave_g": "0.050",
+                                "wave_b": "0.050",
+                                "per_frame_1": "zoom = 1.35;",
+                                "per_frame_2": "rot = 0.08;"}))
+        rc_change = dll.auradsp_projectm_load_preset(
+            dual_a, dual_a_changed.encode("utf-8"))
+        a_changed, b_after_change, a_rc, b_rc = grab_interleaved(
+            (288, 162), (320, 180), seconds=1.5)
+        changed_diff = mean_diff(a_resized, a_changed)
+        check(rc_change == 0 and a_rc == 0 and
+              len(a_changed) == 288 * 162 * 4 and changed_diff > 1.0,
+              "B 存在后 A 改预设发布变化新帧"
+              "（load=%d rc=%d bytes=%d diff=%.3f）" %
+              (rc_change, a_rc, len(a_changed), changed_diff))
+        check(b_rc == 0 and len(b_after_change) == 320 * 180 * 4,
+              "A 改预设后 B 帧仍正确（rc=%d bytes=%d expected=%d）" %
+              (b_rc, len(b_after_change), 320 * 180 * 4))
+
+        # Per-render scope only: process exit reclaims these contexts. The
+        # existing single-instance destroy checks above cover that lifecycle.
     print("smoke_projectm_bridge_runtime: %s" % ("FAIL" if FAILS else "PASS"))
     return 1 if FAILS else 0
 
