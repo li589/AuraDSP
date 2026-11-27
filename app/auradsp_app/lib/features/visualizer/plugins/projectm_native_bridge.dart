@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ffi';
+import 'dart:isolate';
 import 'dart:ui' as ui;
 
 import 'package:ffi/ffi.dart';
@@ -11,12 +12,14 @@ import '../../../engine/native_library_loader.dart';
 import 'milkdrop_preset.dart';
 import 'projectm_bridge_contract.dart';
 
-typedef _CreateC = Pointer<Void> Function(Int32, Int32, Float);
-typedef _CreateDart = Pointer<Void> Function(int, int, double);
+typedef _CreateC = Pointer<Void> Function(Int32, Int32, Float, Int32);
+typedef _CreateDart = Pointer<Void> Function(int, int, double, int);
 typedef _DestroyC = Int32 Function(Pointer<Void>);
 typedef _DestroyDart = int Function(Pointer<Void>);
 typedef _ResizeC = Int32 Function(Pointer<Void>, Int32, Int32);
 typedef _ResizeDart = int Function(Pointer<Void>, int, int);
+typedef _SetActiveC = Int32 Function(Pointer<Void>, Int32);
+typedef _SetActiveDart = int Function(Pointer<Void>, int);
 typedef _HasContextC = Int32 Function();
 typedef _HasContextDart = int Function();
 typedef _GetSizeC = Int32 Function(Pointer<Void>);
@@ -37,6 +40,63 @@ typedef _ReadLoadDart = int Function(Pointer<Void>, int, Pointer<Utf8>, int);
 typedef _RenderC = Int32 Function(Pointer<Void>, Pointer<Uint8>);
 typedef _RenderDart = int Function(Pointer<Void>, Pointer<Uint8>);
 
+typedef ProjectMCreateResult = ({int handle, int width, int height});
+typedef ProjectMCreator = Future<ProjectMCreateResult> Function(
+  int width,
+  int height,
+  double fps,
+  bool active,
+);
+
+Future<void> _destroyProjectMOffUi(int address) {
+  return Isolate.run(() {
+    final library = NativeLibraryLoader.openFirst(
+      PlatformProfile.projectMBridgeLibraryCandidates,
+      what: 'projectM bridge',
+    );
+    final destroy = library.lookupFunction<_DestroyC, _DestroyDart>(
+      'auradsp_projectm_destroy',
+    );
+    if (destroy(Pointer<Void>.fromAddress(address)) != 0) {
+      throw StateError('projectM destroy failed');
+    }
+  });
+}
+
+Future<ProjectMCreateResult> _createProjectMOffUi(
+  int width,
+  int height,
+  double fps,
+  bool active,
+) {
+  return Isolate.run(() {
+    final library = NativeLibraryLoader.openFirst(
+      PlatformProfile.projectMBridgeLibraryCandidates,
+      what: 'projectM bridge',
+    );
+    final hasContext = library.lookupFunction<_HasContextC, _HasContextDart>(
+      'auradsp_projectm_has_current_gl_context',
+    );
+    if (hasContext() == 0) return (handle: 0, width: 0, height: 0);
+    final create = library.lookupFunction<_CreateC, _CreateDart>(
+      'auradsp_projectm_create_with_activity',
+    );
+    final getWidth = library.lookupFunction<_GetSizeC, _GetSizeDart>(
+      'auradsp_projectm_get_width',
+    );
+    final getHeight = library.lookupFunction<_GetSizeC, _GetSizeDart>(
+      'auradsp_projectm_get_height',
+    );
+    final handle = create(width, height, fps, active ? 1 : 0);
+    if (handle == nullptr) return (handle: 0, width: 0, height: 0);
+    return (
+      handle: handle.address,
+      width: getWidth(handle),
+      height: getHeight(handle),
+    );
+  });
+}
+
 /// Real FFI implementation of the optional libprojectM bridge.
 ///
 /// Context ownership (amended 2026-11-23, wiring round W3/W4): the
@@ -45,7 +105,10 @@ typedef _RenderDart = int Function(Pointer<Void>, Pointer<Uint8>);
 /// verifier gate could never pass from a Flutter host and kept the
 /// whole chain permanently unavailable.
 class ProjectMNativeBridge
-    implements ProjectMBridge, ProjectMAsyncPresetBridge {
+    implements
+        ProjectMBridge,
+        ProjectMAsyncPresetBridge,
+        ProjectMActivityController {
   final ValueNotifier<ui.Image?> _frame = ValueNotifier<ui.Image?>(null);
   DynamicLibrary? _library;
   Pointer<Void> _handle = nullptr;
@@ -53,11 +116,14 @@ class ProjectMNativeBridge
   int _height = 0;
   MilkdropPreset? _preset;
   bool _disposed = false;
-  late _CreateDart _create;
-  late _DestroyDart _destroy;
+  bool _desiredActive = true;
+  Future<bool>? _initializing;
+  Pointer<Void>? _pendingHandle;
+  Future<void>? _cleanupInFlight;
+  Pointer<Void>? _cleanupHandle;
+  final ProjectMCreator? creator;
   late _ResizeDart _resize;
-  late _GetSizeDart _getWidth;
-  late _GetSizeDart _getHeight;
+  late _SetActiveDart _setActive;
   late _FeedDart _feed;
   late _LoadDart _load;
   late _RequestLoadDart _requestLoad;
@@ -67,13 +133,13 @@ class ProjectMNativeBridge
 
   bool _ffiBound = false;
 
-  ProjectMNativeBridge();
+  ProjectMNativeBridge({this.creator});
 
   @override
   bool get isNative => true;
 
   @override
-  bool get isAvailable => _library != null && _handle != nullptr;
+  bool get isAvailable => !_disposed && _library != null && _handle != nullptr;
 
   @override
   bool get isLoaded => _preset != null && isAvailable;
@@ -97,35 +163,56 @@ class ProjectMNativeBridge
     int width = 1280,
     int height = 720,
     double fps = 60.0,
+  }) {
+    if (_disposed) return Future<bool>.value(false);
+    if (isAvailable) {
+      _applyActive();
+      return Future<bool>.value(true);
+    }
+    final existing = _initializing;
+    if (existing != null) return existing;
+    final future = _initialize(width: width, height: height, fps: fps);
+    _initializing = future;
+    return future.whenComplete(() {
+      if (identical(_initializing, future)) _initializing = null;
+    });
+  }
+
+  Future<bool> _initialize({
+    required int width,
+    required int height,
+    required double fps,
   }) async {
-    if (_disposed) return false;
-    if (isAvailable) return true;
+    if (_pendingHandle != null || _handle != nullptr) {
+      await _cleanupPending();
+      if (_pendingHandle != null || _handle != nullptr) return false;
+    }
     try {
+      final created = await (creator ?? _createProjectMOffUi)(
+        width,
+        height,
+        fps,
+        _desiredActive,
+      );
+      if (created.handle == 0) return false;
+      final handle = Pointer<Void>.fromAddress(created.handle);
+      _pendingHandle = handle;
       final library = NativeLibraryLoader.openFirst(
         PlatformProfile.projectMBridgeLibraryCandidates,
         what: 'projectM bridge',
       );
       _library = library;
       if (!_ffiBound) {
-        _create = library.lookupFunction<_CreateC, _CreateDart>(
-          'auradsp_projectm_create',
-        );
-        _destroy = library.lookupFunction<_DestroyC, _DestroyDart>(
-          'auradsp_projectm_destroy',
-        );
         _resize = library.lookupFunction<_ResizeC, _ResizeDart>(
           'auradsp_projectm_resize',
+        );
+        _setActive = library.lookupFunction<_SetActiveC, _SetActiveDart>(
+          'auradsp_projectm_set_active',
         );
         _hasCurrentGlContext = library
             .lookupFunction<_HasContextC, _HasContextDart>(
               'auradsp_projectm_has_current_gl_context',
             );
-        _getWidth = library.lookupFunction<_GetSizeC, _GetSizeDart>(
-          'auradsp_projectm_get_width',
-        );
-        _getHeight = library.lookupFunction<_GetSizeC, _GetSizeDart>(
-          'auradsp_projectm_get_height',
-        );
         _feed = library.lookupFunction<_FeedC, _FeedDart>(
           'auradsp_projectm_feed_pcm',
         );
@@ -143,36 +230,61 @@ class ProjectMNativeBridge
         );
         _ffiBound = true;
       }
-      // The probe reports the bridge's own GL platform layer is
-      // compiled in (W3 amended semantics); per-instance readiness
-      // is proven by create() below.
       if (_hasCurrentGlContext() == 0) {
-        _library = null;
+        throw StateError('projectM GL platform is unavailable');
+      }
+      if (_disposed) {
+        await _cleanupPending();
         return false;
       }
-      _handle = _create(width, height, fps);
-      if (_handle == nullptr) {
-        _library = null;
-        return false;
-      }
-      _width = _getWidth(_handle);
-      _height = _getHeight(_handle);
+      _handle = handle;
+      _pendingHandle = null;
+      _width = created.width;
+      _height = created.height;
       if (_width <= 0 || _height <= 0) {
-        if (_destroy(_handle) == 0) {
-          _handle = nullptr;
-          _library = null;
-        }
+        await _cleanupPending();
         return false;
       }
+      _applyActive();
       return true;
     } catch (e, st) {
       swallow(e, st);
-      if (_handle != nullptr && _destroy(_handle) == 0) {
-        _handle = nullptr;
-      }
-      if (_handle == nullptr) _library = null;
+      await _cleanupPending();
+      _library = null;
       return false;
     }
+  }
+
+  Future<void> _cleanupPending() async {
+    final handle = _pendingHandle ?? _handle;
+    if (handle == nullptr) return;
+    try {
+      await _cleanupNativeHandle(handle);
+    } catch (e, st) {
+      swallow(e, st);
+      return;
+    }
+    if (identical(_pendingHandle, handle)) _pendingHandle = null;
+    if (identical(_handle, handle)) _handle = nullptr;
+  }
+
+  Future<void> _cleanupNativeHandle(Pointer<Void> handle) {
+    final existing = _cleanupInFlight;
+    if (existing != null && identical(_cleanupHandle, handle)) return existing;
+    final future = _destroyProjectMOffUi(handle.address);
+    _cleanupHandle = handle;
+    _cleanupInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_cleanupInFlight, future)) {
+        _cleanupInFlight = null;
+        _cleanupHandle = null;
+      }
+    });
+  }
+
+  void _applyActive() {
+    if (!isAvailable) return;
+    _setActive(_handle, _desiredActive ? 1 : 0);
   }
 
   @override
@@ -181,6 +293,12 @@ class ProjectMNativeBridge
     if (_resize(_handle, width, height) != 0) return;
     _width = width;
     _height = height;
+  }
+
+  @override
+  void setActive(bool active) {
+    _desiredActive = active;
+    _applyActive();
   }
 
   @override
@@ -355,9 +473,20 @@ class ProjectMNativeBridge
   @override
   void dispose() {
     if (_disposed) return;
-    if (_handle != nullptr && _destroy(_handle) != 0) return;
-    _handle = nullptr;
     _disposed = true;
+    _desiredActive = false;
+    final handle = _pendingHandle ?? _handle;
+    if (handle != nullptr) {
+      unawaited(_cleanupNativeHandle(handle).then(
+        (_) {
+          if (identical(_pendingHandle, handle)) _pendingHandle = null;
+          if (identical(_handle, handle)) _handle = nullptr;
+        },
+        onError: (Object error, StackTrace stack) {
+          swallow(error, stack);
+        },
+      ));
+    }
     _preset = null;
     final image = _frame.value;
     _frame.value = null;

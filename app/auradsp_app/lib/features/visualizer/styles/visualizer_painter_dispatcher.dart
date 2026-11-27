@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../controllers/waveform_synthesizer.dart';
@@ -33,6 +35,11 @@ CustomPainter buildVisualizerPainter({
   GpuShaderService? service,
 }) {
   final grid = showGrid ?? config.showGrid;
+  final shaderService = service ?? GpuShaderService.instance;
+  void ensureShader(GpuShaderType type) {
+    unawaited(shaderService.ensureCompiled(type));
+  }
+
   switch (style) {
     case VisualizerStyle.oscilloscope:
       return OscilloscopePainter(
@@ -72,33 +79,36 @@ CustomPainter buildVisualizerPainter({
       );
 
     case VisualizerStyle.auroraShader:
+      ensureShader(GpuShaderType.aurora);
       return GpuShaderPainter(
         shaderType: GpuShaderType.aurora,
         bands: rawBands,
         palette: palette,
         time: time,
         sensitivity: config.sensitivity,
-        service: service,
+        service: shaderService,
       );
 
     case VisualizerStyle.tunnelShader:
+      ensureShader(GpuShaderType.tunnel);
       return GpuShaderPainter(
         shaderType: GpuShaderType.tunnel,
         bands: rawBands,
         palette: palette,
         time: time,
         sensitivity: config.sensitivity,
-        service: service,
+        service: shaderService,
       );
 
     case VisualizerStyle.harmonicWarp:
+      ensureShader(GpuShaderType.harmonicWarp);
       return GpuShaderPainter(
         shaderType: GpuShaderType.harmonicWarp,
         bands: rawBands,
         palette: palette,
         time: time,
         sensitivity: config.sensitivity,
-        service: service,
+        service: shaderService,
       );
 
     case VisualizerStyle.bars:
@@ -120,23 +130,25 @@ CustomPainter buildVisualizerPainter({
       );
 
     case VisualizerStyle.tornado:
+      ensureShader(GpuShaderType.tornado);
       return GpuShaderPainter(
         shaderType: GpuShaderType.tornado,
         bands: rawBands,
         palette: palette,
         time: time,
         sensitivity: config.sensitivity,
-        service: service,
+        service: shaderService,
       );
 
     case VisualizerStyle.nebulaFlow:
+      ensureShader(GpuShaderType.nebula);
       return GpuShaderPainter(
         shaderType: GpuShaderType.nebula,
         bands: rawBands,
         palette: palette,
         time: time,
         sensitivity: config.sensitivity,
-        service: service,
+        service: shaderService,
       );
 
     case VisualizerStyle.projectM:
@@ -145,13 +157,7 @@ CustomPainter buildVisualizerPainter({
       final requestedPath = config.milkdropPresetPath;
       final preset = requestedPath == null || requestedPath.isEmpty
           ? MilkdropPreset.builtInPresets.first
-          : nativePreset ??
-                (bridge?.isNative == true
-                    ? MilkdropPreset(
-                        name: requestedPath,
-                        filePath: MilkdropPreset.resolveFilePath(requestedPath),
-                      )
-                    : MilkdropPreset.parseFile(requestedPath));
+          : nativePreset ?? MilkdropPreset.lightweight(requestedPath);
       if (bridge != null &&
           bridge.isAvailable &&
           bridge.isLoaded &&

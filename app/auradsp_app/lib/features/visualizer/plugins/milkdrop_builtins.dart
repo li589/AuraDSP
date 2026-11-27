@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/services.dart' show rootBundle;
 
@@ -23,26 +24,39 @@ abstract final class MilkdropBuiltinStaging {
     if (_done || _inFlight) return;
     _inFlight = true;
     try {
-      final dir = ConfigManager.subDir('milkdrop_builtins');
-      MilkdropPreset.builtinDir = dir.path;
+      final dirPath = ConfigManager.path('milkdrop_builtins');
+      final prepared = await Isolate.run(() {
+        final dir = Directory(dirPath);
+        dir.createSync(recursive: true);
+        final sep = Platform.pathSeparator;
+        final stampFile = File('${dir.path}$sep.version');
+        var stamp = '';
+        if (stampFile.existsSync()) {
+          stamp = stampFile.readAsStringSync().trim();
+        }
+        final stale = stamp != '$_contentVersion';
+        final missing = <String>[];
+        for (final preset in MilkdropPreset.builtInPresets) {
+          final id = preset.filePath.substring('builtin:'.length);
+          final out = File('${dir.path}$sep$id.milk');
+          if (!stale && out.existsSync()) continue;
+          missing.add(id);
+        }
+        return (stale: stale, missing: missing);
+      });
+      MilkdropPreset.builtinDir = dirPath;
       final sep = Platform.pathSeparator;
-      final stampFile = File('${dir.path}$sep.version');
-      var stamp = '';
-      if (stampFile.existsSync()) {
-        stamp = stampFile.readAsStringSync().trim();
-      }
-      final stale = stamp != '$_contentVersion';
-      for (final preset in MilkdropPreset.builtInPresets) {
-        final id = preset.filePath.substring('builtin:'.length);
-        final out = File('${dir.path}$sep$id.milk');
-        if (!stale && out.existsSync()) continue;
+      for (final id in prepared.missing) {
         final data = await rootBundle.load('assets/milkdrop/$id.milk');
+        final out = File('$dirPath$sep$id.milk');
         await out.writeAsBytes(
           data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
           flush: true,
         );
       }
-      if (stale) await stampFile.writeAsString('$_contentVersion');
+      if (prepared.stale) {
+        await File('$dirPath${sep}version').writeAsString('$_contentVersion');
+      }
       _done = true;
     } catch (e, st) {
       // 落盘失败不阻断可视化：内置预设回落声明参数的 Dart 渲染。

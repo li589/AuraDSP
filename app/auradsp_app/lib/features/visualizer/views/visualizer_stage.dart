@@ -14,7 +14,6 @@ import '../lyrics/services/media_sync_service.dart';
 import '../lyrics/views/lyric_view.dart';
 import '../models/visualizer_themes.dart';
 import '../models/visualizer_types.dart';
-import '../shaders/gpu_shader_service.dart';
 import '../plugins/milkdrop_preset.dart';
 import '../plugins/projectm_bridge_contract.dart';
 import 'visualizer_hud.dart';
@@ -123,9 +122,6 @@ class _VisualizerStageState extends State<VisualizerStage> {
     // 默认静止：只有收到真实有声帧后时间轴才启动。
     _syncTimeline();
     _startHudTimer();
-    GpuShaderService.instance.initialize().then((_) {
-      if (mounted) setState(() {});
-    });
   }
 
   /// 产帧节奏：固定 30 Hz 时间轴驱动，不再跟着 vsync 空跑。

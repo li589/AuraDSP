@@ -31,6 +31,9 @@ typedef void* auradsp_projectm_t;
 
 AURADSP_PROJECTM_EXPORT auradsp_projectm_t
     auradsp_projectm_create(int width, int height, float fps);
+AURADSP_PROJECTM_EXPORT auradsp_projectm_t
+    auradsp_projectm_create_with_activity(int width, int height, float fps,
+                                          int active);
 /**
  * Returns 0 on success and -3 when teardown failed inside the core;
  * a failed destroy keeps the handle owned by the caller so cleanup
@@ -39,6 +42,8 @@ AURADSP_PROJECTM_EXPORT auradsp_projectm_t
 AURADSP_PROJECTM_EXPORT int auradsp_projectm_destroy(auradsp_projectm_t handle);
 AURADSP_PROJECTM_EXPORT int
     auradsp_projectm_resize(auradsp_projectm_t handle, int width, int height);
+AURADSP_PROJECTM_EXPORT int
+    auradsp_projectm_set_active(auradsp_projectm_t handle, int active);
 AURADSP_PROJECTM_EXPORT int
     auradsp_projectm_get_width(auradsp_projectm_t handle);
 AURADSP_PROJECTM_EXPORT int

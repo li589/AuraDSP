@@ -348,6 +348,9 @@ struct auradsp_projectm_context {
 #endif
     std::chrono::steady_clock::time_point next_frame_due{};
     std::atomic<bool> gl_ready{false};
+    std::atomic<bool> active{true};
+    std::mutex render_state_mtx;
+    uint64_t render_generation = 0;
 };
 
 namespace {
@@ -438,7 +441,8 @@ private:
                         contexts_.end())
                         continue;
                 }
-                if (ctx->gl_ready.load(std::memory_order_acquire) &&
+                if (ctx->active.load(std::memory_order_acquire) &&
+                    ctx->gl_ready.load(std::memory_order_acquire) &&
                     now >= ctx->next_frame_due) {
                     render_one(ctx);
                     const double fps = ctx->fps > 0.0f ? ctx->fps : 60.0f;
@@ -460,6 +464,12 @@ private:
         }
         WglContextScope gl_scope(ctx->gl);
         if (!gl_scope) return;
+        uint64_t render_generation = 0;
+        {
+            std::lock_guard<std::mutex> lock(ctx->render_state_mtx);
+            if (!ctx->active.load(std::memory_order_acquire)) return;
+            render_generation = ++ctx->render_generation;
+        }
         try {
             // Drain queued PCM first so the frame reacts to fresh audio.
             for (;;) {
@@ -511,9 +521,16 @@ private:
                     std::memcpy(a, b, stride);
                     std::memcpy(b, row.data(), stride);
                 }
-                std::lock_guard<std::mutex> lock(ctx->frames.mtx);
-                ctx->frames.front = std::move(pixels);
-                ctx->frames.has_frame = true;
+                {
+                    std::lock_guard<std::mutex> lock(ctx->render_state_mtx);
+                    if (!ctx->active.load(std::memory_order_acquire) ||
+                        render_generation != ctx->render_generation) {
+                        return;
+                    }
+                    std::lock_guard<std::mutex> frames_lock(ctx->frames.mtx);
+                    ctx->frames.front = std::move(pixels);
+                    ctx->frames.has_frame = true;
+                }
             }
         } catch (...) {
             // A render failure must not kill the render thread; the
@@ -535,11 +552,18 @@ private:
 
 AURADSP_PROJECTM_EXPORT auradsp_projectm_t
     auradsp_projectm_create(int width, int height, float fps) {
+    return auradsp_projectm_create_with_activity(width, height, fps, 1);
+}
+
+AURADSP_PROJECTM_EXPORT auradsp_projectm_t
+    auradsp_projectm_create_with_activity(int width, int height, float fps,
+                                          int active) {
+    if (active != 0 && active != 1) return nullptr;
     if (width <= 0) width = 1280;
     if (height <= 0) height = 720;
     if (fps <= 0.0f) fps = 60.0f;
 #if !defined(_WIN32)
-    (void)width; (void)height; (void)fps;
+    (void)width; (void)height; (void)fps; (void)active;
     return nullptr;  // GL platform layer is Windows/WGL only for now.
 #else
     auto* ctx = new (std::nothrow) auradsp_projectm_context();
@@ -547,6 +571,7 @@ AURADSP_PROJECTM_EXPORT auradsp_projectm_t
     ctx->width = width;
     ctx->height = height;
     ctx->fps = fps;
+    ctx->active.store(active != 0, std::memory_order_release);
     RenderThread::instance().register_ctx(ctx);
     const bool ok = RenderThread::instance().run_sync<bool>([ctx] {
         try {
@@ -646,6 +671,23 @@ AURADSP_PROJECTM_EXPORT int
         } catch (...) {
         }
     });
+    return 0;
+#endif
+}
+
+AURADSP_PROJECTM_EXPORT int
+    auradsp_projectm_set_active(auradsp_projectm_t handle, int active) {
+    if (handle == nullptr || (active != 0 && active != 1)) return -1;
+    auto* ctx = static_cast<auradsp_projectm_context*>(handle);
+#if !defined(_WIN32)
+    (void)ctx;
+    return -2;
+#else
+    {
+        std::lock_guard<std::mutex> lock(ctx->render_state_mtx);
+        ctx->active.store(active != 0, std::memory_order_release);
+        if (!active) ++ctx->render_generation;
+    }
     return 0;
 #endif
 }

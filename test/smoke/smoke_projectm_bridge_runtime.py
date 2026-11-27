@@ -134,6 +134,9 @@ def main() -> int:
     dll.auradsp_projectm_create.restype = ctypes.c_void_p
     dll.auradsp_projectm_create.argtypes = [ctypes.c_int, ctypes.c_int,
                                             ctypes.c_float]
+    dll.auradsp_projectm_create_with_activity.restype = ctypes.c_void_p
+    dll.auradsp_projectm_create_with_activity.argtypes = [
+        ctypes.c_int, ctypes.c_int, ctypes.c_float, ctypes.c_int]
     dll.auradsp_projectm_destroy.restype = ctypes.c_int
     dll.auradsp_projectm_destroy.argtypes = [ctypes.c_void_p]
     dll.auradsp_projectm_get_width.restype = ctypes.c_int
@@ -143,6 +146,8 @@ def main() -> int:
     dll.auradsp_projectm_resize.restype = ctypes.c_int
     dll.auradsp_projectm_resize.argtypes = [ctypes.c_void_p, ctypes.c_int,
                                             ctypes.c_int]
+    dll.auradsp_projectm_set_active.restype = ctypes.c_int
+    dll.auradsp_projectm_set_active.argtypes = [ctypes.c_void_p, ctypes.c_int]
     dll.auradsp_projectm_feed_pcm.restype = ctypes.c_int
     dll.auradsp_projectm_feed_pcm.argtypes = [ctypes.c_void_p,
                                               ctypes.POINTER(ctypes.c_float),
@@ -171,6 +176,27 @@ def main() -> int:
     h = ctypes.c_void_p(h)
     check(dll.auradsp_projectm_get_width(h) == 320 and
           dll.auradsp_projectm_get_height(h) == 180, "尺寸回读 320x180")
+
+    inactive = dll.auradsp_projectm_create_with_activity(160, 90, 30.0, 0)
+    check(inactive is not None, "inactive 初始实例创建成功")
+    if inactive:
+        inactive = ctypes.c_void_p(inactive)
+        inactive_buf = (ctypes.c_ubyte * (160 * 90 * 4))()
+        check(dll.auradsp_projectm_render_pixels(inactive, inactive_buf) == -3,
+              "inactive 初始实例不产生首帧")
+        check(dll.auradsp_projectm_set_active(inactive, 1) == 0,
+              "inactive 初始实例可恢复")
+        deadline = time.time() + 5.0
+        inactive_rc = -3
+        while time.time() < deadline:
+            inactive_rc = dll.auradsp_projectm_render_pixels(
+                inactive, inactive_buf)
+            if inactive_rc == 0:
+                break
+            time.sleep(0.02)
+        check(inactive_rc == 0, "inactive 初始实例恢复后产帧")
+        check(dll.auradsp_projectm_destroy(inactive) == 0,
+              "inactive 初始实例 destroy 成功")
 
     frames = 576
     pcm = (ctypes.c_float * (frames * 2))()
@@ -306,6 +332,15 @@ def main() -> int:
         return tuple(value / count for value in sums)
 
     frame_a = grab(1.2)
+    check(dll.auradsp_projectm_set_active(h, 0) == 0,
+          "原生渲染 active=0 接受")
+    inactive_frame = grab(0.4)
+    check(inactive_frame == frame_a,
+          "active=0 时保留上一完成帧且不继续渲染")
+    check(dll.auradsp_projectm_set_active(h, 1) == 0,
+          "原生渲染 active=1 恢复")
+    check(dll.auradsp_projectm_set_active(h, 2) == -1,
+          "原生渲染 active 非法值拒绝")
     alt = os.path.join(tmp, "variant.milk")
     with open(alt, "w", encoding="utf-8") as f:
         f.write(_variant(MINIMAL_MILK,
@@ -462,7 +497,7 @@ def main() -> int:
         check(rc_a == 0 and rc_b == 0,
               "双实例加载不同预设成功（A=%d B=%d）" % (rc_a, rc_b))
 
-        def grab_interleaved(a_size, b_size, seconds=2.5):
+        def grab_interleaved(a_size, b_size, seconds=4.0):
             aw, ah = a_size
             bw, bh = b_size
             a_buf = (ctypes.c_ubyte * (aw * ah * 4))()

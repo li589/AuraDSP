@@ -79,6 +79,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
 
   /// 扫描或载入的 MilkDrop 预设列表（默认含内置回退拓扑预设）
   List<MilkdropPreset> _milkdropPresets = MilkdropPreset.builtInPresets;
+  int _milkdropPickGeneration = 0;
 
   /// OS 全屏请求串行化：快速连点时保证「最后一次意图」最终生效。
   Future<void> _fullscreenChain = Future<void>.value();
@@ -191,6 +192,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
 
   /// 打开单个 Winamp MilkDrop 预设文件 (.milk)
   Future<void> _pickMilkdropPreset() async {
+    final generation = ++_milkdropPickGeneration;
     final l = l10nOf(context);
     final path = await AuraPathPickerDialog.show(
       context,
@@ -202,7 +204,9 @@ class _VisualizerPageState extends State<VisualizerPage> {
     );
     if (path == null || path.isEmpty) return;
 
-    final preset = MilkdropPreset.parseFile(path);
+    final preset = await MilkdropPreset.parseFileAsync(path);
+    if (!mounted || generation != _milkdropPickGeneration) return;
+    MilkdropPreset.remember(preset);
     final cfg = widget.model.visualizerConfig.value;
     setState(() {
       if (!_milkdropPresets.any((p) => p.filePath == path)) {
@@ -216,6 +220,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
 
   /// 导入 MilkDrop 预设包目录 (.milk 集合)
   Future<void> _pickMilkdropDirectory() async {
+    final generation = ++_milkdropPickGeneration;
     final l = l10nOf(context);
     final path = await AuraPathPickerDialog.show(
       context,
@@ -227,7 +232,11 @@ class _VisualizerPageState extends State<VisualizerPage> {
     );
     if (path == null || path.isEmpty) return;
 
-    final presets = MilkdropPresetScanner.scanDirectory(path);
+    final presets = await MilkdropPresetScanner.scanDirectoryAsync(path);
+    if (!mounted || generation != _milkdropPickGeneration) return;
+    for (final preset in presets) {
+      MilkdropPreset.remember(preset);
+    }
     if (presets.isNotEmpty) {
       final cfg = widget.model.visualizerConfig.value;
       setState(() {
@@ -443,6 +452,8 @@ class _VisualizerPageState extends State<VisualizerPage> {
                                 onPickMilkdropFolder: _pickMilkdropDirectory,
                                 milkdropPresets: _milkdropPresets,
                                 onSelectMilkdropPreset: (preset) {
+                                  _milkdropPickGeneration++;
+                                  MilkdropPreset.remember(preset);
                                   final cfg =
                                       widget.model.visualizerConfig.value;
                                   widget.model.applyVisualizerEdit(
@@ -503,6 +514,9 @@ class _VisualizerPageState extends State<VisualizerPage> {
                 open: _drawerOpen,
                 config: config,
                 onConfigChanged: (newCfg) {
+                  if (newCfg.milkdropPresetPath != config.milkdropPresetPath) {
+                    _milkdropPickGeneration++;
+                  }
                   // 范围分流（2026-11-23）：预设档写当前风格覆盖表，
                   // 全局档写全局配置；显示值恒为生效配置。
                   if (_vizScopePreset) {
@@ -531,6 +545,8 @@ class _VisualizerPageState extends State<VisualizerPage> {
                 onPickMilkdropFolder: _pickMilkdropDirectory,
                 milkdropPresets: _milkdropPresets,
                 onSelectMilkdropPreset: (preset) {
+                  _milkdropPickGeneration++;
+                  MilkdropPreset.remember(preset);
                   final cfg = widget.model.visualizerConfig.value;
                   widget.model.applyVisualizerEdit(
                     cfg.copyWith(

@@ -55,6 +55,26 @@ void main() {
     expect(find.text('显示全景'), findsOneWidget);
   });
 
+  testWidgets('全局信号流右侧操作贴齐卡片内容右边缘', (tester) async {
+    tester.view.physicalSize = const Size(1280, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final model = AppModel(testing: true);
+    await tester.pumpWidget(_wrap(ChainScifiFlowPanel(
+      order: kDefaultCoreOrder,
+      model: model,
+    )));
+    await tester.pumpAndSettle();
+
+    final panel = tester.getRect(find.byType(ChainScifiFlowPanel));
+    final button = tester.getRect(find.ancestor(
+      of: find.text('显示全景'),
+      matching: find.byType(AnimatedContainer),
+    ).first);
+    expect(button.right, closeTo(panel.right - AuraSpace.md, 1.5));
+  });
+
   testWidgets('激活插件插槽在对应 Stage 准确渲染芯片节点', (tester) async {
     tester.view.physicalSize = const Size(1280, 1600);
     tester.view.devicePixelRatio = 1.0;

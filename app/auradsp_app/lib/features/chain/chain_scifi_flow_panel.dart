@@ -190,7 +190,7 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
                   ),
                   const SizedBox(width: AuraSpace.sm + 2),
                   // P3：标题块改为弹性，窄屏截断而不是把右侧操作挤出边界。
-                  Flexible(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -215,8 +215,6 @@ class _ChainScifiFlowPanelState extends State<ChainScifiFlowPanel>
                       ],
                     ),
                   ),
-                  const Spacer(),
-
                   // 节点简要统计（窄屏让位给标题与展开按钮，展开面板内仍有全景）
                   if (!context.isCompactWidth)
                     Container(

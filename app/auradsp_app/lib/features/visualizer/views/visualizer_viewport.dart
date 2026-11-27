@@ -193,6 +193,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
       widget.time.addListener(_onTime);
     }
     if (!identical(oldWidget.projectMBridge, widget.projectMBridge)) {
+      _setProjectmActive(false, bridge: oldWidget.projectMBridge);
       _disposePresetSelection();
       _pmLoadedPath = null;
       _pmInitInFlight = false;
@@ -261,13 +262,22 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         bridge.isNative;
   }
 
+  void _setProjectmActive(bool active, {ProjectMBridge? bridge}) {
+    final controller = bridge ?? widget.projectMBridge;
+    if (controller is ProjectMActivityController) {
+      (controller as ProjectMActivityController).setActive(active);
+    }
+  }
+
   void _syncProjectmSession() {
     if (!_projectmShouldRun) {
+      _setProjectmActive(false);
       _pmTimer?.cancel();
       _pmTimer = null;
       _disposePresetSelection();
       return;
     }
+    _setProjectmActive(true);
     _pmTimer ??= Timer.periodic(
       const Duration(milliseconds: 33),
       (_) => _pmTick(),
@@ -301,7 +311,13 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
         // previously recorded load belongs to the old instance.
         _pmLoadedPath = null;
         _pmPresetSelection?.reset();
+        _setProjectmActive(true, bridge: bridge);
         _pmLoadCurrentPreset();
+      }, onError: (Object error, StackTrace stack) {
+        _pmInitInFlight = false;
+        if (mounted && identical(widget.projectMBridge, bridge)) {
+          _pmInitFailedAt = DateTime.now();
+        }
       });
       return;
     }
@@ -406,6 +422,7 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
   void dispose() {
     _disposeDelegates();
     _bindProjectmModel(null);
+    _setProjectmActive(false);
     _pmTimer?.cancel();
     _pmTimer = null;
     _disposePresetSelection();

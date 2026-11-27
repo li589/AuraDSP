@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:auradsp_app/core/design.dart';
@@ -19,7 +20,10 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  Future<_Fixture> pumpPage(WidgetTester tester) async {
+  Future<_Fixture> pumpPage(
+    WidgetTester tester, {
+    Completer<bool>? initializeGate,
+  }) async {
     final window = NullWindowPort();
     final model = _TestAppModel(window: window)
       ..playing = true
@@ -27,7 +31,7 @@ void main() {
       ..visualizerConfig.value = const VisualizerConfig(
         style: VisualizerStyle.projectM,
       );
-    final bridge = _FakeProjectMBridge();
+    final bridge = _FakeProjectMBridge(initializeGate: initializeGate);
     final mediaSync = MediaSyncService(
       provider: MockMediaSessionProvider(),
       hasSystemMediaSession: false,
@@ -55,6 +59,7 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.pump();
     return _Fixture(model: model, window: window, bridge: bridge);
   }
 
@@ -63,16 +68,21 @@ void main() {
     (tester) async {
       final fixture = await pumpPage(tester);
       await tester.pump(const Duration(milliseconds: 33));
+      await tester.pump(const Duration(milliseconds: 33));
       expect(fixture.bridge.renderCount, greaterThan(0));
+      expect(fixture.bridge.activity.isNotEmpty, isTrue);
+      expect(fixture.bridge.activity.last, isTrue);
 
       fixture.model.visiblePage.value = AppPage.home;
       await tester.pump();
+      expect(fixture.bridge.activity.last, isFalse);
       final stoppedAt = fixture.bridge.renderCount;
       await tester.pump(const Duration(milliseconds: 330));
       expect(fixture.bridge.renderCount, stoppedAt);
 
       fixture.model.visiblePage.value = AppPage.visualizer;
       await tester.pump();
+      expect(fixture.bridge.activity.last, isTrue);
       await tester.pump(const Duration(milliseconds: 33));
       expect(fixture.bridge.renderCount, greaterThan(stoppedAt));
 
@@ -83,10 +93,32 @@ void main() {
     },
   );
 
+  testWidgets('initialization completing offscreen stays inactive', (tester) async {
+    final gate = Completer<bool>();
+    final fixture = await pumpPage(tester, initializeGate: gate);
+    await tester.pump(const Duration(milliseconds: 33));
+    expect(fixture.bridge.initializeCalls, 1);
+
+    fixture.model.visiblePage.value = AppPage.home;
+    await tester.pump();
+    expect(fixture.bridge.activity.last, isFalse);
+    gate.complete(true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 330));
+    expect(fixture.bridge.renderCount, 0);
+    expect(fixture.bridge.activity.last, isFalse);
+
+    fixture.model.visiblePage.value = AppPage.visualizer;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 33));
+    expect(fixture.bridge.renderCount, greaterThan(0));
+  });
+
   testWidgets('projectM follows window visibility and playback pause policy', (
     tester,
   ) async {
     final fixture = await pumpPage(tester);
+    await tester.pump(const Duration(milliseconds: 33));
     await tester.pump(const Duration(milliseconds: 33));
     expect(fixture.bridge.renderCount, greaterThan(0));
 
@@ -138,17 +170,25 @@ final class _TestAppModel extends AppModel {
   }
 }
 
-final class _FakeProjectMBridge implements ProjectMBridge {
+final class _FakeProjectMBridge
+    implements ProjectMBridge, ProjectMActivityController {
+  _FakeProjectMBridge({this.initializeGate});
+
+  final Completer<bool>? initializeGate;
   final ValueNotifier<ui.Image?> _frame = ValueNotifier<ui.Image?>(null);
   MilkdropPreset? _preset;
   bool _disposed = false;
+  bool _available = false;
+  bool _active = true;
+  int initializeCalls = 0;
   int renderCount = 0;
+  final List<bool> activity = [];
 
   @override
   bool get isNative => true;
 
   @override
-  bool get isAvailable => !_disposed;
+  bool get isAvailable => !_disposed && _available;
 
   @override
   bool get isLoaded => _preset != null && isAvailable;
@@ -170,7 +210,12 @@ final class _FakeProjectMBridge implements ProjectMBridge {
     int width = 1280,
     int height = 720,
     double fps = 60.0,
-  }) async => isAvailable;
+  }) async {
+    initializeCalls++;
+    final ok = await (initializeGate?.future ?? Future<bool>.value(true));
+    if (ok) _available = true;
+    return ok;
+  }
 
   @override
   void resize(int width, int height) {}
@@ -187,9 +232,15 @@ final class _FakeProjectMBridge implements ProjectMBridge {
 
   @override
   int renderFrame() {
-    if (!isAvailable) return -2;
+    if (!isAvailable || !_active) return -2;
     renderCount++;
     return 0;
+  }
+
+  @override
+  void setActive(bool active) {
+    _active = active;
+    activity.add(active);
   }
 
   @override

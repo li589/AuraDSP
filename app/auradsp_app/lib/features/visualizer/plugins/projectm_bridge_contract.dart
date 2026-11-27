@@ -323,6 +323,12 @@ class _PresetAttempt {
   _PresetAttempt(this.generation, this.preset);
 }
 
+/// Optional native activity gate. Implementations must stop render-thread work
+/// when disabled, not merely stop the Dart polling timer.
+abstract interface class ProjectMActivityController {
+  void setActive(bool active);
+}
+
 /// Fallback bridge used when the optional native library is unavailable.
 class MockProjectMBridge implements ProjectMBridge {
   @override

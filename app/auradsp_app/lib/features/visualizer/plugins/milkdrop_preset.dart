@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import '../../../core/error_sink.dart';
 import '../../../core/io/resource_gate.dart';
@@ -60,6 +61,29 @@ class MilkdropPreset {
   /// [resolveFilePath] 解析——r64 验收定罪：三只内置预设此前恒
   /// 被桥拒绝、且 parseFile 不认 builtin id 全塌成默认参数。
   static String? builtinDir;
+  static final Map<String, MilkdropPreset> _metadataCache = {};
+
+  static void remember(MilkdropPreset preset) {
+    _metadataCache[preset.filePath] = preset;
+    final resolved = resolveFilePath(preset.filePath);
+    if (resolved != preset.filePath) _metadataCache[resolved] = preset;
+  }
+
+  static MilkdropPreset lightweight(String path) {
+    final resolved = resolveFilePath(path);
+    final cached = _metadataCache[path] ?? _metadataCache[resolved];
+    if (cached != null) return cached;
+    if (isBuiltinPath(path)) {
+      for (final declared in builtInPresets) {
+        if (declared.filePath == path) return declared;
+      }
+    }
+    final segments = File(path).uri.pathSegments;
+    final name = segments.isNotEmpty
+        ? segments.last.replaceAll('.milk', '')
+        : 'Unknown Preset';
+    return MilkdropPreset(name: name, filePath: resolved);
+  }
 
   static bool isBuiltinPath(String path) => path.startsWith('builtin:');
 
@@ -117,6 +141,9 @@ class MilkdropPreset {
     return parseString(name, path, read.text!);
   }
 
+  static Future<MilkdropPreset> parseFileAsync(String path) =>
+      Isolate.run(() => MilkdropPreset.parseFile(path));
+
   /// Parse MilkDrop configuration text
   static MilkdropPreset parseString(String name, String path, String content) {
     var author = 'Unknown';
@@ -171,6 +198,9 @@ class MilkdropPreset {
 
 /// Helper scanner for discovering .milk presets in a folder
 abstract final class MilkdropPresetScanner {
+  static Future<List<MilkdropPreset>> scanDirectoryAsync(String dirPath) =>
+      Isolate.run(() => scanDirectory(dirPath));
+
   static List<MilkdropPreset> scanDirectory(String dirPath) {
     final dir = Directory(dirPath);
     if (!dir.existsSync()) return const [];

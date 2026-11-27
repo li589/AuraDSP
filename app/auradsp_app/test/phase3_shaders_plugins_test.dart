@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
@@ -21,6 +22,7 @@ import 'package:auradsp_app/features/visualizer/views/visualizer_hud.dart';
 import 'package:auradsp_app/features/visualizer/views/visualizer_hud_buttons.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   const testPalette = VisualizerPalette(
     primary: Color(0xFF00E5FF),
     secondary: Color(0xFFFF007F),
@@ -58,6 +60,37 @@ void main() {
       expect(VisualizerStyle.auroraShader.label, 'Aurora Ribbon');
       expect(VisualizerStyle.tunnelShader.label, 'Neon Tunnel');
       expect(VisualizerStyle.harmonicWarp.label, 'Harmonic Warp');
+    });
+
+    testWidgets('only the requested GPU shader is compiled', (tester) async {
+      final loaded = <String>[];
+      final service = GpuShaderService.test(loader: (assetPath) async {
+        loaded.add(assetPath);
+        return FragmentProgram.fromAsset(assetPath);
+      });
+
+      await tester.runAsync(() => service.ensureCompiled(GpuShaderType.aurora));
+
+      expect(loaded, [GpuShaderType.aurora.assetPath]);
+      expect(service.compileStatusFor(GpuShaderType.aurora),
+          GpuShaderCompileStatus.compiled);
+      expect(service.compileStatusFor(GpuShaderType.tornado),
+          GpuShaderCompileStatus.idle);
+    });
+
+    test('duplicate shader requests share one in-flight compile', () async {
+      final gate = Completer<FragmentProgram>();
+      var loads = 0;
+      final service = GpuShaderService.test(loader: (_) {
+        loads++;
+        return gate.future;
+      });
+      final first = service.ensureCompiled(GpuShaderType.aurora);
+      final second = service.ensureCompiled(GpuShaderType.aurora);
+      expect(loads, 1);
+      gate.completeError(StateError('deterministic compile failure'));
+      expect(await first, isFalse);
+      expect(await second, isFalse);
     });
 
     test('GpuShaderPainter draws fallback when shader is uncompiled', () {
@@ -115,6 +148,27 @@ per_pixel_1=rot = rot + 0.02*sin(rad*3.14);
       expect(MilkdropPreset.builtInPresets.first.name, isNotEmpty);
     });
 
+    test('async preset file and directory loading preserves parser results', () async {
+      final tempDir = Directory.systemTemp.createTempSync('milkdrop_async_');
+      try {
+        final file = File('${tempDir.path}/async.milk')
+          ..writeAsStringSync('decay=0.95\nzoom=1.1\nwave_mode=1');
+        final parsed = await MilkdropPreset.parseFileAsync(file.path);
+        expect(parsed.decay, closeTo(0.95, 0.001));
+        expect(parsed.zoom, closeTo(1.1, 0.001));
+        expect(parsed.waveMode, 1);
+        MilkdropPreset.remember(parsed);
+        expect(MilkdropPreset.lightweight(file.path).decay, closeTo(0.95, 0.001));
+
+        final scanned = await MilkdropPresetScanner.scanDirectoryAsync(tempDir.path);
+        expect(scanned, hasLength(1));
+        expect(scanned.single.name, 'async');
+        expect(File(scanned.single.filePath).existsSync(), isTrue);
+      } finally {
+        tempDir.deleteSync(recursive: true);
+      }
+    });
+
     test('MilkdropPresetScanner discovers .milk files in directory', () {
       final tempDir = Directory.systemTemp.createTempSync('milkdrop_test_');
       try {
@@ -162,6 +216,47 @@ per_pixel_1=rot = rot + 0.02*sin(rad*3.14);
   });
 
   group('ProjectM Bridge Contract Tests', () {
+    test('native initialization awaits off-thread creation', () async {
+      final gate = Completer<ProjectMCreateResult>();
+      int? requestedWidth;
+      final bridge = ProjectMNativeBridge(
+        creator: (width, height, fps, active) {
+          requestedWidth = width;
+          return gate.future;
+        },
+      );
+      addTearDown(bridge.dispose);
+      var completed = false;
+      final initializing = bridge.initialize(width: 320, height: 180, fps: 30)
+          .then((ok) {
+        completed = true;
+        return ok;
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(requestedWidth, 320);
+      expect(completed, isFalse);
+      gate.complete(const (handle: 0, width: 0, height: 0));
+      expect(await initializing, isFalse);
+    });
+
+    test('concurrent native initialization shares one creation', () async {
+      final gate = Completer<ProjectMCreateResult>();
+      var creations = 0;
+      final bridge = ProjectMNativeBridge(
+        creator: (width, height, fps, active) {
+          creations++;
+          return gate.future;
+        },
+      );
+      addTearDown(bridge.dispose);
+      final first = bridge.initialize(width: 320, height: 180, fps: 30);
+      final second = bridge.initialize(width: 320, height: 180, fps: 30);
+      expect(creations, 1);
+      gate.complete(const (handle: 0, width: 0, height: 0));
+      expect(await first, isFalse);
+      expect(await second, isFalse);
+    });
+
     test('factory returns a bridge that never claims acceleration '
         'before initialization', () async {
       // 工厂是生产侧唯一入口（2026-11-22 N2 统一后）：探针在
