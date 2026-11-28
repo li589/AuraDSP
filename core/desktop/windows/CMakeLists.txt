@@ -248,6 +248,26 @@ add_test(NAME legacy_mutex_sample_rate COMMAND legacy_mutex_test sample_rate)
 set_tests_properties(legacy_mutex_recursive legacy_mutex_sample_rate
     PROPERTIES TIMEOUT 10)
 
+# Batch 1 C-05/E-03: direct low-level DSP boundary calls. Reverb is compiled
+# here so its handle view matches the test's AURADSP_NO_PLUGINS definition.
+add_executable(dsp_boundary_test
+    "${API}/tests/dsp_boundary_test.cpp"
+    "${API}/dsp/dsp_mc_reverb.cpp")
+target_include_directories(dsp_boundary_test PRIVATE "${API}")
+target_link_libraries(dsp_boundary_test PRIVATE auradsp_core)
+target_compile_definitions(dsp_boundary_test PRIVATE
+    AURADSP_NO_PLUGINS=1 NDEBUG _CRT_SECURE_NO_WARNINGS _WIN32_WINNT=0x0601
+    WINVER=0x0601 NTDDI_VERSION=0x06010000)
+target_compile_options(dsp_boundary_test PRIVATE
+    /utf-8 /EHsc /FI"${API}/auradsp_msvc_shim.h")
+set_property(TARGET dsp_boundary_test PROPERTY CXX_STANDARD 20)
+foreach(case_name liveprog reverb multimodal_eq)
+    add_test(NAME dsp_boundary_${case_name}
+        COMMAND dsp_boundary_test ${case_name})
+endforeach()
+set_tests_properties(dsp_boundary_liveprog dsp_boundary_reverb
+    dsp_boundary_multimodal_eq PROPERTIES TIMEOUT 10)
+
 target_include_directories(auradsp_engine PRIVATE
     "${API}"
     "${API}/chain"

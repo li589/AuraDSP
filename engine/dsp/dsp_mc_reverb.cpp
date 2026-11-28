@@ -126,7 +126,7 @@ void mc_reverb_reset(auradsp_handle h) {
 void mc_reverb_process_mc(auradsp_handle h, float* io, int frames, int ch) {
     if (!h || !io || frames <= 0 || ch <= 0) return;
     const int32_t preset = h->p.reverb_preset.load(std::memory_order_relaxed);
-    if (preset == -1 || preset < -2) return; /* -1 关；越界不应到达 */
+    if (preset == -1 || preset < -2 || preset > 18) return; /* -1 关；越界不应到达 */
 
     McReverbState& s = h->mc_rev;
     const float fs = (h->sample_rate > 8000.0f) ? h->sample_rate : 48000.0f;

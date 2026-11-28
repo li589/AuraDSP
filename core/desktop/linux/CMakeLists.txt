@@ -282,6 +282,24 @@ add_test(NAME legacy_mutex_sample_rate COMMAND legacy_mutex_test sample_rate)
 set_tests_properties(legacy_mutex_recursive legacy_mutex_sample_rate
     PROPERTIES TIMEOUT 10)
 
+# Batch 1 C-05/E-03: direct low-level DSP boundary calls. Reverb is compiled
+# here so its handle view matches the test's AURADSP_NO_PLUGINS definition.
+add_executable(dsp_boundary_test
+    "${API}/tests/dsp_boundary_test.cpp"
+    "${API}/dsp/dsp_mc_reverb.cpp")
+target_include_directories(dsp_boundary_test PRIVATE "${API}")
+target_link_libraries(dsp_boundary_test PRIVATE auradsp_core Threads::Threads m)
+target_compile_definitions(dsp_boundary_test PRIVATE AURADSP_NO_PLUGINS=1)
+target_compile_options(dsp_boundary_test PRIVATE
+    -include "${API}/auradsp_gcc_shim.h")
+set_property(TARGET dsp_boundary_test PROPERTY CXX_STANDARD 20)
+foreach(case_name liveprog reverb multimodal_eq)
+    add_test(NAME dsp_boundary_${case_name}
+        COMMAND dsp_boundary_test ${case_name})
+endforeach()
+set_tests_properties(dsp_boundary_liveprog dsp_boundary_reverb
+    dsp_boundary_multimodal_eq PROPERTIES TIMEOUT 10)
+
 # 进程外宿主 plugin_host_x64（双宿主架构，Linux 无扩展名）：与
 # Windows 的 auradsp_plugin_host 目标对位——宿主自带一份插件层
 # （driver/formats/posix 平台层，HOST_INPROC 语义），经 IPC 协议

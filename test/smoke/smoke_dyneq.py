@@ -208,6 +208,62 @@ except (ValueError, KeyError, IndexError) as ex:
 small = ctypes.create_string_buffer(1024)
 check('graph.effects 1024 rejected (no truncation)', dll.auradsp_get_param(h, b'graph.effects', small, 1024) != 0)
 
+# 7. 低采样率 Nyquist 钳位：Mid/High 的 ABI 上限仍为 8k/20k，
+#    但设备率低于 40k/16k 时不能直接拿去算 RBJ 系数。
+def low_rate_stability(sr, channels):
+    block = 256
+    handle = dll.auradsp_create(sr, block)
+    if not handle:
+        return False, 'create failed'
+
+    def put_i(pid, value):
+        return dll.auradsp_set_param(handle, pid.encode(), ctypes.byref(i32(value)), 4)
+
+    def put_f(pid, value):
+        return dll.auradsp_set_param(handle, pid.encode(), ctypes.byref(f32(value)), 4)
+
+    try:
+        put_i('channels.count', channels)
+        put_i('channels.mode', 1 if channels > 2 else 0)
+        put_i('limiter.enable', 0)
+        put_i('dyneq.enable', 1)
+        put_i('dyneq.mid.enable', 1)
+        put_i('dyneq.high.enable', 1)
+        put_f('dyneq.mid.freq', 8000.0)
+        put_f('dyneq.high.freq', 20000.0)
+        put_f('dyneq.mid.gain', 3.0)
+        put_f('dyneq.high.gain', 3.0)
+        put_f('dyneq.mid.range', 0.0)
+        put_f('dyneq.high.range', 0.0)
+        freq = min(1000.0, sr * 0.1)
+        peak = 0.0
+        energy = 0.0
+        n0 = 0
+        for _ in range(120):
+            buf = (ctypes.c_float * (block * channels))()
+            out = (ctypes.c_float * (block * channels))()
+            for i in range(block):
+                sample = 0.05 * math.sin(2 * math.pi * freq * (n0 + i) / sr)
+                for c in range(channels):
+                    buf[i * channels + c] = sample
+            dll.auradsp_process(handle, buf, out, block)
+            n0 += block
+            for value in out:
+                if not math.isfinite(value):
+                    return False, 'non-finite output'
+                peak = max(peak, abs(value))
+                energy += value * value
+        return peak < 0.5 and energy > 1e-6, 'peak=%.4f rms=%.4f' % (
+            peak, math.sqrt(energy / (block * channels * 120)))
+    finally:
+        dll.auradsp_destroy(handle)
+
+
+for sr in (8000, 11025, 16000, 22050, 24000, 32000, 40000):
+    for channels in (2, 4):
+        ok, detail = low_rate_stability(float(sr), channels)
+        check('low-rate dyneq stable at %dHz/%dch' % (sr, channels), ok, detail)
+
 dll.auradsp_destroy(h)
 
 print()

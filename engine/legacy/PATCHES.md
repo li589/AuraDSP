@@ -1462,3 +1462,15 @@ yquist * 0.999，
   Linux 修复前 recursive 用例 2 秒超时。
 - **上游同步冲突风险**：中（改 mutex 初始化入口与 Free 尾部顺序；上游若变更
   锁生命周期需重新核对递归语义和解锁/销毁序）。
+
+## P-063 multimodalEQ.c — 最后一个 EQ 轴点纳入增益钳位（2026-11-28，Batch 1 E-03）
+
+- **问题**：`MultimodalEqualizerAxisInterpolation` 复制 15 个轴点后只遍历
+  `gain[0..14]`，漏掉 `gain[15]`；后续 Nyquist 端点又直接继承该未钳位值。
+  绕过 ABI 的直调可把 ±100 dB 送入滤波器设计。
+- **修法**：仅钳位实际复制的输入区间 `gain[1..15]`，再由既有逻辑把
+  `gain[0]` 与 `gain[16]` 分别继承首末钳位值，避免读取尚未初始化的端点。
+- **验收**：`engine/tests/dsp_boundary_test.cpp multimodal_eq` 在 Windows/
+  Linux CTest 验证首点 -100 dB、末点 +100 dB 均钳到 ±64 dB，且 Nyquist
+  端点继承 +64 dB；修复前末点与端点两项判红。
+- **上游同步冲突风险**：低（单处循环边界与注释，无结构或 ABI 变化）。

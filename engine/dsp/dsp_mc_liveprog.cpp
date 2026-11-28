@@ -402,7 +402,7 @@ float* mc_liveprog_slider_var(McLiveProgHost* host, int index1Based) {
 
 void mc_liveprog_process(McLiveProgHost* host, float* buf, int frames,
                          int channels) {
-    if (!host || !buf) return;
+    if (!host || !buf || frames <= 0 || channels <= 0) return;
     /* [PATCHED-AuraDSP P-059] slider/block/sample 均在 RT guard 内执行。 */
     aura_eel_rt_guard rt_guard;
     /* 在途守卫双计数（平移 LiveProgProcess）：与 enable 无关，

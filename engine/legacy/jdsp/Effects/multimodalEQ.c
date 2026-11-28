@@ -156,7 +156,8 @@ void MultimodalEqualizerAxisInterpolation(JamesDSPLib *jdsp, int interpolationMo
 {
 	memcpy(jdsp->mEQ.freq + 1, freqAx, NUMPTS * sizeof(double));
 	memcpy(jdsp->mEQ.gain + 1, gaindB, NUMPTS * sizeof(double));
-	for (int i = 0; i < NUMPTS; i++)
+	/* [PATCHED-AuraDSP P-063] 包含第 15 个输入点；Nyquist 端点随后继承其钳位值。 */
+	for (int i = 1; i <= NUMPTS; i++)
 	{
 		if (jdsp->mEQ.gain[i] < -64.0)
 			jdsp->mEQ.gain[i] = -64.0;

@@ -139,6 +139,8 @@ void dyneq_process(auradsp_handle h, float* io, int frames) {
         if (cfg[b].en) anyOn = true;
         if (cfg[b].f < fMin[b]) cfg[b].f = fMin[b];
         if (cfg[b].f > fMax[b]) cfg[b].f = fMax[b];
+        const double nyquist = fs * 0.49;
+        if (cfg[b].f > nyquist) cfg[b].f = nyquist;
         if (b == 1) { if (cfg[b].q < 0.3) cfg[b].q = 0.3; if (cfg[b].q > 10.0) cfg[b].q = 10.0; }
         else { if (cfg[b].q < 0.5) cfg[b].q = 0.5; if (cfg[b].q > 2.0) cfg[b].q = 2.0; }
         if (cfg[b].g < -12.0) cfg[b].g = -12.0; if (cfg[b].g > 12.0) cfg[b].g = 12.0;
@@ -287,6 +289,8 @@ void dyneq_process_mc(auradsp_handle h, float* io, int frames, int ch) {
         if (cfg[b].en) anyOn = true;
         if (cfg[b].f < fMin[b]) cfg[b].f = fMin[b];
         if (cfg[b].f > fMax[b]) cfg[b].f = fMax[b];
+        const double nyquist = fs * 0.49;
+        if (cfg[b].f > nyquist) cfg[b].f = nyquist;
         if (b == 1) { if (cfg[b].q < 0.3) cfg[b].q = 0.3; if (cfg[b].q > 10.0) cfg[b].q = 10.0; }
         else { if (cfg[b].q < 0.5) cfg[b].q = 0.5; if (cfg[b].q > 2.0) cfg[b].q = 2.0; }
         if (cfg[b].g < -12.0) cfg[b].g = -12.0; if (cfg[b].g > 12.0) cfg[b].g = 12.0;
