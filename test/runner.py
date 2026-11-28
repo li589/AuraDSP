@@ -202,6 +202,7 @@ PLATFORM_WINDOWS = {
     "smoke_d6_patch_ids.py",
     "smoke_sr_rate_alignment.py",
     "smoke_eq_response.py",
+    "smoke_liveprog_response.py",
     "smoke_latency_real_resource.py",
     "smoke_g7_1_viz_mirror.py",
     "smoke_g7_2_bridge_abi.py",
@@ -495,6 +496,7 @@ def run_smoke_tests():
         # 曾"加载成功但无卷积"，现须显式拒绝。
         "smoke_sr_rate_alignment.py",
         "smoke_eq_response.py",
+        "smoke_liveprog_response.py",
         "smoke_latency_real_resource.py",
         # §7-1 门禁（2026-10-24）：viz 帧的 Python 镜像单源。改造前
         # tools/ 与 test/ 下各有 8 份彼此独立的手抄 ctypes 定义，ABI v1→v2

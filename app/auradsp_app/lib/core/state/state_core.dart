@@ -772,8 +772,21 @@ extension StateCore on AppModel {
           arbmagAutoGain = v != 0;
           break;
         }
-        final m = RegExp(r'^liveprog\.param([1-8])$').firstMatch(id);
-        if (m != null) lpParams[int.parse(m.group(1)!) - 1] = v;
+        final m = RegExp(r'^liveprog\.param([1-9]|[1-5][0-9]|6[0-4])$')
+            .firstMatch(id);
+        if (m != null) {
+          final idx = int.parse(m.group(1)!);
+          lpSliderValues[idx] = v;
+          if (idx <= 8) lpParams[idx - 1] = v;
+          break;
+        }
+        final mmc = RegExp(r'^liveprogmc\.param([1-9]|[1-5][0-9]|6[0-4])$')
+            .firstMatch(id);
+        if (mmc != null) {
+          final idx = int.parse(mmc.group(1)!);
+          lpMcSliderValues[idx] = v;
+          if (idx <= 8) lpMcParams[idx - 1] = v;
+        }
     }
   }
 

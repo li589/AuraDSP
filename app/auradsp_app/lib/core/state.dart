@@ -1175,6 +1175,7 @@ class AppModel extends ChangeNotifier {
       setFloat('liveprogmc.param$idx', v);
     }
     _notifyUi();
+    scheduleLiveprogProbe(multichannel: true);
     scheduleAutoSave();
   }
 
@@ -1187,6 +1188,7 @@ class AppModel extends ChangeNotifier {
       setFloat('liveprog.param$idx', v);
     }
     _notifyUi();
+    scheduleLiveprogProbe(multichannel: false);
     scheduleAutoSave();
 
     final m = meta ?? lpSliderMetas[idx];
@@ -1709,6 +1711,15 @@ class AppModel extends ChangeNotifier {
 
   Timer? _eqResponseTimer;
 
+  /* ---- Liveprog 频率响应实测缓存（C++ 隔离宿主，立体声 + MC 分账） ---- */
+  static const int lpResponsePoints = 129;
+  final Map<String, ({double fMax, List<double> gainsDb})> lpResponseCache = {};
+  final Map<String, ({double fMax, List<double> gainsDb})> lpMcResponseCache = {};
+  final Set<String> _lpProbeInFlight = {};
+  final Set<String> _lpProbeFailedKeys = {};
+  Timer? _lpResponseTimer;
+  String _lpActiveSpectrumChannel = 'FL';
+
   /// UI 侧的引擎句柄。探针必须由 **UI isolate** 直接调用：
   /// 音频 isolate 正在驱动 WASAPI，在那里跑 29 ms 的探针必然造成 underrun。
   AuraDspLib? _ffiLib;
@@ -1868,6 +1879,7 @@ class AppModel extends ChangeNotifier {
     _linuxSysMonitor = null;
     _eqCurveTimer?.cancel();
     _eqResponseTimer?.cancel();
+    _lpResponseTimer?.cancel();
     // 可视化 config 写盘防抖：退出前补一次同步落盘，避免最后一次改动丢失
     if (_vizConfigSaveTimer != null) {
       _vizConfigSaveTimer!.cancel();

@@ -350,6 +350,9 @@ extension StateEvents on AppModel {
           lpMcStatus = raw['lpMcStatus'] as int;
           if (lpMcStatus == 1) lpMcError = null;
         }
+        if ((lpEnabled && lpStatus == 1) || (lpMcEnabled && lpMcStatus == 1)) {
+          scheduleLiveprogProbe(immediate: true);
+        }
         convEnabled = (raw['convEnable'] as int) != 0;
         convReady = (raw['convReady'] as int) != 0;
         // auto-bypass 的另一半：资源在此刻就绪且用户开关为开 → 立即生效，
@@ -730,6 +733,9 @@ extension StateEvents on AppModel {
             rbLp.isNotEmpty &&
             (lpCode == null || lpCode!.isEmpty)) {
           lpCode = rbLp;
+          if (lpEnabled) {
+            scheduleLiveprogProbe(multichannel: false, immediate: true);
+          }
         }
         final rbArb = raw['arbmagString'];
         if (rbArb is String && rbArb.isNotEmpty && rbArb != arbmagString) {
@@ -832,6 +838,9 @@ extension StateEvents on AppModel {
       case 'liveprog':
         lpStatus = raw['status'] as int;
         if (lpStatus == 1) lpError = null;
+        if (lpEnabled && lpStatus == 1) {
+          scheduleLiveprogProbe(multichannel: false, immediate: true);
+        }
         _notifyUi();
         break;
       case 'fatal':

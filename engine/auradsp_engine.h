@@ -334,6 +334,10 @@ int auradsp_probe_component_current(const char* component, double arg,
  */
 int auradsp_probe_eq_response(int sample_rate, const char* curve, int n_points,
                               double f_max, float* out_db);
+int auradsp_probe_liveprog_response(int sample_rate, const char* code,
+                                    const float* params, int n_params,
+                                    int channel, int multichannel,
+                                    int n_points, double f_max, float* out_db);
 
 /* ---- 第三方插件宿主（M1：VST3 / CLAP 64位） ---- */
 int      auradsp_plugin_scan(auradsp_handle h, const char* extra_dirs_json, int deep_scan);

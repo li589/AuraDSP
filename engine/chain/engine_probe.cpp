@@ -1,5 +1,6 @@
 /* P2 split: probe (extern "C" context preserved from original). */
 #include "engine_internal.h"
+#include "dsp/dsp_mc_liveprog.h"
 extern "C" {
 
 
@@ -460,6 +461,337 @@ MultimodalEqualizerAxisInterpolation(jd, interp, op, freqAx, gainAx);
     JamesDSPFree(jd);
     free(jd);
     /* 与 global_init() 配对：旧实现每次 EQ 响应实测都泄漏一个全局引用。 */
+    global_unref();
+    return AURADSP_OK;
+}
+
+namespace {
+constexpr int kLpProbeWin = 16384;
+constexpr int kLpProbeBlock = 256;
+constexpr int kLpProbeImpPos = 256;
+constexpr int kLpProbeTaper = 1024;
+constexpr float kLpProbeAmp = 0.25f;
+
+inline double lp_tukey_weight(int i) {
+    constexpr int kStart = kLpProbeWin - kLpProbeTaper;
+    if (i < kStart) return 1.0;
+    return 0.5 * (1.0 + cos(M_PI * (double)(i - kStart) /
+                            (double)(kLpProbeTaper - 1)));
+}
+
+int lp_run_stereo_pass(int sample_rate, const char* code,
+                       const float* params, int n_params,
+                       bool inject_impulse, float* out_ch_samples,
+                       double* out_warmup_peak) {
+    const size_t bytes = strlen(code);
+    char* mutable_code = (char*)malloc(bytes + 1);
+    if (!mutable_code) return AURADSP_E_IO;
+    memcpy(mutable_code, code, bytes + 1);
+
+    JamesDSPLib* jd = (JamesDSPLib*)calloc(1, sizeof(JamesDSPLib));
+    if (!jd) {
+        free(mutable_code);
+        return AURADSP_E_IO;
+    }
+
+    JamesDSPInit(jd, kLpProbeBlock, (float)sample_rate);
+    LiveProgSetChannels(jd, 2);
+
+    if (!jd->tmpBuffer[0]) {
+        const size_t per_ch = (size_t)(jd->blockSizeMax > kLpProbeBlock
+                                           ? jd->blockSizeMax
+                                           : kLpProbeBlock);
+        jd->tmpBuffer[0] = (float*)calloc(per_ch * 6, sizeof(float));
+        if (!jd->tmpBuffer[0]) {
+            free(mutable_code);
+            JamesDSPFree(jd);
+            free(jd);
+            return AURADSP_E_IO;
+        }
+        for (int c = 1; c < 6; ++c) {
+            jd->tmpBuffer[c] = jd->tmpBuffer[c - 1] + per_ch;
+        }
+    }
+
+    const int rc = LiveProgStringParser(jd, mutable_code);
+    free(mutable_code);
+    if (rc != 1 || !jd->eel || !jd->eel->vm) {
+        JamesDSPFree(jd);
+        free(jd);
+        return AURADSP_E_PARAM;
+    }
+
+    for (int p = 0; p < n_params && p < 64; ++p) {
+        char nm[16];
+        snprintf(nm, sizeof(nm), "slider%d", p + 1);
+        float* reg = NSEEL_VM_regvar(jd->eel->vm, nm);
+        if (reg) *reg = params[p];
+    }
+    LiveProgEnable(jd);
+
+    double warmup_peak = 0.0;
+    for (int offset = 0; offset < kLpProbeWin; offset += kLpProbeBlock) {
+        for (int i = 0; i < kLpProbeBlock; ++i) {
+            const float x = (inject_impulse && (offset + i) == kLpProbeImpPos)
+                                ? kLpProbeAmp
+                                : 0.0f;
+            jd->tmpBuffer[0][i] = x;
+            jd->tmpBuffer[1][i] = x;
+        }
+        LiveProgProcess(jd, (size_t)kLpProbeBlock);
+        for (int i = 0; i < kLpProbeBlock; ++i) {
+            const float s0 = jd->tmpBuffer[0][i];
+            const float s1 = jd->tmpBuffer[1][i];
+            const float v0 = std::isfinite(s0) ? s0 : 0.0f;
+            const float v1 = std::isfinite(s1) ? s1 : 0.0f;
+            out_ch_samples[0 * kLpProbeWin + offset + i] = v0;
+            out_ch_samples[1 * kLpProbeWin + offset + i] = v1;
+            if ((offset + i) < kLpProbeImpPos) {
+                const double a0 = fabs((double)v0);
+                const double a1 = fabs((double)v1);
+                if (a0 > warmup_peak) warmup_peak = a0;
+                if (a1 > warmup_peak) warmup_peak = a1;
+            }
+        }
+    }
+
+    if (out_warmup_peak) *out_warmup_peak = warmup_peak;
+    JamesDSPFree(jd);
+    free(jd);
+    return AURADSP_OK;
+}
+
+int lp_run_mc_pass(int sample_rate, const char* code,
+                   const float* params, int n_params, int n_ch,
+                   bool inject_impulse, float* out_ch_samples,
+                   double* out_warmup_peak) {
+    McLiveProgHost* host = mc_liveprog_create((float)sample_rate, n_ch);
+    float* blk = (float*)calloc((size_t)kLpProbeBlock * (size_t)n_ch,
+                                sizeof(float));
+    if (!host || !blk) {
+        free(blk);
+        mc_liveprog_destroy(host);
+        return AURADSP_E_IO;
+    }
+
+    const int rc = mc_liveprog_load(host, code);
+    if (rc != 1) {
+        free(blk);
+        mc_liveprog_destroy(host);
+        return AURADSP_E_PARAM;
+    }
+
+    for (int p = 0; p < n_params && p < 64; ++p) {
+        float* reg = mc_liveprog_slider_var(host, p + 1);
+        if (reg) *reg = params[p];
+    }
+    mc_liveprog_set_enabled(host, 1);
+
+    double warmup_peak = 0.0;
+    for (int offset = 0; offset < kLpProbeWin; offset += kLpProbeBlock) {
+        for (int i = 0; i < kLpProbeBlock; ++i) {
+            const float x = (inject_impulse && (offset + i) == kLpProbeImpPos)
+                                ? kLpProbeAmp
+                                : 0.0f;
+            for (int c = 0; c < n_ch; ++c) {
+                blk[i * n_ch + c] = x;
+            }
+        }
+        mc_liveprog_process(host, blk, kLpProbeBlock, n_ch);
+        for (int i = 0; i < kLpProbeBlock; ++i) {
+            for (int c = 0; c < n_ch; ++c) {
+                const float s = blk[i * n_ch + c];
+                const float v = std::isfinite(s) ? s : 0.0f;
+                out_ch_samples[c * kLpProbeWin + offset + i] = v;
+                if ((offset + i) < kLpProbeImpPos) {
+                    const double a = fabs((double)v);
+                    if (a > warmup_peak) warmup_peak = a;
+                }
+            }
+        }
+    }
+
+    if (out_warmup_peak) *out_warmup_peak = warmup_peak;
+    free(blk);
+    mc_liveprog_destroy(host);
+    return AURADSP_OK;
+}
+}  // namespace
+
+int auradsp_probe_liveprog_response(int sample_rate, const char* code,
+                                    const float* params, int n_params,
+                                    int channel, int multichannel,
+                                    int n_points, double f_max, float* out_db) {
+    if (sample_rate < 8000 || sample_rate > 384000) return AURADSP_E_PARAM;
+    if (!code || !out_db || n_points < 2 || n_points > 1024)
+        return AURADSP_E_PARAM;
+    if (n_params < 0 || n_params > 64) return AURADSP_E_PARAM;
+    if (n_params > 0 && !params) return AURADSP_E_PARAM;
+    if (multichannel != 0 && multichannel != 1) return AURADSP_E_PARAM;
+    const int n_ch = multichannel ? 8 : 2;
+    if (channel < -1 || channel >= n_ch) return AURADSP_E_PARAM;
+    const size_t bytes = strlen(code);
+    if (bytes == 0 || bytes > 524288) return AURADSP_E_PARAM;
+
+    const double nyq = sample_rate * 0.5;
+    const double f0 = 20.0;
+    double f1 = f_max;
+    if (!(f1 > f0)) return AURADSP_E_PARAM;
+    if (f1 > nyq * 0.999) f1 = nyq * 0.999;
+
+    const int half = kLpProbeWin / 2;
+    float* imp_samples = (float*)calloc((size_t)n_ch * (size_t)kLpProbeWin,
+                                        sizeof(float));
+    float* re = (float*)malloc((size_t)kLpProbeWin * sizeof(float));
+    float* ref_re = (float*)calloc((size_t)kLpProbeWin, sizeof(float));
+    double* pow_acc = (double*)calloc((size_t)half, sizeof(double));
+    if (!imp_samples || !re || !ref_re || !pow_acc) {
+        free(pow_acc);
+        free(ref_re);
+        free(re);
+        free(imp_samples);
+        return AURADSP_E_IO;
+    }
+
+    global_init();
+
+    double warmup_peak = 0.0;
+    int rc = multichannel
+        ? lp_run_mc_pass(sample_rate, code, params, n_params, n_ch,
+                         true, imp_samples, &warmup_peak)
+        : lp_run_stereo_pass(sample_rate, code, params, n_params,
+                             true, imp_samples, &warmup_peak);
+    if (rc != AURADSP_OK) {
+        free(pow_acc);
+        free(ref_re);
+        free(re);
+        free(imp_samples);
+        global_unref();
+        return rc;
+    }
+
+    const int ch_start = (channel >= 0) ? channel : 0;
+    const int ch_end = (channel >= 0) ? (channel + 1) : n_ch;
+    const int ch_span = ch_end - ch_start;
+
+    bool pure_generator = false;
+    if (warmup_peak > 1e-4) {
+        float* zero_samples = (float*)calloc((size_t)n_ch * (size_t)kLpProbeWin,
+                                             sizeof(float));
+        if (!zero_samples) {
+            free(pow_acc);
+            free(ref_re);
+            free(re);
+            free(imp_samples);
+            global_unref();
+            return AURADSP_E_IO;
+        }
+        const int zrc = multichannel
+            ? lp_run_mc_pass(sample_rate, code, params, n_params, n_ch,
+                             false, zero_samples, nullptr)
+            : lp_run_stereo_pass(sample_rate, code, params, n_params,
+                                 false, zero_samples, nullptr);
+        if (zrc != AURADSP_OK) {
+            free(zero_samples);
+            free(pow_acc);
+            free(ref_re);
+            free(re);
+            free(imp_samples);
+            global_unref();
+            return zrc;
+        }
+
+        double warmup_diff = 0.0;
+        double post_peak = 0.0;
+        for (int c = ch_start; c < ch_end; ++c) {
+            for (int i = 0; i < kLpProbeWin; ++i) {
+                const float iv = imp_samples[c * kLpProbeWin + i];
+                const float zv = zero_samples[c * kLpProbeWin + i];
+                if (i < kLpProbeImpPos) {
+                    const double d = fabs((double)iv - (double)zv);
+                    if (d > warmup_diff) warmup_diff = d;
+                } else {
+                    const double a = fabs((double)iv);
+                    if (a > post_peak) post_peak = a;
+                }
+            }
+        }
+        if (warmup_diff > 1e-5 && post_peak < 3.0 * warmup_peak) {
+            pure_generator = true;
+        } else {
+            double net_energy = 0.0;
+            for (int c = ch_start; c < ch_end; ++c) {
+                for (int i = 0; i < kLpProbeWin; ++i) {
+                    const float diff = imp_samples[c * kLpProbeWin + i] -
+                                       zero_samples[c * kLpProbeWin + i];
+                    imp_samples[c * kLpProbeWin + i] = diff;
+                    net_energy += (double)diff * diff;
+                }
+            }
+            if (net_energy < 1e-10) {
+                pure_generator = true;
+            }
+        }
+        free(zero_samples);
+    }
+
+    if (pure_generator) {
+        for (int i = 0; i < n_points; ++i) out_db[i] = 0.0f;
+        free(pow_acc);
+        free(ref_re);
+        free(re);
+        free(imp_samples);
+        global_unref();
+        return AURADSP_OK;
+    }
+
+    ref_re[kLpProbeImpPos] =
+        kLpProbeAmp * (float)lp_tukey_weight(kLpProbeImpPos);
+    WDL_real_fft(ref_re, kLpProbeWin, 0);
+    const int32_t* perm = WDL_fft_permute_tab(half);
+
+    for (int c = ch_start; c < ch_end; ++c) {
+        for (int i = 0; i < kLpProbeWin; ++i) {
+            re[i] = imp_samples[c * kLpProbeWin + i] *
+                    (float)lp_tukey_weight(i);
+        }
+        WDL_real_fft(re, kLpProbeWin, 0);
+        for (int bin = 1; bin < half; ++bin) {
+            const int pi = perm ? perm[bin] : bin;
+            const double m_sq = (double)re[pi * 2] * re[pi * 2] +
+                                (double)re[pi * 2 + 1] * re[pi * 2 + 1];
+            const double r_sq = (double)ref_re[pi * 2] * ref_re[pi * 2] +
+                                (double)ref_re[pi * 2 + 1] * ref_re[pi * 2 + 1];
+            pow_acc[bin] += (r_sq > 1e-18) ? (m_sq / r_sq) : 1.0;
+        }
+    }
+
+    const double bin_hz = (double)sample_rate / (double)kLpProbeWin;
+    const double lf0 = log(f0), lf1 = log(f1);
+    for (int i = 0; i < n_points; ++i) {
+        const double t = (double)i / (double)(n_points - 1);
+        const double f = exp(lf0 + t * (lf1 - lf0));
+        const double exact_bin = f / bin_hz;
+        int b0 = (int)floor(exact_bin);
+        if (b0 < 1) b0 = 1;
+        if (b0 > half - 2) b0 = half - 2;
+        const int b1 = b0 + 1;
+        double frac = exact_bin - (double)b0;
+        if (frac < 0.0) frac = 0.0;
+        if (frac > 1.0) frac = 1.0;
+        const double p0 = pow_acc[b0] / (double)ch_span;
+        const double p1 = pow_acc[b1] / (double)ch_span;
+        const double avg_pow = p0 * (1.0 - frac) + p1 * frac;
+        double db = 10.0 * log10(avg_pow > 1e-6 ? avg_pow : 1e-6);
+        if (db < -60.0) db = -60.0;
+        if (db > 30.0) db = 30.0;
+        out_db[i] = (float)db;
+    }
+
+    free(pow_acc);
+    free(ref_re);
+    free(re);
+    free(imp_samples);
     global_unref();
     return AURADSP_OK;
 }

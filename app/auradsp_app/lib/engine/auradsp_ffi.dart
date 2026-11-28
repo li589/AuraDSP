@@ -905,6 +905,26 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
         .asFunction<
             int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)>();
 
+late final int Function(
+  int,
+  Pointer<Utf8>,
+  Pointer<Float>,
+  int,
+  int,
+  int,
+  int,
+  double,
+  Pointer<Float>,
+) probeLiveprogResponse = dylib
+    .lookup<
+        NativeFunction<
+            Int32 Function(Int, Pointer<Utf8>, Pointer<Float>, Int, Int, Int,
+                Int, Double, Pointer<Float>)>>(
+        'auradsp_probe_liveprog_response')
+    .asFunction<
+        int Function(int, Pointer<Utf8>, Pointer<Float>, int, int, int, int,
+            double, Pointer<Float>)>();
+
   /// 响应探针实际使用的上限频率：与引擎侧钳位公式保持一致。
   ///
   /// 采样率足够高时就是默认 `fMax`；低采样率下引擎会按 Nyquist 收窄。
@@ -938,6 +958,53 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
       /* 非法输入返回非 0 是**契约**，不是异常：调用方据此回退到本地插值。
        * 刻意不写成 assert —— 那样会把「预期被拒绝」变成崩溃，
        * 而拒绝本身正是这里要测的行为。 */
+      if (rc != 0) return null;
+      return List<double>.generate(nPoints, (i) => out[i], growable: false);
+    } finally {
+      alloc.releaseAll();
+    }
+  }
+
+  /// [probeLiveprogResponse] 的安全封装：在隔离的宿主中以单位脉冲实测 EEL2 脚本
+  /// （立体声或 8 声道 MC）频率响应。
+  ///
+  /// 返回 null 表示脚本为空、语法未就绪或参数无效；调用方应平滑降级或保留缓存。
+  List<double>? measureLiveprogResponse(
+    String code,
+    int sampleRate, {
+    List<double> params = const [],
+    int channel = -1,
+    bool multichannel = false,
+    int nPoints = 129,
+    double fMin = 20.0,
+    double fMax = 20000.0,
+  }) {
+    if (code.trim().isEmpty || nPoints < 2 || nPoints > 1024) return null;
+    final nParams = params.length.clamp(0, 64);
+    final alloc = Arena();
+    try {
+      final out = alloc<Float>(nPoints);
+      final text = code.toNativeUtf8(allocator: alloc);
+      final pBuf = nParams > 0 ? alloc<Float>(nParams) : nullptr;
+      for (var i = 0; i < nParams; i++) {
+        pBuf[i] = params[i];
+      }
+      final hi = responseFMax(
+        sampleRate: sampleRate,
+        fMin: fMin,
+        fMax: fMax,
+      );
+      final rc = probeLiveprogResponse(
+        sampleRate,
+        text,
+        pBuf,
+        nParams,
+        channel,
+        multichannel ? 1 : 0,
+        nPoints,
+        hi,
+        out,
+      );
       if (rc != 0) return null;
       return List<double>.generate(nPoints, (i) => out[i], growable: false);
     } finally {

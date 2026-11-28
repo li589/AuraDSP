@@ -276,6 +276,8 @@ extension StateChain on AppModel {
     for (var i = 0; i < 8; i++) {
       setLiveprogParam(i, lpParams[i]);
     }
+    _notifyUi();
+    scheduleLiveprogProbe(multichannel: false, immediate: true);
     scheduleAutoSave();
   }
 
@@ -289,6 +291,9 @@ extension StateChain on AppModel {
       'value': on ? 1 : 0,
       'isFloat': false,
     });
+    if (on) {
+      scheduleLiveprogProbe(multichannel: false, immediate: true);
+    }
     scheduleAutoSave();
   }
 
@@ -323,6 +328,9 @@ extension StateChain on AppModel {
       'value': on ? 1 : 0,
       'isFloat': false,
     });
+    if (on) {
+      scheduleLiveprogProbe(multichannel: true, immediate: true);
+    }
     scheduleAutoSave();
   }
 
@@ -349,6 +357,8 @@ extension StateChain on AppModel {
       lpMcParams[index] = v;
     }
     setFloat('liveprogmc.param${index + 1}', v);
+    _notifyUi();
+    scheduleLiveprogProbe(multichannel: true);
   }
 
   void setLiveprogMcCode(String text) {
@@ -376,6 +386,8 @@ extension StateChain on AppModel {
     lpMcCode = normalized;
     lpMcDraftCode = normalized;
     send({'cmd': 'setParamStr', 'id': ParamId.lpMcCode, 'text': normalized});
+    _notifyUi();
+    scheduleLiveprogProbe(multichannel: true, immediate: true);
     scheduleAutoSave();
   }
 
@@ -387,8 +399,267 @@ extension StateChain on AppModel {
      * （config_and_presets Liveprog v2 用例抓到）。 */
     if (index >= 0 && index < 8) {
       lpSliderValues[index + 1] = v;
+      lpParams[index] = v;
     }
     setFloat('liveprog.param${index + 1}', v);
+    _notifyUi();
+    scheduleLiveprogProbe(multichannel: false);
+  }
+
+  static int _lpProbeChannelIndex(
+    String spectrumChannel, {
+    required bool multichannel,
+  }) {
+    if (multichannel) {
+      return switch (spectrumChannel) {
+        'FL' => 0,
+        'FR' => 1,
+        'C' => 2,
+        'LFE' => 3,
+        'SL' => 4,
+        'SR' => 5,
+        'BL' => 6,
+        'BR' => 7,
+        _ => -1,
+      };
+    }
+    return switch (spectrumChannel) {
+      'FL' => 0,
+      'FR' => 1,
+      _ => -1,
+    };
+  }
+
+  List<double> effectiveLiveprogParams({required bool multichannel}) {
+    final values = multichannel ? lpMcSliderValues : lpSliderValues;
+    final legacy = multichannel ? lpMcParams : lpParams;
+    final metas = multichannel ? lpMcSliderMetas : lpSliderMetas;
+    var maxIdx = 8;
+    for (final k in values.keys) {
+      if (k > maxIdx && k <= 64) maxIdx = k;
+    }
+    for (final k in metas.keys) {
+      if (k > maxIdx && k <= 64) maxIdx = k;
+    }
+    return List<double>.generate(maxIdx, (i) {
+      final idx = i + 1;
+      if (values.containsKey(idx)) return values[idx]!;
+      if (i < legacy.length) return legacy[i];
+      return metas[idx]?.defaultVal ?? 0.0;
+    }, growable: false);
+  }
+
+  static String _lpCodeDigest(String code) {
+    var h1 = 0x811c9dc5;
+    var h2 = 0x9e3779b9;
+    for (var i = 0; i < code.length; i++) {
+      final c = code.codeUnitAt(i);
+      h1 = ((h1 ^ c) * 0x01000193) & 0xffffffff;
+      h2 = (((h2 << 5) - h2) ^ (c + i)) & 0xffffffff;
+    }
+    return '${code.length}:${h1.toRadixString(16)}:${h2.toRadixString(16)}';
+  }
+
+  static String liveprogProbeKey({
+    required bool multichannel,
+    required int probeChannel,
+    required String code,
+    required int sampleRate,
+    required List<double> params,
+  }) {
+    final sb = StringBuffer()
+      ..write(multichannel ? 'mc' : 'st')
+      ..write('|')
+      ..write(sampleRate)
+      ..write('|')
+      ..write(probeChannel)
+      ..write('|')
+      ..write(_lpCodeDigest(code))
+      ..write('|');
+    for (var i = 0; i < params.length; i++) {
+      if (i > 0) sb.write(',');
+      sb.write(params[i].toStringAsFixed(4));
+    }
+    return sb.toString();
+  }
+
+  ({double fMax, List<double> gainsDb})? cachedLiveprogResponse({
+    required bool multichannel,
+    required String spectrumChannel,
+  }) {
+    final code = (multichannel ? lpMcCode : lpCode)?.trim() ?? '';
+    if (code.isEmpty) return null;
+    final rawRate = engineRate > 0 ? engineRate : 48000;
+    final sr = multichannel ? rawRate : eqWorkingRateFor(rawRate);
+    final chIdx = _lpProbeChannelIndex(
+      spectrumChannel,
+      multichannel: multichannel,
+    );
+    final params = effectiveLiveprogParams(multichannel: multichannel);
+    final key = liveprogProbeKey(
+      multichannel: multichannel,
+      probeChannel: chIdx,
+      code: code,
+      sampleRate: sr,
+      params: params,
+    );
+    return (multichannel ? lpMcResponseCache : lpResponseCache)[key];
+  }
+
+  Future<void> _probeLiveprogNow({
+    required bool multichannel,
+    required String spectrumChannel,
+    bool force = false,
+  }) async {
+    if (_testing || _disposed) return;
+    final code = (multichannel ? lpMcCode : lpCode)?.trim() ?? '';
+    if (code.isEmpty) return;
+    final rawRate = engineRate > 0 ? engineRate : 48000;
+    final sr = multichannel ? rawRate : eqWorkingRateFor(rawRate);
+    final chIdx = _lpProbeChannelIndex(
+      spectrumChannel,
+      multichannel: multichannel,
+    );
+    final params = effectiveLiveprogParams(multichannel: multichannel);
+    final key = liveprogProbeKey(
+      multichannel: multichannel,
+      probeChannel: chIdx,
+      code: code,
+      sampleRate: sr,
+      params: params,
+    );
+    final cache = multichannel ? lpMcResponseCache : lpResponseCache;
+    if (force) {
+      cache.remove(key);
+      _lpProbeFailedKeys.remove(key);
+    }
+    if (cache.containsKey(key) ||
+        _lpProbeInFlight.contains(key) ||
+        _lpProbeFailedKeys.contains(key)) {
+      return;
+    }
+    final lib = _probeLib;
+    if (lib == null) return;
+    final enginePath = AuraDspLib.loadedPath;
+    final fMax = math.min(
+      AuraDspLib.responseFMax(sampleRate: sr),
+      AuraDspLib.responseFMax(sampleRate: rawRate),
+    );
+    _lpProbeInFlight.add(key);
+    try {
+      final db = await Isolate.run(() {
+        final l = AuraDspLib.load(enginePath);
+        return l.measureLiveprogResponse(
+          code,
+          sr,
+          params: params,
+          channel: chIdx,
+          multichannel: multichannel,
+          nPoints: AppModel.lpResponsePoints,
+          fMax: fMax,
+        );
+      });
+      if (_disposed) return;
+      if (db == null) {
+        if (_lpProbeFailedKeys.length >= 64) {
+          _lpProbeFailedKeys.remove(_lpProbeFailedKeys.first);
+        }
+        _lpProbeFailedKeys.add(key);
+      } else {
+        if (cache.length >= 24) {
+          cache.remove(cache.keys.first);
+        }
+        cache[key] = (fMax: fMax, gainsDb: db);
+        _notifyUi();
+      }
+    } catch (e, st) {
+      swallow(e, st);
+      if (_lpProbeFailedKeys.length >= 64) {
+        _lpProbeFailedKeys.remove(_lpProbeFailedKeys.first);
+      }
+      _lpProbeFailedKeys.add(key);
+    } finally {
+      _lpProbeInFlight.remove(key);
+    }
+  }
+
+  void ensureLiveprogResponse(String spectrumChannel) {
+    _lpActiveSpectrumChannel = spectrumChannel;
+    if (_testing || _disposed) return;
+    if (lpEnabled && (lpCode?.trim().isNotEmpty ?? false)) {
+      unawaited(
+        _probeLiveprogNow(
+          multichannel: false,
+          spectrumChannel: spectrumChannel,
+        ),
+      );
+    }
+    if (lpMcEnabled &&
+        effectiveChannelCount > 2 &&
+        (lpMcCode?.trim().isNotEmpty ?? false)) {
+      unawaited(
+        _probeLiveprogNow(
+          multichannel: true,
+          spectrumChannel: spectrumChannel,
+        ),
+      );
+    }
+  }
+
+  Future<void> refreshLiveprogResponseNow(String spectrumChannel) async {
+    _lpActiveSpectrumChannel = spectrumChannel;
+    if (_testing || _disposed) return;
+    final tasks = <Future<void>>[];
+    if (lpEnabled && (lpCode?.trim().isNotEmpty ?? false)) {
+      tasks.add(
+        _probeLiveprogNow(
+          multichannel: false,
+          spectrumChannel: spectrumChannel,
+          force: true,
+        ),
+      );
+    }
+    if (lpMcEnabled &&
+        effectiveChannelCount > 2 &&
+        (lpMcCode?.trim().isNotEmpty ?? false)) {
+      tasks.add(
+        _probeLiveprogNow(
+          multichannel: true,
+          spectrumChannel: spectrumChannel,
+          force: true,
+        ),
+      );
+    }
+    if (tasks.isNotEmpty) {
+      await Future.wait(tasks);
+    }
+  }
+
+  void scheduleLiveprogProbe({bool? multichannel, bool immediate = false}) {
+    _lpResponseTimer?.cancel();
+    if (_testing || _disposed) return;
+    final ch = _lpActiveSpectrumChannel;
+    void kick() {
+      _lpResponseTimer = null;
+      if (_testing || _disposed) return;
+      if (multichannel != true &&
+          lpEnabled &&
+          (lpCode?.trim().isNotEmpty ?? false)) {
+        unawaited(_probeLiveprogNow(multichannel: false, spectrumChannel: ch));
+      }
+      if (multichannel != false &&
+          lpMcEnabled &&
+          effectiveChannelCount > 2 &&
+          (lpMcCode?.trim().isNotEmpty ?? false)) {
+        unawaited(_probeLiveprogNow(multichannel: true, spectrumChannel: ch));
+      }
+    }
+
+    if (immediate) {
+      scheduleMicrotask(kick);
+    } else {
+      _lpResponseTimer = Timer(const Duration(milliseconds: 80), kick);
+    }
   }
 
   // ---- 卷积 / VDC / DDC ----

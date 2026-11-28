@@ -20,6 +20,7 @@ import '../../core/effect_registry.dart';
 import '../../core/error_sink.dart';
 import '../../core/io/resource_gate.dart';
 import '../../core/channel_layout.dart';
+import '../../core/eel_slider_parser.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
 import '../../core/ui_helpers.dart';
@@ -142,6 +143,667 @@ class FullChainTransferCalculator {
         (numRe * numRe + numIm * numIm) / (denRe * denRe + denIm * denIm);
     if (magSq <= 0) return 0.0;
     return 10.0 * math.log(magSq) / math.ln10;
+  }
+
+  /// RBJ High-Shelf 滤波器传递函数增益 (dB)
+  static double calcHighShelfDb({
+    required double f,
+    required double cutoff,
+    required double gainDb,
+    required double q,
+    required int sampleRate,
+  }) {
+    if (gainDb.abs() < 1e-9) return 0.0;
+    if (f <= 0 || cutoff <= 0 || sampleRate <= 0) return 0.0;
+    final a = math.pow(10.0, gainDb / 40.0);
+    final w0 = 2.0 * math.pi * cutoff / sampleRate;
+    final cosW0 = math.cos(w0);
+    final sinW0 = math.sin(w0);
+    final alpha =
+        (sinW0 / 2.0) * math.sqrt((a + 1.0 / a) * (1.0 / q - 1.0) + 2.0);
+    final twoSqrtAAlpha = 2.0 * math.sqrt(a) * alpha;
+
+    final b0 = a * ((a + 1.0) + (a - 1.0) * cosW0 + twoSqrtAAlpha);
+    final b1 = -2.0 * a * ((a - 1.0) + (a + 1.0) * cosW0);
+    final b2 = a * ((a + 1.0) + (a - 1.0) * cosW0 - twoSqrtAAlpha);
+    final a0 = (a + 1.0) - (a - 1.0) * cosW0 + twoSqrtAAlpha;
+    final a1 = 2.0 * ((a - 1.0) - (a + 1.0) * cosW0);
+    final a2 = (a + 1.0) - (a - 1.0) * cosW0 - twoSqrtAAlpha;
+
+    final w = 2.0 * math.pi * f / sampleRate;
+    final cosW = math.cos(w);
+    final cos2W = math.cos(2.0 * w);
+    final sinW = math.sin(w);
+    final sin2W = math.sin(2.0 * w);
+    final numRe = b0 + b1 * cosW + b2 * cos2W;
+    final numIm = -(b1 * sinW + b2 * sin2W);
+    final denRe = a0 + a1 * cosW + a2 * cos2W;
+    final denIm = -(a1 * sinW + a2 * sin2W);
+    final magSq =
+        (numRe * numRe + numIm * numIm) / (denRe * denRe + denIm * denIm);
+    if (magSq <= 0) return 0.0;
+    return 10.0 * math.log(magSq) / math.ln10;
+  }
+
+  /// RBJ Notch 陷波滤波器传递函数增益 (dB)
+  static double calcNotchDb({
+    required double f,
+    required double cutoff,
+    required double q,
+    required int sampleRate,
+  }) {
+    if (f <= 0 || cutoff <= 0 || sampleRate <= 0) return 0.0;
+    final w0 = 2.0 * math.pi * cutoff / sampleRate;
+    final cosW0 = math.cos(w0);
+    final alpha = math.sin(w0) / (2.0 * q.clamp(0.1, 10.0));
+    final b0 = 1.0;
+    final b1 = -2.0 * cosW0;
+    final b2 = 1.0;
+    final a0 = 1.0 + alpha;
+    final a1 = -2.0 * cosW0;
+    final a2 = 1.0 - alpha;
+    final w = 2.0 * math.pi * f / sampleRate;
+    final cosW = math.cos(w);
+    final cos2W = math.cos(2.0 * w);
+    final sinW = math.sin(w);
+    final sin2W = math.sin(2.0 * w);
+    final numRe = b0 + b1 * cosW + b2 * cos2W;
+    final numIm = -(b1 * sinW + b2 * sin2W);
+    final denRe = a0 + a1 * cosW + a2 * cos2W;
+    final denIm = -(a1 * sinW + a2 * sin2W);
+    final magSq =
+        (numRe * numRe + numIm * numIm) / (denRe * denRe + denIm * denIm);
+    if (magSq <= 1e-12) return -60.0;
+    return (10.0 * math.log(magSq) / math.ln10).clamp(-60.0, 40.0);
+  }
+
+  static double _wrapDeg(double deg) {
+    var d = deg;
+    while (d > 180.0) {
+      d -= 360.0;
+    }
+    while (d < -180.0) {
+      d += 360.0;
+    }
+    return d;
+  }
+
+  static double _calcOnePoleLpMagSq(double f, double fc, int sampleRate) {
+    final a = 1.0 - math.exp(-2.0 * math.pi * fc / sampleRate);
+    final w = 2.0 * math.pi * f / sampleRate;
+    final oneMinusA = 1.0 - a;
+    final den = 1.0 + oneMinusA * oneMinusA - 2.0 * oneMinusA * math.cos(w);
+    return (a * a) / (den > 1e-12 ? den : 1e-12);
+  }
+
+  static void _applySpatialDb({
+    required AppModel model,
+    required List<double> freqs,
+    required List<double> gains,
+    required String channel,
+    required int sampleRate,
+  }) {
+    final ch = model.effectiveChannelCount;
+    final isBinaural = model.spatialBinaural && model.spatialOn && ch >= 4;
+    final isDiscrete = !isBinaural && ch >= 4 && model.channelsMode == 1;
+    final isLfe = channel == 'LFE';
+    final isFrontPair = channel == 'FL' || channel == 'FR';
+
+    if (!isBinaural && isLfe) return;
+    double spatialWeight = 1.0;
+    if (isDiscrete) {
+      if (isFrontPair) {
+        spatialWeight = 1.0;
+      } else if (channel == 'all') {
+        spatialWeight = 2.0 / ch;
+      } else {
+        return;
+      }
+    } else if (isBinaural && !isFrontPair && channel != 'all') {
+      return;
+    }
+
+    final room = model.spatialRoom.clamp(0.0, 1.0);
+    final width = model.spatialWidth.clamp(0.5, 1.5);
+    final center = model.spatialCenter.clamp(0.0, 1.0);
+    final outGainDb = model.spatialOutGain.clamp(-12.0, 6.0);
+    final mix = model.spatialMix.clamp(0.0, 1.0);
+    if (mix <= 0.0 && outGainDb == 0.0) return;
+    final elev = model.spatialElevation.clamp(-30.0, 30.0);
+    final head = model.spatialHeadAzim.clamp(-180.0, 180.0);
+    final ev = (elev / 30.0).clamp(-1.0, 1.0);
+    final outGainLinSq = model.spatialAutoGain
+        ? 1.0
+        : math.pow(10.0, outGainDb / 10.0).toDouble();
+
+    final srcDeg = <double>[];
+    final srcPowWeight = <double>[];
+    final double norm;
+    if (!isBinaural) {
+      const kSpatDeg = [-30.0, 0.0, 30.0, -110.0, 110.0];
+      srcDeg.addAll([
+        for (final d in kSpatDeg) _wrapDeg(d * width - head),
+      ]);
+      srcPowWeight.addAll([1.0, 0.5 * center * center, 1.0, 0.49, 0.49]);
+      norm = 1.0 /
+          math.sqrt(
+            2.0 +
+                0.5 * center * center +
+                0.98 +
+                (room > 0.001 ? room * 0.4 : 0.0),
+          );
+    } else {
+      final nsrc = ch.clamp(2, 8);
+      const kBinauralDeg = [
+        -30.0,
+        30.0,
+        0.0,
+        0.0,
+        -110.0,
+        110.0,
+        -150.0,
+        150.0,
+      ];
+      final cGain = 0.5 + 0.5 * center;
+      for (var c = 0; c < nsrc; c++) {
+        if (c == 3) continue; // LFE 不进入空间源表
+        final base = kBinauralDeg[c];
+        srcDeg.add(_wrapDeg(c == 2 ? -head : base * width - head));
+        srcPowWeight.add(c == 2 ? cGain * cGain : 1.0);
+      }
+      norm = 1.0 / math.sqrt(2.0 + 0.5 * (nsrc - 2));
+    }
+
+    // B3c 矩形房间 1/2 阶镜像源能量和（平滑无梳状纹路）
+    var reflPowL = 0.0;
+    var reflPowR = 0.0;
+    if (room > 0.0005) {
+      final hx = 0.8 + 1.7 * room;
+      final hy = 1.2 + 2.3 * room;
+      const ey = 1.5;
+      final refl = 0.5 + 0.4 * room;
+      final ix = <double>[
+        2 * hx,
+        -2 * hx,
+        0,
+        0,
+        4 * hx,
+        -4 * hx,
+        0,
+        0,
+        -2 * hx,
+        -2 * hx,
+        2 * hx,
+        2 * hx,
+      ];
+      final iy = <double>[
+        ey,
+        ey,
+        2 * hy - ey,
+        -2 * hy - ey,
+        ey,
+        ey,
+        4 * hy - ey,
+        -4 * hy - ey,
+        -(2 * hy - ey),
+        (2 * hy - ey),
+        -(2 * hy - ey),
+        (2 * hy - ey),
+      ];
+      const ord = [1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2];
+      const monoSendVar = 0.5;
+      for (var k = 0; k < 12; k++) {
+        final dist = math.sqrt(ix[k] * ix[k] + iy[k] * iy[k]);
+        final az = _wrapDeg(
+          math.atan2(ix[k], iy[k]) * 180.0 / math.pi - head,
+        );
+        final s = math.sin(az * math.pi / 180.0);
+        final gl = s > 0.0 ? 1.0 - 0.5 * s : 1.0;
+        final gr = s > 0.0 ? 1.0 : 1.0 - 0.5 * (-s);
+        final rp = ord[k] >= 2 ? refl * refl : refl;
+        final g = room * rp / (dist < 0.5 ? 0.5 : dist);
+        reflPowL += monoSendVar * (g * gl) * (g * gl);
+        reflPowR += monoSendVar * (g * gr) * (g * gr);
+      }
+    }
+
+    final nFreq = freqs.length;
+    final wetPows = List<double>.filled(nFreq, 0.0);
+    final fc1 = 7200.0 + 2600.0 * ev;
+    final g1 = -2.2 * (0.7 + 0.3 * ev.abs());
+    final normSq = norm * norm;
+
+    double earTransferPow(int ear, double f) {
+      var dirPow = 0.0;
+      for (var s = 0; s < srcDeg.length; s++) {
+        final deg = srcDeg[s];
+        final isCenter = deg.abs() < 0.5;
+        final isFar = !isCenter &&
+            ((deg > 0.5 && ear == 0) || (deg < -0.5 && ear == 1));
+        final th = deg.abs() * math.pi / 180.0;
+        double headPow = 1.0;
+        if (isFar) {
+          final ax = (th / (math.pi * 0.5)).clamp(0.0, 1.0);
+          final farGain = 1.0 - 0.5 * ax;
+          final ax2 = (th / (110.0 * math.pi / 180.0)).clamp(0.0, 1.0);
+          final fcLp = (8000.0 - 5500.0 * ax2).clamp(1500.0, 8000.0);
+          headPow = farGain * farGain * _calcOnePoleLpMagSq(f, fcLp, sampleRate);
+        }
+        final rear = deg.abs() > 90.0;
+        final g0 = (rear ? -4.0 : 2.2) - (isFar ? 1.0 : 0.0);
+        final p0Db = calcPeakingDb(
+          f: f,
+          center: rear ? 10500.0 : 8200.0,
+          gainDb: g0,
+          q: 1.1,
+          sampleRate: sampleRate,
+        );
+        final p1Db = calcPeakingDb(
+          f: f,
+          center: fc1,
+          gainDb: g1,
+          q: 2.0,
+          sampleRate: sampleRate,
+        );
+        final pinnaPow = math.pow(10.0, (p0Db + p1Db) / 10.0).toDouble();
+        dirPow += srcPowWeight[s] * headPow * pinnaPow;
+      }
+
+      var rPow = 0.0;
+      final baseRefl = ear == 0 ? reflPowL : reflPowR;
+      if (baseRefl > 0.0) {
+        final r0Db = calcPeakingDb(
+          f: f,
+          center: 8000.0,
+          gainDb: 2.5,
+          q: 1.0,
+          sampleRate: sampleRate,
+        );
+        final r1Db = calcPeakingDb(
+          f: f,
+          center: 12500.0,
+          gainDb: -3.0,
+          q: 2.0,
+          sampleRate: sampleRate,
+        );
+        rPow = baseRefl * math.pow(10.0, (r0Db + r1Db) / 10.0).toDouble();
+      }
+      return normSq * (dirPow + rPow) * outGainLinSq;
+    }
+
+    var meanWetPow = 0.0;
+    for (var i = 0; i < nFreq; i++) {
+      final f = freqs[i];
+      final double ep;
+      if (channel == 'FL') {
+        ep = earTransferPow(0, f);
+      } else if (channel == 'FR') {
+        ep = earTransferPow(1, f);
+      } else {
+        ep = 0.5 * (earTransferPow(0, f) + earTransferPow(1, f));
+      }
+      wetPows[i] = ep;
+      meanWetPow += ep;
+    }
+    meanWetPow /= nFreq;
+
+    final agScale = (model.spatialAutoGain && meanWetPow > 1e-6)
+        ? 1.0 / meanWetPow
+        : 1.0;
+
+    for (var i = 0; i < nFreq; i++) {
+      final wetAmp = math.sqrt(wetPows[i] * agScale);
+      var totalAmp = (1.0 - mix) + mix * wetAmp;
+      if (isDiscrete && channel == 'all') {
+        totalAmp = math.sqrt(
+          (1.0 - spatialWeight) + spatialWeight * totalAmp * totalAmp,
+        );
+      }
+      gains[i] += 20.0 * math.log(math.max(totalAmp, 1e-6)) / math.ln10;
+    }
+  }
+
+  static List<double> _interpolateProbeCurve(
+    List<double> freqs,
+    List<double> probeDb,
+    double fMax,
+  ) {
+    final n = probeDb.length;
+    if (n < 2) return List<double>.filled(freqs.length, 0.0);
+    final f0 = 20.0;
+    final f1 = math.max(fMax, f0 + 1.0);
+    final lf0 = math.log(f0);
+    final span = math.log(f1) - lf0;
+    return List<double>.generate(freqs.length, (i) {
+      final f = freqs[i].clamp(f0, f1);
+      final u = ((math.log(f) - lf0) / span).clamp(0.0, 1.0) * (n - 1);
+      final idx0 = u.floor().clamp(0, n - 1);
+      final idx1 = (idx0 + 1).clamp(0, n - 1);
+      final frac = u - idx0;
+      return probeDb[idx0] * (1.0 - frac) + probeDb[idx1] * frac;
+    }, growable: false);
+  }
+
+  static double? _resolveEelToken(
+    String raw,
+    Map<int, double> sliderValues,
+    List<double> params,
+    Map<int, EelSliderMeta> metas,
+  ) {
+    final s = raw.trim();
+    final lit = double.tryParse(s);
+    if (lit != null) return lit;
+    final m = RegExp(r'^slider(\d+)$').firstMatch(s);
+    if (m != null) {
+      final idx = int.tryParse(m.group(1)!) ?? 0;
+      if (idx >= 1) {
+        if (sliderValues.containsKey(idx)) return sliderValues[idx];
+        if (idx - 1 < params.length) return params[idx - 1];
+        return metas[idx]?.defaultVal ?? 0.0;
+      }
+    }
+    return null;
+  }
+
+  /// 纯 Dart 离线脚本分析回退（用于无 DLL 单元测试或异步探针就绪前的首帧）
+  static List<double> _calcLiveprogFallbackDb({
+    required String code,
+    required List<double> params,
+    required Map<int, double> sliderValues,
+    required Map<int, EelSliderMeta> metas,
+    required List<double> freqs,
+    required int sampleRate,
+    required String channel,
+  }) {
+    final out = List<double>.filled(freqs.length, 0.0);
+    final trimmed = code.trim();
+    if (trimmed.isEmpty) return out;
+
+    // 发生器脚本不叠加假染色
+    if (trimmed.contains('GeneratePinkNoise') ||
+        trimmed.contains('InitPinkNoise')) {
+      return out;
+    }
+
+    // 1. 解析 EqualizerAPO / RBJ 导出脚本中的 preamp 与每滤波器段
+    final gPre = RegExp(r'g_preamp_db\s*=\s*([-+]?\d+(?:\.\d+)?)')
+        .firstMatch(trimmed);
+    final lPre = RegExp(r'l_preamp_db\s*=\s*([-+]?\d+(?:\.\d+)?)')
+        .firstMatch(trimmed);
+    final rPre = RegExp(r'r_preamp_db\s*=\s*([-+]?\d+(?:\.\d+)?)')
+        .firstMatch(trimmed);
+
+    final filterCommentRe = RegExp(
+      r'//\s*Filter\s+\d+:\s*(PK|LSC|HSC|LP|HP|BP|NO)\s+([-+]?\d+(?:\.\d+)?)\s*Hz\s+([-+]?\d+(?:\.\d+)?)\s*dB\s+Q=([-+]?\d+(?:\.\d+)?)',
+      caseSensitive: false,
+    );
+    final calcBiquadRe = RegExp(
+      r'([A-Za-z_]\w*)\.calc_biquad\(\s*([^,]+?)\s*,\s*([^,]+?)\s*,\s*([^)]+?)\s*\)',
+    );
+
+    if (gPre != null || filterCommentRe.hasMatch(trimmed)) {
+      final gp = double.tryParse(gPre?.group(1) ?? '') ?? 0.0;
+      final lp = double.tryParse(lPre?.group(1) ?? '') ?? 0.0;
+      final rp = double.tryParse(rPre?.group(1) ?? '') ?? 0.0;
+      final chPreamp = gp +
+          (channel == 'FL'
+              ? lp
+              : (channel == 'FR' ? rp : 0.5 * (lp + rp)));
+      if (chPreamp != 0.0) {
+        for (var i = 0; i < freqs.length; i++) {
+          out[i] += chPreamp;
+        }
+      }
+
+      var scope = 'all'; // 'all' | 'FL' | 'FR'
+      for (final line in trimmed.split('\n')) {
+        final ls = line.trim();
+        if (ls.contains('Channel L Specific')) {
+          scope = 'FL';
+          continue;
+        }
+        if (ls.contains('Channel R Specific')) {
+          scope = 'FR';
+          continue;
+        }
+        if (ls.contains('Global Filters')) {
+          scope = 'all';
+          continue;
+        }
+        final fm = filterCommentRe.firstMatch(ls);
+        if (fm == null) continue;
+        if (scope == 'FL' && channel == 'FR') continue;
+        if (scope == 'FR' && channel == 'FL') continue;
+        final kind = fm.group(1)!.toUpperCase();
+        final fc = double.tryParse(fm.group(2)!) ?? 1000.0;
+        final gDb = double.tryParse(fm.group(3)!) ?? 0.0;
+        final q = double.tryParse(fm.group(4)!) ?? 0.707;
+        final w = (scope != 'all' && channel == 'all') ? 0.5 : 1.0;
+        for (var i = 0; i < freqs.length; i++) {
+          final f = freqs[i];
+          final double db = switch (kind) {
+            'PK' => calcPeakingDb(
+              f: f,
+              center: fc,
+              gainDb: gDb,
+              q: q,
+              sampleRate: sampleRate,
+            ),
+            'LSC' => calcLowShelfDb(
+              f: f,
+              cutoff: fc,
+              gainDb: gDb,
+              q: q,
+              sampleRate: sampleRate,
+            ),
+            'HSC' => calcHighShelfDb(
+              f: f,
+              cutoff: fc,
+              gainDb: gDb,
+              q: q,
+              sampleRate: sampleRate,
+            ),
+            'LP' => calcFilterDb(
+              f: f,
+              cutoff: fc,
+              type: 1,
+              q: q,
+              sampleRate: sampleRate,
+            ),
+            'HP' => calcFilterDb(
+              f: f,
+              cutoff: fc,
+              type: 0,
+              q: q,
+              sampleRate: sampleRate,
+            ),
+            'BP' => calcFilterDb(
+              f: f,
+              cutoff: fc,
+              type: 2,
+              q: q,
+              sampleRate: sampleRate,
+            ),
+            'NO' => calcNotchDb(
+              f: f,
+              cutoff: fc,
+              q: q,
+              sampleRate: sampleRate,
+            ),
+            _ => 0.0,
+          };
+          out[i] += db * w;
+        }
+      }
+      return out;
+    }
+
+    // 2. Peaking EQ 模板（obj.calc_biquad(freq, q, gain_db)）
+    final bqMatches = calcBiquadRe.allMatches(trimmed).toList();
+    if (bqMatches.isNotEmpty) {
+      final seenObjs = <String>{};
+      for (final m in bqMatches) {
+        final obj = m.group(1)!;
+        final objUpper = obj.toUpperCase();
+        final isObjL = objUpper.endsWith('L');
+        final isObjR = objUpper.endsWith('R') && !objUpper.endsWith('FILTER');
+        if (isObjL && !isObjR && channel == 'FR') continue;
+        if (isObjR && !isObjL && channel == 'FL') continue;
+        if (!seenObjs.add(obj)) continue;
+        final fc = _resolveEelToken(m.group(2)!, sliderValues, params, metas);
+        final q = _resolveEelToken(m.group(3)!, sliderValues, params, metas);
+        final g = _resolveEelToken(m.group(4)!, sliderValues, params, metas);
+        if (fc != null && q != null && g != null) {
+          for (var i = 0; i < freqs.length; i++) {
+            out[i] += calcPeakingDb(
+              f: freqs[i],
+              center: fc,
+              gainDb: g,
+              q: q,
+              sampleRate: sampleRate,
+            );
+          }
+        }
+      }
+      return out;
+    }
+
+    // 3. 三频段分频模板（IIRBandSplitterInit(mem, fLo, fHi)）
+    final splitMatch = RegExp(
+      r'IIRBandSplitterInit\(\s*[^,]+,\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)\s*\)',
+    ).firstMatch(trimmed);
+    if (splitMatch != null) {
+      final fLo = double.tryParse(splitMatch.group(1)!) ?? 250.0;
+      final fHi = double.tryParse(splitMatch.group(2)!) ?? 3500.0;
+      final gLo = math.pow(
+        10.0,
+        (_resolveEelToken('slider1', sliderValues, params, metas) ?? 0.0) / 20.0,
+      );
+      final gMid = math.pow(
+        10.0,
+        (_resolveEelToken('slider2', sliderValues, params, metas) ?? 0.0) / 20.0,
+      );
+      final gHi = math.pow(
+        10.0,
+        (_resolveEelToken('slider3', sliderValues, params, metas) ?? 0.0) / 20.0,
+      );
+      for (var i = 0; i < freqs.length; i++) {
+        final f = freqs[i];
+        final r1 = f / fLo;
+        final lp = 1.0 / (1.0 + math.pow(r1, 4));
+        final r2 = f / fHi;
+        final hp = math.pow(r2, 4) / (1.0 + math.pow(r2, 4));
+        final bp = math.max(0.0, 1.0 - lp - hp);
+        final amp = (lp * gLo + bp * gMid + hp * gHi).clamp(1e-3, 100.0);
+        out[i] = 20.0 * math.log(amp) / math.ln10;
+      }
+      return out;
+    }
+
+    // 4. 滑块 dB 增益映射（如 gain = 10 ^ (slider1 / 20)）
+    final dbGainMatch = RegExp(
+      r'10\s*\^\s*\(\s*(slider\d+)\s*/\s*20(?:\.0+)?\s*\)',
+    ).firstMatch(trimmed);
+    if (dbGainMatch != null) {
+      final gDb = _resolveEelToken(
+        dbGainMatch.group(1)!,
+        sliderValues,
+        params,
+        metas,
+      );
+      if (gDb != null) {
+        final cl = gDb.clamp(-60.0, 30.0);
+        for (var i = 0; i < freqs.length; i++) {
+          out[i] = cl;
+        }
+      }
+      return out;
+    }
+
+    // 5. 常量乘子（如 spl0 *= 0.5 / spl0 = 0）
+    final mulMatch = RegExp(
+      r'spl[01]\s*\*=\s*([-+]?\d+(?:\.\d+)?)',
+    ).firstMatch(trimmed);
+    if (mulMatch != null) {
+      final lin = double.tryParse(mulMatch.group(1)!)?.abs() ?? 1.0;
+      final db = lin <= 1e-3
+          ? -60.0
+          : (20.0 * math.log(lin) / math.ln10).clamp(-60.0, 30.0);
+      for (var i = 0; i < freqs.length; i++) {
+        out[i] = db;
+      }
+    }
+    return out;
+  }
+
+  static void _applyLiveprogStageDb({
+    required AppModel model,
+    required bool multichannel,
+    required List<double> freqs,
+    required List<double> gains,
+    required String channel,
+    required int sampleRate,
+  }) {
+    final code = (multichannel ? model.lpMcCode : model.lpCode)?.trim() ?? '';
+    if (code.isEmpty) return;
+
+    final chCount = model.effectiveChannelCount;
+    final isBinaural =
+        model.spatialBinaural && model.spatialOn && chCount >= 4;
+    final isDiscrete =
+        !isBinaural && chCount >= 4 && model.channelsMode == 1;
+    final isLfe = channel == 'LFE';
+    final isFrontPair = channel == 'FL' || channel == 'FR';
+
+    double stageWeight = 1.0;
+    String probeCh = channel;
+    if (!multichannel) {
+      if (isLfe) return;
+      if (isDiscrete) {
+        if (isFrontPair) {
+          stageWeight = 1.0;
+        } else if (channel == 'all') {
+          stageWeight = 2.0 / chCount;
+        } else {
+          return;
+        }
+      }
+      probeCh = isFrontPair ? channel : 'all';
+    }
+
+    final cached = model.cachedLiveprogResponse(
+      multichannel: multichannel,
+      spectrumChannel: probeCh,
+    );
+    final workRate = multichannel ? sampleRate : eqWorkingRateFor(sampleRate);
+    final List<double> deltaDb;
+    if (cached != null) {
+      deltaDb = _interpolateProbeCurve(freqs, cached.gainsDb, cached.fMax);
+    } else {
+      deltaDb = _calcLiveprogFallbackDb(
+        code: code,
+        params: model.effectiveLiveprogParams(multichannel: multichannel),
+        sliderValues: multichannel
+            ? model.lpMcSliderValues
+            : model.lpSliderValues,
+        metas: multichannel ? model.lpMcSliderMetas : model.lpSliderMetas,
+        freqs: freqs,
+        sampleRate: workRate,
+        channel: probeCh,
+      );
+    }
+
+    for (var i = 0; i < freqs.length; i++) {
+      final d = deltaDb[i];
+      if (stageWeight >= 0.999) {
+        gains[i] += d;
+      } else {
+        final linPow = math.pow(10.0, d / 10.0).toDouble();
+        final avgPow = (1.0 - stageWeight) + stageWeight * linPow;
+        gains[i] += (10.0 * math.log(math.max(avgPow, 1e-6)) / math.ln10)
+            .clamp(-60.0, 30.0);
+      }
+    }
   }
 
   /// 二阶通用滤波传递函数增益 (HPF, LPF, BPF)
@@ -469,53 +1131,37 @@ class FullChainTransferCalculator {
         }
       }
 
-      // 空间音效 (Spatial) — 耳廓声学滤滤波与声场扩展（LFE 不参与）
-      if (model.isStageEnabled('spatial') && !isLfe) {
-        final mix = model.spatialMix.clamp(0.0, 1.0);
-        final outGain = model.spatialOutGain;
-        final room = model.spatialRoom.clamp(0.0, 1.0);
-        final width = model.spatialWidth.clamp(0.0, 2.0);
-
-        for (var i = 0; i < freqs.length; i++) {
-          final f = freqs[i];
-          double spDb = outGain;
-          // 耳廓 HRTF 空间散射陷波 (3k~7kHz)
-          if (f >= 3000 && f <= 7500) {
-            final notch = math.sin((f - 3000) / 4500 * math.pi);
-            spDb -= 2.2 * (width / 1.0) * notch;
-          }
-          // 房间声学反射与体积增益 (100~350Hz)
-          if (f >= 100 && f <= 350) {
-            final warm = math.sin((f - 100) / 250 * math.pi);
-            spDb += 1.4 * room * warm;
-          }
-          // 左右声道细微声学阴影差
-          if (channel == 'FR') {
-            if (f > 2000) spDb -= 0.5;
-          } else if (channel == 'FL') {
-            if (f > 2000) spDb += 0.2;
-          }
-          gains[i] += spDb * mix;
-        }
+      // 空间音效 (Spatial) — 基于 dsp_spatial.cpp 的平滑连续声学模型（LFE/离散声道对齐）
+      if (model.isStageEnabled('spatial')) {
+        _applySpatialDb(
+          model: model,
+          freqs: freqs,
+          gains: gains,
+          channel: channel,
+          sampleRate: sampleRate,
+        );
       }
 
-      // Liveprog 动态脚本 — 提取参数变动与特征响应
+      // Liveprog 动态脚本（立体声宿主 + 多声道母带宿主 MC，优先 C++ 实测探针缓存）
       if (model.isStageEnabled('liveprog')) {
-        // 脚本激活时引入声学特征与滑块响应
-        final p1 = model.lpParams.isNotEmpty ? model.lpParams[0] : 0.0;
-        final p2 = model.lpParams.length > 1 ? model.lpParams[1] : 0.0;
-        for (var i = 0; i < freqs.length; i++) {
-          final f = freqs[i];
-          // 基础脚本染色响应
-          if (f > 1000) {
-            gains[i] += 0.6 * math.min(1.0, (f - 1000) / 5000);
-          }
-          // 滑块联动响应（如果已设）
-          if (p1.abs() > 0.01 || p2.abs() > 0.01) {
-            gains[i] += (p1 * 2.0 * math.exp(-math.pow(math.log(f / 1000), 2)))
-                .clamp(-6.0, 6.0);
-          }
-        }
+        _applyLiveprogStageDb(
+          model: model,
+          multichannel: false,
+          freqs: freqs,
+          gains: gains,
+          channel: channel,
+          sampleRate: sampleRate,
+        );
+      }
+      if (model.lpMcEnabled && model.effectiveChannelCount > 2) {
+        _applyLiveprogStageDb(
+          model: model,
+          multichannel: true,
+          freqs: freqs,
+          gains: gains,
+          channel: channel,
+          sampleRate: sampleRate,
+        );
       }
 
       // 响度均衡 (Loudness ISO 226 轮廓模拟)
@@ -633,6 +1279,7 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
     final isVb = widget.model.modeCaps.routeSelector;
 
     // 获取当前计算结果
+    widget.model.ensureLiveprogResponse(_selectedChannel);
     final res = FullChainTransferCalculator.compute(
       model: widget.model,
       channel: _selectedChannel,
@@ -736,7 +1383,10 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
                 tooltip: l.chainFreqRefreshTooltip,
                 icon: Icon(Icons.refresh_rounded, size: 18, color: p.accent),
                 onPressed: () async {
-                  await widget.model.refreshAllComponentLatencies();
+                  await Future.wait([
+                    widget.model.refreshAllComponentLatencies(),
+                    widget.model.refreshLiveprogResponseNow(_selectedChannel),
+                  ]);
                   if (context.mounted) {
                     setState(() {});
                     // 全面复审 S2（UI-15）：通知按成分分级——含估算
