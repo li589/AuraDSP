@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-21T02:23:05Z",
-  "updated_at": "2026-11-27T10:27:00Z",
+  "updated_at": "2026-11-28T02:53:31Z",
   "files": {
     ".ai/README.md": {
       "role": "index",
@@ -263,9 +263,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "e6930a3266f01f4cf1f4c9a0d1c92a4f5c4c36e47e32ca71ed3c6a60670e941d",
-      "size": 1195808,
-      "normalized_sha256": "e6930a3266f01f4cf1f4c9a0d1c92a4f5c4c36e47e32ca71ed3c6a60670e941d"
+      "sha256": "2b73cf4d3a931bd55d3a8c83a153c357886c989bf9b2798e4a0db00922dcfa23",
+      "size": 536241,
+      "normalized_sha256": "2b73cf4d3a931bd55d3a8c83a153c357886c989bf9b2798e4a0db00922dcfa23"
     },
     "aoci.meta.txt": {
       "role": "index",
