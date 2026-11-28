@@ -271,10 +271,15 @@ foreach(case_name uninitialized oversized invalid refresh normal)
         COMMAND convolver_safety_test ${case_name})
 endforeach()
 
+# Unit tests only pull legacy C / standalone DSP objects; wrapping OBJECT core
+# in a STATIC archive mirrors Windows selective archive linking without
+# altering auradsp_engine's full OBJECT export closure or recompiling sources.
+add_library(auradsp_core_static STATIC $<TARGET_OBJECTS:auradsp_core>)
+
 # Batch 1 C-02: recursive legacy mutex and SetSampleRate/Free lifecycle.
 add_executable(legacy_mutex_test "${API}/tests/legacy_mutex_test.c")
 target_include_directories(legacy_mutex_test PRIVATE "${API}")
-target_link_libraries(legacy_mutex_test PRIVATE auradsp_core Threads::Threads m)
+target_link_libraries(legacy_mutex_test PRIVATE auradsp_core_static Threads::Threads m)
 set_property(TARGET legacy_mutex_test PROPERTY C_STANDARD 11)
 set_property(TARGET legacy_mutex_test PROPERTY LINKER_LANGUAGE CXX)
 add_test(NAME legacy_mutex_recursive COMMAND legacy_mutex_test recursive)
@@ -298,9 +303,9 @@ add_executable(multimodal_eq_concurrency_test
     "${API}/tests/multimodal_eq_concurrency_test.c")
 target_include_directories(multimodal_eq_concurrency_test PRIVATE "${API}")
 target_link_libraries(multimodal_eq_concurrency_test PRIVATE
-    auradsp_core Threads::Threads m)
+    auradsp_core_static Threads::Threads m)
 target_compile_options(multimodal_eq_concurrency_test PRIVATE
-    -include "${API}/auradsp_gcc_shim.h")
+    $<$<COMPILE_LANGUAGE:C>:-include stdint.h>)
 set_property(TARGET multimodal_eq_concurrency_test PROPERTY C_STANDARD 11)
 set_property(TARGET multimodal_eq_concurrency_test PROPERTY LINKER_LANGUAGE CXX)
 add_test(NAME multimodal_eq_frozen_update
@@ -316,7 +321,7 @@ add_executable(dsp_boundary_test
     "${API}/tests/dsp_boundary_test.cpp"
     "${API}/dsp/dsp_mc_reverb.cpp")
 target_include_directories(dsp_boundary_test PRIVATE "${API}")
-target_link_libraries(dsp_boundary_test PRIVATE auradsp_core Threads::Threads m)
+target_link_libraries(dsp_boundary_test PRIVATE auradsp_core_static Threads::Threads m)
 target_compile_definitions(dsp_boundary_test PRIVATE AURADSP_NO_PLUGINS=1)
 target_compile_options(dsp_boundary_test PRIVATE
     -include "${API}/auradsp_gcc_shim.h")
@@ -386,6 +391,7 @@ if(AURADSP_ENABLE_PLUGINS)
         "LINKER:--allow-multiple-definition"
     )
     target_link_libraries(test_plugin_control_async PRIVATE
+        auradsp_engine
         Threads::Threads
         ${CMAKE_DL_LIBS}
         m
