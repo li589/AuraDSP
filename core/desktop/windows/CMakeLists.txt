@@ -232,6 +232,22 @@ foreach(case_name uninitialized oversized invalid refresh normal)
         COMMAND convolver_safety_test ${case_name})
 endforeach()
 
+# Batch 1 C-02: recursive legacy mutex and SetSampleRate/Free lifecycle.
+add_executable(legacy_mutex_test "${API}/tests/legacy_mutex_test.c")
+target_include_directories(legacy_mutex_test PRIVATE "${API}")
+target_link_libraries(legacy_mutex_test PRIVATE auradsp_core)
+target_compile_definitions(legacy_mutex_test PRIVATE
+    NDEBUG _CRT_SECURE_NO_WARNINGS _WIN32_WINNT=0x0601
+    WINVER=0x0601 NTDDI_VERSION=0x06010000)
+target_compile_options(legacy_mutex_test PRIVATE
+    /utf-8 /FI"${API}/auradsp_msvc_shim.h")
+set_property(TARGET legacy_mutex_test PROPERTY C_STANDARD 11)
+set_property(TARGET legacy_mutex_test PROPERTY LINKER_LANGUAGE CXX)
+add_test(NAME legacy_mutex_recursive COMMAND legacy_mutex_test recursive)
+add_test(NAME legacy_mutex_sample_rate COMMAND legacy_mutex_test sample_rate)
+set_tests_properties(legacy_mutex_recursive legacy_mutex_sample_rate
+    PROPERTIES TIMEOUT 10)
+
 target_include_directories(auradsp_engine PRIVATE
     "${API}"
     "${API}/chain"

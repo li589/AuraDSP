@@ -40,6 +40,29 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *rwlock);
 int pthread_rwlock_trywrlock(pthread_rwlock_t  *rwlock);
 int pthread_rwlock_unlock(pthread_rwlock_t *rwlock);
 #else
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include <pthread.h>
 #endif
+
+/* [PATCHED-AuraDSP P-062] Legacy setters recursively re-enter jdsp_lock on
+ * POSIX; the default normal mutex turns those calls into a self-deadlock. */
+static inline int aura_mutex_init_recursive(pthread_mutex_t *mutex)
+{
+#ifdef _WIN32
+	/* Windows CRITICAL_SECTION is already recursive. */
+	return pthread_mutex_init(mutex, NULL);
+#else
+	pthread_mutexattr_t attr;
+	int rc = pthread_mutexattr_init(&attr);
+	if (rc != 0) return rc;
+	rc = pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+	if (rc == 0)
+		rc = pthread_mutex_init(mutex, &attr);
+	pthread_mutexattr_destroy(&attr);
+	return rc;
+#endif
+}
+
 #endif /* __CPTHREAD_H__ */

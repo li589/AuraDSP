@@ -1,3 +1,6 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1893,7 +1896,8 @@ int JamesDSPInit(JamesDSPLib *jdsp, int n, float sample_rate)
 		jdsp->p24_from_i32 = p24_from_i32_big_endian;
 	}
 	//
-	if (pthread_mutex_init(&jdsp->m_in_processing, NULL) != 0)
+	/* [PATCHED-AuraDSP P-062] Nested vendor setters require a recursive mutex. */
+	if (aura_mutex_init_recursive(&jdsp->m_in_processing) != 0)
 		jdsp->isMutexSuccess = 0;
 	else
 		jdsp->isMutexSuccess = 1;
@@ -2166,6 +2170,7 @@ rate_fail:
 }
 void JamesDSPFree(JamesDSPLib *jdsp)
 {
+	if (!jdsp) return;
 	jdsp_lock(jdsp);
 	StereoEnhancementDestructor(jdsp);
 	CompressorDestructor(jdsp);
@@ -2202,12 +2207,17 @@ void JamesDSPFree(JamesDSPLib *jdsp)
 	}
 	if (jdsp->impulseResponseStorage.impulseResponse)
 		free(jdsp->impulseResponseStorage.impulseResponse);
-	if (jdsp->isMutexSuccess)
-		pthread_mutex_destroy(&jdsp->m_in_processing);
 	if (jdsp->enableASRC)
 	{
 		FreeIntegerASRCHandler(&jdsp->asrc[0]);
 		FreeIntegerASRCHandler(&jdsp->asrc[1]);
 	}
+	/* [PATCHED-AuraDSP P-062] Unlock before destroy; destroying a locked mutex
+	 * and then unlocking it is undefined on POSIX. */
 	jdsp_unlock(jdsp);
+	if (jdsp->isMutexSuccess)
+	{
+		pthread_mutex_destroy(&jdsp->m_in_processing);
+		jdsp->isMutexSuccess = 0;
+	}
 }

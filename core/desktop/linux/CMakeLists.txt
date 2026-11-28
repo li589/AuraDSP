@@ -271,6 +271,17 @@ foreach(case_name uninitialized oversized invalid refresh normal)
         COMMAND convolver_safety_test ${case_name})
 endforeach()
 
+# Batch 1 C-02: recursive legacy mutex and SetSampleRate/Free lifecycle.
+add_executable(legacy_mutex_test "${API}/tests/legacy_mutex_test.c")
+target_include_directories(legacy_mutex_test PRIVATE "${API}")
+target_link_libraries(legacy_mutex_test PRIVATE auradsp_core Threads::Threads m)
+set_property(TARGET legacy_mutex_test PROPERTY C_STANDARD 11)
+set_property(TARGET legacy_mutex_test PROPERTY LINKER_LANGUAGE CXX)
+add_test(NAME legacy_mutex_recursive COMMAND legacy_mutex_test recursive)
+add_test(NAME legacy_mutex_sample_rate COMMAND legacy_mutex_test sample_rate)
+set_tests_properties(legacy_mutex_recursive legacy_mutex_sample_rate
+    PROPERTIES TIMEOUT 10)
+
 # 进程外宿主 plugin_host_x64（双宿主架构，Linux 无扩展名）：与
 # Windows 的 auradsp_plugin_host 目标对位——宿主自带一份插件层
 # （driver/formats/posix 平台层，HOST_INPROC 语义），经 IPC 协议

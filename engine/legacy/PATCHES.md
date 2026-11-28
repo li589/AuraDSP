@@ -1446,3 +1446,19 @@ yquist * 0.999，
   修复后五项全绿，normal 的 1x1/2x2 与原地处理保持精确。
 - **上游同步冲突风险**：高（四种结构体布局、Load/Free/Refresh 和 Process
   入口均改；升级时需保持 initialized 发布点与部分分配清理语义）。
+
+## P-062 cpthread.h + jdspController.c — POSIX 递归锁与 Free 解锁序（2026-11-28，Batch 1 C-02）
+
+- **问题**：非 Windows 使用默认 `PTHREAD_MUTEX_NORMAL`，`JamesDSPSetSampleRate`
+  持锁调用 `ArbitraryResponseEqualizerEnable` 等同锁 setters 时必现自死锁；
+  `JamesDSPFree` 在持锁状态销毁 mutex 后又调用 `jdsp_unlock`，属于 UB。
+- **修法**：新增 `aura_mutex_init_recursive`，POSIX 在系统头前启用 `_GNU_SOURCE`
+  并显式设置 `PTHREAD_MUTEX_RECURSIVE`（该常量是枚举，不能用 `#ifdef` 探测），
+  Windows 沿用本就可递归的 CriticalSection；`JamesDSPInit` 改走该初始化。
+  `JamesDSPFree` 先完成资源释放，再解锁，最后销毁 mutex 并清零
+  `isMutexSuccess`，不再解锁已销毁对象。
+- **验收**：`engine/tests/legacy_mutex_test.c` 在 Windows/Linux CTest 分别运行
+  同线程二次加锁与 `Init→SetSampleRate(forceRefresh=1)→Free` 两个真实用例；
+  Linux 修复前 recursive 用例 2 秒超时。
+- **上游同步冲突风险**：中（改 mutex 初始化入口与 Free 尾部顺序；上游若变更
+  锁生命周期需重新核对递归语义和解锁/销毁序）。
