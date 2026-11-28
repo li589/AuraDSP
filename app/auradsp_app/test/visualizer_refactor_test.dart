@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -10,6 +11,7 @@ import 'package:auradsp_app/features/visualizer/controllers/waveform_synthesizer
 import 'package:auradsp_app/features/visualizer/plugins/milkdrop_preset.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_atmosphere.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_fluid.dart';
+import 'package:auradsp_app/features/visualizer/styles/style_goniometer.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_gpu_shader.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_milkdrop.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_nebula_flow.dart';
@@ -194,6 +196,51 @@ void main() {
   });
 
   group('Canvas style painters', () {
+    test(
+      'goniometer scales a quiet trace across the calibrated polar scope',
+      () async {
+        final points = Float32List(64);
+        for (var i = 0; i < 32; i++) {
+          final angle = i / 31 * 2 * math.pi;
+          points[i * 2] = 0.12 * math.cos(angle);
+          points[i * 2 + 1] = 0.08 * math.sin(angle);
+        }
+        final painter = GoniometerPainter(
+          points: points,
+          palette: VisualizerPalette.resolve(
+            VisualizerColorTheme.neonCyber,
+            auraDark,
+          ),
+          showGrid: false,
+          bloom: 0.0,
+        );
+        final recorder = ui.PictureRecorder();
+        painter.paint(Canvas(recorder), const Size(800, 480));
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(800, 480);
+        final data = (await image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        ))!.buffer.asUint8List();
+        var minX = 800;
+        var minY = 480;
+        var maxX = -1;
+        var maxY = -1;
+        for (var y = 0; y < 480; y++) {
+          for (var x = 0; x < 800; x++) {
+            if (data[(y * 800 + x) * 4 + 3] == 0) continue;
+            minX = math.min(minX, x);
+            minY = math.min(minY, y);
+            maxX = math.max(maxX, x);
+            maxY = math.max(maxY, y);
+          }
+        }
+        image.dispose();
+        picture.dispose();
+        expect(maxX - minX, greaterThan(70));
+        expect(maxY - minY, greaterThan(40));
+      },
+    );
+
     test('New fluid / tornado styles and atmosphere layer paint without errors', () {
       final synth = WaveformSynthesizer();
       synth.update(

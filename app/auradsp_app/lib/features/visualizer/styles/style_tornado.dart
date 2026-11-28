@@ -219,7 +219,11 @@ class _TornadoParticleField {
     final profile = Float32List(256);
     for (var i = 0; i < profile.length; i++) {
       // The reference projects its wide spawning mouth to the top of the screen.
-      profile[i] = 0.20 + 3.85 * math.pow(i / 255.0, 0.82);
+      final t = i / 255.0;
+      // Ease both ends of the funnel so the shoulder grows continuously rather
+      // than opening abruptly near the spawning mouth.
+      final eased = t * t * (3.0 - 2.0 * t);
+      profile[i] = 0.20 + 3.85 * eased;
     }
     return profile;
   }
@@ -361,13 +365,14 @@ class _TornadoParticleField {
     final turbulence =
         math.sin(u * 13.0 + _colorPhase[i] * _tau + _flow * 0.7) * 0.09 +
         math.sin(u * 27.0 - _colorPhase[i] * 11.0 - _flow * 0.43) * 0.035;
+    final core = 1.0 - _smoothstep(0.32, 1.0, u);
     final bendX =
-        math.sin(_flow * 0.82 + u * 2.4) * 0.48 +
-        math.sin(u * 9.0 - _flow * 0.37) * 0.14;
+        math.sin(_flow * 0.82 + u * 2.4) * 0.30 * core +
+        math.sin(u * 9.0 - _flow * 0.37) * 0.08 * core;
     final bendZ =
-        math.cos(_flow * 0.69 - u * 2.1) * 0.34 +
-        math.cos(u * 8.1 + _flow * 0.41) * 0.12;
-    final r = radius + turbulence * (0.70 + spread * 0.30);
+        math.cos(_flow * 0.69 - u * 2.1) * 0.22 * core +
+        math.cos(u * 8.1 + _flow * 0.41) * 0.07 * core;
+    final r = radius + turbulence * (0.35 + spread * 0.18);
     out[offset] = bendX + math.cos(angle) * r;
     out[offset + 1] = _floor + u * _height;
     out[offset + 2] = bendZ + math.sin(angle) * r * 0.88;
@@ -524,11 +529,11 @@ class _TornadoParticleField {
     final y = _projectedY;
     final depth = _projectedDepth;
     final diameter =
-        ((1.80 + _particleSize[i] * 2.80) *
+        ((2.35 + _particleSize[i] * 3.25) *
                 (_cameraNear / depth) *
                 _pixelScale *
-                (1.0 + _smoothedTreble * 0.08))
-            .clamp(1.4, 10.0);
+                (1.0 + _smoothedTreble * 0.10))
+            .clamp(1.8, 11.0);
     final margin = diameter * 2.0 + 8.0;
     if (x < -margin ||
         x > size.width + margin ||
@@ -541,8 +546,11 @@ class _TornadoParticleField {
     _diameterSamples++;
     final u = _heightU[i];
     final slice = _atlas.starTiers[_tier[i]];
+    // A traveling hue wave moves upward through the funnel, with the audio
+    // envelope controlling both phase velocity and color excursion.
+    final wavePhase = _flow * 2.7 + u * _tau * 1.35 + _colorPhase[i] * _tau;
     final colorPulse =
-        _smoothedTreble * 0.04 * math.sin(_flow * 2.7 + _colorPhase[i] * _tau);
+        (_smoothedMid * 0.10 + _smoothedTreble * 0.15) * math.sin(wavePhase);
     final hue =
         (((_colorPhase[i] +
                         u * 0.32 +

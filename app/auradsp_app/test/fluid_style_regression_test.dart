@@ -221,6 +221,17 @@ void main() {
             '$minimumBottomDye',
       );
 
+      var minimumSideDye = double.infinity;
+      for (var y = 0; y < 72; y++) {
+        minimumSideDye = math.min(minimumSideDye, painter.debugDyeAt(0, y));
+        minimumSideDye = math.min(minimumSideDye, painter.debugDyeAt(127, y));
+      }
+      expect(
+        minimumSideDye,
+        greaterThan(0.15),
+        reason: 'The left and right edge cells must not expose dark gaps.',
+      );
+
       final rowProfile = <double>[];
       for (var y = 66; y < 72; y++) {
         var rowMinimum = double.infinity;

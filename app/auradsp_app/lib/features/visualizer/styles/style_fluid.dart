@@ -99,6 +99,7 @@ class _FluidField {
   // 大精灵覆盖面积高于旧网格，压低单次 alpha 防止流体糊成均匀浓雾。
   static const double _spriteOpacity = 0.68;
   static const int _bottomCoverageRows = 8;
+  static const int _sideCoverageColumns = 5;
 
   // 速度场与染料场的双缓冲
   final Float32List _u = Float32List(_cells);
@@ -207,7 +208,7 @@ class _FluidField {
     _confineVorticity(dt);
     _project();
     _advectDye(dt);
-    _coverBottomEdge();
+    _coverViewportEdges();
     _relaxVelocity(dt);
     if (adaptivePressure) {
       _stepWatch.stop();
@@ -369,29 +370,48 @@ class _FluidField {
     }
   }
 
-  /// 底边柔和的连续性衬底：只补低浓度缝隙，不叠加饱和亮带。
-  void _coverBottomEdge() {
+  /// 四周边缘的柔和连续性衬底：只补低浓度缝隙，不叠加饱和亮带。
+  void _coverViewportEdges() {
     var active = 0.0;
     for (var i = 0; i < _smoothedBands.length; i++) {
       active = math.max(active, _smoothedBands[i]);
     }
     if (active < 0.01) return;
 
-    final floorRow = (_ny - 1) * _nx;
     final phase = _simTime * 0.65;
     for (var x = 0; x < _nx; x++) {
       final local = _bandEnergy(_smoothedBands, x / (_nx - 1));
       final ripple =
           math.sin(x * 0.47 + phase) * 0.5 +
           math.sin(x * 0.19 - phase * 0.73) * 0.5;
-      final bottomFloor = 0.172 + local * 0.035 + ripple * 0.008;
+      final edgeFloor = 0.172 + local * 0.035 + ripple * 0.008;
       for (var row = 0; row < _bottomCoverageRows; row++) {
         final t = row / (_bottomCoverageRows - 1);
-        // smoothstep 让底边覆盖连续爬升，不再把最后两行硬钳成明亮色带。
         final falloff = 1.0 - t * t * (3.0 - 2.0 * t);
-        final cell = floorRow - row * _nx + x;
-        final floor = bottomFloor * falloff;
-        if (_dye[cell] < floor) _dye[cell] = floor;
+        final bottomCell = (_ny - 1 - row) * _nx + x;
+        final bottomFloor = edgeFloor * falloff;
+        if (_dye[bottomCell] < bottomFloor) _dye[bottomCell] = bottomFloor;
+
+        final topCell = row * _nx + x;
+        final topFloor = edgeFloor * falloff * 0.68;
+        if (_dye[topCell] < topFloor) _dye[topCell] = topFloor;
+      }
+    }
+
+    for (var y = 0; y < _ny; y++) {
+      final local = _bandEnergy(_smoothedBands, y / (_ny - 1));
+      final ripple =
+          math.sin(y * 0.43 + phase * 0.82) * 0.5 +
+          math.sin(y * 0.17 - phase * 0.58) * 0.5;
+      final edgeFloor = 0.168 + local * 0.028 + ripple * 0.007;
+      for (var column = 0; column < _sideCoverageColumns; column++) {
+        final t = column / (_sideCoverageColumns - 1);
+        final falloff = 1.0 - t * t * (3.0 - 2.0 * t);
+        final floor = edgeFloor * falloff;
+        final leftCell = y * _nx + column;
+        final rightCell = y * _nx + (_nx - 1 - column);
+        if (_dye[leftCell] < floor) _dye[leftCell] = floor;
+        if (_dye[rightCell] < floor) _dye[rightCell] = floor;
       }
     }
   }

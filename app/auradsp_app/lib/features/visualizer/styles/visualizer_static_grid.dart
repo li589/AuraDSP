@@ -34,12 +34,11 @@ class StaticGridPainter extends CustomPainter {
 
   /// 只有这三种风格的网格是纯静态的；其余风格的「网格」本身就是动态地形。
   static bool supports(VisualizerStyle style) => switch (style) {
-        VisualizerStyle.bars ||
-        VisualizerStyle.oscilloscope ||
-        VisualizerStyle.goniometer =>
-          true,
-        _ => false,
-      };
+    VisualizerStyle.bars ||
+    VisualizerStyle.oscilloscope ||
+    VisualizerStyle.goniometer => true,
+    _ => false,
+  };
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -129,7 +128,7 @@ void paintOscilloscopeGrid(
   canvas.drawRawPoints(PointMode.lines, lines, gridPaint);
 }
 
-/// 相位仪极坐标网格：3 层同心圆 + 45° 交叉轴。
+/// 相位仪测量网格：4 层同心圈 + 水平/垂直与 45° 参考轴。
 void paintPolarGrid(
   Canvas canvas,
   Offset center,
@@ -138,20 +137,31 @@ void paintPolarGrid(
   Paint axisPaint,
   Float32List lines,
 ) {
-  canvas.drawCircle(center, radius * 0.33, gridPaint);
-  canvas.drawCircle(center, radius * 0.66, gridPaint);
+  canvas.drawCircle(center, radius * 0.25, gridPaint);
+  canvas.drawCircle(center, radius * 0.50, gridPaint);
+  canvas.drawCircle(center, radius * 0.75, gridPaint);
   canvas.drawCircle(center, radius, gridPaint);
 
-  final dx = radius * 0.707;
-  final dy = radius * 0.707;
-  lines[0] = center.dx - dx;
-  lines[1] = center.dy - dy;
-  lines[2] = center.dx + dx;
-  lines[3] = center.dy + dy;
-  lines[4] = center.dx - dx;
-  lines[5] = center.dy + dy;
-  lines[6] = center.dx + dx;
-  lines[7] = center.dy - dy;
+  final diagonal = radius * 0.707;
+  final halfWidth = radius;
+  final halfHeight = radius;
+  // Horizontal and vertical axes make the stereo phase orientation explicit.
+  lines[0] = center.dx - halfWidth;
+  lines[1] = center.dy;
+  lines[2] = center.dx + halfWidth;
+  lines[3] = center.dy;
+  lines[4] = center.dx;
+  lines[5] = center.dy - halfHeight;
+  lines[6] = center.dx;
+  lines[7] = center.dy + halfHeight;
+  lines[8] = center.dx - diagonal;
+  lines[9] = center.dy - diagonal;
+  lines[10] = center.dx + diagonal;
+  lines[11] = center.dy + diagonal;
+  lines[12] = center.dx - diagonal;
+  lines[13] = center.dy + diagonal;
+  lines[14] = center.dx + diagonal;
+  lines[15] = center.dy - diagonal;
   canvas.drawRawPoints(PointMode.lines, lines, axisPaint);
 }
 
