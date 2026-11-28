@@ -1,14 +1,14 @@
 # source/ 参考项目审理报告
 
-> 版本：**v3.0**（2026-11-22，新增音频可视化双参考：karlstav `cava` 与 projectM-visualizer `projectm`，扩充 §1 / §2.13 / §2.14 / §4 / §5 / §6）
-> 范围：`source/` 下全部 23 个第三方参考克隆/归档（21 个顶层目录，含 `ViPER4Windows/ViPERDSP` 与 `vst2sdk/vstsdk2.4` 两个嵌套项）的实测结构、源码完整性、磁盘占用、许可证与算法价值。
+> 版本：**v3.1**（2026-11-28，新增 Windows 虚拟声卡音效参考 `fxsound2/fxsound-app`：AGPL-3.0 只读红线、体积与嵌套 `.git` 复核，扩充 §1 / §2.15 / §4 / §5 / §6）
+> 范围：`source/` 下全部 24 个第三方参考克隆/归档（22 个顶层目录，含 `ViPER4Windows/ViPERDSP` 与 `vst2sdk/vstsdk2.4` 两个嵌套项）的实测结构、源码完整性、磁盘占用、许可证与算法价值。
 > 定位：只读参考区（.gitignore 排除，不入主库）；本报告为 M1 插件宿主 / Phase 5~8 / 算法对照（M5 细化）与新一代音频可视化系统重构提供完整决策依据。
 
 ---
 
 ## 1. 资产总览（实测基线）
 
-截至 2026-11-22，`source/` 下全部 23 个参考项目/归档均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 整体 gitignore，仅 `ORIGIN.md` 白名单入库；从参考仓提取进主库的第三方资产登记见 [`vendor/ORIGIN.md`](../../vendor/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
+截至 2026-11-28，`source/` 下全部 24 个参考项目/归档均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 整体 gitignore，仅 `ORIGIN.md` 白名单入库；从参考仓提取进主库的第三方资产登记见 [`vendor/ORIGIN.md`](../../vendor/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
 
 | # | 目录 | 对应上游仓库 | 平台 / 技术栈 | 许可证 | 实测体积 / 文件数 | 对 AuraDSP 的参考价值与对齐里程碑 |
 |---|---|---|---|---|---|---|
@@ -35,8 +35,9 @@
 | 21 | **SynchronousAudioRouter** | `eiz/SynchronousAudioRouter` (master@494ed9a) | Windows / C++, PortCls + ASIO + COM | GPL-3.0（另附 GPL-2.0 文本） | 1.4 MB (129 文件) | ★★★ **「虚拟设备↔ASIO↔物理接口」主时钟同步与多设备编排的正典参考**。`SynchronousAudioRouter/SarWaveFilterDescriptor.cpp` 为 PortCls 过滤器描述符式驱动；`SarAsio/` 是配套 ASIO 驱动（`wrapper.cpp` COM 包装、`mmwrapper.cpp` MMDevice 代理、`sarclient.cpp` 客户端、`ActivateAudioInterfaceWorker.idl` 音频接口激活 worker）—— 对应本仓 `auraasio_bridge`；`SarCtl`/`SarConfigure` 为控制面板；`RioPing`/`nm_ping` 为往返延迟测量工具。核心价值：虚拟流**统一同步到物理接口时钟**以消除漂移与欠载 |
 | 22 | **cava** | `karlstav/cava` (master@505cbf6) | 跨平台 / 纯 C (cavacore, FFTW/iniparser) | MIT | 5.38 MB (157 文件) | ★★★ **音频可视化特征层与物理平滑滤波正典真相源**。其核心核 `cavacore` 提供了对数自适应分频（支持 16~128 条可配频带）、感知等响加权（Acoustic weighting）、重力跌落（gravity fall-off）+ 积分平滑（integral noise reduction）以及实时动态范围自动增益（autosens），彻底解决传统原始 FFT 噪点大、频段拥挤、动感生硬的技术顽疾 |
 | 23 | **projectm** | `projectM-visualizer/projectm` (master@9e26f5b5b) | 跨平台 / C++, C-API (libprojectM v4) | LGPL-2.1 | 43.38 MB (901 文件) | ★★★ **Winamp MilkDrop 预设跨平台渲染引擎金标准**。libprojectM v4 提供了纯 C 外部 API（`projectM-4`）、完整的 `.milk` 预设方程式解析器（Per-frame / Per-pixel EEL 代码编译执行）、Warp 网格形变计算、着色器生成与跨平台 OpenGL/GLES/Metal 离屏渲染管线，是 AuraDSP 原生 MilkDrop 脚本预设引擎接入蓝本 |
+| 24 | **fxsound-app** | `fxsound2/fxsound-app` (main@c5ce4f0) | Windows / C++, JUCE GUI + 虚拟驱动接口 + 实时 DSP | **AGPL-3.0**（根 LICENSE + README §License；JUCE 依赖亦 AGPL-3.0） | 381.6 MB (867 文件；剥 `.git` 前 5069.7 MB；已删 release 安装包) | ★★ **Windows 系统级「虚拟声卡」音效应用参考**：JUCE GUI（`fxsound/`）+ 与 FxSound Audio Enhancer 虚拟驱动交互的 `audiopassthru/` + 实时 DSP `dsp/`（DfxDsp / ptechDsp / ptComSftDfx）。树内 `bin/` 含预编译 PDB（**仅只读参考、禁分发**），`release/` 下两个 setup.exe 已删除；`Resources/` 为未初始化 submodule。**AGPL-3.0 与 GPL-3.0 不兼容 → 禁并入主库，仅阅读参考** |
 
-总计占用：**~884 MB**，约 **16,011** 个源文件与资源（2026-11-22 复测；较 v2.9 的 835 MB 净增 48.76 MB / 1,058 文件）。
+总计占用：**~1,266 MB**，约 **16,878** 个源文件与资源（2026-11-28 复测；新增 `fxsound-app` 381.6 MB / 867 文件，较 v3.0 的 ~884 MB / 16,011 文件增长；同时剥除 `projectm/vendor/projectm-eval/.git` 残留，并删除 FxSound `release/` 下两个 setup.exe）。
 
 ---
 
@@ -325,6 +326,18 @@
   - UI 统一性：集成 `PlatformAdapters.instance.picker` 统一文件/文件夹打开交互。
 - **许可与合规**：**LGPL-2.1**（`source/projectm/LICENSE.txt`）。LGPL-2.1 与主库 GPL-3.0 兼容，但需保持动态链接或清晰的 C ABI 隔离，严禁将未封装源码混入主业务树。
 
+### 2.15 fxsound-app（Windows 虚拟声卡音效应用，2026-11-28 新增）
+
+- **背景与定位**：FxSound 是 Windows 上的系统级音效增强程序，把处理链包装成「数字声卡」：纯净 passthrough 之上叠加音量、音色与 EQ 等效果。参考区快照锁定 `main@c5ce4f0`（2026-11-25 合并 PR #697）。
+- **三组件与风险分层**（上游自带 `CLAUDE.md` 对三组件的叙述仅作阅读参考，不约束本仓）：
+  1. `fxsound/`（224 文件）—— JUCE GUI 与预设/设置处理；
+  2. `audiopassthru/`（73 文件）—— 与 FxSound Audio Enhancer 虚拟音频驱动交互，缺陷影响系统级音频；
+  3. `dsp/`（240 文件）—— DfxDsp 实时处理链（ptechDsp / ptComSftDfx / ptutil），需关注 RT 线程分配、锁与阻塞以及数值正确性。
+- **体积来源**：`git clone` 实收 4.43 GiB（5,069.7 MB / 897 文件），其中 `.git` 占 4,546 MB；剥除后原 523.8 MB / 869 文件，**删除 `release/` 下两个 setup.exe（74.72 / 67.52 MB）后为 381.6 MB / 867 文件**。剩余体积主要来自 `bin/{x64,arm64,x86,Win7}/FxSound.pdb`（78.52 / 75.94 / 34.04 / 32.69 MB）与 NotoSans 字体（单件 6–8 MB）。PDB 只读保留、禁分发；`Resources/` 为未初始化 submodule（`.gitmodules` → `fxsound2/Resources`）。
+- **对 AuraDSP 的参考价值**：① 系统级虚拟声卡 + 应用态 DSP 的三层切分，对照本仓 VAIO / ASIO / System APO 的职责边界；② 用户态 DSP 的 preset / registry / private 分层（`dsp/DfxDsp*.cpp`）对照本仓 `engine/dsp/` 与参数表；③「纯净 passthrough + 效果叠加」的产品语义与预置持久化，对照四模式音频后端的切换与回读。
+- **许可与合规**：根 `LICENSE` 为 **GNU AGPL-3.0**（35,184 B），README §License 与 JUCE 依赖同为 AGPL-3.0。**AGPL-3.0 与 GPL-3.0 不兼容**（网络交互条款会传染部署侧），结论：**禁并入主库、禁搬运代码、禁随发行包分发**；仅作架构与产品语义的阅读参考，借鉴须按本仓规范独立净室重写。
+- **治理动作**：克隆后立即剥除根 `.git`；复核另发现 `source/projectm/vendor/projectm-eval/.git` 残留并一并剥除，最终递归复核 `source/` 下 `.git` 数量 = 0。
+
 ---
 
 ## 3. 算法与系统能力对照矩阵
@@ -369,6 +382,7 @@
    - **v2.8 更新（2026-11-02）**：新增 `source/vst2sdk/`，内部包含 Xaymar clean-room 逆向库（vst2sdk）与 Steinberg 官方 2.4 归档（vstsdk2.4）。已彻底剥除 `vst2sdk/vst2sdk/.git` 目录（剥除前约 1.6 MB，剥除后净体积仅 245 KB）；递归复核 `source/` 下 `.git` 数量严格维持为 **0**。已确立法律隔离红线：官方 SDK 仅驻留 `source/` 作只读参考，严禁并入主库；净室库准许作为编译依赖。
    - **v2.9 更新（2026-11-14）**：新增 `source/Virtual-Audio-Driver/`（main@bb34fba）与 `source/SynchronousAudioRouter/`（master@494ed9a）两个克隆。两者在登记前均已剥除嵌套 `.git`：前者剥除前 63 MB（含 `.git`）→ 剥离后 **717 KB / 53 文件**；后者剥除前 6.5 MB → 剥离后 **1.4 MB / 129 文件**。剥除后递归复核 `source/` 下 `.git` 数量严格维持为 **0**，铁律持续有效。附带记录：前者驱动代码派生自微软 WDK Sysvad 示例，仓内自带 `THIRD_PARTY_NOTICES.md` 声明 **MS-PL** 部分；后者树内 `SarAsio/glog` 为 Google logging 库副本（BSD 系），二者均随参考区只读保留，不入主库。
     - **v3.0 更新（2026-11-22）**：新增 `source/cava/`（master@505cbf6）与 `source/projectm/`（master@9e26f5b5b）两个克隆。两者在登记前均已彻底剥除嵌套 `.git`：cava 剥离前 6.7 MB → 剥离后 **5.38 MB / 157 文件**；projectm 剥离前 242.3 MB → 剥离后 **43.38 MB / 901 文件**。剥除后递归复核 `source/` 下 `.git` 数量严格维持为 **0**，铁律持续有效。两仓许可证分别为 MIT 与 LGPL-2.1，与主库 GPL-3.0 兼容。严守“source/ 只读快照、禁直接链接与代码依赖、所需核心净室抽取或置入独立 bridge/vendor”的工程铁律。
+    - **v3.1 更新（2026-11-28）**：新增 `source/fxsound-app/`（main@c5ce4f0）。克隆实收 5,069.7 MB / 897 文件，其中 `.git` 4,546 MB；剥除后原 523.8 MB / 869 文件，**再删除 `release/` 下两个 setup.exe（74.72 / 67.52 MB）→ 381.6 MB / 867 文件**。剩余体积主因为 PDB（78.52 / 75.94 / 34.04 / 32.69 MB）与 NotoSans 字体。`Resources/` 为未初始化 submodule。复核时另发现 `source/projectm/vendor/projectm-eval/.git` 历史残留（此前 v3.0 声称归零时遗漏），已一并剥除；最终递归复核 `source/` 下 `.git` 数量严格为 **0**。许可为 **AGPL-3.0**，与 GPL-3.0 不兼容 → 只读参考、禁并入主库、禁分发其预编译二进制。
 2. **构建缓存审计**：
    - `source/RootJamesDSP/` 与 `source/RootlessJamesDSP/` 下存在由构建/导入自动生成的 `.gradle/` 目录。该目录仅为本地临时索引，建议后续可选择性清理或保留在本地。
 3. **大文件与二进制包审计**：
@@ -395,6 +409,7 @@
 | **P-11** | ✅ 已闭环 | 新增 PeaceTXT-to-EEL-converter 参考仓（nanbeimerco，main@5de0462） | 2026-10-25 克隆至 `source/`；嵌套 `.git` 已剥除（递归复核 `source/` 下 `.git` 数量 = 0），HEAD 锁定 `5de0462`，已于 `source/ORIGIN.md` 追加 #17 登记、本报告升版 v2.7（§1 扩至 17 项、新增 §2.10、§3 补充一行、§4 审计更新）。许可研判：README 的「ライセンス」章节**声明 MIT**，但**仓库无 LICENSE 文件** → 保守记为「声明 MIT、未落文件」；MIT 与 GPL-3.0 单向兼容，**风险显著低于 #16 LiveprogIDE（ARR，禁并入）**。结论：阅读参考与算法对照无碍；并入代码前须请上游补 LICENSE 或按 RBJ 公式自研重写。随仓 `jszip.min.js`（JSZip v3.10.1）为 MIT/GPLv3 双许可，可自由使用。 |
 | **P-12** | ✅ 已闭环 | 新增 VST2 SDK 双轨参考资产（Xaymar clean-room 与 Steinberg 官方归档） | 2026-11-02 用户置入 `source/vst2sdk/`；嵌套 `.git` 已剥除（递归复核 `source/` 下 `.git` 数量 = 0），HEAD 锁定 `root@339d4f3`，已于 `source/ORIGIN.md` 追加登记、本报告升版 v2.8（§1 扩至 19 项、新增 §2.11、§3 补充一行、§4 审计更新）。确立「编译走 Xaymar Clean-Room BSD-3-Clause、排错对照官方归档、官方源码绝不进主库」的双轨合规准则。 |
 | **P-13** | ✅ 已闭环 | 新增可视化参考仓（karlstav/cava 与 projectM-visualizer/projectm） | 2026-11-22 克隆至 `source/`；二者嵌套 `.git` 已剥除（递归复核 `source/` 下 `.git` 数量 = 0），cava 锁定 `505cbf6`（MIT），projectm 锁定 `9e26f5b5b`（LGPL-2.1），已于 `source/ORIGIN.md` 追加 #22 / #23 登记、本报告升版 v3.0（§1 扩至 23 项、新增 §2.13/§2.14、§3 补充两行、§4 审计更新）。遵循本仓「严禁向 `source/` 添加代码依赖」的准则，重构所需算法与 C-ABI 头文件将通过独立适配层迁移到 `core/desktop/visualizer/`，二者维持只读参考区定位。 |
+| **P-14** | ✅ 已闭环 | 新增 Windows 虚拟声卡参考仓 `fxsound2/fxsound-app`（main@c5ce4f0） | 2026-11-28 用户克隆至 `source/`（实收 4.43 GiB）；根 `.git` 已剥除（4,546 MB），剥后原 523.8 MB / 869 文件，**再删除 `release/` 下两个 setup.exe（74.72 / 67.52 MB）→ 381.6 MB / 867 文件**；复核另剥除 `source/projectm/vendor/projectm-eval/.git` 残留，递归复核 `source/` 下 `.git` 数量 = 0。已登记 `source/ORIGIN.md` 第 24 项，本报告升版 v3.1（§1 扩至 24 项、新增 §2.15、§4 审计更新）。许可研判：根 `LICENSE` 与 README 均为 **AGPL-3.0**，与 GPL-3.0 不兼容 → **禁并入主库、禁搬运代码、禁分发预编译二进制**，仅作虚拟声卡三层切分与用户态 DSP 组织方式的阅读参考；树内预编译 PDB / 字体只读保留，setup.exe 已删除。 |
 
 ---
 
@@ -412,6 +427,7 @@
    - 特征层按 CAVA 口径升级：对数分频（可变频段 16~128）、感知等响度加权、重力平滑积分与动态 AGC 自适应灵敏度，建立独立跨平台特征引擎并走 `auradsp_viz_frame` / ring 遥测契约。
    - 渲染层迁往 FragmentShader（GPU GLSL）：重写原生样式预设，降低 CPU 绘图负荷与内存占用，将原内置 "MilkDrop" 样式重命名为 "Harmonic Warp / 极坐标谐波" 消除歧义。
    - 接入 libprojectm 核心引擎：以独立 C-ABI 适配器桥接 projectM-4，桌面端（Windows/Linux）通过纹理共享或高效像素交换驱动原生 `.milk` 脚本；预设系统统一支持原生 GLSL 预设与 MilkDrop 脚本预设，并以统一资源选择器（`ResourcePicker`）接管文件/目录加载与歌词视窗图层融合。
+10. **FxSound 只读对照（v3.1 新增）**：如需梳理「系统级虚拟声卡 → 用户态 DSP → GUI」的职责边界，可读 `source/fxsound-app/audiopassthru/` 与 `dsp/DfxDsp*.cpp`，对照本仓 VAIO/ASIO/System APO 三桥与 `engine/dsp/` 的参数/预设分层；其 JUCE GUI 与预置持久化仅作产品语义参考。**AGPL-3.0 红线不变：禁并入、禁搬运、禁分发其二进制**；借鉴须按本仓规范净室重写。
 
 
 ---

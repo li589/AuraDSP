@@ -2,7 +2,7 @@
 
 > 统一剥除嵌套 .git（铁律风格：参考区只读快照，禁止就地升级/推送）。
 > 更新来源需重新克隆后再次登记。depth/commit 以登记为准。
-> 详尽审理分析与算法对照见 `docs/10-架构/source-参考项目审理报告.md` (v3.0)。
+> 详尽审理分析与算法对照见 `docs/10-架构/source-参考项目审理报告.md` (v3.1)。
 
 | 目录 | origin | HEAD（剥离时） | 许可证 | 实测占用 | 状态 / 备注 |
 |---|---|---|---|---|---|
@@ -29,3 +29,4 @@
 | **vstsdk2.4** | https://archive.org/download/VST2SDK/vstsdk2_4.zip | v2.4 (2006-01-18 官方归档) | **Steinberg Proprietary（严禁并入主库/严禁分发源码）** | 21.2 MB (609 文件) | unzipped 只读归档；**官方金标准行为与文档对照**。含完整 doc/、pluginterfaces/ 与 public.sdk/ 官方示例，仅作内部对齐 ABI 内存对齐、Dispatcher 操作码与特殊插件行为排错的只读技术参考 |
 | **cava** | https://github.com/karlstav/cava.git | master@505cbf6 | MIT | 5.38 MB (157 文件) | stripped；跨平台音频可视化特征引擎（cavacore）真相源：可变对数分频、感知等响加权、重力跌落+积分平滑滤波、动态自动增益（autosens）与噪声抑制，为 AuraDSP 可视化特征层升级标准 |
 | **projectm** | https://github.com/projectM-visualizer/projectm.git | master@9e26f5b5b | LGPL-2.1 | 43.38 MB (901 文件) | stripped；MilkDrop 预设跨平台渲染引擎（libprojectM v4）真相源：C-API、.milk 预设解析、Warp Mesh/动态着色器生成与跨平台渲染管线，为 AuraDSP 原生 MilkDrop 脚本预设引擎蓝本 |
+| **FxSound** | https://github.com/fxsound2/fxsound-app.git | main@c5ce4f0 | **AGPL-3.0**（根 `LICENSE` 35,184 B + README §License；JUCE 依赖亦 AGPL-3.0） | 381.6 MB (867 文件；剥离前 5069.7 MB / 897 文件，其中 `.git` 4546 MB；已删 release 安装包) | stripped；Windows 系统级「虚拟声卡」音效应用：JUCE GUI（`fxsound/` 224 文件）+ 与 FxSound Audio Enhancer 虚拟驱动交互的 `audiopassthru/`（73 文件）+ 实时 DSP `dsp/`（240 文件，DfxDsp / ptechDsp / ptComSftDfx / ptutil）。`Resources/` 为未初始化 submodule（`.gitmodules` 指向 `fxsound2/Resources`）。树内 `bin/` 仍含预编译 PDB（**仅只读参考、禁分发**）；`release/` 下两个 setup.exe（74.72 / 67.52 MB）已删除。体积主因是 4.43 GiB 克隆历史，剥 `.git` 后原 523.8 MB，删安装包后 **381.6 MB** 主要来自 PDB/字体。**AGPL-3.0 与 GPL-3.0 不兼容（网络交互条款）→ 禁并入主库，仅阅读参考**。本轮同时剥除 `source/projectm/vendor/projectm-eval/.git` 残留，递归复核 `source/` 下 `.git` 数 = 0 |
