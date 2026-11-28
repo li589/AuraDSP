@@ -268,6 +268,8 @@ public:
         std::atomic<bool> bypassReady{false};
         std::atomic<uint32_t> bypassGeneration{0};
         std::mutex bypassStateMutex;
+        std::condition_variable bypassReadyCv;
+        std::mutex bypassExecMutex;
         mutable std::atomic<bool> editorOpen{false};
         mutable std::atomic<std::shared_ptr<const std::string>> statusCache;
         /* Phase 0 可观测性：RT 侧写、控制侧读；只用于诊断，不参与音频决策。 */
@@ -428,6 +430,7 @@ public:
     };
     bool submitTaskLocked(ControlTask task);
     bool enqueueControlTask(ControlTask task);
+    void notifyControlWorker();
     bool processPendingBypass();
     bool processPendingChannelHint();
     void controlLoop();
@@ -438,7 +441,9 @@ public:
     std::condition_variable m_controlCv;
     std::thread m_controlThread;
     std::atomic<bool> m_controlRunning{false};
+    bool m_controlWakeup{false};
     std::atomic<int> m_channelHintSyncPending{0};
+    std::atomic<uint32_t> m_channelHintGeneration{0};
     std::atomic<bool> m_channelHintApplying{false};
     std::mutex m_channelHintMutex;
 

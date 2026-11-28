@@ -451,9 +451,12 @@ std::shared_ptr<PluginHostClient> PluginHostManager::remoteScanClientFor(
 #endif
 
 PluginHostManager::~PluginHostManager() {
-    // 先停止控制线程（避免新任务进入）
+    // 先停止控制线程（在 m_controlMutex 下设退出状态并唤醒，避免丢通知死锁）
     m_controlRunning.store(false, std::memory_order_release);
-    m_controlCv.notify_all();
+    for (size_t s = 0; s < kMaxPluginSlots; ++s) {
+        m_slots[s].bypassReadyCv.notify_all();
+    }
+    notifyControlWorker();
     if (m_controlThread.joinable()) m_controlThread.join();
     // 再同步卸载所有槽（控制线程已停，安全）
     for (size_t s = 0; s < kMaxPluginSlots; ++s) {

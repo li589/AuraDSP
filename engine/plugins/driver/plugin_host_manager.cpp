@@ -232,6 +232,7 @@ void PluginHostManager::latchSlotFault(size_t slot, int stage, int category) {
     s.faultStage.store(stage, std::memory_order_relaxed);
     s.faultCategory.store(category, std::memory_order_relaxed);
     s.fault.store(true, std::memory_order_release);
+    s.bypassReadyCv.notify_all();
     // 与旁路切换同口径：状态翻转后首个音频块必然刷新遥测，
     // 不让 UI/回传读到故障前的陈旧值。
     resetTelemetryGateSlot(slot);
@@ -266,6 +267,7 @@ void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
 
     const bool quiesced = waitQuiesce(s.inFlight);
     s.destroyPending.store(false, std::memory_order_relaxed);
+    s.bypassReadyCv.notify_all();
 
     s.latency.store(0, std::memory_order_relaxed);
     s.mainInChannels.store(2, std::memory_order_relaxed);
@@ -277,7 +279,12 @@ void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
     s.lastFrames.store(0, std::memory_order_relaxed);
     resetTelemetryGateSlot(slot);
 
-    if (!s.instance) {
+    std::unique_ptr<IPluginInstance> instance;
+    {
+        std::lock_guard<std::mutex> execLock(s.bypassExecMutex);
+        instance = std::move(s.instance);
+    }
+    if (!instance) {
         AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] no instance");
         return;
     }
@@ -288,26 +295,26 @@ void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
         // 不可控崩溃）。计数清零让本槽可再次装载：滞留线程晚些退出时
         // InFlightGuard 饱和递减不会再下溢。
         s.inFlight.store(0, std::memory_order_relaxed);
-        quarantineAbandonedInstance(std::move(s.instance));
+        quarantineAbandonedInstance(std::move(instance));
         AURADSP_WARN_S("[DBG Slot] unloadLocked[" << slot
                         << "] quarantined (RT still in-flight after "
                         << kQuiesceWaitMs << "ms)");
         return;
     }
     AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] quiesced, calling closeEditor");
-    s.instance->closeEditor();
+    instance->closeEditor();
     AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] deactivate");
-    s.instance->deactivate();
+    instance->deactivate();
     AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] unload");
-    s.instance->unload();
-    if (s.instance->abandoned()) {
+    instance->unload();
+    if (instance->abandoned()) {
         // 隔离（放弃释放）：内部线程挂死且仍引用实例，析构 =
         // use-after-free。整体移入隔离区（可控泄漏换不可控崩溃）。
-        quarantineAbandonedInstance(std::move(s.instance));
+        quarantineAbandonedInstance(std::move(instance));
         AURADSP_WARN_S("[DBG Slot] unloadLocked[" << slot << "] quarantined (abandoned)");
     } else {
         AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] reset (dtor)");
-        s.instance.reset();
+        instance.reset();
     }
     AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] complete");
 }
@@ -458,20 +465,30 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
 
 void PluginHostManager::setBypassSlot(size_t slot, bool bypass) {
     if (slot >= kMaxPluginSlots) return;
+    PluginSlot& s = m_slots[slot];
+    uint32_t generation = 0;
     {
-        std::lock_guard<std::mutex> lock(m_slots[slot].bypassStateMutex);
-        m_slots[slot].bypassGeneration.fetch_add(1, std::memory_order_relaxed);
-        m_slots[slot].bypassReady.store(false, std::memory_order_release);
-        m_slots[slot].bypassed.store(bypass, std::memory_order_release);
-        m_slots[slot].bypassSyncPending.store(true, std::memory_order_release);
+        std::lock_guard<std::mutex> lock(s.bypassStateMutex);
+        generation = s.bypassGeneration.fetch_add(1, std::memory_order_relaxed) + 1u;
+        s.bypassReady.store(false, std::memory_order_release);
+        s.bypassed.store(bypass, std::memory_order_release);
+        s.bypassSyncPending.store(true, std::memory_order_release);
     }
     resetTelemetryGateSlot(slot);
-    m_controlCv.notify_one();
-    if (!bypass) {
-        // Fast-path confirmation only; slow plugins remain effectively bypassed.
-        for (int spin = 0; spin < 50000 &&
-             !m_slots[slot].bypassReady.load(std::memory_order_acquire); ++spin)
-            platform::cpu_relax();
+    notifyControlWorker();
+    if (!bypass && s.hasActive.load(std::memory_order_acquire)) {
+        // Wait briefly via condition variable so fast real plugins (and sync
+        // callers/tests) observe bypassReady==true before return, while slow/
+        // blocking plugins stay bounded well below async control budgets.
+        std::unique_lock<std::mutex> lock(s.bypassStateMutex);
+        s.bypassReadyCv.wait_for(
+            lock, std::chrono::milliseconds(100), [&]() {
+                return s.bypassReady.load(std::memory_order_acquire) ||
+                       s.bypassGeneration.load(std::memory_order_relaxed) != generation ||
+                       s.fault.load(std::memory_order_acquire) ||
+                       !s.hasActive.load(std::memory_order_acquire) ||
+                       !m_controlRunning.load(std::memory_order_acquire);
+            });
     }
 }
 
@@ -676,13 +693,14 @@ void PluginHostManager::setChannelHint(int channels) {
         std::lock_guard<std::mutex> lock(m_channelHintMutex);
         const int previous = m_channelHint.load(std::memory_order_seq_cst);
         if (previous != channels) {
+            m_channelHintGeneration.fetch_add(1, std::memory_order_relaxed);
             m_channelHintApplying.store(true, std::memory_order_seq_cst);
             m_channelHintSyncPending.store(channels, std::memory_order_release);
             m_channelHint.store(channels, std::memory_order_seq_cst);
             changed = true;
         }
     }
-    if (changed) m_controlCv.notify_one();
+    if (changed) notifyControlWorker();
 }
 
 int PluginHostManager::getChannelHint() const {
@@ -785,6 +803,8 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
     PluginSlot& s = m_slots[slot];
     if (!s.hasActive.load(std::memory_order_acquire) ||
         s.bypassed.load(std::memory_order_acquire) ||
+        !s.bypassReady.load(std::memory_order_acquire) ||
+        m_channelHintApplying.load(std::memory_order_seq_cst) ||
         s.fault.load(std::memory_order_acquire)) {
         return;
     }
@@ -828,6 +848,8 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
         s.processCalls.fetch_add(1, std::memory_order_relaxed);
         if (s.hasActive.load(std::memory_order_acquire) &&
             !s.bypassed.load(std::memory_order_acquire) &&
+            s.bypassReady.load(std::memory_order_acquire) &&
+            !m_channelHintApplying.load(std::memory_order_seq_cst) &&
             !s.fault.load(std::memory_order_acquire)) {
             /* F-8a（续）+ Q1：processInterleaved 崩溃 → 故障闩锁，
              * 镜像 processSlot 的崩溃恢复路径（闩锁内置遥测门复位）。 */
@@ -1061,18 +1083,21 @@ void PluginHostManager::reactivateSlot(PluginSlot& s, int channelHint,
     s.hasActive.store(false, std::memory_order_release);
     const bool quiesced = waitQuiesce(s.inFlight);
     if (quiesced) {
-        s.instance->setChannelHint(channelHint);
-        s.instance->activate(sampleRate, maxBlockSize);
-        s.latency.store(s.instance->getLatency(), std::memory_order_relaxed);
-        s.transportFailed.store(s.instance->hostTransportFailed(),
-                                std::memory_order_relaxed);
-        const PluginBusInfo bus = s.instance->busInfo();
-        s.mainInChannels.store(bus.mainInChannels > 0 ? bus.mainInChannels : 2,
-                               std::memory_order_relaxed);
-        s.mainOutChannels.store(
-            bus.mainOutChannels > 0 ? bus.mainOutChannels
-                                    : (bus.mainInChannels > 0 ? bus.mainInChannels : 2),
-            std::memory_order_relaxed);
+        std::lock_guard<std::mutex> execLock(s.bypassExecMutex);
+        if (s.instance) {
+            s.instance->setChannelHint(channelHint);
+            s.instance->activate(sampleRate, maxBlockSize);
+            s.latency.store(s.instance->getLatency(), std::memory_order_relaxed);
+            s.transportFailed.store(s.instance->hostTransportFailed(),
+                                    std::memory_order_relaxed);
+            const PluginBusInfo bus = s.instance->busInfo();
+            s.mainInChannels.store(bus.mainInChannels > 0 ? bus.mainInChannels : 2,
+                                   std::memory_order_relaxed);
+            s.mainOutChannels.store(
+                bus.mainOutChannels > 0 ? bus.mainOutChannels
+                                        : (bus.mainInChannels > 0 ? bus.mainInChannels : 2),
+                std::memory_order_relaxed);
+        }
     }
     s.hasActive.store(true, std::memory_order_release);
 }
@@ -1211,8 +1236,12 @@ void PluginHostManager::commitInstanceLocked(size_t slot, std::unique_ptr<IPlugi
     if (slot >= kMaxPluginSlots || !instance) return;
     PluginSlot& s = m_slots[slot];
     // 挂入新实例（若槽上有未事先摘除的旧实例，做防御性替换）
-    auto old = std::move(s.instance);
-    s.instance = std::move(instance);
+    std::unique_ptr<IPluginInstance> old;
+    {
+        std::lock_guard<std::mutex> execLock(s.bypassExecMutex);
+        old = std::move(s.instance);
+        s.instance = std::move(instance);
+    }
     s.latency.store(s.instance->getLatency(), std::memory_order_relaxed);
     /* M7 补漏二：落座点以新实例活读回填传输快照（与 latency 同点），
      * 同步/异步两条挂载路都经本函数，一处覆盖。 */
@@ -1236,9 +1265,13 @@ void PluginHostManager::commitInstanceLocked(size_t slot, std::unique_ptr<IPlugi
      * 保存的旁路值由 Dart 侧在 load 完成后显式下发（恒发，见
      * state_session.dart）。 */
     clearSlotFault(slot);
-    s.bypassed.store(true, std::memory_order_release);
-    s.bypassReady.store(false, std::memory_order_release);
-    s.bypassSyncPending.store(true, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> lock(s.bypassStateMutex);
+        s.bypassGeneration.fetch_add(1, std::memory_order_relaxed);
+        s.bypassed.store(true, std::memory_order_release);
+        s.bypassReady.store(false, std::memory_order_release);
+        s.bypassSyncPending.store(true, std::memory_order_release);
+    }
     s.editorOpen.store(false, std::memory_order_relaxed);
     std::atomic_store(&s.statusCache, std::shared_ptr<const std::string>{});
     s.hasActive.store(true, std::memory_order_release);
@@ -1248,6 +1281,7 @@ void PluginHostManager::commitInstanceLocked(size_t slot, std::unique_ptr<IPlugi
     s.maxDiffBits.store(0, std::memory_order_relaxed);
     s.lastFrames.store(0, std::memory_order_relaxed);
     resetTelemetryGateSlot(slot);
+    notifyControlWorker();
     (void)getStatusJsonSlot(slot);
 
     if (old) {
@@ -1275,12 +1309,17 @@ std::unique_ptr<IPluginInstance> PluginHostManager::detachInstanceLocked(size_t 
 
     const bool quiesced = waitQuiesce(s.inFlight);
     s.destroyPending.store(false, std::memory_order_relaxed);
+    s.bypassReadyCv.notify_all();
     s.latency.store(0, std::memory_order_relaxed);
     /* M7 补漏二（同 unloadPluginSlotLocked 口径）：拆卸路径清
      * 传输失联快照，防新实例被旧快照判旁路恒直通。 */
     s.transportFailed.store(false, std::memory_order_relaxed);
 
-    auto instance = std::move(s.instance);
+    std::unique_ptr<IPluginInstance> instance;
+    {
+        std::lock_guard<std::mutex> execLock(s.bypassExecMutex);
+        instance = std::move(s.instance);
+    }
     if (!quiesced) {
         // B3：未能排空 = RT 异常滞留。不能交给调用方——destroyInstance 会
         // closeEditor/deactivate/unload 并析构，而对在途实例那样做就是
@@ -1316,12 +1355,21 @@ void PluginHostManager::destroyInstance(std::unique_ptr<IPluginInstance> instanc
 
 // C3 控制线程：异步执行 load/unload 任务
 
+void PluginHostManager::notifyControlWorker() {
+    {
+        std::lock_guard<std::mutex> lock(m_controlMutex);
+        m_controlWakeup = true;
+    }
+    m_controlCv.notify_all();
+}
+
 bool PluginHostManager::enqueueControlTask(ControlTask task) {
     {
         std::lock_guard<std::mutex> ql(m_controlMutex);
         m_controlQueue.push_back(std::move(task));
+        m_controlWakeup = true;
     }
-    m_controlCv.notify_one();
+    m_controlCv.notify_all();
     return true;
 }
 
@@ -1343,22 +1391,32 @@ bool PluginHostManager::processPendingBypass() {
     bool processed = false;
     for (size_t slot = 0; slot < kMaxPluginSlots; ++slot) {
         PluginSlot& s = m_slots[slot];
-        if (!s.bypassSyncPending.exchange(false, std::memory_order_acq_rel)) continue;
+        if (!s.bypassSyncPending.load(std::memory_order_acquire)) continue;
         processed = true;
         try {
-            std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
-            if (s.instance && s.hasActive.load(std::memory_order_acquire)) {
-                uint32_t generation;
-                bool desired;
-                {
-                    std::lock_guard<std::mutex> stateLock(s.bypassStateMutex);
+            std::lock_guard<std::mutex> execLock(s.bypassExecMutex);
+            uint32_t generation = 0;
+            bool desired = true;
+            bool syncNeeded = false;
+            {
+                std::lock_guard<std::mutex> stateLock(s.bypassStateMutex);
+                if (s.bypassSyncPending.exchange(false, std::memory_order_acq_rel)) {
                     generation = s.bypassGeneration.load(std::memory_order_relaxed);
                     desired = s.bypassed.load(std::memory_order_relaxed);
+                    syncNeeded = true;
                 }
+            }
+            if (!syncNeeded) continue;
+            if (s.instance && s.hasActive.load(std::memory_order_acquire)) {
                 s.instance->setBypass(desired);
-                std::lock_guard<std::mutex> stateLock(s.bypassStateMutex);
-                if (s.bypassGeneration.load(std::memory_order_relaxed) == generation)
-                    s.bypassReady.store(true, std::memory_order_release);
+                {
+                    std::lock_guard<std::mutex> stateLock(s.bypassStateMutex);
+                    if (s.bypassGeneration.load(std::memory_order_relaxed) == generation)
+                        s.bypassReady.store(true, std::memory_order_release);
+                }
+                s.bypassReadyCv.notify_all();
+            } else {
+                s.bypassReadyCv.notify_all();
             }
         } catch (...) {
             latchSlotFault(slot, static_cast<int>(PluginFaultStage::Process),
@@ -1369,10 +1427,12 @@ bool PluginHostManager::processPendingBypass() {
 }
 
 bool PluginHostManager::processPendingChannelHint() {
-    int channels;
+    int channels = 0;
+    uint32_t generation = 0;
     {
         std::lock_guard<std::mutex> lock(m_channelHintMutex);
         channels = m_channelHintSyncPending.exchange(0, std::memory_order_relaxed);
+        generation = m_channelHintGeneration.load(std::memory_order_relaxed);
     }
     if (channels == 0) return false;
 #ifndef AURADSP_HOST_INPROC
@@ -1388,13 +1448,14 @@ bool PluginHostManager::processPendingChannelHint() {
                                static_cast<int>(PluginFaultCategory::ProcessCrash));
         {
             std::lock_guard<std::mutex> lock(m_channelHintMutex);
-            m_channelHintApplying.store(false, std::memory_order_release);
+            if (m_channelHintGeneration.load(std::memory_order_relaxed) == generation)
+                m_channelHintApplying.store(false, std::memory_order_release);
         }
         return true;
     }
     if (m_remoteMode && m_remoteClient) {
         std::lock_guard<std::mutex> lock(m_channelHintMutex);
-        if (m_channelHint.load(std::memory_order_seq_cst) == channels)
+        if (m_channelHintGeneration.load(std::memory_order_relaxed) == generation)
             m_channelHintApplying.store(false, std::memory_order_release);
         return true;
     }
@@ -1411,7 +1472,7 @@ bool PluginHostManager::processPendingChannelHint() {
     }
     {
         std::lock_guard<std::mutex> lock(m_channelHintMutex);
-        if (m_channelHint.load(std::memory_order_seq_cst) == channels)
+        if (m_channelHintGeneration.load(std::memory_order_relaxed) == generation)
             m_channelHintApplying.store(false, std::memory_order_release);
     }
     return true;
@@ -1419,6 +1480,19 @@ bool PluginHostManager::processPendingChannelHint() {
 
 void PluginHostManager::controlLoop() {
     for (;;) {
+        {
+            std::unique_lock<std::mutex> lock(m_controlMutex);
+            m_controlCv.wait(lock, [this]() {
+                return !m_controlRunning.load(std::memory_order_acquire) ||
+                       m_controlWakeup ||
+                       !m_controlQueue.empty();
+            });
+            if (!m_controlRunning.load(std::memory_order_acquire) &&
+                !m_controlWakeup && m_controlQueue.empty()) {
+                break;
+            }
+            m_controlWakeup = false;
+        }
         bool processed = false;
         for (;;) {
             ControlTask task;
@@ -1434,10 +1508,6 @@ void PluginHostManager::controlLoop() {
         processed = processPendingBypass() || processed;
         processed = processPendingChannelHint() || processed;
         if (!m_controlRunning.load(std::memory_order_acquire) && !processed) break;
-        if (!processed) {
-            std::unique_lock<std::mutex> lock(m_controlMutex);
-            m_controlCv.wait_for(lock, std::chrono::milliseconds(2));
-        }
     }
 }
 

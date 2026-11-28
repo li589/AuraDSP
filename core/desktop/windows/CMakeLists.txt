@@ -621,13 +621,14 @@ set_property(TARGET test_plugin_control_async PROPERTY CXX_STANDARD 20)
 set_property(TARGET test_plugin_control_async PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(test_plugin_control_async PRIVATE
     auradsp_engine auradsp_wincompat version)
-foreach(case_name bypass status hint reuse fallback generation)
+foreach(case_name bypass status hint reuse fallback generation ready interleaved)
     add_test(NAME plugin_control_async_${case_name}
         COMMAND test_plugin_control_async ${case_name})
 endforeach()
 set_tests_properties(plugin_control_async_bypass plugin_control_async_status
     plugin_control_async_hint plugin_control_async_reuse plugin_control_async_fallback
-    plugin_control_async_generation PROPERTIES TIMEOUT 15)
+    plugin_control_async_generation plugin_control_async_ready
+    plugin_control_async_interleaved PROPERTIES TIMEOUT 15)
 
 # B3 验收（2026-10-24）：RT 异常滞留时卸载必须隔离实例而不是硬清零后销毁。
 # 假实例 process() 阻塞注入"插件死锁在音频线程内"，断言 dtor 未跑、

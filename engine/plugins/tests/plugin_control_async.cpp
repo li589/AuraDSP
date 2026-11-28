@@ -234,6 +234,106 @@ int RunBypassGeneration() {
     return 0;
 }
 
+class CountingScaleInstance : public IPluginInstance {
+public:
+    explicit CountingScaleInstance(bool interleaved) : m_interleaved(interleaved) {}
+    bool load(const std::string&, const std::string&, const PluginMetadata*) override { return true; }
+    void unload() override {}
+    bool activate(double, uint32_t) override { return true; }
+    void deactivate() override {}
+    void process(float* const* inCh, float* const* outCh, uint32_t n) override {
+        m_calls.fetch_add(1, std::memory_order_relaxed);
+        for (int c = 0; c < 2; ++c)
+            for (uint32_t i = 0; i < n; ++i)
+                outCh[c][i] = inCh[c][i] * 0.5f;
+    }
+    bool interleavedTransport() const override { return m_interleaved; }
+    void processInterleaved(float* interleaved, uint32_t n,
+                            uint32_t channels, uint32_t mask) override {
+        m_calls.fetch_add(1, std::memory_order_relaxed);
+        for (uint32_t ch = 0; ch < channels; ++ch) {
+            if (!(mask & (1u << ch))) continue;
+            for (uint32_t i = 0; i < n; ++i)
+                interleaved[i * channels + ch] *= 0.5f;
+        }
+    }
+    bool isLoaded() const override { return true; }
+    bool isBypassed() const override { return false; }
+    void setBypass(bool) override {}
+    uint32_t getLatency() const override { return 0; }
+    const PluginMetadata& getMetadata() const override { return m_meta; }
+    bool showEditor(const std::string&) override { return false; }
+    void closeEditor() override {}
+    bool isEditorOpen() const override { return false; }
+    bool savePreset(const std::string&) override { return false; }
+    bool loadPreset(const std::string&) override { return false; }
+    int Calls() const { return m_calls.load(std::memory_order_relaxed); }
+
+private:
+    bool m_interleaved;
+    std::atomic<int> m_calls{0};
+    PluginMetadata m_meta;
+};
+
+int RunBypassFastReady() {
+    PluginHostManager manager;
+    manager.m_slots[0].instance = std::make_unique<BlockingInstance>(nullptr, nullptr);
+    manager.m_slots[0].hasActive.store(true, std::memory_order_release);
+    manager.m_slots[0].bypassed.store(true, std::memory_order_release);
+
+    manager.setBypassSlot(0, false);
+    const bool bypassed = manager.isBypassedSlot(0);
+    const bool ready = manager.m_slots[0].bypassReady.load(std::memory_order_acquire);
+    if (bypassed || !ready) {
+        std::fprintf(stderr, "FAIL: fast unbypass returned before bypassReady became true\n");
+        return 1;
+    }
+    puts("plugin fast unbypass: immediately ready on return");
+    return 0;
+}
+
+int RunInterleavedGate() {
+    PluginHostManager manager;
+    if (!manager.ensureChannelScratch(64)) return 1;
+    for (bool interleaved : {false, true}) {
+        auto* inst = new CountingScaleInstance(interleaved);
+        manager.m_slots[0].instance.reset(inst);
+        manager.m_slots[0].hasActive.store(true, std::memory_order_release);
+        manager.m_slots[0].bypassed.store(false, std::memory_order_release);
+        manager.m_slots[0].bypassReady.store(false, std::memory_order_release);
+        manager.m_channelHintApplying.store(false, std::memory_order_seq_cst);
+
+        float buf[16] = {};
+        for (float& v : buf) v = 1.0f;
+        manager.processSlotInterleaved(0, buf, 8, 2, 0x3u);
+        if (inst->Calls() != 0 || buf[0] != 1.0f) {
+            std::fprintf(stderr, "FAIL: processSlotInterleaved bypassed !bypassReady (mode=%d)\n",
+                         interleaved ? 1 : 0);
+            return 1;
+        }
+
+        manager.m_slots[0].bypassReady.store(true, std::memory_order_release);
+        manager.m_channelHintApplying.store(true, std::memory_order_seq_cst);
+        manager.processSlotInterleaved(0, buf, 8, 2, 0x3u);
+        if (inst->Calls() != 0 || buf[0] != 1.0f) {
+            std::fprintf(stderr, "FAIL: processSlotInterleaved ran during channelHintApplying (mode=%d)\n",
+                         interleaved ? 1 : 0);
+            return 1;
+        }
+
+        manager.m_channelHintApplying.store(false, std::memory_order_seq_cst);
+        manager.processSlotInterleaved(0, buf, 8, 2, 0x3u);
+        if (inst->Calls() != 1 || buf[0] != 0.5f) {
+            std::fprintf(stderr, "FAIL: processSlotInterleaved did not process when ready (mode=%d)\n",
+                         interleaved ? 1 : 0);
+            return 1;
+        }
+        manager.unloadPluginSlot(0);
+    }
+    puts("plugin interleaved gating: respects bypassReady and channelHintApplying");
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -243,5 +343,7 @@ int main(int argc, char** argv) {
     if (strcmp(mode, "reuse") == 0) return RunReuse();
     if (strcmp(mode, "fallback") == 0) return RunFallbackStatus();
     if (strcmp(mode, "generation") == 0) return RunBypassGeneration();
+    if (strcmp(mode, "ready") == 0) return RunBypassFastReady();
+    if (strcmp(mode, "interleaved") == 0) return RunInterleavedGate();
     return RunBypass();
 }

@@ -1149,6 +1149,7 @@ static auradsp_status handle_indexed_param_set(auradsp_handle h, const char* id,
         const float v = *(const float*)value;
         if (!std::isfinite(v)) { set_error(h, "param: rejected (NaN/Inf input)"); return AURADSP_E_PARAM; }
         h->p.lp_mc_param[idx].store(v, std::memory_order_relaxed);
+        h->lp_mc_param_set[idx] = true;
         mc_liveprog_set_slider(h->mc_lp, (int)n, v);
         return AURADSP_OK;
     }

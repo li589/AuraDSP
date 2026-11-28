@@ -332,13 +332,8 @@ set_tests_properties(dsp_boundary_liveprog dsp_boundary_reverb
 # Windows 的 auradsp_plugin_host 目标对位——宿主自带一份插件层
 # （driver/formats/posix 平台层，HOST_INPROC 语义），经 IPC 协议
 # 与引擎协作；产物与引擎 .so 同目录（客户端 dladdr 定位）。
-if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
-    set(AURADSP_HOST_SOURCES
-        "${API}/plugins/platform/posix/host/plugin_host_main_posix.cpp"
-        # R-07（2026-11-05）：命令循环与 Op 分发下沉到平台无关层，
-        # POSIX 主程序只保留 socket/看门狗/唤醒等平台原语。
-        "${API}/plugins/platform/host/plugin_host_command.cpp"
-        "${API}/plugins/platform/posix/host/plugin_shared_region_posix.cpp"
+if(AURADSP_ENABLE_PLUGINS)
+    set(AURADSP_LINUX_PLUGIN_HOST_COMMON_SOURCES
         "${API}/platform/linux/fs_linux.cpp"
         "${API}/platform/linux/env_linux.cpp"
         "${API}/platform/linux/log_linux.cpp"
@@ -364,6 +359,55 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         "${API}/plugins/formats/vst2/vst2_metadata.cpp"
         "${API}/plugins/platform/posix/plugin_util_posix.cpp"
         "${API}/plugins/platform/posix/plugin_gui_x11.cpp"
+    )
+
+    add_executable(test_plugin_control_async
+        "${API}/plugins/tests/plugin_control_async.cpp"
+        ${AURADSP_LINUX_PLUGIN_HOST_COMMON_SOURCES}
+    )
+    set_property(TARGET test_plugin_control_async PROPERTY CXX_STANDARD 20)
+    target_compile_definitions(test_plugin_control_async PRIVATE
+        AURADSP_HOST_INPROC=1
+    )
+    target_compile_options(test_plugin_control_async PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:-include ${API}/auradsp_gcc_shim.h>
+    )
+    target_include_directories(test_plugin_control_async PRIVATE
+        "${API}"
+        "${API}/chain"
+        "${API}/plugins/api"
+        "${API}/plugins/driver"
+        "${API}/plugins/platform/posix"
+        "${LEGACY}"
+        "${LEGACY}/jdsp"
+        "${PLUGIN_API}"
+    )
+    target_link_options(test_plugin_control_async PRIVATE
+        "LINKER:--allow-multiple-definition"
+    )
+    target_link_libraries(test_plugin_control_async PRIVATE
+        Threads::Threads
+        ${CMAKE_DL_LIBS}
+        m
+    )
+    foreach(case_name bypass status hint reuse fallback generation ready interleaved)
+        add_test(NAME plugin_control_async_${case_name}
+            COMMAND test_plugin_control_async ${case_name})
+    endforeach()
+    set_tests_properties(plugin_control_async_bypass plugin_control_async_status
+        plugin_control_async_hint plugin_control_async_reuse plugin_control_async_fallback
+        plugin_control_async_generation plugin_control_async_ready
+        plugin_control_async_interleaved PROPERTIES TIMEOUT 15)
+endif()
+
+if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
+    set(AURADSP_HOST_SOURCES
+        "${API}/plugins/platform/posix/host/plugin_host_main_posix.cpp"
+        # R-07（2026-11-05）：命令循环与 Op 分发下沉到平台无关层，
+        # POSIX 主程序只保留 socket/看门狗/唤醒等平台原语。
+        "${API}/plugins/platform/host/plugin_host_command.cpp"
+        "${API}/plugins/platform/posix/host/plugin_shared_region_posix.cpp"
+        ${AURADSP_LINUX_PLUGIN_HOST_COMMON_SOURCES}
     )
     add_executable(plugin_host_x64 ${AURADSP_HOST_SOURCES})
     set_property(TARGET plugin_host_x64 PROPERTY CXX_STANDARD 20)

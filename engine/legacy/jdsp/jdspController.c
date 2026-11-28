@@ -267,6 +267,17 @@ static int jdsp_size_mul(size_t a, size_t b, size_t *out)
 	return 1;
 }
 
+static unsigned long long jdsp_gcd_u64(unsigned long long a, unsigned long long b)
+{
+	while (b != 0)
+	{
+		const unsigned long long r = a % b;
+		a = b;
+		b = r;
+	}
+	return a;
+}
+
 static int jdsp_block_layout(float fs, float trueSampleRate, char enableASRC,
                              size_t blockSizeMax, size_t *scratch,
                              size_t *ringSize)
@@ -282,25 +293,53 @@ static int jdsp_block_layout(float fs, float trueSampleRate, char enableASRC,
 		return 1;
 	}
 	{
-		const double ratio = (double)fs / (double)trueSampleRate;
-		const double decimated = ceil((double)blockSizeMax * ratio);
-		const double interpolated = ceil(decimated / ratio);
-		size_t d, i;
-		unsigned int ring;
-		if (!isfinite(ratio) || ratio <= 0.0 || !isfinite(decimated) ||
-			!isfinite(interpolated) || decimated < 1.0 ||
-			interpolated < 1.0 || decimated > (double)UINT_MAX ||
-			interpolated > (double)UINT_MAX)
+		unsigned long long decimated_u = 0;
+		unsigned long long interpolated_u = 0;
+		unsigned long long fsu = (unsigned long long)fs;
+		unsigned long long sru = (unsigned long long)trueSampleRate;
+		if (fsu > 0 && sru > 0 &&
+			(float)fsu == fs && (float)sru == trueSampleRate)
+		{
+			const unsigned long long g = jdsp_gcd_u64(fsu, sru);
+			const unsigned long long num = fsu / g;
+			const unsigned long long denom = sru / g;
+			const unsigned long long bmax = (unsigned long long)blockSizeMax;
+			if (num == 0 || denom == 0 || bmax > (ULLONG_MAX - (denom - 1)) / num)
+				return 0;
+			decimated_u = (bmax * num + denom - 1) / denom;
+			if (decimated_u > (ULLONG_MAX - (num - 1)) / denom)
+				return 0;
+			interpolated_u = (decimated_u * denom + num - 1) / num;
+		}
+		else
+		{
+			const double ratio = (double)fs / (double)trueSampleRate;
+			const double decimated = ceil((double)blockSizeMax * ratio);
+			const double interpolated = ceil(decimated / ratio);
+			if (!isfinite(ratio) || ratio <= 0.0 || !isfinite(decimated) ||
+				!isfinite(interpolated) || decimated < 1.0 ||
+				interpolated < 1.0 || decimated > (double)UINT_MAX ||
+				interpolated > (double)UINT_MAX)
+				return 0;
+			decimated_u = (unsigned long long)decimated;
+			interpolated_u = (unsigned long long)interpolated;
+		}
+		if (decimated_u < 1 || interpolated_u < 1 ||
+			decimated_u > (unsigned long long)UINT_MAX ||
+			interpolated_u > (unsigned long long)UINT_MAX)
 			return 0;
-		d = (size_t)decimated;
-		i = (size_t)interpolated;
-		*scratch = blockSizeMax;
-		if (d > *scratch) *scratch = d;
-		if (i > *scratch) *scratch = i;
-		ring = next_pow_2((unsigned int)i);
-		if (ring == 0)
-			return 0;
-		*ringSize = ring;
+		{
+			size_t d = (size_t)decimated_u;
+			size_t i = (size_t)interpolated_u;
+			unsigned int ring;
+			*scratch = blockSizeMax;
+			if (d > *scratch) *scratch = d;
+			if (i > *scratch) *scratch = i;
+			ring = next_pow_2((unsigned int)i);
+			if (ring == 0)
+				return 0;
+			*ringSize = ring;
+		}
 	}
 	return 1;
 }

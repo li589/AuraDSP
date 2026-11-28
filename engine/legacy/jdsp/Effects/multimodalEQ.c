@@ -52,6 +52,8 @@ static int eq_refresh_fir(JamesDSPLib *jdsp, float *eqFil)
 	FFTConvolver2x2 *active = eq_active_load(jdsp);
 	FFTConvolver2x2 *buildTarget = (active == &jdsp->mEQ.conv)
 		? &jdsp->mEQ.convB : &jdsp->mEQ.conv;
+	if (!jdsp->mEQ.instance.convState._initialized || !buildTarget->_initialized)
+		return 0;
 	const long inFlight = eq_counter_load(&jdsp->mEQ.convInFlight);
 	const long procCount = eq_counter_load(&jdsp->mEQ.convProcCount);
 	if (inFlight != 0 && procCount - jdsp->mEQ.convSwapProc < 1)
@@ -85,12 +87,15 @@ void MultimodalEqualizerConstructor(JamesDSPLib *jdsp)
 	jdsp->mEQ.convSwapProc = -2;
 	jdsp->mEQ.convInFlight = 0;
 	float *kDelta = (float*)malloc(jdsp->mEQ.instance.filterLen * sizeof(float));
-	memset(kDelta, 0, jdsp->mEQ.instance.filterLen * sizeof(float));
-	kDelta[0] = 1.0f;
-	FFTConvolver2x2LoadImpulseResponse(&jdsp->mEQ.instance.convState, (unsigned int)jdsp->blockSize, kDelta, kDelta, jdsp->mEQ.instance.filterLen);
-	FFTConvolver2x2LoadImpulseResponse(&jdsp->mEQ.conv, (unsigned int)jdsp->blockSize, kDelta, kDelta, jdsp->mEQ.instance.filterLen);
-	FFTConvolver2x2LoadImpulseResponse(&jdsp->mEQ.convB, (unsigned int)jdsp->blockSize, kDelta, kDelta, jdsp->mEQ.instance.filterLen);
-	free(kDelta);
+	if (kDelta)
+	{
+		memset(kDelta, 0, jdsp->mEQ.instance.filterLen * sizeof(float));
+		kDelta[0] = 1.0f;
+		FFTConvolver2x2LoadImpulseResponse(&jdsp->mEQ.instance.convState, (unsigned int)jdsp->blockSize, kDelta, kDelta, jdsp->mEQ.instance.filterLen);
+		FFTConvolver2x2LoadImpulseResponse(&jdsp->mEQ.conv, (unsigned int)jdsp->blockSize, kDelta, kDelta, jdsp->mEQ.instance.filterLen);
+		FFTConvolver2x2LoadImpulseResponse(&jdsp->mEQ.convB, (unsigned int)jdsp->blockSize, kDelta, kDelta, jdsp->mEQ.instance.filterLen);
+		free(kDelta);
+	}
 }
 void MultimodalEqualizerDestructor(JamesDSPLib *jdsp)
 {
@@ -334,7 +339,8 @@ void MultimodalEqualizerProcess(JamesDSPLib *jdsp, size_t n)
 	eq_inflight_inc(&jdsp->mEQ.convInFlight);
 	if (!jdsp->mEQ.operatingMode) {
 		FFTConvolver2x2 *active = eq_active_load(jdsp);
-		FFTConvolver2x2Process(active, jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], (unsigned int)n);
+		if (active && active->_initialized)
+			FFTConvolver2x2Process(active, jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], (unsigned int)n);
 	}
 	else
 	{

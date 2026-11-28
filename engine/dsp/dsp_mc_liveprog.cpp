@@ -40,6 +40,7 @@ struct McSlot {
     float* vmNch = nullptr;
     float* inputs[kMcChannels] = {};
     float* sliders[kMcSliders] = {};
+    uint64_t appliedSliderGen[kMcSliders] = {};
     std::atomic<int> compileOk{0};
     uint64_t retiredAt = 0;
 };
@@ -55,6 +56,7 @@ struct McLiveProgHost {
     std::atomic<float> fs{48000.0f};
     std::atomic<int> channels{2};
     std::atomic<float> sliders[kMcSliders]{};
+    std::atomic<uint64_t> sliderGen[kMcSliders]{};
 };
 
 namespace {
@@ -142,13 +144,15 @@ int mc_compile_into(McLiveProgHost* host, McSlot* s, char* codeInit,
         std::snprintf(nm, sizeof(nm), "spl%d", c);
         s->inputs[c] = NSEEL_VM_regvar(s->vm, nm);
     }
-    /* 滑块 slider1..64：控制线程只写宿主原子影子值，RT 每块同步到活动 VM。 */
+    /* 滑块 slider1..64：只同步宿主显式变更过的代号，保留脚本 @init / @slider 自身默认值。 */
     for (int i = 1; i <= kMcSliders; ++i) {
         char nm[16];
         std::snprintf(nm, sizeof(nm), "slider%d", i);
         float* v = NSEEL_VM_regvar(s->vm, nm);
         s->sliders[i - 1] = v;
-        if (v) *v = host->sliders[i - 1].load(std::memory_order_relaxed);
+        s->appliedSliderGen[i - 1] = 0;
+        if (v && host->sliderGen[i - 1].load(std::memory_order_acquire) != 0)
+            *v = host->sliders[i - 1].load(std::memory_order_relaxed);
     }
     if (s->codehandleInit) { NSEEL_code_free(s->codehandleInit); s->codehandleInit = nullptr; }
     if (s->codehandleSlider) { NSEEL_code_free(s->codehandleSlider); s->codehandleSlider = nullptr; }
@@ -261,8 +265,10 @@ McLiveProgHost* mc_liveprog_create(float sampleRate, int channels) {
     host->fs.store((sampleRate > 0.0f) ? sampleRate : 48000.0f,
                    std::memory_order_relaxed);
     host->channels.store((channels > 0) ? channels : 2, std::memory_order_relaxed);
-    for (int i = 0; i < kMcSliders; ++i)
+    for (int i = 0; i < kMcSliders; ++i) {
         host->sliders[i].store(0.0f, std::memory_order_relaxed);
+        host->sliderGen[i].store(0, std::memory_order_relaxed);
+    }
     for (int i = 0; i < kMcSlots; ++i) mc_slot_init_vm(host, &host->slots[i]);
     host->active.store(&host->slots[0], std::memory_order_release);
     host->procCount.store(0, std::memory_order_relaxed);
@@ -382,6 +388,7 @@ void mc_liveprog_set_channels(McLiveProgHost* host, int channels) {
 void mc_liveprog_set_slider(McLiveProgHost* host, int index1Based, float value) {
     if (!host || index1Based < 1 || index1Based > kMcSliders) return;
     host->sliders[index1Based - 1].store(value, std::memory_order_relaxed);
+    host->sliderGen[index1Based - 1].fetch_add(1, std::memory_order_release);
 }
 
 void mc_liveprog_process(McLiveProgHost* host, float* buf, int frames,
@@ -407,9 +414,13 @@ void mc_liveprog_process(McLiveProgHost* host, float* buf, int frames,
                 if (s->vmDevFs) *s->vmDevFs = fs;
                 if (s->vmNumCh) *s->vmNumCh = (float)channelCount;
                 if (s->vmNch) *s->vmNch = (float)channelCount;
-                for (int i = 0; i < kMcSliders; ++i)
-                    if (s->sliders[i])
+                for (int i = 0; i < kMcSliders; ++i) {
+                    const uint64_t g = host->sliderGen[i].load(std::memory_order_acquire);
+                    if (g != s->appliedSliderGen[i] && s->sliders[i]) {
                         *s->sliders[i] = host->sliders[i].load(std::memory_order_relaxed);
+                        s->appliedSliderGen[i] = g;
+                    }
+                }
                 /* P-053 托管预算按块补给（slider/process 各 400 万次）。 */
                 if (s->codehandleSlider) {
                     NSEEL_aura_budget_arm(s->codehandleSlider, 4000000);

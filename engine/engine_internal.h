@@ -552,16 +552,18 @@ struct BiquadCoefficients {
 /* Versioned double buffering prevents RT from observing a mixed pole set. */
 struct VersionedBiquad {
     struct Slot {
-        std::atomic<double> b0{1.0}, b1{0.0}, b2{0.0}, a1{0.0}, a2{1.0};
+        std::atomic<double> b0{1.0}, b1{0.0}, b2{0.0}, a1{0.0}, a2{0.0};
     } slots[2];
     std::atomic<uint32_t> active{0};
     std::atomic<uint64_t> version{0};
-    BiquadCoefficients rt{1.0, 0.0, 0.0, 0.0, 1.0};
+    BiquadCoefficients rt{1.0, 0.0, 0.0, 0.0, 0.0};
 
     void publish(const BiquadCoefficients& next) noexcept {
-        const uint32_t target = active.load(std::memory_order_relaxed) ^ 1u;
-        const uint64_t current = version.load(std::memory_order_relaxed);
-        version.store(current | 1u, std::memory_order_release);
+        const uint32_t target = (active.load(std::memory_order_relaxed) ^ 1u) & 1u;
+        const uint64_t current = version.load(std::memory_order_relaxed) & ~1ULL;
+        version.store(current | 1u, std::memory_order_relaxed);
+        /* Prevent slot stores from reordering before the odd seqlock state on weak-memory CPUs. */
+        std::atomic_thread_fence(std::memory_order_seq_cst);
         Slot& slot = slots[target];
         slot.b0.store(next.b0, std::memory_order_relaxed);
         slot.b1.store(next.b1, std::memory_order_relaxed);
@@ -574,7 +576,10 @@ struct VersionedBiquad {
 
     BiquadCoefficients snapshot() noexcept {
         const uint64_t before = version.load(std::memory_order_acquire);
-        const Slot& slot = slots[active.load(std::memory_order_acquire)];
+        if ((before & 1u) != 0)
+            return rt;
+        const uint32_t idx = active.load(std::memory_order_acquire) & 1u;
+        const Slot& slot = slots[idx];
         const BiquadCoefficients next{
             slot.b0.load(std::memory_order_relaxed),
             slot.b1.load(std::memory_order_relaxed),
@@ -582,8 +587,10 @@ struct VersionedBiquad {
             slot.a1.load(std::memory_order_relaxed),
             slot.a2.load(std::memory_order_relaxed),
         };
-        const uint64_t after = version.load(std::memory_order_acquire);
-        if ((before & 1u) != 0 || (after & 1u) != 0 || before != after)
+        /* Order coefficient loads before the closing version check on weak-memory CPUs. */
+        std::atomic_thread_fence(std::memory_order_acquire);
+        const uint64_t after = version.load(std::memory_order_relaxed);
+        if (after != before)
             return rt;
         rt = next;
         return next;
@@ -704,6 +711,7 @@ struct auradsp_handle_s {
     int    lp_mc_status = 0;          /* 0=无代码 1=编译成功 <0=错误码 */
     char*  lp_mc_code = nullptr;      /* 已下发代码副本（get_param 回读用） */
     size_t lp_mc_code_len = 0;
+    bool   lp_mc_param_set[64] = {};  /* 仅宿主显式写入过的滑块覆盖脚本 @init 初值 */
     /* 字符串回读副本（预设 §8.1 / 调研 §1：存原始串而非重序列化，避免格式漂移；析构释放） */
     char*  eq_curve = nullptr;        /* 已下发 eq.curve 原串副本（get_param 回读用） */
     size_t eq_curve_len = 0;

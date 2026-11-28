@@ -516,12 +516,15 @@ void apply_liveprogmc(auradsp_handle h) {
 }
 
 
-/* MC 代码加载成功后把宿主存储值发布到 LiveProg 滑块影子槽。 */
+/* MC 代码加载成功后把宿主显式设置过的滑块发布到 LiveProg 影子槽。 */
 void mc_lp_refresh_sliders(auradsp_handle h) {
     if (!h->mc_lp) return;
-    for (int i = 0; i < 64; ++i)
-        mc_liveprog_set_slider(h->mc_lp, i + 1,
-            h->p.lp_mc_param[i].load(std::memory_order_relaxed));
+    for (int i = 0; i < 64; ++i) {
+        if (h->lp_mc_param_set[i]) {
+            mc_liveprog_set_slider(h->mc_lp, i + 1,
+                h->p.lp_mc_param[i].load(std::memory_order_relaxed));
+        }
+    }
     /* [审查 M11 2026-11-24] 同 lp_refresh_sliders：不在控制线程对
      * 活动槽 execute @slider；MC 处理路径每块开头在 RT 线程执行
      * slider 段，新值下一块生效。 */

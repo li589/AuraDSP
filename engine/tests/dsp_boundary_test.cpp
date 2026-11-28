@@ -50,6 +50,27 @@ int RunLiveProgBoundary() {
                 Check(std::fabs(envBuffer[1] - 44100.0f / 48000.0f) < 1e-6f,
                       "RT must consume shadow sample-rate value");
             }
+
+            McLiveProgHost* initHost = mc_liveprog_create(48000.0f, 2);
+            Check(initHost != nullptr, "create second MC liveprog host for @init slider test");
+            if (initHost) {
+                const char* initSliderCode =
+                    "@init\nslider12 = 10.0;\n@slider\ns = 1.0 / slider12;\n@sample\nspl0 = s;\n";
+                Check(mc_liveprog_load(initHost, initSliderCode) == 1,
+                      "compile @init slider default fixture");
+                mc_liveprog_set_enabled(initHost, 1);
+                float initBuf[2] = {1.0f, 1.0f};
+                for (int b = 0; b < 3; ++b) {
+                    mc_liveprog_process(initHost, initBuf, 1, 2);
+                    Check(std::fabs(initBuf[0] - 0.1f) < 1e-6f,
+                          "RT must preserve @init slider defaults when untouched by host");
+                }
+                mc_liveprog_set_slider(initHost, 12, 4.0f);
+                mc_liveprog_process(initHost, initBuf, 1, 2);
+                Check(std::fabs(initBuf[0] - 0.25f) < 1e-6f,
+                      "explicit host slider update must override @init default");
+                mc_liveprog_destroy(initHost);
+            }
         }
         mc_liveprog_destroy(host);
     }
