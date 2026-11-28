@@ -22,13 +22,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get licenseAgree => '我已阅读并同意许可协议（GPL-3.0 / 随包组件许可）';
 
   @override
-  String get quickInstall => '立即安装';
-
-  @override
-  String get quickUpdate => '立即更新';
-
-  @override
-  String get customInstall => '自定义安装';
+  String get next => '下一步';
 
   @override
   String get optionsTitle => '安装选项';

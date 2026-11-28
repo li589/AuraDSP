@@ -24,13 +24,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'I have read and agree to the license agreement (GPL-3.0 / bundled component licenses)';
 
   @override
-  String get quickInstall => 'Install now';
-
-  @override
-  String get quickUpdate => 'Update now';
-
-  @override
-  String get customInstall => 'Custom install';
+  String get next => 'Next';
 
   @override
   String get optionsTitle => 'Install options';

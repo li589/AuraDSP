@@ -23,13 +23,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get licenseAgree => 'ライセンス契約（GPL-3.0 / 同梱コンポーネントのライセンス）を読み、同意します';
 
   @override
-  String get quickInstall => '今すぐインストール';
-
-  @override
-  String get quickUpdate => '今すぐ更新';
-
-  @override
-  String get customInstall => 'カスタムインストール';
+  String get next => '次へ';
 
   @override
   String get optionsTitle => 'インストールオプション';

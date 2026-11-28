@@ -31,10 +31,8 @@ String normalizeInstallDir(String raw, String fallback) {
 
 /// 版本号按数字段比较（支持 '.' 与 '+' 分隔），返回 -1 / 0 / 1。
 int compareVersion(String a, String b) {
-  List<int> parts(String v) => v
-      .split(RegExp(r'[.+]'))
-      .map((e) => int.tryParse(e.trim()) ?? 0)
-      .toList();
+  List<int> parts(String v) =>
+      v.split(RegExp(r'[.+]')).map((e) => int.tryParse(e.trim()) ?? 0).toList();
   final x = parts(a);
   final y = parts(b);
   final n = x.length > y.length ? x.length : y.length;
@@ -79,7 +77,8 @@ class UpdatePlan {
   final int versionCompare;
 
   /// 覆盖既有安装（升级或修复）：需要备份/回滚与用户数据保护。
-  bool get isOverwrite => mode == UpdateMode.upgrade || mode == UpdateMode.repair;
+  bool get isOverwrite =>
+      mode == UpdateMode.upgrade || mode == UpdateMode.repair;
   bool get isBlocked => mode == UpdateMode.downgradeBlocked;
   UpdateMode get effectiveMode => mode;
 }
@@ -95,10 +94,12 @@ UpdatePlan planUpdate({
   InstalledInfo? installed,
 }) {
   final requested = normalizeInstallDir(requestedDir, defaultDir);
-  if (installed == null || installed.fullVersion.isEmpty) {
+  if (installed == null) {
     return UpdatePlan(mode: UpdateMode.fresh, installDir: requested);
   }
-  final cmp = compareVersion(newFullVersion, installed.fullVersion);
+  final cmp = installed.fullVersion.isEmpty
+      ? 0
+      : compareVersion(newFullVersion, installed.fullVersion);
   final dir = installed.installDir.trim().isEmpty
       ? requested
       : normalizeInstallDir(installed.installDir, defaultDir);
@@ -149,7 +150,10 @@ enum UninstallAction { deleteProgram, keepUserData, deleteAllUserData }
 /// - 清单外的文件 = 用户后加的内容，keepData=true 时保留，否则一并删除；
 /// - 卸载器与清单自身 = 生成物，总是删除。
 UninstallAction classifyUninstallPath(
-        String rel, Set<String> programPaths, bool keepData) {
+  String rel,
+  Set<String> programPaths,
+  bool keepData,
+) {
   final s = rel.replaceAll(r'\', '/').replaceFirst(RegExp(r'^/+'), '');
   if (kUninstallGeneratedFiles.contains(s.toLowerCase())) {
     return UninstallAction.deleteProgram;
@@ -165,8 +169,10 @@ UninstallAction classifyUninstallPath(
 /// [alsoPresent] 是本次仍留在盘上的路径（如写入失败被用户跳过、
 /// 保留了旧版的文件），同样不得当遗留删除。
 Set<String> staleUpgradePaths(
-    InstallManifest? previous, List<ManifestFile> currentFiles,
-    {Set<String> alsoPresent = const <String>{}}) {
+  InstallManifest? previous,
+  List<ManifestFile> currentFiles, {
+  Set<String> alsoPresent = const <String>{},
+}) {
   if (previous == null) return <String>{};
   final current = currentFiles.map((f) => f.path).toSet();
   return previous.files
@@ -198,12 +204,12 @@ String writabilityFailureMessage({
     // ERROR_ACCESS_DENIED
     return elevated
         ? '安装目录不可写（拒绝访问）：$dir\n'
-            '请检查该目录的权限设置或安全软件拦截，处理后重试。\n'
-            '（技术详情：$rawError）'
+              '请检查该目录的权限设置或安全软件拦截，处理后重试。\n'
+              '（技术详情：$rawError）'
         : '安装目录不可写（拒绝访问）：$dir\n'
-            '该目录需要管理员权限。请以管理员身份重新运行安装程序，'
-            '或改选当前用户目录（例如“本地应用数据\\Programs\\AuraDSP”）。\n'
-            '（技术详情：$rawError）';
+              '该目录需要管理员权限。请以管理员身份重新运行安装程序，'
+              '或改选当前用户目录（例如“本地应用数据\\Programs\\AuraDSP”）。\n'
+              '（技术详情：$rawError）';
   }
   return '无法写入安装目录：$dir\n'
       '请确认目录可写，或换一个目录后重试。\n'

@@ -124,23 +124,11 @@ abstract class AppLocalizations {
   /// **'I have read and agree to the license agreement (GPL-3.0 / bundled component licenses)'**
   String get licenseAgree;
 
-  /// No description provided for @quickInstall.
+  /// No description provided for @next.
   ///
   /// In en, this message translates to:
-  /// **'Install now'**
-  String get quickInstall;
-
-  /// No description provided for @quickUpdate.
-  ///
-  /// In en, this message translates to:
-  /// **'Update now'**
-  String get quickUpdate;
-
-  /// No description provided for @customInstall.
-  ///
-  /// In en, this message translates to:
-  /// **'Custom install'**
-  String get customInstall;
+  /// **'Next'**
+  String get next;
 
   /// No description provided for @optionsTitle.
   ///

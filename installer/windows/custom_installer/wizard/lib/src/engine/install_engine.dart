@@ -19,11 +19,150 @@ import 'win32.dart';
 String env(String name) => Platform.environment[name] ?? '';
 
 String defaultInstallDir(bool allUsers) => normalizeInstallDir(
-      allUsers ? r'C:\Program Files' : p.join(env('LOCALAPPDATA'), 'Programs'),
-      r'C:\AuraDSP',
-    );
+  allUsers ? r'C:\Program Files' : p.join(env('LOCALAPPDATA'), 'Programs'),
+  r'C:\AuraDSP',
+);
 
-bool installNeedsElevation(InstallOptions options) => options.allUsers;
+bool installNeedsElevation(InstallOptions options) =>
+    options.allUsers || options.asio || options.vaio;
+
+List<String> installedComponents(
+  InstallOptions options, {
+  required bool skipPrivilegedSteps,
+}) => [
+  'app',
+  if (options.asio && !skipPrivilegedSteps) 'asio',
+  if (options.vaio && !skipPrivilegedSteps) 'vaio',
+  if (options.ddcPresets) 'ddc',
+];
+
+bool hasExistingApp(String dir) {
+  for (final name in const [
+    'auradsp_app.exe',
+    'AuraDSP.exe',
+    'uninstall.exe',
+  ]) {
+    if (File(p.join(dir, name)).existsSync()) return true;
+  }
+  return false;
+}
+
+class InstallTargetAccess {
+  const InstallTargetAccess({
+    required this.ok,
+    required this.accessDenied,
+    required this.message,
+    this.errorCode,
+    this.rawError,
+  });
+
+  final bool ok;
+  final bool accessDenied;
+  final String message;
+  final int? errorCode;
+  final String? rawError;
+}
+
+abstract interface class InstallTargetInspector {
+  Future<void> createDirectory(String path);
+  Future<List<FileSystemEntity>> listDirectory(String path);
+  Future<String?> readManifest(File file);
+  Future<File> createProbe(String path);
+  Future<void> writeProbe(File file);
+  Future<void> deleteProbe(File file);
+}
+
+class _DefaultInstallTargetInspector implements InstallTargetInspector {
+  const _DefaultInstallTargetInspector();
+
+  @override
+  Future<void> createDirectory(String path) =>
+      Directory(path).create(recursive: true);
+
+  @override
+  Future<List<FileSystemEntity>> listDirectory(String path) =>
+      Directory(path).list(followLinks: false).toList();
+
+  @override
+  Future<String?> readManifest(File file) async {
+    if (!await file.exists()) return null;
+    return file.readAsString();
+  }
+
+  @override
+  Future<File> createProbe(String path) async {
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    final file = File(
+      p.join(path, '.auradsp-write-probe-${identityHashCode(this)}-$stamp'),
+    );
+    await file.create(exclusive: true);
+    return file;
+  }
+
+  @override
+  Future<void> writeProbe(File file) =>
+      file.writeAsBytes(const <int>[0], flush: true);
+
+  @override
+  Future<void> deleteProbe(File file) => file.delete();
+}
+
+InstallTargetAccess _targetAccessFailure(
+  String dir,
+  FileSystemException error, {
+  required bool elevated,
+}) {
+  final code = error.osError?.errorCode;
+  final raw =
+      '${error.osError?.message ?? error.message}'
+      '${error.osError != null ? ' (errno ${error.osError!.errorCode})' : ''}';
+  return InstallTargetAccess(
+    ok: false,
+    accessDenied: code == 5,
+    message: writabilityFailureMessage(
+      dir: dir,
+      errorCode: code,
+      rawError: raw,
+      elevated: elevated,
+    ),
+    errorCode: code,
+    rawError: raw,
+  );
+}
+
+Future<InstallTargetAccess> inspectInstallTarget(
+  String dir, {
+  required bool elevated,
+  required bool overwrite,
+  InstallTargetInspector? inspector,
+}) async {
+  final target = inspector ?? const _DefaultInstallTargetInspector();
+  File? probe;
+  try {
+    await target.createDirectory(dir);
+    if (overwrite) {
+      await target.listDirectory(dir);
+      await target.readManifest(File(p.join(dir, 'install_manifest.json')));
+    }
+    probe = await target.createProbe(dir);
+    await target.writeProbe(probe);
+    await target.deleteProbe(probe);
+    probe = null;
+    return const InstallTargetAccess(
+      ok: true,
+      accessDenied: false,
+      message: '',
+    );
+  } on FileSystemException catch (e) {
+    return _targetAccessFailure(dir, e, elevated: elevated);
+  } finally {
+    if (probe != null) {
+      try {
+        await target.deleteProbe(probe);
+      } catch (_) {}
+    }
+  }
+}
 
 String vaioDriverFailureWarning(Object error) {
   final detail = error is TimeoutException ? '超时' : '异常：$error';
@@ -52,11 +191,8 @@ Future<void> _killProcessTree(int pid) async {
       .transform(const Utf8Decoder(allowMalformed: true))
       .join();
   try {
-    final result = await Future.wait<Object>([
-      killer.exitCode,
-      stdout,
-      stderr,
-    ]).timeout(const Duration(seconds: 5));
+    final result = await Future.wait<Object>([killer.exitCode, stdout, stderr])
+        .timeout(const Duration(seconds: 5));
     if (result[0] != 0) {
       throw StateError('taskkill exit ${result[0]}');
     }
@@ -87,11 +223,8 @@ Future<ProcessResult> runProcessWithTimeout(
       .transform(const Utf8Decoder(allowMalformed: true))
       .join();
   try {
-    final result = await Future.wait<Object>([
-      process.exitCode,
-      stdout,
-      stderr,
-    ]).timeout(timeout);
+    final result = await Future.wait<Object>([process.exitCode, stdout, stderr])
+        .timeout(timeout);
     return ProcessResult(
       process.pid,
       result[0] as int,
@@ -169,20 +302,19 @@ class InstallEngine {
     // 进系统设置显示（第五十六轮 S4）。
     required String displayVersion,
     required int estimatedSizeKb,
-  }) =>
-      {
-        'DisplayName': 'AuraDSP',
-        'DisplayVersion': displayVersion,
-        'Publisher': 'AuraDSP Project',
-        'DisplayIcon': '$installDir\\auradsp_app.exe,0',
-        'InstallLocation': installDir,
-        'UninstallString': '"$installDir\\uninstall.exe"',
-        'QuietUninstallString': '"$installDir\\uninstall.exe" /silent',
-        'EstimatedSize': estimatedSizeKb,
-        'NoModify': 1,
-        'NoRepair': 1,
-        'URLInfoAbout': 'https://github.com/li589/AuraDSP',
-      };
+  }) => {
+    'DisplayName': 'AuraDSP',
+    'DisplayVersion': displayVersion,
+    'Publisher': 'AuraDSP Project',
+    'DisplayIcon': '$installDir\\auradsp_app.exe,0',
+    'InstallLocation': installDir,
+    'UninstallString': '"$installDir\\uninstall.exe"',
+    'QuietUninstallString': '"$installDir\\uninstall.exe" /silent',
+    'EstimatedSize': estimatedSizeKb,
+    'NoModify': 1,
+    'NoRepair': 1,
+    'URLInfoAbout': 'https://github.com/li589/AuraDSP',
+  };
 
   int get _hive => _allUsers ? kHkeyLocalMachine : kHkeyCurrentUser;
   bool _allUsers = false;
@@ -192,6 +324,7 @@ class InstallEngine {
     ProgressSink sink, {
     UpdatePlan? plan,
     FileErrorHandler? onFileError,
+    bool skipPrivilegedSteps = false,
   }) async {
     args.validateProtectedSession();
     final trustedPayloadSha = args.payloadSha256;
@@ -200,7 +333,9 @@ class InstallEngine {
       throw StateError('wizard payload manifest is not bound to setup footer');
     }
     _allUsers = o.allUsers;
-    final warnings = <String>[];
+    final warnings = <String>[
+      if (skipPrivilegedSteps) '用户未授予管理员权限：已跳过 ASIO/VAIO 自动安装及需要管理员的系统注册步骤。',
+    ];
     final createdFiles = <ManifestFile>[];
     final createdShortcuts = <String>[];
     final backupFailed = <String>{};
@@ -217,7 +352,12 @@ class InstallEngine {
       //    否则选了 Program Files 等系统目录又未提权时，会一路
       //    走到解压中途才撞墙（且可能已写了一半）。
       sink(const ProgressEvent('guard', 'probe', 0.01));
-      await _probeWritable(o.installDir, elevated: elevated);
+      final access = await inspectInstallTarget(
+        o.installDir,
+        elevated: elevated,
+        overwrite: overwrite,
+      );
+      if (!access.ok) throw StateError(access.message);
 
       // 1) 进程守卫
       sink(const ProgressEvent('guard', 'check', 0.02));
@@ -326,7 +466,7 @@ class InstallEngine {
       }
 
       // 4) ASIO 注册（用户态 COM，不受内核驱动签名限制；降级警告）
-      if (o.asio) {
+      if (o.asio && !skipPrivilegedSteps) {
         sink(const ProgressEvent('asio', 'register', 0.80));
         final dll = asioDllPath(o.installDir);
         if (!File(dll).existsSync()) {
@@ -349,7 +489,7 @@ class InstallEngine {
       // 5) VAIO 内核驱动：调随包自包含脚本并显式传 -Action install。
       //    旧口径直接执行 install_driver.ps1（默认 -Action status，等于不安装）
       //    且该脚本按源码树找包、依赖 WDK signtool，随包环境不可用。
-      if (o.vaio) {
+      if (o.vaio && !skipPrivilegedSteps) {
         sink(const ProgressEvent('driver', 'install', 0.86));
         final script = p.join(
           o.installDir,
@@ -366,27 +506,24 @@ class InstallEngine {
           warnings.add(kDriverSigningNotice);
         } else {
           try {
-            final r = await runProcessWithTimeout(
-              'powershell.exe',
-              [
-                '-NoProfile',
-                '-ExecutionPolicy',
-                'Bypass',
-                '-File',
-                script,
-                '-Action',
-                'install',
-              ],
-              workingDirectory: p.dirname(script),
-            );
+            final r = await runProcessWithTimeout('powershell.exe', [
+              '-NoProfile',
+              '-ExecutionPolicy',
+              'Bypass',
+              '-File',
+              script,
+              '-Action',
+              'install',
+            ], workingDirectory: p.dirname(script));
             if (r.exitCode == kDriverSigningRequired) {
               warnings.add(kDriverSigningNotice);
             } else {
               if (r.exitCode == kDriverRebootRequired) {
                 warnings.add('VAIO 驱动已安装；旧驱动尚在内存中，重启电脑后新驱动完全生效');
               } else if (r.exitCode != 0) {
-                final detail =
-                    r.exitCode == -1 && r.stderr.isNotEmpty ? '；${r.stderr}' : '';
+                final detail = r.exitCode == -1 && r.stderr.isNotEmpty
+                    ? '；${r.stderr}'
+                    : '';
                 warnings.add(
                   'VAIO 驱动安装失败（退出码 ${r.exitCode}$detail），应用本体不受影响；'
                   '可查看 %TEMP%\\auradsp-vaio-install.log 后手动重试',
@@ -411,7 +548,7 @@ class InstallEngine {
           warnings.add('桌面快捷方式创建失败');
         }
       }
-      if (o.startMenuShortcut) {
+      if (o.startMenuShortcut && !(skipPrivilegedSteps && o.allUsers)) {
         final base = o.allUsers
             ? p.join(
                 env('ProgramData'),
@@ -462,12 +599,10 @@ class InstallEngine {
         fullVersion: wizard.fullVersion,
         installDir: o.installDir,
         allUsers: o.allUsers,
-        components: [
-          'app',
-          if (o.asio) 'asio',
-          if (o.vaio) 'vaio',
-          if (o.ddcPresets) 'ddc',
-        ],
+        components: installedComponents(
+          o,
+          skipPrivilegedSteps: skipPrivilegedSteps,
+        ),
         files: createdFiles,
         shortcuts: createdShortcuts,
         installedAtIso: DateTime.now().toIso8601String(),
@@ -478,23 +613,28 @@ class InstallEngine {
           .writeAsString(manifest.encode());
 
       sink(const ProgressEvent('registry', 'write', 0.97));
-      final regOk = registryWriteValues(
-        _hive,
-        r'Software\Microsoft\Windows\CurrentVersion\Uninstall\AuraDSP',
-        uninstallValues(
-          installDir: o.installDir,
-          displayVersion: wizard.version,
-          estimatedSizeKb: manifest.estimatedSizeKb,
-        ),
-      );
-      registryWriteValues(_hive, r'Software\AuraDSP', {
-        'InstallDir': o.installDir,
-        'Version': wizard.fullVersion,
-        if (plan?.previous != null)
-          'PreviousVersion': plan!.previous!.fullVersion,
-        'UpdateMode': manifest.updateMode,
-      });
-      if (!regOk) warnings.add('卸载注册表项写入失败（不影响使用与文件卸载）');
+      final skipSystemRegistration = skipPrivilegedSteps && o.allUsers;
+      if (skipSystemRegistration) {
+        warnings.add('未以管理员运行：已跳过全用户注册表与公共开始菜单更新。');
+      } else {
+        final regOk = registryWriteValues(
+          _hive,
+          r'Software\Microsoft\Windows\CurrentVersion\Uninstall\AuraDSP',
+          uninstallValues(
+            installDir: o.installDir,
+            displayVersion: wizard.version,
+            estimatedSizeKb: manifest.estimatedSizeKb,
+          ),
+        );
+        registryWriteValues(_hive, r'Software\AuraDSP', {
+          'InstallDir': o.installDir,
+          'Version': wizard.fullVersion,
+          if (plan?.previous != null)
+            'PreviousVersion': plan!.previous!.fullVersion,
+          'UpdateMode': manifest.updateMode,
+        });
+        if (!regOk) warnings.add('卸载注册表项写入失败（不影响使用与文件卸载）');
+      }
 
       // 8) 升级成功：清理旧版遗留（旧清单有、新清单没有的随包文件），
       //    再删备份快照。这些旧文件都在备份里，若此步抛错仍可回滚恢复。
@@ -569,11 +709,11 @@ class InstallEngine {
       final errorText = e is InstallCancelled
           ? (overwrite ? '安装已被取消，已回滚到安装前的状态。' : '安装已被取消，已清除本次写入的文件。')
           : e is FileSystemException
-              ? '文件被其他进程占用或无法访问：${e.path ?? ''}\n'
-                  '请关闭正在播放音频的程序、退出 AuraDSP 后重试。\n'
-                  '（技术详情：${e.osError?.message ?? e.message}'
-                  '${e.osError != null ? '，errno ${e.osError!.errorCode}' : ''}）'
-              : '$e';
+          ? '文件被其他进程占用或无法访问：${e.path ?? ''}\n'
+                '请关闭正在播放音频的程序、退出 AuraDSP 后重试。\n'
+                '（技术详情：${e.osError?.message ?? e.message}'
+                '${e.osError != null ? '，errno ${e.osError!.errorCode}' : ''}）'
+          : '$e';
       return EngineResult(
         ok: false,
         error: errorText,
@@ -617,20 +757,17 @@ class InstallEngine {
       return;
     }
     try {
-      final r = await Process.run(
-              tool,
-              const [
-                'uninstall',
-                '--yes',
-                '--json',
-              ],
-              stdoutEncoding: utf8)
-          .timeout(
-        const Duration(minutes: 2),
-        onTimeout: () {
-          throw StateError('APO 分离超时');
-        },
-      );
+      final r =
+          await Process.run(tool, const [
+            'uninstall',
+            '--yes',
+            '--json',
+          ], stdoutEncoding: utf8).timeout(
+            const Duration(minutes: 2),
+            onTimeout: () {
+              throw StateError('APO 分离超时');
+            },
+          );
       if (r.exitCode != 0) {
         final out = r.stdout.toString().trim();
         final tail = out.length > 200 ? out.substring(out.length - 200) : out;
@@ -724,42 +861,6 @@ class InstallEngine {
       } catch (_) {
         failed?.add(p.relative(e.path, from: installDir));
       }
-    }
-  }
-
-  /// 安装目录可写性预检：建目录（递归）+ 写删一个探针文件。
-  /// 失败时把裸异常翻译成可行动文案（见 writabilityFailureMessage）。
-  Future<void> _probeWritable(String dir, {required bool elevated}) async {
-    String rawOf(FileSystemException e) => '${e.osError?.message ?? e.message}'
-        '${e.osError != null ? ' (errno ${e.osError!.errorCode})' : ''}';
-    try {
-      await Directory(dir).create(recursive: true);
-    } on FileSystemException catch (e) {
-      throw StateError(
-        writabilityFailureMessage(
-          dir: dir,
-          errorCode: e.osError?.errorCode,
-          rawError: rawOf(e),
-          elevated: elevated,
-        ),
-      );
-    }
-    final probe = File(p.join(dir, '.auradsp-write-probe'));
-    try {
-      await probe.writeAsBytes(const <int>[0], flush: true);
-    } on FileSystemException catch (e) {
-      throw StateError(
-        writabilityFailureMessage(
-          dir: dir,
-          errorCode: e.osError?.errorCode,
-          rawError: rawOf(e),
-          elevated: elevated,
-        ),
-      );
-    } finally {
-      try {
-        await probe.delete();
-      } catch (_) {}
     }
   }
 
@@ -922,25 +1023,22 @@ $s.Save()
             '请手动以管理员执行 driver\\install_vaio.ps1 -Action uninstall -RemoveTestCert',
           );
         } else {
-          final r = await Process.run(
-                  'powershell.exe',
-                  [
-                    '-NoProfile',
-                    '-ExecutionPolicy',
-                    'Bypass',
-                    '-File',
-                    script,
-                    '-Action',
-                    'uninstall',
-                    '-RemoveTestCert',
-                  ],
-                  workingDirectory: driverDir)
-              .timeout(
-            const Duration(minutes: 3),
-            onTimeout: () {
-              throw StateError('驱动卸载超时');
-            },
-          );
+          final r =
+              await Process.run('powershell.exe', [
+                '-NoProfile',
+                '-ExecutionPolicy',
+                'Bypass',
+                '-File',
+                script,
+                '-Action',
+                'uninstall',
+                '-RemoveTestCert',
+              ], workingDirectory: driverDir).timeout(
+                const Duration(minutes: 3),
+                onTimeout: () {
+                  throw StateError('驱动卸载超时');
+                },
+              );
           if (r.exitCode != 0) {
             warnings.add(
               'VAIO 驱动卸载返回 ${r.exitCode}，'

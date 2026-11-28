@@ -24,6 +24,51 @@ List<ManifestFile> trustedPayload(Iterable<MapEntry<String, String>> entries) =>
         )
         .toList();
 
+class _FakeTargetInspector implements InstallTargetInspector {
+  final List<String> operations = [];
+  FileSystemException? listError;
+  FileSystemException? readError;
+  FileSystemException? writeError;
+  FileSystemException? deleteError;
+
+  @override
+  Future<void> createDirectory(String path) async {
+    operations.add('create:$path');
+  }
+
+  @override
+  Future<File> createProbe(String path) async {
+    operations.add('probe:$path');
+    return File('$path\\.auradsp-write-probe-test');
+  }
+
+  @override
+  Future<List<FileSystemEntity>> listDirectory(String path) async {
+    operations.add('list:$path');
+    if (listError != null) throw listError!;
+    return const [];
+  }
+
+  @override
+  Future<String?> readManifest(File file) async {
+    operations.add('read:${file.path}');
+    if (readError != null) throw readError!;
+    return null;
+  }
+
+  @override
+  Future<void> writeProbe(File file) async {
+    operations.add('write:${file.path}');
+    if (writeError != null) throw writeError!;
+  }
+
+  @override
+  Future<void> deleteProbe(File file) async {
+    operations.add('delete:${file.path}');
+    if (deleteError != null) throw deleteError!;
+  }
+}
+
 void main() {
   group('SetupArgs.parse', () {
     test('引导壳标准参数', () {
@@ -130,6 +175,21 @@ void main() {
       expect(p.previous?.fullVersion, '0.1.0.1');
     });
 
+    test('已发现旧应用但缺少版本时按修复安装', () {
+      final repair = planUpdate(
+        newFullVersion: '0.2.0.1',
+        requestedDir: r'D:\Elsewhere',
+        defaultDir: r'C:\AuraDSP',
+        installed: const InstalledInfo(
+          fullVersion: '',
+          installDir: r'D:\Legacy\AuraDSP',
+        ),
+      );
+      expect(repair.mode, UpdateMode.repair);
+      expect(repair.installDir, r'D:\Legacy\AuraDSP');
+      expect(repair.isOverwrite, isTrue);
+    });
+
     test('同版本 = 修复，低版本 = 拦截', () {
       final repair = planUpdate(
         newFullVersion: '0.1.0.1',
@@ -169,7 +229,8 @@ void main() {
 
   group('parseRegQuery（已装实例探测）', () {
     test('解析含空格的路径与多种类型', () {
-      const out = 'HKEY_CURRENT_USER\\Software\\AuraDSP\r\n'
+      const out =
+          'HKEY_CURRENT_USER\\Software\\AuraDSP\r\n'
           '    InstallDir    REG_SZ    C:\\Program Files\\AuraDSP\r\n'
           '    Version    REG_SZ    0.1.0.1\r\n'
           '    Flag    REG_DWORD    0x1\r\n';
@@ -280,18 +341,52 @@ void main() {
   });
 
   group('InstallOptions', () {
-    test('VAIO 勾选不再强制普通安装提权', () {
-      final o = InstallOptions(installDir: defaultInstallDir(false));
-      expect(o.vaio, isTrue);
-      expect(installNeedsElevation(o), isFalse);
+    test('ASIO 勾选需要提权', () {
+      final o = InstallOptions(
+        installDir: defaultInstallDir(false),
+        asio: true,
+        vaio: false,
+      );
+      expect(installNeedsElevation(o), isTrue);
     });
 
-    test('全用户安装仍需要提权', () {
+    test('VAIO 勾选需要提权', () {
+      final o = InstallOptions(
+        installDir: defaultInstallDir(false),
+        asio: false,
+        vaio: true,
+      );
+      expect(installNeedsElevation(o), isTrue);
+    });
+
+    test('仅全用户安装需要提权', () {
       final o = InstallOptions(
         installDir: defaultInstallDir(true),
         allUsers: true,
+        asio: false,
+        vaio: false,
       );
       expect(installNeedsElevation(o), isTrue);
+    });
+
+    test('全部关闭管理员步骤时无需提权', () {
+      final o = InstallOptions(
+        installDir: defaultInstallDir(false),
+        asio: false,
+        vaio: false,
+      );
+      expect(installNeedsElevation(o), isFalse);
+    });
+
+    test('降级安装不把跳过的驱动写进已安装组件', () {
+      final o = InstallOptions(installDir: defaultInstallDir(false));
+      expect(installedComponents(o, skipPrivilegedSteps: true), ['app', 'ddc']);
+      expect(installedComponents(o, skipPrivilegedSteps: false), [
+        'app',
+        'asio',
+        'vaio',
+        'ddc',
+      ]);
     });
 
     test('驱动超时/异常只产生警告，不否定应用本体', () {
@@ -452,8 +547,9 @@ void main() {
         reason: '窗口隐藏由启动参数负责，脚本内不重复',
       );
       // PowerShell 数组字面量不允许尾随逗号，曾导致「',' 后缺少表达式」。
-      final targetLine =
-          s.split('\n').firstWhere((l) => l.startsWith(r'$targets = @'));
+      final targetLine = s
+          .split('\n')
+          .firstWhere((l) => l.startsWith(r'$targets = @'));
       expect(targetLine.trim().endsWith(',)'), isFalse);
       expect(targetLine, contains("', '"));
     });
@@ -468,7 +564,8 @@ void main() {
 
   group('进程守卫路径核对（防误杀同名进程）', () {
     test('parseProcessPaths 解析 pid|path，跳过取不到路径的项', () {
-      const out = '1234|C:\\Program Files\\AuraDSP\\auradsp_app.exe\r\n'
+      const out =
+          '1234|C:\\Program Files\\AuraDSP\\auradsp_app.exe\r\n'
           '5678|C:\\Other\\auradsp_app.exe\r\n'
           '9999|\r\n'
           'bad|line\r\n';
@@ -661,6 +758,91 @@ void main() {
     });
   });
 
+  group('安装目标读写预检', () {
+    test('覆盖安装先读目录与清单，再写删探针', () async {
+      final inspector = _FakeTargetInspector();
+      final result = await inspectInstallTarget(
+        r'D:\Apps\AuraDSP',
+        elevated: false,
+        overwrite: true,
+        inspector: inspector,
+      );
+      expect(result.ok, isTrue);
+      expect(inspector.operations, [
+        r'create:D:\Apps\AuraDSP',
+        r'list:D:\Apps\AuraDSP',
+        r'read:D:\Apps\AuraDSP\install_manifest.json',
+        r'probe:D:\Apps\AuraDSP',
+        r'write:D:\Apps\AuraDSP\.auradsp-write-probe-test',
+        r'delete:D:\Apps\AuraDSP\.auradsp-write-probe-test',
+      ]);
+    });
+
+    test('拒绝访问标记为可提权并给出目录错误', () async {
+      final inspector = _FakeTargetInspector()
+        ..writeError = const FileSystemException(
+          'denied',
+          r'D:\Apps\AuraDSP\.auradsp-write-probe',
+          OSError('denied', 5),
+        );
+      final result = await inspectInstallTarget(
+        r'D:\Apps\AuraDSP',
+        elevated: false,
+        overwrite: true,
+        inspector: inspector,
+      );
+      expect(result.ok, isFalse);
+      expect(result.accessDenied, isTrue);
+      expect(result.errorCode, 5);
+      expect(result.message, contains(r'D:\Apps\AuraDSP'));
+      expect(result.message, contains('管理员'));
+    });
+
+    test('默认探针不覆盖已有同名文件且不遗留探针', () async {
+      final temp = await Directory.systemTemp.createTemp('auradsp-probe-');
+      try {
+        final existing = File('${temp.path}/.auradsp-write-probe')
+          ..writeAsStringSync('keep');
+        final result = await inspectInstallTarget(
+          temp.path,
+          elevated: false,
+          overwrite: false,
+        );
+        expect(result.ok, isTrue);
+        expect(existing.readAsStringSync(), 'keep');
+        expect(
+          temp.listSync().where(
+            (e) => e.path.contains('.auradsp-write-probe-'),
+          ),
+          isEmpty,
+        );
+      } finally {
+        await temp.delete(recursive: true);
+      }
+    });
+
+    test('读取失败发生在写入探针之前', () async {
+      final inspector = _FakeTargetInspector()
+        ..listError = const FileSystemException(
+          'denied',
+          r'D:\Apps\AuraDSP',
+          OSError('denied', 5),
+        );
+      final result = await inspectInstallTarget(
+        r'D:\Apps\AuraDSP',
+        elevated: false,
+        overwrite: true,
+        inspector: inspector,
+      );
+      expect(result.ok, isFalse);
+      expect(result.accessDenied, isTrue);
+      expect(
+        inspector.operations.any((op) => op.startsWith('write:')),
+        isFalse,
+      );
+    });
+  });
+
   group('关键文件分类与不可写文案（S2/S3\'）', () {
     test('isCriticalPayloadPath：resources/ 可跳过、其余关键', () {
       expect(isCriticalPayloadPath('resources/ir/a.irs'), isFalse);
@@ -743,10 +925,10 @@ void main() {
     // 父路径已是文件，建目录必然抛 FileSystemException，与平台
     // 无关、可重复。其余条目正常。
     List<MapEntry<String, String>> fixture(String base) => [
-          MapEntry('payload/$base/blob.bin', 'file-not-dir'),
-          MapEntry('payload/$base/blob.bin/inner.dat', 'boom'),
-          const MapEntry('payload/ok.txt', 'fine'),
-        ];
+      MapEntry('payload/$base/blob.bin', 'file-not-dir'),
+      MapEntry('payload/$base/blob.bin/inner.dat', 'boom'),
+      const MapEntry('payload/ok.txt', 'fine'),
+    ];
 
     test('跳过：失败条目不进清单、进跳过名单（resources 非关键）', () async {
       final tmp = await Directory.systemTemp.createTemp('auradsp-wiz-');
@@ -919,49 +1101,53 @@ void main() {
       expect(result.stderr, contains('timeout'));
     });
 
-    test(
-      '真实 PowerShell 子进程树被超时终止',
-      () async {
-        final tmp = await Directory.systemTemp.createTemp('auradsp-tree-');
-        final child = File('${tmp.path}/child.ps1');
-        final parent = File('${tmp.path}/parent.ps1');
-        final marker = File('${tmp.path}/child-survived.txt');
-        final pidFile = File('${tmp.path}/child.pid');
-        String quote(String value) => value.replaceAll("'", "''");
-        await child.writeAsString(
-          "Start-Sleep -Seconds 5\n"
-          "Set-Content -LiteralPath '${quote(marker.path)}' 'alive'\n",
+    test('真实 PowerShell 子进程树被超时终止', () async {
+      final tmp = await Directory.systemTemp.createTemp('auradsp-tree-');
+      final child = File('${tmp.path}/child.ps1');
+      final parent = File('${tmp.path}/parent.ps1');
+      final marker = File('${tmp.path}/child-survived.txt');
+      final pidFile = File('${tmp.path}/child.pid');
+      String quote(String value) => value.replaceAll("'", "''");
+      await child.writeAsString(
+        "Start-Sleep -Seconds 5\n"
+        "Set-Content -LiteralPath '${quote(marker.path)}' 'alive'\n",
+      );
+      await parent.writeAsString(
+        "\$child = '${quote(child.path)}'\n"
+        r"$p = Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile', '-File', $child) -PassThru"
+        '\n'
+        "Set-Content -LiteralPath '${quote(pidFile.path)}' \$p.Id\n"
+        'Start-Sleep -Seconds 30\n',
+      );
+      try {
+        final result = await runProcessWithTimeout(
+          'powershell.exe',
+          ['-NoProfile', '-File', parent.path],
+          timeout: const Duration(seconds: 3),
+          terminationGrace: const Duration(seconds: 3),
         );
-        await parent.writeAsString(
-          "\$child = '${quote(child.path)}'\n"
-          r"$p = Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile', '-File', $child) -PassThru" '\n'
-          "Set-Content -LiteralPath '${quote(pidFile.path)}' \$p.Id\n"
-          'Start-Sleep -Seconds 30\n',
+        expect(result.exitCode, -1);
+        expect(
+          pidFile.existsSync(),
+          isTrue,
+          reason:
+              'fixture must spawn a real descendant before timeout; '
+              'result=${result.stderr}',
         );
-        try {
-          final result = await runProcessWithTimeout(
-            'powershell.exe',
-            ['-NoProfile', '-File', parent.path],
-            timeout: const Duration(seconds: 3),
-            terminationGrace: const Duration(seconds: 3),
-          );
-          expect(result.exitCode, -1);
-          expect(pidFile.existsSync(), isTrue,
-              reason: 'fixture must spawn a real descendant before timeout; '
-                  'result=${result.stderr}');
-          await Future<void>.delayed(const Duration(seconds: 5));
-          expect(marker.existsSync(), isFalse,
-              reason: 'descendant must not survive taskkill /T /F');
-        } finally {
-          if (pidFile.existsSync()) {
-            final pid = (await pidFile.readAsString()).trim();
-            await Process.run('taskkill.exe', ['/PID', pid, '/T', '/F']);
-          }
-          await tmp.delete(recursive: true);
+        await Future<void>.delayed(const Duration(seconds: 5));
+        expect(
+          marker.existsSync(),
+          isFalse,
+          reason: 'descendant must not survive taskkill /T /F',
+        );
+      } finally {
+        if (pidFile.existsSync()) {
+          final pid = (await pidFile.readAsString()).trim();
+          await Process.run('taskkill.exe', ['/PID', pid, '/T', '/F']);
         }
-      },
-      skip: !Platform.isWindows,
-    );
+        await tmp.delete(recursive: true);
+      }
+    }, skip: !Platform.isWindows);
   });
 }
 
@@ -983,14 +1169,12 @@ final class _FakeProcess implements Process {
   IOSink get stdin => throw UnimplementedError();
 
   @override
-  Stream<List<int>> get stdout => holdStreams
-      ? _heldStdout.stream
-      : Stream.value(utf8.encode(stdoutText));
+  Stream<List<int>> get stdout =>
+      holdStreams ? _heldStdout.stream : Stream.value(utf8.encode(stdoutText));
 
   @override
-  Stream<List<int>> get stderr => holdStreams
-      ? _heldStderr.stream
-      : Stream.value(utf8.encode(stderrText));
+  Stream<List<int>> get stderr =>
+      holdStreams ? _heldStderr.stream : Stream.value(utf8.encode(stderrText));
 
   @override
   Future<int> get exitCode =>
