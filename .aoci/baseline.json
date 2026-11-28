@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-21T02:23:05Z",
-  "updated_at": "2026-11-28T11:28:13Z",
+  "updated_at": "2026-11-28T11:56:18Z",
   "files": {
     ".ai/README.md": {
       "role": "index",
@@ -269,9 +269,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "d26ce54c2fa58a6af631b5ffbddf7c61a3acf34f3b7a0ee80a67308de701a670",
-      "size": 546448,
-      "normalized_sha256": "d26ce54c2fa58a6af631b5ffbddf7c61a3acf34f3b7a0ee80a67308de701a670"
+      "sha256": "8fd7a96baff15d4b57ec0f998c17c575d6ac5c32496b548cd21b683231a4fbd7",
+      "size": 546441,
+      "normalized_sha256": "8fd7a96baff15d4b57ec0f998c17c575d6ac5c32496b548cd21b683231a4fbd7"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -3784,9 +3784,9 @@
     },
     "core/desktop/linux/CMakeLists.txt": {
       "role": "index",
-      "sha256": "1781cd1d549aebac63c1e53085915719b889571870d74c8045362c3d149f095d",
-      "size": 24393,
-      "normalized_sha256": "a99f35f8c9e6fddd46cf313735fb0467979409ecaaf7e2d4b712a09e412bcb09"
+      "sha256": "ef0025743640c74e3277838e4636c417e19c6c07dc50eedc54f4a39be3f3b11a",
+      "size": 24751,
+      "normalized_sha256": "bf5732af064dd9f1c67126167d114bfe59bde59bd36ab109b66ea23f92a6fcd4"
     },
     "core/desktop/linux/build_engine.sh": {
       "role": "index",

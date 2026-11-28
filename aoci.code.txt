@@ -788,7 +788,7 @@ Log.h[LV4T]: F:libutils Log 桩：ALOGD/I/W/E 宏转发 __android_log_print，LO
 SystemClock.h[LV4T]: F:libutils SystemClock 桩：elapsedRealtimeNano 用 CLOCK_BOOTTIME 实现，语义与 AOSP 一致 | R:code:core/android/stubs/README.md | A:L | S:-
 
 ===D:/temp_desktop/Proj/JamesDSP/core/desktop/linux/===
-CMakeLists.txt[FV6L]: F:声明 Linux 引擎、进程内/远程插件宿主与原生/异步控制测试构建 | R:code:engine/core_sources.cmake,code:engine/auradsp_engine.map,code:engine/legacy/jdsp/jdsp_header.h | A:以 OBJECT 库聚合共享核心并追加 POSIX 与插件源链成 .so，version script 收口导出，out-noplugins 隔离句柄视图，共享 COMMON 源表并注册 dsp_boundary 与 plugin_control_async 8 用例 CTest | S:核心必须保持 OBJECT 否则漏抽符号；禁叠 hidden visibility；test_plugin_control_async 与宿主须共用 AURADSP_LINUX_PLUGIN_HOST_COMMON_SOURCES；NO_PLUGINS 测试视图须对齐
+CMakeLists.txt[FV6L]: F:声明 Linux 引擎、进程内/远程插件宿主与原生/异步控制测试构建 | R:code:engine/core_sources.cmake,code:engine/auradsp_engine.map,code:engine/legacy/jdsp/jdsp_header.h | A:以 OBJECT 库聚合核心链入 .so 并用 version script 收口导出，包装 STATIC 归档供纯核/DSP 单测选择性链接，共享 COMMON 源表构建宿主与 8 用例 plugin_control_async | S:auradsp_engine 必须保持 OBJECT 否则漏抽符号且禁叠 hidden visibility；纯 C 测试禁注入含 C++ 头的 auradsp_gcc_shim.h；test_plugin_control_async 须链 auradsp_engine 供给 auradsp_version
 build_engine.sh[FV3T]: F:Linux 引擎一键构建入口：preset linux-x64 配置加 release 构建并报告 .so 路径 | R:- | A:- | S:-
 
 ===D:/temp_desktop/Proj/JamesDSP/core/desktop/windows-drivers/01_vaio_driver/===
