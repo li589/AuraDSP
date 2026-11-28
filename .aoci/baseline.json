@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-21T02:23:05Z",
-  "updated_at": "2026-11-28T10:19:08Z",
+  "updated_at": "2026-11-28T11:28:13Z",
   "files": {
     ".ai/README.md": {
       "role": "index",
@@ -269,9 +269,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "770b5d5da22b5c8b515170cf7be8338252a4bd2f107f47309d6ad7e23507dfc2",
-      "size": 546764,
-      "normalized_sha256": "770b5d5da22b5c8b515170cf7be8338252a4bd2f107f47309d6ad7e23507dfc2"
+      "sha256": "d26ce54c2fa58a6af631b5ffbddf7c61a3acf34f3b7a0ee80a67308de701a670",
+      "size": 546448,
+      "normalized_sha256": "d26ce54c2fa58a6af631b5ffbddf7c61a3acf34f3b7a0ee80a67308de701a670"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -1138,9 +1138,9 @@
     },
     "app/auradsp_app/lib/engine/apo_param_index.dart": {
       "role": "index",
-      "sha256": "392b5bbae3636c7593fdbbb5dfd3cfff089cce19ebebe166abb346a31d4642ca",
+      "sha256": "a49b76d5a345cbfb7bf02f5dfc77eb096e2ee96f0eda670f2da9e0846f2919fd",
       "size": 11391,
-      "normalized_sha256": "392b5bbae3636c7593fdbbb5dfd3cfff089cce19ebebe166abb346a31d4642ca"
+      "normalized_sha256": "a49b76d5a345cbfb7bf02f5dfc77eb096e2ee96f0eda670f2da9e0846f2919fd"
     },
     "app/auradsp_app/lib/engine/apo_plugin_block.dart": {
       "role": "index",
@@ -3784,9 +3784,9 @@
     },
     "core/desktop/linux/CMakeLists.txt": {
       "role": "index",
-      "sha256": "d601ac988a8416482515cf890d81e56f2a000160e96f541d1f2009787321dafe",
-      "size": 22694,
-      "normalized_sha256": "79d0cdc8e370ecf3062483557e1d992abf5d68c427f4267f07b4523c87787c2c"
+      "sha256": "1781cd1d549aebac63c1e53085915719b889571870d74c8045362c3d149f095d",
+      "size": 24393,
+      "normalized_sha256": "a99f35f8c9e6fddd46cf313735fb0467979409ecaaf7e2d4b712a09e412bcb09"
     },
     "core/desktop/linux/build_engine.sh": {
       "role": "index",
@@ -4095,9 +4095,9 @@
     },
     "core/desktop/windows-drivers/03_system_apo/ApoParamIndex.h": {
       "role": "index",
-      "sha256": "d8091f20b3d78bdf9e1bb963b9a514602eb02f8a9914617dff11aa300e836a79",
+      "sha256": "47d967e3527ddd4c472cf8926df8f5daabd7d0a901a656a1d971ebcc35d9473a",
       "size": 10680,
-      "normalized_sha256": "d8091f20b3d78bdf9e1bb963b9a514602eb02f8a9914617dff11aa300e836a79"
+      "normalized_sha256": "47d967e3527ddd4c472cf8926df8f5daabd7d0a901a656a1d971ebcc35d9473a"
     },
     "core/desktop/windows-drivers/03_system_apo/ApoShared.h": {
       "role": "index",
@@ -4557,9 +4557,9 @@
     },
     "core/desktop/windows/CMakeLists.txt": {
       "role": "index",
-      "sha256": "42b8d57565a94cdec844e4913f05518a6bffff9e597e163abb23dc6123346b5f",
-      "size": 33571,
-      "normalized_sha256": "a593e77101f4f16a0a577aea946af3183565835b5bf4e009a6aab43ce2db37a3"
+      "sha256": "ab0795712bb9c80aaa112c1c07c087a94afaa13078198243996c4d0b61b9bf39",
+      "size": 33654,
+      "normalized_sha256": "ce79c4286e43c48182f82ba0f866744ca652a83c0211f5bbea9c9789fb7ac0ff"
     },
     "core/desktop/windows/build_engine.sh": {
       "role": "index",
@@ -6459,9 +6459,9 @@
     },
     "engine/chain/engine_chain.cpp": {
       "role": "index",
-      "sha256": "cacdc5d5cc3fbc2489822fec163e72bda4956c76db8bc953e09ead81193e5946",
-      "size": 91943,
-      "normalized_sha256": "fb3df1355eae01f72455e9e3a3910ba45cf4d20417e1c12bbd29d3ec9ab11382"
+      "sha256": "3afb9cf448f12eb170b0a9eed13558ea0aa204351f49e6ae1b91b04576039ac0",
+      "size": 92018,
+      "normalized_sha256": "fa2e260c6984eb72cbf698075ff5d774bc14d144ad118439aa4d2d3d6644364a"
     },
     "engine/chain/engine_convolver.cpp": {
       "role": "index",
@@ -6549,9 +6549,9 @@
     },
     "engine/dsp/dsp_mc_liveprog.cpp": {
       "role": "index",
-      "sha256": "12273d7dfa5f57d5b9632a5d11feafbfd1b673c9ebe27a666d5d1a281bfe77ec",
-      "size": 19079,
-      "normalized_sha256": "27d94b003f0b774ed2191fb44d0c2ee08e744b1e2caf9408063c8994e123b0e8"
+      "sha256": "3c1b4f5508de9e8fcd70ccf1e444c263ad834ee1d1aec34bc4b73d24c1118076",
+      "size": 19689,
+      "normalized_sha256": "0ced04b2e82a27347e153ad5355e981cf017d218671afde10e9eb9e43166fa3d"
     },
     "engine/dsp/dsp_mc_liveprog.h": {
       "role": "index",
@@ -6591,15 +6591,15 @@
     },
     "engine/engine_internal.h": {
       "role": "index",
-      "sha256": "bae586f089a90f3ffd8e6b60d71d5b80d920836efe88da50c46890d99ff2badf",
-      "size": 64251,
-      "normalized_sha256": "7ac940fbf160cf97bda0a2a6beb162e250eb6389e4819f4d53df16c89bcf18ca"
+      "sha256": "4199f4581df4c6d65d96f458fa4ce53af04ff22a4aae8fc43ef68c14776a37b0",
+      "size": 64742,
+      "normalized_sha256": "9e640e9c1c19bdedbe2096fa39ca85cabc3597040b700480c4dff4dc0b491ce0"
     },
     "engine/engine_param_table.h": {
       "role": "index",
-      "sha256": "4a8ed2859a78a97919d1795f42d6be088c9742a2c558e9fd1a713a1cb6ffea16",
-      "size": 74058,
-      "normalized_sha256": "28ce92a0e0f62d67f9fcd34342d633381272e1b4eebf08b60a15acf68ef11da3"
+      "sha256": "f111bc6c8e7308640088477fb4e257954dad29ba3bc5ccecc31c12e54e175c64",
+      "size": 74099,
+      "normalized_sha256": "7dcb4325cdbf49ff9b3acb8a8bece7957b8f4e6b0e9e8ef9f1b430ab9845eb10"
     },
     "engine/geometry_snapshot.h": {
       "role": "index",
@@ -7341,9 +7341,9 @@
     },
     "engine/legacy/jdsp/Effects/multimodalEQ.c": {
       "role": "index",
-      "sha256": "771419ed53172729b1516c03096fa294e7ba04e64e261f207e84b382dd6a2fcd",
-      "size": 14596,
-      "normalized_sha256": "c936fc99baf8c73855a1991cee6fc41b6bc278a6c83cbd5773c89b925ee6069e"
+      "sha256": "282d3ff2fd83492b5b4d43a3948b963c3b06e78450a62b9a5a6e6ba3a106c476",
+      "size": 14757,
+      "normalized_sha256": "0c5374befe758c86f06f26306c71966ca465e74346eed989af7c8a0e02f20ea1"
     },
     "engine/legacy/jdsp/Effects/reverb.c": {
       "role": "index",
@@ -7443,9 +7443,9 @@
     },
     "engine/legacy/jdsp/jdspController.c": {
       "role": "index",
-      "sha256": "d30b799bb6f82547436a62e11991248db3ce4129aca2f7b7bb110160bf217d90",
-      "size": 73077,
-      "normalized_sha256": "c6cf2ad512a810aeccbd5af7285f3ee25207d25c8451a4b694761dd43c174a85"
+      "sha256": "16229ef47dba4cc13d2f0d04044efb62d29d8564a288fad1c58199db10061b5f",
+      "size": 74360,
+      "normalized_sha256": "aff120ea7e2f3c50132137f563dbbb2dfbcda4cde6e28baf80656432cea19f42"
     },
     "engine/legacy/jdsp/jdsp_header.h": {
       "role": "index",
@@ -7551,9 +7551,9 @@
     },
     "engine/plugins/api/plugin_host.h": {
       "role": "index",
-      "sha256": "6988e4acb592b8340ab571ca16a0db209b0c5a6bad203082020aa53b282c7d57",
-      "size": 28163,
-      "normalized_sha256": "76969885c47bb003c53668eb0b794dc1da8aab778fcbf52a87ac2181e23a82d9"
+      "sha256": "b6f33ddbc3135e34cf3c81004f74372a33261a83aabd1d81bae7bcc4aec921fd",
+      "size": 28370,
+      "normalized_sha256": "e49aea137910ee420a4a377a17e418c49f7ed5e183fcbab16c317a528cd9ec5a"
     },
     "engine/plugins/api/plugin_metadata_util.h": {
       "role": "index",
@@ -7605,9 +7605,9 @@
     },
     "engine/plugins/driver/plugin_host_manager.cpp": {
       "role": "index",
-      "sha256": "df17b07bd04b7bd23e752e44d850c668c58980241a432b8167d9de09ae555186",
-      "size": 74413,
-      "normalized_sha256": "a9d986e2f1de92b65d20f5b941cd8c931cc47f0b8e132b5cf70df945a99bb43c"
+      "sha256": "d80d43e3743247d7a4e23505efe092c5f274ab971068f385e5f4dd679ded1e6f",
+      "size": 77388,
+      "normalized_sha256": "15fe33e2fb1c11bc7ab1f706405b3fde7094660fcbd6f03cc161d2637e72e41b"
     },
     "engine/plugins/driver/plugin_json.cpp": {
       "role": "index",
@@ -7623,9 +7623,9 @@
     },
     "engine/plugins/driver/plugin_scanner.cpp": {
       "role": "index",
-      "sha256": "2d120f04280811f4daef0bbf8e5c3c3467874377c99db0f3d5a208dc5cd63904",
-      "size": 31496,
-      "normalized_sha256": "87fcac3b9fd31ca2da13640c5185eec29dece3ef25614819a4d241c16ff3ea1f"
+      "sha256": "c17360ea16dd57c05a47acd8411b1e32ed456b82950f1557bd9d1f94dc6d6190",
+      "size": 31649,
+      "normalized_sha256": "aa3dc0f059abba611d7216ab8dd2d5f4f59aeeadb696abb87932033ba617e2df"
     },
     "engine/plugins/driver/plugin_thread.cpp": {
       "role": "index",
@@ -7953,9 +7953,9 @@
     },
     "engine/plugins/tests/plugin_control_async.cpp": {
       "role": "observe",
-      "sha256": "6ad64653de021d3e1176285ee4d399db29a6ef50e5cd121b964c2deadefb8eca",
-      "size": 8955,
-      "normalized_sha256": "6ad64653de021d3e1176285ee4d399db29a6ef50e5cd121b964c2deadefb8eca"
+      "sha256": "d9cf4affee1ecde45572b1df211114d4d041952ae59148d4bfe05f9d9d5594dd",
+      "size": 13573,
+      "normalized_sha256": "d9cf4affee1ecde45572b1df211114d4d041952ae59148d4bfe05f9d9d5594dd"
     },
     "engine/plugins/tests/plugin_host_direct.cpp": {
       "role": "observe",
@@ -7983,9 +7983,9 @@
     },
     "engine/tests/biquad_snapshot_test.cpp": {
       "role": "observe",
-      "sha256": "bdd579f947ac8c837b10185f844b4f08a82d7b018331c7e0b09988b4a524fda8",
-      "size": 1603,
-      "normalized_sha256": "bdd579f947ac8c837b10185f844b4f08a82d7b018331c7e0b09988b4a524fda8"
+      "sha256": "0db76e3bbd2bd8af52c03670c5210164038e39c8d1fedf1606a4cac6e7e3569b",
+      "size": 2888,
+      "normalized_sha256": "0db76e3bbd2bd8af52c03670c5210164038e39c8d1fedf1606a4cac6e7e3569b"
     },
     "engine/tests/convolver_safety_test.c": {
       "role": "observe",
@@ -7995,9 +7995,9 @@
     },
     "engine/tests/dsp_boundary_test.cpp": {
       "role": "observe",
-      "sha256": "0959733d902866c94f4da240d2897d969cc59b5399c3e6f203cedece9202284e",
-      "size": 3954,
-      "normalized_sha256": "0959733d902866c94f4da240d2897d969cc59b5399c3e6f203cedece9202284e"
+      "sha256": "e73ce4059220743033ab8424b0beb773199a8f699b8f72d35927f9e7473a7d72",
+      "size": 5144,
+      "normalized_sha256": "e73ce4059220743033ab8424b0beb773199a8f699b8f72d35927f9e7473a7d72"
     },
     "engine/tests/geometry_atomic_test.cpp": {
       "role": "observe",
