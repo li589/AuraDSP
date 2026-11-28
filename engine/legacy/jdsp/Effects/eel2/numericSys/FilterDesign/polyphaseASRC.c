@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <limits.h>
+#include <stdint.h>
 #include "polyphaseASRC.h"
 #include "../codelet.h"
 #ifndef M_PI
@@ -86,14 +88,6 @@ static double sincFx(double x)
 		return sin(x * M_PI) / (x * M_PI);
 }
 #include <float.h>
-#define uptopow2_0(v) ((v) - 1)
-#define uptopow2_1(v) (uptopow2_0(v) | uptopow2_0(v) >> 1)
-#define uptopow2_2(v) (uptopow2_1(v) | uptopow2_1(v) >> 2)
-#define uptopow2_3(v) (uptopow2_2(v) | uptopow2_2(v) >> 4)
-#define uptopow2_4(v) (uptopow2_3(v) | uptopow2_3(v) >> 8)
-#define uptopow2_5(v) (uptopow2_4(v) | uptopow2_4(v) >> 16)
-
-#define uptopow2(v) (uptopow2_5(v) + 1)
 extern void fhtbitReversalTbl(unsigned *dst, unsigned int n);
 static void LLdiscreteHartley(double *A, const unsigned int nPoints, const double *sinTab)
 {
@@ -179,74 +173,146 @@ static void fhtsinHalfTbl(double *dst, unsigned int n)
 	for (unsigned int i = 0; i < n >> 1; ++i)
 		dst[i] = sin(twopi_over_n * i);
 }
-void psrc_generate(SRCResampler* filter, unsigned int interpolation, unsigned int decimation, int tap, double cutoff_freq, char minphase)
+
+/* [PATCHED-AuraDSP P-060] Checked construction: publish a filter only after
+ * every allocation and coefficient transform succeeds. */
+static int src_mul_size(size_t a, size_t b, size_t *out)
 {
-	unsigned int num_taps = tap * interpolation;
-	unsigned int tapDiv2 = tap / 2;
-	double ratio = (double)tapDiv2 / (double)num_taps;
-	ratio = cutoff_freq * ratio;
-	if (interpolation < decimation)
-		ratio *= ((double)interpolation / (double)decimation);
+	if (b != 0 && a > SIZE_MAX / b)
+		return 0;
+	*out = a * b;
+	return 1;
+}
+
+static unsigned int src_next_pow2(unsigned int value)
+{
+	unsigned int power = 1;
+	if (value == 0)
+		return 0;
+	while (power < value)
+	{
+		if (power > 0x40000000u)
+			return 0;
+		power <<= 1;
+	}
+	return power;
+}
+
+int psrc_is_valid(const SRCResampler *filter)
+{
+	return filter && filter->pfb && filter->interpolation != 0 &&
+		filter->decimation != 0 && filter->num_phases == filter->interpolation &&
+		filter->taps_per_phase != 0 && filter->phase_index < filter->interpolation &&
+		filter->phase_index_step == filter->decimation % filter->interpolation &&
+		(filter->history_length == 0 || filter->history != NULL);
+}
+
+int psrc_generate(SRCResampler *filter, unsigned int interpolation,
+                  unsigned int decimation, int tap, double cutoff_freq,
+                  char minphase)
+{
+	SRCResampler out;
+	unsigned int *mBitRev = NULL;
+	double *mSineTab = NULL;
+	double *timeData = NULL;
+	double *freqData = NULL;
+	float *pfb = NULL;
+	float *history = NULL;
+	size_t num_taps;
+	size_t pfb_size;
+	size_t bytes;
+	unsigned int filterLength = 0;
+	memset(&out, 0, sizeof(out));
+
+	if (!filter || interpolation == 0 || decimation == 0 || tap <= 1 ||
+		!isfinite(cutoff_freq) || cutoff_freq <= 0.0 || cutoff_freq > 1.0 ||
+		(size_t)tap > SIZE_MAX / (size_t)interpolation)
+		goto fail;
+	/* [PATCHED-AuraDSP P-060] The interpolator can have the larger phase
+	 * count even when the reduced numerator is below the controller cap. */
+	if (minphase && interpolation > AURADSP_ASRC_MINPHASE_MAX_PHASES)
+		minphase = 0;
+	num_taps = (size_t)tap * (size_t)interpolation;
+	if (num_taps > INT_MAX)
+		goto fail;
+
+	out.num_phases = interpolation;
+	out.interpolation = interpolation;
+	out.decimation = decimation;
+	out.taps_per_phase = iceil((unsigned int)num_taps, interpolation);
+	if ((size_t)out.taps_per_phase > SIZE_MAX / (size_t)interpolation)
+		goto fail;
+	pfb_size = (size_t)out.taps_per_phase * (size_t)interpolation;
+	if (pfb_size > INT_MAX || !src_mul_size(pfb_size, sizeof(float), &bytes))
+		goto fail;
+
 	if (minphase)
 	{
-		unsigned int m = num_taps - 1;
-		filter->taps_per_phase = iceil(num_taps, interpolation); // iceil(a/b)
-		unsigned int hLen = interpolation * filter->taps_per_phase;
+		unsigned int hLen;
+		const unsigned int m = (unsigned int)num_taps - 1;
+		double ratio = (double)(tap / 2) / (double)num_taps;
 		double g = 1.0;
-		if (interpolation < decimation)
-			g = (double)interpolation / (double)decimation;
-		unsigned int filterLength = uptopow2(num_taps * 100);
 		double gain, re, im, eR;
 		const double threshdB = -200.0;
 		const double clipThresh = pow(10.0, threshdB / 20.0);
-		double logThreshold = log(clipThresh);
-		unsigned int *mBitRev = (unsigned int*)malloc(filterLength * sizeof(unsigned int));
-		double* mSineTab = (double*)malloc((filterLength >> 1) * sizeof(double));
-		double *timeData = (double*)malloc(filterLength * sizeof(double));
-		double* freqData = (double*)malloc(filterLength * sizeof(double));
+		const double logThreshold = log(clipThresh);
+		int i, symIdx;
+		ratio = cutoff_freq * ratio;
+		if (interpolation < decimation)
+		{
+			g = (double)interpolation / (double)decimation;
+			ratio *= g;
+		}
+		if (num_taps > UINT_MAX / 100u)
+			goto fail;
+		filterLength = src_next_pow2((unsigned int)(num_taps * 100u));
+		hLen = (unsigned int)pfb_size;
+		if (filterLength == 0 || filterLength > INT_MAX || hLen > filterLength ||
+			filterLength > SIZE_MAX / sizeof(unsigned int) ||
+			filterLength > SIZE_MAX / sizeof(double))
+			goto fail;
+		mBitRev = (unsigned int *)malloc(filterLength * sizeof(unsigned int));
+		mSineTab = (double *)malloc((filterLength >> 1) * sizeof(double));
+		timeData = (double *)malloc(filterLength * sizeof(double));
+		freqData = (double *)malloc(filterLength * sizeof(double));
+		if (!mBitRev || !mSineTab || !timeData || !freqData)
+			goto fail;
 		fhtbitReversalTbl(mBitRev, filterLength);
 		fhtsinHalfTbl(mSineTab, filterLength);
-		int i, symIdx;
-		for (i = 0; i < hLen; i++)
-			timeData[mBitRev[i]] = cutoff_freq * g * ((sincFx(2.0*ratio*(i - m / 2.0))) * (0.5 - 0.5 * cos(2.0 * M_PI * (double)i / (double)(num_taps - 1))));
-		for (i = hLen; i < filterLength; i++)
-			timeData[mBitRev[i]] = 0;
+		for (i = 0; i < (int)hLen; i++)
+			timeData[mBitRev[i]] = cutoff_freq * g *
+				((sincFx(2.0 * ratio * (i - m / 2.0))) *
+				(0.5 - 0.5 * cos(2.0 * M_PI * (double)i / (double)(num_taps - 1))));
+		for (i = (int)hLen; i < (int)filterLength; i++)
+			timeData[mBitRev[i]] = 0.0;
 		LLdiscreteHartley(timeData, filterLength, mSineTab);
 		if (fabs(timeData[0]) < clipThresh)
 			freqData[0] = logThreshold;
 		else
 			freqData[0] = log(fabs(timeData[0]));
-		for (int i = 1; i < filterLength; i++)
+		for (int j = 1; j < (int)filterLength; j++)
 		{
-			symIdx = filterLength - i;
-			double lR = timeData[i] + timeData[symIdx];
-			double lI = timeData[i] - timeData[symIdx];
-			double mag = hypot(lR, lI) * 0.5;
-			double logV;
-			if (mag < clipThresh)
-				logV = logThreshold;
-			else
-				logV = log(mag);
-			freqData[mBitRev[i]] = logV;
+			symIdx = (int)filterLength - j;
+			const double lR = timeData[j] + timeData[symIdx];
+			const double lI = timeData[j] - timeData[symIdx];
+			const double mag = hypot(lR, lI) * 0.5;
+			const double logV = mag < clipThresh ? logThreshold : log(mag);
+			freqData[mBitRev[j]] = logV;
 			freqData[mBitRev[symIdx]] = logV;
 		}
 		LLdiscreteHartley(freqData, filterLength, mSineTab);
-		gain = 1.0 / ((double)filterLength);
-		/*FILE *fp = fopen("a.txt", "wb");
-		for (int i = 0; i < filterLength; i++)
-			fprintf(fp, "%1.16lf\n", freqData[i] * gain);
-		fclose(fp);*/
+		gain = 1.0 / (double)filterLength;
 		timeData[0] = freqData[0] * gain;
-		unsigned int halfLen = filterLength >> 1;
+		const unsigned int halfLen = filterLength >> 1;
 		timeData[mBitRev[halfLen]] = freqData[halfLen] * gain;
-		for (i = 1; i < halfLen; i++)
+		for (i = 1; i < (int)halfLen; i++)
 		{
 			timeData[mBitRev[i]] = (freqData[i] + freqData[filterLength - i]) * gain;
 			timeData[mBitRev[filterLength - i]] = 0.0;
 		}
 		LLdiscreteHartley(timeData, filterLength, mSineTab);
 		freqData[0] = exp(timeData[0]);
-		for (i = 1; i < filterLength; i++)
+		for (i = 1; i < (int)filterLength; i++)
 		{
 			re = (timeData[i] + timeData[filterLength - i]) * 0.5;
 			im = (timeData[i] - timeData[filterLength - i]) * 0.5;
@@ -257,101 +323,180 @@ void psrc_generate(SRCResampler* filter, unsigned int interpolation, unsigned in
 			freqData[mBitRev[filterLength - i]] = re - im;
 		}
 		LLdiscreteHartley(freqData, filterLength, mSineTab);
-		/*FILE *fp = fopen("a.txt", "wb");
-		for (int i = 0; i < filterLength; i++)
-			fprintf(fp, "%1.16lf\n", freqData[i] * gain);
-		fclose(fp);*/
-		free(timeData);
-		free(mBitRev);
-		free(mSineTab);
-		filter->num_phases = interpolation;
-		unsigned int pfb_size = filter->taps_per_phase * interpolation;
-		filter->pfb = (float*)malloc(pfb_size * sizeof(float));
+	}
+
+	pfb = (float *)malloc(bytes);
+	if (!pfb)
+		goto fail;
+	if (minphase)
+	{
+		const double gain = 1.0 / (double)filterLength;
 		for (unsigned int phase = 0; phase < interpolation; phase++)
-			for (unsigned int tap = 0; tap < filter->taps_per_phase; tap++)
-				filter->pfb[phase * filter->taps_per_phase + filter->taps_per_phase - 1 - tap] = freqData[tap * interpolation + phase] * gain;
-		free(freqData);
+			for (unsigned int tapIndex = 0; tapIndex < out.taps_per_phase; tapIndex++)
+				pfb[phase * out.taps_per_phase + out.taps_per_phase - 1 - tapIndex] =
+					(float)(freqData[tapIndex * interpolation + phase] * gain);
 	}
 	else
 	{
-		unsigned int m = num_taps - 1;
-		filter->num_phases = interpolation;
-		filter->taps_per_phase = iceil(num_taps, interpolation); // iceil(a/b)
-		unsigned int pfb_size = filter->taps_per_phase * interpolation;
-		filter->pfb = (float*)malloc(pfb_size * sizeof(float));
+		const unsigned int m = (unsigned int)num_taps - 1;
+		double ratio = (double)(tap / 2) / (double)num_taps;
 		double g = 1.0;
+		ratio = cutoff_freq * ratio;
 		if (interpolation < decimation)
+		{
 			g = (double)interpolation / (double)decimation;
-		/*FILE *fp = fopen("a.txt", "wb");
-		for (int idx = 0; idx < interpolation * filter->taps_per_phase; idx++)
-			fprintf(fp, "%1.14lf,", ((sincFx(2.0*ratio*(idx - m / 2.0))) * (0.5 - 0.5 * cos(2.0 * M_PI * (double)idx / (double)(num_taps - 1)))) / 4.0);
-		fclose(fp);*/
+			ratio *= g;
+		}
 		for (unsigned int phase = 0; phase < interpolation; phase++)
-			for (unsigned int tap = 0; tap < filter->taps_per_phase; tap++)
+			for (unsigned int tapIndex = 0; tapIndex < out.taps_per_phase; tapIndex++)
 			{
-				unsigned int idx = tap * interpolation + phase;
-				filter->pfb[phase * filter->taps_per_phase + filter->taps_per_phase - 1 - tap] = (float)(cutoff_freq * g * ((sincFx(2.0*ratio*(idx - m / 2.0))) * (0.5 - 0.5 * cos(2.0 * M_PI * (double)idx / (double)(num_taps - 1)))));
+				const unsigned int idx = tapIndex * interpolation + phase;
+				pfb[phase * out.taps_per_phase + out.taps_per_phase - 1 - tapIndex] =
+					(float)(cutoff_freq * g *
+					((sincFx(2.0 * ratio * (idx - m / 2.0))) *
+					(0.5 - 0.5 * cos(2.0 * M_PI * (double)idx / (double)(num_taps - 1)))));
 			}
 	}
-	filter->interpolation = interpolation;
-	filter->decimation = decimation;
-	filter->phase_index = 0;
-	filter->input_deficit = 0;
-	filter->history_length = filter->taps_per_phase - 1;
-	filter->phase_index_step = filter->decimation % filter->interpolation;
-	filter->history = malloc(filter->history_length * sizeof(float));
-	memset(filter->history, 0, filter->history_length * sizeof(float));
+	out.pfb = pfb;
+	out.history_length = out.taps_per_phase - 1;
+	out.phase_index = 0;
+	out.input_deficit = 0;
+	out.phase_index_step = decimation % interpolation;
+	if (out.history_length != 0)
+	{
+		if (!src_mul_size(out.history_length, sizeof(float), &bytes))
+			goto fail;
+		history = (float *)malloc(bytes);
+		if (!history)
+			goto fail;
+		memset(history, 0, bytes);
+	}
+	out.history = history;
+	*filter = out;
+	free(mBitRev);
+	free(mSineTab);
+	free(timeData);
+	free(freqData);
+	return 1;
+
+fail:
+	free(mBitRev);
+	free(mSineTab);
+	free(timeData);
+	free(freqData);
+	free(pfb);
+	free(history);
+	if (filter)
+		memset(filter, 0, sizeof(*filter));
+	return 0;
 }
-void psrc_clone(SRCResampler* filterDest, SRCResampler* filterSrc)
+
+int psrc_clone(SRCResampler *filterDest, SRCResampler *filterSrc)
 {
-	filterDest->num_phases = filterSrc->num_phases;
-	filterDest->taps_per_phase = filterSrc->taps_per_phase;
-	filterDest->interpolation = filterSrc->interpolation;
-	filterDest->decimation = filterSrc->decimation;
-	filterDest->input_deficit = filterSrc->input_deficit;
-	filterDest->history_length = filterSrc->history_length;
-	filterDest->phase_index = filterSrc->phase_index;
-	filterDest->phase_index_step = filterSrc->phase_index_step;
-	filterDest->history = (float*)malloc(filterSrc->history_length * sizeof(float));
-	memcpy(filterDest->history, filterSrc->history, filterSrc->history_length * sizeof(float));
-	filterDest->pfb = (float*)malloc(filterSrc->taps_per_phase * filterSrc->interpolation * sizeof(float));
-	memcpy(filterDest->pfb, filterSrc->pfb, filterSrc->taps_per_phase * filterSrc->interpolation * sizeof(float));
+	SRCResampler out;
+	float *pfb = NULL;
+	float *history = NULL;
+	size_t pfb_count;
+	size_t bytes;
+	memset(&out, 0, sizeof(out));
+	if (!filterDest || !filterSrc || filterDest == filterSrc ||
+		!psrc_is_valid(filterSrc) ||
+		(size_t)filterSrc->taps_per_phase > SIZE_MAX / (size_t)filterSrc->interpolation)
+		goto fail;
+	pfb_count = (size_t)filterSrc->taps_per_phase * (size_t)filterSrc->interpolation;
+	if (!src_mul_size(pfb_count, sizeof(float), &bytes))
+		goto fail;
+	pfb = (float *)malloc(bytes);
+	if (!pfb)
+		goto fail;
+	memcpy(pfb, filterSrc->pfb, bytes);
+	if (filterSrc->history_length != 0)
+	{
+		if (!src_mul_size(filterSrc->history_length, sizeof(float), &bytes))
+			goto fail;
+		history = (float *)malloc(bytes);
+		if (!history)
+			goto fail;
+		memcpy(history, filterSrc->history, bytes);
+	}
+	out = *filterSrc;
+	out.pfb = pfb;
+	out.history = history;
+	*filterDest = out;
+	return 1;
+
+fail:
+	free(pfb);
+	free(history);
+	if (filterDest)
+		memset(filterDest, 0, sizeof(*filterDest));
+	return 0;
 }
-unsigned int psrc_filt(SRCResampler* filter, float *x, unsigned int count, float *y)
+
+unsigned int psrc_filt(SRCResampler *filter, float *x, unsigned int count, float *y)
 {
-	unsigned int phase = filter->phase_index;
-	unsigned int i = filter->input_deficit;
+	unsigned int phase;
+	unsigned int i;
 	unsigned int output_length = 0;
+	if (!psrc_is_valid(filter) || !x || !y || count > INT_MAX)
+		return 0;
+	phase = filter->phase_index;
+	i = filter->input_deficit;
 	while (i < count)
 	{
-		y[output_length++] = dot(&filter->pfb[phase * filter->taps_per_phase], filter->taps_per_phase, filter->history, x, i);
+		y[output_length++] = dot(&filter->pfb[phase * filter->taps_per_phase],
+			filter->taps_per_phase, filter->history, x, i);
 		i += (phase + filter->decimation) / filter->interpolation;
 		phase = (phase + filter->phase_index_step) % filter->interpolation;
 	}
 	filter->input_deficit = i - count;
 	filter->phase_index = phase;
-	src_shiftin(filter->history, filter->history_length, x, count);
+	if (filter->history_length != 0)
+		src_shiftin(filter->history, filter->history_length, x, count);
 	return output_length;
 }
-unsigned int psrc_filt_stereo(SRCResampler *filter[2], float *x1, float *x2, unsigned int count, float *y1, float *y2)
+
+unsigned int psrc_filt_stereo(SRCResampler *filter[2], float *x1, float *x2,
+                              unsigned int count, float *y1, float *y2)
 {
-	unsigned int phase = filter[0]->phase_index;
-	unsigned int i = filter[0]->input_deficit;
+	unsigned int phase;
+	unsigned int i;
 	unsigned int output_length = 0;
+	if (!filter || !filter[0] || !filter[1] || !x1 || !x2 || !y1 || !y2 ||
+		!psrc_is_valid(filter[0]) || !psrc_is_valid(filter[1]) || count > INT_MAX ||
+		filter[0]->interpolation != filter[1]->interpolation ||
+		filter[0]->decimation != filter[1]->decimation ||
+		filter[0]->taps_per_phase != filter[1]->taps_per_phase ||
+		filter[0]->history_length != filter[1]->history_length ||
+		filter[0]->phase_index != filter[1]->phase_index ||
+		filter[0]->input_deficit != filter[1]->input_deficit)
+		return 0;
+	phase = filter[0]->phase_index;
+	i = filter[0]->input_deficit;
 	while (i < count)
 	{
-		dotStereo(&filter[0]->pfb[phase * filter[0]->taps_per_phase], filter[0]->taps_per_phase, filter[0]->history, filter[1]->history, x1, x2, i, &y1[output_length], &y2[output_length]);
+		dotStereo(&filter[0]->pfb[phase * filter[0]->taps_per_phase],
+			filter[0]->taps_per_phase, filter[0]->history, filter[1]->history,
+			x1, x2, i, &y1[output_length], &y2[output_length]);
 		output_length++;
 		i += (phase + filter[0]->decimation) / filter[0]->interpolation;
 		phase = (phase + filter[0]->phase_index_step) % filter[0]->interpolation;
 	}
 	filter[0]->input_deficit = i - count;
 	filter[0]->phase_index = phase;
-	src_shiftinStereo(filter[0]->history, filter[1]->history, filter[0]->history_length, x1, x2, count);
+	filter[1]->input_deficit = i - count;
+	filter[1]->phase_index = phase;
+	if (filter[0]->history_length != 0)
+		src_shiftinStereo(filter[0]->history, filter[1]->history,
+			filter[0]->history_length, x1, x2, count);
 	return output_length;
 }
-void psrc_free(SRCResampler* filter)
+
+void psrc_free(SRCResampler *filter)
 {
+	if (!filter)
+		return;
 	free(filter->pfb);
 	free(filter->history);
+	memset(filter, 0, sizeof(*filter));
 }

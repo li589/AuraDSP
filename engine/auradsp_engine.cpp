@@ -155,6 +155,31 @@ static bool geometry_valid(const auradsp_geometry& g) {
            (g.mode == 0 || g.mode == 1);
 }
 
+/* [PATCHED-AuraDSP P-060] Shared cleanup for partial create and destroy. */
+static void cleanup_handle(auradsp_handle h) {
+    if (!h) return;
+    auradsp::plugin_chain_reset(h);
+    arbmag_pool_free(h);
+    eq_pool_free(h);
+    delete[] h->fft_scratch;
+    delete[] h->hann;
+    delete[] h->viz_hist;
+    delete[] h->eq_in_hist;
+    delete[] h->pcm_hist;
+    delete[] h->shelf_scratch;
+    delete[] h->conv_scratch;
+    delete[] h->mx_scratch;
+    delete[] h->mx_stereo;
+    delete[] h->haas_ring;
+    free(h->lp_code);
+    mc_liveprog_destroy(h->mc_lp);
+    h->mc_lp = nullptr;
+    free(h->lp_mc_code);
+    free(h->eq_curve);
+    free(h->arbmag_string);
+    delete h;
+}
+
 /* ================= ABI 实现 ================= */
 
 extern "C" {
@@ -163,7 +188,8 @@ const char* auradsp_version(void) { return AURADSP_VERSION; }
 uint32_t    auradsp_abi(void) { return AURADSP_ABI; }
 
 auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
-    if (sample_rate < 8000 || sample_rate > 192000) return nullptr;
+    if (!std::isfinite(sample_rate) || std::floor(sample_rate) != sample_rate ||
+        sample_rate < 8000 || sample_rate > 192000) return nullptr;
     if (max_block_frames <= 0 || max_block_frames > 16384) return nullptr;
     if (!global_init()) return nullptr;
 
@@ -180,17 +206,19 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     h->sample_rate = sample_rate;
     h->max_block = max_block_frames;
     if (!auradsp::plugin_chain_prepare(h, sample_rate, (uint32_t)max_block_frames)) {
-        delete h;
+        cleanup_handle(h);
         return nullptr;
     }
     h->fft_scratch = new (std::nothrow) float[kVizFftMax];
     h->hann = new (std::nothrow) float[kVizFftMax];
     if (!h->fft_scratch || !h->hann) {
-        delete[] h->fft_scratch; delete[] h->hann; delete h; return nullptr;
+        cleanup_handle(h);
+        return nullptr;
     }
     h->viz_hist = new (std::nothrow) float[kVizFftMax * 2]();
     if (!h->viz_hist) {
-        delete[] h->fft_scratch; delete[] h->hann; delete h; return nullptr;
+        cleanup_handle(h);
+        return nullptr;
     }
     /* [EQ tap] 第二条环形历史。分配失败不算致命：emit_viz 里对 nullptr
      * 已有分支，eq_in_spectrum 保持全 0，UI 会退回旧的全链输出谱。 */
@@ -199,29 +227,26 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     h->pcm_hist = new (std::nothrow) float[kPcmHistFrames * 2]();
     h->shelf_scratch = new (std::nothrow) float[(size_t)max_block_frames * 2]();
     if (!h->shelf_scratch) {
-        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete[] h->eq_in_hist; delete[] h->pcm_hist; delete h; return nullptr;
+        cleanup_handle(h);
+        return nullptr;
     }
     h->conv_scratch = new (std::nothrow) float[(size_t)max_block_frames * 2]();
     if (!h->conv_scratch) {
-        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete[] h->eq_in_hist; delete[] h->pcm_hist;
-        delete[] h->shelf_scratch; delete h; return nullptr;
+        cleanup_handle(h);
+        return nullptr;
     }
     h->mx_scratch = new (std::nothrow) float[(size_t)max_block_frames * kMxMaxChannels]();
     h->mx_stereo = new (std::nothrow) float[(size_t)max_block_frames * 2]();
     if (!h->mx_scratch || !h->mx_stereo) {
-        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete[] h->eq_in_hist; delete[] h->pcm_hist;
-        delete[] h->shelf_scratch; delete[] h->conv_scratch;
-        delete[] h->mx_scratch; delete[] h->mx_stereo;
-        delete h; return nullptr;
+        cleanup_handle(h);
+        return nullptr;
     }
     /* Haas 延迟环：25ms 上限 + 一块余量，清零（开轮即录制，无陈旧音频 burst） */
     h->haas_ring_len = (int)(0.025 * sample_rate) + max_block_frames + 64;
     h->haas_ring = new (std::nothrow) float[(size_t)h->haas_ring_len]();
     if (!h->haas_ring) {
-        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete[] h->eq_in_hist; delete[] h->pcm_hist;
-        delete[] h->shelf_scratch; delete[] h->conv_scratch;
-        delete[] h->mx_scratch; delete[] h->mx_stereo;
-        delete h; return nullptr;
+        cleanup_handle(h);
+        return nullptr;
     }
 
     /* B5 后续：arbmag 逐声道池（句柄级，create 分配；失败不算致命——
@@ -274,8 +299,13 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
         h->p.comp_gain[i].store(-0.35f);
     }
 
-    std::lock_guard<std::mutex> lk(h->ctrl_mutex);
-    JamesDSPInit(&h->jdsp, max_block_frames, sample_rate);
+    std::unique_lock<std::mutex> lk(h->ctrl_mutex);
+    /* [PATCHED-AuraDSP P-060] Initial ASRC/work storage is mandatory. */
+    if (!JamesDSPInit(&h->jdsp, max_block_frames, sample_rate)) {
+        lk.unlock();
+        cleanup_handle(h);
+        return nullptr;
+    }
     /* P-005：scratch 绑定（必须在 memset 之后）+ 默认纯湿（=上游行为） */
     h->jdsp.auraConvScratch = h->conv_scratch;
     h->jdsp.auraConvWet = 1.0f;
@@ -328,24 +358,7 @@ void auradsp_destroy(auradsp_handle h) {
             h->open.store(false);
         }
     }
-    auradsp::plugin_chain_reset(h);
-    arbmag_pool_free(h);
-    eq_pool_free(h);
-    delete[] h->fft_scratch;
-    delete[] h->hann;
-    delete[] h->viz_hist; delete[] h->eq_in_hist; delete[] h->pcm_hist;
-    delete[] h->shelf_scratch;
-    delete[] h->conv_scratch;
-    delete[] h->mx_scratch;
-    delete[] h->mx_stereo;
-    delete[] h->haas_ring;
-    free(h->lp_code);
-    mc_liveprog_destroy(h->mc_lp);
-    h->mc_lp = nullptr;
-    free(h->lp_mc_code);
-    free(h->eq_curve);
-    free(h->arbmag_string);
-    delete h;
+    cleanup_handle(h);
     global_unref();
 }
 

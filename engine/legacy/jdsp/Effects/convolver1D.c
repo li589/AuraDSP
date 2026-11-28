@@ -58,14 +58,40 @@ void Convolver1DProcessTwoStageFFTConvolver2x4x2(JamesDSPLib *jdsp, size_t n)
 }
 int Convolver1DLoadImpulseResponse(JamesDSPLib *jdsp, float *tempImpulseFloat, unsigned int impChannels, size_t impulseLengthActual, char updateOld)
 {
+	size_t impulseBytes;
+	float *replacementImpulse = NULL;
+	/* [PATCHED-AuraDSP P-061] Validate all interleaved-IR arithmetic before
+	 * touching the existing convolver or copying through a NULL allocation. */
+	if (!jdsp || !tempImpulseFloat ||
+		(impChannels != 1 && impChannels != 2 && impChannels != 4) ||
+		impulseLengthActual == 0 || impulseLengthActual > UINT_MAX ||
+		impChannels > SIZE_MAX / sizeof(float *) ||
+		impulseLengthActual > SIZE_MAX / impChannels)
+		return -2;
+	impulseBytes = impChannels * impulseLengthActual;
+	if (impulseBytes > SIZE_MAX / sizeof(float))
+		return -2;
+	for (size_t i = 0; i < impulseBytes; ++i)
+		if (!isfinite(tempImpulseFloat[i]))
+			return -2;
+	impulseBytes *= sizeof(float);
 	jdsp_lock(jdsp);
+	if (updateOld)
+	{
+		replacementImpulse = (float *)malloc(impulseBytes);
+		if (!replacementImpulse)
+		{
+			jdsp_unlock(jdsp);
+			return -2;
+		}
+		memcpy(replacementImpulse, tempImpulseFloat, impulseBytes);
+	}
 	Convolver1DDestructor(jdsp);
 	if (updateOld)
 	{
 		if (jdsp->impulseResponseStorage.impulseResponse)
 			free(jdsp->impulseResponseStorage.impulseResponse);
-		jdsp->impulseResponseStorage.impulseResponse = (float *)malloc(impChannels * impulseLengthActual * sizeof(float));
-		memcpy(jdsp->impulseResponseStorage.impulseResponse, tempImpulseFloat, impChannels * impulseLengthActual * sizeof(float));
+		jdsp->impulseResponseStorage.impulseResponse = replacementImpulse;
 		jdsp->impulseResponseStorage.impChannels = impChannels;
 		jdsp->impulseResponseStorage.impulseLengthActual = impulseLengthActual;
 	}

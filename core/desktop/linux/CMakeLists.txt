@@ -251,6 +251,26 @@ target_link_libraries(geometry_atomic_test PRIVATE auradsp_engine ${CMAKE_DL_LIB
 set_property(TARGET geometry_atomic_test PROPERTY CXX_STANDARD 20)
 add_test(NAME geometry_atomic_test COMMAND geometry_atomic_test)
 
+# Batch 1 E-02: same real-code native convolver regression as Windows.
+add_executable(convolver_safety_test
+    "${API}/tests/convolver_safety_test.c"
+    "${LEGACY}/jdsp/Effects/eel2/numericSys/FFTConvolver.c"
+    "${LEGACY}/jdsp/Effects/eel2/numericSys/codelet.c"
+)
+target_include_directories(convolver_safety_test PRIVATE
+    "${LEGACY}/jdsp/Effects/eel2/numericSys"
+)
+target_compile_options(convolver_safety_test PRIVATE
+    $<$<COMPILE_LANGUAGE:C>:-include stdint.h>
+)
+set_property(TARGET convolver_safety_test PROPERTY C_STANDARD 11)
+set_property(TARGET convolver_safety_test PROPERTY C_EXTENSIONS ON)
+target_link_libraries(convolver_safety_test PRIVATE m)
+foreach(case_name uninitialized oversized invalid refresh normal)
+    add_test(NAME convolver_safety_${case_name}
+        COMMAND convolver_safety_test ${case_name})
+endforeach()
+
 # 进程外宿主 plugin_host_x64（双宿主架构，Linux 无扩展名）：与
 # Windows 的 auradsp_plugin_host 目标对位——宿主自带一份插件层
 # （driver/formats/posix 平台层，HOST_INPROC 语义），经 IPC 协议

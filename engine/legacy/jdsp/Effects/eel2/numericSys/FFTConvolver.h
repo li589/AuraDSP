@@ -41,6 +41,9 @@ typedef struct
 	unsigned int _inputBufferFill;
 	float gain; // float32, it's perfectly safe to have blockSize == 2097152, however, it's impractical to have such large block
 	void(*fft)(float*, const float*);
+	/* [PATCHED-AuraDSP P-061] Published only after a complete successful load. */
+	int _initialized;
+	unsigned int _irLength;
 } FFTConvolver1x1;
 typedef struct
 {
@@ -71,6 +74,9 @@ typedef struct
 	unsigned int _inputBufferFill;
 	float gain; // float32, it's perfectly safe to have blockSize == 2097152, however, it's impractical to have such large block
 	void(*fft)(float*, const float*);
+	/* [PATCHED-AuraDSP P-061] Published only after a complete successful load. */
+	int _initialized;
+	unsigned int _irLength;
 } FFTConvolver2x4x2;
 typedef struct
 {
@@ -97,6 +103,9 @@ typedef struct
 	unsigned int _inputBufferFill;
 	float gain; // float32, it's perfectly safe to have blockSize == 2097152, however, it's impractical to have such large block
 	void(*fft)(float*, const float*);
+	/* [PATCHED-AuraDSP P-061] Published only after a complete successful load. */
+	int _initialized;
+	unsigned int _irLength;
 } FFTConvolver2x2;
 typedef struct
 {
@@ -121,6 +130,9 @@ typedef struct
 	unsigned int _inputBufferFill;
 	float gain; // float32, it's perfectly safe to have blockSize == 2097152, however, it's impractical to have such large block
 	void(*fft)(float*, const float*);
+	/* [PATCHED-AuraDSP P-061] Published only after a complete successful load. */
+	int _initialized;
+	unsigned int _irLength;
 } FFTConvolver1x2;
 extern void FFTConvolver1x1Init(FFTConvolver1x1 *conv);
 extern void FFTConvolver2x4x2Init(FFTConvolver2x4x2 *conv);

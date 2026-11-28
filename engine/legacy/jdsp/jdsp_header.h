@@ -735,6 +735,9 @@ typedef struct dspsys
 	JLimiter limiter;
 	int limiterEnabled; /* [PATCHED-AuraDSP P-012] limiter.enable 总开关（默认 1，关时只做 postGain） */
 	size_t blockSize, blockSizeMax, pw2BlockMemSize;
+	/* [PATCHED-AuraDSP P-060] Capacity of each ASRC work partition
+	 * (tmpBuffer[0..3]); >= blockSizeMax and >= ceil(blockSizeMax*fs/trueFs). */
+	size_t asrcScratchSize;
 	float *tmpBuffer[6];
 	// Internal function pointer
 	void(*processInternal)(struct dspsys *, size_t);
@@ -783,14 +786,14 @@ typedef struct dspsys
 // JamesDSP controller
 extern void JamesDSPGlobalMemoryAllocation();
 extern void JamesDSPGlobalMemoryDeallocation();
-extern void JamesDSPReallocateBlock(JamesDSPLib *jdsp, size_t blockSizeMax);
+extern int JamesDSPReallocateBlock(JamesDSPLib *jdsp, size_t blockSizeMax); /* [PATCHED-AuraDSP P-060] */
 extern void JamesDSP_Load_benchmark(double *_c0, double *_c1);
 extern void JamesDSP_Save_benchmark(double *_c0, double *_c1);
 extern void JamesDSP_Start_benchmark();
 extern void jdsp_lock(JamesDSPLib *jdsp);
 extern void jdsp_unlock(JamesDSPLib *jdsp);
 extern void JamesDSPFree(JamesDSPLib *jdsp);
- extern void JamesDSPInit(JamesDSPLib *jdsp, int blockSizeMax, float sample_rate);
+ extern int JamesDSPInit(JamesDSPLib *jdsp, int blockSizeMax, float sample_rate); /* [PATCHED-AuraDSP P-060] */
  extern void JamesDSPSetPostGain(JamesDSPLib *jdsp, double pGaindB);
  extern void JamesDSPSetPostGainCh(JamesDSPLib *jdsp, int ch, double pGaindB); /* [PATCHED-AuraDSP P-037] */
  /* [PATCHED-AuraDSP P-010] 每效果输出增益门 + 自动补偿（0=tube 1=comp 2=bass 3=eq 4=arbmag） */

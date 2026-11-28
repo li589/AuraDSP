@@ -209,6 +209,29 @@ target_compile_options(geometry_atomic_test PRIVATE /utf-8 /W4 /EHsc)
 set_property(TARGET geometry_atomic_test PROPERTY CXX_STANDARD 20)
 set_property(TARGET geometry_atomic_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 add_test(NAME geometry_atomic_test COMMAND geometry_atomic_test)
+
+# Batch 1 E-02: compile the real convolver/DFT code into a small native test.
+# Separate CTest cases preserve pre-fix crash/guard evidence independently.
+add_executable(convolver_safety_test
+    "${API}/tests/convolver_safety_test.c"
+    "${LEGACY}/jdsp/Effects/eel2/numericSys/FFTConvolver.c"
+    "${LEGACY}/jdsp/Effects/eel2/numericSys/codelet.c"
+)
+target_include_directories(convolver_safety_test PRIVATE
+    "${LEGACY}/jdsp/Effects/eel2/numericSys"
+)
+target_compile_definitions(convolver_safety_test PRIVATE
+    NDEBUG
+    _CRT_SECURE_NO_WARNINGS
+)
+target_compile_options(convolver_safety_test PRIVATE /utf-8 /W1)
+set_property(TARGET convolver_safety_test PROPERTY C_STANDARD 11)
+set_property(TARGET convolver_safety_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+foreach(case_name uninitialized oversized invalid refresh normal)
+    add_test(NAME convolver_safety_${case_name}
+        COMMAND convolver_safety_test ${case_name})
+endforeach()
+
 target_include_directories(auradsp_engine PRIVATE
     "${API}"
     "${API}/chain"

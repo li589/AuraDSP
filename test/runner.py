@@ -66,6 +66,8 @@ PLATFORM_ANY = {
     # OS 门控、Linux 插件能力现行边界（2026-11-02 立项后口径）。纯源码
     # 扫描，任意平台可跑。
     "smoke_audio_modes_linux.py",
+    # Batch 1 C-01/E-01: real ABI subprocesses at low/near-neighbor rates.
+    "smoke_asrc_safety.py",
     "smoke_linux_plugin_ui.py",
     # S1（2026-11-01）：Linux 引擎信号链功能门禁（产物缺失时自 SKIP）。
     "smoke_linux_engine_process.py",
@@ -439,6 +441,8 @@ def run_smoke_tests():
         # 见下）+ limiter 按 lookahead 模式（默认 0ms）+ ASRC 环形缓冲分量 +
         # 上报值==脉冲实测。
         "smoke_d7_asrc_consistency.py",
+        # Batch 1 C-01/E-01: isolated low-rate and near-neighbor ASRC safety.
+        "smoke_asrc_safety.py",
         # D5 门禁（2026-10-24）：插件槽异步等待上界 150s → 5s + 墙钟收口 +
         # 超时兜底（同步 unload）+ timedOut 上报。数值与链路任一项回退即红。
         "smoke_d5_slot_timeout.py",

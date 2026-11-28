@@ -1376,3 +1376,73 @@ yquist * 0.999，
 - **验收**：矩阵安全 smoke 增加 stereo/MC 的 `@sample` / `@block` 拒绝、
   编译初跑 `@slider` 拒绝、固定墙钟上限、几何入口、guard 退出恢复与合法
   `@init` 预计算；原有 P-057/P-058 失败契约用例移到合法 `@init` 后继续执行。
+
+## P-060 jdspController.c + polyphaseASRC + jdsp_header.h + auradsp_engine.cpp — ASRC 长度、分配与失败安全（2026-11-28，Batch 1 C-01/E-01）
+
+- **问题**：三处 ASRC 缓冲布局按输入块长 `B` 分配 `tmpBuffer[0..3]`，但
+  `DoASRC_fwd/bwd` 会写工作域长度 `D=ceil(B*fs/trueFs)`；低采样率下
+  `tmpBuffer[2/3]` 稳定越界（8k/11.025k 实测堆损坏终止）。原布局还在替换前
+  释放旧基址、失败后保留悬空内指针。近邻大约分频比进入最小相位 FHT 时，
+  `num_taps*100` 的临时工作区可达约 192 MiB（48,048→48k 实测峰值 227 MiB）；
+  `psrc_generate/clone` 不检查分配，失败会继续 `memcpy/memset`。
+- **修法**：新增唯一 checked layout：`B=blockSizeMax`、
+  `D=ceil(B*fs/trueSampleRate)`、`I=ceil(D/ratio)`、
+  `scratch=max(B,D,I)`、`ring=next_pow_2(I)`；`tmpBuffer[0..3]` 四个分区均按
+  `scratch` 分配，`[4/5]` 仍按 `ring` 分配。所有乘法/加法/FHT 长度先做
+  `size_t` 与整数上界检查。替换缓冲先分配成功再释放旧基址；失败时清空所有
+  内指针并发布不可用容量，`JamesDSPFree` 释放后清空六指针。
+- **失败契约**：`JamesDSPReallocateBlock`/`JamesDSPInit` 返回状态；
+  `JamesDSPInit` 的初始 ASRC/缓冲失败会清理过滤器、缓冲与 mutex 并返回 0，
+  `auradsp_create` 据此返回 NULL。十个 PCM 处理入口及 StageSet 在存储/过滤器
+  不可用时输出数字零并返回；`DoASRC_fwd/bwd` 再校验过滤器与长度，不调用
+  未完成的 `SRCResampler`。`JamesDSPSetSampleRate` 先构建替换过滤器与缓冲，
+  全部成功后才提交，失败保留旧状态。
+- **E-01 最小相位上限**：约分后的 `num>256` 时强制线性相位。147/160 的
+  44.1/48、88.2/96、176.4/192 常见路径保持原最小相位行为；1000/1001 或互质
+  近邻率改用线性相位，避免数百 MiB FHT。`sample_ratio` 改欧几里得 GCD。
+- **psrc 分配契约**：`psrc_generate/clone` 返回状态，仅在全部缓冲区与系数
+  生成成功后发布过滤器；任一失败释放已得资源并清零。`psrc_free` 清零，
+  `psrc_filt/stereo` 拒绝无效过滤器/缓冲，零长 history 不解引用。
+- **RT 纪律**：Process/DoASRC 路径不新增分配、锁或 IO；块长超过控制侧预备容量时
+  直接输出数字零，不在 RT 内调用 `JamesDSPReallocateBlock`。所有 PCM 入口不再因
+  块长变化调用 `JamesDSPRefreshConvolutions`，避免卷积器重建引入分配与锁；零长度
+  调用同样安全早退。新增分配只在 init、显式 reallocation、SetSampleRate 与 psrc
+  构造路径。
+- **采样率与 blob 事务性**：公共 ABI、Init 与 SetSampleRate 拒绝 NaN/Inf 和小数
+  采样率，确保 float 布局与整数 ASRC 比率同源。`JamesDSPRefreshBlob` 改为先完整
+  分配、解码、重采样到临时 bank，全部成功后才替换旧 bank；失败保留旧状态。
+  SetSampleRate 的过滤器、存储与 blob 准备均在 `jdsp_lock` 外完成，仅在最终
+  提交与效果刷新阶段持锁，避免重采样准备期间阻塞 RT。Init 失败调用已构造效果器
+  析构，create 失败经统一 `cleanup_handle` 回收全部分配，不再只 `delete h`。
+- **E-01 最小相位上限**：约分后的 `num` 或 `denom` 任一 >256 时强制线性相位，
+  避免 191808Hz 这类分子未超限、插值分母 999 仍触发约 192 MiB FHT 的旁路。
+  147/160 的 44.1/48、88.2/96、176.4/192 常见路径保持原最小相位行为；1000/1001
+  或互质近邻率改用线性相位。`sample_ratio` 改欧几里得 GCD。
+- **验收增量**：`smoke_asrc_safety.py` 覆盖 8k–32k、44.1/48、88.2/96、176.4/192、
+  47952/47999/48048 与 191808Hz，以及 NaN/Inf/小数率拒绝、8k 块长 1、RT 固定容量
+  源码不变式；内存上限 160 MiB。
+- **上游同步冲突风险**：高（改 legacy 结构布局、Init 返回类型、blob 重建和 ASRC
+  构造链；升级时需逐函数核对三处 layout、所有 PCM 入口和事务提交点）。
+
+## P-061 FFTConvolver + convolver1D.c — 初始化、块长、几何与 OOM 守卫（2026-11-28，Batch 1 E-02）
+
+- **问题**：四种 `FFTConvolver` 的 Init 只清部分字段，Free 也不发布明确的
+  未初始化状态；Load 前 Process 会调用空函数指针/野指针。Load 不拒 NULL、
+  非有限 IR 或 `blockSize>524288`，Refresh 不校验几何，分配失败直接
+  `memset/memcpy`。`convolver1D.c` 的交织 IR 存储在 malloc 后立即 memcpy。
+- **修法**：四个结构体新增 `_initialized` 与 `_irLength`；Init 全量 memset，
+  Free 清理全部分配后全量 memset，只有 Load 完成才发布 initialized。
+  Load 在触碰旧状态前验证 NULL、非零/最大块长、IR 长度、全部 IR 样本有限性
+  与分配尺寸；Refresh 验证两侧 initialized、块/段几何与 IR 长度完全兼容。
+  所有段表和段缓冲使用 calloc 并逐项检查，失败统一走 Free，支持部分分配清理。
+- **Process 契约**：未初始化、已 Free 或关键指针/几何无效时，将请求的输出
+  清零后返回，不读输入、不调用 FFT。正常 1x1/2x2 卷积算法与缓冲布局不变。
+- **convolver1D**：交叠 IR 字节数与通道指针数组先做溢出检查；仅接受 1/2/4ch，
+  在触碰旧状态前扫描全部 IR 样本的有限性；updateOld 的替代 IR 先 malloc/判空
+  再复制，成功后才释放旧 IR，保留 P-055 的 finalImpulse 判空顺序与失败清理守卫。
+- **验收**：`engine/tests/convolver_safety_test.c` 由 Windows/Linux CMake 各注册
+  五个 CTest（uninitialized、oversized、invalid、refresh、normal）。修复前
+  uninitialized/invalid/refresh 实测 segfault，oversized 四项守卫失败；
+  修复后五项全绿，normal 的 1x1/2x2 与原地处理保持精确。
+- **上游同步冲突风险**：高（四种结构体布局、Load/Free/Refresh 和 Process
+  入口均改；升级时需保持 initialized 发布点与部分分配清理语义）。
