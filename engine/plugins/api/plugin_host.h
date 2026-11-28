@@ -264,6 +264,12 @@ public:
         /* C3 异步挂载/卸载任务状态（原子，供 Dart 无锁轮询）：
          * 0=无任务 1=进行中 2=成功 3=失败。终态（2/3）在下一次提交时被清零。 */
         std::atomic<int> taskState{0};
+        std::atomic<bool> bypassSyncPending{false};
+        std::atomic<bool> bypassReady{false};
+        std::atomic<uint32_t> bypassGeneration{0};
+        std::mutex bypassStateMutex;
+        mutable std::atomic<bool> editorOpen{false};
+        mutable std::atomic<std::shared_ptr<const std::string>> statusCache;
         /* Phase 0 可观测性：RT 侧写、控制侧读；只用于诊断，不参与音频决策。 */
         std::atomic<uint64_t> processCalls{0};
         std::atomic<uint32_t> inRmsBits{0};
@@ -412,15 +418,18 @@ public:
 
     // ---- C3 异步挂载/卸载：控制线程 + 任务队列 ----
     struct ControlTask {
+        enum class Type { Load, Unload };
         size_t slot = 0;
-        bool isLoad = false;
+        Type type = Type::Load;
         std::string path;
         std::string pluginId;
         double sampleRate = 48000.0;
         uint32_t maxBlockSize = 1024;
     };
     bool submitTaskLocked(ControlTask task);
-    void ensureControlThreadLocked();
+    bool enqueueControlTask(ControlTask task);
+    bool processPendingBypass();
+    bool processPendingChannelHint();
     void controlLoop();
     void runControlTask(const ControlTask& t);
 
@@ -429,6 +438,9 @@ public:
     std::condition_variable m_controlCv;
     std::thread m_controlThread;
     std::atomic<bool> m_controlRunning{false};
+    std::atomic<int> m_channelHintSyncPending{0};
+    std::atomic<bool> m_channelHintApplying{false};
+    std::mutex m_channelHintMutex;
 
     bool remoteMode() const { return m_remoteMode; }
 

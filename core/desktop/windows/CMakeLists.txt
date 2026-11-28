@@ -602,6 +602,33 @@ set_target_properties(auradsp_test_latency PROPERTIES
     CXX_STANDARD 20
     MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
+# C-07：插件控制调用不得在调用线程或状态轮询线程等待宿主锁。
+add_executable(test_plugin_control_async
+    "${API}/plugins/tests/plugin_control_async.cpp"
+    ${AURADSP_PLUGIN_HOST_SOURCES}
+)
+target_include_directories(test_plugin_control_async PRIVATE
+    "${API}"
+    "${API}/plugins/api"
+    "${API}/plugins/driver"
+    "${API}/plugins/platform/win32"
+    "${PLUGIN_API}"
+)
+target_compile_definitions(test_plugin_control_async PRIVATE
+    NDEBUG _CRT_SECURE_NO_WARNINGS AURADSP_HOST_INPROC=1)
+target_compile_options(test_plugin_control_async PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET test_plugin_control_async PROPERTY CXX_STANDARD 20)
+set_property(TARGET test_plugin_control_async PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_link_libraries(test_plugin_control_async PRIVATE
+    auradsp_engine auradsp_wincompat version)
+foreach(case_name bypass status hint reuse fallback generation)
+    add_test(NAME plugin_control_async_${case_name}
+        COMMAND test_plugin_control_async ${case_name})
+endforeach()
+set_tests_properties(plugin_control_async_bypass plugin_control_async_status
+    plugin_control_async_hint plugin_control_async_reuse plugin_control_async_fallback
+    plugin_control_async_generation PROPERTIES TIMEOUT 15)
+
 # B3 验收（2026-10-24）：RT 异常滞留时卸载必须隔离实例而不是硬清零后销毁。
 # 假实例 process() 阻塞注入"插件死锁在音频线程内"，断言 dtor 未跑、
 # 实例方法未被调用、计数清零且不下溢、槽可复用（smoke_plugin_quarantine.py）。

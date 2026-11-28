@@ -105,6 +105,8 @@ int main() {
     auto* fake = new FakeInstance(gate);
     mgr.m_slots[0].instance.reset(fake);
     mgr.m_slots[0].hasActive.store(true, std::memory_order_release);
+    mgr.m_slots[0].bypassed.store(false, std::memory_order_release);
+    mgr.m_slots[0].bypassReady.store(true, std::memory_order_release);
 
     std::thread rt([&mgr] {
         float inL[128] = {0}, inR[128] = {0}, outL[128] = {0}, outR[128] = {0};
@@ -152,6 +154,8 @@ int main() {
     auto* fake2 = new FakeInstance(nullptr);
     mgr.m_slots[0].instance.reset(fake2);
     mgr.m_slots[0].hasActive.store(true, std::memory_order_release);
+    mgr.m_slots[0].bypassed.store(false, std::memory_order_release);
+    mgr.m_slots[0].bypassReady.store(true, std::memory_order_release);
     mgr.unloadPluginSlot(0);
     const auto dtor2 = g_dtorCount.load();
     f.Check(dtor2 == 1, "quiesced unload did not destroy instance");

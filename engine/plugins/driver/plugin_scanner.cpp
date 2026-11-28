@@ -408,6 +408,8 @@ PluginHostManager::PluginHostManager() {
     // 位桥可用性一次性写入（快扫的 32 位标记依赖它，见 D-5）。
     PluginScanner::setArchBridgeAvailable(m_remoteClientX86 != nullptr);
 #endif
+    m_controlRunning.store(true, std::memory_order_release);
+    m_controlThread = std::thread([this]() { controlLoop(); });
 }
 
 #ifndef AURADSP_HOST_INPROC
