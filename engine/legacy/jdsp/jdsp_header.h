@@ -586,6 +586,8 @@ typedef struct
 	FFTConvolver2x2 *activeConv;
 	volatile long convProcCount;
 	volatile long convSwapProc;
+	/* [PATCHED-AuraDSP P-064] 0 proves no RT call still owns the retired bank. */
+	volatile long convInFlight;
 	double freq[NUMPTS + 2];
 	double gain[NUMPTS + 2];
 	// IIR

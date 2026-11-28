@@ -3,7 +3,7 @@
 
 
 
-/* 独立滤波器（RBJ cookbook HP/LP/BP）：shelf 同款系数原子 + TDF2 直型。
+/* 独立滤波器（RBJ cookbook HP/LP/BP）：shelf 同款版本化系数快照 + TDF2 直型。
  * 控制线程 filter_recalc() 重算，RT 只读系数。默认全通（b0=1）。 */
 void filter_recalc(auradsp_handle h) {
     const int type = h->p.filter_type.load(std::memory_order_relaxed);
@@ -28,20 +28,18 @@ void filter_recalc(auradsp_handle h) {
         b0 = (1.0 + cw) / 2.0; b1 = -(1.0 + cw); b2 = (1.0 + cw) / 2.0;
         a0 = 1.0 + alpha; a1 = -2.0 * cw; a2 = 1.0 - alpha;
     }
-    h->filter.b0.store(b0 / a0, std::memory_order_release);
-    h->filter.b1.store(b1 / a0, std::memory_order_release);
-    h->filter.b2.store(b2 / a0, std::memory_order_release);
-    h->filter.a1.store(a1 / a0, std::memory_order_release);
-    h->filter.a2.store(a2 / a0, std::memory_order_release);
+    h->filter.coefficients.publish({b0 / a0, b1 / a0, b2 / a0,
+                                    a1 / a0, a2 / a0});
 }
 
 
 void filter_process(auradsp_handle h, float* io, int frames) {
-    const double b0 = h->filter.b0.load(std::memory_order_acquire);
-    const double b1 = h->filter.b1.load(std::memory_order_acquire);
-    const double b2 = h->filter.b2.load(std::memory_order_acquire);
-    const double a1 = h->filter.a1.load(std::memory_order_acquire);
-    const double a2 = h->filter.a2.load(std::memory_order_acquire);
+    const BiquadCoefficients coefficients = h->filter.coefficients.snapshot();
+    const double b0 = coefficients.b0;
+    const double b1 = coefficients.b1;
+    const double b2 = coefficients.b2;
+    const double a1 = coefficients.a1;
+    const double a2 = coefficients.a2;
     double z1L = h->filter.z1[0], z2L = h->filter.z2[0];
     double z1R = h->filter.z1[1], z2R = h->filter.z2[1];
     for (int i = 0; i < frames; ++i) {
@@ -69,11 +67,12 @@ void filter_process_mc(auradsp_handle h, float* io, int frames, int ch) {
     const uint32_t mask = (uint32_t)h->p.filter_channels.load(std::memory_order_relaxed);
     if ((mask & ((1u << ch) - 1u)) == 0) return;
 
-    const double b0 = h->filter.b0.load(std::memory_order_acquire);
-    const double b1 = h->filter.b1.load(std::memory_order_acquire);
-    const double b2 = h->filter.b2.load(std::memory_order_acquire);
-    const double a1 = h->filter.a1.load(std::memory_order_acquire);
-    const double a2 = h->filter.a2.load(std::memory_order_acquire);
+    const BiquadCoefficients coefficients = h->filter.coefficients.snapshot();
+    const double b0 = coefficients.b0;
+    const double b1 = coefficients.b1;
+    const double b2 = coefficients.b2;
+    const double a1 = coefficients.a1;
+    const double a2 = coefficients.a2;
 
     const int max_c = ch > kMxMaxChannels ? kMxMaxChannels : ch;
     for (int c = 0; c < max_c; ++c) {

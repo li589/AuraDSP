@@ -148,6 +148,16 @@ _, badhead = probe('eqm:9:9;100:0.0;1000:12.0;10000:0.0', sr=48000)
 check('非法 eqm 头回退默认（不断言崩溃、结果一致）', base == badhead,
       'maxdiff=%.4f' % max(abs(a - b) for a, b in zip(base, badhead)))
 
-print('\n=== %d/%d 通过 ===' % (16 - len(FAIL), 16) if not FAIL else
+# 9) C-06：Enable 的强制刷新不得直接释放 RT 正在使用的活动卷积器。
+source_path = os.path.join(ROOT, 'engine', 'legacy', 'jdsp', 'Effects',
+                           'multimodalEQ.c')
+with open(source_path, encoding='utf-8') as source_file:
+    source = source_file.read()
+enable_body = source.split('void MultimodalEqualizerEnable', 1)[1].split(
+    'void MultimodalEqualizerDisable', 1)[0]
+check('EQ 强制刷新不直接 Free 活动卷积器',
+      'FFTConvolver2x2Free(&jdsp->mEQ.conv)' not in enable_body)
+
+print('\n=== %d/%d 通过 ===' % (17 - len(FAIL), 17) if not FAIL else
       '\n失败: %s' % FAIL)
 sys.exit(1 if FAIL else 0)

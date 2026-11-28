@@ -2,7 +2,7 @@
 # 多声道 EEL 脚本级（方案 B）边界与并发门禁：
 # 越界声道读 0/写丢弃、num_ch 随声道切换、坏脚本保旧码、unload 直通、
 # 直通脚本比特精确、非有限卫士、@block 段语义、换码竞态压测。
-import ctypes, math, struct, sys, threading, time
+import ctypes, math, re, struct, sys, threading, time
 
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
@@ -19,10 +19,31 @@ dll.auradsp_get_param.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_voi
 
 h = dll.auradsp_create(48000.0, 480)
 assert h
+
+# C-06：共享发布状态必须是原子量，环境/滑块不能由控制线程直写活动 VM。
+ROOT = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+with open(_os.path.join(ROOT, 'engine', 'dsp', 'dsp_mc_liveprog.cpp'), encoding='utf-8') as f:
+    lp_source = f.read()
+for pattern in (
+    r'std::atomic<McSlot\*>\s+active',
+    r'std::atomic<uint64_t>\s+procCount',
+    r'std::atomic<int>\s+compileOk',
+    r'std::atomic<float>\s+sliders',
+    r'std::atomic<float>\s+fs',
+    r'std::atomic<int>\s+channels',
+):
+    assert re.search(pattern, lp_source), 'missing atomic LiveProg state: ' + pattern
+sr_body = re.search(r'void mc_liveprog_set_sample_rate.*?\n}', lp_source, re.S).group(0)
+ch_body = re.search(r'void mc_liveprog_set_channels.*?\n}', lp_source, re.S).group(0)
+assert 'vmFs' not in sr_body and 'vmDevFs' not in sr_body, 'sample-rate setter writes active VM'
+assert 'vmNumCh' not in ch_body and 'vmNch' not in ch_body, 'channel setter writes active VM'
+assert 'mc_liveprog_slider_var' not in lp_source, 'raw slider VM pointer API remains'
+
 i32 = lambda v: ctypes.c_int32(v)
 f32 = lambda v: ctypes.c_float(v)
 
 def set_i(pid, v): return dll.auradsp_set_param(h, pid.encode(), ctypes.byref(i32(v)), 4)
+def set_f(pid, v): return dll.auradsp_set_param(h, pid.encode(), ctypes.byref(f32(v)), 4)
 def set_str(pid, s):
     b = s.encode("utf-8")
     buf = (ctypes.c_char * len(b)).from_buffer_copy(b)
@@ -181,5 +202,22 @@ assert get_i("liveprogmc.status") == 1
 _, out = run(8)
 expect(chvals(out, 8, 0), 0.04, "post-race deterministic behavior")
 
-print("smoke_liveprog_mc_stress: PASS (oob / num_ch / bad-keeps-old / unload / bit-exact / nonfinite / @block / small frames / race)")
+# ---------- 10. 滑块/环境影子值：控制线程不直接写活动 VM ----------
+set_channels(8)
+assert set_str("liveprogmc.code",
+               "@init\nspl0=spl0;\n@sample\n"
+               "spl0=slider1; spl1=srate/48000; spl2=num_ch;\n") == 0
+assert set_i("liveprogmc.enable", 1) == 0
+assert set_f("liveprogmc.param1", 0.625) == 0
+_, out = run(8)
+expect(chvals(out, 8, 0), 0.625, "slider shadow value")
+expect(chvals(out, 8, 1), 1.0, "sample-rate environment")
+expect(chvals(out, 8, 2), 8.0, "channel environment")
+assert set_f("liveprogmc.param1", 0.25) == 0
+set_channels(4)
+_, out = run(4)
+expect(chvals(out, 4, 0), 0.25, "updated slider shadow value")
+expect(chvals(out, 4, 2), 4.0, "updated channel environment")
+
+print("smoke_liveprog_mc_stress: PASS (oob / num_ch / bad-keeps-old / unload / bit-exact / nonfinite / @block / small frames / race / shadow params)")
 sys.exit(0)

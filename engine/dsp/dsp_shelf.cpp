@@ -4,7 +4,7 @@
 
 
 /* ---- M5-b 低频搁架（RBJ cookbook low-shelf，Q=0.707）----
- * RT 路径：DF2T 双声道，系数原子读；控制线程重算系数。 */
+ * RT 路径：DF2T 双声道，块首取一致系数快照；控制线程重算并发布。 */
 void shelf_recalc(auradsp_handle h) {
     const double f0 = h->p.shelf_freq.load(std::memory_order_relaxed);
     const double gdb = h->p.shelf_gain.load(std::memory_order_relaxed);
@@ -20,20 +20,18 @@ void shelf_recalc(auradsp_handle h) {
     const double a0 = (A + 1) + (A - 1) * cw + sqA2a;
     const double a1 = -2.0 * ((A - 1) + (A + 1) * cw);
     const double a2 = (A + 1) + (A - 1) * cw - sqA2a;
-    h->shelf.b0.store(b0 / a0, std::memory_order_release);
-    h->shelf.b1.store(b1 / a0, std::memory_order_release);
-    h->shelf.b2.store(b2 / a0, std::memory_order_release);
-    h->shelf.a1.store(a1 / a0, std::memory_order_release);
-    h->shelf.a2.store(a2 / a0, std::memory_order_release);
+    h->shelf.coefficients.publish({b0 / a0, b1 / a0, b2 / a0,
+                                   a1 / a0, a2 / a0});
 }
 
 
 void shelf_process(auradsp_handle h, float* io, int frames) {
-    const double b0 = h->shelf.b0.load(std::memory_order_acquire);
-    const double b1 = h->shelf.b1.load(std::memory_order_acquire);
-    const double b2 = h->shelf.b2.load(std::memory_order_acquire);
-    const double a1 = h->shelf.a1.load(std::memory_order_acquire);
-    const double a2 = h->shelf.a2.load(std::memory_order_acquire);
+    const BiquadCoefficients coefficients = h->shelf.coefficients.snapshot();
+    const double b0 = coefficients.b0;
+    const double b1 = coefficients.b1;
+    const double b2 = coefficients.b2;
+    const double a1 = coefficients.a1;
+    const double a2 = coefficients.a2;
     double z1L = h->shelf.z1[0], z2L = h->shelf.z2[0];
     double z1R = h->shelf.z1[1], z2R = h->shelf.z2[1];
     for (int i = 0; i < frames; ++i) {
@@ -62,11 +60,12 @@ void shelf_process_mc(auradsp_handle h, float* io, int frames, int ch) {
     const uint32_t mask = (uint32_t)h->p.shelf_channels.load(std::memory_order_relaxed);
     if ((mask & ((1u << ch) - 1u)) == 0) return;
 
-    const double b0 = h->shelf.b0.load(std::memory_order_acquire);
-    const double b1 = h->shelf.b1.load(std::memory_order_acquire);
-    const double b2 = h->shelf.b2.load(std::memory_order_acquire);
-    const double a1 = h->shelf.a1.load(std::memory_order_acquire);
-    const double a2 = h->shelf.a2.load(std::memory_order_acquire);
+    const BiquadCoefficients coefficients = h->shelf.coefficients.snapshot();
+    const double b0 = coefficients.b0;
+    const double b1 = coefficients.b1;
+    const double b2 = coefficients.b2;
+    const double a1 = coefficients.a1;
+    const double a2 = coefficients.a2;
 
     const int max_c = ch > kMxMaxChannels ? kMxMaxChannels : ch;
     for (int c = 0; c < max_c; ++c) {

@@ -541,6 +541,55 @@ inline double AsrcRingLatencyMs(double in_fs, double work_fs) {
 }
 
 
+struct BiquadCoefficients {
+    double b0;
+    double b1;
+    double b2;
+    double a1;
+    double a2;
+};
+
+/* Versioned double buffering prevents RT from observing a mixed pole set. */
+struct VersionedBiquad {
+    struct Slot {
+        std::atomic<double> b0{1.0}, b1{0.0}, b2{0.0}, a1{0.0}, a2{1.0};
+    } slots[2];
+    std::atomic<uint32_t> active{0};
+    std::atomic<uint64_t> version{0};
+    BiquadCoefficients rt{1.0, 0.0, 0.0, 0.0, 1.0};
+
+    void publish(const BiquadCoefficients& next) noexcept {
+        const uint32_t target = active.load(std::memory_order_relaxed) ^ 1u;
+        const uint64_t current = version.load(std::memory_order_relaxed);
+        version.store(current | 1u, std::memory_order_release);
+        Slot& slot = slots[target];
+        slot.b0.store(next.b0, std::memory_order_relaxed);
+        slot.b1.store(next.b1, std::memory_order_relaxed);
+        slot.b2.store(next.b2, std::memory_order_relaxed);
+        slot.a1.store(next.a1, std::memory_order_relaxed);
+        slot.a2.store(next.a2, std::memory_order_relaxed);
+        active.store(target, std::memory_order_release);
+        version.store(current + 2u, std::memory_order_release);
+    }
+
+    BiquadCoefficients snapshot() noexcept {
+        const uint64_t before = version.load(std::memory_order_acquire);
+        const Slot& slot = slots[active.load(std::memory_order_acquire)];
+        const BiquadCoefficients next{
+            slot.b0.load(std::memory_order_relaxed),
+            slot.b1.load(std::memory_order_relaxed),
+            slot.b2.load(std::memory_order_relaxed),
+            slot.a1.load(std::memory_order_relaxed),
+            slot.a2.load(std::memory_order_relaxed),
+        };
+        const uint64_t after = version.load(std::memory_order_acquire);
+        if ((before & 1u) != 0 || (after & 1u) != 0 || before != after)
+            return rt;
+        rt = next;
+        return next;
+    }
+};
+
 /* handle (moved verbatim) */
 struct auradsp_handle_s {
     JamesDSPLib jdsp;
@@ -652,7 +701,6 @@ struct auradsp_handle_s {
     size_t lp_code_len = 0;
     /* 多声道 Liveprog 状态（方案 B） */
     McLiveProgHost* mc_lp = nullptr;  /* create 时构造、destroy 时析构 */
-    float* lp_mc_slider_ptr[64] = {}; /* slider1..64 的 MC VM 寄存器指针 */
     int    lp_mc_status = 0;          /* 0=无代码 1=编译成功 <0=错误码 */
     char*  lp_mc_code = nullptr;      /* 已下发代码副本（get_param 回读用） */
     size_t lp_mc_code_len = 0;
@@ -681,15 +729,15 @@ struct auradsp_handle_s {
     double rev_ag_in = 0.0, rev_ag_out = 0.0, rev_ag_comp = 1.0;
     float  rev_g_sm = 1.0f;    /* 混响输出总增益一阶平滑状态（2ms 时间常数） */
 
-    /* M5-b：低频搁架 biquad（系数原子写防撕裂；状态仅 RT 线程触碰；支持 8 声道） */
+    /* M5-b：低频搁架 biquad（版本化双槽系数；状态仅 RT 线程触碰；支持 8 声道） */
     struct ShelfBiquad {
-        std::atomic<double> b0{1}, b1{0}, b2{0}, a1{0}, a2{1};
+        VersionedBiquad coefficients;
         double z1[kMxMaxChannels] = {};
         double z2[kMxMaxChannels] = {};
     } shelf;
     /* 独立滤波器 biquad（同 shelf 模式：控制线程重算系数，RT 只读；支持 8 声道） */
     struct FilterBiquad {
-        std::atomic<double> b0{1}, b1{0}, b2{0}, a1{0}, a2{1};
+        VersionedBiquad coefficients;
         double z1[kMxMaxChannels] = {};
         double z2[kMxMaxChannels] = {};
     } filter;

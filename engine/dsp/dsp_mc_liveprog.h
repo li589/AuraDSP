@@ -32,18 +32,13 @@ void mc_liveprog_unload(McLiveProgHost* host);
 void mc_liveprog_set_enabled(McLiveProgHost* host, int enabled);
 int mc_liveprog_get_enabled(const McLiveProgHost* host);
 
-/* 控制线程：环境同步——采样率/声道数变化时调用；写全部槽快照与
- * 已注册的环境寄存器（srate/dev_srate/num_ch/nch）。
- * 注意（审查 L13）：本宿主 dev_srate 与 srate 同值（恒等于引擎采样
- * 率），与立体声宿主 dev_srate=设备采样率的口径不同（PATCHES.md
- * P-038 登记）；脚本跨宿主移植时勿假设 dev_srate 为设备率。 */
+/* 控制线程：环境同步——采样率/声道数变化时只发布原子影子值，
+ * RT 在下一个启用块同步到活动 VM，不并发改写 VM 寄存器。 */
 void mc_liveprog_set_sample_rate(McLiveProgHost* host, float sampleRate);
 void mc_liveprog_set_channels(McLiveProgHost* host, int channels);
 
-/* 控制线程：取活动 VM 的 sliderN 寄存器指针（N=1..64），无活动 VM
- * 时返回 nullptr。供参数层在编译成功后刷新滑块指针（平移
- * lp_refresh_sliders 的取指针部分）。 */
-float* mc_liveprog_slider_var(McLiveProgHost* host, int index1Based);
+/* 控制线程：发布滑块影子值；RT 每块同步到活动 VM，不返回 VM 裸指针。 */
+void mc_liveprog_set_slider(McLiveProgHost* host, int index1Based, float value);
 
 /* RT 线程：对交织缓冲原地执行多声道脚本。
  * buf 为 frames × channels 交织；仅在使能且编译成功时改动数据，

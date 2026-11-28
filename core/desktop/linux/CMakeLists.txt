@@ -282,6 +282,34 @@ add_test(NAME legacy_mutex_sample_rate COMMAND legacy_mutex_test sample_rate)
 set_tests_properties(legacy_mutex_recursive legacy_mutex_sample_rate
     PROPERTIES TIMEOUT 10)
 
+# Batch 1 C-06: concurrent biquad publication must yield coherent snapshots.
+add_executable(biquad_snapshot_test "${API}/tests/biquad_snapshot_test.cpp")
+target_include_directories(biquad_snapshot_test PRIVATE "${API}")
+target_compile_definitions(biquad_snapshot_test PRIVATE AURADSP_NO_PLUGINS=1)
+target_compile_options(biquad_snapshot_test PRIVATE
+    -include "${API}/auradsp_gcc_shim.h")
+target_link_libraries(biquad_snapshot_test PRIVATE Threads::Threads)
+set_property(TARGET biquad_snapshot_test PROPERTY CXX_STANDARD 20)
+add_test(NAME biquad_snapshot_test COMMAND biquad_snapshot_test)
+set_tests_properties(biquad_snapshot_test PROPERTIES TIMEOUT 10)
+
+# Batch 1 C-06: EQ refresh must not free the active convolver or lose updates.
+add_executable(multimodal_eq_concurrency_test
+    "${API}/tests/multimodal_eq_concurrency_test.c")
+target_include_directories(multimodal_eq_concurrency_test PRIVATE "${API}")
+target_link_libraries(multimodal_eq_concurrency_test PRIVATE
+    auradsp_core Threads::Threads m)
+target_compile_options(multimodal_eq_concurrency_test PRIVATE
+    -include "${API}/auradsp_gcc_shim.h")
+set_property(TARGET multimodal_eq_concurrency_test PROPERTY C_STANDARD 11)
+set_property(TARGET multimodal_eq_concurrency_test PROPERTY LINKER_LANGUAGE CXX)
+add_test(NAME multimodal_eq_frozen_update
+    COMMAND multimodal_eq_concurrency_test frozen)
+add_test(NAME multimodal_eq_refresh_race
+    COMMAND multimodal_eq_concurrency_test race)
+set_tests_properties(multimodal_eq_frozen_update multimodal_eq_refresh_race
+    PROPERTIES TIMEOUT 20)
+
 # Batch 1 C-05/E-03: direct low-level DSP boundary calls. Reverb is compiled
 # here so its handle view matches the test's AURADSP_NO_PLUGINS definition.
 add_executable(dsp_boundary_test

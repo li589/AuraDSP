@@ -1474,3 +1474,18 @@ yquist * 0.999，
   Linux CTest 验证首点 -100 dB、末点 +100 dB 均钳到 ±64 dB，且 Nyquist
   端点继承 +64 dB；修复前末点与端点两项判红。
 - **上游同步冲突风险**：低（单处循环边界与注释，无结构或 ABI 变化）。
+
+## P-064 multimodalEQ.c + jdsp_header.h — 影子刷新与在途排空（2026-11-28，Batch 1 C-06）
+
+- **问题**：`MultimodalEqualizerEnable(forceRefresh)` 直接 `Free` 活动
+  `mEQ.conv` 后重载，RT 可能同时持有其 IR/overlap 指针；原有换槽守卫只看
+  `convProcCount`，音频停流时第二次更新会因计数冻结被静默丢弃。
+- **修法**：复用 `conv/convB` 双槽，控制线程只刷新非活动槽并以原子发布
+  `activeConv`；新增 RT 入口/出口原子在途计数，复用退役槽的条件改为
+  `convInFlight==0 || convProcCount-convSwapProc>=1`。刷新未获槽时保留
+  `equalizerForceRefresh`，后续控制调用继续重试。
+- **验收**：`multimodal_eq_frozen_update` 证明无块推进时连续两次刷新均换入；
+  `multimodal_eq_refresh_race` 验证刷新/处理并发不崩且输出有限；
+  `smoke_eq_response.py` 新增禁止直接 Free 活动卷积器的源码不变性。
+- **上游同步冲突风险**：中（改 MultimodalEQ 结构、活动指针发布和 Process
+  生命周期；升级时需同时核对双槽复用条件与在途计数配对）。

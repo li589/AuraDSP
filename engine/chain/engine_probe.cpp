@@ -581,10 +581,8 @@ int lp_run_mc_pass(int sample_rate, const char* code,
         return AURADSP_E_PARAM;
     }
 
-    for (int p = 0; p < n_params && p < 64; ++p) {
-        float* reg = mc_liveprog_slider_var(host, p + 1);
-        if (reg) *reg = params[p];
-    }
+    for (int p = 0; p < n_params && p < 64; ++p)
+        mc_liveprog_set_slider(host, p + 1, params[p]);
     mc_liveprog_set_enabled(host, 1);
 
     double warmup_peak = 0.0;

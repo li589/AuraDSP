@@ -4,6 +4,65 @@
 #include <math.h>
 #include <float.h>
 #include "../jdsp_header.h"
+
+/* [PATCHED-AuraDSP P-064] RT 在途计数与活动指针的原子发布。 */
+static long eq_inflight_inc(volatile long *p)
+{
+#ifdef _WIN32
+	return _InterlockedIncrement(p);
+#else
+	return __sync_add_and_fetch((long*)p, 1);
+#endif
+}
+static long eq_inflight_dec(volatile long *p)
+{
+#ifdef _WIN32
+	return _InterlockedDecrement(p);
+#else
+	return __sync_sub_and_fetch((long*)p, 1);
+#endif
+}
+static long eq_counter_load(volatile long *p)
+{
+#ifdef _WIN32
+	return _InterlockedCompareExchange(p, 0, 0);
+#else
+	return __sync_val_compare_and_swap((long*)p, 0, 0);
+#endif
+}
+static FFTConvolver2x2 *eq_active_load(JamesDSPLib *jdsp)
+{
+#ifdef _WIN32
+	return (FFTConvolver2x2*)_InterlockedCompareExchangePointer(
+		(void**)&jdsp->mEQ.activeConv, NULL, NULL);
+#else
+	return __atomic_load_n(&jdsp->mEQ.activeConv, __ATOMIC_ACQUIRE);
+#endif
+}
+static void eq_active_store(JamesDSPLib *jdsp, FFTConvolver2x2 *next)
+{
+#ifdef _WIN32
+	_InterlockedExchangePointer((void**)&jdsp->mEQ.activeConv, next);
+#else
+	__atomic_store_n(&jdsp->mEQ.activeConv, next, __ATOMIC_RELEASE);
+#endif
+}
+static int eq_refresh_fir(JamesDSPLib *jdsp, float *eqFil)
+{
+	FFTConvolver2x2 *active = eq_active_load(jdsp);
+	FFTConvolver2x2 *buildTarget = (active == &jdsp->mEQ.conv)
+		? &jdsp->mEQ.convB : &jdsp->mEQ.conv;
+	const long inFlight = eq_counter_load(&jdsp->mEQ.convInFlight);
+	const long procCount = eq_counter_load(&jdsp->mEQ.convProcCount);
+	if (inFlight != 0 && procCount - jdsp->mEQ.convSwapProc < 1)
+		return 0;
+	FFTConvolver2x2RefreshImpulseResponse(&jdsp->mEQ.instance.convState,
+		buildTarget, eqFil, eqFil, jdsp->mEQ.instance.filterLen);
+	eq_active_store(jdsp, buildTarget);
+	jdsp->mEQ.convSwapProc = eq_counter_load(&jdsp->mEQ.convProcCount);
+	return 1;
+}
+
 void MultimodalEqualizerConstructor(JamesDSPLib *jdsp)
 {
 	double freqAx[NUMPTS] = { 25.0, 40.0, 63.0, 100.0, 160.0, 250.0, 400.0, 630.0, 1000.0, 1600.0, 2500.0, 4000.0, 6300.0, 10000.0, 16000.0 };
@@ -24,6 +83,7 @@ void MultimodalEqualizerConstructor(JamesDSPLib *jdsp)
 	jdsp->mEQ.activeConv = &jdsp->mEQ.conv;
 	jdsp->mEQ.convProcCount = 0;
 	jdsp->mEQ.convSwapProc = -2;
+	jdsp->mEQ.convInFlight = 0;
 	float *kDelta = (float*)malloc(jdsp->mEQ.instance.filterLen * sizeof(float));
 	memset(kDelta, 0, jdsp->mEQ.instance.filterLen * sizeof(float));
 	kDelta[0] = 1.0f;
@@ -182,19 +242,9 @@ void MultimodalEqualizerAxisInterpolation(JamesDSPLib *jdsp, int interpolationMo
 			makima(&jdsp->mEQ.pch2, jdsp->mEQ.freq, jdsp->mEQ.gain, NUMPTS + 2, 1, 1);
 			eqFil = InterpolatingEqMinimumPhase(&jdsp->mEQ.instance.coeffGen, (float)jdsp->fs, (void *)(&jdsp->mEQ.pch2));
 		}
-		/* [PATCHED-AuraDSP P-006] 重建到「非活动」的那个卷积器，再在块边界原子换指针。
-		 * 旧代码直接重建 mEQ.conv，而音频线程同时在 FFTConvolver2x2Process 里
-		 * 读它的 IR 段指针、_current、_overlap —— 同一对象边处理边重写。
-		 * 换出后必须再跑满 1 块才允许把该实例重新投入重建，否则会与
-		 * 换出瞬间尚未返回的那次 Process 调用竞争。*/
-		FFTConvolver2x2 *buildTarget = (jdsp->mEQ.activeConv == &jdsp->mEQ.conv)
-			? &jdsp->mEQ.convB : &jdsp->mEQ.conv;
-		if (jdsp->mEQ.convProcCount - jdsp->mEQ.convSwapProc >= 1)
-		{
-			FFTConvolver2x2RefreshImpulseResponse(&jdsp->mEQ.instance.convState, buildTarget, eqFil, eqFil, jdsp->mEQ.instance.filterLen);
-			jdsp->mEQ.activeConv = buildTarget;
-			jdsp->mEQ.convSwapProc = jdsp->mEQ.convProcCount;
-		}
+		/* [PATCHED-AuraDSP P-064] 只重建非活动影子槽；停流时靠 inFlight==0 放行。 */
+		if (!eq_refresh_fir(jdsp, eqFil))
+			jdsp->equalizerForceRefresh = 1;
 	}
 	else
 	{
@@ -268,11 +318,9 @@ void MultimodalEqualizerEnable(JamesDSPLib *jdsp, char enable)
 			makima(&jdsp->mEQ.pch2, jdsp->mEQ.freq, jdsp->mEQ.gain, NUMPTS + 2, 1, 1);
 			eqFil = InterpolatingEqMinimumPhase(&jdsp->mEQ.instance.coeffGen, (float)jdsp->fs, (void *)(&jdsp->mEQ.pch2));
 		}
-		FFTConvolver2x2Free(&jdsp->mEQ.instance.convState);
-		FFTConvolver2x2Free(&jdsp->mEQ.conv);
-		FFTConvolver2x2LoadImpulseResponse(&jdsp->mEQ.instance.convState, (unsigned int)jdsp->blockSize, eqFil, eqFil, jdsp->mEQ.instance.filterLen);
-		FFTConvolver2x2LoadImpulseResponse(&jdsp->mEQ.conv, (unsigned int)jdsp->blockSize, eqFil, eqFil, jdsp->mEQ.instance.filterLen);
-		jdsp->equalizerForceRefresh = 0;
+		/* [PATCHED-AuraDSP P-064] 活动卷积器只读；刷新失败时保留待处理标志。 */
+		if (eq_refresh_fir(jdsp, eqFil))
+			jdsp->equalizerForceRefresh = 0;
 	}
 	if (enable)
 		jdsp->equalizerEnabled = 1;
@@ -283,8 +331,11 @@ void MultimodalEqualizerDisable(JamesDSPLib *jdsp)
 }
 void MultimodalEqualizerProcess(JamesDSPLib *jdsp, size_t n)
 {
-	if (!jdsp->mEQ.operatingMode)
-		FFTConvolver2x2Process(jdsp->mEQ.activeConv, jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], (unsigned int)n);
+	eq_inflight_inc(&jdsp->mEQ.convInFlight);
+	if (!jdsp->mEQ.operatingMode) {
+		FFTConvolver2x2 *active = eq_active_load(jdsp);
+		FFTConvolver2x2Process(active, jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], (unsigned int)n);
+	}
 	else
 	{
 		for (size_t smp = 0; smp < n; smp++)
@@ -309,5 +360,6 @@ jdsp->tmpBuffer[0][smp] = x1 * jdsp->mEQ.overallGain;
 		jdsp->tmpBuffer[1][smp] = x2 * jdsp->mEQ.overallGain;
 		}
 	}
-	jdsp->mEQ.convProcCount++;
+	eq_inflight_inc(&jdsp->mEQ.convProcCount);
+	eq_inflight_dec(&jdsp->mEQ.convInFlight);
 }

@@ -34,6 +34,22 @@ int RunLiveProgBoundary() {
             mc_liveprog_process(host, &negativeChannels, 1, -1);
             Check(zeroChannels == 0.25f, "zero channels must not execute or stride VM");
             Check(negativeChannels == 0.25f, "negative channels must not execute or stride VM");
+
+            const char* envCode =
+                "@init\nspl0=spl0;\n@sample\n"
+                "spl0=slider1; spl1=srate/48000;\n";
+            const int envLoaded = mc_liveprog_load(host, envCode);
+            Check(envLoaded == 1, "compile MC liveprog environment fixture");
+            if (envLoaded == 1) {
+                mc_liveprog_set_slider(host, 1, 0.75f);
+                mc_liveprog_set_sample_rate(host, 44100.0f);
+                mc_liveprog_set_channels(host, 2);
+                float envBuffer[2] = {};
+                mc_liveprog_process(host, envBuffer, 1, 2);
+                Check(envBuffer[0] == 0.75f, "RT must consume shadow slider value");
+                Check(std::fabs(envBuffer[1] - 44100.0f / 48000.0f) < 1e-6f,
+                      "RT must consume shadow sample-rate value");
+            }
         }
         mc_liveprog_destroy(host);
     }
